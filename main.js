@@ -17542,24 +17542,24 @@ function renderUsersRows(users) {
          <span class="sgb-truncate text-[11px] font-black uppercase tracking-wide ${statusColorClass}">${isActivo ? 'Habilitado' : 'Suspendido'}</span>
       </div>
       <div class="sgb-actions">
-        <button class="adminActionBtn w-8 h-8 rounded-xl bg-surface-variant flex items-center justify-center text-surface-on hover:bg-primary hover:text-white transition-all shadow-sm cursor-pointer border-none" data-action="edit" data-user="${escapeAttr(u.usuario)}" title="Editar / Mover CLUES">
-          <span class="material-symbols-rounded text-lg">edit</span>
+        <button class="sgb-icon-btn sgb-icon-btn--edit" data-action="edit" data-user="${escapeAttr(u.usuario)}" title="Editar / Mover CLUES">
+          <span class="material-symbols-rounded">edit</span>
         </button>
-        <button class="adminActionBtn w-8 h-8 rounded-xl bg-surface-variant flex items-center justify-center text-surface-on hover:bg-primary hover:text-white transition-all shadow-sm cursor-pointer border-none" data-action="reset" data-user="${escapeAttr(u.usuario)}" title="Nueva Contraseña">
-          <span class="material-symbols-rounded text-lg">key</span>
+        <button class="sgb-icon-btn sgb-icon-btn--reset" data-action="reset" data-user="${escapeAttr(u.usuario)}" title="Nueva Contraseña">
+          <span class="material-symbols-rounded">key</span>
         </button>
-        <button class="adminActionBtn w-8 h-8 rounded-xl ${isActivo ? 'bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white'} flex items-center justify-center transition-all shadow-sm cursor-pointer border-none" data-action="toggle" data-user="${escapeAttr(u.usuario)}" data-active="${escapeAttr(u.activo)}" title="${isActivo ? 'Bloquear Acceso' : 'Activar Acceso'}">
-          <span class="material-symbols-rounded text-lg">${isActivo ? 'block' : 'check_circle'}</span>
+        <button class="sgb-icon-btn ${isActivo ? 'sgb-icon-btn--block' : 'sgb-icon-btn--activate'}" data-action="toggle" data-user="${escapeAttr(u.usuario)}" data-active="${escapeAttr(u.activo)}" title="${isActivo ? 'Bloquear Acceso' : 'Activar Acceso'}">
+          <span class="material-symbols-rounded">${isActivo ? 'block' : 'check_circle'}</span>
         </button>
-        <button class="adminActionBtn w-8 h-8 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-all shadow-sm cursor-pointer border-none" data-action="delete" data-user="${escapeAttr(u.usuario)}" title="Eliminar definitivamente">
-          <span class="material-symbols-rounded text-lg">delete</span>
+        <button class="sgb-icon-btn sgb-icon-btn--delete" data-action="delete" data-user="${escapeAttr(u.usuario)}" title="Eliminar definitivamente">
+          <span class="material-symbols-rounded">delete</span>
         </button>
       </div>`;
     tbody.appendChild(row);
   }
 
   // VINCULAR EVENTOS
-  document.querySelectorAll("#usersTbody .adminActionBtn").forEach(btn => {
+  document.querySelectorAll("#usersTbody .sgb-icon-btn").forEach(btn => {
     btn.onclick = async () => {
       const action = btn.dataset.action;
       const targetUser = btn.dataset.user;
