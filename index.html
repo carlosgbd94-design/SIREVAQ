@@ -897,6 +897,11 @@
             <span class="material-symbols-rounded ml-2" id="btnLoginIconMobile">login</span>
           </button>
 
+          <button type="button" id="btnMagicLink"
+            class="w-full text-center text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-primary/40 hover:text-primary transition-all bg-transparent border-none cursor-pointer mt-3">
+            Entrar con enlace mágico
+          </button>
+
           <!-- BIOMETRIC LOGIN — Movido abajo del botón ENTRAR -->
           <div id="btnBiometricLogin"
             style="display: none; flex-direction: column; align-items: center; width: 100%; gap: 0; margin-top: 12px;">
@@ -4308,37 +4313,66 @@
                 <button
                   class="flex items-center justify-center gap-2 h-10 px-5 rounded-full text-xs font-black uppercase tracking-widest text-primary-on shadow-[0_8px_16px_-4px_rgba(79,70,229,0.5)] transition-all hover:-translate-y-1 hover:shadow-[0_12px_24px_-6px_rgba(79,70,229,0.7)]"
                   style="background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);"
-                  onclick="document.getElementById('createUserModal').classList.add('show')">
+                  onclick="openCreateUserModal()">
                   <span class="material-symbols-rounded text-[18px]">person_add</span>
                   Nuevo Usuario
                 </button>
               </div>
             </div>
 
-            <div class="overflow-x-auto min-h-[400px]">
+            <!-- Barra de filtros: evita la lista vertical infinita, permite ubicar un usuario al instante -->
+            <div class="px-6 py-4 bg-surface/30 border-b border-outline-variant/20 flex flex-col md:flex-row gap-3 md:items-center">
+              <div class="modern-input-group" style="max-width: 360px; flex: 1;">
+                <span class="input-icon material-symbols-rounded">search</span>
+                <input type="text" id="usersSearchInput" placeholder="Buscar por usuario, correo, CLUES o unidad..."
+                  autocomplete="off" class="rounded-xl h-10 text-[13px] font-bold">
+              </div>
+              <select id="usersRoleFilter"
+                class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-10 px-3 text-xs font-bold cursor-pointer">
+                <option value="">Todos los roles</option>
+                <option value="ADMIN">ADMIN</option>
+                <option value="UNIDAD">UNIDAD</option>
+                <option value="MUNICIPAL">MUNICIPAL</option>
+                <option value="JURISDICCIONAL">JURISDICCIONAL</option>
+                <option value="VISUALIZADOR_JURISDICCIONAL">VISUALIZADOR JURISDICCIONAL</option>
+                <option value="CARAVANAS">CARAVANAS</option>
+              </select>
+              <select id="usersStatusFilter"
+                class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-10 px-3 text-xs font-bold cursor-pointer">
+                <option value="">Todos los estados</option>
+                <option value="SI">Habilitado</option>
+                <option value="NO">Suspendido</option>
+              </select>
+            </div>
+
+            <div class="overflow-x-auto tableWrap" id="usersTableWrap" style="max-height: 560px; border: none; border-radius: 0; box-shadow: none; margin-top: 0;">
               <table class="w-full text-left border-collapse" id="usersTableDesktop"
-                style="table-layout: fixed; width: 100%; min-width: 850px;">
+                style="table-layout: fixed; width: 100%; min-width: 900px;">
                 <thead>
                   <tr class="bg-primary/5">
                     <th
                       class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
-                      style="width: 25%;">
+                      style="width: 20%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
                       Identificador</th>
                     <th
                       class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
-                      style="width: 35%;">
+                      style="width: 26%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
                       Correo Electrónico</th>
                     <th
                       class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
-                      style="width: 12%;">
+                      style="width: 11%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
                       Rol</th>
                     <th
                       class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
-                      style="width: 13%;">
+                      style="width: 21%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
+                      CLUES / Unidad</th>
+                    <th
+                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
+                      style="width: 10%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
                       Estado</th>
                     <th
                       class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30 text-right"
-                      style="width: 15%;">
+                      style="width: 12%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
                       Acciones</th>
                   </tr>
                 </thead>
@@ -4368,18 +4402,21 @@
               </div>
             </div>
 
-            <div class="overflow-x-auto min-h-[400px] p-6">
+            <div class="overflow-x-auto tableWrap p-6" style="max-height: 480px; border: none; border-radius: 0; box-shadow: none; margin-top: 0;">
               <table class="w-full text-left border-collapse bg-surface/50 rounded-2xl overflow-hidden shadow-sm">
                 <thead>
                   <tr class="bg-primary/5">
                     <th
-                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30">
+                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
+                      style="position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
                       Usuario</th>
                     <th
-                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30">
+                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
+                      style="position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
                       Rol</th>
                     <th
-                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30">
+                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
+                      style="position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
                       CLUES</th>
                   </tr>
                 </thead>
@@ -6548,16 +6585,16 @@
       class="modal w-full max-w-[500px] bg-surface border border-outline-variant/30 rounded-[28px] overflow-hidden shadow-[0_24px_48px_-12px_rgba(0,0,0,0.25)] transform scale-95 transition-transform duration-300 [[class~='show']_&]:scale-100 flex flex-col">
       <div class="modalHead">
         <button type="button" class="js1-modal-close-x"
-          onclick="document.getElementById('createUserModal').classList.remove('show')" aria-label="Cerrar">
+          onclick="window.closeCreateUserModal ? window.closeCreateUserModal() : document.getElementById('createUserModal').classList.remove('show')" aria-label="Cerrar">
           <span class="material-symbols-rounded">close</span>
         </button>
-        <div class="modalEyebrow"
+        <div class="modalEyebrow" id="createUserModalEyebrow"
           style="background: #e0e7ff; color: #3730a3; padding: 6px 14px; border-radius: 12px; display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 11px; text-transform: uppercase; margin-bottom: 12px;">
-          <span class="material-symbols-rounded" style="font-size:18px;">person_add</span>
-          Nuevo Acceso Institucional
+          <span class="material-symbols-rounded" style="font-size:18px;" id="createUserModalIcon">person_add</span>
+          <span id="createUserModalEyebrowTxt">Nuevo Acceso Institucional</span>
         </div>
-        <div class="modalTitle" style="font-weight:900; margin-bottom:8px;">Alta de Usuario</div>
-        <div class="modalSub" style="color:var(--md-sys-color-on-surface-variant); line-height:1.5;">
+        <div class="modalTitle" id="createUserModalTitle" style="font-weight:900; margin-bottom:8px;">Alta de Usuario</div>
+        <div class="modalSub" id="createUserModalSub" style="color:var(--md-sys-color-on-surface-variant); line-height:1.5;">
           La contraseña inicial será <b>JS1-2026-Temp</b> y el usuario será forzado a cambiarla en su primer inicio de
           sesión.
         </div>
@@ -6570,7 +6607,7 @@
             class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-9 px-3 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all" />
         </div>
         <div class="flex flex-col gap-0.5">
-          <label class="text-[9px] font-bold text-primary/50 uppercase ml-1">ID de Usuario</label>
+          <label class="text-[9px] font-bold text-primary/50 uppercase ml-1" id="createUsuarioIDLabel">ID de Usuario</label>
           <input type="text" id="createUsuarioID" placeholder="ID INTERNO"
             class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-9 px-3 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all" />
         </div>
@@ -6619,7 +6656,8 @@
         style="margin-top:24px; padding:20px; display:flex; justify-content:flex-end; gap:12px; border-top: 1px solid rgba(0,0,0,0.05);">
         <button class="btn" id="btnSubmitCreateUser" type="button"
           style="background: var(--md-sys-color-primary); color: var(--md-sys-color-surface); padding: 12px 28px; border: none; border-radius: 14px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
-          <span class="material-symbols-rounded" style="font-weight: normal;">check_circle</span> Registrar
+          <span class="material-symbols-rounded" style="font-weight: normal;" id="createUserModalBtnIcon">check_circle</span>
+          <span id="createUserModalBtnTxt">Registrar</span>
         </button>
       </div>
     </div>
@@ -6768,6 +6806,68 @@
 
         <div class="modalFooter" style="margin-top:24px; display:flex; justify-content:flex-end; gap:12px;">
           <button class="btn" id="btnForgotSend" type="button" style="
+                background: linear-gradient(135deg, #001B3D 0%, var(--md-sys-color-primary) 100%);
+                color: var(--md-sys-color-surface);
+                padding: 12px 24px;
+                border: none;
+                border-radius: 12px;
+                font-weight: 800;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+              ">
+            Enviar enlace
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modalOverlay" id="magicLinkOverlay">
+    <div class="modal"
+      style="max-width:440px; border-radius:28px; background: var(--md-sys-color-surface); box-shadow: var(--md-shadow-5); overflow: hidden;">
+      <div class="modalHead">
+        <button type="button" class="js1-modal-close-x" id="btnMagicLinkClose" aria-label="Cerrar">
+          <span class="material-symbols-rounded">close</span>
+        </button>
+        <div class="modalEyebrow" style="
+              background: var(--md-sys-color-primary-container);
+              color: var(--md-sys-color-on-primary-container);
+              padding: 6px 14px;
+              border-radius: 12px;
+              display: inline-flex;
+              align-items: center;
+              gap: 8px;
+              font-weight: 800;
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+              margin-bottom: 12px;
+            ">
+          <span class="material-symbols-rounded" style="font-size:18px;">bolt</span>
+          Acceso sin contraseña
+        </div>
+        <div class="modalTitle" style="font-weight:900; margin-bottom:8px;">Entrar con enlace mágico</div>
+        <div class="modalSub" style="color:var(--md-sys-color-on-surface-variant); line-height:1.5;">
+          Ingresa tu correo institucional o usuario. Si tu cuenta existe, te enviaremos un enlace de acceso directo,
+          sin necesidad de escribir tu contraseña.
+        </div>
+      </div>
+
+      <div class="modalBody" style="padding-top:20px;">
+        <div class="modalFields">
+          <div class="fieldCard" style="background:transparent; border:none; padding:0;">
+            <label
+              style="color:var(--md-sys-color-primary); font-weight:800; font-size:12px; margin-bottom:8px; display:block;">CORREO
+              O USUARIO</label>
+            <div class="modern-input-group">
+              <span class="input-icon material-symbols-rounded">contact_mail</span>
+              <input id="magicLinkUsuario" type="text" placeholder="ejemplo@js1.com o tu usuario" class="rounded-xl h-12">
+            </div>
+
+          </div>
+        </div>
+
+        <div class="modalFooter" style="margin-top:24px; display:flex; justify-content:flex-end; gap:12px;">
+          <button class="btn" id="btnMagicLinkSend" type="button" style="
                 background: linear-gradient(135deg, #001B3D 0%, var(--md-sys-color-primary) 100%);
                 color: var(--md-sys-color-surface);
                 padding: 12px 24px;

@@ -112,6 +112,25 @@ if (!window.supabase || typeof window.supabase.createClient !== 'function') {
   });
   // Alias esperado por offline_db.js para poder sincronizar la cola local al recuperar la red.
   window.supabaseClient = window.supabase;
+
+  // 🔗 MAGIC LINK: si llegamos aquí con un token de sesión en el hash (clic en el enlace
+  // del correo), hidratamos la UI en cuanto el SDK confirme el inicio de sesión. whoami()
+  // en el arranque (DOMContentLoaded) ya debería cubrir este caso, pero este listener es
+  // una red de seguridad ante condiciones de carrera del SDK al procesar el hash de la URL.
+  const JS1_LANDED_WITH_AUTH_HASH = /[#&](access_token|refresh_token)=/.test(window.location.hash);
+  window.supabase.auth.onAuthStateChange((event, session) => {
+    if (event === "SIGNED_IN" && session && JS1_LANDED_WITH_AUTH_HASH && typeof USER !== "undefined" && !USER) {
+      (async () => {
+        const u = await whoami();
+        if (u) {
+          await hydrateSessionUi(u, null, {
+            showSuccessToast: true,
+            mustChangePassword: !!u.mustChange
+          });
+        }
+      })();
+    }
+  });
 }
 
 
@@ -4969,6 +4988,22 @@ function closeForgotModal() {
   if (ov) ov.classList.remove("show");
 }
 
+function openMagicLinkModal() {
+  const ov = $("magicLinkOverlay");
+  if (ov) ov.classList.add("show");
+
+  if ($("magicLinkUsuario")) $("magicLinkUsuario").value = "";
+
+  setTimeout(() => {
+    if ($("magicLinkUsuario")) $("magicLinkUsuario").focus();
+  }, 60);
+}
+
+function closeMagicLinkModal() {
+  const ov = $("magicLinkOverlay");
+  if (ov) ov.classList.remove("show");
+}
+
 function maskEmailAddress(email) {
   if (!email || !email.includes("@")) return email;
   const parts = email.split("@");
@@ -5065,6 +5100,97 @@ async function requestPasswordResetFlow() {
     showToast("Error al solicitar recuperación", false, "bad");
     openForgotModal();
     if ($("forgotUsuario")) $("forgotUsuario").value = emailOrUser;
+  } finally {
+    hideOverlay();
+  }
+}
+
+async function requestMagicLinkFlow() {
+  const lastRequest = localStorage.getItem("JS1_last_magiclink_request");
+  const now = Date.now();
+  const cooldownMs = 60000; // 60 segundos de bloqueo para evitar saturar Supabase
+  if (lastRequest) {
+    const elapsed = now - parseInt(lastRequest, 10);
+    if (elapsed < cooldownMs) {
+      const remaining = Math.ceil((cooldownMs - elapsed) / 1000);
+      showToast(`Por favor, espera ${remaining} segundos antes de solicitar un nuevo enlace para evitar saturar el sistema.`, false, "warn");
+      return;
+    }
+  }
+
+  let emailOrUser = $("magicLinkUsuario") ? $("magicLinkUsuario").value.trim() : "";
+
+  if (!emailOrUser) {
+    showToast("Ingresa tu usuario o correo institucional", false, "warn");
+    return;
+  }
+
+  // Si no contiene '@', asumimos que es un usuario y buscamos su correo en usuarios_legacy
+  let finalEmail = emailOrUser;
+  if (!emailOrUser.includes("@")) {
+    closeMagicLinkModal();
+    showOverlay("Buscando correo de usuario...", "Verificando");
+    try {
+      const { data, error } = await window.supabase
+        .from('usuarios_legacy')
+        .select('email')
+        .ilike('usuario', emailOrUser)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (!data || !data.email) {
+        hideOverlay();
+        showToast("El usuario no tiene un correo registrado o no existe", false, "bad");
+        openMagicLinkModal();
+        if ($("magicLinkUsuario")) $("magicLinkUsuario").value = emailOrUser;
+        return;
+      }
+      finalEmail = data.email;
+    } catch (e) {
+      console.error("Error al buscar usuario:", e);
+      hideOverlay();
+      showToast("Error al verificar el usuario. Reintenta.", false, "bad");
+      openMagicLinkModal();
+      if ($("magicLinkUsuario")) $("magicLinkUsuario").value = emailOrUser;
+      return;
+    } finally {
+      hideOverlay();
+    }
+  } else {
+    closeMagicLinkModal();
+  }
+
+  showOverlay("Estamos enviando tu enlace de acceso…", "Acceso sin contraseña");
+
+  try {
+    // shouldCreateUser: false — el enlace mágico SOLO debe funcionar para cuentas ya
+    // aprovisionadas por un administrador (ver supabase/functions/admin-create-user).
+    // Permitir la creación automática de usuarios aquí abriría una vía para que cualquier
+    // correo obtenga una cuenta activa con rol UNIDAD (ver trigger public.handle_new_user).
+    const { error } = await window.supabase.auth.signInWithOtp({
+      email: finalEmail,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: window.location.origin + window.location.pathname.replace('index.html', '') + 'index.html'
+      }
+    });
+
+    if (error) {
+      showToast(error.message || "No se pudo enviar el enlace", false, "bad");
+      openMagicLinkModal();
+      if ($("magicLinkUsuario")) $("magicLinkUsuario").value = emailOrUser;
+      return;
+    }
+
+    localStorage.setItem("JS1_last_magiclink_request", Date.now().toString());
+    const masked = maskEmailAddress(finalEmail);
+    showToast(`Enlace de acceso enviado a ${masked}. Revisa tu bandeja de entrada (y SPAM) y ábrelo desde este mismo dispositivo.`, true, "good");
+  } catch (e) {
+    console.error(e);
+    showToast("Error al solicitar el enlace de acceso", false, "bad");
+    openMagicLinkModal();
+    if ($("magicLinkUsuario")) $("magicLinkUsuario").value = emailOrUser;
   } finally {
     hideOverlay();
   }
@@ -7577,12 +7703,72 @@ async function supabaseRequest(action = "", payload, options = {}) {
       }
 
       case "adminsetactive": {
-        const { error } = await supabase
-          .from('usuarios_legacy')
-          .update({ activo: payload.activo ? 'SI' : 'NO' })
-          .eq('usuario', payload.usuario);
-        if (error) throw error;
-        return { ok: true };
+        const { data: { session } } = await supabase.auth.getSession();
+        const sessionToken = session?.access_token || TOKEN || AppState.token;
+
+        const { data, error } = await supabase.functions.invoke('admin-set-active', {
+          body: {
+            usuario: payload.usuario,
+            activo: !!payload.activo
+          },
+          headers: {
+            Authorization: `Bearer ${sessionToken}`
+          }
+        });
+
+        if (error) {
+          console.error("Edge Function Error Details:", error);
+          let detailedMsg = error.message;
+          if (error.context && typeof error.context.json === 'function') {
+            try {
+              const body = await error.context.json();
+              if (body && body.error) detailedMsg = body.error;
+            } catch (e) { }
+          }
+          throw new Error(detailedMsg || "Error al comunicarse con la función de estado");
+        }
+
+        if (!data.ok) {
+          throw new Error(data.error || "No se pudo actualizar el estado del usuario");
+        }
+
+        return { ok: true, message: data.message };
+      }
+
+      case "adminupdateuser": {
+        const { data: { session } } = await supabase.auth.getSession();
+        const sessionToken = session?.access_token || TOKEN || AppState.token;
+
+        const { data, error } = await supabase.functions.invoke('admin-update-user', {
+          body: {
+            usuario: payload.usuario,
+            rol: payload.rol,
+            municipio: payload.municipio,
+            clues: payload.clues,
+            unidad: payload.unidad
+          },
+          headers: {
+            Authorization: `Bearer ${sessionToken}`
+          }
+        });
+
+        if (error) {
+          console.error("Edge Function Error Details:", error);
+          let detailedMsg = error.message;
+          if (error.context && typeof error.context.json === 'function') {
+            try {
+              const body = await error.context.json();
+              if (body && body.error) detailedMsg = body.error;
+            } catch (e) { }
+          }
+          throw new Error(detailedMsg || "Error al comunicarse con la función de edición");
+        }
+
+        if (!data.ok) {
+          throw new Error(data.error || "No se pudo actualizar el usuario");
+        }
+
+        return { ok: true, message: data.message };
       }
 
       case "markpinoldelivered": {
@@ -8578,6 +8764,27 @@ function bindAuthUiEvents() {
       if (e.key === "Enter") {
         e.preventDefault();
         requestPasswordResetFlow();
+      }
+    };
+  }
+
+  if ($("btnMagicLink")) {
+    $("btnMagicLink").onclick = () => openMagicLinkModal();
+  }
+
+  if ($("btnMagicLinkClose")) {
+    $("btnMagicLinkClose").onclick = () => closeMagicLinkModal();
+  }
+
+  if ($("btnMagicLinkSend")) {
+    $("btnMagicLinkSend").onclick = () => requestMagicLinkFlow();
+  }
+
+  if ($("magicLinkUsuario")) {
+    $("magicLinkUsuario").onkeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        requestMagicLinkFlow();
       }
     };
   }
@@ -16734,7 +16941,93 @@ if (rBtn) {
   };
 }
 
-// --- Lógica del Modal "Alta de Usuario" ---
+// --- Lógica del Modal "Alta de Usuario" / "Editar Usuario (Mover CLUES)" ---
+let EDIT_USER_CTX = null; // null = modo alta; string (usuario) = modo edición
+
+function resetCreateUserForm() {
+  if ($("createEmail")) { $("createEmail").value = ""; $("createEmail").readOnly = false; }
+  if ($("createUsuarioID")) { $("createUsuarioID").value = ""; $("createUsuarioID").readOnly = false; }
+  if ($("createRol")) $("createRol").value = "";
+  if ($("createUnidad")) {
+    $("createUnidad").innerHTML = '<option value="">Selecciona la Unidad</option>';
+    $("createUnidad").value = "";
+    $("createUnidad").disabled = false;
+  }
+  if ($("createClues")) $("createClues").value = "";
+  if ($("createMunicipio")) { $("createMunicipio").value = ""; $("createMunicipio").disabled = false; }
+}
+
+window.closeCreateUserModal = function closeCreateUserModal() {
+  EDIT_USER_CTX = null;
+  document.getElementById('createUserModal')?.classList.remove('show');
+};
+
+window.openCreateUserModal = function openCreateUserModal() {
+  EDIT_USER_CTX = null;
+  resetCreateUserForm();
+  if ($("createUserModalEyebrowTxt")) $("createUserModalEyebrowTxt").textContent = "Nuevo Acceso Institucional";
+  if ($("createUserModalIcon")) $("createUserModalIcon").textContent = "person_add";
+  if ($("createUserModalTitle")) $("createUserModalTitle").textContent = "Alta de Usuario";
+  if ($("createUserModalSub")) $("createUserModalSub").innerHTML = "La contraseña inicial será <b>JS1-2026-Temp</b> y el usuario será forzado a cambiarla en su primer inicio de sesión.";
+  if ($("createUsuarioIDLabel")) $("createUsuarioIDLabel").textContent = "ID de Usuario";
+  if ($("createUserModalBtnIcon")) $("createUserModalBtnIcon").textContent = "check_circle";
+  if ($("createUserModalBtnTxt")) $("createUserModalBtnTxt").textContent = "Registrar";
+  document.getElementById('createUserModal').classList.add('show');
+};
+
+window.openEditUserModal = async function openEditUserModal(u) {
+  if (!u) return;
+  EDIT_USER_CTX = u.usuario;
+  resetCreateUserForm();
+
+  if ($("createUserModalEyebrowTxt")) $("createUserModalEyebrowTxt").textContent = "Editar Acceso / Mover CLUES";
+  if ($("createUserModalIcon")) $("createUserModalIcon").textContent = "edit_location_alt";
+  if ($("createUserModalTitle")) $("createUserModalTitle").textContent = "Editar Usuario";
+  if ($("createUserModalSub")) $("createUserModalSub").textContent = "Puedes reasignar el rol, municipio, unidad o CLUES de este usuario sin afectar sus reportes históricos.";
+  if ($("createUsuarioIDLabel")) $("createUsuarioIDLabel").textContent = "ID de Usuario (no editable)";
+  if ($("createUserModalBtnIcon")) $("createUserModalBtnIcon").textContent = "save";
+  if ($("createUserModalBtnTxt")) $("createUserModalBtnTxt").textContent = "Guardar cambios";
+
+  if ($("createEmail")) { $("createEmail").value = u.email || ""; $("createEmail").readOnly = true; }
+  if ($("createUsuarioID")) { $("createUsuarioID").value = u.usuario || ""; $("createUsuarioID").readOnly = true; }
+  if ($("createRol")) {
+    // El selector de alta no incluye ADMIN a propósito (no se crean admins desde este modal),
+    // pero al editar un ADMIN existente debe poder conservarse ese rol sin quedar en blanco.
+    if (u.rol === "ADMIN" && !$("createRol").querySelector('option[value="ADMIN"]')) {
+      $("createRol").insertAdjacentHTML("beforeend", '<option value="ADMIN">ADMIN</option>');
+    }
+    $("createRol").value = u.rol || "";
+  }
+  if ($("createMunicipio")) $("createMunicipio").value = u.municipio || "";
+  if ($("createClues")) $("createClues").value = u.clues || "";
+
+  // Reconstruir el catálogo de Unidad para el municipio actual antes de fijar el valor existente
+  const rol = u.rol || "";
+  if ((rol === "UNIDAD" || rol === "MUNICIPAL") && u.municipio) {
+    let catalog = (typeof NOTIF_UNIT_CATALOG !== "undefined") ? NOTIF_UNIT_CATALOG : [];
+    if (catalog.length === 0 && typeof loadNotifUnitCatalog === "function") {
+      catalog = await loadNotifUnitCatalog();
+    }
+    const munNorm = normalizeText(u.municipio);
+    if (rol === "UNIDAD") {
+      const filtered = catalog.filter(x => normalizeText(x.municipio || x.MUNICIPIO || "") === munNorm);
+      let html = '<option value="">Selecciona la Unidad</option>';
+      filtered.forEach(x => {
+        const name = x.unidad || x.UNIDAD || x.nombre || "";
+        html += `<option value="${name}">${name}</option>`;
+      });
+      if ($("createUnidad")) $("createUnidad").innerHTML = html;
+    }
+  }
+  if (rol === "JURISDICCIONAL" || rol === "VISUALIZADOR_JURISDICCIONAL" || rol === "CARAVANAS") {
+    if ($("createUnidad")) $("createUnidad").innerHTML = '<option value="OFICINAS DE LA JURISDICCIÓN SANITARIA 1">OFICINAS DE LA JURISDICCIÓN SANITARIA 1</option>';
+    if ($("createMunicipio")) $("createMunicipio").disabled = true;
+  }
+  if ($("createUnidad")) $("createUnidad").value = u.unidad || "";
+
+  document.getElementById('createUserModal').classList.add('show');
+};
+
 const btnCreateUser = $("btnSubmitCreateUser");
 if (btnCreateUser) {
   btnCreateUser.onclick = async () => {
@@ -16750,37 +17043,39 @@ if (btnCreateUser) {
       return;
     }
 
+    const isEdit = !!EDIT_USER_CTX;
     setBtnBusy("btnSubmitCreateUser", true);
-    showOverlay("Creando usuario e inicializando sesión...", "Administración");
+    showOverlay(isEdit ? "Actualizando asignación del usuario..." : "Creando usuario e inicializando sesión...", "Administración");
 
     try {
-      const payload = {
-        action: "admincreateuser",
-        email: email,       // Credencial Supabase Auth
-        usuario: usuarioID, // Identificador interno en tablas
-        rol: rol,
-        unidad: unidad,
-        clues: clues,
-        municipio: municipio
-      };
+      const payload = isEdit
+        ? {
+          action: "adminupdateuser",
+          usuario: EDIT_USER_CTX,
+          rol: rol,
+          unidad: unidad,
+          clues: clues,
+          municipio: municipio
+        }
+        : {
+          action: "admincreateuser",
+          email: email,       // Credencial Supabase Auth
+          usuario: usuarioID, // Identificador interno en tablas
+          rol: rol,
+          unidad: unidad,
+          clues: clues,
+          municipio: municipio
+        };
 
       const res = await apiCall(payload);
       if (res && res.ok) {
-        showToast(res.message || "Usuario dado de alta exitosamente", true);
+        showToast(res.message || (isEdit ? "Usuario actualizado exitosamente" : "Usuario dado de alta exitosamente"), true);
         document.getElementById('createUserModal').classList.remove('show');
-        // Limpiar formulario
-        if ($("createEmail")) $("createEmail").value = "";
-        if ($("createUsuarioID")) $("createUsuarioID").value = "";
-        if ($("createRol")) $("createRol").value = "";
-        if ($("createUnidad")) {
-          $("createUnidad").innerHTML = '<option value="">Selecciona la Unidad</option>';
-          $("createUnidad").value = "";
-        }
-        if ($("createClues")) $("createClues").value = "";
-        if ($("createMunicipio")) $("createMunicipio").value = "";
+        EDIT_USER_CTX = null;
+        resetCreateUserForm();
         await refreshUsers();
       } else {
-        showToast(res.error || "Hubo un error al crear el usuario", false);
+        showToast(res.error || "Hubo un error al procesar la solicitud", false);
       }
     } catch (err) {
       showToast(err.message || "Error de conexión", false);
@@ -16841,6 +17136,9 @@ if (createRol && createUnidad && createClues && createMunicipio) {
       createMunicipio.disabled = false;
       createUsuarioID.value = "";
     }
+
+    // En modo edición el ID de usuario es inmutable: no se regenera con la cascada
+    if (EDIT_USER_CTX) createUsuarioID.value = EDIT_USER_CTX;
   });
 
   createMunicipio.addEventListener("change", async () => {
@@ -16873,6 +17171,8 @@ if (createRol && createUnidad && createClues && createMunicipio) {
         createUsuarioID.value = `QTSSA012154_${munNorm.replace(/\s+/g, '_')}`;
       }
     }
+
+    if (EDIT_USER_CTX) createUsuarioID.value = EDIT_USER_CTX;
   });
 
   createUnidad.addEventListener("change", async () => {
@@ -16899,7 +17199,7 @@ if (createRol && createUnidad && createClues && createMunicipio) {
       createClues.value = clues;
       // Generar ID con CLUES + NOMBRE DE UNIDAD (normalizado)
       const unitID = norm(unitName).replace(/\s+/g, '_');
-      createUsuarioID.value = `${clues}_${unitID}`;
+      createUsuarioID.value = EDIT_USER_CTX ? EDIT_USER_CTX : `${clues}_${unitID}`;
     }
   });
 }
@@ -17162,6 +17462,140 @@ $("btnClearExistenciaOverride").onclick = async () => {
 };
 
 
+let USERS_CACHE = [];
+
+function getUsersFilterState() {
+  return {
+    query: normalizeText($("usersSearchInput")?.value || "").trim(),
+    rol: $("usersRoleFilter")?.value || "",
+    activo: $("usersStatusFilter")?.value || ""
+  };
+}
+
+function filterUsersCache(users, filters) {
+  const { query, rol, activo } = filters;
+  return users.filter(u => {
+    if (rol && u.rol !== rol) return false;
+    if (activo && String(u.activo || "SI").toUpperCase() !== activo) return false;
+    if (query) {
+      const haystack = normalizeText(
+        [u.usuario, u.email, u.clues, u.municipio, u.unidad, u.rol].filter(Boolean).join(" | ")
+      );
+      if (!haystack.includes(query)) return false;
+    }
+    return true;
+  });
+}
+
+function renderUsersRows(users) {
+  const tbody = $("usersTbody");
+  if (!tbody) throw new Error("No existe #usersTbody");
+
+  tbody.innerHTML = "";
+
+  if (users.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="muted text-center py-8">Sin usuarios que coincidan con el filtro</td></tr>`;
+    return;
+  }
+
+  for (const u of users) {
+    const tr = document.createElement("tr");
+    tr.className = "hover:bg-primary/5 transition-colors group border-b border-outline-variant/30";
+
+    const isActivo = u.activo === "SI";
+    const roleClass = u.rol === "ADMIN" ? "bg-primary/10 text-primary border-primary/20" : "bg-slate-100 text-slate-600 border-slate-200";
+    const statusClass = isActivo ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
+    const ubicacion = [u.clues, (u.unidad || u.municipio)].filter(Boolean).join(" · ");
+
+    tr.innerHTML = `
+      <td class="px-6 py-5 align-middle" style="word-break: break-all; overflow-wrap: break-word;">
+         <div class="flex flex-col min-w-0" style="word-break: break-all; overflow-wrap: break-word;">
+            <span class="font-extrabold text-primary text-[13px] tracking-tight leading-normal" title="${escapeHtml(u.usuario)}" style="word-break: break-all; overflow-wrap: break-word; white-space: normal; display: block;">${escapeHtml(u.usuario)}</span>
+            <span class="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">Cuenta Activa</span>
+         </div>
+      </td>
+      <td class="px-6 py-5 align-middle" style="word-break: break-all; overflow-wrap: break-word;">
+         <div class="flex flex-col min-w-0" style="word-break: break-all; overflow-wrap: break-word;">
+            <span class="font-bold text-slate-600 text-[13px] tracking-tight leading-normal" title="${escapeHtml(u.email || 'Sin correo registrado')}" style="word-break: break-all; overflow-wrap: break-word; white-space: normal; display: block;">${escapeHtml(u.email || 'Sin correo registrado')}</span>
+         </div>
+      </td>
+      <td class="px-6 py-5 align-middle">
+         <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${roleClass}">${escapeHtml(u.rol)}</span>
+      </td>
+      <td class="px-6 py-5 align-middle" style="word-break: break-all; overflow-wrap: break-word;">
+         <span class="font-bold text-slate-600 text-[12px] tracking-tight leading-normal" title="${escapeHtml(ubicacion || 'Sin asignar')}">${escapeHtml(ubicacion || '—')}</span>
+      </td>
+      <td class="px-6 py-5 align-middle">
+         <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0 ${isActivo ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-400'}"></span>
+            <span class="text-[11px] font-black uppercase tracking-wide ${statusClass.split(' ')[1]}">${isActivo ? 'Habilitado' : 'Suspendido'}</span>
+         </div>
+      </td>
+      <td class="px-6 py-5 align-middle text-right">
+        <div class="flex items-center justify-end gap-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
+          <button class="adminActionBtn w-8 h-8 rounded-xl bg-surface-variant flex items-center justify-center text-surface-on hover:bg-primary hover:text-white transition-all shadow-sm cursor-pointer border-none" data-action="edit" data-user="${escapeAttr(u.usuario)}" title="Editar / Mover CLUES">
+            <span class="material-symbols-rounded text-lg">edit</span>
+          </button>
+          <button class="adminActionBtn w-8 h-8 rounded-xl bg-surface-variant flex items-center justify-center text-surface-on hover:bg-primary hover:text-white transition-all shadow-sm cursor-pointer border-none" data-action="reset" data-user="${escapeAttr(u.usuario)}" title="Nueva Contraseña">
+            <span class="material-symbols-rounded text-lg">key</span>
+          </button>
+          <button class="adminActionBtn w-8 h-8 rounded-xl ${isActivo ? 'bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white'} flex items-center justify-center transition-all shadow-sm cursor-pointer border-none" data-action="toggle" data-user="${escapeAttr(u.usuario)}" data-active="${escapeAttr(u.activo)}" title="${isActivo ? 'Bloquear Acceso' : 'Activar Acceso'}">
+            <span class="material-symbols-rounded text-lg">${isActivo ? 'block' : 'check_circle'}</span>
+          </button>
+          <button class="adminActionBtn w-8 h-8 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-all shadow-sm cursor-pointer border-none" data-action="delete" data-user="${escapeAttr(u.usuario)}" title="Eliminar definitivamente">
+            <span class="material-symbols-rounded text-lg">delete</span>
+          </button>
+        </div>
+      </td>`;
+    tbody.appendChild(tr);
+  }
+
+  // VINCULAR EVENTOS
+  document.querySelectorAll("#usersTbody .adminActionBtn").forEach(btn => {
+    btn.onclick = async () => {
+      const action = btn.dataset.action;
+      const targetUser = btn.dataset.user;
+      const currentActive = btn.dataset.active;
+
+      if (action === "edit") {
+        const u = USERS_CACHE.find(x => x.usuario === targetUser);
+        if (u) openEditUserModal(u);
+        return;
+      }
+
+      if (action === "delete" && !confirm(`¿Estás seguro de eliminar a ${targetUser}?`)) return;
+
+      try {
+        showOverlay("Procesando...", "Admin");
+        let r;
+        if (action === "toggle") {
+          const newActive = String(currentActive || "SI").toUpperCase() !== "SI";
+          r = await apiCall({ action: "adminSetActive", usuario: targetUser, activo: newActive });
+        } else if (action === "reset") {
+          r = await apiCall({ action: "adminResetPassword", usuario: targetUser });
+        } else if (action === "delete") {
+          r = await apiCall({ action: "adminDeleteUser", usuario: targetUser });
+        }
+
+        if (r && r.ok) {
+          showToast(r.message || "Operación exitosa", true);
+          await refreshUsers();
+        } else {
+          showToast(r.error || "Error en la operación", false);
+        }
+      } catch (e) {
+        showToast("Error de conexión", false);
+      } finally {
+        hideOverlay();
+      }
+    };
+  });
+}
+
+function rerenderUsersFiltered() {
+  renderUsersRows(filterUsersCache(USERS_CACHE, getUsersFilterState()));
+}
+
 async function refreshUsers() {
   if (!USER || USER.rol !== "ADMIN") return;
 
@@ -17188,102 +17622,21 @@ async function refreshUsers() {
       return;
     }
 
-    const users = r.data || [];
-    if ($("usersCount")) $("usersCount").textContent = `${users.length} usuario(s)`;
+    USERS_CACHE = r.data || [];
+    if ($("usersCount")) $("usersCount").textContent = `${USERS_CACHE.length} usuario(s)`;
 
-    const tbody = $("usersTbody");
-    if (!tbody) throw new Error("No existe #usersTbody");
-
-    tbody.innerHTML = "";
-
-    if (users.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="muted">Sin usuarios</td></tr>`;
-      return;
-    }
-
-    for (const u of users) {
-      const tr = document.createElement("tr");
-      tr.className = "hover:bg-primary/5 transition-colors group border-b border-outline-variant/30";
-
-      const isActivo = u.activo === "SI";
-      const roleClass = u.rol === "ADMIN" ? "bg-primary/10 text-primary border-primary/20" : "bg-slate-100 text-slate-600 border-slate-200";
-      const statusClass = isActivo ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
-
-      tr.innerHTML = `
-        <td class="px-6 py-5 align-middle" style="word-break: break-all; overflow-wrap: break-word;">
-           <div class="flex flex-col min-w-0" style="word-break: break-all; overflow-wrap: break-word;">
-              <span class="font-extrabold text-primary text-[13px] tracking-tight leading-normal" title="${escapeHtml(u.usuario)}" style="word-break: break-all; overflow-wrap: break-word; white-space: normal; display: block;">${escapeHtml(u.usuario)}</span>
-              <span class="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">Cuenta Activa</span>
-           </div>
-        </td>
-        <td class="px-6 py-5 align-middle" style="word-break: break-all; overflow-wrap: break-word;">
-           <div class="flex flex-col min-w-0" style="word-break: break-all; overflow-wrap: break-word;">
-              <span class="font-bold text-slate-600 text-[13px] tracking-tight leading-normal" title="${escapeHtml(u.email || 'Sin correo registrado')}" style="word-break: break-all; overflow-wrap: break-word; white-space: normal; display: block;">${escapeHtml(u.email || 'Sin correo registrado')}</span>
-           </div>
-        </td>
-        <td class="px-6 py-5 align-middle">
-           <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${roleClass}">${escapeHtml(u.rol)}</span>
-        </td>
-        <td class="px-6 py-5 align-middle">
-           <div class="flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full shrink-0 ${isActivo ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-400'}"></span>
-              <span class="text-[11px] font-black uppercase tracking-wide ${statusClass.split(' ')[1]}">${isActivo ? 'Habilitado' : 'Suspendido'}</span>
-           </div>
-        </td>
-        <td class="px-6 py-5 align-middle text-right">
-          <div class="flex items-center justify-end gap-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
-            <button class="adminActionBtn w-8 h-8 rounded-xl bg-surface-variant flex items-center justify-center text-surface-on hover:bg-primary hover:text-white transition-all shadow-sm cursor-pointer border-none" data-action="reset" data-user="${escapeAttr(u.usuario)}" title="Nueva Contraseña">
-              <span class="material-symbols-rounded text-lg">key</span>
-            </button>
-            <button class="adminActionBtn w-8 h-8 rounded-xl ${isActivo ? 'bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white'} flex items-center justify-center transition-all shadow-sm cursor-pointer border-none" data-action="toggle" data-user="${escapeAttr(u.usuario)}" data-active="${escapeAttr(u.activo)}" title="${isActivo ? 'Bloquear Acceso' : 'Activar Acceso'}">
-              <span class="material-symbols-rounded text-lg">${isActivo ? 'block' : 'check_circle'}</span>
-            </button>
-            <button class="adminActionBtn w-8 h-8 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-all shadow-sm cursor-pointer border-none" data-action="delete" data-user="${escapeAttr(u.usuario)}" title="Eliminar definitivamente">
-              <span class="material-symbols-rounded text-lg">delete</span>
-            </button>
-          </div>
-        </td>`;
-      tbody.appendChild(tr);
-    }
-
-    // VINCULAR EVENTOS
-    document.querySelectorAll("#usersTbody .adminActionBtn").forEach(btn => {
-      btn.onclick = async () => {
-        const action = btn.dataset.action;
-        const targetUser = btn.dataset.user;
-        const currentActive = btn.dataset.active;
-
-        if (action === "delete" && !confirm(`¿Estás seguro de eliminar a ${targetUser}?`)) return;
-
-        try {
-          showOverlay("Procesando...", "Admin");
-          let r;
-          if (action === "toggle") {
-            const newActive = String(currentActive || "SI").toUpperCase() === "SI" ? "NO" : "SI";
-            r = await apiCall({ action: "adminToggleUser", usuario: targetUser, activo: newActive });
-          } else if (action === "reset") {
-            r = await apiCall({ action: "adminResetPassword", usuario: targetUser });
-          } else if (action === "delete") {
-            r = await apiCall({ action: "adminDeleteUser", usuario: targetUser });
-          }
-
-          if (r && r.ok) {
-            showToast(r.message || "Operación exitosa", true);
-            await refreshUsers();
-          } else {
-            showToast(r.error || "Error en la operación", false);
-          }
-        } catch (e) {
-          showToast("Error de conexión", false);
-        } finally {
-          hideOverlay();
-        }
-      };
-    });
+    rerenderUsersFiltered();
   } catch (e) {
     console.error("refreshUsers error:", e);
   }
 }
+
+document.addEventListener("input", (e) => {
+  if (e.target.id === "usersSearchInput") rerenderUsersFiltered();
+});
+document.addEventListener("change", (e) => {
+  if (e.target.id === "usersRoleFilter" || e.target.id === "usersStatusFilter") rerenderUsersFiltered();
+});
 
 
 async function listPinol(force = false) {
