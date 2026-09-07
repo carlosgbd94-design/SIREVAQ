@@ -4300,6 +4300,138 @@
         <!-- SUB-PANEL 3: SEGURIDAD (USUARIOS) -->
         <div id="adminSection_seguridad"
           class="admin-sub-panel hide animate-in fade-in slide-in-from-bottom-4 duration-500" style="display: none;">
+
+          <!-- Estilos aislados exclusivos del módulo de Seguridad (prefijo sgb- = SeGuridad, Bloque).
+               No reutiliza .modern-input-group / <table> a propósito: ambos arrastran reglas globales
+               (!important, sticky-th sobre border-collapse, alturas fijas de 56-60px pensadas para el
+               login) que chocaban entre sí y producían el encimado reportado. Aquí todo es CSS Grid con
+               reglas propias, sin dependencias externas que puedan pisarlo. -->
+          <style>
+            #adminSection_seguridad .sgb-toolbar {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 12px;
+              align-items: center;
+              padding: 16px 24px;
+              background: rgba(0,0,0,0.015);
+              border-bottom: 1px solid var(--md-sys-color-outline-variant, #e2e8f0);
+            }
+            #adminSection_seguridad .sgb-search {
+              position: relative;
+              flex: 1 1 280px;
+              min-width: 220px;
+            }
+            #adminSection_seguridad .sgb-search .material-symbols-rounded {
+              position: absolute;
+              left: 14px;
+              top: 50%;
+              transform: translateY(-50%);
+              font-size: 19px;
+              color: var(--md-sys-color-primary, #4f46e5);
+              opacity: 0.55;
+              pointer-events: none;
+            }
+            #adminSection_seguridad .sgb-search input {
+              width: 100%;
+              height: 42px;
+              box-sizing: border-box;
+              border-radius: 12px;
+              border: 1.5px solid var(--md-sys-color-outline-variant, #e2e8f0);
+              background: var(--md-sys-color-surface, #fff);
+              padding: 0 14px 0 42px;
+              font-size: 13px;
+              font-weight: 700;
+              color: var(--md-sys-color-on-surface, #1e293b);
+              outline: none;
+              transition: border-color .15s ease, box-shadow .15s ease;
+            }
+            #adminSection_seguridad .sgb-search input:focus {
+              border-color: var(--md-sys-color-primary, #4f46e5);
+              box-shadow: 0 0 0 3px rgba(79,70,229,0.15);
+            }
+            #adminSection_seguridad .sgb-filter {
+              flex: 0 0 auto;
+              height: 42px;
+              box-sizing: border-box;
+              border-radius: 12px;
+              border: 1.5px solid var(--md-sys-color-outline-variant, #e2e8f0);
+              background: var(--md-sys-color-surface, #fff);
+              padding: 0 32px 0 14px;
+              font-size: 12px;
+              font-weight: 700;
+              color: var(--md-sys-color-on-surface, #1e293b);
+              outline: none;
+              cursor: pointer;
+            }
+            #adminSection_seguridad .sgb-list-wrap {
+              max-height: 560px;
+              overflow: auto;
+              position: relative;
+            }
+            #adminSection_seguridad .sgb-row {
+              display: grid;
+              /* fr reparte el espacio SOBRANTE tras restar la columna fija de acciones:
+                 así nunca desborda su propio min-width, sin importar el ancho real. */
+              grid-template-columns: 1.7fr 2.3fr 0.9fr 1.7fr 1fr 160px;
+              align-items: center;
+              column-gap: 14px;
+              min-width: 880px;
+              padding: 0 24px;
+            }
+            #adminSection_seguridad .sgb-head {
+              position: sticky;
+              top: 0;
+              z-index: 3;
+              background: var(--md-sys-color-surface, #fff);
+              border-bottom: 1px solid var(--md-sys-color-outline-variant, #e2e8f0);
+              padding-top: 14px;
+              padding-bottom: 14px;
+            }
+            #adminSection_seguridad .sgb-head > div {
+              font-size: 10px;
+              font-weight: 900;
+              text-transform: uppercase;
+              letter-spacing: 0.06em;
+              color: var(--md-sys-color-primary, #4f46e5);
+              opacity: 0.7;
+            }
+            #adminSection_seguridad .sgb-body-row {
+              border-bottom: 1px solid var(--md-sys-color-outline-variant, #e2e8f0);
+              padding-top: 14px;
+              padding-bottom: 14px;
+              transition: background-color .15s ease;
+            }
+            #adminSection_seguridad .sgb-body-row:hover {
+              background: rgba(79,70,229,0.04);
+            }
+            #adminSection_seguridad .sgb-cell {
+              min-width: 0; /* permite que el ellipsis funcione dentro de una celda grid */
+            }
+            #adminSection_seguridad .sgb-truncate {
+              display: block;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+            #adminSection_seguridad .sgb-actions {
+              display: flex;
+              align-items: center;
+              justify-content: flex-end;
+              gap: 6px;
+              flex-wrap: nowrap;
+            }
+            #adminSection_seguridad .sgb-actions button {
+              flex-shrink: 0;
+            }
+            #adminSection_seguridad .sgb-empty {
+              padding: 48px 24px;
+              text-align: center;
+              font-size: 12px;
+              font-weight: 700;
+              color: var(--md-sys-color-on-surface-variant, #64748b);
+            }
+          </style>
+
           <div class="bg-surface/50 rounded-[32px] overflow-hidden border border-outline-variant/30 shadow-sm">
             <div
               class="p-6 bg-primary/5 border-b border-outline-variant/20 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -4321,14 +4453,13 @@
             </div>
 
             <!-- Barra de filtros: evita la lista vertical infinita, permite ubicar un usuario al instante -->
-            <div class="px-6 py-4 bg-surface/30 border-b border-outline-variant/20 flex flex-col md:flex-row gap-3 md:items-center">
-              <div class="modern-input-group" style="max-width: 360px; flex: 1;">
-                <span class="input-icon material-symbols-rounded">search</span>
+            <div class="sgb-toolbar">
+              <div class="sgb-search">
+                <span class="material-symbols-rounded">search</span>
                 <input type="text" id="usersSearchInput" placeholder="Buscar por usuario, correo, CLUES o unidad..."
-                  autocomplete="off" class="rounded-xl h-10 text-[13px] font-bold">
+                  autocomplete="off">
               </div>
-              <select id="usersRoleFilter"
-                class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-10 px-3 text-xs font-bold cursor-pointer">
+              <select id="usersRoleFilter" class="sgb-filter">
                 <option value="">Todos los roles</option>
                 <option value="ADMIN">ADMIN</option>
                 <option value="UNIDAD">UNIDAD</option>
@@ -4337,49 +4468,25 @@
                 <option value="VISUALIZADOR_JURISDICCIONAL">VISUALIZADOR JURISDICCIONAL</option>
                 <option value="CARAVANAS">CARAVANAS</option>
               </select>
-              <select id="usersStatusFilter"
-                class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-10 px-3 text-xs font-bold cursor-pointer">
+              <select id="usersStatusFilter" class="sgb-filter">
                 <option value="">Todos los estados</option>
                 <option value="SI">Habilitado</option>
                 <option value="NO">Suspendido</option>
               </select>
             </div>
 
-            <div class="overflow-x-auto tableWrap" id="usersTableWrap" style="max-height: 560px; border: none; border-radius: 0; box-shadow: none; margin-top: 0;">
-              <table class="w-full text-left border-collapse" id="usersTableDesktop"
-                style="table-layout: fixed; width: 100%; min-width: 900px;">
-                <thead>
-                  <tr class="bg-primary/5">
-                    <th
-                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
-                      style="width: 20%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
-                      Identificador</th>
-                    <th
-                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
-                      style="width: 26%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
-                      Correo Electrónico</th>
-                    <th
-                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
-                      style="width: 11%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
-                      Rol</th>
-                    <th
-                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
-                      style="width: 21%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
-                      CLUES / Unidad</th>
-                    <th
-                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30"
-                      style="width: 10%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
-                      Estado</th>
-                    <th
-                      class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30 text-right"
-                      style="width: 12%; position: sticky; top: 0; background: var(--md-sys-color-surface); z-index: 5;">
-                      Acciones</th>
-                  </tr>
-                </thead>
-                <tbody id="usersTbody" class="divide-y divide-outline-variant/20">
-                  <!-- JS populate -->
-                </tbody>
-              </table>
+            <div class="sgb-list-wrap" id="usersTableWrap">
+              <div class="sgb-row sgb-head">
+                <div>Identificador</div>
+                <div>Correo Electrónico</div>
+                <div>Rol</div>
+                <div>CLUES / Unidad</div>
+                <div>Estado</div>
+                <div style="text-align:right;">Acciones</div>
+              </div>
+              <div id="usersTbody">
+                <!-- JS populate -->
+              </div>
             </div>
 
           </div>
