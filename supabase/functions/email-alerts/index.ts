@@ -526,6 +526,101 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200
       })
+
+    } else if (action === 'send-desabasto-alert') {
+      // --- ALERTA INMEDIATA DE DESABASTO CRÍTICO ---
+      // Disparada por un Database Webhook (trigger en public.notificaciones, ver
+      // migración add_desabasto_critico_webhook) apenas se inserta una fila
+      // type = 'ALERTA_DESABASTO'. No espera al cron de jueves/viernes.
+      let meta: any = {}
+      try {
+        meta = typeof payload.meta === 'string' ? JSON.parse(payload.meta) : (payload.meta || {})
+      } catch (_e) { meta = {} }
+
+      const alertMunicipio = normalizeMuni(meta.municipio || '')
+      const alertUnidad = meta.unidad || 'Unidad no especificada'
+      const alertClues = meta.clues || ''
+      const missing: string[] = Array.isArray(meta.missing) ? meta.missing : []
+      const alertMessage = payload.message || `La unidad ${alertUnidad} capturó sin existencias.`
+
+      const { data: criticalProfiles, error: critErr } = await supabaseAdmin
+        .from('perfiles')
+        .select('email, rol, municipio, municipios_allowed')
+        .in('rol', ['ADMIN', 'JURISDICCIONAL', 'MUNICIPAL', 'CARAVANAS'])
+
+      if (critErr) throw new Error(`Error obteniendo destinatarios de desabasto: ${critErr.message}`)
+
+      // ADMIN/JURISDICCIONAL siempre reciben. MUNICIPAL/CARAVANAS solo si el
+      // municipio de la alerta está dentro de su alcance (mismo criterio que
+      // fanout_notification_trigger usa para el scope MUNICIPIO).
+      const recipients = (criticalProfiles || []).filter((p: any) => {
+        if (!p.email) return false
+        if (p.rol === 'ADMIN' || p.rol === 'JURISDICCIONAL') return true
+        let allowedMunis: string[] = []
+        if (Array.isArray(p.municipios_allowed) && p.municipios_allowed.length > 0) {
+          allowedMunis = p.municipios_allowed.map(normalizeMuni)
+        } else if (p.municipio) {
+          allowedMunis = String(p.municipio).split(',').map(normalizeMuni)
+        }
+        return allowedMunis.includes('*') || (alertMunicipio !== '' && allowedMunis.includes(alertMunicipio))
+      })
+
+      const htmlBody = `
+<div style="font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); border: 2px solid #fecaca;">
+  <div style="background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%); padding: 30px 20px; text-align: center;">
+    <div style="background-color: rgba(255, 255, 255, 0.2); width: 60px; height: 60px; border-radius: 50%; margin: 0 auto 15px auto; text-align: center;">
+      <span style="font-size: 30px; line-height: 60px; display: block;">🚨</span>
+    </div>
+    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Desabasto Crítico</h1>
+    <p style="color: #fee2e2; margin: 8px 0 0 0; font-size: 15px; font-weight: 500;">Alerta inmediata — Esquema Básico</p>
+  </div>
+
+  <div style="padding: 35px 30px; color: #334155; line-height: 1.6;">
+    <p style="font-size: 15px; color: #475569;">${alertMessage}</p>
+
+    <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 5px solid #ef4444; padding: 20px; border-radius: 8px; margin: 25px 0;">
+      <div style="color: #b91c1c; font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">Sin existencias</div>
+      <ul style="margin: 0; padding-left: 20px; color: #7f1d1d; font-size: 16px; font-weight: 600;">
+        ${missing.map(item => `<li style="margin-bottom: 6px;">${item}</li>`).join('') || '<li>No especificado</li>'}
+      </ul>
+      <div style="margin-top: 14px; font-size: 13px; color: #7f1d1d;">
+        Unidad: <strong>${alertUnidad}</strong> (${alertClues}) — Municipio: <strong>${meta.municipio || 'N/D'}</strong>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin: 40px 0 10px 0;">
+      <a href="${platformUrl}" style="background-color: #b91c1c; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; display: inline-block;">Ver en la Plataforma</a>
+    </div>
+  </div>
+
+  <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+    <p style="margin: 0; color: #64748b; font-size: 12px; font-weight: 500;">Jurisdicción Sanitaria 1 - SIREVAQ</p>
+    <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 11px;">Este es un correo automático de no-reply. Favor de no responder a esta dirección.</p>
+  </div>
+</div>
+`
+
+      const desabastoSends: Promise<void>[] = []
+      for (const r of recipients) {
+        desabastoSends.push(
+          transporter.sendMail({
+            from: gmailUser,
+            to: r.email,
+            subject: `🚨 Desabasto crítico: ${alertUnidad} (${missing.join(', ') || 'Esquema Básico'})`,
+            text: alertMessage,
+            html: htmlBody,
+            replyTo: 'no-reply@js1reportes.com'
+          }).catch(err => console.error(`Error enviando alerta de desabasto a ${r.email}:`, err))
+        )
+      }
+
+      await Promise.allSettled(desabastoSends)
+      transporter.close()
+
+      return new Response(JSON.stringify({ ok: true, message: `Alerta de desabasto enviada a ${desabastoSends.length} destinatarios.` }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      })
     }
 
     throw new Error('Acción no soportada.')
