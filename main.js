@@ -13987,6 +13987,8 @@ function resetApplicationState() {
   document.querySelectorAll("input, textarea, select").forEach(el => {
     if (el.type === "checkbox" || el.type === "radio") {
       el.checked = false;
+    } else if (el.tagName === "SELECT") {
+      Array.from(el.options).forEach(o => { o.selected = o.defaultSelected; });
     } else {
       el.value = "";
     }
