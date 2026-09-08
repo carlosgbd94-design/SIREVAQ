@@ -1026,23 +1026,119 @@ html.dark .premium-loading-glass {
     50% { transform: translateY(-8px); }
 }
 
+.logo-orbit-stage {
+    position: relative;
+    width: 128px;
+    height: 128px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+.orbit-ambient {
+    position: absolute;
+    inset: 22%;
+    border-radius: 50%;
+    z-index: 0;
+    background: radial-gradient(circle, #7dd3fc 0%, transparent 72%);
+    filter: blur(11px);
+    opacity: .3;
+    animation: orbitAmbient 4s ease-in-out infinite;
+}
+
+@keyframes orbitAmbient {
+  0%, 100% { opacity: .18; transform: scale(.9); }
+  50% { opacity: .42; transform: scale(1.1); }
+}
+
 .bounce-logo-mobile {
     width: 68px;
     height: 68px;
     object-fit: contain;
-    animation: p9-bounce-mobile 1.5s infinite ease-in-out;
+    position: relative;
+    z-index: 3;
+    animation: orbitBreathe 4s cubic-bezier(.45,0,.55,1) infinite;
     filter: drop-shadow(0 8px 16px rgba(0, 51, 102, 0.12));
+}
+
+@keyframes orbitBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.045); }
 }
 
 html.dark .bounce-logo-mobile {
     filter: drop-shadow(0 8px 24px rgba(59, 130, 246, 0.25)) brightness(1.15);
 }
 
-@keyframes p9-bounce-mobile {
-  0%, 100% { transform: translateY(0) scale(1, 1); }
-  25% { transform: translateY(-20px) scale(0.9, 1.12); }
-  50% { transform: translateY(0) scale(1.08, 0.88); }
-  75% { transform: translateY(-5px) scale(0.98, 1.02); }
+.orbit-guide {
+    position: absolute;
+    border-radius: 50%;
+    z-index: 1;
+    border: 1px solid rgba(56, 189, 248, .18);
+}
+.orbit-guide-a { inset: 4%; }
+.orbit-guide-b { inset: 22%; }
+
+.orbit-plane {
+    position: absolute;
+    border-radius: 50%;
+}
+.orbit-plane-a { inset: 4%; animation: orbitDepthA 2.6s linear infinite; }
+.orbit-plane-b { inset: 22%; animation: orbitDepthB 3.4s linear infinite; }
+
+.orbit-spin {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+}
+.orbit-spin-a { animation: orbitSpin 2.6s linear infinite; }
+.orbit-spin-b { animation: orbitSpin 3.4s linear infinite reverse; }
+
+@keyframes orbitSpin { to { transform: rotate(360deg); } }
+
+.orbit-mote {
+    position: absolute;
+    top: -1px;
+    left: 50%;
+    border-radius: 50%;
+}
+.orbit-mote-a {
+    width: 9px;
+    height: 9px;
+    margin-left: -4.5px;
+    background: radial-gradient(circle at 34% 30%, #ffffff, #38bdf8 55%, transparent 100%);
+    box-shadow: 0 0 6px #38bdf8, 0 0 14px rgba(56, 189, 248, .55);
+}
+.orbit-mote-b {
+    width: 7px;
+    height: 7px;
+    margin-left: -3.5px;
+    background: radial-gradient(circle at 34% 30%, #ffffff, #818cf8 55%, transparent 100%);
+    box-shadow: 0 0 6px #818cf8, 0 0 12px rgba(129, 140, 248, .55);
+}
+
+@keyframes orbitDepthA {
+  0% { opacity: .4; z-index: 1; }
+  50% { opacity: 1; z-index: 4; }
+  100% { opacity: .4; z-index: 1; }
+}
+@keyframes orbitDepthB {
+  0% { opacity: 1; z-index: 4; }
+  50% { opacity: .4; z-index: 1; }
+  100% { opacity: 1; z-index: 4; }
+}
+
+.premium-loading-overlay:not(.hidden) .orbit-spin-a,
+.premium-loading-overlay:not(.hidden) .orbit-spin-b {
+  will-change: transform;
+}
+.premium-loading-overlay:not(.hidden) .orbit-plane-a,
+.premium-loading-overlay:not(.hidden) .orbit-plane-b {
+  will-change: opacity;
+}
+.premium-loading-overlay:not(.hidden) .bounce-logo-mobile {
+  will-change: transform;
 }
 
 .loading-text-container {
