@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Requisiciones — SIREVAQ</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1">
+<script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script defer src="requi_engine.js"></script>
+<script defer src="requisiciones_ui.js"></script>
+<style>
+  :root {
+    --primary: #0f172a; --secondary: #0ea5e9;
+    --surface: #ffffff; --surface-container: #f1f4f8;
+    --outline: #73777f; --outline-variant: #e2e8f0;
+    --text: #1a1c20; --muted: #64748b;
+    --error: #ba1a1a; --error-bg: #fef2f2; --error-border: #fecaca;
+    --success: #10b981; --success-bg: #f0fdf9;
+    --warning: #b45309; --warning-bg: #fffbeb; --warning-border: #fde68a;
+    --shadow-1: 0 1px 3px rgba(0,0,0,.06); --shadow-2: 0 4px 8px rgba(0,0,0,.10);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--surface-container);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: var(--text); font-size: 14px; letter-spacing: -.01em;
+  }
+  .material-symbols-rounded { font-variation-settings: 'FILL' 0; font-size: 19px; line-height: 1; vertical-align: middle; }
+  h1 { font-size: 19px; margin: 0; color: var(--primary); font-weight: 800; font-family: 'Poppins', sans-serif; }
+  h2 { font-size: 15.5px; margin: 0 0 12px; color: var(--primary); font-weight: 800; font-family: 'Poppins', sans-serif; display: flex; align-items: center; gap: 8px; }
+  .subtitulo { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
+
+  .volver {
+    display: inline-flex; align-items: center; gap: 7px; color: var(--primary);
+    font-size: 12.5px; font-weight: 800; text-decoration: none; margin-bottom: 16px;
+    padding: 9px 16px 9px 12px; border-radius: 14px; background: var(--surface);
+    border: 1.5px solid var(--outline-variant); box-shadow: var(--shadow-1);
+  }
+  .volver:hover { border-color: var(--secondary); color: var(--secondary); }
+
+  .tarjeta {
+    background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 20px;
+    padding: 18px 22px; margin-bottom: 16px; box-shadow: var(--shadow-1);
+  }
+
+  .barra { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
+  .campo { display: flex; flex-direction: column; gap: 5px; }
+  .campo label { font-size: 10px; color: var(--primary); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+  select, input[type=text], input[type=number], input[type=date] {
+    border: 1px solid var(--outline-variant); border-radius: 10px; padding: 9px 11px;
+    font-size: 13px; font-family: inherit; background: #fff; color: var(--text);
+  }
+  select:focus, input:focus { outline: none; border-color: var(--secondary); box-shadow: 0 0 0 3px rgba(14,165,233,.15); }
+  input[type=number] { -moz-appearance: textfield; width: 90px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 10px;
+    padding: 9px 14px; font-size: 12.5px; font-weight: 800; cursor: pointer; font-family: inherit;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: #1e293b; }
+  .btn-outline { background: #fff; border: 1.5px solid var(--outline-variant); color: var(--text); }
+  .btn-outline:hover { border-color: var(--secondary); color: var(--secondary); }
+  .btn-sm { padding: 6px 10px; font-size: 11.5px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.tbl th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 800; padding: 8px 8px; border-bottom: 2px solid var(--outline-variant); position: sticky; top: 0; background: #fff; }
+  table.tbl td { padding: 7px 8px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
+  table.tbl tr.fila-bio { cursor: pointer; }
+  table.tbl tr.fila-bio:hover { background: var(--surface-container); }
+  .tbl-scroll { max-height: 60vh; overflow: auto; border-radius: 12px; }
+
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800; }
+  .pill-ok { background: var(--success-bg); color: #067a55; }
+  .pill-warn { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+  .pill-new { background: #eff6ff; color: #1d4ed8; }
+  .pill-err { background: var(--error-bg); color: var(--error); }
+
+  .saldo { font-weight: 800; }
+  .saldo.ok { color: var(--success); }
+  .saldo.bajo { color: var(--warning); }
+  .saldo.agotado { color: var(--error); }
+
+  .grid-destinos { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
+  .destino-card { border: 1.5px solid var(--outline-variant); border-radius: 14px; padding: 10px 12px; }
+  .destino-card label { font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 6px; }
+  .destino-card input { width: 100%; }
+
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--primary); color: #fff; padding: 12px 18px; border-radius: 12px; font-size: 12.5px; font-weight: 700; box-shadow: var(--shadow-2); z-index: 999; opacity: 0; transform: translateY(8px); transition: all .2s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.err { background: var(--error); }
+
+  .pasos { display: flex; gap: 8px; margin-bottom: 16px; }
+  .paso-tab { flex: 1; padding: 12px 16px; border-radius: 14px; background: #fff; border: 1.5px solid var(--outline-variant); cursor: pointer; text-align: center; font-weight: 800; font-size: 12.5px; color: var(--muted); }
+  .paso-tab.activo { border-color: var(--secondary); color: var(--secondary); background: #f0f9ff; }
+  .paso-panel { display: none; }
+  .paso-panel.activo { display: block; }
+
+  .hint { font-size: 11.5px; color: var(--muted); background: var(--surface-container); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
+  [data-solo-lectura="1"] .solo-edicion { display: none !important; }
+  [data-solo-lectura="1"] .solo-lectura { display: inline-block !important; }
+  .badge-role { font-size: 10.5px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--surface-container); color: var(--muted); }
+</style>
+</head>
+<body data-solo-lectura="0" id="pagina">
+
+  <a href="index.html" class="volver"><span class="material-symbols-rounded">arrow_back</span> Volver a SIREVAQ</a>
+
+  <div class="tarjeta">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <div>
+        <h1>Requisiciones de Biológicos</h1>
+        <p class="subtitulo">Jurisdicción Sanitaria N.1 → Municipios/Hospitales → Unidades</p>
+      </div>
+      <span class="badge-role" id="badgeRol">Cargando sesión…</span>
+    </div>
+
+    <div class="barra" style="margin-top:16px;">
+      <div class="campo">
+        <label>Año</label>
+        <select id="selAnio"></select>
+      </div>
+      <div class="campo">
+        <label>Mes</label>
+        <select id="selMes"></select>
+      </div>
+      <div class="campo solo-edicion">
+        <label>Folio Oracle/SACI</label>
+        <input type="text" id="inpFolio" placeholder="Se escribe a mano, como en el sello físico">
+      </div>
+      <button class="btn btn-primary solo-edicion" id="btnGuardarCabecera">
+        <span class="material-symbols-rounded">save</span> Guardar / Abrir requisición
+      </button>
+      <button class="btn btn-outline" id="btnCargar">
+        <span class="material-symbols-rounded">refresh</span> Cargar
+      </button>
+    </div>
+    <div class="hint" id="hintCabecera" style="margin-top:12px; display:none;"></div>
+  </div>
+
+  <div id="contenidoRequisicion" style="display:none;">
+    <div class="pasos">
+      <div class="paso-tab activo" data-paso="1"><span class="material-symbols-rounded">inventory</span> 1. Lo surtido (Jurisdicción)</div>
+      <div class="paso-tab" data-paso="2"><span class="material-symbols-rounded">alt_route</span> 2. Reparto a Municipios/Hospitales</div>
+      <div class="paso-tab" data-paso="3"><span class="material-symbols-rounded">local_hospital</span> 3. Reparto a Unidades</div>
+    </div>
+
+    <!-- PASO 1 -->
+    <div class="paso-panel activo" id="panelPaso1">
+      <div class="tarjeta">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <h2 style="margin:0;"><span class="material-symbols-rounded">inventory</span> Lo que llegó del almacén estatal</h2>
+          <button class="btn btn-outline btn-sm" id="btnPdfJurisdiccional"><span class="material-symbols-rounded" style="font-size:14px">draw</span> Firmas y exportar PDF Jurisdiccional (2 copias)</button>
+        </div>
+        <div id="cajaFirmasJurisdiccional" style="display:none; margin:10px 0; padding:12px; background:var(--surface-container); border-radius:12px;"></div>
+        <p class="hint">Da clic en un biológico para capturar sus lotes recibidos. El comparador te avisa si el lote ya existe o parece un error de captura antes de guardarlo.</p>
+        <div class="tbl-scroll">
+          <table class="tbl">
+            <thead><tr><th>#</th><th>Biológico</th><th>Presentación</th><th>Lotes capturados</th><th>Total surtido</th></tr></thead>
+            <tbody id="tbodyBiologicos"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASO 2 -->
+    <div class="paso-panel" id="panelPaso2">
+      <div class="tarjeta">
+        <h2><span class="material-symbols-rounded">alt_route</span> Reparto a Municipios/Hospitales</h2>
+        <div class="barra">
+          <div class="campo" style="min-width:320px;">
+            <label>Biológico + Lote</label>
+            <select id="selLoteParaMunicipio"></select>
+          </div>
+        </div>
+        <div id="cajaRepartoMunicipio"></div>
+      </div>
+    </div>
+
+    <!-- PASO 3 -->
+    <div class="paso-panel" id="panelPaso3">
+      <div class="tarjeta">
+        <h2><span class="material-symbols-rounded">local_hospital</span> Reparto a Unidades</h2>
+        <div class="barra">
+          <div class="campo">
+            <label>Municipio / Hospitales</label>
+            <select id="selMunicipioUnidad"></select>
+          </div>
+          <div class="campo" style="min-width:320px;">
+            <label>Biológico + Lote</label>
+            <select id="selLoteParaUnidad"></select>
+          </div>
+        </div>
+        <div id="cajaRepartoUnidad"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</body>
+</html>

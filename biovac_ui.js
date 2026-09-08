@@ -308,6 +308,94 @@ async function cargarMovimiento() {
   estado.movimiento = movimiento;
   await cargarRenglones();
   render();
+  if (movimiento.estado === 'BORRADOR') await ofrecerCargaDesdeRequisiciones();
+}
+
+// ---------------------------------------------------------------------------
+// Puente opcional con Requisiciones (módulo aparte, requi_*.sql): si esa
+// jurisdicción ya repartió lotes a este municipio para el mismo año/mes, se
+// OFRECE cargarlos aquí como "recibido" -- nunca automático. Requisiciones
+// está en fase de pruebas, así que el dato no se asume definitivo: se
+// pregunta primero (mostrarModal) y el usuario decide.
+//
+// Biovac trabaja al nivel de MUNICIPIO (biovac_unidades tiene un renglón por
+// municipio, no por unidad de salud), y requi_distribucion_municipio reparte
+// exactamente a ese mismo nivel -- por eso el cruce es directo por
+// `municipio`, sin necesitar CLUES. Solo se ofrecen biológicos que sí tienen
+// equivalente en el catálogo de Biovac (requi_catalogo_biologicos.
+// biovac_biologico_id) y que todavía no tengan un renglón NORMAL cargado en
+// este movimiento (para no pisar una captura manual ya hecha).
+// ---------------------------------------------------------------------------
+
+async function ofrecerCargaDesdeRequisiciones() {
+  const unidad = estado.unidades.find((u) => u.id === estado.movimiento.unidad_id);
+  if (!unidad) return;
+
+  const { data: requisicion } = await estado.db.from('requi_requisiciones')
+    .select('id, folio_oracle')
+    .eq('anio', estado.movimiento.anio).eq('mes', estado.movimiento.mes).maybeSingle();
+  if (!requisicion) return;
+
+  const { data: reparto, error } = await estado.db.from('requi_distribucion_municipio')
+    .select(`cantidad, requi_catalogo_biologicos ( nombre, biovac_biologico_id ), requi_lotes ( numero_lote, caducidad )`)
+    .eq('requisicion_id', requisicion.id).eq('municipio', unidad.municipio).gt('cantidad', 0);
+  if (error || !reparto || !reparto.length) return;
+
+  const yaCargados = new Set(
+    estado.renglones.filter((r) => r.categoria === 'NORMAL')
+      .map((r) => r.biovac_lotes.biologico_id + '::' + r.biovac_lotes.numero_lote)
+  );
+
+  const candidatos = reparto
+    .filter((r) => r.requi_catalogo_biologicos.biovac_biologico_id)
+    .filter((r) => !yaCargados.has(r.requi_catalogo_biologicos.biovac_biologico_id + '::' + r.requi_lotes.numero_lote));
+  if (!candidatos.length) return;
+
+  const detalle = candidatos
+    .map((c) => `• ${c.requi_catalogo_biologicos.nombre} — Lote ${c.requi_lotes.numero_lote} (${c.cantidad} pzas)`)
+    .join('\n');
+  const aceptar = await mostrarModal({
+    titulo: 'Cargar recibido desde Requisiciones',
+    mensaje: `Requisiciones ya repartió ${candidatos.length} lote(s) a este municipio para este mes`
+      + (requisicion.folio_oracle ? ` (folio ${requisicion.folio_oracle})` : '') + `:\n\n${detalle}\n\n`
+      + `¿Deseas cargarlos aquí como recibido? La cantidad se convierte de piezas a frascos según el catálogo -- revísala antes de cerrar el mes.`,
+    textoAceptar: 'Sí, cargar'
+  });
+  if (!aceptar) return;
+
+  let cargados = 0;
+  for (const c of candidatos) {
+    const bio = estado.biologicos.find((b) => b.id === c.requi_catalogo_biologicos.biovac_biologico_id);
+    if (!bio) continue;
+    const dosisPorFrasco = Number(bio.dosis_por_frasco) || 1;
+    const frascos = Math.round((Number(c.cantidad) / dosisPorFrasco) * 100) / 100;
+
+    let { data: lote } = await estado.db.from('biovac_lotes')
+      .select('id').eq('biologico_id', bio.id).eq('numero_lote', c.requi_lotes.numero_lote).maybeSingle();
+    if (!lote) {
+      const { data: nuevo, error: errIns } = await estado.db.from('biovac_lotes')
+        .insert({ biologico_id: bio.id, numero_lote: c.requi_lotes.numero_lote, caducidad: c.requi_lotes.caducidad })
+        .select('id').single();
+      if (errIns) continue;
+      lote = nuevo;
+    }
+
+    const { error: errRenglon } = await estado.db.from('biovac_renglones').insert({
+      movimiento_id: estado.movimiento.id, lote_id: lote.id, categoria: 'NORMAL',
+      recibido_frascos: frascos,
+      observaciones: `Cargado desde Requisiciones (${c.cantidad} pzas ÷ ${dosisPorFrasco}/frasco)`
+        + (requisicion.folio_oracle ? ` · folio ${requisicion.folio_oracle}` : '')
+    });
+    if (!errRenglon) cargados++;
+  }
+
+  if (cargados) {
+    toast(`${cargados} lote(s) cargado(s) desde Requisiciones.`, 'ok');
+    await cargarRenglones();
+    render();
+  } else {
+    toast('No se pudo cargar ningún lote desde Requisiciones.', 'error');
+  }
 }
 
 async function cargarRenglones() {

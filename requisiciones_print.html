@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Imprimir Requisición — SIREVAQ</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script defer src="requisiciones_assets.js"></script>
+<script defer src="requisiciones_print_ui.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #111; background: #999; }
+
+  .barra-pantalla { display: flex; justify-content: space-between; align-items: center; padding: 10px 18px; background: #0f172a; color: #fff; font-family: 'Segoe UI', Arial, sans-serif; }
+  .barra-pantalla button { background: #0ea5e9; color: #fff; border: none; border-radius: 8px; padding: 9px 16px; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .barra-pantalla .info { font-size: 12.5px; opacity: .85; }
+
+  @page { size: letter; margin: 8mm; }
+
+  .hoja {
+    width: 216mm; min-height: 279mm; margin: 14px auto; background: #fff;
+    padding: 8mm; page-break-after: always;
+  }
+  .hoja:last-child { page-break-after: auto; }
+
+  .encabezado { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .encabezado img { height: 15mm; width: auto; }
+  .titulo-central { flex: 1; text-align: center; }
+  .titulo-central .l1 { font-size: 12px; font-weight: bold; text-transform: uppercase; }
+  .titulo-central .l2 { font-size: 10.5px; }
+  .subtitulo-doc { text-align: center; font-size: 11px; font-weight: bold; margin: 4mm 0 3mm; text-decoration: underline; }
+
+  table.datos { width: 100%; border-collapse: collapse; font-size: 9.5px; margin-bottom: 3mm; }
+  table.datos td { border: 1px solid #000; padding: 1.5mm 2mm; }
+  table.datos td.etq { font-weight: bold; width: 22mm; background: #f2f2f2; }
+
+  table.grid { width: 100%; border-collapse: collapse; font-size: 8.3px; }
+  table.grid th, table.grid td { border: 1px solid #000; padding: 1mm 1.3mm; text-align: center; vertical-align: middle; }
+  table.grid th { background: #dbe4ef; font-weight: bold; text-transform: uppercase; font-size: 7.6px; }
+  table.grid td.nombre { text-align: left; font-weight: bold; }
+  table.grid td.clave { font-size: 7.3px; color: #333; }
+
+  .nota-transporte { font-size: 7.6px; font-weight: bold; text-align: center; border: 1px solid #000; border-top: none; padding: 1.5mm; }
+
+  .fila-recepcion { display: flex; border: 1px solid #000; border-top: none; font-size: 8.3px; }
+  .fila-recepcion > div { flex: 1; padding: 2mm; border-left: 1px solid #000; }
+  .fila-recepcion > div:first-child { border-left: none; }
+
+  .obs { border: 1px solid #000; border-top: none; padding: 2mm; font-size: 8.3px; min-height: 10mm; }
+
+  .firmas { display: flex; margin-top: 6mm; gap: 10mm; }
+  .firmas > div { flex: 1; text-align: center; }
+  .firmas .linea { border-top: 1px solid #000; margin-top: 10mm; }
+  .firmas .nombre-impreso { font-size: 8.3px; font-weight: bold; margin-top: 1.5mm; }
+  .firmas .cargo-caption { font-size: 7.6px; }
+
+  @media print {
+    body { background: #fff; }
+    .barra-pantalla { display: none; }
+    .hoja { margin: 0; box-shadow: none; }
+  }
+  @media screen {
+    .hoja { box-shadow: 0 2px 10px rgba(0,0,0,.3); }
+  }
+</style>
+</head>
+<body>
+  <div class="barra-pantalla">
+    <span class="info" id="infoImpresion">Cargando…</span>
+    <button onclick="window.print()">Imprimir / Guardar PDF</button>
+  </div>
+  <div id="hojas"></div>
+</body>
+</html>
