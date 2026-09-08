@@ -211,6 +211,14 @@
   }
   table.renglones input:focus { border-color: var(--secondary); }
   table.renglones input[data-campo=observaciones] { text-align: left; font-weight: 400; }
+  /* Destello breve al confirmarse el guardado automático de una celda (al
+     salir del campo) -- no bloquea nada, solo confirma visualmente que ya
+     quedó a salvo sin depender de "Cerrar mes". */
+  table.renglones input.campo-guardado-ok { animation: campoGuardadoFlash 1.1s ease-out; }
+  @keyframes campoGuardadoFlash {
+    0% { border-color: var(--success); box-shadow: 0 0 0 2px rgba(16,185,129,.25); }
+    100% { border-color: var(--outline-variant); box-shadow: none; }
+  }
   table.renglones .btn-fantasma { padding: 5px; border-radius: 8px; }
   table.renglones .btn-fantasma .material-symbols-rounded { font-size: 17px; }
   table.renglones .btn-fantasma[data-action="eliminar-renglon"]:hover { background: var(--error-bg); color: var(--error); }

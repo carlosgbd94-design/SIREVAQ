@@ -753,6 +753,33 @@ function validarGuardadoRenglon(r, bio, dosisProspectiva) {
   return null;
 }
 
+// Cada celda de renglón (recibido/aplicadas/desechadas/observaciones) se
+// guarda sola al perder el foco -- no hace falta "Cerrar mes" para que el
+// progreso quede a salvo, eso solo bloquea edición y arrastra la existencia
+// al mes siguiente. Este set trackea celdas tecleadas (evento "input") que
+// AÚN no confirmaron ese guardado (evento "change", que dispara recién al
+// salir del campo) -- se usa para advertir antes de cerrar la pestaña con
+// algo a medio escribir, y para el destello verde de "guardado".
+const camposSinGuardar = new Set();
+
+function marcarCampoSinGuardar(input) {
+  camposSinGuardar.add(input);
+}
+
+function destellarGuardado(input) {
+  input.classList.remove('campo-guardado-ok');
+  // Forzar reflow para poder re-disparar la animación si el usuario edita
+  // el mismo campo dos veces seguidas.
+  void input.offsetWidth;
+  input.classList.add('campo-guardado-ok');
+}
+
+window.addEventListener('beforeunload', (ev) => {
+  if (camposSinGuardar.size === 0) return;
+  ev.preventDefault();
+  ev.returnValue = '';
+});
+
 async function guardarCampoRenglon(input) {
   const renglonId = input.dataset.renglon;
   const campo = input.dataset.campo;
@@ -772,6 +799,7 @@ async function guardarCampoRenglon(input) {
     if (errorValidacion) {
       toast(errorValidacion, 'error');
       input.value = r[campo] || '';
+      camposSinGuardar.delete(input);
       recalcularFilaEnVivo(renglonId);
       return;
     }
@@ -780,6 +808,8 @@ async function guardarCampoRenglon(input) {
   const { data, error } = await estado.db.from('biovac_renglones').update({ [campo]: valor }).eq('id', renglonId)
     .select('existencia_final_frascos').single();
   if (error) { toast('Error al guardar: ' + error.message, 'error'); return; }
+  camposSinGuardar.delete(input);
+  destellarGuardado(input);
   if (r) {
     r[campo] = valor;
     r.existencia_final_frascos = data.existencia_final_frascos;
@@ -1350,8 +1380,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const cont = document.getElementById('contenedorBloques');
   cont.addEventListener('input', (ev) => {
-    if (ev.target.matches('[data-renglon][data-campo]') && ev.target.dataset.campo !== 'observaciones') {
-      recalcularFilaEnVivo(ev.target.dataset.renglon);
+    if (ev.target.matches('[data-renglon][data-campo]')) {
+      marcarCampoSinGuardar(ev.target);
+      if (ev.target.dataset.campo !== 'observaciones') recalcularFilaEnVivo(ev.target.dataset.renglon);
       return;
     }
   });

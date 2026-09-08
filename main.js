@@ -9739,8 +9739,12 @@ $("btnAddLoteRow")?.addEventListener("click", async () => {
   let addedCount = 0;
   let newLotes = [];
   selectedMunis.forEach(muni => {
-    // VALIDACIÓN DE DUPLICADOS (Por Municipio)
-    const exists = BATCH_CATALOG.find(x => x.biologico === biologico && x.lote === lote && x.municipio === muni);
+    // VALIDACIÓN DE DUPLICADOS (por municipio Y tipo -- un mismo número de
+    // lote puede existir a la vez como Normal y como A.R.F.: una parte
+    // sigue en uso normal mientras otra está en dictamen. Canje no debería
+    // repetir número de lote en la práctica, pero no hace falta bloquearlo
+    // aparte: si coincide con otro tipo ya registrado, es igual de válido.)
+    const exists = BATCH_CATALOG.find(x => x.biologico === biologico && x.lote === lote && x.municipio === muni && x.tipo === tipo);
     if (!exists) {
       const newLoteObj = { biologico, lote, caducidad, fecha_recepcion, municipio: muni, tipo };
       BATCH_CATALOG.push(newLoteObj);
@@ -9811,11 +9815,19 @@ window.saveLoteEdit = async function (idx) {
     return;
   }
 
+  const nuevoBiologico = bioInput.value;
+  const nuevoTipo = tipoInput ? tipoInput.value : (item.tipo || "NORMAL");
+  const chocaConOtro = BATCH_CATALOG.some((x, i) => i !== idx && x.biologico === nuevoBiologico && x.lote === rawLote && x.municipio === item.municipio && x.tipo === nuevoTipo);
+  if (chocaConOtro) {
+    showToast("Ya existe un lote igual (mismo biológico, lote, municipio y tipo).", false, "warn");
+    return;
+  }
+
   // Update object
-  item.biologico = bioInput.value;
+  item.biologico = nuevoBiologico;
   item.lote = rawLote;
   item.caducidad = rawCad;
-  item.tipo = tipoInput ? tipoInput.value : (item.tipo || "NORMAL");
+  item.tipo = nuevoTipo;
 
   window.LoteEditingIdx = null;
 
