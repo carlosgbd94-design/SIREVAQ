@@ -122,12 +122,18 @@ for each row execute function biovac_trg_10_bloqueo();
 -- 3. Autocálculo de existencia final (BEFORE, sin recursión: escribe en NEW)
 -- ---------------------------------------------------------------------------
 
+-- NOTA: la seguridad "BCG/SR no puede quedar fraccionario" NO vive aquí --
+-- vivir en el trigger de cada insert/update bloqueaba capturar "aplicadas"
+-- y "desechadas" como dos ediciones de campo separadas (autoguardado por
+-- celda): el estado INTERMEDIO, con solo aplicadas tecleado, casi siempre
+-- deja un decimal. Se movió como compuerta explícita dentro de
+-- biovac_cerrar_mes (ver más abajo, junto a la de existencia negativa) --
+-- ahí sí debe estar resuelto, y antes se bypasseaba justo ahí por error.
 create or replace function biovac_trg_20_autocalc() returns trigger
 language plpgsql
 as $$
 declare
   v_caducidad date;
-  v_frasco_dia boolean;
   v_numero_lote text;
   v_fin_de_mes date;
 begin
@@ -142,21 +148,21 @@ begin
   );
   new.updated_at := now();
 
-  -- Dos seguridades que solo aplican a renglones NORMALES (un lote en
-  -- A.R.F./canje puede legítimamente quedar caducado o con cantidades no
-  -- enteras mientras se resuelve -- no está en uso activo):
+  -- Solo aplica a renglones NORMALES (un lote en A.R.F./canje puede
+  -- legítimamente quedar caducado mientras se resuelve -- no está en uso
+  -- activo):
   if new.categoria = 'NORMAL' and coalesce(current_setting('biovac.bypass_validaciones', true), 'off') <> 'on' then
-    select l.numero_lote, l.caducidad, cb.frasco_desecho_mismo_dia
-      into v_numero_lote, v_caducidad, v_frasco_dia
-    from biovac_lotes l join biovac_catalogo_biologicos cb on cb.id = l.biologico_id
+    select l.numero_lote, l.caducidad
+      into v_numero_lote, v_caducidad
+    from biovac_lotes l
     where l.id = new.lote_id;
 
-    -- 1. Lote caducado con existencia activa: debe desecharse o
-    --    reclasificarse antes de poder guardarse así. Se compara contra el
-    --    ÚLTIMO DÍA DEL MES del propio movimiento, no contra la fecha real
-    --    de hoy -- así una importación de histórico o una corrección a un
-    --    mes pasado no se bloquea solo porque, visto desde HOY, ese lote ya
-    --    caducó; lo que importa es si ya estaba caducado EN ese mes.
+    -- Lote caducado con existencia activa: debe desecharse o
+    -- reclasificarse antes de poder guardarse así. Se compara contra el
+    -- ÚLTIMO DÍA DEL MES del propio movimiento, no contra la fecha real
+    -- de hoy -- así una importación de histórico o una corrección a un
+    -- mes pasado no se bloquea solo porque, visto desde HOY, ese lote ya
+    -- caducó; lo que importa es si ya estaba caducado EN ese mes.
     select (date_trunc('month', make_date(m.anio, m.mes, 1)) + interval '1 month' - interval '1 day')::date
       into v_fin_de_mes
     from biovac_movimientos m where m.id = new.movimiento_id;
@@ -164,13 +170,6 @@ begin
     if v_caducidad is not null and v_fin_de_mes is not null and v_caducidad < v_fin_de_mes and new.existencia_final_frascos > 0 then
       raise exception 'El lote % está caducado (%) y aún registra existencia (%). Regístralo como desechado antes de guardar.',
         v_numero_lote, v_caducidad, new.existencia_final_frascos;
-    end if;
-
-    -- 2. BCG/SR: frasco multidosis que se desecha el mismo día de
-    --    abrirse -- nunca puede quedar una existencia final fraccionaria.
-    if v_frasco_dia and new.existencia_final_frascos <> round(new.existencia_final_frascos) then
-      raise exception 'El lote % es de un biológico que se desecha el mismo día de abrirse: la existencia final no puede quedar en fracción de frasco (%).',
-        v_numero_lote, new.existencia_final_frascos;
     end if;
   end if;
 
@@ -213,6 +212,7 @@ declare
   v_next_mes int;
   v_next_id uuid;
   v_negativos int;
+  v_fraccionarios int;
 begin
   perform set_config('biovac.bypass_lock', 'on', true);
   perform set_config('biovac.bypass_validaciones', 'on', true);
@@ -224,7 +224,28 @@ begin
   where movimiento_id = p_movimiento_id and existencia_final_frascos < 0;
 
   if v_negativos > 0 then
+    perform set_config('biovac.bypass_lock', 'off', true);
+    perform set_config('biovac.bypass_validaciones', 'off', true);
     raise exception 'No se puede cerrar: % renglón(es) con existencia final negativa', v_negativos;
+  end if;
+
+  -- BCG/SR: frasco multidosis que se desecha el mismo día de abrirse --
+  -- nunca puede quedar una existencia final fraccionaria. Aquí, al cerrar,
+  -- es donde de verdad debe estar resuelto (ver nota en
+  -- biovac_trg_20_autocalc más arriba).
+  select count(*) into v_fraccionarios
+  from biovac_renglones r
+  join biovac_lotes l on l.id = r.lote_id
+  join biovac_catalogo_biologicos cb on cb.id = l.biologico_id
+  where r.movimiento_id = p_movimiento_id
+    and r.categoria = 'NORMAL'
+    and cb.frasco_desecho_mismo_dia
+    and r.existencia_final_frascos <> round(r.existencia_final_frascos);
+
+  if v_fraccionarios > 0 then
+    perform set_config('biovac.bypass_lock', 'off', true);
+    perform set_config('biovac.bypass_validaciones', 'off', true);
+    raise exception 'No se puede cerrar: % renglón(es) de biológicos que se desechan el mismo día de abrirse (BCG/SR) quedan con un frasco a medio resolver. Completa las dosis aplicadas/desechadas de esos renglones antes de cerrar.', v_fraccionarios;
   end if;
 
   select unidad_id, anio, mes into v_unidad, v_anio, v_mes

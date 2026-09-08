@@ -741,14 +741,18 @@ function recalcularTotalBio(bioId) {
 // aplica biovac_trg_20_autocalc (solo sobre renglones NORMALES) -- esto es
 // solo para dar el error al instante sin esperar el viaje al servidor; la
 // base de datos sigue siendo quien realmente lo bloquea.
+// La seguridad "BCG/SR no puede quedar fraccionario" NO se revisa aquí a
+// propósito -- con autoguardado por celda, "aplicadas" y "desechadas" se
+// escriben en dos momentos separados, y el estado intermedio (solo
+// aplicadas tecleado) casi siempre deja un decimal. Bloquear ESE guardado
+// individual hacía imposible capturar el renglón en dos pasos. Esa cuenta
+// debe cerrar exacta al terminar de capturar, no en cada campo -- se revisa
+// del lado del servidor solo al intentar "Cerrar mes" (biovac_cerrar_mes).
 function validarGuardadoRenglon(r, bio, dosisProspectiva) {
   if (r.categoria !== 'NORMAL') return null;
   const lote = r.biovac_lotes;
   if (Number(dosisProspectiva) > 0 && loteVencido(lote.caducidad)) {
     return `El lote ${lote.numero_lote} está caducado. Regístralo como desechado antes de guardar.`;
-  }
-  if (bio.frasco_desecho_mismo_dia && Number(dosisProspectiva) !== Math.round(Number(dosisProspectiva))) {
-    return `${bio.nombre_excel.replace(/\n/g, ' ')} se desecha el mismo día de abrirse: la existencia final no puede quedar en fracción de frasco.`;
   }
   return null;
 }
