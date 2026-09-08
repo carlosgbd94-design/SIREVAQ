@@ -1449,3 +1449,169 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Botón flotante de feedback -- mismo mecanismo que el resto de SIREVAQ
+// (envía a Discord vía webhook, con imágenes adjuntas opcionales), solo que
+// aquí la info de usuario/unidad sale de `estado` (sesión real de BioVac o
+// el campo de texto libre) en vez del `USER` global de main.js.
+// ---------------------------------------------------------------------------
+
+const DISCORD_WEBHOOK_URL = atob("aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTUxNjE5OTgzNTQzNzM3MTU1My8yU19XYW1qck9PcE5ybUdYbHV3QTdTcmRTa3FhZXNiTXY1aXpzWVByQlN4dnJPaDg0LWZIYThHQlFEanNVYWVLc0VIUw==");
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btnFeedbackFAB = document.getElementById('btnFeedbackFAB');
+  const feedbackModal = document.getElementById('feedbackModal');
+  if (!btnFeedbackFAB || !feedbackModal) return;
+
+  const btnCancelFeedback = document.getElementById('btnCancelFeedback');
+  const btnCloseFeedbackHeader = document.getElementById('btnCloseFeedbackHeader');
+  const formFeedback = document.getElementById('formFeedback');
+  const feedbackImagesInput = document.getElementById('feedbackImagesInput');
+  const feedbackUploadArea = document.getElementById('feedbackUploadArea');
+  const feedbackPreviewGrid = document.getElementById('feedbackPreviewGrid');
+  const btnSelectFilesTrigger = document.getElementById('btnSelectFilesTrigger');
+
+  let uploadedFiles = [];
+
+  btnFeedbackFAB.addEventListener('click', () => feedbackModal.classList.add('show'));
+
+  const renderPreviews = () => {
+    if (!feedbackPreviewGrid) return;
+    feedbackPreviewGrid.innerHTML = '';
+    uploadedFiles.forEach((file, index) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const item = document.createElement('div');
+        item.className = 'feedback-preview-item';
+        const img = document.createElement('img');
+        img.src = e.target.result;
+        img.alt = `Preview ${index}`;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'feedback-preview-remove';
+        removeBtn.innerHTML = '✕';
+        removeBtn.addEventListener('click', (evt) => {
+          evt.stopPropagation();
+          uploadedFiles.splice(index, 1);
+          renderPreviews();
+        });
+        item.appendChild(img);
+        item.appendChild(removeBtn);
+        feedbackPreviewGrid.appendChild(item);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const closeModal = () => {
+    feedbackModal.classList.remove('show');
+    formFeedback.reset();
+    uploadedFiles = [];
+    renderPreviews();
+  };
+
+  btnCancelFeedback?.addEventListener('click', closeModal);
+  btnCloseFeedbackHeader?.addEventListener('click', closeModal);
+  feedbackModal.addEventListener('click', (e) => { if (!e.target.closest('.feedback-modal-card')) closeModal(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && feedbackModal.classList.contains('show')) closeModal(); });
+
+  btnSelectFilesTrigger?.addEventListener('click', (e) => { e.preventDefault(); feedbackImagesInput.click(); });
+
+  if (feedbackUploadArea && feedbackImagesInput) {
+    feedbackUploadArea.addEventListener('click', () => feedbackImagesInput.click());
+    feedbackUploadArea.addEventListener('dragover', (e) => { e.preventDefault(); feedbackUploadArea.classList.add('dragover'); });
+    feedbackUploadArea.addEventListener('dragleave', () => feedbackUploadArea.classList.remove('dragover'));
+    feedbackUploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      feedbackUploadArea.classList.remove('dragover');
+      if (e.dataTransfer.files) {
+        Array.from(e.dataTransfer.files).forEach((file) => { if (file.type.startsWith('image/')) uploadedFiles.push(file); });
+        renderPreviews();
+      }
+    });
+  }
+
+  feedbackImagesInput?.addEventListener('change', (e) => {
+    if (e.target.files) {
+      Array.from(e.target.files).forEach((file) => { if (file.type.startsWith('image/')) uploadedFiles.push(file); });
+      renderPreviews();
+      feedbackImagesInput.value = '';
+    }
+  });
+
+  feedbackModal.addEventListener('paste', (e) => {
+    if (!feedbackModal.classList.contains('show')) return;
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    let hasImage = false;
+    for (const item of items) {
+      if (item.type.indexOf('image') !== -1) {
+        const file = item.getAsFile();
+        if (file) {
+          const pFile = new File([file], `paste_${Date.now()}.png`, { type: file.type });
+          uploadedFiles.push(pFile);
+          hasImage = true;
+        }
+      }
+    }
+    if (hasImage) renderPreviews();
+  });
+
+  formFeedback.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const type = document.getElementById('feedbackType').value;
+    const moduleVal = document.getElementById('feedbackModule').value;
+    const message = document.getElementById('feedbackMessage').value;
+    const submitBtn = document.getElementById('btnSubmitFeedback');
+
+    const originalBtnText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<span class="material-symbols-rounded">refresh</span> Enviando...';
+    submitBtn.disabled = true;
+
+    const userName = nombreCompletoDePerfil(estado.perfil) || document.getElementById('selUsuario')?.value.trim() || 'Usuario anónimo';
+    const userRole = estado.perfil?.rol || 'N/A (sin sesión real)';
+    const unidadSel = document.getElementById('selUnidad');
+    const unidadTexto = unidadSel?.selectedOptions[0]?.textContent || 'N/A';
+    const periodo = estado.movimiento ? `${MESES.find((m) => m.v === estado.movimiento.mes)?.l || estado.movimiento.mes} ${estado.movimiento.anio} (${estado.movimiento.estado})` : 'N/A (sin movimiento cargado)';
+
+    let embedColor = 3447003;
+    let typeEmoji = '❓ Pregunta/Duda';
+    if (type === 'Sugerencia') { embedColor = 16766720; typeEmoji = '💡 Sugerencia'; }
+    else if (type === 'Error') { embedColor = 15158332; typeEmoji = '🚨 Reporte de Error'; }
+
+    const embed = {
+      title: `[Movimiento de Biológico] ${typeEmoji}`,
+      description: `**Mensaje del Usuario:**\n${message}`,
+      color: embedColor,
+      fields: [
+        { name: '👤 Usuario', value: userName, inline: true },
+        { name: '🔑 Rol', value: userRole, inline: true },
+        { name: '🏥 Unidad', value: unidadTexto, inline: true },
+        { name: '📅 Periodo', value: periodo, inline: true },
+        { name: '🛠️ Sección afectada', value: moduleVal, inline: true }
+      ],
+      footer: { text: 'SIREVAQ · Movimiento de Biológico' },
+      timestamp: new Date().toISOString()
+    };
+    if (uploadedFiles.length > 0) embed.image = { url: 'attachment://image_0.png' };
+
+    const formData = new FormData();
+    formData.append('payload_json', JSON.stringify({ embeds: [embed] }));
+    uploadedFiles.forEach((file, index) => {
+      const extension = file.name.split('.').pop() || 'png';
+      formData.append(`files[${index}]`, file, `image_${index}.${extension}`);
+    });
+
+    try {
+      const response = await fetch(DISCORD_WEBHOOK_URL, { method: 'POST', body: formData });
+      if (!response.ok) throw new Error('Error al enviar a Discord');
+      toast('¡Gracias! Hemos recibido tu mensaje y capturas correctamente.', 'ok');
+      closeModal();
+    } catch (err) {
+      toast('Hubo un problema al enviar tu mensaje. Intenta de nuevo más tarde.', 'error');
+      submitBtn.innerHTML = originalBtnText;
+      submitBtn.disabled = false;
+    }
+  });
+});

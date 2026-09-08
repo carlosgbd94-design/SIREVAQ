@@ -365,6 +365,75 @@
   }
   .toast.error { background: var(--error); }
   .toast.ok { background: var(--success); }
+
+  /* --- Botón flotante de feedback (mismo sistema que el resto de SIREVAQ,
+     adaptado a la paleta de esta página) --- */
+  .feedback-fab {
+    position: fixed; bottom: 24px; right: 24px; z-index: 9990;
+    width: 60px; height: 60px; background: var(--primary);
+    border: 1px solid rgba(255,255,255,.15); border-top: 1px solid rgba(255,255,255,.3);
+    box-shadow: 0 8px 32px rgba(0,0,0,.2), inset 0 0 16px rgba(255,255,255,.05);
+    color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all .4s cubic-bezier(.16,1,.3,1); outline: none;
+  }
+  .feedback-fab:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,.3), inset 0 0 20px rgba(255,255,255,.1); background: #1e293b; }
+  .feedback-fab .material-symbols-rounded { font-size: 26px; transition: transform .4s cubic-bezier(.16,1,.3,1); }
+  .feedback-fab:hover .material-symbols-rounded { transform: scale(1.1) rotate(-5deg); }
+
+  .feedback-modal-overlay {
+    position: fixed; inset: 0; z-index: 9999; display: flex; align-items: flex-end; justify-content: flex-end;
+    padding: 24px; padding-bottom: 96px; background: rgba(15,23,42,.15);
+    opacity: 0; visibility: hidden; transition: all .3s ease;
+  }
+  @media (max-width: 480px) { .feedback-modal-overlay { padding: 12px; padding-bottom: 96px; } }
+  .feedback-modal-overlay.show { opacity: 1; visibility: visible; }
+  .feedback-modal-card {
+    width: 100%; max-width: 380px; max-height: calc(100vh - 150px); display: flex; flex-direction: column;
+    background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 24px;
+    box-shadow: 0 16px 40px -8px rgba(0,0,0,.2); transform-origin: bottom right; transform: scale(0); opacity: 0;
+    transition: all .4s cubic-bezier(.34,1.56,.64,1); overflow: hidden;
+  }
+  .feedback-modal-overlay.show .feedback-modal-card { transform: scale(1); opacity: 1; }
+  .feedback-modal-header { padding: 20px 24px; border-bottom: 1px solid var(--outline-variant); display: flex; align-items: center; justify-content: space-between; position: relative; }
+  .feedback-header-text { display: flex; flex-direction: column; }
+  .feedback-close-x { background: transparent !important; border: none !important; font-size: 20px !important; color: var(--muted) !important; opacity: .5 !important; cursor: pointer !important; transition: opacity .2s !important; padding: 4px !important; margin: 0 !important; line-height: 1 !important; box-shadow: none !important; height: auto !important; width: auto !important; }
+  .feedback-close-x:hover { opacity: 1 !important; }
+  .feedback-modal-title { font-size: 18px; font-weight: 900; color: var(--primary); margin: 0; letter-spacing: -.02em; font-family: 'Poppins', sans-serif; }
+  .feedback-modal-subtitle { font-size: 11px; font-weight: 600; color: var(--muted); margin: 2px 0 0 0; }
+  .feedback-label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+  .feedback-select-link { background: transparent !important; border: none !important; font-size: 11px !important; font-weight: 800 !important; color: var(--secondary) !important; cursor: pointer !important; text-transform: uppercase !important; letter-spacing: .05em !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; height: auto !important; width: auto !important; transition: opacity .2s !important; }
+  .feedback-select-link:hover { opacity: .8 !important; }
+  .feedback-info-note { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; color: var(--muted); margin-top: 4px; }
+  .feedback-form { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; max-height: 60vh; overflow-y: auto; }
+  .feedback-form::-webkit-scrollbar { width: 6px; }
+  .feedback-form::-webkit-scrollbar-track { background: transparent; }
+  .feedback-form::-webkit-scrollbar-thumb { background: var(--outline-variant); border-radius: 3px; }
+  .feedback-upload-area {
+    background: rgba(14,165,233,.02); border: 1px dashed rgba(14,165,233,.25); border-radius: 12px;
+    padding: 10px 14px; display: flex !important; flex-direction: row !important; align-items: center !important;
+    justify-content: center !important; gap: 8px !important; cursor: pointer !important; transition: all .2s ease !important; margin-top: 4px;
+  }
+  .feedback-upload-area:hover, .feedback-upload-area.dragover { border-color: var(--secondary); background: rgba(14,165,233,.08); }
+  .shortcut-kbd { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-container); border: 1px solid var(--outline-variant); border-bottom: 2px solid var(--outline); border-radius: 6px; padding: 3px 8px; font-family: inherit; font-size: 10px; font-weight: 800; color: var(--primary); box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+  .feedback-preview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+  .feedback-preview-item { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 1px solid var(--outline-variant); background: var(--surface-container); animation: previewFadeIn .3s ease; }
+  @keyframes previewFadeIn { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+  .feedback-preview-item img { width: 100%; height: 100%; object-fit: cover; }
+  button.feedback-preview-remove { position: absolute !important; top: 4px !important; right: 4px !important; width: 20px !important; height: 20px !important; min-width: 20px !important; min-height: 20px !important; max-width: 20px !important; max-height: 20px !important; border-radius: 50% !important; background: var(--error) !important; color: #fff !important; display: flex !important; align-items: center !important; justify-content: center !important; border: none !important; padding: 0 !important; margin: 0 !important; cursor: pointer !important; font-size: 10px !important; font-weight: 900 !important; box-shadow: 0 2px 4px rgba(0,0,0,.3) !important; line-height: 1 !important; transition: all .2s ease !important; z-index: 10 !important; }
+  button.feedback-preview-remove:hover { transform: scale(1.1) !important; }
+  .feedback-input-group { display: flex; flex-direction: column; gap: 8px; }
+  .feedback-form-label { font-size: 11px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: .1em; margin-left: 4px; opacity: .8; }
+  .feedback-input-wrapper { position: relative; border-radius: 16px; background: var(--surface-container); transition: all .3s ease; border: 1px solid var(--outline-variant); }
+  .feedback-input-wrapper:focus-within { background: var(--surface); border-color: rgba(14,165,233,.4); box-shadow: 0 0 0 4px rgba(14,165,233,.1); }
+  .feedback-form select.feedback-select { width: 100% !important; height: 52px !important; background: transparent !important; background-image: none !important; border: none !important; padding: 0 16px !important; font-size: 14px !important; font-weight: 700 !important; color: var(--primary) !important; appearance: none !important; outline: none !important; cursor: pointer !important; box-shadow: none !important; }
+  .feedback-select-arrow { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--primary); opacity: .4; pointer-events: none; }
+  .feedback-form textarea.feedback-textarea { width: 100% !important; height: 120px !important; background: transparent !important; border: none !important; padding: 16px !important; font-size: 14px !important; font-weight: 500 !important; color: var(--primary) !important; resize: none !important; outline: none !important; box-shadow: none !important; font-family: inherit !important; }
+  .feedback-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 20px 28px; background: rgba(0,0,0,.02); border-top: 1px solid rgba(0,0,0,.05); }
+  .feedback-btn-cancel { background: transparent; color: var(--muted); padding: 0 20px; height: 44px; border-radius: 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; border: none; cursor: pointer; transition: all .2s ease; font-family: 'Poppins', sans-serif; }
+  .feedback-btn-cancel:hover { background: rgba(0,0,0,.05); color: var(--primary); }
+  .feedback-btn-submit { background: linear-gradient(135deg, var(--primary), #1e293b); color: #fff; padding: 0 24px; height: 44px; border-radius: 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,.1); cursor: pointer; box-shadow: 0 4px 12px rgba(15,23,42,.2); transition: all .4s cubic-bezier(.16,1,.3,1); font-family: 'Poppins', sans-serif; }
+  .feedback-btn-submit:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(15,23,42,.3); }
+  .feedback-btn-submit:disabled { opacity: .6; cursor: not-allowed; transform: none; }
 </style>
 </head>
 <body>
@@ -480,6 +549,113 @@
 </div>
 
 <div id="toast" class="toast"></div>
+
+<button id="btnFeedbackFAB" class="feedback-fab" title="Enviar Feedback">
+  <span class="material-symbols-rounded">chat</span>
+</button>
+
+<div id="feedbackModal" class="feedback-modal-overlay" aria-hidden="true">
+  <div class="feedback-modal-card">
+    <div class="feedback-modal-header">
+      <div class="feedback-header-text">
+        <h3 class="feedback-modal-title">Soporte Técnico</h3>
+        <p class="feedback-modal-subtitle">Reporta un error o sugiere mejoras — Movimiento de Biológico</p>
+      </div>
+      <button type="button" id="btnCloseFeedbackHeader" class="feedback-close-x">✕</button>
+    </div>
+
+    <a id="whatsappSupportLink"
+      href="https://wa.me/524425507146?text=Hola%20Carlos,%20necesito%20soporte%20con%20Movimiento%20de%20Biol%C3%B3gico..."
+      target="_blank" style="text-decoration:none; display:flex !important; align-items:center !important; gap:14px !important; margin:16px 24px 0 24px !important; padding:14px 18px !important; border-radius:20px !important; border:1px solid rgba(37,211,102,.25) !important; background:linear-gradient(135deg, rgba(37,211,102,.08) 0%, rgba(18,140,126,.03) 100%) !important; transition:all .3s ease !important;">
+      <div style="width:40px !important; height:40px !important; border-radius:12px !important; background:#25d366 !important; color:#fff !important; display:flex !important; align-items:center !important; justify-content:center !important; box-shadow:0 4px 12px rgba(37,211,102,.25) !important; flex-shrink:0 !important;">
+        <svg viewBox="0 0 24 24" style="width:22px !important; height:22px !important; fill:#ffffff !important; display:block !important;">
+          <path d="M12.012 2c-5.506 0-9.988 4.482-9.988 9.988 0 1.761.46 3.475 1.332 4.988L2 22l5.176-1.357c1.468.8 3.123 1.22 4.825 1.22 5.506 0 9.988-4.482 9.988-9.988C22 6.482 17.518 2 12.012 2zm3.844 14.241c-.244.688-1.222 1.259-1.688 1.312-.456.052-.907.245-2.909-.589-2.56-1.066-4.212-3.67-4.339-3.839-.127-.17-1.026-1.365-1.026-2.605 0-1.24.646-1.848.874-2.095.228-.248.498-.31.664-.31.166 0 .332.002.477.009.15.007.352-.057.552.428.2.485.684 1.663.743 1.782.059.12.098.258.019.414-.079.156-.119.255-.239.395-.12.14-.252.312-.359.419-.119.119-.244.25-.104.49.14.24.622 1.025 1.332 1.657.917.817 1.693 1.07 1.932 1.189.239.119.38.101.522-.059.143-.16.622-.724.789-.968.167-.244.332-.206.56-.12.228.086 1.448.683 1.7.808.252.125.42.188.481.294.062.106.062.615-.182 1.303z" />
+        </svg>
+      </div>
+      <div style="flex:1 !important; text-align:left !important; display:flex !important; flex-direction:column !important; gap:2px !important;">
+        <div style="font-size:13.5px !important; font-weight:800 !important; color:var(--primary) !important; letter-spacing:-.01em !important; margin:0 !important; padding:0 !important; line-height:1.2 !important;">Soporte por WhatsApp</div>
+        <div style="font-size:11px !important; font-weight:600 !important; color:var(--muted) !important; margin-top:3px !important; line-height:1.3 !important;">¿Tienes una duda o urgencia? Chatea directo con el administrador.</div>
+      </div>
+      <span class="material-symbols-rounded" style="color:var(--primary) !important; opacity:.5 !important; font-size:20px !important; flex-shrink:0 !important;">chevron_right</span>
+    </a>
+
+    <form id="formFeedback" class="feedback-form">
+      <div class="feedback-input-group">
+        <label for="feedbackType" class="feedback-form-label">Tipo de mensaje</label>
+        <div class="feedback-input-wrapper">
+          <select id="feedbackType" required class="feedback-select">
+            <option value="Sugerencia">💡 Sugerencia</option>
+            <option value="Error">🐛 Reportar Error</option>
+            <option value="Pregunta">❓ Pregunta</option>
+            <option value="Otro">💬 Otro</option>
+          </select>
+          <span class="material-symbols-rounded feedback-select-arrow">expand_more</span>
+        </div>
+      </div>
+
+      <div class="feedback-input-group">
+        <label for="feedbackModule" class="feedback-form-label">¿En qué parte de Movimiento de Biológico ocurre?</label>
+        <div class="feedback-input-wrapper">
+          <select id="feedbackModule" required class="feedback-select">
+            <option value="General">General / Sistema</option>
+            <option value="Captura de renglones">Captura de renglones (recibido/aplicadas/desechadas)</option>
+            <option value="Agregar lote">Agregar lote</option>
+            <option value="A.R.F. / Canje">A.R.F. / Canje</option>
+            <option value="Importar histórico">Importar histórico</option>
+            <option value="Cierre / Corrección de mes">Cierre / Corrección de mes</option>
+            <option value="Exportar Excel/PDF">Exportar Excel / PDF</option>
+          </select>
+          <span class="material-symbols-rounded feedback-select-arrow">expand_more</span>
+        </div>
+      </div>
+
+      <div class="feedback-input-group">
+        <label for="feedbackMessage" class="feedback-form-label">¿Qué problema encontraste o qué te gustaría sugerir?</label>
+        <div class="feedback-input-wrapper">
+          <textarea id="feedbackMessage" required
+            placeholder="Ej. Al agregar un lote A.R.F. no me deja seleccionar..."
+            class="feedback-textarea"></textarea>
+        </div>
+      </div>
+
+      <div class="feedback-input-group">
+        <div class="feedback-label-row">
+          <span class="feedback-form-label" style="margin:0;">Adjuntar imágenes</span>
+          <button type="button" id="btnSelectFilesTrigger" class="feedback-select-link">Seleccionar archivos</button>
+        </div>
+        <input type="file" id="feedbackImagesInput" accept="image/*" multiple style="display:none;">
+
+        <div class="feedback-upload-area" id="feedbackUploadArea">
+          <span class="material-symbols-rounded" style="font-size:18px; color:var(--secondary);">cloud_upload</span>
+          <span style="font-size:11px; font-weight:700; color:var(--muted);">Arrastra imágenes, pégalas o haz clic aquí</span>
+        </div>
+
+        <div style="font-size:11px; font-weight:600; color:var(--muted); display:flex; align-items:center; justify-content:center; gap:5px; margin-top:6px; flex-wrap:nowrap; white-space:nowrap;">
+          <span>Tip: Captura con</span>
+          <kbd class="shortcut-kbd" style="padding:2px 5px !important; font-size:9px !important; height:auto !important; min-height:0 !important; line-height:1 !important; display:inline-flex !important; align-items:center !important;">Win</kbd>
+          <span>+</span>
+          <kbd class="shortcut-kbd" style="padding:2px 5px !important; font-size:9px !important; height:auto !important; min-height:0 !important; line-height:1 !important; display:inline-flex !important; align-items:center !important;">Shift</kbd>
+          <span>+</span>
+          <kbd class="shortcut-kbd" style="padding:2px 5px !important; font-size:9px !important; height:auto !important; min-height:0 !important; line-height:1 !important; display:inline-flex !important; align-items:center !important;">S</kbd>
+          <span>y pégala aquí (Ctrl + V)</span>
+        </div>
+
+        <div class="feedback-preview-grid" id="feedbackPreviewGrid"></div>
+      </div>
+
+      <div class="feedback-info-note">
+        <span class="material-symbols-rounded" style="font-size:16px;">info</span>
+        <span>Se adjuntará información del usuario para ayudar al desarrollador.</span>
+      </div>
+    </form>
+    <div class="feedback-actions">
+      <button type="button" id="btnCancelFeedback" class="feedback-btn-cancel">Cancelar</button>
+      <button type="submit" form="formFeedback" id="btnSubmitFeedback" class="feedback-btn-submit">
+        <span class="material-symbols-rounded" style="font-size:18px;">send</span> Enviar Reporte
+      </button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
