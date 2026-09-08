@@ -864,16 +864,40 @@ async function obtenerLotesCatalogoCentral(bio, categoria) {
   return lista;
 }
 
+// biovac_renglones tiene unique(movimiento_id, lote_id, categoria) -- un
+// mismo lote+categoría no puede tener dos renglones en el mismo movimiento
+// (para eso está editar el renglón que ya existe, no agregar otro). El
+// dropdown consulta el catálogo central, que no sabe nada de qué renglones
+// ya trae ESTE movimiento -- sin este filtro, ofrecía lotes que, al
+// elegirlos, Supabase rechazaba con el error crudo de la restricción.
+function lotesYaEnMovimiento(bioId, categoria) {
+  const set = new Set();
+  for (const r of estado.renglones) {
+    if (r.categoria === categoria && r.biovac_lotes.biologico_id === bioId) {
+      set.add(String(r.biovac_lotes.numero_lote || '').trim().toUpperCase());
+    }
+  }
+  return set;
+}
+
 // Llena un <select> de lote con lo que ya existe en el catálogo central para
 // ese biológico+categoría, más una opción para capturar uno genuinamente
 // nuevo que el catálogo central aún no conozca (input de texto que aparece
 // al elegirla) -- así el flujo normal es "elegir de la lista", sin volver a
-// depender de detección de errores de dedo.
+// depender de detección de errores de dedo. Los lotes que ya tienen renglón
+// en este movimiento con esta misma categoría se muestran deshabilitados
+// (en vez de ocultarlos) para que quede claro por qué no se pueden
+// seleccionar de nuevo -- ese lote ya está en la tabla de arriba, se edita
+// ahí directamente.
 async function poblarSelectLote(bio, categoria, selectEl) {
   selectEl.innerHTML = '<option value="">Cargando lotes…</option>';
   const lista = await obtenerLotesCatalogoCentral(bio, categoria);
+  const yaUsados = lotesYaEnMovimiento(bio.id, categoria);
   const opciones = lista
-    .map((l) => `<option value="${l.lote}" data-cad="${l.caducidad || ''}">${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}</option>`)
+    .map((l) => {
+      const usado = yaUsados.has(String(l.lote).trim().toUpperCase());
+      return `<option value="${l.lote}" data-cad="${l.caducidad || ''}" ${usado ? 'disabled' : ''}>${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}${usado ? ' (ya agregado en este movimiento)' : ''}</option>`;
+    })
     .join('');
   selectEl.innerHTML = `<option value="">Selecciona un lote…</option>${opciones}<option value="__nuevo__">+ Nuevo lote (no está en la lista)</option>`;
 }
@@ -950,7 +974,11 @@ async function agregarLote(bioId, panel) {
 
   const { error: errRenglon } = await estado.db.from('biovac_renglones').insert(renglon);
   if (errRenglon) {
-    toast('Error agregando renglón: ' + errRenglon.message, 'error');
+    if (errRenglon.code === '23505') {
+      toast(`El lote "${numeroLote}" ya está agregado en este movimiento con este mismo Estatus. Edítalo directamente en la tabla de arriba en vez de agregarlo otra vez.`, 'error');
+    } else {
+      toast('Error agregando renglón: ' + errRenglon.message, 'error');
+    }
     // si el lote se acababa de crear para este intento, no dejarlo huérfano
     // (si no, un reintento con la caducidad corregida reutilizaría por error
     // el lote viejo -- ya bloqueado -- en vez de crear uno con el dato bueno)
