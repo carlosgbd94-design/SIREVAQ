@@ -37,11 +37,17 @@ function hexToRgb(hex) {
   return m ? `${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}` : '15, 23, 42';
 }
 
-// La captura de "Existencia de Biológico" (tabla existencia_detalle, ya
-// existente en el resto de SIREVAQ) ya trae lote/caducidad reales por
-// municipio -- se reutiliza aquí solo para sugerir/corregir lo que el
-// usuario teclea en BioVac y evitar errores de dedo (0 por O, etc.), sin
-// depender de que BioVac esté integrado con esa tabla de ninguna otra forma.
+// Catálogo central de lotes (tabla "lotes", ya existente en el resto de
+// SIREVAQ -- panel "Carga de lotes por municipio") -- desde la fase de
+// integración con ARF/Canje, es la ÚNICA fuente de números de lote dentro de
+// BioVac: el número de lote se selecciona de una lista desplegable en vez de
+// teclearse a mano, así que ya no hace falta ningún mecanismo de detección
+// de errores de dedo (el que había aquí antes comparaba contra el propio
+// histórico de BioVac vía Levenshtein y generaba falsos positivos entre
+// lotes genuinamente distintos que solo comparten un par de caracteres).
+// Solo los lotes con tipo NORMAL se ofrecen para resolver un canje (el lote
+// nuevo recibido siempre entra como existencia normal); los de tipo ARF o
+// CANJE se ofrecen al agregar un lote nuevo cuyo Estatus sea ese mismo.
 const CLAVE_A_EXISTENCIA_BIOLOGICO = {
   BCG: ['BCG'], DPT: ['DPT'], HEPA: ['HEPATITIS A'], HEPB: ['HEPATITIS B'],
   HEXAVALENTE: ['HEXAVALENTE'], ANTIINFLUENZA: ['INFLUENZA'],
@@ -49,87 +55,15 @@ const CLAVE_A_EXISTENCIA_BIOLOGICO = {
   ROTAVIRUS: ['ROTAVIRUS'], SR: ['SR'], SRP: ['SRP'], TD: ['TD'], TDPA: ['TDPA'],
   VARICELA: ['VARICELA'], VPH: ['VPH'], VSR: ['VSR']
 };
-function normalizarLote(texto) {
-  return String(texto || '').trim().toUpperCase().replace(/O/g, '0');
-}
 
-// ---------------------------------------------------------------------------
-// Motor de detección de posibles errores de dedo en número de lote, cruzando
-// en tiempo real lo que cualquiera de los 4 municipios ya registró en
-// biovac_lotes para el MISMO biológico (biovac_lotes no está segmentado por
-// municipio -- es, de por sí, la base compartida de la jurisdicción). Es un
-// mecanismo totalmente aparte del que usa existencia_detalle (ver arriba):
-// ese sugiere/corrige contra la captura semanal externa; este compara contra
-// el propio histórico de BioVac entre municipios y solo advierte -- nunca
-// bloquea ni sustituye lo que el usuario decida.
-// ---------------------------------------------------------------------------
-
-function normalizarParaTypo(texto) {
-  return String(texto || '').trim().toUpperCase()
-    .replace(/O/g, '0').replace(/[IL]/g, '1').replace(/S/g, '5').replace(/B/g, '8').replace(/Z/g, '2');
-}
-
-function distanciaLevenshtein(a, b) {
-  const m = a.length, n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
-    }
-  }
-  return dp[m][n];
-}
-
-// Detecta el lote más parecido ya usado (en cualquier municipio) para este
-// biológico, si lo tecleado no coincide exacto con ninguno. Coincidencia
-// normalizada (O/0, I/L/1, S/5, B/8, Z/2) siempre cuenta como "posible
-// typo"; si no, se exige una distancia de edición pequeña relativa al largo
-// del texto, para no sugerir falsos positivos entre lotes genuinamente
-// distintos que solo comparten un par de caracteres.
-function detectarPosibleTypoLote(tecleado, lotesConocidos) {
-  if (!tecleado || lotesConocidos.includes(tecleado)) return null;
-  const normTecleado = normalizarParaTypo(tecleado);
-  let mejor = null, mejorDist = Infinity;
-  for (const lote of lotesConocidos) {
-    if (lote === tecleado) continue;
-    if (normalizarParaTypo(lote) === normTecleado) return { lote, distancia: 0 };
-    const dist = distanciaLevenshtein(tecleado.toUpperCase(), lote.toUpperCase());
-    const umbral = tecleado.length <= 6 ? 1 : 2;
-    if (dist <= umbral && dist < mejorDist) { mejor = lote; mejorDist = dist; }
-  }
-  return mejor ? { lote: mejor, distancia: mejorDist } : null;
-}
-
-async function obtenerLotesConocidos(bioId) {
-  if (estado.lotesConocidos[bioId]) return estado.lotesConocidos[bioId];
-  const { data, error } = await estado.db.from('biovac_lotes').select('numero_lote, caducidad').eq('biologico_id', bioId);
-  const lista = (!error && data) ? data : [];
-  estado.lotesConocidos[bioId] = lista;
-  return lista;
-}
-
-async function revisarPosibleTypoLote(input, bioId, hintEl) {
-  const tecleado = input.value.trim();
-  if (!tecleado || tecleado.length < 3) { hintEl.style.display = 'none'; return; }
-  const lotes = await obtenerLotesConocidos(bioId);
-  const nombres = lotes.map((l) => l.numero_lote);
-  const posible = detectarPosibleTypoLote(tecleado, nombres);
-  if (!posible) { hintEl.style.display = 'none'; return; }
-  hintEl.querySelector('[data-hint-valor]').textContent = posible.lote;
-  hintEl.dataset.valorSugerido = posible.lote;
-  hintEl.style.display = 'flex';
-}
-
-function debounce(fn, ms) {
-  let temporizador;
-  return (...args) => { clearTimeout(temporizador); temporizador = setTimeout(() => fn(...args), ms); };
-}
-const revisarPosibleTypoLoteDebounced = debounce(revisarPosibleTypoLote, 350);
+// El catálogo central nombra a los 4 municipios distinto de como los nombra
+// BioVac (con/sin acentos, con/sin "EL ") -- mapeo explícito en vez de
+// normalización difusa, porque son solo 4 y así un municipio nuevo mal
+// escrito en cualquiera de los dos lados falla visiblemente (lista vacía)
+// en vez de emparejar con el equivocado.
+const MUNICIPIO_BIOVAC_A_LOTES = {
+  QUERETARO: 'QUERÉTARO', CORREGIDORA: 'CORREGIDORA', MARQUES: 'EL MARQUÉS', HUIMILPAN: 'HUIMILPAN'
+};
 
 // perfiles.usuario guarda un nombre corto de login (ej. "CARLOS_BECERRA"),
 // no el nombre completo real -- este mapa es solo de despliegue dentro de
@@ -155,8 +89,7 @@ const estado = {
   movimiento: null,
   renglones: [],
   correccionBatchId: null,
-  sugerenciasLotes: {},
-  lotesConocidos: {}
+  catalogoLotesCentral: {}
 };
 
 function initDb() {
@@ -470,17 +403,30 @@ function colgroupRenglones(split) {
 }
 
 function encabezadoColumnas(split) {
-  return `<thead><tr>
-    <th style="text-align:left">Lote</th>
-    <th>Caducidad</th>
-    <th>Ant.</th>
-    <th>Recibido</th>
-    <th colspan="${split ? 2 : 1}">Dosis aplicadas${split ? ' (frac. / compl.)' : ''}</th>
-    <th colspan="${split ? 2 : 1}">Dosis desechadas${split ? ' (frac. / compl.)' : ''}</th>
-    <th>Final</th>
-    <th>Observaciones</th>
-    <th></th>
-  </tr></thead>`;
+  // Cuando hay dosis fraccionada (Hepatitis B), cada columna de "aplicadas"
+  // y "desechadas" se separa en dos: una fila de subencabezado marca cuál
+  // corresponde a 0.5 mL (fraccionada) y cuál a 1 mL (completa) -- de otro
+  // modo, con solo el título del grupo arriba, no se distingue a simple
+  // vista qué recuadro es cuál dosis.
+  const rs = split ? ' rowspan="2"' : '';
+  const subfila = split ? `<tr class="fila-subencabezado">
+    <th class="col-dosis-05">0.5 mL</th><th class="col-dosis-1">1 mL</th>
+    <th class="col-dosis-05">0.5 mL</th><th class="col-dosis-1">1 mL</th>
+  </tr>` : '';
+  return `<thead>
+    <tr>
+      <th style="text-align:left"${rs}>Lote</th>
+      <th${rs}>Caducidad</th>
+      <th${rs}>Ant.</th>
+      <th${rs}>Recibido</th>
+      <th colspan="${split ? 2 : 1}">Dosis aplicadas</th>
+      <th colspan="${split ? 2 : 1}">Dosis desechadas</th>
+      <th${rs}>Final</th>
+      <th${rs}>Observaciones</th>
+      <th${rs}></th>
+    </tr>
+    ${subfila}
+  </thead>`;
 }
 
 // Semaforización de caducidad: rojo = ya caducó, ámbar = vence dentro de
@@ -575,18 +521,17 @@ function renderBiologico(bio, editable) {
     <td colspan="2">Total ${bio.nombre_excel.replace(/\n/g, ' ')}</td>
     <td data-total-ant="${bio.id}">${totalAnt}</td>
     <td data-total-recibido="${bio.id}">${totalRecibido}</td>
-    <td data-total-aplicadas-a="${bio.id}">${totalAplicadasA}</td>
-    ${split ? `<td data-total-aplicadas-b="${bio.id}">${totalAplicadasB}</td>` : ''}
-    <td data-total-desechadas-a="${bio.id}">${totalDesechadasA}</td>
-    ${split ? `<td data-total-desechadas-b="${bio.id}">${totalDesechadasB}</td>` : ''}
+    <td class="${split ? 'col-dosis-05' : ''}" data-total-aplicadas-a="${bio.id}">${totalAplicadasA}</td>
+    ${split ? `<td class="col-dosis-1" data-total-aplicadas-b="${bio.id}">${totalAplicadasB}</td>` : ''}
+    <td class="${split ? 'col-dosis-05' : ''}" data-total-desechadas-a="${bio.id}">${totalDesechadasA}</td>
+    ${split ? `<td class="col-dosis-1" data-total-desechadas-b="${bio.id}">${totalDesechadasB}</td>` : ''}
     <td><span class="valor-final" data-total-final="${bio.id}">${totalFinal}</span></td>
     <td colspan="2"></td>
   </tr></tfoot>`;
   html += `</table></div>`;
-  html += `<datalist id="datalist-lote-${bio.id}"></datalist>`;
 
   if (editable) {
-    html += renderPanelAgregar(bio.id);
+    html += renderPanelAgregar(bio);
   }
   html += `</div>`;
   return html;
@@ -617,7 +562,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     filaResolver = `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelResolverArfHtml(r.id)}</td></tr>`;
   } else if (editable && subcategoria === 'canje' && Number(dosis) > 0) {
     botonResolver = `<button class="btn-resolver canje" data-action="toggle-resolver" data-renglon="${r.id}"><span class="material-symbols-rounded">sync_alt</span> Canje</button>`;
-    filaResolver = `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelResolverCanjeHtml(r.id, bio.id)}</td></tr>`;
+    filaResolver = `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelResolverCanjeHtml(r.id, bio)}</td></tr>`;
   }
 
   return `<tr class="${subcategoria ? 'categoria-' + subcategoria : ''}">
@@ -631,10 +576,10 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     </td>
     <td class="col-anterior">${r.existencia_anterior_frascos || 0}</td>
     <td class="col-mov">${campo('recibido_frascos', r.recibido_frascos)}</td>
-    <td class="col-mov">${campo('aplicadas_a', r.aplicadas_a)}</td>
-    ${split ? `<td class="col-mov">${campo('aplicadas_b', r.aplicadas_b)}</td>` : ''}
-    <td class="col-mov">${campo('desechadas_a', r.desechadas_a)}</td>
-    ${split ? `<td class="col-mov">${campo('desechadas_b', r.desechadas_b)}</td>` : ''}
+    <td class="col-mov${split ? ' col-dosis-05' : ''}">${campo('aplicadas_a', r.aplicadas_a)}</td>
+    ${split ? `<td class="col-mov col-dosis-1">${campo('aplicadas_b', r.aplicadas_b)}</td>` : ''}
+    <td class="col-mov${split ? ' col-dosis-05' : ''}">${campo('desechadas_a', r.desechadas_a)}</td>
+    ${split ? `<td class="col-mov col-dosis-1">${campo('desechadas_b', r.desechadas_b)}</td>` : ''}
     <td class="col-final"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}" data-existencia-final="${r.id}">${dosis}</span></td>
     <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}</td>
     <td>${editable ? `<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar renglón"><span class="material-symbols-rounded">delete</span></button>` : ''}</td>
@@ -657,19 +602,14 @@ function panelResolverArfHtml(renglonId) {
   </div>`;
 }
 
-function panelResolverCanjeHtml(renglonId, bioId) {
-  return `<div class="panel-resolver" data-panel-canje="${renglonId}" data-bio="${bioId}">
+function panelResolverCanjeHtml(renglonId, bio) {
+  return `<div class="panel-resolver" data-panel-canje="${renglonId}" data-bio="${bio.id}">
     <p>El canje se realizó: este lote se sustituye por el lote nuevo recibido, y su existencia pasa a un renglón normal.</p>
     <div class="campos">
       <div class="campo">
         <label>N° de lote nuevo</label>
-        <input type="text" data-nuevo-lote-canje list="datalist-lote-${bioId}" placeholder="Ej. 0984">
-        <div class="hint-lote" data-hint-typo="canje-${renglonId}">
-          <span class="material-symbols-rounded">lightbulb</span>
-          <span>¿Quisiste decir <strong data-hint-valor></strong>?</span>
-          <button type="button" class="btn-primario" data-action="usar-sugerencia-lote">Usar</button>
-          <button type="button" class="btn-fantasma" data-action="descartar-sugerencia-lote">Es nuevo</button>
-        </div>
+        <select data-nuevo-lote-canje><option value="">Selecciona un lote…</option></select>
+        <input type="text" data-nuevo-lote-canje-manual placeholder="Escribe el número del lote nuevo" style="display:none; margin-top:6px">
       </div>
       <div class="campo">
         <label>Caducidad del nuevo</label>
@@ -687,20 +627,16 @@ function panelResolverCanjeHtml(renglonId, bioId) {
   </div>`;
 }
 
-function renderPanelAgregar(bioId) {
+function renderPanelAgregar(bio) {
+  const bioId = bio.id;
   return `
   <button class="btn-mini btn-secundario" style="margin-top:14px" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add</span> Agregar lote</button>
   <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
     <div class="campos">
       <div class="campo">
         <label>N° de lote</label>
-        <input type="text" data-nuevo-lote list="datalist-lote-${bioId}" placeholder="Ej. 0374MA109">
-        <div class="hint-lote" data-hint-typo="agregar-${bioId}">
-          <span class="material-symbols-rounded">lightbulb</span>
-          <span>¿Quisiste decir <strong data-hint-valor></strong>?</span>
-          <button type="button" class="btn-primario" data-action="usar-sugerencia-lote">Usar</button>
-          <button type="button" class="btn-fantasma" data-action="descartar-sugerencia-lote">Es nuevo</button>
-        </div>
+        <select data-nuevo-lote><option value="">Selecciona un lote…</option></select>
+        <input type="text" data-nuevo-lote-manual placeholder="Escribe el nuevo número de lote" style="display:none; margin-top:6px">
       </div>
       <div class="campo">
         <label>Caducidad</label>
@@ -862,69 +798,101 @@ async function eliminarRenglon(renglonId) {
 }
 
 // ---------------------------------------------------------------------------
-// Sugerencias de lote desde "Existencia de Biológico" (existencia_detalle,
-// ya existente en el resto de SIREVAQ) -- solo para autocompletar y corregir
-// errores de dedo (0 por O, minúsculas, etc.), nunca para bloquear captura
-// de un lote genuinamente nuevo que Existencia de Biológico no conozca aún.
+// Lotes disponibles desde el catálogo central (tabla "lotes") para ofrecer
+// en la lista desplegable -- filtrados por biológico, por el municipio de
+// la unidad activa (o "*"/"TODOS", registrado para toda la jurisdicción) y
+// por tipo (NORMAL/ARF/CANJE, según el Estatus elegido). Cacheado por
+// bio+categoría dentro de la sesión; se invalida solo al cambiar de unidad
+// (cargarCatalogo se llama una sola vez al inicio, así que en la práctica
+// dura toda la sesión de captura).
 // ---------------------------------------------------------------------------
 
-async function obtenerSugerenciasLotes(bio) {
-  if (estado.sugerenciasLotes[bio.clave]) return estado.sugerenciasLotes[bio.clave];
+async function obtenerLotesCatalogoCentral(bio, categoria) {
+  const key = bio.clave + '::' + categoria;
+  if (estado.catalogoLotesCentral[key]) return estado.catalogoLotesCentral[key];
+
   const unidad = estado.unidades.find((u) => u.id === estado.movimiento.unidad_id);
   const nombres = CLAVE_A_EXISTENCIA_BIOLOGICO[bio.clave];
-  if (!unidad || !nombres) { estado.sugerenciasLotes[bio.clave] = []; return []; }
+  const municipioLotes = unidad ? MUNICIPIO_BIOVAC_A_LOTES[unidad.municipio] : null;
+  if (!nombres || !municipioLotes) { estado.catalogoLotesCentral[key] = []; return []; }
 
-  const { data, error } = await estado.db.from('existencia_detalle')
-    .select('lote, caducidad, fecha')
-    .eq('municipio', unidad.municipio).in('biologico', nombres).not('lote', 'is', null)
-    .order('fecha', { ascending: false }).limit(300);
-  if (error || !data) { estado.sugerenciasLotes[bio.clave] = []; return []; }
+  const { data, error } = await estado.db.from('lotes')
+    .select('lote, caducidad, municipio')
+    .in('biologico', nombres).eq('tipo', categoria);
+  if (error || !data) { estado.catalogoLotesCentral[key] = []; return []; }
 
   const vistos = new Map();
   for (const fila of data) {
+    const m = String(fila.municipio || '').trim().toUpperCase();
+    if (m !== municipioLotes && m !== '*' && m !== 'TODOS') continue;
     const lote = String(fila.lote || '').trim();
     if (!lote || vistos.has(lote)) continue;
     vistos.set(lote, fila.caducidad);
   }
   const lista = [...vistos.entries()].map(([lote, caducidad]) => ({ lote, caducidad }));
-  estado.sugerenciasLotes[bio.clave] = lista;
+  estado.catalogoLotesCentral[key] = lista;
   return lista;
 }
 
-async function prepararSugerenciasParaBio(bioId) {
-  const bio = estado.biologicos.find((b) => b.id === bioId);
-  if (!bio) return;
-  const lista = await obtenerSugerenciasLotes(bio);
-  const dl = document.getElementById(`datalist-lote-${bioId}`);
-  if (dl) dl.innerHTML = lista.map((s) => `<option value="${s.lote}">`).join('');
+// Llena un <select> de lote con lo que ya existe en el catálogo central para
+// ese biológico+categoría, más una opción para capturar uno genuinamente
+// nuevo que el catálogo central aún no conozca (input de texto que aparece
+// al elegirla) -- así el flujo normal es "elegir de la lista", sin volver a
+// depender de detección de errores de dedo.
+async function poblarSelectLote(bio, categoria, selectEl) {
+  selectEl.innerHTML = '<option value="">Cargando lotes…</option>';
+  const lista = await obtenerLotesCatalogoCentral(bio, categoria);
+  const opciones = lista
+    .map((l) => `<option value="${l.lote}" data-cad="${l.caducidad || ''}">${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}</option>`)
+    .join('');
+  selectEl.innerHTML = `<option value="">Selecciona un lote…</option>${opciones}<option value="__nuevo__">+ Nuevo lote (no está en la lista)</option>`;
 }
 
-function corregirLoteTecleado(input) {
-  const panel = input.closest('[data-bio]');
-  const bio = panel && estado.biologicos.find((b) => b.id === panel.dataset.bio);
-  const lista = bio ? (estado.sugerenciasLotes[bio.clave] || []) : [];
-  const tecleado = input.value.trim();
-  if (!lista.length || !tecleado) return;
+// Muestra/oculta el input de texto para "+ Nuevo lote" y, al elegir un lote
+// ya conocido, precarga su caducidad (sin sobreescribir si el usuario ya
+// escribió una).
+function onCambioSelectLote(selectEl) {
+  const campo = selectEl.closest('.campo');
+  const manual = campo && campo.querySelector('[data-nuevo-lote-manual], [data-nuevo-lote-canje-manual]');
+  if (manual) manual.style.display = selectEl.value === '__nuevo__' ? 'block' : 'none';
 
-  const coincidencias = lista.filter((s) => normalizarLote(s.lote) === normalizarLote(tecleado));
-  if (coincidencias.length !== 1) return;
+  const opt = selectEl.selectedOptions[0];
+  const cad = opt && opt.dataset ? opt.dataset.cad : '';
+  if (cad) {
+    const panel = selectEl.closest('[data-bio]');
+    const campoCaducidad = panel && panel.querySelector('[data-nuevo-caducidad], [data-nueva-caducidad-canje]');
+    if (campoCaducidad && !campoCaducidad.value.trim()) campoCaducidad.value = formatMmmAa(cad);
+  }
+}
 
-  if (coincidencias[0].lote !== tecleado) {
-    input.value = coincidencias[0].lote;
-    toast(`Lote corregido a "${coincidencias[0].lote}" (coincide con Existencia de Biológico).`, 'ok');
-  }
-  if (coincidencias[0].caducidad) {
-    const campoCaducidad = panel.querySelector('[data-nuevo-caducidad], [data-nueva-caducidad-canje]');
-    if (campoCaducidad && !campoCaducidad.value.trim()) campoCaducidad.value = formatMmmAa(coincidencias[0].caducidad);
-  }
+// "Agregar lote": la lista depende del Estatus elegido (Normal/A.R.F./Canje)
+// -- se repuebla cada vez que el panel se abre y cada vez que cambia el
+// Estatus.
+function poblarSelectLoteAgregar(panel) {
+  const bio = estado.biologicos.find((b) => b.id === panel.dataset.bio);
+  const selectEl = panel.querySelector('[data-nuevo-lote]');
+  if (!bio || !selectEl) return;
+  const categoria = panel.querySelector('[data-nuevo-categoria]')?.value || 'NORMAL';
+  poblarSelectLote(bio, categoria, selectEl);
+}
+
+// Resolución de canje: el lote nuevo siempre entra como existencia normal.
+function poblarSelectLoteCanje(panel) {
+  const bio = estado.biologicos.find((b) => b.id === panel.dataset.bio);
+  const selectEl = panel.querySelector('[data-nuevo-lote-canje]');
+  if (!bio || !selectEl) return;
+  poblarSelectLote(bio, 'NORMAL', selectEl);
 }
 
 async function agregarLote(bioId, panel) {
-  const numeroLote = panel.querySelector('[data-nuevo-lote]').value.trim();
+  const loteSelect = panel.querySelector('[data-nuevo-lote]');
+  const loteManual = panel.querySelector('[data-nuevo-lote-manual]');
+  const numeroLote = (loteSelect.value === '__nuevo__' ? loteManual.value : loteSelect.value).trim();
   const caducidadTexto = panel.querySelector('[data-nuevo-caducidad]').value.trim();
   const categoria = panel.querySelector('[data-nuevo-categoria]').value;
   const tipoCantidad = panel.querySelector('[data-nuevo-tipo-cantidad]').value;
   const cantidad = Number(panel.querySelector('[data-nuevo-cantidad]').value) || 0;
+  if (!loteSelect.value) { toast('Selecciona un lote de la lista, o "+ Nuevo lote".', 'error'); return; }
   if (!numeroLote) { toast('Escribe el número de lote.', 'error'); return; }
 
   let caducidad = null;
@@ -944,7 +912,6 @@ async function agregarLote(bioId, panel) {
     if (errIns) { toast('Error creando lote: ' + errIns.message, 'error'); return; }
     lote = nuevo;
     loteReciénCreado = true;
-    estado.lotesConocidos[bioId] = null;
   }
 
   const renglon = { movimiento_id: estado.movimiento.id, lote_id: lote.id, categoria };
@@ -959,7 +926,6 @@ async function agregarLote(bioId, panel) {
     // el lote viejo -- ya bloqueado -- en vez de crear uno con el dato bueno)
     if (loteReciénCreado) {
       await estado.db.from('biovac_lotes').delete().eq('id', lote.id);
-      estado.lotesConocidos[bioId] = null;
     }
     return;
   }
@@ -994,9 +960,12 @@ async function reactivarArf(renglonId, panel) {
 async function resolverCanje(renglonId, panel) {
   const usuario = usuarioActual();
   if (!usuario) return;
-  const nuevoLote = panel.querySelector('[data-nuevo-lote-canje]').value.trim();
+  const loteSelect = panel.querySelector('[data-nuevo-lote-canje]');
+  const loteManual = panel.querySelector('[data-nuevo-lote-canje-manual]');
+  const nuevoLote = (loteSelect.value === '__nuevo__' ? loteManual.value : loteSelect.value).trim();
   const caducidadTexto = panel.querySelector('[data-nueva-caducidad-canje]').value.trim();
   const motivo = panel.querySelector('[data-motivo-canje]').value.trim();
+  if (!loteSelect.value) { toast('Selecciona el lote nuevo de la lista, o "+ Nuevo lote".', 'error'); return; }
   if (!nuevoLote) { toast('Escribe el número del lote nuevo.', 'error'); return; }
   if (!motivo) { toast('Escribe el motivo del canje.', 'error'); return; }
 
@@ -1011,7 +980,6 @@ async function resolverCanje(renglonId, panel) {
     p_usuario: usuario, p_rol: (estado.perfil ? estado.perfil.rol : 'MUNICIPAL'), p_motivo: motivo
   });
   if (error) { toast('No se pudo registrar el canje: ' + error.message, 'error'); return; }
-  if (panel.dataset.bio) estado.lotesConocidos[panel.dataset.bio] = null;
   toast('Canje registrado: el lote nuevo entró a existencia normal.', 'ok');
   await cargarRenglones();
   render();
@@ -1386,14 +1354,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       recalcularFilaEnVivo(ev.target.dataset.renglon);
       return;
     }
-    if (ev.target.matches('[data-nuevo-lote], [data-nuevo-lote-canje]')) {
-      const bioId = ev.target.closest('[data-bio]')?.dataset.bio;
-      const hintEl = ev.target.parentElement.querySelector('.hint-lote');
-      if (bioId && hintEl) revisarPosibleTypoLoteDebounced(ev.target, bioId, hintEl);
-    }
   });
   cont.addEventListener('change', (ev) => {
-    if (ev.target.matches('[data-renglon][data-campo]')) guardarCampoRenglon(ev.target);
+    if (ev.target.matches('[data-renglon][data-campo]')) { guardarCampoRenglon(ev.target); return; }
+    if (ev.target.matches('[data-nuevo-lote], [data-nuevo-lote-canje]')) { onCambioSelectLote(ev.target); return; }
+    if (ev.target.matches('[data-nuevo-categoria]')) {
+      const panel = ev.target.closest('[data-panel-agregar]');
+      if (panel) poblarSelectLoteAgregar(panel);
+    }
   });
   // seleccionar todo el contenido al enfocar un número, para que escribir
   // reemplace el "0" en vez de concatenarse ("05")
@@ -1408,7 +1376,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (iso) ev.target.value = formatMmmAa(iso);
       return;
     }
-    if (ev.target.matches('[data-nuevo-lote], [data-nuevo-lote-canje]')) corregirLoteTecleado(ev.target);
   }, true);
   cont.addEventListener('click', (ev) => {
     const btn = ev.target.closest('[data-action]');
@@ -1422,7 +1389,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (accion === 'toggle-agregar') {
         const abriendo = !panel.classList.contains('abierto');
         panel.classList.toggle('abierto');
-        if (abriendo) prepararSugerenciasParaBio(btn.dataset.bio);
+        if (abriendo) poblarSelectLoteAgregar(panel);
       }
       if (accion === 'cancelar-agregar') panel.classList.remove('abierto');
       if (accion === 'confirmar-agregar') agregarLote(btn.dataset.bio, panel);
@@ -1435,7 +1402,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (accion === 'toggle-resolver') {
         const abriendo = !panel.classList.contains('abierto');
         panel.classList.toggle('abierto');
-        if (abriendo && panel.dataset.bio) prepararSugerenciasParaBio(panel.dataset.bio);
+        if (abriendo && panel.dataset.bio) poblarSelectLoteCanje(panel);
       } else {
         panel.classList.remove('abierto');
       }
@@ -1447,14 +1414,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (accion === 'confirmar-resolver-canje') {
       resolverCanje(btn.dataset.renglon, document.querySelector(`[data-panel-canje="${btn.dataset.renglon}"]`));
-      return;
-    }
-
-    if (accion === 'usar-sugerencia-lote' || accion === 'descartar-sugerencia-lote') {
-      const hintEl = btn.closest('.hint-lote');
-      const input = hintEl.parentElement.querySelector('[data-nuevo-lote], [data-nuevo-lote-canje]');
-      if (accion === 'usar-sugerencia-lote' && input) input.value = hintEl.dataset.valorSugerido || input.value;
-      hintEl.style.display = 'none';
       return;
     }
   });

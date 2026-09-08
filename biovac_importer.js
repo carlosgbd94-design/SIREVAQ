@@ -147,8 +147,12 @@
   }
 
   function parseHojaMensual(worksheet, mesClave) {
-    const anioCell = worksheet.getCell('I7');
-    const anio = typeof anioCell.value === 'number' ? anioCell.value : null;
+    // Igual que el día de corte (ver abajo): un formato anterior puede
+    // traer el año como fórmula (con resultado cacheado) o como texto en
+    // vez de número plano.
+    const anioCellValue = worksheet.getCell('I7').value;
+    const anio = numeroDeCelda(anioCellValue)
+      || (typeof anioCellValue === 'string' && /^\d{4}$/.test(anioCellValue.trim()) ? Number(anioCellValue.trim()) : null);
     // C7 ("DIA:") es un número de día de mes, NO una fecha -- la fecha de
     // corte real se arma combinando ese día con el mes de la hoja y I7 (año).
     const dia = numeroDeCelda(worksheet.getCell('C7').value);
@@ -294,15 +298,50 @@
     return orden.map((k) => porLote.get(k));
   }
 
+  // Acepta número plano o número tecleado como texto ("50") -- un formato
+  // anterior capturado a mano puede traer cualquiera de las dos formas, y
+  // antes solo se reconocía la primera, así que una hoja con datos reales
+  // pero tecleados como texto se leía como "sin datos" y el mes entero
+  // desaparecía del análisis. A propósito NO se acepta aquí el resultado
+  // cacheado de una fórmula: estas columnas pueden traer una fórmula de
+  // arrastre (existencia anterior = total del mes previo) que da un valor
+  // no-cero en un mes genuinamente vacío -- contarla como "dato" generaría
+  // falsos positivos (meses sin ningún renglón real que igual aparecerían
+  // en el análisis).
+  function esNumeroConDatos(v) {
+    if (typeof v === 'number') return v !== 0;
+    if (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v.trim()))) return Number(v.trim()) !== 0;
+    return false;
+  }
+
   function hojaTieneDatos(worksheet) {
     for (let r = 13; r <= worksheet.rowCount; r++) {
       const row = worksheet.getRow(r);
       for (const col of [2, 5, 8, 9, 11, 12]) {
-        const v = row.getCell(col).value;
-        if (typeof v === 'number' && v !== 0) return true;
+        if (esNumeroConDatos(row.getCell(col).value)) return true;
       }
     }
     return false;
+  }
+
+  // El nombre de la pestaña varía entre formatos/años ("ENE", "Enero",
+  // "ENE-25", "ene 2024"...) -- todos los nombres de mes en español
+  // (ENERO, FEBRERO, ...) empiezan con su propia abreviatura de 3 letras,
+  // así que basta con normalizar (sin acentos/espacios/números/mayúsculas)
+  // y comparar por prefijo en vez de exigir el nombre exacto de 3 letras.
+  function normalizarNombreHoja(nombre) {
+    return String(nombre || '')
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toUpperCase().replace(/[^A-Z]/g, '');
+  }
+
+  function encontrarHojaDeMes(wb, mesClave) {
+    const directa = wb.getWorksheet(mesClave);
+    if (directa) return directa;
+    for (const hoja of wb.worksheets) {
+      if (normalizarNombreHoja(hoja.name).startsWith(mesClave)) return hoja;
+    }
+    return null;
   }
 
   async function parseWorkbook(arrayBufferOrBuffer) {
@@ -311,7 +350,7 @@
 
     const meses = [];
     for (const mesClave of Object.keys(MESES)) {
-      const ws = wb.getWorksheet(mesClave);
+      const ws = encontrarHojaDeMes(wb, mesClave);
       if (!ws) continue;
       if (!hojaTieneDatos(ws)) continue;
       meses.push(parseHojaMensual(ws, mesClave));

@@ -7841,7 +7841,8 @@ async function supabaseRequest(action = "", payload, options = {}) {
             lote: it.lote,
             caducidad: mmmaaToIsoDate(it.caducidad), // CONVERSIÓN PARA DB
             fecha_recepcion: it.fecha_recepcion || null,
-            municipio: it.municipio || "*"
+            municipio: it.municipio || "*",
+            tipo: it.tipo || "NORMAL"
           })));
           if (insError) throw insError;
         }
@@ -9267,6 +9268,10 @@ async function loadBatchesForSession(user) {
     const userMuni = normalizeTextKey_(user.municipio || AppState.municipio);
     const seenLotes = new Set();
     UNIT_BATCHES = allLotes.filter(l => {
+      // Los lotes A.R.F./Canje solo se usan en Movimiento de Biológico —
+      // nunca deben ofrecerse en la captura de existencia de las unidades.
+      if (l.tipo && l.tipo !== "NORMAL") return false;
+
       let isMatch = false;
       if (AppState.rol === "ADMIN" || AppState.rol === "JURISDICCIONAL" || AppState.rol === "VISUALIZADOR_JURISDICCIONAL" || !AppState.municipio) {
         isMatch = true;
@@ -9448,6 +9453,13 @@ async function refreshLotesAdmin() {
   }
 }
 
+function tipoLoteBadgeHtml(tipo) {
+  const t = tipo || "NORMAL";
+  if (t === "ARF") return `<div class="status-pill bad" title="A.R.F. — en dictamen"><span class="material-symbols-rounded" style="font-size:16px">gavel</span>A.R.F.</div>`;
+  if (t === "CANJE") return `<div class="status-pill warn" title="Canje"><span class="material-symbols-rounded" style="font-size:16px">sync_alt</span>CANJE</div>`;
+  return `<div class="status-pill ok" title="Normal — visible en captura de existencia"><span class="material-symbols-rounded" style="font-size:16px">check_circle</span>NORMAL</div>`;
+}
+
 function renderLotesAdmin() {
   const tbody = $("lotesAdminTbody");
   if (!tbody) return;
@@ -9456,7 +9468,7 @@ function renderLotesAdmin() {
   updateLogisticsSummary();
 
   if (!BATCH_CATALOG.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">Sin lotes cargados.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="muted">Sin lotes cargados.</td></tr>`;
     return;
   }
 
@@ -9478,7 +9490,7 @@ function renderLotesAdmin() {
   }
 
   if (!finalFiltered.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="muted" style="padding:24px;">No se encontraron resultados para "${BATCH_SEARCH_QUERY || BATCH_FILTER}".</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="muted" style="padding:24px;">No se encontraron resultados para "${BATCH_SEARCH_QUERY || BATCH_FILTER}".</td></tr>`;
     return;
   }
 
@@ -9500,6 +9512,13 @@ function renderLotesAdmin() {
           </td>
           <td>
             <input type="text" id="editCad_${idx}" class="inline-edit-input" value="${escapeHtml(formatToMmmAa(item.caducidad))}" onblur="this.dataset.iso = parseInputToIso(this.value) || ''; this.value = formatToMmmAa(this.dataset.iso || this.value);" data-iso="${escapeHtml(item.caducidad)}" oninput="this.value = this.value.toUpperCase()" />
+          </td>
+          <td>
+            <select id="editTipo_${idx}" class="inline-edit-input">
+              <option value="NORMAL" ${(item.tipo || "NORMAL") === "NORMAL" ? "selected" : ""}>Normal</option>
+              <option value="ARF" ${item.tipo === "ARF" ? "selected" : ""}>A.R.F.</option>
+              <option value="CANJE" ${item.tipo === "CANJE" ? "selected" : ""}>Canje</option>
+            </select>
           </td>
           <td>
             <div class="status-pill warn" title="En edición"><span class="material-symbols-rounded" style="font-size:16px">edit</span>EDICIÓN</div>
@@ -9534,6 +9553,7 @@ function renderLotesAdmin() {
                <div class="lote-life-bar ${expiryInfo.class}" style="width: ${expiryInfo.progress}%"></div>
              </div>
           </td>
+          <td>${tipoLoteBadgeHtml(item.tipo)}</td>
           <td>
             <div class="status-pill ${expiryInfo.class}" title="${expiryInfo.friendly}">
               <span class="material-symbols-rounded" style="font-size:16px">${expiryInfo.icon}</span>
@@ -9696,6 +9716,7 @@ $("btnAddLoteRow")?.addEventListener("click", async () => {
   const caducidad = $("loteCad").dataset.iso || parseInputToIso(rawCad);
   const lote = rawLote;
   const fecha_recepcion = $("loteRec").value;
+  const tipo = $("loteTipo")?.value || "NORMAL";
 
   // RECOLECCIÓN MULTIMUNICIPIO
   const selectedMunis = Array.from(document.querySelectorAll(".loteMuniChk:checked")).map(cb => cb.value);
@@ -9721,7 +9742,7 @@ $("btnAddLoteRow")?.addEventListener("click", async () => {
     // VALIDACIÓN DE DUPLICADOS (Por Municipio)
     const exists = BATCH_CATALOG.find(x => x.biologico === biologico && x.lote === lote && x.municipio === muni);
     if (!exists) {
-      const newLoteObj = { biologico, lote, caducidad, fecha_recepcion, municipio: muni };
+      const newLoteObj = { biologico, lote, caducidad, fecha_recepcion, municipio: muni, tipo };
       BATCH_CATALOG.push(newLoteObj);
       newLotes.push(newLoteObj);
       addedCount++;
@@ -9753,6 +9774,7 @@ $("btnAddLoteRow")?.addEventListener("click", async () => {
   $("loteCad").value = "";
   $("loteCad").removeAttribute("data-iso");
   $("loteRec").value = "";
+  if ($("loteTipo")) $("loteTipo").value = "NORMAL";
 
   document.querySelectorAll(".loteMuniChk").forEach(chk => chk.checked = false);
   $("loteTxt").focus();
@@ -9775,6 +9797,7 @@ window.saveLoteEdit = async function (idx) {
   const bioInput = document.getElementById(`editBio_${idx}`);
   const loteInput = document.getElementById(`editLote_${idx}`);
   const cadInput = document.getElementById(`editCad_${idx}`);
+  const tipoInput = document.getElementById(`editTipo_${idx}`);
 
   const rawLote = loteInput.value.trim().toUpperCase();
   const rawCad = cadInput.dataset.iso || parseInputToIso(cadInput.value.trim().toUpperCase());
@@ -9792,6 +9815,7 @@ window.saveLoteEdit = async function (idx) {
   item.biologico = bioInput.value;
   item.lote = rawLote;
   item.caducidad = rawCad;
+  item.tipo = tipoInput ? tipoInput.value : (item.tipo || "NORMAL");
 
   window.LoteEditingIdx = null;
 

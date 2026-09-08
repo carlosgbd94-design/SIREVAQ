@@ -480,6 +480,30 @@ textarea {
   outline: none !important;
 }
 
+/* El reset de arriba usa 9 exclusiones :not() con !important, lo que le da
+   MAS especificidad ((0,9,1)) que ".modern-input-group input" ((0,6,1) o
+   menos) e incluso que "input[type=date]:not(.evd-date)" ((0,2,1)), aunque
+   esas reglas tambien tengan !important -- por eso NINGUNA de las reglas
+   pensadas para que el input/select dentro de un .modern-input-group se
+   vea "sin caja propia" (solo el contenedor padre dibuja el borde) lograba
+   ganar: ni el padding-left:56px que le reserva espacio al icono (quedaba
+   encimado con el placeholder), ni el border:none/background:transparent
+   (el input de fecha, por ejemplo, terminaba con SU PROPIO borde redondeado
+   ademas del borde del contenedor -- el "doble contorno" reportado en Carga
+   de lotes). Se repite aqui la MISMA lista de exclusiones para igualar y
+   superar esa especificidad ((0,10,1)) sin tocar el reset global de arriba,
+   que usan cientos de inputs en el resto de la app. */
+.modern-input-group :is(input, select):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not(.notifSearchInput):not(.spm-input-num-clean):not(.evd-search-input):not(.evd-date) {
+  padding-left: 56px !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+/* Box-shadow queda fuera de la regla de arriba a propósito: el truco de
+   autocompletado de Chrome (-webkit-autofill) en ese mismo reset global
+   depende de poder seguir poniendo su propio inset box-shadow; forzarlo a
+   "none" aquí con esta especificidad se lo comería también. */
+
 select {
   appearance: none !important;
   -webkit-appearance: none !important;
@@ -628,6 +652,16 @@ label {
     width: 100%;
     transition: transform 0.2s ease;
     flex-wrap: wrap;
+    /* Cuando dos .modern-input-group con <input> quedan cerca uno del otro
+       (ej. la fila Lote/Caducidad/Fecha Recepción, separados solo por
+       gap:20px), Chromium a veces pinta una costura/línea vertical fantasma
+       en el espacio entre ambos -- un artefacto de compositing de los
+       <input> (no aparece con divs vacíos ni con el ícono solo, sólo
+       cuando hay un <input> real adentro; confirmado quitando/agregando
+       piezas una por una). contain:paint aísla el pintado de cada
+       contenedor y lo elimina por completo, sin afectar el anillo de foco
+       (box-shadow) porque ese lo pinta el propio elemento, no un hijo. */
+    contain: paint;
 }
 
 .modern-input-group .input-icon {
@@ -1922,14 +1956,17 @@ label,
   box-shadow: none !important;
 }
 
-/* Anchos Pro para Log*/
+/* Anchos Pro para Log -- 7 columnas: Bio y Registro, Lote, Vigencia, Tipo,
+   Estatus Log, Municipio, Acción (la columna Tipo se agregó después; si se
+   agrega/quita otra columna aquí, hay que correr estos nth-child también). */
 #lotesTableWrap .summaryTable { table-layout: fixed; }
-#lotesTableWrap .summaryTable :is(th, td):nth-child(1) { width: 18%; } /* Bio y Registro */
-#lotesTableWrap .summaryTable :is(th, td):nth-child(2) { width: 12%; } /* Lote */
-#lotesTableWrap .summaryTable :is(th, td):nth-child(3) { width: 14%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* Vigencia */
-#lotesTableWrap .summaryTable :is(th, td):nth-child(4) { width: 35%; } /* Estatus Log*/
-#lotesTableWrap .summaryTable :is(th, td):nth-child(5) { width: 13%; } /* Municipio */
-#lotesTableWrap .summaryTable :is(th, td):nth-child(6) { width: 8%; text-align: center; }  /* Acci*/
+#lotesTableWrap .summaryTable :is(th, td):nth-child(1) { width: 16%; } /* Bio y Registro */
+#lotesTableWrap .summaryTable :is(th, td):nth-child(2) { width: 11%; } /* Lote */
+#lotesTableWrap .summaryTable :is(th, td):nth-child(3) { width: 13%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* Vigencia */
+#lotesTableWrap .summaryTable :is(th, td):nth-child(4) { width: 11%; } /* Tipo */
+#lotesTableWrap .summaryTable :is(th, td):nth-child(5) { width: 26%; } /* Estatus Log*/
+#lotesTableWrap .summaryTable :is(th, td):nth-child(6) { width: 13%; } /* Municipio */
+#lotesTableWrap .summaryTable :is(th, td):nth-child(7) { width: 10%; text-align: center; }  /* Acci*/
 
 .summaryTable :is(th, td):last-child {
   padding-right: 16px !important;
@@ -3510,18 +3547,27 @@ input[disabled] {
 .modalOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(3, 8, 18, .85);
-  display: none;
+  background-color: rgba(10, 14, 24, 0.6);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999999;
+  z-index: 2000000 !important;
   padding: 18px;
-  will-change: opacity;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.3s ease-out, visibility 0s linear 0.3s;
 }
 
 .overlay.show,
 .modalOverlay.show {
-  display: flex;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  will-change: opacity;
+  transition: opacity 0.3s ease-out;
 }
 
 .loader {
@@ -5776,29 +5822,9 @@ input[disabled] {
 
 /* ===== VENTANAS MODERNAS RESET / PASSWORD ===== */
 /* */
-.overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100000;
-  background: rgba(0, 0, 0, 0.4); /* Standard semi-transparent dark backdrop */
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-
 /* Specific for functional modals to ensure they don't look like loading screens */
 #uploadFilesOverlay, #exportOverlay, #passwordOverlay, #forgotOverlay {
   background: rgba(3, 8, 18, 0.4) !important;
-}
-
-
-.overlay.show {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .loader {
@@ -6687,54 +6713,74 @@ body.bioConfirmOpen {
     cursor: not-allowed !important;
 }
 
-.overlay {
-  position: fixed;
-  inset: 0;
-  background-color: rgba(0, 0, 0, 0.85) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000000 !important;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.overlay.show {
-  display: flex !important;
-  opacity: 1 !important;
-  pointer-events: auto !important;
-}
-
 .overlay-content {
-  background-color: var(--md-sys-color-surface) !important;
+  background-color: color-mix(in srgb, var(--md-sys-color-surface) 82%, transparent) !important;
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
   width: 90%;
   max-width: 380px;
   padding: 56px 40px;
   border-radius: 24px;
   text-align: center;
   box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6);
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(255, 255, 255, 0.35);
   display: flex !important;
   flex-direction: column !important;
   gap: 32px !important;
   opacity: 1 !important;
-  transform: scale(0.9);
-  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.overlay.show .overlay-content {
-  transform: scale(1);
+/* Sin tarjeta rigida: el logo y el texto flotan sobre una mancha de vidrio
+   con los bordes desvanecidos (mask-image), nunca un rectangulo con borde.
+   Solo la usa #overlay, el loader ambiental principal; #progressOverlay
+   conserva su tarjeta con datos reales. */
+.overlay-borderless {
+  background: none !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  box-shadow: none;
+  padding: 36px 28px 8px;
+  position: relative;
 }
 
+.overlay-borderless::before {
+  content: "";
+  position: absolute;
+  inset: -16px -30px -4px;
+  z-index: -1;
+  background: radial-gradient(ellipse 72% 64% at 50% 40%, rgba(248, 250, 252, 0.16) 0%, rgba(248, 250, 252, 0.07) 46%, transparent 74%);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  -webkit-mask-image: radial-gradient(ellipse 76% 68% at 50% 40%, #000 48%, transparent 88%);
+  mask-image: radial-gradient(ellipse 76% 68% at 50% 40%, #000 48%, transparent 88%);
+  pointer-events: none;
+}
+
+.overlay-borderless .overlay-text h3 {
+  color: #f8fafc !important;
+}
+
+.overlay-borderless .overlay-text p {
+  color: #cbd5e1 !important;
+}
+
+/* Oscurecido consistente en toda la pantalla: sin esto, el atenuado se nota
+   mucho menos sobre paneles claros (ej. la tarjeta de login) que sobre
+   paneles oscuros, y da la sensacion de que el loader "no cubre todo". Un
+   blur ligero (barato, radio pequeno) empareja la lectura en ambos casos. */
+#overlay.show {
+  background-color: rgba(8, 11, 20, 0.62) !important;
+  backdrop-filter: blur(7px) brightness(0.62) saturate(1.05) !important;
+  -webkit-backdrop-filter: blur(7px) brightness(0.62) saturate(1.05) !important;
+}
 
 
 @keyframes md-spin {
   to { transform: rotate(360deg); }
 }
 
-/* Elastic Squash loader (Proposal 9) */
+/* Contenedor simple (spinners secundarios: compresion PDF, subida a Drive, reset de password) */
 .elastic-bounce-container {
   display: flex;
   align-items: center;
@@ -6742,21 +6788,119 @@ body.bioConfirmOpen {
   margin: 0 auto;
 }
 
+/* Logo orbital: dos particulas de luz orbitan el logo y pasan por detras de el */
+.logo-orbit-stage {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.orbit-ambient {
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  z-index: 0;
+  background: radial-gradient(circle, #7dd3fc 0%, transparent 72%);
+  filter: blur(11px);
+  opacity: .3;
+  animation: orbitAmbient 4s ease-in-out infinite;
+}
+
+@keyframes orbitAmbient {
+  0%, 100% { opacity: .18; transform: scale(.9); }
+  50% { opacity: .42; transform: scale(1.1); }
+}
+
 .bounce-logo {
   width: 70px;
   height: 70px;
   object-fit: contain;
-  animation: p9-bounce 1.5s infinite ease-in-out;
+  position: relative;
+  z-index: 3;
   will-change: transform;
-  transform: translateZ(0);
   backface-visibility: hidden;
+  animation: orbitBreathe 4s cubic-bezier(.45,0,.55,1) infinite;
 }
 
-@keyframes p9-bounce {
-  0%, 100% { transform: translateY(0) scale(1, 1); }
-  25% { transform: translateY(-25px) scale(0.9, 1.15); }
-  50% { transform: translateY(0) scale(1.1, 0.85); }
-  75% { transform: translateY(-6px) scale(0.97, 1.03); }
+@keyframes orbitBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.045); }
+}
+
+.orbit-guide {
+  position: absolute;
+  border-radius: 50%;
+  z-index: 1;
+  border: 1px solid rgba(56, 189, 248, .18);
+}
+.orbit-guide-a { inset: 4%; }
+.orbit-guide-b { inset: 22%; }
+
+.orbit-plane {
+  position: absolute;
+  border-radius: 50%;
+}
+.orbit-plane-a { inset: 4%; animation: orbitDepthA 2.6s linear infinite; }
+.orbit-plane-b { inset: 22%; animation: orbitDepthB 3.4s linear infinite; }
+
+.orbit-spin {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+.orbit-spin-a { animation: orbitSpin 2.6s linear infinite; }
+.orbit-spin-b { animation: orbitSpin 3.4s linear infinite reverse; }
+
+@keyframes orbitSpin { to { transform: rotate(360deg); } }
+
+.orbit-mote {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  border-radius: 50%;
+}
+.orbit-mote-a {
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  background: radial-gradient(circle at 34% 30%, #ffffff, #38bdf8 55%, transparent 100%);
+  box-shadow: 0 0 6px #38bdf8, 0 0 14px rgba(56, 189, 248, .55);
+}
+.orbit-mote-b {
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  background: radial-gradient(circle at 34% 30%, #ffffff, #818cf8 55%, transparent 100%);
+  box-shadow: 0 0 6px #818cf8, 0 0 12px rgba(129, 140, 248, .55);
+}
+
+@keyframes orbitDepthA {
+  0% { opacity: .4; z-index: 1; }
+  50% { opacity: 1; z-index: 4; }
+  100% { opacity: .4; z-index: 1; }
+}
+@keyframes orbitDepthB {
+  0% { opacity: 1; z-index: 4; }
+  50% { opacity: .4; z-index: 1; }
+  100% { opacity: 1; z-index: 4; }
+}
+
+/* GPU solo mientras el loader esta visible: evita mantener capas compuestas
+   de forma permanente para animaciones que casi nunca se ven en pantalla. */
+.overlay.show .orbit-spin-a,
+.overlay.show .orbit-spin-b {
+  will-change: transform;
+}
+.overlay.show .orbit-plane-a,
+.overlay.show .orbit-plane-b {
+  will-change: opacity;
+}
+.overlay.show .bounce-logo {
+  will-change: transform;
 }
 
 .overlay-text {

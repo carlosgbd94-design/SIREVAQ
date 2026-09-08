@@ -74,7 +74,7 @@
 
   <!-- Estilos -->
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="style.css?v=2026.79" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.82" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -324,7 +324,7 @@
        (ensurePdfAssetsLoaded) solo al exportar el PDF de Resguardo.
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
-  <script src="dist/bundle-head.js?v=2026.27" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.29" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3828,6 +3828,15 @@
                   <input type="date" id="loteRec" class="h-[50px]">
                 </div>
               </div>
+              <div style="flex: 1;">
+                <label class="text-[10px] font-black text-primary/50 uppercase tracking-widest block mb-2 px-2">Tipo</label>
+                <select id="loteTipo" class="h-[50px] w-full">
+                  <option value="NORMAL">Normal</option>
+                  <option value="ARF">A.R.F. (en dictamen)</option>
+                  <option value="CANJE">Canje</option>
+                </select>
+                <p class="text-[10px] font-bold text-primary/40 m-0 mt-1 px-2 leading-tight">Solo los lotes "Normal" aparecen en la captura de existencia de las unidades. A.R.F. y Canje quedan disponibles únicamente en Movimiento de Biológico.</p>
+              </div>
             </div>
 
             <!-- Info Box -->
@@ -3913,6 +3922,7 @@
                 <th>Biológico y Registro</th>
                 <th>Lote</th>
                 <th>Vigencia de Lote</th>
+                <th>Tipo</th>
                 <th>Estatus Logístico</th>
                 <th>Municipio</th>
                 <th>Acción</th>
@@ -3920,7 +3930,7 @@
             </thead>
             <tbody id="lotesAdminTbody">
               <tr>
-                <td colspan="6" class="muted">Sin lotes cargados.</td>
+                <td colspan="7" class="muted">Sin lotes cargados.</td>
               </tr>
             </tbody>
           </table>
@@ -6059,16 +6069,21 @@
   </div>
 
   <div id="overlay" class="overlay" aria-hidden="true">
-    <div class="overlay-content">
-      <div class="elastic-bounce-container" style="margin-bottom: 8px;">
+    <div class="overlay-content overlay-borderless">
+      <div class="logo-orbit-stage" style="margin-bottom: 8px;">
+        <div class="orbit-ambient"></div>
+        <div class="orbit-guide orbit-guide-b"></div>
+        <div class="orbit-guide orbit-guide-a"></div>
+        <div class="orbit-plane orbit-plane-b"><div class="orbit-spin orbit-spin-b"><span class="orbit-mote orbit-mote-b"></span></div></div>
         <img src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png"
           alt="Cargando..." class="bounce-logo">
+        <div class="orbit-plane orbit-plane-a"><div class="orbit-spin orbit-spin-a"><span class="orbit-mote orbit-mote-a"></span></div></div>
       </div>
       <div class="overlay-text">
         <h3 id="overlayTitle">Procesando</h3>
         <p id="overlayMsg">Cargando SIREVAQ…</p>
         <div class="loaderSub"
-          style="font-size: 13px; font-weight: 700; color: #535f70; margin-top: 10px; opacity: 0.8;">
+          style="font-size: 13px; font-weight: 700; color: #cbd5e1; margin-top: 10px; opacity: 0.75;">
           Por favor espera mientras se completa la operación.
         </div>
       </div>

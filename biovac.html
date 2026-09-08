@@ -175,6 +175,28 @@
     color: var(--muted); padding: 10px 6px; font-weight: 800; border-bottom: 1px solid var(--outline-variant);
   }
   table.renglones thead th:first-child { text-align: left; padding-left: 10px; }
+  /* Subencabezado "0.5 mL / 1 mL" (Hepatitis B y demás dosis fraccionada):
+     cada mitad lleva su propio tinte para que, aun sin releer el título de
+     arriba, se note a simple vista cuál recuadro es cuál dosis. */
+  table.renglones thead tr.fila-subencabezado th {
+    padding: 4px 6px 9px; font-size: 9.5px; font-weight: 800; text-transform: none; letter-spacing: 0;
+    text-align: center;
+  }
+  table.renglones thead tr:first-child th[colspan] { text-align: center; }
+  table.renglones thead tr.fila-subencabezado th.col-dosis-05 { color: var(--secondary); background: rgba(14,165,233,.08); }
+  table.renglones thead tr.fila-subencabezado th.col-dosis-1 { color: var(--canje); background: rgba(124,58,237,.08); }
+  table.renglones tbody td.col-dosis-05,
+  table.renglones tfoot td.col-dosis-05 { background: rgba(14,165,233,.05); }
+  table.renglones tbody td.col-dosis-1,
+  table.renglones tfoot td.col-dosis-1 { background: rgba(124,58,237,.05); }
+  table.renglones tbody tr:hover td.col-dosis-05 { background-color: rgba(14,165,233,.10); }
+  table.renglones tbody tr:hover td.col-dosis-1 { background-color: rgba(124,58,237,.10); }
+  /* el input casi llena la celda -- sin esto, el tinte de arriba apenas se
+     asoma por el borde y no ayuda a distinguir la columna de un vistazo */
+  table.renglones td.col-dosis-05 input { border-color: rgba(14,165,233,.4); background: rgba(14,165,233,.08); }
+  table.renglones td.col-dosis-1 input { border-color: rgba(124,58,237,.4); background: rgba(124,58,237,.08); }
+  table.renglones td.col-dosis-05 input:focus { border-color: var(--secondary); }
+  table.renglones td.col-dosis-1 input:focus { border-color: var(--canje); }
   table.renglones tbody td {
     padding: 6px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; text-align: center;
   }
@@ -255,15 +277,6 @@
   .panel-agregar .campos .campo input { width: 100%; }
   .panel-agregar .acciones { margin-top: 16px; display: flex; gap: 8px; }
   .campo .ayuda { font-size: 10.5px; color: var(--muted); }
-
-  .hint-lote {
-    display: none; align-items: center; gap: 6px; margin-top: 6px; font-size: 10.5px; font-weight: 700;
-    color: var(--warning); background: var(--warning-bg); border: 1px solid var(--warning-border);
-    padding: 4px 8px; border-radius: 8px; flex-wrap: wrap;
-  }
-  .hint-lote .material-symbols-rounded { font-size: 13px; }
-  .hint-lote button { padding: 2px 8px; font-size: 10px; border-radius: 6px; }
-  .hint-lote .btn-fantasma { color: var(--warning); }
 
   .ayuda-importador { font-size: 12px; color: var(--muted); margin: 0 0 14px; line-height: 1.5; }
   .resumen-importador { margin-top: 14px; font-size: 12.5px; }
