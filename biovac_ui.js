@@ -201,48 +201,6 @@ function ultimoDiaMes(anio, mes) {
   return `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
 }
 
-// Convierte teclear solo números (DDMMAA de 6 dígitos, o MMAA de 4 -- se
-// asume día = último día del mes cuando no se captura) a fecha ISO. Acepta
-// separadores (-, /, espacios) porque se descartan antes de interpretar.
-function parsearCaducidadInteligente(texto) {
-  const t = String(texto || '').trim();
-  // ya viene formateado como "JUL-29" (p.ej. si el usuario no vuelve a
-  // tocar el campo después del blur) -- se interpreta directo.
-  const mMmmAa = t.match(/^([A-ZÑ]{3})-(\d{2})$/i);
-  if (mMmmAa) {
-    const idx = MESES_ABREV3.indexOf(mMmmAa[1].toUpperCase());
-    if (idx === -1) return null;
-    const anioCompleto = 2000 + Number(mMmmAa[2]);
-    return ultimoDiaMes(anioCompleto, idx + 1);
-  }
-  // Si hay separadores (-, /, espacio), se interpreta por partes -- esto
-  // permite mes/día de 1 O 2 dígitos ("7-27" == "07-27"), no solo bloques
-  // de longitud fija. Sin separadores, se interpreta por longitud total
-  // (260729 = DDMMAA, 0729 = MMAA, 26072029... = DDMMAAAA).
-  const partes = t.split(/[^0-9]+/).filter(Boolean);
-  let dd = null, mm, yy;
-  if (partes.length === 3) {
-    [dd, mm, yy] = partes;
-  } else if (partes.length === 2) {
-    [mm, yy] = partes;
-  } else if (partes.length === 1) {
-    const digitos = partes[0];
-    if (digitos.length === 6) { dd = digitos.slice(0, 2); mm = digitos.slice(2, 4); yy = digitos.slice(4, 6); }
-    else if (digitos.length === 4) { mm = digitos.slice(0, 2); yy = digitos.slice(2, 4); }
-    else if (digitos.length === 8) { dd = digitos.slice(0, 2); mm = digitos.slice(2, 4); yy = digitos.slice(6, 8); }
-    else return null;
-  } else return null;
-
-  if (yy.length > 2) yy = yy.slice(-2);
-  const mesNum = Number(mm);
-  if (!mesNum || mesNum < 1 || mesNum > 12) return null;
-  const anioCompleto = 2000 + Number(yy);
-  const ultimoDiaDelMes = new Date(anioCompleto, mesNum, 0).getDate();
-  let diaNum = dd ? Number(dd) : ultimoDiaDelMes;
-  if (!diaNum || diaNum < 1 || diaNum > ultimoDiaDelMes) diaNum = ultimoDiaDelMes;
-  return `${anioCompleto}-${String(mesNum).padStart(2, '0')}-${String(diaNum).padStart(2, '0')}`;
-}
-
 // ---------------------------------------------------------------------------
 // Carga inicial: catálogo + unidades + selects de año/mes
 // ---------------------------------------------------------------------------
@@ -697,11 +655,11 @@ function panelResolverCanjeHtml(renglonId, bio) {
       <div class="campo">
         <label>N° de lote nuevo</label>
         <select data-nuevo-lote-canje><option value="">Selecciona un lote…</option></select>
-        <input type="text" data-nuevo-lote-canje-manual placeholder="Escribe el número del lote nuevo" style="display:none; margin-top:6px">
+        <span class="ayuda">Solo lotes ya dados de alta en Carga de lotes por municipio</span>
       </div>
       <div class="campo">
         <label>Caducidad del nuevo</label>
-        <input type="text" inputmode="numeric" data-nueva-caducidad-canje placeholder="DDMMAA o MMAA">
+        <input type="text" data-nueva-caducidad-canje placeholder="Se completa al elegir el lote" readonly>
       </div>
       <div class="campo" style="width:220px">
         <label>Motivo</label>
@@ -724,12 +682,11 @@ function renderPanelAgregar(bio) {
       <div class="campo">
         <label>N° de lote</label>
         <select data-nuevo-lote><option value="">Selecciona un lote…</option></select>
-        <input type="text" data-nuevo-lote-manual placeholder="Escribe el nuevo número de lote" style="display:none; margin-top:6px">
+        <span class="ayuda">Solo lotes ya dados de alta en Carga de lotes por municipio</span>
       </div>
       <div class="campo">
         <label>Caducidad</label>
-        <input type="text" inputmode="numeric" data-nuevo-caducidad placeholder="Ej. 072029">
-        <span class="ayuda">Solo números; se convierte a "JUL-29" al salir del campo</span>
+        <input type="text" data-nuevo-caducidad placeholder="Se completa al elegir el lote" readonly>
       </div>
       <div class="campo">
         <label>Estatus</label>
@@ -926,22 +883,27 @@ async function eliminarRenglon(renglonId) {
 // por tipo (NORMAL/ARF/CANJE, según el Estatus elegido). Cacheado por
 // bio+categoría dentro de la sesión; se invalida solo al cambiar de unidad
 // (cargarCatalogo se llama una sola vez al inicio, así que en la práctica
-// dura toda la sesión de captura).
+// dura toda la sesión de captura). Solo se cachea un resultado NO VACÍO --
+// si en el catálogo central aún no había nada para ese bio+categoría (ej.
+// un canje que otro usuario registra en la app principal mientras esta
+// pestaña sigue abierta), la próxima vez que se abra el panel se vuelve a
+// consultar en vez de quedarse con el "no hay nada" de la primera vez.
 // ---------------------------------------------------------------------------
 
 async function obtenerLotesCatalogoCentral(bio, categoria) {
   const key = bio.clave + '::' + categoria;
-  if (estado.catalogoLotesCentral[key]) return estado.catalogoLotesCentral[key];
+  if (estado.catalogoLotesCentral[key]?.length) return estado.catalogoLotesCentral[key];
 
   const unidad = estado.unidades.find((u) => u.id === estado.movimiento.unidad_id);
   const nombres = CLAVE_A_EXISTENCIA_BIOLOGICO[bio.clave];
   const municipioLotes = unidad ? MUNICIPIO_BIOVAC_A_LOTES[unidad.municipio] : null;
-  if (!nombres || !municipioLotes) { estado.catalogoLotesCentral[key] = []; return []; }
+  if (!nombres || !municipioLotes) return [];
 
   const { data, error } = await estado.db.from('lotes')
     .select('lote, caducidad, municipio')
     .in('biologico', nombres).eq('tipo', categoria);
-  if (error || !data) { estado.catalogoLotesCentral[key] = []; return []; }
+  if (error) { console.error('[BioVac] Error consultando catálogo central de lotes:', error); return []; }
+  if (!data) return [];
 
   const vistos = new Map();
   for (const fila of data) {
@@ -972,15 +934,17 @@ function lotesYaEnMovimiento(bioId, categoria) {
   return set;
 }
 
-// Llena un <select> de lote con lo que ya existe en el catálogo central para
-// ese biológico+categoría, más una opción para capturar uno genuinamente
-// nuevo que el catálogo central aún no conozca (input de texto que aparece
-// al elegirla) -- así el flujo normal es "elegir de la lista", sin volver a
-// depender de detección de errores de dedo. Los lotes que ya tienen renglón
-// en este movimiento con esta misma categoría se muestran deshabilitados
-// (en vez de ocultarlos) para que quede claro por qué no se pueden
-// seleccionar de nuevo -- ese lote ya está en la tabla de arriba, se edita
-// ahí directamente.
+// Llena un <select> de lote SOLO con lo que ya existe en el catálogo
+// central ("lotes", panel "Carga de lotes por municipio") -- BioVac ya no
+// deja capturar un número de lote nuevo por su cuenta: la matriz de lotes
+// es la única fuente de verdad, así biovac_lotes nunca vuelve a divergir de
+// ella (numero_lote y caducidad, los dos). Si un lote real todavía no
+// aparece aquí, hay que darlo de alta primero en esa pantalla -- no hay
+// atajo para agregarlo desde Movimiento de Biológico. Los lotes que ya
+// tienen renglón en este movimiento con esta misma categoría se muestran
+// deshabilitados (en vez de ocultarlos) para que quede claro por qué no se
+// pueden seleccionar de nuevo -- ese lote ya está en la tabla de arriba, se
+// edita ahí directamente.
 async function poblarSelectLote(bio, categoria, selectEl) {
   selectEl.innerHTML = '<option value="">Cargando lotes…</option>';
   const lista = await obtenerLotesCatalogoCentral(bio, categoria);
@@ -991,24 +955,20 @@ async function poblarSelectLote(bio, categoria, selectEl) {
       return `<option value="${l.lote}" data-cad="${l.caducidad || ''}" ${usado ? 'disabled' : ''}>${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}${usado ? ' (ya agregado en este movimiento)' : ''}</option>`;
     })
     .join('');
-  selectEl.innerHTML = `<option value="">Selecciona un lote…</option>${opciones}<option value="__nuevo__">+ Nuevo lote (no está en la lista)</option>`;
+  const vacio = !lista.length ? '<option value="" disabled>Sin lotes dados de alta para este municipio -- regístralo en Carga de lotes por municipio</option>' : '';
+  selectEl.innerHTML = `<option value="">Selecciona un lote…</option>${opciones}${vacio}`;
 }
 
-// Muestra/oculta el input de texto para "+ Nuevo lote" y, al elegir un lote
-// ya conocido, precarga su caducidad (sin sobreescribir si el usuario ya
-// escribió una).
+// Al elegir un lote de la matriz, su caducidad se completa sola y queda de
+// solo lectura -- ya no se captura a mano (mismo criterio que el número de
+// lote: todo sale del catálogo central, nunca de lo que teclee el usuario).
 function onCambioSelectLote(selectEl) {
-  const campo = selectEl.closest('.campo');
-  const manual = campo && campo.querySelector('[data-nuevo-lote-manual], [data-nuevo-lote-canje-manual]');
-  if (manual) manual.style.display = selectEl.value === '__nuevo__' ? 'block' : 'none';
-
+  const panel = selectEl.closest('[data-bio]');
+  const campoCaducidad = panel && panel.querySelector('[data-nuevo-caducidad], [data-nueva-caducidad-canje]');
+  if (!campoCaducidad) return;
   const opt = selectEl.selectedOptions[0];
   const cad = opt && opt.dataset ? opt.dataset.cad : '';
-  if (cad) {
-    const panel = selectEl.closest('[data-bio]');
-    const campoCaducidad = panel && panel.querySelector('[data-nuevo-caducidad], [data-nueva-caducidad-canje]');
-    if (campoCaducidad && !campoCaducidad.value.trim()) campoCaducidad.value = formatMmmAa(cad);
-  }
+  campoCaducidad.value = cad ? formatMmmAa(cad) : '';
 }
 
 // "Agregar lote": la lista depende del Estatus elegido (Normal/A.R.F./Canje)
@@ -1032,23 +992,15 @@ function poblarSelectLoteCanje(panel) {
 
 async function agregarLote(bioId, panel) {
   const loteSelect = panel.querySelector('[data-nuevo-lote]');
-  const loteManual = panel.querySelector('[data-nuevo-lote-manual]');
-  const numeroLote = (loteSelect.value === '__nuevo__' ? loteManual.value : loteSelect.value).trim();
-  const caducidadTexto = panel.querySelector('[data-nuevo-caducidad]').value.trim();
+  if (!loteSelect.value) { toast('Selecciona un lote de la lista (Carga de lotes por municipio).', 'error'); return; }
+  const numeroLote = loteSelect.value.trim();
+  const caducidad = loteSelect.selectedOptions[0]?.dataset.cad || null;
   const categoria = panel.querySelector('[data-nuevo-categoria]').value;
   const tipoCantidad = panel.querySelector('[data-nuevo-tipo-cantidad]').value;
   const cantidad = Number(panel.querySelector('[data-nuevo-cantidad]').value) || 0;
-  if (!loteSelect.value) { toast('Selecciona un lote de la lista, o "+ Nuevo lote".', 'error'); return; }
-  if (!numeroLote) { toast('Escribe el número de lote.', 'error'); return; }
-
-  let caducidad = null;
-  if (caducidadTexto) {
-    caducidad = parsearCaducidadInteligente(caducidadTexto);
-    if (!caducidad) { toast('No entendí la fecha de caducidad. Usa por ejemplo 260729 o 07-29.', 'error'); return; }
-  }
 
   let { data: lote, error: errSel } = await estado.db.from('biovac_lotes')
-    .select('id').eq('biologico_id', bioId).eq('numero_lote', numeroLote).maybeSingle();
+    .select('id, caducidad').eq('biologico_id', bioId).eq('numero_lote', numeroLote).maybeSingle();
   if (errSel) { toast('Error: ' + errSel.message, 'error'); return; }
 
   let loteReciénCreado = false;
@@ -1058,6 +1010,17 @@ async function agregarLote(bioId, panel) {
     if (errIns) { toast('Error creando lote: ' + errIns.message, 'error'); return; }
     lote = nuevo;
     loteReciénCreado = true;
+  } else if (caducidad && caducidad !== lote.caducidad) {
+    // biovac_lotes no está segmentado por municipio -- este número de lote
+    // puede ya existir con una caducidad vieja/equivocada capturada por
+    // otro municipio o antes de esta integración con el catálogo central.
+    // Si el usuario está viendo/escribiendo una caducidad distinta ahora
+    // (típicamente porque el desplegable la trajo del catálogo central,
+    // que es la fuente de verdad), se actualiza -- si no, se quedaba
+    // guardada la vieja en silencio sin que el usuario se enterara. Mismo
+    // criterio que ya usa biovac_resolver_canje al reutilizar un lote.
+    const { error: errUpd } = await estado.db.from('biovac_lotes').update({ caducidad }).eq('id', lote.id);
+    if (errUpd) { toast('Error actualizando caducidad del lote: ' + errUpd.message, 'error'); return; }
   }
 
   const renglon = { movimiento_id: estado.movimiento.id, lote_id: lote.id, categoria };
@@ -1111,19 +1074,11 @@ async function resolverCanje(renglonId, panel) {
   const usuario = usuarioActual();
   if (!usuario) return;
   const loteSelect = panel.querySelector('[data-nuevo-lote-canje]');
-  const loteManual = panel.querySelector('[data-nuevo-lote-canje-manual]');
-  const nuevoLote = (loteSelect.value === '__nuevo__' ? loteManual.value : loteSelect.value).trim();
-  const caducidadTexto = panel.querySelector('[data-nueva-caducidad-canje]').value.trim();
+  if (!loteSelect.value) { toast('Selecciona el lote nuevo de la lista (Carga de lotes por municipio).', 'error'); return; }
+  const nuevoLote = loteSelect.value.trim();
+  const caducidad = loteSelect.selectedOptions[0]?.dataset.cad || null;
   const motivo = panel.querySelector('[data-motivo-canje]').value.trim();
-  if (!loteSelect.value) { toast('Selecciona el lote nuevo de la lista, o "+ Nuevo lote".', 'error'); return; }
-  if (!nuevoLote) { toast('Escribe el número del lote nuevo.', 'error'); return; }
   if (!motivo) { toast('Escribe el motivo del canje.', 'error'); return; }
-
-  let caducidad = null;
-  if (caducidadTexto) {
-    caducidad = parsearCaducidadInteligente(caducidadTexto);
-    if (!caducidad) { toast('No entendí la fecha de caducidad. Usa por ejemplo 260729 o 07-29.', 'error'); return; }
-  }
 
   const { error } = await estado.db.rpc('biovac_resolver_canje', {
     p_renglon_id: renglonId, p_nuevo_numero_lote: nuevoLote, p_nueva_caducidad: caducidad,
@@ -1518,15 +1473,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // reemplace el "0" en vez de concatenarse ("05")
   cont.addEventListener('focus', (ev) => {
     if (ev.target.matches('input[type=number]')) ev.target.select();
-  }, true);
-  // al salir del campo de caducidad del "+ Agregar lote", reacomodar lo
-  // tecleado (números sueltos) al formato visible "JUL-29"
-  cont.addEventListener('blur', (ev) => {
-    if (ev.target.matches('[data-nuevo-caducidad], [data-nueva-caducidad-canje]')) {
-      const iso = parsearCaducidadInteligente(ev.target.value);
-      if (iso) ev.target.value = formatMmmAa(iso);
-      return;
-    }
   }, true);
   cont.addEventListener('click', (ev) => {
     const btn = ev.target.closest('[data-action]');
