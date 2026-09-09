@@ -6,6 +6,10 @@
 // Postgres (supabase/requi_engine.sql) es la autoridad de validación; este
 // archivo solo espeja esa lógica (requi_engine.js) para dar feedback
 // instantáneo y atrapar el error del trigger si aun así se excede.
+//
+// La captura web es un diseño propio (lista expandible), NO una réplica del
+// Excel oficial -- eso se reserva para la exportación (requisiciones_export_
+// excel.js), que sí clona el archivo real celda por celda.
 // ============================================================================
 
 const SUPABASE_URL = "https://utclfqjietlxzlorxhrs.supabase.co";
@@ -16,20 +20,38 @@ const MESES = [
   { v: 5, l: 'Mayo' }, { v: 6, l: 'Junio' }, { v: 7, l: 'Julio' }, { v: 8, l: 'Agosto' },
   { v: 9, l: 'Septiembre' }, { v: 10, l: 'Octubre' }, { v: 11, l: 'Noviembre' }, { v: 12, l: 'Diciembre' }
 ];
+const MESES_ABREV3 = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
-const MUNICIPIOS = [
+// 4 municipios reales + 2 hospitales (el "Hospital General" viejo ya no
+// existe), todos hermanos entre sí -- cada hospital lleva su propia
+// requisición. A diferencia de los municipios, los hospitales se tratan
+// como "unidad" para firmas: nunca llevan nombre de quien recibe
+// precapturado (ver esHospital más abajo).
+const DESTINOS = [
   { v: 'CORREGIDORA', l: 'Corregidora' },
   { v: 'HUIMILPAN', l: 'Huimilpan' },
   { v: 'MARQUES', l: 'El Marqués' },
   { v: 'QUERETARO', l: 'Querétaro' },
-  { v: 'HOSPITALES', l: 'Hospitales' }
+  { v: 'NHG', l: 'Nuevo Hospital General' },
+  { v: 'HENM', l: 'HENM' }
 ];
+const MUNICIPIOS_REALES = DESTINOS.slice(0, 4); // solo estos tienen unidades (Paso 3) y firma cacheada
+function esHospital(destino) { return destino === 'NHG' || destino === 'HENM'; }
+
+const NOMBRE_DESTINO_EXPORT = {
+  CORREGIDORA: 'MUNICIPIO CORREGIDORA', HUIMILPAN: 'MUNICIPIO HUIMILPAN',
+  MARQUES: 'MUNICIPIO EL MARQUÉS', QUERETARO: 'MUNICIPIO QUERÉTARO',
+  NHG: 'NUEVO HOSPITAL GENERAL DE QUERÉTARO', HENM: 'HOSPITAL DE ESPECIALIDADES DEL NIÑO Y LA MUJER'
+};
+const DIRECCION_HOSPITAL = {
+  NHG: 'Adalberto Martínez n.448, La Joya, Querétaro, Qro.',
+  HENM: 'Av. Luis Vega Monrroy n.410, Colinas del Cimatario, Querétaro, Qro.'
+};
+const DIRECCION_JURISDICCION = 'Circuito Moises Solana S/N, Col. Vista Alegre, Santiago de Querétaro. Qro.';
+const COPIAS_SUGERIDAS = { JURISDICCIONAL: 2, MUNICIPAL: 2, UNIDAD: 3 };
 
 // Puente opcional hacia la tabla "lotes" (panel "Carga de lotes por
-// municipio", ya usado por Biovac) -- mismo criterio de mapeo explícito que
-// MUNICIPIO_BIOVAC_A_LOTES en biovac_ui.js: si un código de artículo no
-// tiene equivalente exacto en ese catálogo (BIOS_LIST), la sincronización
-// simplemente no se ofrece para ese biológico.
+// municipio", ya usado por Biovac) -- solo aplica a los 4 municipios reales.
 const MUNICIPIO_A_LOTES = { CORREGIDORA: 'CORREGIDORA', HUIMILPAN: 'HUIMILPAN', MARQUES: 'EL MARQUÉS', QUERETARO: 'QUERÉTARO' };
 const CODIGO_A_LOTES_BIOLOGICO = {
   '148': 'NEUMOCÓCICA 13', '150': 'ROTAVIRUS', '6135': 'HEXAVALENTE', '2526': 'HEPATITIS B',
@@ -41,73 +63,17 @@ const estado = {
   db: null,
   perfil: null,
   catalogo: [],       // requi_catalogo_biologicos
-  unidades: [],        // requi_unidades
+  unidades: [],        // requi_unidades (solo los 4 municipios reales)
   requisicion: null,   // requi_requisiciones actual
   items: [],           // requi_items_jurisdiccion
   distMunicipio: [],   // requi_distribucion_municipio
   distUnidad: [],      // requi_distribucion_unidad
   lotesPorBiologico: {},
-  puedeEditar: false
+  puedeEditar: false,
+  plantillaBuffer: null
 };
 
 function $(id) { return document.getElementById(id); }
-
-function abrirPdf(nivel, destino, copias) {
-  if (!estado.requisicion) { toast('Guarda primero la cabecera de la requisición.', true); return; }
-  const params = new URLSearchParams({ id: estado.requisicion.id, nivel, copias: String(copias) });
-  if (destino) params.set('destino', destino);
-  window.open('requisiciones_print.html?' + params.toString(), '_blank');
-}
-
-// ---------------------------------------------------------------------------
-// Firmas por nivel/destino — Elaboró/Autorizó/Entrega/Recibe cambian en
-// cada rango (jurisdicción, cada municipio/Hospitales, cada unidad), así
-// que se editan justo antes de imprimir ese destino en concreto, no una
-// sola vez para todo el mes.
-// ---------------------------------------------------------------------------
-
-const CAMPOS_FIRMA = [
-  ['elaboro_nombre', 'elaboroN', 'Elaboró — Nombre'], ['elaboro_cargo', 'elaboroC', 'Elaboró — Cargo'],
-  ['autorizo_nombre', 'autorizoN', 'Autorizó — Nombre'], ['autorizo_cargo', 'autorizoC', 'Autorizó — Cargo'],
-  ['entrega_nombre', 'entregaN', 'Entrega — Nombre'], ['entrega_cargo', 'entregaC', 'Entrega — Cargo'],
-  ['recibe_nombre', 'recibeN', 'Recibe — Nombre'], ['recibe_cargo', 'recibeC', 'Recibe — Cargo']
-];
-
-function htmlFirmasForm(idPrefix, datos) {
-  datos = datos || {};
-  const campos = CAMPOS_FIRMA.map(([col, sufijo, etiqueta]) => `
-    <div class="campo"><label>${etiqueta}</label><input type="text" id="${idPrefix}-${sufijo}" value="${(datos[col] || '').replace(/"/g, '&quot;')}"></div>
-  `).join('');
-  return `
-    <div class="barra">${campos}</div>
-    <button class="btn btn-primary btn-sm" style="margin-top:8px;" data-guardar-firmas="${idPrefix}">
-      <span class="material-symbols-rounded" style="font-size:14px">print</span> Guardar firmas e imprimir
-    </button>
-  `;
-}
-
-async function toggleCajaFirmas(contId, nivel, destino, copias) {
-  if (!estado.requisicion) { toast('Guarda primero la cabecera de la requisición.', true); return; }
-  const cont = $(contId);
-  const abierto = cont.style.display === 'block';
-  if (abierto) { cont.style.display = 'none'; return; }
-
-  const { data } = await estado.db.from('requi_firmas').select('*')
-    .eq('requisicion_id', estado.requisicion.id).eq('nivel', nivel).eq('destino', destino).maybeSingle();
-  cont.innerHTML = htmlFirmasForm(contId, data);
-  cont.style.display = 'block';
-  const btn = cont.querySelector('[data-guardar-firmas]');
-  btn.addEventListener('click', () => guardarFirmasEImprimir(contId, nivel, destino, copias));
-}
-
-async function guardarFirmasEImprimir(idPrefix, nivel, destino, copias) {
-  const payload = { requisicion_id: estado.requisicion.id, nivel, destino };
-  CAMPOS_FIRMA.forEach(([col, sufijo]) => { payload[col] = valorOnull(`${idPrefix}-${sufijo}`); });
-  const { error } = await estado.db.from('requi_firmas').upsert(payload, { onConflict: 'requisicion_id,nivel,destino' });
-  if (error) { toast('No se pudieron guardar las firmas: ' + error.message, true); return; }
-  toast('Firmas guardadas.');
-  abrirPdf(nivel, destino, copias);
-}
 
 function toast(msg, esError) {
   const t = $('toast');
@@ -115,7 +81,64 @@ function toast(msg, esError) {
   t.classList.toggle('err', !!esError);
   t.classList.add('show');
   clearTimeout(toast._h);
-  toast._h = setTimeout(() => t.classList.remove('show'), esError ? 5000 : 2600);
+  toast._h = setTimeout(() => t.classList.remove('show'), esError ? 5500 : 2600);
+}
+
+function valorOnull(id) { return $(id).value.trim() || null; }
+
+function flashGuardado(el) {
+  const celdas = el.tagName === 'TR' ? el.querySelectorAll('td') : [el];
+  celdas.forEach((td) => td.classList.add('celda-guardada'));
+  setTimeout(() => celdas.forEach((td) => td.classList.remove('celda-guardada')), 900);
+}
+
+// ---------------------------------------------------------------------------
+// Fechas de caducidad — mismo formato y mismo parser inteligente que ya usa
+// Biovac (formatMmmAa / parsearCaducidadInteligente en biovac_ui.js): se
+// muestra "FEB-27" y se captura tecleando solo números (270228, 02-27, etc.)
+// ---------------------------------------------------------------------------
+
+function ultimoDiaMes(anio, mes) {
+  const dia = new Date(anio, mes, 0).getDate();
+  return `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+function formatMmmAa(fechaIso) {
+  if (!fechaIso) return '';
+  const d = new Date(fechaIso + 'T00:00:00');
+  if (isNaN(d.getTime())) return fechaIso;
+  return `${MESES_ABREV3[d.getMonth()]}-${String(d.getFullYear()).slice(2)}`;
+}
+
+function parsearCaducidadInteligente(texto) {
+  const t = String(texto || '').trim();
+  if (!t) return null;
+  const mMmmAa = t.match(/^([A-ZÑ]{3})-(\d{2})$/i);
+  if (mMmmAa) {
+    const idx = MESES_ABREV3.indexOf(mMmmAa[1].toUpperCase());
+    if (idx === -1) return null;
+    return ultimoDiaMes(2000 + Number(mMmmAa[2]), idx + 1);
+  }
+  const partes = t.split(/[^0-9]+/).filter(Boolean);
+  let dd = null, mm, yy;
+  if (partes.length === 3) { [dd, mm, yy] = partes; }
+  else if (partes.length === 2) { [mm, yy] = partes; }
+  else if (partes.length === 1) {
+    const digitos = partes[0];
+    if (digitos.length === 6) { dd = digitos.slice(0, 2); mm = digitos.slice(2, 4); yy = digitos.slice(4, 6); }
+    else if (digitos.length === 4) { mm = digitos.slice(0, 2); yy = digitos.slice(2, 4); }
+    else if (digitos.length === 8) { dd = digitos.slice(0, 2); mm = digitos.slice(2, 4); yy = digitos.slice(6, 8); }
+    else return null;
+  } else return null;
+
+  if (yy.length > 2) yy = yy.slice(-2);
+  const mesNum = Number(mm);
+  if (!mesNum || mesNum < 1 || mesNum > 12) return null;
+  const anioCompleto = 2000 + Number(yy);
+  const ultimoDiaDelMes = new Date(anioCompleto, mesNum, 0).getDate();
+  let diaNum = dd ? Number(dd) : ultimoDiaDelMes;
+  if (!diaNum || diaNum < 1 || diaNum > ultimoDiaDelMes) diaNum = ultimoDiaDelMes;
+  return `${anioCompleto}-${String(mesNum).padStart(2, '0')}-${String(diaNum).padStart(2, '0')}`;
 }
 
 function initDb() {
@@ -141,10 +164,85 @@ async function cargarSesionReal() {
 }
 
 function pillComparador(resultado) {
-  if (resultado.estado === 'EXISTE') return `<span class="pill pill-ok"><span class="material-symbols-rounded" style="font-size:13px">check_circle</span> Ya existe (cad. ${resultado.lote.caducidad || 's/f'})</span>`;
-  if (resultado.estado === 'SIMILAR') return `<span class="pill pill-warn"><span class="material-symbols-rounded" style="font-size:13px">warning</span> ¿Quisiste decir ${resultado.sugerencias[0].numero_lote}?</span>`;
-  if (resultado.estado === 'NUEVO') return `<span class="pill pill-new"><span class="material-symbols-rounded" style="font-size:13px">fiber_new</span> Nuevo ingreso</span>`;
+  if (resultado.estado === 'EXISTE') return `<span class="pill pill-ok badge-comparador"><span class="material-symbols-rounded" style="font-size:12px">check_circle</span> Ya existe (${formatMmmAa(resultado.lote.caducidad)})</span>`;
+  if (resultado.estado === 'SIMILAR') return `<span class="pill pill-warn badge-comparador"><span class="material-symbols-rounded" style="font-size:12px">warning</span> ¿"${resultado.sugerencias[0].numero_lote}"?</span>`;
+  if (resultado.estado === 'NUEVO') return `<span class="pill pill-new badge-comparador"><span class="material-symbols-rounded" style="font-size:12px">fiber_new</span> Nuevo</span>`;
   return '';
+}
+
+// ---------------------------------------------------------------------------
+// Responsables (Elaboró/Autorizó/Entrega/Recibe) — configuración fija por
+// nivel/destino, NO por requisición: el mismo responsable firma mes tras
+// mes, así que se captura una sola vez y se reutiliza (caché) hasta que
+// cambie. Cada municipio tiene su propia tarjeta (entrega/recibe distinto
+// en cada uno). Los hospitales no aparecen aquí -- cuentan como unidad,
+// firman a mano y anotan su propio nombre en el papel.
+// ---------------------------------------------------------------------------
+
+async function cargarFirmasJurisdiccionales() {
+  const { data } = await estado.db.from('requi_firmas').select('*')
+    .eq('nivel', 'JURISDICCIONAL').eq('destino', 'JURISDICCION').maybeSingle();
+  const d = data || {};
+  $('jurElaboroNombre').value = d.elaboro_nombre || '';
+  $('jurElaboroCargo').value = d.elaboro_cargo || '';
+  $('jurAutorizoNombre').value = d.autorizo_nombre || '';
+  $('jurAutorizoCargo').value = d.autorizo_cargo || '';
+  $('jurEntregaNombre').value = d.entrega_nombre || '';
+  $('jurEntregaCargo').value = d.entrega_cargo || '';
+  $('jurRecibeNombre').value = d.recibe_nombre || '';
+  $('jurRecibeCargo').value = d.recibe_cargo || '';
+}
+
+async function guardarFirmasJurisdiccionales() {
+  const payload = {
+    nivel: 'JURISDICCIONAL', destino: 'JURISDICCION',
+    elaboro_nombre: valorOnull('jurElaboroNombre'), elaboro_cargo: valorOnull('jurElaboroCargo'),
+    autorizo_nombre: valorOnull('jurAutorizoNombre'), autorizo_cargo: valorOnull('jurAutorizoCargo'),
+    entrega_nombre: valorOnull('jurEntregaNombre'), entrega_cargo: valorOnull('jurEntregaCargo'),
+    recibe_nombre: valorOnull('jurRecibeNombre'), recibe_cargo: valorOnull('jurRecibeCargo')
+  };
+  const { error } = await estado.db.from('requi_firmas').upsert(payload, { onConflict: 'nivel,destino' });
+  if (error) { toast('No se pudieron guardar: ' + error.message, true); return; }
+  toast('Responsables jurisdiccionales guardados.');
+}
+
+async function renderFirmasMunicipio() {
+  const cont = $('listaFirmasMunicipio');
+  const { data } = await estado.db.from('requi_firmas').select('*').eq('nivel', 'MUNICIPAL');
+  const porDestino = {};
+  (data || []).forEach((f) => { porDestino[f.destino] = f; });
+
+  cont.innerHTML = MUNICIPIOS_REALES.map((m) => {
+    const d = porDestino[m.v] || {};
+    return `
+      <div class="barra" data-firma-municipio="${m.v}" style="padding:10px 12px; background:var(--surface-container); border-radius:12px;">
+        <div class="campo" style="min-width:110px;"><label>Municipio</label><div style="font-weight:800; padding:9px 0;">${m.l}</div></div>
+        <div class="campo"><label>Entrega — Nombre</label><input type="text" class="inp-firma-entrega-n" value="${(d.entrega_nombre || '').replace(/"/g, '&quot;')}"></div>
+        <div class="campo"><label>Entrega — Cargo</label><input type="text" class="inp-firma-entrega-c" value="${(d.entrega_cargo || '').replace(/"/g, '&quot;')}"></div>
+        <div class="campo"><label>Recibe — Nombre</label><input type="text" class="inp-firma-recibe-n" value="${(d.recibe_nombre || '').replace(/"/g, '&quot;')}"></div>
+        <div class="campo"><label>Recibe — Cargo</label><input type="text" class="inp-firma-recibe-c" value="${(d.recibe_cargo || '').replace(/"/g, '&quot;')}"></div>
+        <button class="btn btn-primary btn-sm" data-guardar-firma-municipio="${m.v}"><span class="material-symbols-rounded" style="font-size:14px">save</span> Guardar</button>
+      </div>
+    `;
+  }).join('');
+
+  cont.querySelectorAll('[data-guardar-firma-municipio]').forEach((btn) => {
+    btn.addEventListener('click', () => guardarFirmasMunicipio(btn.dataset.guardarFirmaMunicipio));
+  });
+}
+
+async function guardarFirmasMunicipio(destino) {
+  const fila = document.querySelector(`[data-firma-municipio="${destino}"]`);
+  const payload = {
+    nivel: 'MUNICIPAL', destino,
+    entrega_nombre: fila.querySelector('.inp-firma-entrega-n').value.trim() || null,
+    entrega_cargo: fila.querySelector('.inp-firma-entrega-c').value.trim() || null,
+    recibe_nombre: fila.querySelector('.inp-firma-recibe-n').value.trim() || null,
+    recibe_cargo: fila.querySelector('.inp-firma-recibe-c').value.trim() || null
+  };
+  const { error } = await estado.db.from('requi_firmas').upsert(payload, { onConflict: 'nivel,destino' });
+  if (error) { toast('No se pudieron guardar: ' + error.message, true); return; }
+  toast(`Responsables de ${destino} guardados.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,8 +267,6 @@ async function cargarCatalogoYUnidades() {
   estado.catalogo = catalogo || [];
   estado.unidades = unidades || [];
 }
-
-function valorOnull(id) { return $(id).value.trim() || null; }
 
 async function guardarCabecera() {
   if (!estado.puedeEditar) return;
@@ -210,7 +306,7 @@ async function cargarDatosRequisicion() {
   if (!estado.requisicion) return;
   const reqId = estado.requisicion.id;
   const [{ data: items }, { data: dm }, { data: du }] = await Promise.all([
-    estado.db.from('requi_items_jurisdiccion').select('*, requi_lotes(numero_lote, caducidad)').eq('requisicion_id', reqId),
+    estado.db.from('requi_items_jurisdiccion').select('*, requi_lotes(numero_lote, caducidad)').eq('requisicion_id', reqId).order('created_at'),
     estado.db.from('requi_distribucion_municipio').select('*').eq('requisicion_id', reqId),
     estado.db.from('requi_distribucion_unidad').select('*').eq('requisicion_id', reqId)
   ]);
@@ -221,57 +317,62 @@ async function cargarDatosRequisicion() {
   renderPaso1();
   renderSelectLotesPaso2();
   renderSelectMunicipioYLotesPaso3();
+  renderDestinosMasivos();
 }
 
 // ---------------------------------------------------------------------------
-// Paso 1 — Lo surtido
+// Paso 1 — Lo surtido: da clic en un biológico para ver/agregar sus lotes.
+// Sin límite de lotes (el límite de 2 por biológico es solo un detalle
+// físico de la plantilla de exportación, no de la captura).
 // ---------------------------------------------------------------------------
 
 function itemsDe(biologicoId) {
   return estado.items.filter((i) => i.requi_biologico_id === biologicoId);
 }
 
+function filasBiologicoHtml(bio, idx) {
+  const items = itemsDe(bio.id);
+  const total = items.reduce((acc, i) => acc + Number(i.cantidad_surtida || 0), 0);
+  return `
+    <tr class="fila-bio" data-bio="${bio.id}">
+      <td>${idx + 1}</td>
+      <td><strong>${bio.nombre}</strong><br><span style="color:var(--muted); font-size:11px;">${bio.clave_articulo}</span></td>
+      <td>${bio.presentacion}</td>
+      <td>${items.length} lote(s)</td>
+      <td><strong>${total}</strong></td>
+    </tr>
+    <tr id="detalle-${bio.id}" class="fila-detalle" style="display:none;"><td colspan="5" style="background:var(--surface-container);">${renderDetalleBiologico(bio, items)}</td></tr>
+  `;
+}
+
 function renderPaso1() {
   const tbody = $('tbodyBiologicos');
-  tbody.innerHTML = estado.catalogo.map((bio, idx) => {
-    const items = itemsDe(bio.id);
-    const total = items.reduce((acc, i) => acc + Number(i.cantidad_surtida || 0), 0);
-    return `
-      <tr class="fila-bio" data-bio="${bio.id}">
-        <td>${idx + 1}</td>
-        <td><strong>${bio.nombre}</strong><br><span style="color:var(--muted); font-size:11px;">${bio.clave_articulo}</span></td>
-        <td>${bio.presentacion}</td>
-        <td>${items.length} lote(s)</td>
-        <td><strong>${total}</strong></td>
-      </tr>
-      <tr id="detalle-${bio.id}" style="display:none;"><td colspan="5" style="background:var(--surface-container);">${renderDetalleBiologico(bio, items)}</td></tr>
-    `;
-  }).join('');
+  tbody.innerHTML = estado.catalogo.map((bio, idx) => filasBiologicoHtml(bio, idx)).join('');
+  tbody.querySelectorAll('tr.fila-bio').forEach((tr) => tr.addEventListener('click', () => toggleDetalle(tr.dataset.bio)));
+  tbody.querySelectorAll('tr.fila-detalle').forEach((tr) => cablearDetalle(tr));
+}
 
-  tbody.querySelectorAll('tr.fila-bio').forEach((tr) => {
-    tr.addEventListener('click', () => {
-      const detalle = $('detalle-' + tr.dataset.bio);
-      const abierto = detalle.style.display !== 'none';
-      tbody.querySelectorAll('tr[id^="detalle-"]').forEach((d) => (d.style.display = 'none'));
-      detalle.style.display = abierto ? 'none' : 'table-row';
-    });
-  });
+function toggleDetalle(bioId) {
+  const detalle = $('detalle-' + bioId);
+  const abierto = detalle.style.display !== 'none';
+  document.querySelectorAll('tr.fila-detalle').forEach((d) => (d.style.display = 'none'));
+  detalle.style.display = abierto ? 'none' : 'table-row';
+}
 
-  tbody.querySelectorAll('.btn-agregar-lote').forEach((btn) => {
-    btn.addEventListener('click', () => agregarLoteSurtido(btn.dataset.bio));
-  });
-  tbody.querySelectorAll('.btn-quitar-item').forEach((btn) => {
-    btn.addEventListener('click', () => quitarItemSurtido(btn.dataset.item));
-  });
+function cablearDetalle(trDetalle) {
+  trDetalle.querySelectorAll('.btn-agregar-lote').forEach((btn) => btn.addEventListener('click', () => agregarLoteSurtido(btn.dataset.bio)));
+  trDetalle.querySelectorAll('.btn-quitar-item').forEach((btn) => btn.addEventListener('click', () => quitarItemSurtido(btn.dataset.item, btn.dataset.bio)));
+  const inpCantidad = trDetalle.querySelector('.inp-cantidad-nueva');
+  if (inpCantidad) inpCantidad.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') agregarLoteSurtido(inpCantidad.dataset.bio); });
 }
 
 function renderDetalleBiologico(bio, items) {
   const filas = items.map((it) => `
     <tr>
       <td>${it.requi_lotes.numero_lote}</td>
-      <td>${it.requi_lotes.caducidad || '—'}</td>
+      <td>${formatMmmAa(it.requi_lotes.caducidad)}</td>
       <td>${it.cantidad_surtida}</td>
-      <td class="solo-edicion"><button class="btn btn-outline btn-sm btn-quitar-item" data-item="${it.id}"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button></td>
+      <td class="solo-edicion"><button class="btn btn-outline btn-sm btn-quitar-item" data-item="${it.id}" data-bio="${bio.id}"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button></td>
     </tr>
   `).join('') || '<tr><td colspan="4" style="color:var(--muted)">Sin lotes capturados.</td></tr>';
 
@@ -280,13 +381,13 @@ function renderDetalleBiologico(bio, items) {
       <thead><tr><th>Lote</th><th>Caducidad</th><th>Cantidad surtida</th><th class="solo-edicion"></th></tr></thead>
       <tbody>${filas}</tbody>
     </table>
-    <div class="barra solo-edicion" style="margin-top:12px;">
-      <div class="campo"><label>Número de lote</label><input type="text" id="loteTxt-${bio.id}" placeholder="Ej. 0374MA109"></div>
-      <div class="campo"><label>Caducidad</label><input type="date" id="loteCad-${bio.id}"></div>
-      <div class="campo"><label>Cantidad</label><input type="number" id="loteCant-${bio.id}" min="0"></div>
+    <div class="fila-add-lote solo-edicion">
+      <div class="campo"><label>Número de lote</label><input type="text" class="inp-lote-nueva" placeholder="Ej. 0374MA109"></div>
+      <div class="campo"><label>Caducidad</label><input type="text" class="inp-caducidad-nueva" placeholder="FEB-27"></div>
+      <div class="campo"><label>Cantidad</label><input type="number" min="0" class="inp-cantidad-nueva" data-bio="${bio.id}" placeholder="Cant."></div>
       <button class="btn btn-primary btn-sm btn-agregar-lote" data-bio="${bio.id}"><span class="material-symbols-rounded" style="font-size:14px">add</span> Agregar</button>
+      <span class="comparador-resultado" id="comparador-${bio.id}"></span>
     </div>
-    <div id="comparador-${bio.id}" style="margin-top:8px;"></div>
   `;
 }
 
@@ -297,23 +398,40 @@ async function lotesExistentesDe(biologicoId) {
   return estado.lotesPorBiologico[biologicoId];
 }
 
+function actualizarFilaBiologico(bioId, mantenerAbierto) {
+  const bio = estado.catalogo.find((b) => b.id === bioId);
+  const idx = estado.catalogo.indexOf(bio);
+  const tmp = document.createElement('tbody');
+  tmp.innerHTML = filasBiologicoHtml(bio, idx);
+  const nuevaResumen = tmp.children[0];
+  const nuevaDetalle = tmp.children[1];
+  document.querySelector(`tr.fila-bio[data-bio="${bioId}"]`).replaceWith(nuevaResumen);
+  $('detalle-' + bioId).replaceWith(nuevaDetalle);
+  nuevaResumen.addEventListener('click', () => toggleDetalle(bioId));
+  cablearDetalle(nuevaDetalle);
+  if (mantenerAbierto) nuevaDetalle.style.display = 'table-row';
+}
+
 async function agregarLoteSurtido(biologicoId) {
   if (!estado.requisicion) { toast('Guarda primero la cabecera de la requisición.', true); return; }
-  const numeroLote = $('loteTxt-' + biologicoId).value.trim();
-  const caducidad = $('loteCad-' + biologicoId).value || null;
-  const cantidad = Number($('loteCant-' + biologicoId).value);
+  const detalle = $('detalle-' + biologicoId);
+  const numeroLote = detalle.querySelector('.inp-lote-nueva').value.trim();
+  const caducidadTexto = detalle.querySelector('.inp-caducidad-nueva').value.trim();
+  const cantidad = Number(detalle.querySelector('.inp-cantidad-nueva').value);
   if (!numeroLote || !cantidad || cantidad <= 0) { toast('Captura número de lote y cantidad mayor a 0.', true); return; }
+
+  let caducidad = null;
+  if (caducidadTexto) {
+    caducidad = parsearCaducidadInteligente(caducidadTexto);
+    if (!caducidad) { toast('No entendí la caducidad. Usa por ejemplo FEB-27.', true); return; }
+  }
 
   const existentes = await lotesExistentesDe(biologicoId);
   const resultado = RequiEngine.compararLote(numeroLote, existentes);
-  const cajaComparador = $('comparador-' + biologicoId);
-  cajaComparador.innerHTML = pillComparador(resultado);
-
+  const badgeComparador = $('comparador-' + biologicoId);
+  if (badgeComparador) badgeComparador.innerHTML = pillComparador(resultado);
   if (resultado.estado === 'SIMILAR') {
-    const continuar = confirm(
-      `El lote "${numeroLote}" se parece a "${resultado.sugerencias[0].numero_lote}", ya registrado. `
-      + `¿Seguro que es un lote NUEVO y distinto? Cancelar para corregir la captura.`
-    );
+    const continuar = confirm(`El lote "${numeroLote}" se parece a "${resultado.sugerencias[0].numero_lote}", ya registrado. ¿Seguro que es un lote NUEVO y distinto? Cancelar para corregir la captura.`);
     if (!continuar) return;
   }
 
@@ -327,34 +445,43 @@ async function agregarLoteSurtido(biologicoId) {
     estado.lotesPorBiologico[biologicoId].push(nuevoLote);
   }
 
-  const { error: errItem } = await estado.db.from('requi_items_jurisdiccion')
+  const { data: itemGuardado, error: errItem } = await estado.db.from('requi_items_jurisdiccion')
     .upsert({ requisicion_id: estado.requisicion.id, requi_biologico_id: biologicoId, lote_id: loteId, cantidad_surtida: cantidad },
-      { onConflict: 'requisicion_id,requi_biologico_id,lote_id' });
+      { onConflict: 'requisicion_id,requi_biologico_id,lote_id' })
+    .select('*, requi_lotes(numero_lote, caducidad)').single();
   if (errItem) { toast('No se pudo guardar lo surtido: ' + errItem.message, true); return; }
 
+  const idxExistente = estado.items.findIndex((i) => i.id === itemGuardado.id);
+  if (idxExistente === -1) estado.items.push(itemGuardado); else estado.items[idxExistente] = itemGuardado;
+
   toast('Lote registrado.');
-  await cargarDatosRequisicion();
+  actualizarFilaBiologico(biologicoId, true);
+  renderSelectLotesPaso2();
 }
 
-async function quitarItemSurtido(itemId) {
+async function quitarItemSurtido(itemId, biologicoId) {
   if (!confirm('¿Quitar este lote de lo surtido? Esto falla si ya tiene reparto asignado.')) return;
   const { error } = await estado.db.from('requi_items_jurisdiccion').delete().eq('id', itemId);
   if (error) { toast('No se pudo quitar: ' + error.message, true); return; }
+  estado.items = estado.items.filter((i) => i.id !== itemId);
   toast('Lote quitado.');
-  await cargarDatosRequisicion();
+  actualizarFilaBiologico(biologicoId, true);
+  renderSelectLotesPaso2();
 }
 
 // ---------------------------------------------------------------------------
-// Paso 2 — Reparto a Municipios/Hospitales
+// Paso 2 — Reparto a Municipios y Hospitales (6 destinos hermanos)
 // ---------------------------------------------------------------------------
 
 function renderSelectLotesPaso2() {
   const sel = $('selLoteParaMunicipio');
+  const valorPrevio = sel.value;
   const opciones = estado.items.filter((i) => Number(i.cantidad_surtida) > 0);
   sel.innerHTML = opciones.map((i) => {
     const bio = estado.catalogo.find((b) => b.id === i.requi_biologico_id);
     return `<option value="${i.requi_biologico_id}::${i.lote_id}">${bio ? bio.nombre : '?'} — Lote ${i.requi_lotes.numero_lote} (surtido: ${i.cantidad_surtida})</option>`;
   }).join('') || '<option value="">Sin lotes surtidos capturados</option>';
+  if ([...sel.options].some((o) => o.value === valorPrevio)) sel.value = valorPrevio;
   sel.onchange = renderCajaRepartoMunicipio;
   renderCajaRepartoMunicipio();
 }
@@ -368,7 +495,7 @@ function renderCajaRepartoMunicipio() {
   const disponible = Number(item.cantidad_surtida);
   const filas = estado.distMunicipio.filter((d) => d.requi_biologico_id === biologicoId && d.lote_id === loteId);
 
-  const cards = MUNICIPIOS.map((m) => {
+  const cards = DESTINOS.map((m) => {
     const fila = filas.find((f) => f.municipio === m.v);
     const cantidad = fila ? Number(fila.cantidad) : 0;
     const puedeSincronizar = estado.puedeEditar && fila && cantidad > 0 && MUNICIPIO_A_LOTES[m.v];
@@ -378,8 +505,7 @@ function renderCajaRepartoMunicipio() {
         <input type="number" min="0" class="solo-edicion" id="dm-${m.v}" value="${cantidad}" data-municipio="${m.v}">
         <span class="solo-lectura" style="display:none;">${cantidad}</span>
         ${puedeSincronizar ? `<button class="btn btn-outline btn-sm solo-edicion" style="margin-top:8px; width:100%;" data-sync-muni="${m.v}"><span class="material-symbols-rounded" style="font-size:13px">sync</span> Sincronizar a Lotes</button>` : ''}
-        <button class="btn btn-outline btn-sm" style="margin-top:6px; width:100%;" data-pdf-muni="${m.v}"><span class="material-symbols-rounded" style="font-size:13px">draw</span> Firmas y PDF (2 copias)</button>
-        <div id="cajaFirmasMuni-${m.v}" style="display:none; margin-top:8px; padding:8px; background:var(--surface-container); border-radius:10px;"></div>
+        <button class="btn btn-outline btn-sm" style="margin-top:6px; width:100%;" data-export-muni="${m.v}"><span class="material-symbols-rounded" style="font-size:13px">download</span> Excel</button>
       </div>
     `;
   }).join('');
@@ -400,9 +526,8 @@ function renderCajaRepartoMunicipio() {
   caja.querySelectorAll('[data-sync-muni]').forEach((btn) => {
     btn.addEventListener('click', () => sincronizarLotePublico(btn.dataset.syncMuni, biologicoId, loteId));
   });
-  caja.querySelectorAll('[data-pdf-muni]').forEach((btn) => {
-    const muni = btn.dataset.pdfMuni;
-    btn.addEventListener('click', () => toggleCajaFirmas('cajaFirmasMuni-' + muni, 'MUNICIPAL', muni, 2));
+  caja.querySelectorAll('[data-export-muni]').forEach((btn) => {
+    btn.addEventListener('click', () => exportarUno('MUNICIPAL', btn.dataset.exportMuni));
   });
 }
 
@@ -421,6 +546,7 @@ async function guardarRepartoMunicipio(biologicoId, loteId, municipio, inputEl) 
   estado.distMunicipio = dm || [];
   renderCajaRepartoMunicipio();
   renderSelectMunicipioYLotesPaso3();
+  renderDestinosMasivos();
 }
 
 async function sincronizarLotePublico(municipio, biologicoId, loteId) {
@@ -444,13 +570,14 @@ async function sincronizarLotePublico(municipio, biologicoId, loteId) {
 }
 
 // ---------------------------------------------------------------------------
-// Paso 3 — Reparto a Unidades
+// Paso 3 — Reparto a Unidades (solo los 4 municipios reales; los hospitales
+// no tienen unidades, ver Paso 2)
 // ---------------------------------------------------------------------------
 
 function renderSelectMunicipioYLotesPaso3() {
   const selMuni = $('selMunicipioUnidad');
   if (!selMuni.dataset.armado) {
-    selMuni.innerHTML = MUNICIPIOS.map((m) => `<option value="${m.v}">${m.l}</option>`).join('');
+    selMuni.innerHTML = MUNICIPIOS_REALES.map((m) => `<option value="${m.v}">${m.l}</option>`).join('');
     selMuni.dataset.armado = '1';
     selMuni.onchange = renderSelectLotesPaso3;
   }
@@ -465,7 +592,7 @@ function renderSelectLotesPaso3() {
     const bio = estado.catalogo.find((b) => b.id === d.requi_biologico_id);
     const item = estado.items.find((i) => i.requi_biologico_id === d.requi_biologico_id && i.lote_id === d.lote_id);
     return `<option value="${d.requi_biologico_id}::${d.lote_id}">${bio ? bio.nombre : '?'} — Lote ${item ? item.requi_lotes.numero_lote : ''} (asignado: ${d.cantidad})</option>`;
-  }).join('') || '<option value="">Este destino no tiene lotes asignados todavía (ver paso 2)</option>';
+  }).join('') || '<option value="">Este municipio no tiene lotes asignados todavía (ver paso 2)</option>';
   sel.onchange = renderCajaRepartoUnidad;
   renderCajaRepartoUnidad();
 }
@@ -491,35 +618,29 @@ function renderCajaRepartoUnidad() {
         <td>${u.nombre}</td>
         <td class="solo-edicion"><input type="number" min="0" value="${cantidad}" data-unidad="${u.id}"></td>
         <td class="solo-lectura" style="display:none;">${cantidad}</td>
-        <td><button class="btn btn-outline btn-sm" data-pdf-unidad="${u.id}"><span class="material-symbols-rounded" style="font-size:13px">draw</span> Firmas y PDF</button></td>
+        <td><button class="btn btn-outline btn-sm" data-export-unidad="${u.id}"><span class="material-symbols-rounded" style="font-size:13px">download</span> Excel</button></td>
       </tr>
     `;
   }).join('');
 
   caja.innerHTML = `
     <div style="margin-top:14px;">
-      <span>Disponible en ${municipio === 'HOSPITALES' ? 'Hospitales' : municipio}: <strong>${disponible}</strong> · Repartido: <strong>${yaRepartido}</strong> ·
+      <span>Disponible en ${municipio}: <strong>${disponible}</strong> · Repartido: <strong>${yaRepartido}</strong> ·
         Saldo: <span class="saldo ${saldo <= 0 ? 'agotado' : saldo < disponible * 0.2 ? 'bajo' : 'ok'}">${saldo}</span></span>
       <div class="tbl-scroll" style="margin-top:10px;">
         <table class="tbl">
-          <thead><tr><th>Unidad</th><th>Cantidad</th><th>Firmas y PDF (3 copias)</th></tr></thead>
-          <tbody>${filasHtml || '<tr><td colspan="3" style="color:var(--muted)">Sin unidades registradas para este destino.</td></tr>'}</tbody>
+          <thead><tr><th>Unidad</th><th>Cantidad</th><th>Exportar (3 copias)</th></tr></thead>
+          <tbody>${filasHtml || '<tr><td colspan="3" style="color:var(--muted)">Sin unidades registradas para este municipio.</td></tr>'}</tbody>
         </table>
       </div>
-      <div id="cajaFirmasUnidad" style="display:none; margin-top:10px; padding:10px; background:var(--surface-container); border-radius:10px;"></div>
     </div>
   `;
 
   caja.querySelectorAll('input[data-unidad]').forEach((inp) => {
     inp.addEventListener('change', () => guardarRepartoUnidad(biologicoId, loteId, inp.dataset.unidad, inp));
   });
-  caja.querySelectorAll('[data-pdf-unidad]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const cont = $('cajaFirmasUnidad');
-      if (cont.dataset.unidadActual !== btn.dataset.pdfUnidad) cont.style.display = 'none';
-      cont.dataset.unidadActual = btn.dataset.pdfUnidad;
-      toggleCajaFirmas('cajaFirmasUnidad', 'UNIDAD', btn.dataset.pdfUnidad, 3);
-    });
+  caja.querySelectorAll('[data-export-unidad]').forEach((btn) => {
+    btn.addEventListener('click', () => exportarUno('UNIDAD', btn.dataset.exportUnidad));
   });
 }
 
@@ -540,8 +661,200 @@ async function guardarRepartoUnidad(biologicoId, loteId, unidadId, inputEl) {
 }
 
 // ---------------------------------------------------------------------------
+// Exportación — clona la plantilla oficial real (requisiciones_export_
+// excel.js), 1:1 con el Excel original. Genera .xlsx descargables; el
+// número de copias (2 jurisdiccional/municipal, 3 unidad) se imprime desde
+// ahí mismo, no se "hornean" páginas de más en el archivo.
+// ---------------------------------------------------------------------------
+
+async function obtenerPlantillaBuffer() {
+  if (!estado.plantillaBuffer) {
+    const resp = await fetch('requisiciones_plantilla.xlsx');
+    estado.plantillaBuffer = await resp.arrayBuffer();
+  }
+  return estado.plantillaBuffer;
+}
+
+// Construye los datos (encabezado/firmas/renglones) de UN destino, sin
+// generar ni descargar nada -- se reutiliza tanto para exportar uno solo
+// como para el paquete masivo.
+async function construirDatosDestino(nivel, destino) {
+  let filasPorBiologico = {};
+  let destinoNombre = '', destinoDireccion = '';
+
+  if (nivel === 'JURISDICCIONAL') {
+    destinoNombre = 'JURISDICCIÓN SANITARIA N.1 (concentrado)';
+    destinoDireccion = DIRECCION_JURISDICCION;
+    estado.items.forEach((it) => {
+      if (Number(it.cantidad_surtida) <= 0) return;
+      (filasPorBiologico[it.requi_biologico_id] ||= []).push({
+        cantidad: it.cantidad_surtida, numeroLote: it.requi_lotes.numero_lote, caducidad: it.requi_lotes.caducidad
+      });
+    });
+  } else if (nivel === 'MUNICIPAL') {
+    destinoNombre = NOMBRE_DESTINO_EXPORT[destino] || destino;
+    destinoDireccion = DIRECCION_HOSPITAL[destino] || '';
+    const { data } = await estado.db.from('requi_distribucion_municipio')
+      .select('*, requi_lotes(numero_lote, caducidad)').eq('requisicion_id', estado.requisicion.id).eq('municipio', destino).gt('cantidad', 0);
+    (data || []).forEach((it) => (filasPorBiologico[it.requi_biologico_id] ||= []).push({
+      cantidad: it.cantidad, numeroLote: it.requi_lotes.numero_lote, caducidad: it.requi_lotes.caducidad
+    }));
+  } else {
+    const unidad = estado.unidades.find((u) => u.id === destino);
+    const muniLabel = unidad ? MUNICIPIOS_REALES.find((m) => m.v === unidad.municipio) : null;
+    destinoNombre = unidad ? `C.S. ${unidad.nombre}` : '';
+    destinoDireccion = muniLabel ? muniLabel.l : '';
+    const { data } = await estado.db.from('requi_distribucion_unidad')
+      .select('*, requi_lotes(numero_lote, caducidad)').eq('requisicion_id', estado.requisicion.id).eq('unidad_id', destino).gt('cantidad', 0);
+    (data || []).forEach((it) => (filasPorBiologico[it.requi_biologico_id] ||= []).push({
+      cantidad: it.cantidad, numeroLote: it.requi_lotes.numero_lote, caducidad: it.requi_lotes.caducidad
+    }));
+  }
+
+  const { data: firmasJuris } = await estado.db.from('requi_firmas').select('*')
+    .eq('nivel', 'JURISDICCIONAL').eq('destino', 'JURISDICCION').maybeSingle();
+
+  // Entrega/Recibe: solo existe para JURISDICCIONAL y para un municipio
+  // real. Las unidades y los hospitales (que se tratan como unidad) SIEMPRE
+  // van en blanco -- firman a mano y anotan su propio nombre en el papel.
+  let entregaRecibe = {};
+  if (nivel === 'JURISDICCIONAL') entregaRecibe = firmasJuris || {};
+  else if (nivel === 'MUNICIPAL' && !esHospital(destino)) {
+    const { data } = await estado.db.from('requi_firmas').select('*').eq('nivel', 'MUNICIPAL').eq('destino', destino).maybeSingle();
+    entregaRecibe = data || {};
+  }
+  const firmas = {
+    elaboro_nombre: firmasJuris?.elaboro_nombre, elaboro_cargo: firmasJuris?.elaboro_cargo,
+    autorizo_nombre: firmasJuris?.autorizo_nombre, autorizo_cargo: firmasJuris?.autorizo_cargo,
+    entrega_nombre: entregaRecibe.entrega_nombre, entrega_cargo: entregaRecibe.entrega_cargo,
+    recibe_nombre: entregaRecibe.recibe_nombre, recibe_cargo: entregaRecibe.recibe_cargo
+  };
+
+  const mesInfo = MESES.find((m) => m.v === estado.requisicion.mes);
+  const encabezado = {
+    origenNombre: 'JURISDICCIÓN SANITARIA N.1', area: 'VACUNAS', origenDireccion: DIRECCION_JURISDICCION,
+    fechaEnvio: estado.requisicion.fecha_envio ? new Date(estado.requisicion.fecha_envio + 'T00:00:00') : new Date(),
+    destinoNombre, folio: estado.requisicion.folio_oracle || '', destinoDireccion,
+    mesLabel: mesInfo ? `${mesInfo.l.toUpperCase()} ${estado.requisicion.anio}` : ''
+  };
+
+  const nombreArchivo = `Requisicion_${nivel}_${(destinoNombre || destino).replace(/[^\wÁÉÍÓÚÑáéíóúñ ]/g, '').trim().replace(/\s+/g, '_')}_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}.xlsx`;
+
+  return { encabezado, firmas, catalogo: estado.catalogo, filasPorBiologico, nombreArchivo };
+}
+
+function descargarBlob(blob, nombreArchivo) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombreArchivo;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function registrarExportacion(nivel, destino, copias) {
+  const { data: { session } } = await estado.db.auth.getSession();
+  if (!session) return;
+  await estado.db.from('requi_pdf_generados').insert({
+    requisicion_id: estado.requisicion.id, nivel, destino: destino || 'JURISDICCION', copias, generado_por: session.user.email
+  });
+}
+
+async function exportarUno(nivel, destino) {
+  if (!estado.requisicion) { toast('Guarda primero la cabecera de la requisición.', true); return; }
+  toast('Generando Excel…');
+  try {
+    const datos = await construirDatosDestino(nivel, destino);
+    const plantillaBuffer = await obtenerPlantillaBuffer();
+    const { buffer, sobrantes } = await RequiExportExcel.generar({ plantillaBuffer, ...datos });
+    descargarBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), datos.nombreArchivo);
+
+    const copias = COPIAS_SUGERIDAS[nivel] || 1;
+    toast(sobrantes.length
+      ? `Excel generado. Ojo: ${sobrantes.join(', ')} tiene más de 2 lotes -- el formato solo admite 2, repórtalo aparte. Imprime ${copias} copia(s).`
+      : `Excel generado. Imprime ${copias} copia(s) desde ahí.`, !!sobrantes.length);
+    await registrarExportacion(nivel, destino, copias);
+  } catch (e) {
+    toast('No se pudo generar el Excel: ' + e.message, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Exportación masiva — el día de entrega se imprime todo de una vez: se
+// eligen destinos con filtros (checkboxes) y se descarga un solo .zip con
+// un .xlsx por cada requisición, en vez de exportar uno por uno.
+// ---------------------------------------------------------------------------
+
+function renderDestinosMasivos() {
+  const cont = $('destinosMasivos');
+  cont.innerHTML = DESTINOS.map((m) => {
+    const tieneDatos = estado.distMunicipio.some((d) => d.municipio === m.v && Number(d.cantidad) > 0);
+    return `
+      <label class="destino-masivo-chk">
+        <input type="checkbox" class="chk-destino-masivo" value="${m.v}" ${tieneDatos ? 'checked' : ''}>
+        ${m.l} <span class="cuenta">${tieneDatos ? '' : '(sin repartir)'}</span>
+      </label>
+    `;
+  }).join('');
+}
+
+async function exportarMasivo() {
+  if (!estado.requisicion) { toast('Guarda primero la cabecera de la requisición.', true); return; }
+  const seleccionados = [...document.querySelectorAll('.chk-destino-masivo:checked')].map((c) => c.value);
+  if (!seleccionados.length) { toast('Selecciona al menos un destino.', true); return; }
+  const incluirUnidades = $('chkIncluirUnidades').checked;
+
+  toast('Generando paquete…');
+  try {
+    const zip = new JSZip();
+    const plantillaBuffer = await obtenerPlantillaBuffer();
+    const sobrantesTotal = new Set();
+    let total = 0;
+
+    for (const destino of seleccionados) {
+      const datos = await construirDatosDestino('MUNICIPAL', destino);
+      const { buffer, sobrantes } = await RequiExportExcel.generar({ plantillaBuffer, ...datos });
+      zip.file(datos.nombreArchivo, buffer);
+      sobrantes.forEach((s) => sobrantesTotal.add(s));
+      total++;
+      await registrarExportacion('MUNICIPAL', destino, COPIAS_SUGERIDAS.MUNICIPAL);
+
+      if (incluirUnidades && !esHospital(destino)) {
+        const unidadesDeEste = estado.unidades.filter((u) => u.municipio === destino);
+        for (const u of unidadesDeEste) {
+          const tieneAsignado = estado.distUnidad.some((d) => d.unidad_id === u.id && Number(d.cantidad) > 0);
+          if (!tieneAsignado) continue;
+          const datosU = await construirDatosDestino('UNIDAD', u.id);
+          const { buffer: bufU, sobrantes: sobU } = await RequiExportExcel.generar({ plantillaBuffer, ...datosU });
+          zip.file(datosU.nombreArchivo, bufU);
+          sobU.forEach((s) => sobrantesTotal.add(s));
+          total++;
+          await registrarExportacion('UNIDAD', u.id, COPIAS_SUGERIDAS.UNIDAD);
+        }
+      }
+    }
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    descargarBlob(zipBlob, `Requisiciones_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}.zip`);
+    toast(`Listo: ${total} archivo(s) en el paquete.` + (sobrantesTotal.size ? ` Ojo con lotes de sobra en: ${[...sobrantesTotal].join(', ')}.` : ''), !!sobrantesTotal.size);
+  } catch (e) {
+    toast('No se pudo generar el paquete: ' + e.message, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Navegación de pasos / arranque
 // ---------------------------------------------------------------------------
+
+function toggleResponsables() {
+  const cuerpo = $('cuerpoResponsables');
+  const icono = $('iconoToggleResponsables');
+  const abierto = cuerpo.style.display !== 'none';
+  cuerpo.style.display = abierto ? 'none' : 'block';
+  icono.style.transform = abierto ? 'rotate(0deg)' : 'rotate(180deg)';
+}
 
 function activarPaso(n) {
   document.querySelectorAll('.paso-tab').forEach((t) => t.classList.toggle('activo', t.dataset.paso === String(n)));
@@ -554,10 +867,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   poblarSelectoresCabecera();
   await cargarSesionReal();
   await cargarCatalogoYUnidades();
+  await cargarFirmasJurisdiccionales();
+  await renderFirmasMunicipio();
   await cargarRequisicion();
 
   document.querySelectorAll('.paso-tab').forEach((tab) => tab.addEventListener('click', () => activarPaso(tab.dataset.paso)));
   $('btnCargar').addEventListener('click', cargarRequisicion);
   $('btnGuardarCabecera').addEventListener('click', guardarCabecera);
-  $('btnPdfJurisdiccional').addEventListener('click', () => toggleCajaFirmas('cajaFirmasJurisdiccional', 'JURISDICCIONAL', 'JURISDICCION', 2));
+  $('btnPdfJurisdiccional').addEventListener('click', () => exportarUno('JURISDICCIONAL', ''));
+  $('btnGuardarFirmasJuris').addEventListener('click', guardarFirmasJurisdiccionales);
+  $('btnExportarMasivo').addEventListener('click', exportarMasivo);
+  $('btnToggleResponsables').addEventListener('click', toggleResponsables);
 });

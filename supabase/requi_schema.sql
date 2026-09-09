@@ -69,11 +69,15 @@ create index if not exists idx_requi_lotes_biologico on requi_lotes(requi_biolog
 -- municipio). Catálogo propio -- ver nota de aislamiento arriba.
 -- ---------------------------------------------------------------------------
 
+-- Solo los 4 municipios reales tienen unidades (Paso 3). Los hospitales son
+-- destinos de primer nivel sin desglose por unidad -- ver
+-- requi_distribucion_municipio y requi_separa_hospitales_como_destinos_
+-- propios.sql.
 create table if not exists requi_unidades (
   id uuid primary key default gen_random_uuid(),
   clues text unique,
   nombre text not null,
-  municipio text not null check (municipio in ('CORREGIDORA','HUIMILPAN','MARQUES','QUERETARO','HOSPITALES')),
+  municipio text not null check (municipio in ('CORREGIDORA','HUIMILPAN','MARQUES','QUERETARO')),
   activo boolean not null default true,
   created_at timestamptz not null default now(),
   unique (municipio, nombre)
@@ -122,10 +126,17 @@ create index if not exists idx_requi_items_juris_requisicion on requi_items_juri
 -- 1, 2, 3, 4 o los 5 destinos de forma independiente (o en ninguno todavía).
 -- ---------------------------------------------------------------------------
 
+-- municipio: los 4 municipios reales + 2 hospitales como destinos de primer
+-- nivel, hermanos entre sí (NHG=Nuevo Hospital General, HENM=Hospital de
+-- Especialidades del Niño y la Mujer -- el "Hospital General" viejo ya no
+-- existe). Cada hospital lleva su propia requisición -- no comparten un
+-- bucket combinado. A diferencia de los municipios, los hospitales se
+-- tratan como "unidad" para firmas: nunca llevan nombre de quien recibe
+-- precapturado (se firma a mano en el papel), ver requisiciones_ui.js.
 create table if not exists requi_distribucion_municipio (
   id uuid primary key default gen_random_uuid(),
   requisicion_id uuid not null references requi_requisiciones(id) on delete cascade,
-  municipio text not null check (municipio in ('CORREGIDORA','HUIMILPAN','MARQUES','QUERETARO','HOSPITALES')),
+  municipio text not null check (municipio in ('CORREGIDORA','HUIMILPAN','MARQUES','QUERETARO','NHG','HENM')),
   requi_biologico_id uuid not null references requi_catalogo_biologicos(id),
   lote_id uuid not null references requi_lotes(id),
   cantidad numeric not null default 0 check (cantidad >= 0),
@@ -174,18 +185,22 @@ create table if not exists requi_pdf_generados (
 create index if not exists idx_requi_pdf_requisicion on requi_pdf_generados(requisicion_id);
 
 -- ---------------------------------------------------------------------------
--- Firmas por nivel/destino: Elaboró/Autorizó/Entrega/Recibe cambian en cada
--- rango -- jurisdicción, cada municipio/Hospitales y cada unidad tienen su
--- propio responsable, así que se capturan por separado en cada uno, no una
--- sola vez para todo el mes. destino: 'JURISDICCION' para nivel
--- JURISDICCIONAL (único destino posible en ese nivel), código de municipio
--- para MUNICIPAL, id de requi_unidades para UNIDAD.
+-- Firmas/responsables por nivel/destino: catálogo de configuración, NO datos
+-- transaccionales -- el usuario señaló que el mismo responsable firma mes
+-- tras mes, así que se capturan una vez y se reutilizan (caché) hasta que
+-- cambien, en vez de volver a teclearse en cada requisición mensual.
+-- Elaboró/Autorizó son fijos a nivel jurisdicción (una sola fila,
+-- destino='JURISDICCION') y se imprimen igual en las 3 copias. Entrega/
+-- Recibe se capturan por destino: la fila jurisdiccional para el nivel
+-- JURISDICCIONAL, y una fila por município/Hospitales para el nivel
+-- MUNICIPAL. Las UNIDADES no llevan nombre precapturado -- la unidad firma
+-- a mano y anota su propio nombre en el papel, por eso 'UNIDAD' no es un
+-- nivel válido aquí.
 -- ---------------------------------------------------------------------------
 
 create table if not exists requi_firmas (
   id uuid primary key default gen_random_uuid(),
-  requisicion_id uuid not null references requi_requisiciones(id) on delete cascade,
-  nivel text not null check (nivel in ('JURISDICCIONAL','MUNICIPAL','UNIDAD')),
+  nivel text not null check (nivel in ('JURISDICCIONAL','MUNICIPAL')),
   destino text not null,
   elaboro_nombre text,
   elaboro_cargo text,
@@ -196,7 +211,5 @@ create table if not exists requi_firmas (
   recibe_nombre text,
   recibe_cargo text,
   updated_at timestamptz not null default now(),
-  unique (requisicion_id, nivel, destino)
+  unique (nivel, destino)
 );
-
-create index if not exists idx_requi_firmas_requisicion on requi_firmas(requisicion_id);

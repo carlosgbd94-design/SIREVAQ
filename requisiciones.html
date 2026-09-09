@@ -11,6 +11,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1">
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script defer src="requi_engine.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script defer src="requisiciones_export_excel.js"></script>
 <script defer src="requisiciones_ui.js"></script>
 <style>
   :root {
@@ -50,12 +53,14 @@
   .barra { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
   .campo { display: flex; flex-direction: column; gap: 5px; }
   .campo label { font-size: 10px; color: var(--primary); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
-  select, input[type=text], input[type=number], input[type=date] {
+  select, input[type=text], input[type=number] {
     border: 1px solid var(--outline-variant); border-radius: 10px; padding: 9px 11px;
     font-size: 13px; font-family: inherit; background: #fff; color: var(--text);
   }
   select:focus, input:focus { outline: none; border-color: var(--secondary); box-shadow: 0 0 0 3px rgba(14,165,233,.15); }
+  /* Sin flechas de incremento -- no aportan nada en escritorio y estorban al teclear. */
   input[type=number] { -moz-appearance: textfield; width: 90px; }
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
   .btn {
     display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 10px;
@@ -102,6 +107,16 @@
   .paso-panel.activo { display: block; }
 
   .hint { font-size: 11.5px; color: var(--muted); background: var(--surface-container); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
+
+  table.tbl tr.fila-detalle:hover { background: none; }
+  td.celda-guardada { animation: flash-guardado 900ms ease-out; }
+  @keyframes flash-guardado { 0% { background: var(--success-bg); } 100% { background: transparent; } }
+  .badge-comparador { font-size: 10.5px; margin-left: 6px; }
+  .fila-add-lote { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 10px; }
+  .lista-destinos-firma { display: flex; flex-direction: column; gap: 10px; }
+  .destinos-masivos { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin: 10px 0; }
+  .destino-masivo-chk { display: flex; align-items: center; gap: 8px; border: 1.5px solid var(--outline-variant); border-radius: 12px; padding: 8px 12px; font-size: 12.5px; font-weight: 700; }
+  .destino-masivo-chk .cuenta { color: var(--muted); font-weight: 600; font-size: 11px; }
   [data-solo-lectura="1"] .solo-edicion { display: none !important; }
   [data-solo-lectura="1"] .solo-lectura { display: inline-block !important; }
   .badge-role { font-size: 10.5px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--surface-container); color: var(--muted); }
@@ -143,6 +158,39 @@
     <div class="hint" id="hintCabecera" style="margin-top:12px; display:none;"></div>
   </div>
 
+  <div class="tarjeta solo-edicion">
+    <h2 id="btnToggleResponsables" style="cursor:pointer; user-select:none;">
+      <span class="material-symbols-rounded">draw</span> Responsables (Elaboró / Autorizó / Entrega / Recibe)
+      <span class="material-symbols-rounded" id="iconoToggleResponsables" style="margin-left:auto; transition:transform .2s;">expand_more</span>
+    </h2>
+    <div id="cuerpoResponsables" style="display:none;">
+      <p class="hint">Casi siempre es la misma persona mes con mes, así que se guardan aquí una sola vez y se reutilizan en cada PDF. Solo hace falta tocar esto cuando cambie el responsable. Las unidades no llevan nombre precapturado: firman a mano y anotan su propio nombre en el papel.</p>
+
+      <div style="margin-bottom:18px;">
+        <label style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; display:block; margin-bottom:8px;">Jurisdiccional (se imprime igual en las 3 copias)</label>
+        <div class="barra" style="margin-bottom:10px;">
+          <div class="campo"><label>Elaboró — Nombre</label><input type="text" id="jurElaboroNombre"></div>
+          <div class="campo"><label>Elaboró — Cargo</label><input type="text" id="jurElaboroCargo" placeholder="Ej. Responsable PVU"></div>
+          <div class="campo"><label>Autorizó — Nombre</label><input type="text" id="jurAutorizoNombre"></div>
+          <div class="campo"><label>Autorizó — Cargo</label><input type="text" id="jurAutorizoCargo" placeholder="Ej. Administrador de Jurisdicción Sanitaria No. 1"></div>
+        </div>
+        <div class="barra">
+          <div class="campo"><label>Entrega (jurisdiccional) — Nombre</label><input type="text" id="jurEntregaNombre"></div>
+          <div class="campo"><label>Entrega — Cargo</label><input type="text" id="jurEntregaCargo"></div>
+          <div class="campo"><label>Recibe (jurisdiccional) — Nombre</label><input type="text" id="jurRecibeNombre"></div>
+          <div class="campo"><label>Recibe — Cargo</label><input type="text" id="jurRecibeCargo"></div>
+          <button class="btn btn-primary btn-sm" id="btnGuardarFirmasJuris"><span class="material-symbols-rounded" style="font-size:14px">save</span> Guardar</button>
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; display:block; margin-bottom:8px;">Entrega/Recibe por municipio</label>
+        <p class="hint" style="margin-bottom:10px;">Cada municipio tiene su propio responsable de entrega/recibe. Los hospitales no aparecen aquí: cuentan como unidad, firman a mano y anotan su propio nombre en el papel.</p>
+        <div class="lista-destinos-firma" id="listaFirmasMunicipio"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="contenidoRequisicion" style="display:none;">
     <div class="pasos">
       <div class="paso-tab activo" data-paso="1"><span class="material-symbols-rounded">inventory</span> 1. Lo surtido (Jurisdicción)</div>
@@ -155,10 +203,9 @@
       <div class="tarjeta">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
           <h2 style="margin:0;"><span class="material-symbols-rounded">inventory</span> Lo que llegó del almacén estatal</h2>
-          <button class="btn btn-outline btn-sm" id="btnPdfJurisdiccional"><span class="material-symbols-rounded" style="font-size:14px">draw</span> Firmas y exportar PDF Jurisdiccional (2 copias)</button>
+          <button class="btn btn-outline btn-sm" id="btnPdfJurisdiccional"><span class="material-symbols-rounded" style="font-size:14px">download</span> Exportar Excel Jurisdiccional (2 copias)</button>
         </div>
-        <div id="cajaFirmasJurisdiccional" style="display:none; margin:10px 0; padding:12px; background:var(--surface-container); border-radius:12px;"></div>
-        <p class="hint">Da clic en un biológico para capturar sus lotes recibidos. El comparador te avisa si el lote ya existe o parece un error de captura antes de guardarlo.</p>
+        <p class="hint">Da clic en un biológico para ver/agregar sus lotes recibidos — sin límite de lotes. El comparador te avisa si el lote ya existe o parece un error de captura antes de guardarlo.</p>
         <div class="tbl-scroll">
           <table class="tbl">
             <thead><tr><th>#</th><th>Biológico</th><th>Presentación</th><th>Lotes capturados</th><th>Total surtido</th></tr></thead>
@@ -171,7 +218,20 @@
     <!-- PASO 2 -->
     <div class="paso-panel" id="panelPaso2">
       <div class="tarjeta">
-        <h2><span class="material-symbols-rounded">alt_route</span> Reparto a Municipios/Hospitales</h2>
+        <h2><span class="material-symbols-rounded">folder_zip</span> Exportación masiva</h2>
+        <p class="hint">Para el día de entrega: marca qué destinos quieres y descarga todo junto en un .zip, en vez de exportar uno por uno.</p>
+        <div class="destinos-masivos" id="destinosMasivos"></div>
+        <div class="barra">
+          <label class="destino-masivo-chk" style="border:none; padding:0;">
+            <input type="checkbox" id="chkIncluirUnidades" checked> Incluir unidades de los municipios marcados
+          </label>
+          <button class="btn btn-primary btn-sm" id="btnExportarMasivo"><span class="material-symbols-rounded" style="font-size:14px">folder_zip</span> Descargar paquete (.zip)</button>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <h2><span class="material-symbols-rounded">alt_route</span> Reparto a Municipios y Hospitales</h2>
+        <p class="hint">Cada hospital es su propio destino, igual que un municipio — no se reparte más adentro.</p>
         <div class="barra">
           <div class="campo" style="min-width:320px;">
             <label>Biológico + Lote</label>
@@ -188,7 +248,7 @@
         <h2><span class="material-symbols-rounded">local_hospital</span> Reparto a Unidades</h2>
         <div class="barra">
           <div class="campo">
-            <label>Municipio / Hospitales</label>
+            <label>Municipio</label>
             <select id="selMunicipioUnidad"></select>
           </div>
           <div class="campo" style="min-width:320px;">

@@ -1,11 +1,16 @@
 -- ============================================================================
 -- Requisiciones — Siembra inicial
 --
--- 1) requi_catalogo_biologicos: los 20 renglones reales de la requisición
+-- 1) requi_catalogo_biologicos: los renglones reales de la requisición
 --    oficial de septiembre 2026 (SEPTIEMBRE/Municipio Corregidora.xlsx, hoja
 --    GENERAL, filas 14-53), en el orden exacto en que se imprimen. Se cruzan
 --    con biovac_catalogo_biologicos cuando existe equivalencia (puente
 --    opcional, usado solo por el botón manual de sincronización en la UI).
+--    NOTA: "VACUNA ANTINEUMOCOCCICA 23 1DS" (código 146, la que estaba en la
+--    fila 14 del Excel) se excluye a propósito -- el usuario confirmó que ya
+--    no existe en el esquema de vacunación vigente (el renglón ya sembrado
+--    en producción se desactivó vía requi_firmas_cache_por_nivel_y_quita_
+--    neumo23.sql en vez de borrarse).
 -- 2) requi_unidades: los 4 municipios reales, sembrados desde public.unidades
 --    (misma CLUES) + Hospitales como destino de primer nivel (no existe como
 --    tal en public.unidades -- ahí HENM/Hospital General cuelgan de
@@ -20,8 +25,6 @@
 insert into requi_catalogo_biologicos
   (clave_articulo, codigo_articulo, nombre, presentacion, forma, orden, biovac_biologico_id)
 values
-  ('25311.020-000-0146-03','146','VACUNA ANTINEUMOCOCCICA 23 1DS','UNIDOSIS','Susp. Inyectable (Fco. Ampula)',1,
-    (select id from biovac_catalogo_biologicos where clave='NEUMO_23V')),
   ('25311.020-000-0148-01','148','VACUNA ANTINEUMOCOCCICA 13','UNIDOSIS','Susp. Inyectable (Jer. prellenada)',2,
     (select id from biovac_catalogo_biologicos where clave='NEUMO_13V')),
   ('25311.020-000-0150-05','150','VACUNA ROTAVIRUS MONOVALENTE','UNIDOSIS','Susp. Inyectable (Jer. prellenada)',3,
@@ -67,32 +70,43 @@ on conflict (clave_articulo) do nothing;
 --    CLUES real). Solo unidades activas.
 -- ---------------------------------------------------------------------------
 
+-- HENM no se siembra aquí como unidad de QUERETARO: es un hospital, destino
+-- de primer nivel propio (ver requi_distribucion_municipio) sin unidades
+-- debajo -- H.G./N.H.G./HENM ya no viven en requi_unidades en absoluto,
+-- cada uno lleva su propia requisición directa, tal como pidió el usuario.
 insert into requi_unidades (clues, nombre, municipio, activo)
 select u.clues, u.unidad, u.municipio, true
 from public.unidades u
 where u.activo = 'SI'
   and u.municipio in ('CORREGIDORA','HUIMILPAN','MARQUES','QUERETARO')
-  -- HENM se resiembra abajo bajo HOSPITALES, no se duplica aquí
   and u.unidad <> 'HENM'
 on conflict (municipio, nombre) do update set clues = excluded.clues, activo = true;
 
 -- ---------------------------------------------------------------------------
--- 3) Hospitales, destino de primer nivel.
---    - HENM: CLUES confirmada en public.unidades y public.unidades_medicas
---      (QTSSA001740, "Hospital de Especialidades del Niño y la Mujer Dr.
---      Felipe Núñez Lara").
---    - H.G.: CLUES confirmada en public.unidades (QTSSA002901, "Hospital
---      General de Queretaro") -- ahí aparece inactiva por motivos ajenos a
---      la distribución de vacunas; en la requisición real de septiembre
---      2026 sigue siendo destinatario activo, por eso aquí se sembra activa.
---    - N.H.G. (Nuevo Hospital General de Querétaro, Hospitales.xlsx hoja
---      "N.H.G"): SIN CLUES -- no existe registro en ninguna tabla de
---      SIREVAQ (unidades, unidades_medicas). Es un establecimiento nuevo;
---      su CLUES oficial (DGIS/SICLUES) debe confirmarla el usuario.
+-- 3) Responsables de entrega/recibe por municipio, con los nombres reales
+--    que ya traen las requisiciones de ejemplo de septiembre (SEPTIEMBRE/
+--    Municipio *.xlsx, hoja GENERAL, A72/H72) -- son valores default
+--    editables desde la UI, no fijos. Entrega es la misma persona
+--    (jurisdicción) en los 4 municipios; Recibe cambia por municipio y
+--    coincide con el usuario real asignado a cada uno en perfiles.
 -- ---------------------------------------------------------------------------
 
-insert into requi_unidades (clues, nombre, municipio, activo) values
-  ('QTSSA001740', 'HENM', 'HOSPITALES', true),
-  ('QTSSA002901', 'H.G.', 'HOSPITALES', true),
-  (null, 'N.H.G.', 'HOSPITALES', true)
-on conflict (municipio, nombre) do update set clues = excluded.clues, activo = true;
+insert into requi_firmas (nivel, destino, entrega_nombre, recibe_nombre) values
+  ('MUNICIPAL', 'CORREGIDORA', 'LIC. LESLIE LÓPEZ ENCISO', 'ENF. ALMA DELIA HERNÁNDEZ ESQUIVEL'),
+  ('MUNICIPAL', 'HUIMILPAN',   'LIC. LESLIE LÓPEZ ENCISO', 'ENF. ALMA DELIA HERNÁNDEZ ESQUIVEL'),
+  ('MUNICIPAL', 'MARQUES',     'LIC. LESLIE LÓPEZ ENCISO', 'L.E ANA JULIA MENDOZA HERNANDEZ'),
+  ('MUNICIPAL', 'QUERETARO',   'LIC. LESLIE LÓPEZ ENCISO', 'MTRA. ANA MARÍA RAMÍREZ MUNGUÍA')
+on conflict (nivel, destino) do nothing;
+
+-- Jurisdiccional: extraído de "Gran total Juris.xlsx" (hoja GRAN TOTAL
+-- JURIS, A65/A66/H65/H66/A72/H72). A este nivel los roles de entrega/recibe
+-- se invierten respecto al municipal -- la jurisdicción RECIBE del almacén
+-- estatal, no entrega.
+insert into requi_firmas (nivel, destino, elaboro_nombre, elaboro_cargo, autorizo_nombre, autorizo_cargo, entrega_nombre, recibe_nombre)
+values (
+  'JURISDICCIONAL', 'JURISDICCION',
+  'L.E LIZBETH URIBE PANTOJA', 'RESPONSABLE PVU',
+  'ING. ISRAEL RUIZ BARCENAS', 'ADMINISTRADOR DE JURISDICCION SANITARIA No. 1',
+  'ENF. JESÚS FERNANDO MOLINA REYES', 'LIC. LESLIE LÓPEZ ENCISO'
+)
+on conflict (nivel, destino) do nothing;

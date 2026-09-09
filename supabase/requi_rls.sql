@@ -37,9 +37,9 @@ drop policy if exists requi_lotes_write on requi_lotes;
 create policy requi_lotes_write on requi_lotes for all to authenticated
   using (is_admin() or is_jurisdiccional()) with check (is_admin() or is_jurisdiccional());
 
--- requi_unidades: igual que biovac_unidades -- MUNICIPAL solo ve las suyas
--- (más Hospitales, que es de consulta general para poder ver el reparto
--- completo aunque no le pertenezca). JURISDICCIONAL/ADMIN/VISUALIZADOR ven todo.
+-- requi_unidades: igual que biovac_unidades -- MUNICIPAL solo ve las suyas.
+-- Los hospitales ya no viven aquí (son destinos de primer nivel propios, ver
+-- requi_distribucion_municipio). JURISDICCIONAL/ADMIN/VISUALIZADOR ven todo.
 drop policy if exists requi_unidades_select on requi_unidades;
 create policy requi_unidades_select on requi_unidades for select to authenticated
   using (
@@ -49,8 +49,7 @@ create policy requi_unidades_select on requi_unidades for select to authenticate
         and (
           upper(p.rol) in ('JURISDICCIONAL', 'VISUALIZADOR_JURISDICCIONAL', 'ADMIN')
           or (upper(p.rol) = 'MUNICIPAL' and (
-            requi_unidades.municipio = 'HOSPITALES'
-            or requi_unidades.municipio = p.municipio_asignado
+            requi_unidades.municipio = p.municipio_asignado
             or requi_unidades.municipio = any (p.municipios_allowed)
             or requi_unidades.municipio = any (string_to_array(p.municipio_asignado, ','))
             or requi_unidades.municipio = any (string_to_array(p.municipio, ','))
@@ -190,25 +189,12 @@ create policy requi_firmas_select on requi_firmas for select to authenticated
         and (
           upper(p.rol) in ('JURISDICCIONAL', 'VISUALIZADOR_JURISDICCIONAL', 'ADMIN')
           or requi_firmas.nivel = 'JURISDICCIONAL'
-          or (upper(p.rol) = 'MUNICIPAL' and (
-            (requi_firmas.nivel = 'MUNICIPAL' and (
-              requi_firmas.destino = 'HOSPITALES'
-              or requi_firmas.destino = p.municipio_asignado
-              or requi_firmas.destino = any (p.municipios_allowed)
-              or requi_firmas.destino = any (string_to_array(p.municipio_asignado, ','))
-              or requi_firmas.destino = any (string_to_array(p.municipio, ','))
-            ))
-            or (requi_firmas.nivel = 'UNIDAD' and exists (
-              select 1 from requi_unidades u
-              where u.id::text = requi_firmas.destino
-                and (
-                  u.municipio = 'HOSPITALES'
-                  or u.municipio = p.municipio_asignado
-                  or u.municipio = any (p.municipios_allowed)
-                  or u.municipio = any (string_to_array(p.municipio_asignado, ','))
-                  or u.municipio = any (string_to_array(p.municipio, ','))
-                )
-            ))
+          or (upper(p.rol) = 'MUNICIPAL' and requi_firmas.nivel = 'MUNICIPAL' and (
+            requi_firmas.destino = 'HOSPITALES'
+            or requi_firmas.destino = p.municipio_asignado
+            or requi_firmas.destino = any (p.municipios_allowed)
+            or requi_firmas.destino = any (string_to_array(p.municipio_asignado, ','))
+            or requi_firmas.destino = any (string_to_array(p.municipio, ','))
           ))
         )
     )
