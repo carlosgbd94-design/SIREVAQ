@@ -1,16 +1,14 @@
 -- ============================================================================
 -- Requisiciones — Siembra inicial
 --
--- 1) requi_catalogo_biologicos: los renglones reales de la requisición
+-- 1) requi_catalogo_biologicos: los 20 renglones reales de la requisición
 --    oficial de septiembre 2026 (SEPTIEMBRE/Municipio Corregidora.xlsx, hoja
 --    GENERAL, filas 14-53), en el orden exacto en que se imprimen. Se cruzan
 --    con biovac_catalogo_biologicos cuando existe equivalencia (puente
 --    opcional, usado solo por el botón manual de sincronización en la UI).
---    NOTA: "VACUNA ANTINEUMOCOCCICA 23 1DS" (código 146, la que estaba en la
---    fila 14 del Excel) se excluye a propósito -- el usuario confirmó que ya
---    no existe en el esquema de vacunación vigente (el renglón ya sembrado
---    en producción se desactivó vía requi_firmas_cache_por_nivel_y_quita_
---    neumo23.sql en vez de borrarse).
+--    "VACUNA ANTINEUMOCOCCICA 23 1DS" (código 146, fila 14) se había
+--    desactivado por un pedido del usuario que luego se corrigió -- sí
+--    sigue vigente en el formato oficial (ver requi_restaura_neumo23.sql).
 -- 2) requi_unidades: los 4 municipios reales, sembrados desde public.unidades
 --    (misma CLUES) + Hospitales como destino de primer nivel (no existe como
 --    tal en public.unidades -- ahí HENM/Hospital General cuelgan de
@@ -25,6 +23,8 @@
 insert into requi_catalogo_biologicos
   (clave_articulo, codigo_articulo, nombre, presentacion, forma, orden, biovac_biologico_id)
 values
+  ('25311.020-000-0146-03','146','VACUNA ANTINEUMOCOCCICA 23 1DS','UNIDOSIS','Susp. Inyectable (Fco. Ampula)',1,
+    (select id from biovac_catalogo_biologicos where clave='NEUMO_23V')),
   ('25311.020-000-0148-01','148','VACUNA ANTINEUMOCOCCICA 13','UNIDOSIS','Susp. Inyectable (Jer. prellenada)',2,
     (select id from biovac_catalogo_biologicos where clave='NEUMO_13V')),
   ('25311.020-000-0150-05','150','VACUNA ROTAVIRUS MONOVALENTE','UNIDOSIS','Susp. Inyectable (Jer. prellenada)',3,

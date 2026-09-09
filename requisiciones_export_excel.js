@@ -24,6 +24,53 @@
   // límite físico de la plantilla, igual que en el Excel real).
   function filaBase(orden) { return 12 + 2 * orden; }
 
+  // La plantilla tiene 20 renglones físicos (filas 14-53) sin importar
+  // cuántos biológicos estén activos hoy en el catálogo -- se limpian TODOS
+  // antes de escribir, porque requisiciones_plantilla.xlsx es una copia real
+  // de "Municipio Corregidora.xlsx" y trae datos reales de septiembre ya
+  // capturados en esas celdas (cantidades, lotes) que de otro modo se
+  // quedarían pegados en cualquier renglón que esta exportación no llene.
+  const TOTAL_RENGLONES_PLANTILLA = 20;
+
+  function limpiarDatosPrevios(ws) {
+    for (let orden = 1; orden <= TOTAL_RENGLONES_PLANTILLA; orden++) {
+      const fila = filaBase(orden);
+      ['F', 'G', 'H', 'I', 'J', 'K'].forEach((col) => {
+        ws.getCell(`${col}${fila}`).value = null;
+        ws.getCell(`${col}${fila + 1}`).value = null;
+      });
+    }
+  }
+
+  // Tabla de referencia de "jeringas" (filas 14-18, columnas M-P): ya no se
+  // usa (el usuario confirmó que ese cálculo se dejó de hacer), así que se
+  // elimina del archivo exportado en vez de solo dejarla sin tocar. Se
+  // limpia con margen (M1:Q90) por si la plantilla trae alguna fila extra
+  // no detectada, y se recorta el área de impresión a A1:K87 (la cuadrícula
+  // real de la requisición) para que no quede ese espacio en blanco.
+  function limpiarTablaJeringas(ws) {
+    for (let r = 1; r <= 90; r++) {
+      ['M', 'N', 'O', 'P', 'Q'].forEach((col) => { ws.getCell(`${col}${r}`).value = null; });
+    }
+    ws.pageSetup.printArea = 'A1:K87';
+  }
+
+  // La plantilla real trae, además de "GENERAL", las hojas ocultas/visibles
+  // de cada unidad de ese municipio (con sus propios datos y CLUES reales de
+  // septiembre). NO se borran (wb.removeWorksheet) -- varias celdas de
+  // GENERAL las referencian con fórmulas 3D (ej. SUM('HOJA1:HOJA9'!F16));
+  // borrar una hoja referenciada así corrompe el .xlsx a nivel OOXML (Excel
+  // avisa "encontramos un problema con el contenido"), aunque ExcelJS lo
+  // siga leyendo sin quejarse. En su lugar se ocultan por completo
+  // (veryHidden, ni siquiera aparece en "Mostrar hoja" del menú) -- mismo
+  // resultado visual de "una sola hoja" al abrir el archivo, sin tocar la
+  // estructura interna.
+  function ocultarOtrasHojas(wb, nombreHoja) {
+    wb.worksheets.forEach((hoja) => {
+      if (hoja.name !== nombreHoja) hoja.state = 'veryHidden';
+    });
+  }
+
   const CELDAS_ENCABEZADO = {
     origenNombre: 'B7', area: 'H7',
     origenDireccion: 'B8', fechaEnvio: 'H8',
@@ -97,9 +144,12 @@
     // siempre, sin depender de lo que el archivo original haya heredado.
     ws.pageSetup.paperSize = 1; // 1 = Letter/Carta (OOXML)
 
+    limpiarDatosPrevios(ws);
+    limpiarTablaJeringas(ws);
     escribirEncabezado(ws, encabezado || {});
     escribirFirmas(ws, firmas || {});
     const sobrantes = escribirBiologicos(ws, catalogo || [], filasPorBiologico || {});
+    ocultarOtrasHojas(wb, HOJA);
 
     const buffer = await wb.xlsx.writeBuffer();
     return { buffer, sobrantes };

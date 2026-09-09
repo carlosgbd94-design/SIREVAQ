@@ -65,6 +65,7 @@
   .btn {
     display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 10px;
     padding: 9px 14px; font-size: 12.5px; font-weight: 800; cursor: pointer; font-family: inherit;
+    transition: all .2s ease;
   }
   .btn-primary { background: var(--primary); color: #fff; }
   .btn-primary:hover { background: #1e293b; }
@@ -73,12 +74,37 @@
   .btn-sm { padding: 6px 10px; font-size: 11.5px; }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
 
-  table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  table.tbl th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 800; padding: 8px 8px; border-bottom: 2px solid var(--outline-variant); position: sticky; top: 0; background: #fff; }
-  table.tbl td { padding: 7px 8px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
+  /* Mismos valores que .summaryTable del resto de SIREVAQ (style.css): fondo
+     de encabezado en surface-container (no blanco puro) y z-index explícito
+     -- sin el z-index, el encabezado "sticky" deja ver las filas de abajo
+     por encima al hacer scroll en Chrome (bug real, reportado por el usuario). */
+  table.tbl, table.tbl-unidades { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+  table.tbl th, table.tbl-unidades th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--primary); font-weight: 800; padding: 12px 14px;
+    border-bottom: 2px solid var(--outline-variant); position: sticky; top: 0; z-index: 5;
+    background: var(--surface-container);
+  }
+  table.tbl td, table.tbl-unidades td { padding: 11px 14px; font-weight: 500; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; transition: background .2s ease; }
   table.tbl tr.fila-bio { cursor: pointer; }
-  table.tbl tr.fila-bio:hover { background: var(--surface-container); }
-  .tbl-scroll { max-height: 60vh; overflow: auto; border-radius: 12px; }
+  table.tbl tr.fila-bio:hover td { background: var(--surface-container); }
+  /* El biológico cuyo detalle está desplegado necesita un color propio,
+     persistente (no solo al pasar el mouse) y distinto del gris del
+     encabezado -- antes no había ninguno y el :hover (gris, igual al
+     thead) se confundía con "esto es un header". Azul = mismo lenguaje que
+     .paso-tab.activo / .pill-new en el resto de la página. */
+  table.tbl tr.fila-bio.activa td { background: #eff6ff; border-bottom-color: #bfdbfe; }
+  table.tbl tr.fila-bio.activa td:first-child { border-left: 3px solid var(--secondary); }
+  table.tbl tr.fila-bio.activa:hover td { background: #e0f2fe; }
+  .tbl-scroll { max-height: 60vh; overflow: auto; border-radius: 16px; border: 1px solid var(--outline-variant); }
+  .tbl-scroll table.tbl, .tbl-scroll table.tbl-unidades { border: none; }
+
+  .badge-count { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 800; color: var(--muted); }
+  .badge-count.tiene-lotes { color: #166534; }
+  .badge-count .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--outline-variant); }
+  .badge-count.tiene-lotes .dot { background: #22c55e; }
+  .pill-presentacion { display: inline-flex; padding: 4px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 800; letter-spacing: .03em; background: #eff6ff; color: #1d4ed8; }
+  .pill-presentacion.multidosis { background: #fdf4ff; color: #a21caf; }
 
   .pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800; }
   .pill-ok { background: var(--success-bg); color: #067a55; }
@@ -86,14 +112,44 @@
   .pill-new { background: #eff6ff; color: #1d4ed8; }
   .pill-err { background: var(--error-bg); color: var(--error); }
 
-  .saldo { font-weight: 800; }
-  .saldo.ok { color: var(--success); }
-  .saldo.bajo { color: var(--warning); }
-  .saldo.agotado { color: var(--error); }
+  /* Lote ya capturado (detalle de Paso 1): antes no tenía ningún realce
+     propio y se confundía con el gris estructural del resto del panel
+     (encabezado, fondo del detalle). Usa el mismo lenguaje ya validado en
+     .con-asignacion (verde = "ya tiene dato"), nunca gris genérico. */
+  tr.fila-lote-capturado { background: var(--success-bg); }
+  tr.fila-lote-capturado td:first-child { border-left: 3px solid var(--success); }
+  tr.fila-lote-capturado .celda-acciones { display: flex; gap: 2px; justify-content: flex-end; }
+  tr.fila-lote-capturado input[type=text], tr.fila-lote-capturado input[type=number] { width: 100%; }
 
-  .grid-destinos { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
-  .destino-card { border: 1.5px solid var(--outline-variant); border-radius: 14px; padding: 10px 12px; }
-  .destino-card label { font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 6px; }
+  /* Resumen de reparto (Paso 2 y 3): "stat cards" de verdad separadas (con
+     su propio borde/sombra, no una línea gris de fondo asomando entre
+     ellas) -- cada número clave (disponible/repartido/saldo/...) se lee de
+     un vistazo, y el saldo se tiñe por completo (no solo el número) según
+     qué tan crítico esté. */
+  .franja-estado { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .franja-estado .stat {
+    flex: 1; min-width: 128px; background: var(--surface); border: 1px solid var(--outline-variant);
+    border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 3px; box-shadow: var(--shadow-1);
+  }
+  .franja-estado .stat span { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .franja-estado .stat b { font-size: 18px; font-weight: 800; color: var(--primary); }
+  .franja-estado .stat.saldo-ok { background: var(--success-bg); border-color: #bbf7d0; }
+  .franja-estado .stat.saldo-ok b { color: var(--success); }
+  .franja-estado .stat.saldo-bajo { background: var(--warning-bg); border-color: var(--warning-border); }
+  .franja-estado .stat.saldo-bajo b { color: var(--warning); }
+  .franja-estado .stat.saldo-agotado { background: var(--error-bg); border-color: var(--error-border); }
+  .franja-estado .stat.saldo-agotado b { color: var(--error); }
+
+  /* Mismo lenguaje que .premium-muni-card del resto de SIREVAQ: borde suave,
+     sombra apenas perceptible en reposo, se eleva un poco al hover. */
+  .grid-destinos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 10px; }
+  .destino-card {
+    border: 1px solid var(--outline-variant); border-radius: 16px; padding: 12px 14px;
+    box-shadow: 0 2px 4px rgba(0,0,0,.02); transition: all .3s cubic-bezier(.4,0,.2,1);
+  }
+  .destino-card:hover { border-color: #cbd5e1; box-shadow: 0 6px 12px rgba(0,0,0,.05); transform: translateY(-2px); }
+  .destino-card-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
+  .destino-card label { font-size: 10.5px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
   .destino-card input { width: 100%; }
 
   .toast { position: fixed; bottom: 20px; right: 20px; background: var(--primary); color: #fff; padding: 12px 18px; border-radius: 12px; font-size: 12.5px; font-weight: 700; box-shadow: var(--shadow-2); z-index: 999; opacity: 0; transform: translateY(8px); transition: all .2s; pointer-events: none; }
@@ -101,8 +157,13 @@
   .toast.err { background: var(--error); }
 
   .pasos { display: flex; gap: 8px; margin-bottom: 16px; }
-  .paso-tab { flex: 1; padding: 12px 16px; border-radius: 14px; background: #fff; border: 1.5px solid var(--outline-variant); cursor: pointer; text-align: center; font-weight: 800; font-size: 12.5px; color: var(--muted); }
-  .paso-tab.activo { border-color: var(--secondary); color: var(--secondary); background: #f0f9ff; }
+  .paso-tab {
+    flex: 1; padding: 12px 16px; border-radius: 14px; background: #fff; border: 1.5px solid var(--outline-variant);
+    cursor: pointer; text-align: center; font-weight: 800; font-size: 12.5px; color: var(--muted);
+    transition: all .25s cubic-bezier(.4,0,.2,1);
+  }
+  .paso-tab:hover { border-color: #cbd5e1; color: var(--primary); }
+  .paso-tab.activo { border-color: var(--secondary); color: var(--secondary); background: #f0f9ff; box-shadow: 0 2px 6px rgba(14,165,233,.12); }
   .paso-panel { display: none; }
   .paso-panel.activo { display: block; }
 
@@ -120,6 +181,39 @@
   [data-solo-lectura="1"] .solo-edicion { display: none !important; }
   [data-solo-lectura="1"] .solo-lectura { display: inline-block !important; }
   .badge-role { font-size: 10.5px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--surface-container); color: var(--muted); }
+
+  /* Botón-ícono puro (sin caja/borde), mismo criterio que .notifIconPureBtn
+     del resto de SIREVAQ: transparente en reposo, solo reacciona al hover
+     en punteros reales para no dejarlo "atorado" en táctil. */
+  .icon-btn-pure {
+    background: transparent; border: none; outline: none; padding: 4px; margin: 0;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    color: var(--muted); transition: all .25s cubic-bezier(.34,1.56,.64,1); position: relative;
+  }
+  .icon-btn-pure .material-symbols-rounded { transition: transform .25s cubic-bezier(.34,1.56,.64,1); }
+  @media (hover: hover) and (pointer: fine) {
+    .icon-btn-pure:hover { color: var(--secondary); transform: translateY(-3px) scale(1.2); filter: drop-shadow(0 6px 6px rgba(14,165,233,.3)); }
+  }
+  .icon-btn-pure:active { transform: translateY(0) scale(.95); }
+
+  /* Pill de exportación en el header + su panel desplegable */
+  .pill-exportar-wrap { position: relative; }
+  .btn-pill { background: var(--primary); color: #fff; border-radius: 999px; padding: 9px 18px; }
+  .btn-pill:hover { background: #1e293b; }
+  .panel-exportar {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: 420px;
+    background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 18px;
+    padding: 16px; box-shadow: var(--shadow-2);
+  }
+
+  /* Paso 3 -- diseño con más jerarquía visual. El sticky-header (position,
+     z-index, fondo) de .tbl-unidades y el resumen (.franja-estado) ya los
+     define el bloque de arriba (compartido con .tbl y con Paso 2) -- aquí
+     solo lo propio de esta tabla, para no duplicar reglas que antes
+     competían entre sí (mismo bug ya encontrado dos veces en este archivo). */
+  table.tbl-unidades tr.con-asignacion { background: var(--success-bg); }
+  table.tbl-unidades tr.con-asignacion td:first-child { border-left: 3px solid var(--success); }
+  table.tbl-unidades tr:not(.con-asignacion) td:first-child { border-left: 3px solid transparent; }
 </style>
 </head>
 <body data-solo-lectura="0" id="pagina">
@@ -127,12 +221,32 @@
   <a href="index.html" class="volver"><span class="material-symbols-rounded">arrow_back</span> Volver a SIREVAQ</a>
 
   <div class="tarjeta">
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; position:relative;">
       <div>
         <h1>Requisiciones de Biológicos</h1>
         <p class="subtitulo">Jurisdicción Sanitaria N.1 → Municipios/Hospitales → Unidades</p>
       </div>
-      <span class="badge-role" id="badgeRol">Cargando sesión…</span>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div class="pill-exportar-wrap">
+          <button class="btn btn-pill" id="btnAbrirExportar"><span class="material-symbols-rounded" style="font-size:16px">download</span> Exportar</button>
+          <div class="panel-exportar" id="panelExportar" style="display:none;">
+            <button class="btn btn-outline btn-sm" id="btnPdfJurisdiccional" style="width:100%; justify-content:center; margin-bottom:12px;">
+              <span class="material-symbols-rounded" style="font-size:14px">summarize</span> Concentrado Jurisdiccional
+            </button>
+            <div class="hint" style="margin-bottom:10px;">Para el día de entrega: marca qué destinos quieres y descarga todo junto en un .zip.</div>
+            <div class="destinos-masivos" id="destinosMasivos"></div>
+            <div class="barra" style="margin-top:10px;">
+              <label class="destino-masivo-chk" style="border:none; padding:0;">
+                <input type="checkbox" id="chkIncluirUnidades" checked> Incluir unidades de los municipios marcados
+              </label>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btnExportarMasivo" style="width:100%; justify-content:center; margin-top:10px;">
+              <span class="material-symbols-rounded" style="font-size:14px">folder_zip</span> Descargar paquete (.zip)
+            </button>
+          </div>
+        </div>
+        <span class="badge-role" id="badgeRol">Cargando sesión…</span>
+      </div>
     </div>
 
     <div class="barra" style="margin-top:16px;">
@@ -143,10 +257,6 @@
       <div class="campo">
         <label>Mes</label>
         <select id="selMes"></select>
-      </div>
-      <div class="campo solo-edicion">
-        <label>Folio Oracle/SACI</label>
-        <input type="text" id="inpFolio" placeholder="Se escribe a mano, como en el sello físico">
       </div>
       <button class="btn btn-primary solo-edicion" id="btnGuardarCabecera">
         <span class="material-symbols-rounded">save</span> Guardar / Abrir requisición
@@ -167,7 +277,7 @@
       <p class="hint">Casi siempre es la misma persona mes con mes, así que se guardan aquí una sola vez y se reutilizan en cada PDF. Solo hace falta tocar esto cuando cambie el responsable. Las unidades no llevan nombre precapturado: firman a mano y anotan su propio nombre en el papel.</p>
 
       <div style="margin-bottom:18px;">
-        <label style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; display:block; margin-bottom:8px;">Jurisdiccional (se imprime igual en las 3 copias)</label>
+        <label style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; display:block; margin-bottom:8px;">Jurisdiccional</label>
         <div class="barra" style="margin-bottom:10px;">
           <div class="campo"><label>Elaboró — Nombre</label><input type="text" id="jurElaboroNombre"></div>
           <div class="campo"><label>Elaboró — Cargo</label><input type="text" id="jurElaboroCargo" placeholder="Ej. Responsable PVU"></div>
@@ -201,10 +311,7 @@
     <!-- PASO 1 -->
     <div class="paso-panel activo" id="panelPaso1">
       <div class="tarjeta">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-          <h2 style="margin:0;"><span class="material-symbols-rounded">inventory</span> Lo que llegó del almacén estatal</h2>
-          <button class="btn btn-outline btn-sm" id="btnPdfJurisdiccional"><span class="material-symbols-rounded" style="font-size:14px">download</span> Exportar Excel Jurisdiccional (2 copias)</button>
-        </div>
+        <h2 style="margin:0 0 10px;"><span class="material-symbols-rounded">inventory</span> Lo que llegó del almacén estatal</h2>
         <p class="hint">Da clic en un biológico para ver/agregar sus lotes recibidos — sin límite de lotes. El comparador te avisa si el lote ya existe o parece un error de captura antes de guardarlo.</p>
         <div class="tbl-scroll">
           <table class="tbl">
@@ -218,23 +325,15 @@
     <!-- PASO 2 -->
     <div class="paso-panel" id="panelPaso2">
       <div class="tarjeta">
-        <h2><span class="material-symbols-rounded">folder_zip</span> Exportación masiva</h2>
-        <p class="hint">Para el día de entrega: marca qué destinos quieres y descarga todo junto en un .zip, en vez de exportar uno por uno.</p>
-        <div class="destinos-masivos" id="destinosMasivos"></div>
-        <div class="barra">
-          <label class="destino-masivo-chk" style="border:none; padding:0;">
-            <input type="checkbox" id="chkIncluirUnidades" checked> Incluir unidades de los municipios marcados
-          </label>
-          <button class="btn btn-primary btn-sm" id="btnExportarMasivo"><span class="material-symbols-rounded" style="font-size:14px">folder_zip</span> Descargar paquete (.zip)</button>
-        </div>
-      </div>
-
-      <div class="tarjeta">
         <h2><span class="material-symbols-rounded">alt_route</span> Reparto a Municipios y Hospitales</h2>
         <p class="hint">Cada hospital es su propio destino, igual que un municipio — no se reparte más adentro.</p>
         <div class="barra">
-          <div class="campo" style="min-width:320px;">
-            <label>Biológico + Lote</label>
+          <div class="campo" style="min-width:220px;">
+            <label>Biológico</label>
+            <select id="selBiologicoMunicipio"></select>
+          </div>
+          <div class="campo" style="min-width:220px; flex:1;">
+            <label>Lote</label>
             <select id="selLoteParaMunicipio"></select>
           </div>
         </div>
@@ -246,13 +345,18 @@
     <div class="paso-panel" id="panelPaso3">
       <div class="tarjeta">
         <h2><span class="material-symbols-rounded">local_hospital</span> Reparto a Unidades</h2>
+        <p class="hint">Elige municipio y luego el lote a repartir — las unidades que ya tienen algo asignado se marcan en verde para ubicarlas rápido.</p>
         <div class="barra">
           <div class="campo">
             <label>Municipio</label>
             <select id="selMunicipioUnidad"></select>
           </div>
-          <div class="campo" style="min-width:320px;">
-            <label>Biológico + Lote</label>
+          <div class="campo" style="min-width:220px;">
+            <label>Biológico</label>
+            <select id="selBiologicoUnidad"></select>
+          </div>
+          <div class="campo" style="min-width:220px; flex:1;">
+            <label>Lote</label>
             <select id="selLoteParaUnidad"></select>
           </div>
         </div>

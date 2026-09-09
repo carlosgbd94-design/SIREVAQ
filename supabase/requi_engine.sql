@@ -132,3 +132,48 @@ drop trigger if exists trg_requi_firmas_touch on requi_firmas;
 create trigger trg_requi_firmas_touch
   before update on requi_firmas
   for each row execute function requi_trg_touch_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Nivel 0: editar lo surtido (Paso 1, botón "Editar") no puede bajar por
+-- debajo de lo que ya se repartió a municipios/Hospitales de ese mismo
+-- lote -- ver requi_valida_edicion_surtido.sql para el detalle.
+-- ---------------------------------------------------------------------------
+
+create or replace function requi_trg_valida_edicion_surtido()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_repartido numeric;
+begin
+  if new.cantidad_surtida = old.cantidad_surtida
+     and new.requi_biologico_id = old.requi_biologico_id
+     and new.lote_id = old.lote_id then
+    return new;
+  end if;
+
+  if new.requi_biologico_id <> old.requi_biologico_id or new.lote_id <> old.lote_id then
+    raise exception 'No se puede cambiar el biológico o el lote de un ítem ya capturado; quítalo y vuelve a agregarlo.';
+  end if;
+
+  select coalesce(sum(cantidad), 0) into v_repartido
+  from requi_distribucion_municipio
+  where requisicion_id = new.requisicion_id
+    and requi_biologico_id = new.requi_biologico_id
+    and lote_id = new.lote_id;
+
+  if new.cantidad_surtida < v_repartido then
+    raise exception 'No puedes bajar lo surtido a % -- ya se repartieron % unidades de este lote a municipios/Hospitales. Reduce primero ese reparto.',
+      new.cantidad_surtida, v_repartido;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_requi_valida_edicion_surtido on requi_items_jurisdiccion;
+create trigger trg_requi_valida_edicion_surtido
+  before update on requi_items_jurisdiccion
+  for each row execute function requi_trg_valida_edicion_surtido();

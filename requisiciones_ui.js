@@ -272,9 +272,8 @@ async function guardarCabecera() {
   if (!estado.puedeEditar) return;
   const anio = Number($('selAnio').value);
   const mes = Number($('selMes').value);
-  const folio = $('inpFolio').value.trim() || null;
   const { data, error } = await estado.db.from('requi_requisiciones')
-    .upsert({ anio, mes, folio_oracle: folio, creado_por: estado.perfil.usuario }, { onConflict: 'anio,mes' })
+    .upsert({ anio, mes, creado_por: estado.perfil.usuario }, { onConflict: 'anio,mes' })
     .select().single();
   if (error) { toast('No se pudo guardar la cabecera: ' + error.message, true); return; }
   estado.requisicion = data;
@@ -293,11 +292,10 @@ async function cargarRequisicion() {
     $('contenidoRequisicion').style.display = 'none';
     $('hintCabecera').style.display = 'block';
     $('hintCabecera').innerHTML = estado.puedeEditar
-      ? 'No existe requisición para este mes todavía. Escribe el folio (opcional) y presiona "Guardar / Abrir requisición" para crearla.'
+      ? 'No existe requisición para este mes todavía. Presiona "Guardar / Abrir requisición" para crearla.'
       : 'No existe requisición capturada para este mes.';
     return;
   }
-  $('inpFolio').value = data.folio_oracle || '';
   $('hintCabecera').style.display = 'none';
   await cargarDatosRequisicion();
 }
@@ -333,12 +331,13 @@ function itemsDe(biologicoId) {
 function filasBiologicoHtml(bio, idx) {
   const items = itemsDe(bio.id);
   const total = items.reduce((acc, i) => acc + Number(i.cantidad_surtida || 0), 0);
+  const esMultidosis = bio.presentacion === 'MULTIDOSIS';
   return `
     <tr class="fila-bio" data-bio="${bio.id}">
       <td>${idx + 1}</td>
       <td><strong>${bio.nombre}</strong><br><span style="color:var(--muted); font-size:11px;">${bio.clave_articulo}</span></td>
-      <td>${bio.presentacion}</td>
-      <td>${items.length} lote(s)</td>
+      <td><span class="pill-presentacion ${esMultidosis ? 'multidosis' : ''}">${bio.presentacion}</span></td>
+      <td><span class="badge-count ${items.length ? 'tiene-lotes' : ''}"><span class="dot"></span>${items.length} lote${items.length === 1 ? '' : 's'}</span></td>
       <td><strong>${total}</strong></td>
     </tr>
     <tr id="detalle-${bio.id}" class="fila-detalle" style="display:none;"><td colspan="5" style="background:var(--surface-container);">${renderDetalleBiologico(bio, items)}</td></tr>
@@ -356,23 +355,84 @@ function toggleDetalle(bioId) {
   const detalle = $('detalle-' + bioId);
   const abierto = detalle.style.display !== 'none';
   document.querySelectorAll('tr.fila-detalle').forEach((d) => (d.style.display = 'none'));
+  document.querySelectorAll('tr.fila-bio').forEach((tr) => tr.classList.remove('activa'));
   detalle.style.display = abierto ? 'none' : 'table-row';
+  if (!abierto) document.querySelector(`tr.fila-bio[data-bio="${bioId}"]`).classList.add('activa');
 }
 
 function cablearDetalle(trDetalle) {
   trDetalle.querySelectorAll('.btn-agregar-lote').forEach((btn) => btn.addEventListener('click', () => agregarLoteSurtido(btn.dataset.bio)));
   trDetalle.querySelectorAll('.btn-quitar-item').forEach((btn) => btn.addEventListener('click', () => quitarItemSurtido(btn.dataset.item, btn.dataset.bio)));
+  trDetalle.querySelectorAll('.btn-editar-item').forEach((btn) => btn.addEventListener('click', () => activarEdicionItem(btn.dataset.item, btn.dataset.bio)));
   const inpCantidad = trDetalle.querySelector('.inp-cantidad-nueva');
   if (inpCantidad) inpCantidad.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') agregarLoteSurtido(inpCantidad.dataset.bio); });
 }
 
+// Edición en línea de un lote ya capturado -- solo cantidad y caducidad (no
+// número de lote: cambiarlo es, en la práctica, un lote distinto, así que
+// para eso se sigue usando quitar + volver a agregar con el comparador).
+function activarEdicionItem(itemId, bioId) {
+  const item = estado.items.find((i) => i.id === itemId);
+  const tr = document.querySelector(`tr.fila-lote-capturado[data-item="${itemId}"]`);
+  if (!item || !tr) return;
+  tr.innerHTML = `
+    <td>${item.requi_lotes.numero_lote}</td>
+    <td><input type="text" class="inp-editar-caducidad" value="${formatMmmAa(item.requi_lotes.caducidad)}" placeholder="FEB-27"></td>
+    <td><input type="number" min="0" class="inp-editar-cantidad" value="${item.cantidad_surtida}"></td>
+    <td class="solo-edicion celda-acciones">
+      <button class="icon-btn-pure btn-guardar-edicion" title="Guardar"><span class="material-symbols-rounded" style="font-size:16px">check</span></button>
+      <button class="icon-btn-pure btn-cancelar-edicion" title="Cancelar"><span class="material-symbols-rounded" style="font-size:16px">close</span></button>
+    </td>
+  `;
+  tr.querySelector('.btn-guardar-edicion').addEventListener('click', () => guardarEdicionItem(itemId, bioId));
+  tr.querySelector('.btn-cancelar-edicion').addEventListener('click', () => actualizarFilaBiologico(bioId, true));
+  tr.querySelector('.inp-editar-cantidad').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') guardarEdicionItem(itemId, bioId); });
+}
+
+async function guardarEdicionItem(itemId, bioId) {
+  const item = estado.items.find((i) => i.id === itemId);
+  const tr = document.querySelector(`tr.fila-lote-capturado[data-item="${itemId}"]`);
+  const caducidadTexto = tr.querySelector('.inp-editar-caducidad').value.trim();
+  const cantidad = Number(tr.querySelector('.inp-editar-cantidad').value);
+  if (!cantidad || cantidad <= 0) { toast('La cantidad debe ser mayor a 0.', true); return; }
+
+  let caducidad = item.requi_lotes.caducidad;
+  if (caducidadTexto) {
+    const parseada = parsearCaducidadInteligente(caducidadTexto);
+    if (!parseada) { toast('No entendí la caducidad. Usa por ejemplo FEB-27.', true); return; }
+    caducidad = parseada;
+  }
+
+  if (caducidad !== item.requi_lotes.caducidad) {
+    const { error: errLote } = await estado.db.from('requi_lotes').update({ caducidad }).eq('id', item.lote_id);
+    if (errLote) { toast('No se pudo actualizar la caducidad: ' + errLote.message, true); return; }
+    item.requi_lotes.caducidad = caducidad;
+  }
+
+  if (cantidad !== Number(item.cantidad_surtida)) {
+    const { error: errItem } = await estado.db.from('requi_items_jurisdiccion').update({ cantidad_surtida: cantidad }).eq('id', itemId);
+    // El trigger de Postgres rechaza bajar la cantidad por debajo de lo que
+    // ya se repartió a municipios/Hospitales -- ese mensaje se muestra tal
+    // cual, es más claro que cualquier validación que dupliquemos aquí.
+    if (errItem) { toast('No se pudo guardar: ' + errItem.message, true); return; }
+    item.cantidad_surtida = cantidad;
+  }
+
+  toast('Lote actualizado.');
+  actualizarFilaBiologico(bioId, true);
+  renderSelectLotesPaso2();
+}
+
 function renderDetalleBiologico(bio, items) {
   const filas = items.map((it) => `
-    <tr>
+    <tr class="fila-lote-capturado" data-item="${it.id}">
       <td>${it.requi_lotes.numero_lote}</td>
       <td>${formatMmmAa(it.requi_lotes.caducidad)}</td>
       <td>${it.cantidad_surtida}</td>
-      <td class="solo-edicion"><button class="btn btn-outline btn-sm btn-quitar-item" data-item="${it.id}" data-bio="${bio.id}"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button></td>
+      <td class="solo-edicion celda-acciones">
+        <button class="icon-btn-pure btn-editar-item" data-item="${it.id}" data-bio="${bio.id}" title="Editar"><span class="material-symbols-rounded" style="font-size:16px">edit</span></button>
+        <button class="icon-btn-pure btn-quitar-item" data-item="${it.id}" data-bio="${bio.id}" title="Quitar"><span class="material-symbols-rounded" style="font-size:16px">delete</span></button>
+      </td>
     </tr>
   `).join('') || '<tr><td colspan="4" style="color:var(--muted)">Sin lotes capturados.</td></tr>';
 
@@ -409,7 +469,7 @@ function actualizarFilaBiologico(bioId, mantenerAbierto) {
   $('detalle-' + bioId).replaceWith(nuevaDetalle);
   nuevaResumen.addEventListener('click', () => toggleDetalle(bioId));
   cablearDetalle(nuevaDetalle);
-  if (mantenerAbierto) nuevaDetalle.style.display = 'table-row';
+  if (mantenerAbierto) { nuevaDetalle.style.display = 'table-row'; nuevaResumen.classList.add('activa'); }
 }
 
 async function agregarLoteSurtido(biologicoId) {
@@ -473,15 +533,33 @@ async function quitarItemSurtido(itemId, biologicoId) {
 // Paso 2 — Reparto a Municipios y Hospitales (6 destinos hermanos)
 // ---------------------------------------------------------------------------
 
+function claseSaldo(saldo, disponible) {
+  return saldo <= 0 ? 'agotado' : saldo < disponible * 0.2 ? 'bajo' : 'ok';
+}
+
+// 2 filtros en cascada (biológico -> lote), mismo motivo que en Paso 3: un
+// solo combo mezclando ambos dificulta ver de un vistazo qué se está
+// repartiendo cuando hay varios biológicos con lotes surtidos a la vez.
 function renderSelectLotesPaso2() {
+  const selBio = $('selBiologicoMunicipio');
+  const valorPrevio = selBio.value;
+  const idsConSurtido = new Set(estado.items.filter((i) => Number(i.cantidad_surtida) > 0).map((i) => i.requi_biologico_id));
+  const biologicos = estado.catalogo.filter((bio) => idsConSurtido.has(bio.id));
+  selBio.innerHTML = biologicos.length
+    ? biologicos.map((bio) => `<option value="${bio.id}">${bio.nombre}</option>`).join('')
+    : '<option value="">Sin lotes surtidos capturados</option>';
+  if (biologicos.some((b) => b.id === valorPrevio)) selBio.value = valorPrevio;
+  selBio.onchange = renderSelectLotesPorBiologicoMunicipio;
+  renderSelectLotesPorBiologicoMunicipio();
+}
+
+function renderSelectLotesPorBiologicoMunicipio() {
   const sel = $('selLoteParaMunicipio');
-  const valorPrevio = sel.value;
-  const opciones = estado.items.filter((i) => Number(i.cantidad_surtida) > 0);
-  sel.innerHTML = opciones.map((i) => {
-    const bio = estado.catalogo.find((b) => b.id === i.requi_biologico_id);
-    return `<option value="${i.requi_biologico_id}::${i.lote_id}">${bio ? bio.nombre : '?'} — Lote ${i.requi_lotes.numero_lote} (surtido: ${i.cantidad_surtida})</option>`;
-  }).join('') || '<option value="">Sin lotes surtidos capturados</option>';
-  if ([...sel.options].some((o) => o.value === valorPrevio)) sel.value = valorPrevio;
+  const biologicoId = $('selBiologicoMunicipio').value;
+  const opciones = estado.items.filter((i) => i.requi_biologico_id === biologicoId && Number(i.cantidad_surtida) > 0);
+  sel.innerHTML = opciones.length
+    ? opciones.map((i) => `<option value="${i.requi_biologico_id}::${i.lote_id}">Lote ${i.requi_lotes.numero_lote} (surtido: ${i.cantidad_surtida})</option>`).join('')
+    : '<option value="">Elige un biológico</option>';
   sel.onchange = renderCajaRepartoMunicipio;
   renderCajaRepartoMunicipio();
 }
@@ -501,21 +579,27 @@ function renderCajaRepartoMunicipio() {
     const puedeSincronizar = estado.puedeEditar && fila && cantidad > 0 && MUNICIPIO_A_LOTES[m.v];
     return `
       <div class="destino-card">
-        <label>${m.l}</label>
+        <div class="destino-card-cabecera">
+          <label>${m.l}</label>
+          ${puedeSincronizar ? `<button class="icon-btn-pure solo-edicion" data-sync-muni="${m.v}" title="Sincronizar a Lotes"><span class="material-symbols-rounded">sync</span></button>` : ''}
+        </div>
         <input type="number" min="0" class="solo-edicion" id="dm-${m.v}" value="${cantidad}" data-municipio="${m.v}">
         <span class="solo-lectura" style="display:none;">${cantidad}</span>
-        ${puedeSincronizar ? `<button class="btn btn-outline btn-sm solo-edicion" style="margin-top:8px; width:100%;" data-sync-muni="${m.v}"><span class="material-symbols-rounded" style="font-size:13px">sync</span> Sincronizar a Lotes</button>` : ''}
-        <button class="btn btn-outline btn-sm" style="margin-top:6px; width:100%;" data-export-muni="${m.v}"><span class="material-symbols-rounded" style="font-size:13px">download</span> Excel</button>
       </div>
     `;
   }).join('');
 
   const yaRepartido = filas.reduce((acc, f) => acc + Number(f.cantidad || 0), 0);
   const saldo = disponible - yaRepartido;
+  const conReparto = filas.filter((f) => Number(f.cantidad) > 0).length;
   caja.innerHTML = `
     <div style="margin-top:14px;">
-      <span>Disponible: <strong>${disponible}</strong> · Repartido: <strong>${yaRepartido}</strong> ·
-        Saldo: <span class="saldo ${saldo <= 0 ? 'agotado' : saldo < disponible * 0.2 ? 'bajo' : 'ok'}">${saldo}</span></span>
+      <div class="franja-estado">
+        <div class="stat"><span>Disponible</span><b>${disponible}</b></div>
+        <div class="stat"><span>Repartido</span><b>${yaRepartido}</b></div>
+        <div class="stat saldo-${claseSaldo(saldo, disponible)}"><span>Saldo</span><b>${saldo}</b></div>
+        <div class="stat"><span>Destinos con reparto</span><b>${conReparto} / ${DESTINOS.length}</b></div>
+      </div>
       <div class="grid-destinos">${cards}</div>
     </div>
   `;
@@ -525,9 +609,6 @@ function renderCajaRepartoMunicipio() {
   });
   caja.querySelectorAll('[data-sync-muni]').forEach((btn) => {
     btn.addEventListener('click', () => sincronizarLotePublico(btn.dataset.syncMuni, biologicoId, loteId));
-  });
-  caja.querySelectorAll('[data-export-muni]').forEach((btn) => {
-    btn.addEventListener('click', () => exportarUno('MUNICIPAL', btn.dataset.exportMuni));
   });
 }
 
@@ -579,20 +660,48 @@ function renderSelectMunicipioYLotesPaso3() {
   if (!selMuni.dataset.armado) {
     selMuni.innerHTML = MUNICIPIOS_REALES.map((m) => `<option value="${m.v}">${m.l}</option>`).join('');
     selMuni.dataset.armado = '1';
-    selMuni.onchange = renderSelectLotesPaso3;
+    selMuni.onchange = renderSelectBiologicosUnidad;
   }
+  renderSelectBiologicosUnidad();
+}
+
+function asignadosMunicipioUnidad() {
+  const municipio = $('selMunicipioUnidad').value;
+  return estado.distMunicipio.filter((d) => d.municipio === municipio && Number(d.cantidad) > 0);
+}
+
+// 2 filtros en cascada (biológico -> lote) en vez de un solo combo con
+// optgroups -- el nombre del biológico se perdía al cerrar el select
+// (el navegador no muestra la etiqueta del optgroup, solo la opción),
+// dejando ambigüedad sobre qué se está repartiendo.
+function renderSelectBiologicosUnidad() {
+  const selBio = $('selBiologicoUnidad');
+  const valorPrevio = selBio.value;
+  const idsAsignados = new Set(asignadosMunicipioUnidad().map((d) => d.requi_biologico_id));
+  const biologicos = estado.catalogo.filter((bio) => idsAsignados.has(bio.id));
+  selBio.innerHTML = biologicos.length
+    ? biologicos.map((bio) => `<option value="${bio.id}">${bio.nombre}</option>`).join('')
+    : '<option value="">Este municipio no tiene lotes asignados todavía (ver paso 2)</option>';
+  if (biologicos.some((b) => b.id === valorPrevio)) selBio.value = valorPrevio;
+  selBio.onchange = renderSelectLotesPaso3;
   renderSelectLotesPaso3();
 }
 
 function renderSelectLotesPaso3() {
-  const municipio = $('selMunicipioUnidad').value;
   const sel = $('selLoteParaUnidad');
-  const asignados = estado.distMunicipio.filter((d) => d.municipio === municipio && Number(d.cantidad) > 0);
-  sel.innerHTML = asignados.map((d) => {
-    const bio = estado.catalogo.find((b) => b.id === d.requi_biologico_id);
-    const item = estado.items.find((i) => i.requi_biologico_id === d.requi_biologico_id && i.lote_id === d.lote_id);
-    return `<option value="${d.requi_biologico_id}::${d.lote_id}">${bio ? bio.nombre : '?'} — Lote ${item ? item.requi_lotes.numero_lote : ''} (asignado: ${d.cantidad})</option>`;
-  }).join('') || '<option value="">Este municipio no tiene lotes asignados todavía (ver paso 2)</option>';
+  const biologicoId = $('selBiologicoUnidad').value;
+  const asignados = asignadosMunicipioUnidad().filter((d) => d.requi_biologico_id === biologicoId);
+
+  sel.innerHTML = asignados.length
+    ? asignados.map((d) => {
+        const item = estado.items.find((i) => i.requi_biologico_id === d.requi_biologico_id && i.lote_id === d.lote_id);
+        const yaRepartidoAqui = estado.distUnidad
+          .filter((u) => u.requi_biologico_id === d.requi_biologico_id && u.lote_id === d.lote_id)
+          .reduce((acc, u) => acc + Number(u.cantidad || 0), 0);
+        const saldo = Number(d.cantidad) - yaRepartidoAqui;
+        return `<option value="${d.requi_biologico_id}::${d.lote_id}">Lote ${item ? item.requi_lotes.numero_lote : '?'} — asignado ${d.cantidad}, saldo ${saldo}</option>`;
+      }).join('')
+    : '<option value="">Elige un biológico</option>';
   sel.onchange = renderCajaRepartoUnidad;
   renderCajaRepartoUnidad();
 }
@@ -610,29 +719,35 @@ function renderCajaRepartoUnidad() {
   const yaRepartido = filas.reduce((acc, f) => acc + Number(f.cantidad || 0), 0);
   const saldo = disponible - yaRepartido;
 
+  // Orden alfabético fijo (no se reordena por asignación) -- reordenar en
+  // cada guardado saltaría filas de lugar mientras se teclea varias unidades
+  // seguidas. El resaltado en verde ya resuelve "ubicarlas rápido".
   const filasHtml = unidadesMunicipio.map((u) => {
     const fila = filas.find((f) => f.unidad_id === u.id);
     const cantidad = fila ? Number(fila.cantidad) : 0;
     return `
-      <tr>
+      <tr class="${cantidad > 0 ? 'con-asignacion' : ''}">
         <td>${u.nombre}</td>
         <td class="solo-edicion"><input type="number" min="0" value="${cantidad}" data-unidad="${u.id}"></td>
         <td class="solo-lectura" style="display:none;">${cantidad}</td>
-        <td><button class="btn btn-outline btn-sm" data-export-unidad="${u.id}"><span class="material-symbols-rounded" style="font-size:13px">download</span> Excel</button></td>
+        <td style="text-align:center;"><button class="icon-btn-pure" data-export-unidad="${u.id}" title="Exportar Excel de esta unidad"><span class="material-symbols-rounded">download</span></button></td>
       </tr>
     `;
   }).join('');
 
+  const conReparto = filas.filter((f) => Number(f.cantidad) > 0).length;
   caja.innerHTML = `
-    <div style="margin-top:14px;">
-      <span>Disponible en ${municipio}: <strong>${disponible}</strong> · Repartido: <strong>${yaRepartido}</strong> ·
-        Saldo: <span class="saldo ${saldo <= 0 ? 'agotado' : saldo < disponible * 0.2 ? 'bajo' : 'ok'}">${saldo}</span></span>
-      <div class="tbl-scroll" style="margin-top:10px;">
-        <table class="tbl">
-          <thead><tr><th>Unidad</th><th>Cantidad</th><th>Exportar (3 copias)</th></tr></thead>
-          <tbody>${filasHtml || '<tr><td colspan="3" style="color:var(--muted)">Sin unidades registradas para este municipio.</td></tr>'}</tbody>
-        </table>
-      </div>
+    <div class="franja-estado">
+      <div class="stat"><span>Disponible en ${municipio}</span><b>${disponible}</b></div>
+      <div class="stat"><span>Repartido</span><b>${yaRepartido}</b></div>
+      <div class="stat saldo-${claseSaldo(saldo, disponible)}"><span>Saldo</span><b>${saldo}</b></div>
+      <div class="stat"><span>Unidades con reparto</span><b>${conReparto} / ${unidadesMunicipio.length}</b></div>
+    </div>
+    <div class="tbl-scroll" style="margin-top:10px;">
+      <table class="tbl-unidades">
+        <thead><tr><th>Unidad</th><th>Cantidad</th><th style="text-align:center;">Exportar</th></tr></thead>
+        <tbody>${filasHtml || '<tr><td colspan="3" style="color:var(--muted)">Sin unidades registradas para este municipio.</td></tr>'}</tbody>
+      </table>
     </div>
   `;
 
@@ -773,8 +888,8 @@ async function exportarUno(nivel, destino) {
 
     const copias = COPIAS_SUGERIDAS[nivel] || 1;
     toast(sobrantes.length
-      ? `Excel generado. Ojo: ${sobrantes.join(', ')} tiene más de 2 lotes -- el formato solo admite 2, repórtalo aparte. Imprime ${copias} copia(s).`
-      : `Excel generado. Imprime ${copias} copia(s) desde ahí.`, !!sobrantes.length);
+      ? `Excel generado. Ojo: ${sobrantes.join(', ')} tiene más de 2 lotes -- el formato solo admite 2, repórtalo aparte.`
+      : `Excel generado.`, !!sobrantes.length);
     await registrarExportacion(nivel, destino, copias);
   } catch (e) {
     toast('No se pudo generar el Excel: ' + e.message, true);
@@ -848,6 +963,12 @@ async function exportarMasivo() {
 // Navegación de pasos / arranque
 // ---------------------------------------------------------------------------
 
+function togglePanelExportar(forzarCerrado) {
+  const panel = $('panelExportar');
+  const abierto = panel.style.display !== 'none';
+  panel.style.display = (forzarCerrado || abierto) ? 'none' : 'block';
+}
+
 function toggleResponsables() {
   const cuerpo = $('cuerpoResponsables');
   const icono = $('iconoToggleResponsables');
@@ -878,4 +999,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('btnGuardarFirmasJuris').addEventListener('click', guardarFirmasJurisdiccionales);
   $('btnExportarMasivo').addEventListener('click', exportarMasivo);
   $('btnToggleResponsables').addEventListener('click', toggleResponsables);
+  $('btnAbrirExportar').addEventListener('click', (ev) => { ev.stopPropagation(); togglePanelExportar(); });
+  $('panelExportar').addEventListener('click', (ev) => ev.stopPropagation());
+  document.addEventListener('click', () => togglePanelExportar(true));
 });
