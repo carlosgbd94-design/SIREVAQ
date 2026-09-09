@@ -871,7 +871,14 @@ async function eliminarRenglon(renglonId) {
   const ok = await mostrarModal({ titulo: 'Eliminar renglón', mensaje: '¿Eliminar este renglón (lote)? Esta acción no se puede deshacer.', textoAceptar: 'Eliminar', peligro: true });
   if (!ok) return;
   const { error } = await estado.db.from('biovac_renglones').delete().eq('id', renglonId);
-  if (error) { toast('Error al eliminar: ' + error.message, 'error'); return; }
+  if (error) {
+    if (error.code === '23503') {
+      toast('No se pudo eliminar: este renglón tiene historial de auditoría vinculado. Intenta de nuevo -- si persiste, avísale al desarrollador.', 'error');
+    } else {
+      toast('Error al eliminar: ' + error.message, 'error');
+    }
+    return;
+  }
   await cargarRenglones();
   render();
 }

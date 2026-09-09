@@ -169,7 +169,14 @@ create index if not exists idx_biovac_renglones_lote on biovac_renglones(lote_id
 create table if not exists biovac_correcciones (
   id uuid primary key default gen_random_uuid(),
   movimiento_id uuid not null references biovac_movimientos(id),
-  renglon_id uuid references biovac_renglones(id),
+  -- on delete set null: esta fila es append-only y ya guarda todo lo
+  -- legible como texto (valor_anterior/valor_nuevo, ej. "ARF (5 frascos)"
+  -- -> "NORMAL (5 frascos)"), así que perder el enlace al renglón no
+  -- pierde información de auditoría -- pero sin esto, la sola existencia
+  -- de esta fila bloqueaba por completo poder borrar después el renglón
+  -- resultante de una reactivación de A.R.F. o resolución de Canje
+  -- (violación de llave foránea, sin ningún mensaje claro para el usuario).
+  renglon_id uuid references biovac_renglones(id) on delete set null,
   usuario text not null,
   rol text not null,
   campo text,
