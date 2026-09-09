@@ -136,7 +136,7 @@
   // ---------------------------------------------------------------------
 
   function renglonVacio() {
-    return { numeroLote: '', caducidad: null, existenciaAnterior: '', recibido: '', aplicadasA: '', aplicadasB: '', desechadasA: '', desechadasB: '', observaciones: null, dosisPorFrasco: null };
+    return { numeroLote: '', caducidad: null, existenciaAnterior: '', recibido: '', aplicadasA: '', aplicadasB: '', desechadasA: '', desechadasB: '', observaciones: null, dosisPorFrasco: null, categoria: null };
   }
 
   // La celda de caducidad usa formato "mmm-yy" (capturado del estilo de la
@@ -163,6 +163,16 @@
     row.getCell(15).value = r.numeroLote || null;
     row.getCell(16).value = caducidad;
   }
+
+  // Colores capturados de la plantilla real para el bloque A.R.F. (texto
+  // rojo DE0000 sobre relleno rosa FFCDCD, ver fila 16 de la plantilla) --
+  // y su versión para Canje: mismo morado que ya usa el resto de BioVac en
+  // pantalla (--canje/--canje-bg en biovac.html), autorizado explícitamente
+  // a aplicarse aquí en vez del rojo, sin tocar bordes/estructura.
+  const ARF_FONT_ARGB = 'FFDE0000';
+  const ARF_FILL_ARGB = 'FFFFCDCD';
+  const CANJE_FONT_ARGB = 'FF7C3AED';
+  const CANJE_FILL_ARGB = 'FFF5F3FF';
 
   // Escribe un bloque completo, que puede combinar VARIOS biológicos bajo
   // un solo renglón "Total" compartido (caso real: COVID-19 MODERNA y
@@ -194,8 +204,20 @@
     for (let i = 0; i < listaArf.length; i++) {
       const { bio, renglon } = listaArf[i];
       const split = bio.regla_especial === 'SPLIT_DOSE';
-      aplicarEstiloFila(ws, fila, estilos.arf, split, estilos.alturaArf);
-      if (i === 0) ws.getCell(`A${fila}`).value = { richText: [{ text: 'A.R.F.\nEn dictamen o canje', font: { bold: true, color: { argb: 'FFFF0000' } } }] };
+      // A.R.F. y Canje comparten esta misma sección visual en el formulario
+      // oficial, pero son categorías distintas en el motor -- se
+      // distinguen por color: rojo (como la plantilla) para A.R.F., morado
+      // para Canje (mismo criterio que ya usa el resto de BioVac).
+      const esCanje = renglon.categoria === 'CANJE';
+      aplicarEstiloFila(ws, fila, estilos.arf, split, estilos.alturaArf, esCanje);
+      if (i === 0) {
+        ws.getCell(`A${fila}`).value = {
+          richText: [
+            { text: 'A.R.F.', font: { bold: true, color: { argb: 'FFFF0000' } } },
+            { text: '\nEn dictamen o canje', font: { bold: true, color: { theme: 1 } } }
+          ]
+        };
+      }
       escribirDatosRenglon(ws, fila, renglon, split);
       const dosis = renglon.dosisPorFrasco || bio.dosis_por_frasco || 1;
       escribirFormulasFila(ws, fila, bio, dosis, split);
@@ -209,7 +231,17 @@
     const observaciones = todasLasFilas.map((r) => r.observaciones).find((o) => o);
     if (observaciones) ws.getCell(`Q${inicioBloque}`).value = observaciones;
 
+    // Fusionar ANTES de aplicar el estilo capturado (no después): ExcelJS
+    // homogeniza el borde de las celdas no-ancla de un rango recién
+    // fusionado al de la celda ancla -- si se fusiona después de pintar,
+    // se pierde el borde "medium" del lado externo de C:D, F:G, H:J, K:M y
+    // O:P (mismo motivo documentado en aplicarEstiloFila).
     const filaTotal = fila;
+    ws.mergeCells(`C${filaTotal}:D${filaTotal}`);
+    ws.mergeCells(`F${filaTotal}:G${filaTotal}`);
+    ws.mergeCells(`H${filaTotal}:J${filaTotal}`);
+    ws.mergeCells(`K${filaTotal}:M${filaTotal}`);
+    ws.mergeCells(`O${filaTotal}:P${filaTotal}`);
     aplicarEstiloFilaTotal(ws, filaTotal, estilos.total, estilos.alturaTotal);
     ws.getCell(`A${filaTotal}`).value = 'Total';
     ws.getCell(`B${filaTotal}`).value = { formula: formulaTotal('B', 'B', inicioBloque, finArf, filaTotal) };
@@ -217,11 +249,6 @@
     ws.getCell(`H${filaTotal}`).value = { formula: formulaTotal('H', 'J', inicioBloque, finArf, filaTotal) };
     ws.getCell(`K${filaTotal}`).value = { formula: formulaTotal('K', 'M', inicioBloque, finArf, filaTotal) };
     ws.getCell(`N${filaTotal}`).value = { formula: formulaTotal('N', 'N', inicioBloque, finArf, filaTotal) };
-    ws.mergeCells(`C${filaTotal}:D${filaTotal}`);
-    ws.mergeCells(`F${filaTotal}:G${filaTotal}`);
-    ws.mergeCells(`H${filaTotal}:J${filaTotal}`);
-    ws.mergeCells(`K${filaTotal}:M${filaTotal}`);
-    ws.mergeCells(`O${filaTotal}:P${filaTotal}`);
 
     return filaTotal + 1;
   }
@@ -242,14 +269,28 @@
   // renglón A.R.F. (celda combinada de una sola fila) no quede con el
   // alto pensado para una fila normal de una sola línea, comprimiendo el
   // texto de 2 líneas "A.R.F.\nEn dictamen o canje".
-  function aplicarEstiloFila(ws, fila, plantillaFila, split, altura) {
+  //
+  // Fusionar H:J y K:M ANTES de pintar el estilo (no después): al fusionar,
+  // ExcelJS homogeniza el borde de las celdas no-ancla (I, J, L, M) al de
+  // la celda ancla (H, K) -- si se fusiona después de aplicar el estilo
+  // capturado de la plantilla, se pierde el borde "medium" que debía ir en
+  // el lado derecho del rango (J, M), quedando "thin" como el de en medio.
+  // Verificado: fusionar primero y pintar después sí conserva el borde
+  // distinto de cada celda del rango.
+  function aplicarEstiloFila(ws, fila, plantillaFila, split, altura, recolorCanje) {
     const row = ws.getRow(fila);
-    plantillaFila.forEach(({ col, style }) => { row.getCell(col).style = JSON.parse(JSON.stringify(style)); });
-    if (altura != null) row.height = altura;
     if (!split) {
       ws.mergeCells(`H${fila}:J${fila}`);
       ws.mergeCells(`K${fila}:M${fila}`);
     }
+    plantillaFila.forEach(({ col, style }) => {
+      let styleStr = JSON.stringify(style);
+      if (recolorCanje) {
+        styleStr = styleStr.split(ARF_FONT_ARGB).join(CANJE_FONT_ARGB).split(ARF_FILL_ARGB).join(CANJE_FILL_ARGB);
+      }
+      row.getCell(col).style = JSON.parse(styleStr);
+    });
+    if (altura != null) row.height = altura;
   }
 
   function aplicarEstiloFilaTotal(ws, fila, plantillaFila, altura) {
@@ -397,7 +438,7 @@
       existenciaAnterior: Number(r.existencia_anterior_frascos), recibido: Number(r.recibido_frascos),
       aplicadasA: Number(r.aplicadas_a), aplicadasB: Number(r.aplicadas_b),
       desechadasA: Number(r.desechadas_a), desechadasB: Number(r.desechadas_b),
-      observaciones: r.observaciones
+      observaciones: r.observaciones, categoria: r.categoria
     };
   }
 
