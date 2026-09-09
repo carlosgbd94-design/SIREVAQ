@@ -177,3 +177,52 @@ drop trigger if exists trg_requi_valida_edicion_surtido on requi_items_jurisdicc
 create trigger trg_requi_valida_edicion_surtido
   before update on requi_items_jurisdiccion
   for each row execute function requi_trg_valida_edicion_surtido();
+
+-- ---------------------------------------------------------------------------
+-- "Cerrar mes" no bloquea edición -- ver requi_cerrar_mes_y_marca_corregido.sql
+-- para el detalle de por qué (el usuario lo pidió explícitamente). En vez de
+-- bloquear, cualquier escritura en surtido/reparto sobre una requisición ya
+-- CERRADA prende fue_corregido=true, visible en todos los niveles porque
+-- todos leen el mismo renglón de requi_requisiciones.
+-- ---------------------------------------------------------------------------
+
+create or replace function requi_trg_marca_corregido()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_req_id uuid;
+begin
+  if tg_op = 'DELETE' then
+    v_req_id := old.requisicion_id;
+  else
+    v_req_id := new.requisicion_id;
+  end if;
+
+  update requi_requisiciones
+    set fue_corregido = true
+    where id = v_req_id and estado = 'CERRADA';
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_requi_marca_corregido_items on requi_items_jurisdiccion;
+create trigger trg_requi_marca_corregido_items
+  after insert or update or delete on requi_items_jurisdiccion
+  for each row execute function requi_trg_marca_corregido();
+
+drop trigger if exists trg_requi_marca_corregido_municipio on requi_distribucion_municipio;
+create trigger trg_requi_marca_corregido_municipio
+  after insert or update or delete on requi_distribucion_municipio
+  for each row execute function requi_trg_marca_corregido();
+
+drop trigger if exists trg_requi_marca_corregido_unidad on requi_distribucion_unidad;
+create trigger trg_requi_marca_corregido_unidad
+  after insert or update or delete on requi_distribucion_unidad
+  for each row execute function requi_trg_marca_corregido();

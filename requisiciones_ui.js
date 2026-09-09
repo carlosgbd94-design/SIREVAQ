@@ -278,6 +278,7 @@ async function guardarCabecera() {
   if (error) { toast('No se pudo guardar la cabecera: ' + error.message, true); return; }
   estado.requisicion = data;
   toast('Requisición guardada.');
+  renderEstadoRequisicion();
   await cargarDatosRequisicion();
 }
 
@@ -288,6 +289,7 @@ async function cargarRequisicion() {
     .select('*').eq('anio', anio).eq('mes', mes).maybeSingle();
   if (error) { toast('Error al cargar: ' + error.message, true); return; }
   estado.requisicion = data;
+  renderEstadoRequisicion();
   if (!data) {
     $('contenidoRequisicion').style.display = 'none';
     $('hintCabecera').style.display = 'block';
@@ -297,6 +299,91 @@ async function cargarRequisicion() {
     return;
   }
   $('hintCabecera').style.display = 'none';
+  await cargarDatosRequisicion();
+}
+
+// ---------------------------------------------------------------------------
+// Estado (BORRADOR/CERRADA) + "Cerrar mes": ver requi_cerrar_mes_y_marca_
+// corregido.sql -- cerrar NO bloquea edición, solo dispara el aviso
+// "corregido posteriormente" si se vuelve a tocar algo después.
+// ---------------------------------------------------------------------------
+
+function renderEstadoRequisicion() {
+  const badges = $('badgesEstadoRequisicion');
+  const btnCerrar = $('btnCerrarMes');
+  const r = estado.requisicion;
+  if (!r) { badges.style.display = 'none'; btnCerrar.style.display = 'none'; return; }
+
+  const esCerrada = r.estado === 'CERRADA';
+  badges.style.display = 'inline-flex';
+  badges.innerHTML = `
+    <span class="pill ${esCerrada ? 'pill-ok' : 'pill-warn'}">${esCerrada ? 'Cerrada' : 'Borrador'}</span>
+    ${r.fue_corregido ? '<span class="pill pill-err">Corregido posteriormente</span>' : ''}
+  `;
+  btnCerrar.style.display = estado.puedeEditar && !esCerrada ? 'inline-flex' : 'none';
+}
+
+async function cerrarMes() {
+  if (!estado.puedeEditar || !estado.requisicion || estado.requisicion.estado === 'CERRADA') return;
+  const ok = confirm('¿Cerrar esta requisición? Se marca como enviada. Si después necesitas corregir algo, puedes seguir editándola aquí mismo -- quedará marcada como "corregida posteriormente" para que municipios y unidades lo sepan.');
+  if (!ok) return;
+  const { data, error } = await estado.db.from('requi_requisiciones')
+    .update({ estado: 'CERRADA', cerrado_en: new Date().toISOString(), fecha_envio: estado.requisicion.fecha_envio || ultimoDiaMes(estado.requisicion.anio, estado.requisicion.mes) })
+    .eq('id', estado.requisicion.id).select().single();
+  if (error) { toast('No se pudo cerrar: ' + error.message, true); return; }
+  estado.requisicion = data;
+  toast('Requisición cerrada.');
+  renderEstadoRequisicion();
+}
+
+// ---------------------------------------------------------------------------
+// Explorador -- historial de requisiciones capturadas. Salta directo al
+// registro elegido (no depende de que el año esté en el <select>: se le
+// asigna el valor si existe, pero la carga de datos usa el id real).
+// ---------------------------------------------------------------------------
+
+async function toggleExplorador() {
+  const panel = $('panelExplorador');
+  const abrir = panel.style.display === 'none';
+  panel.style.display = abrir ? 'block' : 'none';
+  if (!abrir) return;
+
+  const { data, error } = await estado.db.from('requi_requisiciones')
+    .select('*').order('anio', { ascending: false }).order('mes', { ascending: false });
+  if (error) { toast('No se pudo cargar el historial: ' + error.message, true); return; }
+  renderExplorador(data || []);
+}
+
+function renderExplorador(filas) {
+  $('tbodyExplorador').innerHTML = filas.map((r) => {
+    const mesInfo = MESES.find((m) => m.v === r.mes);
+    const esCerrada = r.estado === 'CERRADA';
+    return `
+      <tr class="${estado.requisicion && estado.requisicion.id === r.id ? 'activa' : ''}">
+        <td><strong>${mesInfo ? mesInfo.l : r.mes} ${r.anio}</strong></td>
+        <td><span class="pill ${esCerrada ? 'pill-ok' : 'pill-warn'}">${esCerrada ? 'Cerrada' : 'Borrador'}</span></td>
+        <td>${r.fue_corregido ? '<span class="pill pill-err">Corregido</span>' : ''}</td>
+        <td>${r.fecha_envio ? formatMmmAa(r.fecha_envio) : '—'}</td>
+        <td>${r.creado_por || '—'}</td>
+        <td><button class="btn btn-outline btn-sm btn-abrir-historial" data-id="${r.id}">Abrir</button></td>
+      </tr>
+    `;
+  }).join('') || '<tr><td colspan="6" style="color:var(--muted)">Todavía no hay requisiciones capturadas.</td></tr>';
+
+  $('tbodyExplorador').querySelectorAll('.btn-abrir-historial').forEach((btn) => {
+    btn.addEventListener('click', () => abrirDesdeHistorial(btn.dataset.id, filas));
+  });
+}
+
+async function abrirDesdeHistorial(id, filas) {
+  const r = filas.find((f) => f.id === id);
+  if (!r) return;
+  if ([...$('selAnio').options].some((o) => o.value === String(r.anio))) $('selAnio').value = r.anio;
+  if ([...$('selMes').options].some((o) => o.value === String(r.mes))) $('selMes').value = r.mes;
+  estado.requisicion = r;
+  renderEstadoRequisicion();
+  $('hintCabecera').style.display = 'none';
+  $('panelExplorador').style.display = 'none';
   await cargarDatosRequisicion();
 }
 
@@ -576,13 +663,9 @@ function renderCajaRepartoMunicipio() {
   const cards = DESTINOS.map((m) => {
     const fila = filas.find((f) => f.municipio === m.v);
     const cantidad = fila ? Number(fila.cantidad) : 0;
-    const puedeSincronizar = estado.puedeEditar && fila && cantidad > 0 && MUNICIPIO_A_LOTES[m.v];
     return `
       <div class="destino-card">
-        <div class="destino-card-cabecera">
-          <label>${m.l}</label>
-          ${puedeSincronizar ? `<button class="icon-btn-pure solo-edicion" data-sync-muni="${m.v}" title="Sincronizar a Lotes"><span class="material-symbols-rounded">sync</span></button>` : ''}
-        </div>
+        <div class="destino-card-cabecera"><label>${m.l}</label></div>
         <input type="number" min="0" class="solo-edicion" id="dm-${m.v}" value="${cantidad}" data-municipio="${m.v}">
         <span class="solo-lectura" style="display:none;">${cantidad}</span>
       </div>
@@ -607,9 +690,6 @@ function renderCajaRepartoMunicipio() {
   caja.querySelectorAll('input[data-municipio]').forEach((inp) => {
     inp.addEventListener('change', () => guardarRepartoMunicipio(biologicoId, loteId, inp.dataset.municipio, inp));
   });
-  caja.querySelectorAll('[data-sync-muni]').forEach((btn) => {
-    btn.addEventListener('click', () => sincronizarLotePublico(btn.dataset.syncMuni, biologicoId, loteId));
-  });
 }
 
 async function guardarRepartoMunicipio(biologicoId, loteId, municipio, inputEl) {
@@ -628,26 +708,32 @@ async function guardarRepartoMunicipio(biologicoId, loteId, municipio, inputEl) 
   renderCajaRepartoMunicipio();
   renderSelectMunicipioYLotesPaso3();
   renderDestinosMasivos();
+  sincronizarLotePublico(municipio, biologicoId, loteId, cantidad); // en segundo plano, no bloquea el guardado
 }
 
-async function sincronizarLotePublico(municipio, biologicoId, loteId) {
+// Automático desde guardarRepartoMunicipio -- no es una acción que el
+// usuario dispare, así que nunca interrumpe con un toast: si el biológico
+// o el municipio no tienen equivalente en el sistema viejo (ej. Hospitales,
+// o un biológico que no existía cuando se armó ese catálogo), simplemente
+// no hay nada que sincronizar ahí. Si falla la escritura, no es grave --
+// solo afecta el autocompletado de caducidad en captura de aplicaciones,
+// no ningún conteo de inventario -- se reintenta solo en el siguiente
+// guardado de este mismo reparto.
+async function sincronizarLotePublico(municipio, biologicoId, loteId, cantidad) {
   const bio = estado.catalogo.find((b) => b.id === biologicoId);
   const lote = estado.items.find((i) => i.requi_biologico_id === biologicoId && i.lote_id === loteId);
   const nombreLotesTabla = bio ? CODIGO_A_LOTES_BIOLOGICO[bio.codigo_articulo] : null;
   const municipioLotesTabla = MUNICIPIO_A_LOTES[municipio];
-  if (!nombreLotesTabla || !municipioLotesTabla || !lote) {
-    toast('Este biológico no tiene equivalente en "Carga de lotes por municipio"; sincroniza ahí manualmente.', true);
-    return;
-  }
+  if (!nombreLotesTabla || !municipioLotesTabla || !lote) return;
+
   const numeroLote = lote.requi_lotes.numero_lote;
-  const caducidad = lote.requi_lotes.caducidad;
-  const { error: errDel } = await estado.db.from('lotes').delete()
+  await estado.db.from('lotes').delete()
     .eq('biologico', nombreLotesTabla).eq('lote', numeroLote).eq('municipio', municipioLotesTabla);
-  if (errDel) { toast('No se pudo sincronizar: ' + errDel.message, true); return; }
-  const { error: errIns } = await estado.db.from('lotes')
-    .insert({ biologico: nombreLotesTabla, lote: numeroLote, caducidad, municipio: municipioLotesTabla, tipo: 'NORMAL' });
-  if (errIns) { toast('No se pudo sincronizar: ' + errIns.message, true); return; }
-  toast(`Sincronizado con "Carga de lotes por municipio" (${municipioLotesTabla}).`);
+  // cantidad 0 = ya no se reparte a este municipio -- se queda borrado, no se reinserta.
+  if (cantidad > 0) {
+    await estado.db.from('lotes')
+      .insert({ biologico: nombreLotesTabla, lote: numeroLote, caducidad: lote.requi_lotes.caducidad, municipio: municipioLotesTabla, tipo: 'NORMAL' });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1002,4 +1088,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('btnAbrirExportar').addEventListener('click', (ev) => { ev.stopPropagation(); togglePanelExportar(); });
   $('panelExportar').addEventListener('click', (ev) => ev.stopPropagation());
   document.addEventListener('click', () => togglePanelExportar(true));
+  $('btnAbrirExplorador').addEventListener('click', toggleExplorador);
+  $('btnCerrarMes').addEventListener('click', cerrarMes);
 });

@@ -206,6 +206,13 @@
     padding: 16px; box-shadow: var(--shadow-2);
   }
 
+  /* Explorador de historial -- panel de ancho completo (no flotante como el
+     de exportar) porque su contenido es una tabla que necesita todo el
+     espacio disponible para leerse bien. */
+  .panel-explorador { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--outline-variant); }
+  #tbodyExplorador tr.activa td { background: #eff6ff; }
+  #tbodyExplorador tr.activa td:first-child { border-left: 3px solid var(--secondary); }
+
   /* Paso 3 -- diseño con más jerarquía visual. El sticky-header (position,
      z-index, fondo) de .tbl-unidades y el resumen (.franja-estado) ya los
      define el bloque de arriba (compartido con .tbl y con Paso 2) -- aquí
@@ -245,11 +252,12 @@
             </button>
           </div>
         </div>
+        <button class="icon-btn-pure" id="btnAbrirExplorador" title="Historial de requisiciones"><span class="material-symbols-rounded">history</span></button>
         <span class="badge-role" id="badgeRol">Cargando sesión…</span>
       </div>
     </div>
 
-    <div class="barra" style="margin-top:16px;">
+    <div class="barra" style="margin-top:16px; align-items:center;">
       <div class="campo">
         <label>Año</label>
         <select id="selAnio"></select>
@@ -264,8 +272,22 @@
       <button class="btn btn-outline" id="btnCargar">
         <span class="material-symbols-rounded">refresh</span> Cargar
       </button>
+      <span id="badgesEstadoRequisicion" style="display:none; gap:6px; align-items:center;"></span>
+      <button class="btn btn-outline btn-sm solo-edicion" id="btnCerrarMes" style="display:none; margin-left:auto;">
+        <span class="material-symbols-rounded" style="font-size:14px">lock</span> Cerrar mes
+      </button>
     </div>
     <div class="hint" id="hintCabecera" style="margin-top:12px; display:none;"></div>
+
+    <div class="panel-explorador" id="panelExplorador" style="display:none;">
+      <p class="hint" style="margin-bottom:10px;">Historial de requisiciones capturadas -- da clic en "Abrir" para saltar directo a ese mes.</p>
+      <div class="tbl-scroll" style="max-height:280px;">
+        <table class="tbl">
+          <thead><tr><th>Mes</th><th>Estado</th><th></th><th>Fecha de envío</th><th>Creó</th><th></th></tr></thead>
+          <tbody id="tbodyExplorador"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div class="tarjeta solo-edicion">

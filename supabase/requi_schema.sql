@@ -100,6 +100,12 @@ create table if not exists requi_requisiciones (
   creado_por text,
   creado_en timestamptz not null default now(),
   cerrado_en timestamptz,
+  -- "Cerrar mes" NO bloquea edición (a diferencia de Biovac) -- se puede
+  -- seguir corrigiendo, pero cualquier cambio hecho después de cerrar
+  -- prende esta bandera (ver requi_cerrar_mes_y_marca_corregido.sql), y como
+  -- jurisdicción/municipios/unidades leen el mismo renglón, el aviso les
+  -- llega a todos sin trabajo extra.
+  fue_corregido boolean not null default false,
   unique (anio, mes)
 );
 
