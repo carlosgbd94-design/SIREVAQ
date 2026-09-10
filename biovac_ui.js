@@ -703,21 +703,22 @@ function renderPanelAgregar(bio) {
   <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
     <div class="campos">
       <div class="campo">
-        <label>N° de lote</label>
-        <select data-nuevo-lote><option value="">Selecciona un lote…</option></select>
-        <span class="ayuda">Solo lotes ya dados de alta en Carga de lotes por municipio</span>
-      </div>
-      <div class="campo">
-        <label>Caducidad</label>
-        <input type="text" data-nuevo-caducidad placeholder="Se completa al elegir el lote" readonly>
-      </div>
-      <div class="campo">
-        <label>Estatus</label>
+        <label>1. Estatus</label>
         <select data-nuevo-categoria>
+          <option value="">Selecciona el Estatus…</option>
           <option value="NORMAL">Normal</option>
           <option value="ARF">A.R.F. (en dictamen)</option>
           <option value="CANJE">Canje</option>
         </select>
+      </div>
+      <div class="campo" style="width:260px">
+        <label>2. N° de lote</label>
+        <select data-nuevo-lote disabled><option value="">Primero elige el Estatus…</option></select>
+        <span class="ayuda">Lotes dados de alta en Carga de lotes por municipio -- para A.R.F. se ofrecen también los lotes dados de alta como Normal, porque suele ser el mismo lote en dictamen</span>
+      </div>
+      <div class="campo">
+        <label>Caducidad</label>
+        <input type="text" data-nuevo-caducidad placeholder="Se completa al elegir el lote" readonly>
       </div>
       <div class="campo">
         <label>Esta cantidad es...</label>
@@ -910,17 +911,36 @@ async function eliminarRenglon(renglonId) {
 // Lotes disponibles desde el catálogo central (tabla "lotes") para ofrecer
 // en la lista desplegable -- filtrados por biológico, por el municipio de
 // la unidad activa (o "*"/"TODOS", registrado para toda la jurisdicción) y
-// por tipo (NORMAL/ARF/CANJE, según el Estatus elegido). Cacheado por
-// bio+categoría+municipio dentro de la sesión (el municipio va en la llave
-// porque una sesión JURISDICCIONAL/ADMIN puede ver varias unidades sin
-// recargar la página -- sin el municipio en la llave, ver primero un
-// municipio CON canje y luego otro SIN canje reusaba por error la lista del
-// primero). Solo se cachea un resultado NO VACÍO -- si en el catálogo
-// central aún no había nada para esa combinación (ej. un canje que otro
-// usuario registra en la app principal mientras esta pestaña sigue
-// abierta), la próxima vez que se abra el panel se vuelve a consultar en
-// vez de quedarse con el "no hay nada" de la primera vez.
+// por tipo, según el Estatus elegido. El Estatus se elige PRIMERO a
+// propósito: es el dato que decide contra qué columna de la matriz de
+// lotes se busca, así que "N° de lote" se queda deshabilitado hasta que
+// haya un Estatus elegido, en vez de asumir "Normal" en silencio -- eso
+// era justo lo que escondía los lotes de A.R.F./Canje: el desplegable de
+// lote nunca llegaba a pedirse con esa categoría si el Estatus no se
+// tocaba.
+//
+// A.R.F. es un caso especial al mapear el Estatus a tipo(s) de la matriz:
+// un lote en dictamen casi siempre ES el mismo lote ya dado de alta como
+// Normal (una parte de ese mismo lote queda retenida en revisión, no es
+// un lote distinto recibido aparte) -- por eso el Tipo "A.R.F." en la
+// matriz central casi nunca se usa en la práctica, y exigirlo dejaba el
+// desplegable vacío aunque el lote sí existiera. Para Estatus=A.R.F. se
+// ofrecen los lotes con tipo NORMAL o ARF de la matriz; Canje sigue
+// exigiendo tipo CANJE estricto, porque ahí sí son lotes físicamente
+// distintos (el lote nuevo que llega a cambio del que se retira).
+//
+// Cacheado por bio+categoría+municipio dentro de la sesión (el municipio
+// va en la llave porque una sesión JURISDICCIONAL/ADMIN puede ver varias
+// unidades sin recargar la página -- sin el municipio en la llave, ver
+// primero un municipio CON canje y luego otro SIN canje reusaba por error
+// la lista del primero). Solo se cachea un resultado NO VACÍO -- si en el
+// catálogo central aún no había nada para esa combinación (ej. un canje
+// que otro usuario registra en la app principal mientras esta pestaña
+// sigue abierta), la próxima vez que se abra el panel se vuelve a
+// consultar en vez de quedarse con el "no hay nada" de la primera vez.
 // ---------------------------------------------------------------------------
+
+const TIPOS_MATRIZ_POR_CATEGORIA = { NORMAL: ['NORMAL'], ARF: ['NORMAL', 'ARF'], CANJE: ['CANJE'] };
 
 async function obtenerLotesCatalogoCentral(bio, categoria) {
   const unidad = estado.unidades.find((u) => u.id === estado.movimiento.unidad_id);
@@ -931,9 +951,10 @@ async function obtenerLotesCatalogoCentral(bio, categoria) {
   const key = bio.clave + '::' + categoria + '::' + municipioLotes;
   if (estado.catalogoLotesCentral[key]?.length) return estado.catalogoLotesCentral[key];
 
+  const tiposMatriz = TIPOS_MATRIZ_POR_CATEGORIA[categoria] || [categoria];
   const { data, error } = await estado.db.from('lotes')
     .select('lote, caducidad, municipio')
-    .in('biologico', nombres).eq('tipo', categoria);
+    .in('biologico', nombres).in('tipo', tiposMatriz);
   if (error) { console.error('[BioVac] Error consultando catálogo central de lotes:', error); return []; }
   if (!data) return [];
 
@@ -978,6 +999,7 @@ function lotesYaEnMovimiento(bioId, categoria) {
 // pueden seleccionar de nuevo -- ese lote ya está en la tabla de arriba, se
 // edita ahí directamente.
 async function poblarSelectLote(bio, categoria, selectEl) {
+  selectEl.disabled = true;
   selectEl.innerHTML = '<option value="">Cargando lotes…</option>';
   const lista = await obtenerLotesCatalogoCentral(bio, categoria);
   const yaUsados = lotesYaEnMovimiento(bio.id, categoria);
@@ -987,8 +1009,17 @@ async function poblarSelectLote(bio, categoria, selectEl) {
       return `<option value="${l.lote}" data-cad="${l.caducidad || ''}" ${usado ? 'disabled' : ''}>${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}${usado ? ' (ya agregado en este movimiento)' : ''}</option>`;
     })
     .join('');
-  const vacio = !lista.length ? '<option value="" disabled>Sin lotes dados de alta para este municipio -- regístralo en Carga de lotes por municipio</option>' : '';
+  const vacio = !lista.length ? '<option value="" disabled>Sin lotes con este Estatus dados de alta para este municipio -- regístralo en Carga de lotes por municipio</option>' : '';
   selectEl.innerHTML = `<option value="">Selecciona un lote…</option>${opciones}${vacio}`;
+  selectEl.disabled = false;
+}
+
+// Deja "N° de lote" deshabilitado con un texto que explica por qué, en vez
+// de mostrarlo vacío sin más -- se usa mientras todavía no hay un Estatus
+// elegido en el panel de "Agregar lote".
+function resetearSelectLote(selectEl, placeholder) {
+  selectEl.innerHTML = `<option value="">${placeholder}</option>`;
+  selectEl.disabled = true;
 }
 
 // Al elegir un lote de la matriz, su caducidad se completa sola y queda de
@@ -1003,15 +1034,18 @@ function onCambioSelectLote(selectEl) {
   campoCaducidad.value = cad ? formatMmmAa(cad) : '';
 }
 
-// "Agregar lote": la lista depende del Estatus elegido (Normal/A.R.F./Canje)
-// -- se repuebla cada vez que el panel se abre y cada vez que cambia el
-// Estatus.
+// "Agregar lote": el Estatus (Normal/A.R.F./Canje) se elige PRIMERO -- hasta
+// entonces "N° de lote" se queda deshabilitado, para que sea imposible
+// dejarlo en un Estatus por default sin darse cuenta (la causa real de que
+// los lotes de A.R.F./Canje "no aparecieran": el desplegable de lote nunca
+// llegaba a pedirse con esa categoría si el Estatus no se tocaba).
 function poblarSelectLoteAgregar(panel) {
   const bio = estado.biologicos.find((b) => b.id === panel.dataset.bio);
-  const selectEl = panel.querySelector('[data-nuevo-lote]');
-  if (!bio || !selectEl) return;
-  const categoria = panel.querySelector('[data-nuevo-categoria]')?.value || 'NORMAL';
-  poblarSelectLote(bio, categoria, selectEl);
+  const selectLote = panel.querySelector('[data-nuevo-lote]');
+  const categoria = panel.querySelector('[data-nuevo-categoria]')?.value || '';
+  if (!bio || !selectLote) return;
+  if (!categoria) { resetearSelectLote(selectLote, 'Primero elige el Estatus…'); return; }
+  poblarSelectLote(bio, categoria, selectLote);
 }
 
 // Resolución de canje: el lote nuevo siempre entra como existencia normal.
