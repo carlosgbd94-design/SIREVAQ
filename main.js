@@ -9456,7 +9456,7 @@ async function refreshLotesAdmin() {
 function tipoLoteBadgeHtml(tipo) {
   const t = tipo || "NORMAL";
   if (t === "ARF") return `<div class="status-pill bad" title="A.R.F. — en dictamen"><span class="material-symbols-rounded" style="font-size:16px">gavel</span>A.R.F.</div>`;
-  if (t === "CANJE") return `<div class="status-pill warn" title="Canje"><span class="material-symbols-rounded" style="font-size:16px">sync_alt</span>CANJE</div>`;
+  if (t === "CANJE") return `<div class="status-pill canje" title="Canje"><span class="material-symbols-rounded" style="font-size:16px">sync_alt</span>CANJE</div>`;
   return `<div class="status-pill ok" title="Normal — visible en captura de existencia"><span class="material-symbols-rounded" style="font-size:16px">check_circle</span>NORMAL</div>`;
 }
 

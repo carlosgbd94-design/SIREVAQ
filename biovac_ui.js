@@ -134,11 +134,18 @@ function toast(msg, tipo) {
 // Reemplaza confirm()/prompt() nativos del navegador por un modal propio.
 // Sin pedirMotivo: resuelve true (Aceptar) / false (Cancelar o Escape).
 // Con pedirMotivo: resuelve el texto escrito (no vacío) / null si se cancela.
-function mostrarModal({ titulo, mensaje, pedirMotivo = false, placeholderMotivo = '', textoAceptar = 'Aceptar', peligro = false }) {
+// `detalleHtml` es HTML de verdad (a diferencia de `mensaje`, que siempre es
+// texto plano vía textContent) -- úsalo solo con contenido que tú mismo
+// construyes a partir de datos ya de confianza (catálogos, no texto libre
+// de un usuario), como la lista de lotes en ofrecerCargaDesdeRequisiciones.
+function mostrarModal({ titulo, mensaje, detalleHtml = '', pedirMotivo = false, placeholderMotivo = '', textoAceptar = 'Aceptar', peligro = false }) {
   return new Promise((resolve) => {
     const overlay = document.getElementById('modalOverlay');
     document.getElementById('modalTitulo').textContent = titulo;
     document.getElementById('modalMensaje').textContent = mensaje;
+    const modalDetalle = document.getElementById('modalDetalle');
+    modalDetalle.style.display = detalleHtml ? 'flex' : 'none';
+    modalDetalle.innerHTML = detalleHtml;
     const campoMotivo = document.getElementById('modalCampoMotivo');
     const inputMotivo = document.getElementById('modalInputMotivo');
     campoMotivo.style.display = pedirMotivo ? 'block' : 'none';
@@ -304,29 +311,45 @@ async function ofrecerCargaDesdeRequisiciones() {
       .map((r) => r.biovac_lotes.biologico_id + '::' + r.biovac_lotes.numero_lote)
   );
 
+  // dosis_por_frasco/frascos se calculan aquí, antes de mostrar el modal,
+  // para que el detalle que se le enseña al usuario sea EXACTAMENTE lo que
+  // luego se inserta -- no una aproximación aparte que podría desincronizarse.
   const candidatos = reparto
     .filter((r) => r.requi_catalogo_biologicos.biovac_biologico_id)
-    .filter((r) => !yaCargados.has(r.requi_catalogo_biologicos.biovac_biologico_id + '::' + r.requi_lotes.numero_lote));
+    .filter((r) => !yaCargados.has(r.requi_catalogo_biologicos.biovac_biologico_id + '::' + r.requi_lotes.numero_lote))
+    .map((r) => {
+      const bio = estado.biologicos.find((b) => b.id === r.requi_catalogo_biologicos.biovac_biologico_id);
+      const dosisPorFrasco = bio ? Number(bio.dosis_por_frasco) || 1 : 1;
+      return { ...r, bio, dosisPorFrasco, frascos: Math.round((Number(r.cantidad) / dosisPorFrasco) * 100) / 100 };
+    });
   if (!candidatos.length) return;
 
-  const detalle = candidatos
-    .map((c) => `• ${c.requi_catalogo_biologicos.nombre} — Lote ${c.requi_lotes.numero_lote} (${c.cantidad} pzas)`)
-    .join('\n');
+  // Con 1 solo lote un párrafo corrido se lee bien, pero con varios
+  // biológicos/lotes a la vez se volvía una sola oración larguísima sin
+  // ninguna separación visual -- ahora cada uno es su propia tarjeta, con
+  // el mismo dato de frascos que de verdad se va a guardar.
+  const detalleHtml = candidatos.map((c) => `
+    <div class="modal-detalle-item">
+      <span class="bio">${c.requi_catalogo_biologicos.nombre}</span>
+      <div class="detalle-fila"><span>Lote ${c.requi_lotes.numero_lote}</span><b>${c.cantidad} pzas → ${c.frascos} frasco(s)</b></div>
+    </div>
+  `).join('');
   const aceptar = await mostrarModal({
     titulo: 'Cargar recibido desde Requisiciones',
     mensaje: `Requisiciones ya repartió ${candidatos.length} lote(s) a este municipio para este mes`
-      + (requisicion.folio_oracle ? ` (folio ${requisicion.folio_oracle})` : '') + `:\n\n${detalle}\n\n`
-      + `¿Deseas cargarlos aquí como recibido? La cantidad se convierte de piezas a frascos según el catálogo -- revísala antes de cerrar el mes.`,
+      + (requisicion.folio_oracle ? ` (folio ${requisicion.folio_oracle})` : '') + '. '
+      + '¿Deseas cargarlos aquí como recibido? Revisa la conversión a frascos antes de cerrar el mes.',
+    detalleHtml,
     textoAceptar: 'Sí, cargar'
   });
   if (!aceptar) return;
 
   let cargados = 0;
   for (const c of candidatos) {
-    const bio = estado.biologicos.find((b) => b.id === c.requi_catalogo_biologicos.biovac_biologico_id);
+    const bio = c.bio;
     if (!bio) continue;
-    const dosisPorFrasco = Number(bio.dosis_por_frasco) || 1;
-    const frascos = Math.round((Number(c.cantidad) / dosisPorFrasco) * 100) / 100;
+    const dosisPorFrasco = c.dosisPorFrasco;
+    const frascos = c.frascos;
 
     let { data: lote } = await estado.db.from('biovac_lotes')
       .select('id').eq('biologico_id', bio.id).eq('numero_lote', c.requi_lotes.numero_lote).maybeSingle();
@@ -888,23 +911,25 @@ async function eliminarRenglon(renglonId) {
 // en la lista desplegable -- filtrados por biológico, por el municipio de
 // la unidad activa (o "*"/"TODOS", registrado para toda la jurisdicción) y
 // por tipo (NORMAL/ARF/CANJE, según el Estatus elegido). Cacheado por
-// bio+categoría dentro de la sesión; se invalida solo al cambiar de unidad
-// (cargarCatalogo se llama una sola vez al inicio, así que en la práctica
-// dura toda la sesión de captura). Solo se cachea un resultado NO VACÍO --
-// si en el catálogo central aún no había nada para ese bio+categoría (ej.
-// un canje que otro usuario registra en la app principal mientras esta
-// pestaña sigue abierta), la próxima vez que se abra el panel se vuelve a
-// consultar en vez de quedarse con el "no hay nada" de la primera vez.
+// bio+categoría+municipio dentro de la sesión (el municipio va en la llave
+// porque una sesión JURISDICCIONAL/ADMIN puede ver varias unidades sin
+// recargar la página -- sin el municipio en la llave, ver primero un
+// municipio CON canje y luego otro SIN canje reusaba por error la lista del
+// primero). Solo se cachea un resultado NO VACÍO -- si en el catálogo
+// central aún no había nada para esa combinación (ej. un canje que otro
+// usuario registra en la app principal mientras esta pestaña sigue
+// abierta), la próxima vez que se abra el panel se vuelve a consultar en
+// vez de quedarse con el "no hay nada" de la primera vez.
 // ---------------------------------------------------------------------------
 
 async function obtenerLotesCatalogoCentral(bio, categoria) {
-  const key = bio.clave + '::' + categoria;
-  if (estado.catalogoLotesCentral[key]?.length) return estado.catalogoLotesCentral[key];
-
   const unidad = estado.unidades.find((u) => u.id === estado.movimiento.unidad_id);
   const nombres = CLAVE_A_EXISTENCIA_BIOLOGICO[bio.clave];
   const municipioLotes = unidad ? MUNICIPIO_BIOVAC_A_LOTES[unidad.municipio] : null;
   if (!nombres || !municipioLotes) return [];
+
+  const key = bio.clave + '::' + categoria + '::' + municipioLotes;
+  if (estado.catalogoLotesCentral[key]?.length) return estado.catalogoLotesCentral[key];
 
   const { data, error } = await estado.db.from('lotes')
     .select('lote, caducidad, municipio')

@@ -2147,6 +2147,9 @@ label,
 .status-pill.ok { background: #dcfce7; color: #166534; border: 1.5px solid #bbf7d0; }
 .status-pill.warn { background: #fef3c7; color: #92400e; border: 1.5px solid #fde68a; }
 .status-pill.bad { background: #fee2e2; color: #b91c1c; border: 1.5px solid #fecaca; }
+/* Morado de Canje: mismo tono que ya usa Movimiento de Biológico (--canje en
+   biovac.html), para que el estatus se lea igual en ambas pantallas. */
+.status-pill.canje { background: #f5f3ff; color: #6d28d9; border: 1.5px solid #ddd6fe; }
 .status-pill.bad.imminent { 
   background: #fef2f2; 
   color: #991b1b; 
@@ -12013,6 +12016,11 @@ html body .modern-input-group input[type="date"]:focus,
   animation: pulse-red 2.5s infinite alternate ease-in-out;
 }
 
+.status-pill.canje {
+  box-shadow: 0 0 10px rgba(124, 58, 237, 0.15);
+  animation: pulse-purple 2.5s infinite alternate ease-in-out;
+}
+
 @keyframes pulse-green {
   0% { box-shadow: 0 0 4px rgba(16, 185, 129, 0.1); }
   100% { box-shadow: 0 0 12px rgba(16, 185, 129, 0.35); }
@@ -12021,6 +12029,11 @@ html body .modern-input-group input[type="date"]:focus,
 @keyframes pulse-yellow {
   0% { box-shadow: 0 0 4px rgba(245, 158, 11, 0.1); }
   100% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.35); }
+}
+
+@keyframes pulse-purple {
+  0% { box-shadow: 0 0 4px rgba(124, 58, 237, 0.1); }
+  100% { box-shadow: 0 0 12px rgba(124, 58, 237, 0.35); }
 }
 
 @keyframes pulse-red {
@@ -12218,6 +12231,11 @@ html body .modern-input-group input[type="date"]:focus,
   animation: pulse-red 2.5s infinite alternate ease-in-out;
 }
 
+.status-pill.canje {
+  box-shadow: 0 0 10px rgba(124, 58, 237, 0.15);
+  animation: pulse-purple 2.5s infinite alternate ease-in-out;
+}
+
 @keyframes pulse-green {
   0% { box-shadow: 0 0 4px rgba(16, 185, 129, 0.1); }
   100% { box-shadow: 0 0 12px rgba(16, 185, 129, 0.35); }
@@ -12226,6 +12244,11 @@ html body .modern-input-group input[type="date"]:focus,
 @keyframes pulse-yellow {
   0% { box-shadow: 0 0 4px rgba(245, 158, 11, 0.1); }
   100% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.35); }
+}
+
+@keyframes pulse-purple {
+  0% { box-shadow: 0 0 4px rgba(124, 58, 237, 0.1); }
+  100% { box-shadow: 0 0 12px rgba(124, 58, 237, 0.35); }
 }
 
 @keyframes pulse-red {

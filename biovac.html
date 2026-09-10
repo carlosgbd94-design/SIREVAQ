@@ -14,7 +14,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.1"></script>
 <script defer src="biovac_importer.js?v=2026.2"></script>
-<script defer src="biovac_ui.js?v=2026.10"></script>
+<script defer src="biovac_ui.js?v=2026.11"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -356,6 +356,20 @@
   .modal-caja h3 { margin: 0 0 8px; font-family: 'Poppins', sans-serif; font-size: 16px; color: var(--primary); }
   .modal-caja p { margin: 0 0 6px; font-size: 13px; color: var(--muted); line-height: 1.5; }
   .modal-caja .campo { margin-top: 14px; }
+
+  /* Detalle estructurado (ej. lista de lotes a cargar desde Requisiciones):
+     #modalMensaje es texto plano (textContent, sin riesgo de HTML injection
+     para el resto de los usos del modal) -- esta lista aparte sí acepta
+     HTML, para que con varios biológicos/lotes a la vez cada uno se lea
+     como su propia tarjeta en vez de un párrafo corrido con viñetas. */
+  .modal-detalle { max-height: 220px; overflow-y: auto; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+  .modal-detalle-item {
+    background: var(--surface-container); border: 1px solid var(--outline-variant); border-radius: 10px;
+    padding: 8px 10px; font-size: 12px;
+  }
+  .modal-detalle-item .bio { font-weight: 800; color: var(--text); display: block; margin-bottom: 2px; }
+  .modal-detalle-item .detalle-fila { display: flex; justify-content: space-between; color: var(--muted); gap: 8px; }
+  .modal-detalle-item .detalle-fila b { color: var(--primary); font-weight: 800; }
   .modal-acciones { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
   .toast {
@@ -526,6 +540,7 @@
   <div class="modal-caja">
     <h3 id="modalTitulo"></h3>
     <p id="modalMensaje"></p>
+    <div id="modalDetalle" class="modal-detalle" style="display:none"></div>
     <div id="modalCampoMotivo" class="campo" style="display:none">
       <label>Motivo</label>
       <input type="text" id="modalInputMotivo" placeholder="">
