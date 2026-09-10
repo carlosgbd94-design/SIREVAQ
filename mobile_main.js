@@ -1,4 +1,71 @@
 (() => {
+    // 💉 SIREVAQ_CATALOG: Copia local del catálogo único de biológicos (main.js no se carga en mobile.html).
+    // Debe mantenerse en sincronía con la definición homónima en main.js.
+    if (!window.SIREVAQ_CATALOG) {
+        window.SIREVAQ_CATALOG = {
+            "bcg":            { key: "bcg", label: "BCG", isEsquemaBasico: true, requiresPriorHistory: false, dosesPerVial: 10, color: "#3B82F6" },
+            "hepatitis_b":    { key: "hepatitis_b", label: "HEPATITIS B", isEsquemaBasico: true, requiresPriorHistory: false, dosesPerVial: 10, color: "#2563EB" },
+            "hexavalente":    { key: "hexavalente", label: "HEXAVALENTE", isEsquemaBasico: true, requiresPriorHistory: false, dosesPerVial: 1, color: "#059669" },
+            "dpt":            { key: "dpt", label: "DPT", isEsquemaBasico: true, requiresPriorHistory: false, dosesPerVial: 10, color: "#D97706" },
+            "rotavirus":      { key: "rotavirus", label: "ROTAVIRUS", isEsquemaBasico: true, requiresPriorHistory: false, dosesPerVial: 1, color: "#7C3AED" },
+            "neumococica_13": { key: "neumococica_13", label: "NEUMOCÓCICA 13", isEsquemaBasico: true, requiresPriorHistory: true, dosesPerVial: 1, color: "#3D405B" },
+            "neumococica_20": { key: "neumococica_20", label: "NEUMOCÓCICA 20", isEsquemaBasico: true, requiresPriorHistory: true, dosesPerVial: 1, color: "#4B5563" },
+            "srp":            { key: "srp", label: "SRP", isEsquemaBasico: true, requiresPriorHistory: false, dosesPerVial: 1, color: "#DC2626" },
+            "sr":             { key: "sr", label: "SR", isEsquemaBasico: true, requiresPriorHistory: false, dosesPerVial: 10, color: "#EA580C" },
+            "vph":            { key: "vph", label: "VPH", isEsquemaBasico: false, requiresPriorHistory: false, dosesPerVial: 1, color: "#DB2777" },
+            "varicela":       { key: "varicela", label: "VARICELA", isEsquemaBasico: false, requiresPriorHistory: false, dosesPerVial: 1, color: "#9333EA" },
+            "hepatitis_a":    { key: "hepatitis_a", label: "HEPATITIS A", isEsquemaBasico: true, requiresPriorHistory: false, dosesPerVial: 1, color: "#0284C7" },
+            "td":             { key: "td", label: "TD", isEsquemaBasico: true, requiresPriorHistory: false, dosesPerVial: 10, color: "#65A30D" },
+            "tdpa":           { key: "tdpa", label: "TDPA", isEsquemaBasico: true, requiresPriorHistory: false, dosesPerVial: 1, color: "#16A34A" },
+            "covid_19":       { key: "covid_19", label: "COVID-19", isEsquemaBasico: false, requiresPriorHistory: false, dosesPerVial: 6, color: "#0891B2" },
+            "influenza":      { key: "influenza", label: "INFLUENZA", isEsquemaBasico: false, requiresPriorHistory: false, dosesPerVial: 10, color: "#CA8A04" },
+            "vsr":            { key: "vsr", label: "VSR", isEsquemaBasico: true, requiresPriorHistory: false, dosesPerVial: 1, color: "#4F46E5" }
+        };
+    }
+
+    if (!window.normalizeBioKey) {
+        window.normalizeBioKey = function(str) {
+            if (!str) return "";
+            const raw = String(str).toLowerCase()
+                .normalize("NFD")
+                .replace(new RegExp("[̀-ͯ]", "g"), "")
+                .replace(/[^a-z0-9]/g, "");
+
+            if (raw.includes("neumo")) return raw.includes("20") ? "neumococica_20" : "neumococica_13";
+            if (raw.includes("hepatitisb")) return "hepatitis_b";
+            if (raw.includes("hepatitisa")) return "hepatitis_a";
+            if (raw.includes("hexavalente") || raw.includes("hexa")) return "hexavalente";
+            if (raw.includes("rotavirus") || raw.includes("rotav")) return "rotavirus";
+            if (raw.includes("varic")) return "varicela";
+            if (raw.includes("influ")) return "influenza";
+            if (raw.includes("covid")) return "covid_19";
+            if (raw.includes("tdpa")) return "tdpa";
+            if (raw === "td" || raw.includes("td")) return "td";
+            if (raw.includes("vsr")) return "vsr";
+            if (raw.includes("srp")) return "srp";
+            if (raw === "sr" || raw.includes("sr")) return "sr";
+            if (raw.includes("vph")) return "vph";
+            if (raw.includes("dpt")) return "dpt";
+            if (raw.includes("bcg")) return "bcg";
+
+            return raw;
+        };
+    }
+
+    if (!window.getBioMetadata) {
+        window.getBioMetadata = function(str) {
+            const key = window.normalizeBioKey(str);
+            return window.SIREVAQ_CATALOG[key] || { key: key, label: String(str || '').toUpperCase().trim(), isEsquemaBasico: false, requiresPriorHistory: false, dosesPerVial: 10, color: "#64748B" };
+        };
+    }
+
+    if (!window.isBioEsquemaBasico) {
+        window.isBioEsquemaBasico = function(str) {
+            const meta = window.getBioMetadata(str);
+            return Boolean(meta && meta.isEsquemaBasico);
+        };
+    }
+
     // --- Configuración Global ---
     const SUPABASE_URL = "https://utclfqjietlxzlorxhrs.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0Y2xmcWppZXRseHpsb3J4aHJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNTYyNTQsImV4cCI6MjA5MTkzMjI1NH0.EgDK7xkSZHZyUlGF5m2C7bZjrfkx1M8cBXzxIFedDa4"; 
