@@ -294,7 +294,7 @@ async function cargarRequisicion() {
     $('contenidoRequisicion').style.display = 'none';
     $('hintCabecera').style.display = 'block';
     $('hintCabecera').innerHTML = estado.puedeEditar
-      ? 'No existe requisición para este mes todavía. Presiona "Guardar / Abrir requisición" para crearla.'
+      ? 'No existe requisición para este mes todavía. Presiona el botón de guardar (💾) para crearla.'
       : 'No existe requisición capturada para este mes.';
     return;
   }
@@ -415,6 +415,10 @@ function itemsDe(biologicoId) {
   return estado.items.filter((i) => i.requi_biologico_id === biologicoId);
 }
 
+function textoClave(bio) {
+  return bio.codigo_articulo ? `${bio.clave_articulo} · ${bio.codigo_articulo}` : bio.clave_articulo;
+}
+
 function filasBiologicoHtml(bio, idx) {
   const items = itemsDe(bio.id);
   const total = items.reduce((acc, i) => acc + Number(i.cantidad_surtida || 0), 0);
@@ -422,7 +426,13 @@ function filasBiologicoHtml(bio, idx) {
   return `
     <tr class="fila-bio" data-bio="${bio.id}">
       <td>${idx + 1}</td>
-      <td><strong>${bio.nombre}</strong><br><span style="color:var(--muted); font-size:11px;">${bio.clave_articulo}</span></td>
+      <td>
+        <strong>${bio.nombre}</strong><br>
+        <span class="clave-bio" id="clave-${bio.id}">
+          <span class="clave-texto">${textoClave(bio)}</span>
+          <button class="icon-btn-pure btn-editar-clave solo-edicion" data-bio="${bio.id}" title="Editar clave de artículo"><span class="material-symbols-rounded">edit</span></button>
+        </span>
+      </td>
       <td><span class="pill-presentacion ${esMultidosis ? 'multidosis' : ''}">${bio.presentacion}</span></td>
       <td><span class="badge-count ${items.length ? 'tiene-lotes' : ''}"><span class="dot"></span>${items.length} lote${items.length === 1 ? '' : 's'}</span></td>
       <td><strong>${total}</strong></td>
@@ -434,8 +444,18 @@ function filasBiologicoHtml(bio, idx) {
 function renderPaso1() {
   const tbody = $('tbodyBiologicos');
   tbody.innerHTML = estado.catalogo.map((bio, idx) => filasBiologicoHtml(bio, idx)).join('');
-  tbody.querySelectorAll('tr.fila-bio').forEach((tr) => tr.addEventListener('click', () => toggleDetalle(tr.dataset.bio)));
+  tbody.querySelectorAll('tr.fila-bio').forEach((tr) => cablearResumen(tr));
   tbody.querySelectorAll('tr.fila-detalle').forEach((tr) => cablearDetalle(tr));
+}
+
+// Clic en la fila abre/cierra el detalle -- el botón de editar clave vive
+// dentro de esa misma fila, así que necesita stopPropagation para no
+// disparar también el toggle del detalle.
+function cablearResumen(trResumen) {
+  trResumen.addEventListener('click', () => toggleDetalle(trResumen.dataset.bio));
+  trResumen.querySelectorAll('.btn-editar-clave').forEach((btn) => {
+    btn.addEventListener('click', (ev) => { ev.stopPropagation(); activarEdicionClave(btn.dataset.bio); });
+  });
 }
 
 function toggleDetalle(bioId) {
@@ -554,9 +574,55 @@ function actualizarFilaBiologico(bioId, mantenerAbierto) {
   const nuevaDetalle = tmp.children[1];
   document.querySelector(`tr.fila-bio[data-bio="${bioId}"]`).replaceWith(nuevaResumen);
   $('detalle-' + bioId).replaceWith(nuevaDetalle);
-  nuevaResumen.addEventListener('click', () => toggleDetalle(bioId));
+  cablearResumen(nuevaResumen);
   cablearDetalle(nuevaDetalle);
   if (mantenerAbierto) { nuevaDetalle.style.display = 'table-row'; nuevaResumen.classList.add('activa'); }
+}
+
+// Edición en línea de la clave/código de artículo del catálogo (jurisdicción
+// completa, no por requisición) -- ADMIN/JURISDICCIONAL únicamente, mismo
+// candado que el resto de la edición (estado.puedeEditar). El valor editado
+// se usa tal cual en el próximo Excel exportado (ver requisiciones_export_
+// excel.js), no solo en esta tabla.
+function activarEdicionClave(bioId) {
+  const bio = estado.catalogo.find((b) => b.id === bioId);
+  const cont = document.getElementById('clave-' + bioId);
+  if (!bio || !cont) return;
+  cont.innerHTML = `
+    <input type="text" class="inp-editar-clave-articulo" value="${bio.clave_articulo || ''}" placeholder="Clave de artículo" title="Clave de artículo (columna A del Excel)">
+    <input type="text" class="inp-editar-codigo-articulo" value="${bio.codigo_articulo || ''}" placeholder="Código" title="Código de artículo (columna B del Excel)">
+    <button class="icon-btn-pure btn-guardar-clave" title="Guardar"><span class="material-symbols-rounded">check</span></button>
+    <button class="icon-btn-pure btn-cancelar-clave" title="Cancelar"><span class="material-symbols-rounded">close</span></button>
+  `;
+  const detalleAbierto = document.getElementById('detalle-' + bioId)?.style.display !== 'none';
+  cont.querySelector('.btn-guardar-clave').addEventListener('click', (ev) => { ev.stopPropagation(); guardarClaveArticulo(bioId, detalleAbierto); });
+  cont.querySelector('.btn-cancelar-clave').addEventListener('click', (ev) => { ev.stopPropagation(); actualizarFilaBiologico(bioId, detalleAbierto); });
+  cont.querySelectorAll('input').forEach((inp) => {
+    inp.addEventListener('click', (ev) => ev.stopPropagation());
+    inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') guardarClaveArticulo(bioId, detalleAbierto); });
+  });
+}
+
+async function guardarClaveArticulo(bioId, detalleAbierto) {
+  const bio = estado.catalogo.find((b) => b.id === bioId);
+  const cont = document.getElementById('clave-' + bioId);
+  if (!bio || !cont) return;
+  const claveArticulo = cont.querySelector('.inp-editar-clave-articulo').value.trim();
+  const codigoArticulo = cont.querySelector('.inp-editar-codigo-articulo').value.trim();
+  if (!claveArticulo) { toast('La clave de artículo no puede quedar vacía.', true); return; }
+
+  const cambios = {};
+  if (claveArticulo !== bio.clave_articulo) cambios.clave_articulo = claveArticulo;
+  if (codigoArticulo !== (bio.codigo_articulo || '')) cambios.codigo_articulo = codigoArticulo || null;
+  if (Object.keys(cambios).length === 0) { actualizarFilaBiologico(bioId, detalleAbierto); return; }
+
+  const { error } = await estado.db.from('requi_catalogo_biologicos').update(cambios).eq('id', bioId);
+  // Ej. violación de la clave única si ya existe otro biológico con la
+  // misma clave_articulo -- se muestra el mensaje real de Postgres.
+  if (error) { toast('No se pudo guardar la clave: ' + error.message, true); return; }
+  Object.assign(bio, cambios);
+  toast('Clave actualizada.');
+  actualizarFilaBiologico(bioId, detalleAbierto);
 }
 
 async function agregarLoteSurtido(biologicoId) {

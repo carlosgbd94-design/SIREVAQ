@@ -196,6 +196,32 @@
   }
   .icon-btn-pure:active { transform: translateY(0) scale(.95); }
 
+  /* Clave de artículo (Paso 1): editable en línea, mismo patrón que la
+     edición de un lote ya capturado (activarEdicionItem) -- el lápiz
+     reemplaza el texto por inputs + check/cancelar, sin salir de la fila. */
+  .clave-bio { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; }
+  .clave-bio .icon-btn-pure { padding: 2px; }
+  .clave-bio .icon-btn-pure .material-symbols-rounded { font-size: 13px; }
+  .clave-bio input[type=text] { padding: 3px 6px; font-size: 11px; }
+  .clave-bio .inp-editar-clave-articulo { width: 130px; }
+  .clave-bio .inp-editar-codigo-articulo { width: 54px; }
+
+  /* Grupo de acciones de cabecera (cargar/guardar/cerrar mes): mismo
+     lenguaje que .grupo-acciones/.btn-icono de Movimiento de Biológico
+     (biovac.html) -- botones-ícono agrupados en vez de un solo botón con
+     etiqueta compuesta ("Guardar / Abrir"), que confundía qué acción hacía
+     cada cosa. */
+  .grupo-acciones { display: flex; gap: 3px; padding: 4px; background: var(--surface-container); border-radius: 14px; }
+  .btn-icono {
+    background: transparent; color: var(--muted); border: none; padding: 8px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-family: inherit;
+  }
+  .btn-icono:hover { background: #fff; color: var(--secondary); box-shadow: var(--shadow-1); }
+  .btn-icono .material-symbols-rounded { font-size: 19px; }
+  .btn-icono.azul { color: var(--secondary); }
+  .btn-icono.azul:hover { background: rgba(14,165,233,.12); color: var(--secondary); }
+  .btn-icono:disabled { opacity: .45; cursor: not-allowed; }
+
   /* Pill de exportación en el header + su panel desplegable */
   .pill-exportar-wrap { position: relative; }
   .btn-pill { background: var(--primary); color: #fff; border-radius: 999px; padding: 9px 18px; }
@@ -266,12 +292,10 @@
         <label>Mes</label>
         <select id="selMes"></select>
       </div>
-      <button class="btn btn-primary solo-edicion" id="btnGuardarCabecera">
-        <span class="material-symbols-rounded">save</span> Guardar / Abrir requisición
-      </button>
-      <button class="btn btn-outline" id="btnCargar">
-        <span class="material-symbols-rounded">refresh</span> Cargar
-      </button>
+      <div class="grupo-acciones">
+        <button class="btn-icono" id="btnCargar" title="Cargar la requisición ya guardada de este año/mes"><span class="material-symbols-rounded">folder_open</span></button>
+        <button class="btn-icono solo-edicion" id="btnGuardarCabecera" title="Guardar (crea la requisición del mes si no existe)"><span class="material-symbols-rounded">save</span></button>
+      </div>
       <span id="badgesEstadoRequisicion" style="display:none; gap:6px; align-items:center;"></span>
       <button class="btn btn-outline btn-sm solo-edicion" id="btnCerrarMes" style="display:none; margin-left:auto;">
         <span class="material-symbols-rounded" style="font-size:14px">lock</span> Cerrar mes

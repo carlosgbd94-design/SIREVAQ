@@ -111,6 +111,15 @@
       if (registros.length > 2) sobrantes.push(bio.nombre);
       const usados = registros.slice(0, 2);
 
+      // A (CLAVE DE ARTÍCULO) y B (CÓDIGO) venían fijas en la plantilla --
+      // texto plano de la captura de septiembre, sin relación con el
+      // catálogo real. Ahora se escriben desde requi_catalogo_biologicos
+      // (editable en la UI) para que una clave corregida sí se refleje en
+      // el Excel exportado, no solo en pantalla. Igual que F, A/B están
+      // fusionadas entre las 2 filas del biológico -- se escriben una vez.
+      escribir(ws, `A${filaBase(bio.orden)}`, bio.clave_articulo);
+      escribir(ws, `B${filaBase(bio.orden)}`, bio.codigo_articulo || '');
+
       // F (SOLICITADO) está fusionada entre las 2 filas del biológico -- es
       // UN solo total, no un valor por lote. Escribirlo dos veces pisaría el
       // mismo valor (la fusión apunta a una sola celda real). Se escribe una
