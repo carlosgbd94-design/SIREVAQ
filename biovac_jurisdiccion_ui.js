@@ -408,7 +408,7 @@ function renderFilaDrilldown(d, anio, mes) {
   const enCorreccion = d.movimiento_estado === 'EN_CORRECCION';
   const cerrado = d.movimiento_estado === 'CERRADO';
   const campo = (campo, valor) => enCorreccion
-    ? `<input type="number" step="any" data-corr-renglon="${d.renglon_id}" data-corr-campo="${campo}" value="${valor || 0}">`
+    ? `<input type="number" step="any" data-corr-renglon="${d.renglon_id}" data-corr-campo="${campo}" data-corr-movimiento="${d.movimiento_id}" value="${valor || 0}">`
     : valor;
   return `<tr data-fila-renglon="${d.renglon_id}">
     <td><b>${d.unidad_nombre}</b></td>
@@ -420,7 +420,7 @@ function renderFilaDrilldown(d, anio, mes) {
     <td>${campo('desechadas_a', d.desechadas_a)}</td>
     <td>${campo('desechadas_b', d.desechadas_b)}</td>
     <td class="existencia-final" data-drill-final="${d.renglon_id}">${d.existencia_final_frascos}</td>
-    <td>${enCorreccion ? `<input type="text" data-corr-renglon="${d.renglon_id}" data-corr-campo="observaciones" value="${(d.observaciones || '').replace(/"/g, '&quot;')}">` : (d.observaciones || '')}</td>
+    <td>${enCorreccion ? `<input type="text" data-corr-renglon="${d.renglon_id}" data-corr-campo="observaciones" data-corr-movimiento="${d.movimiento_id}" value="${(d.observaciones || '').replace(/"/g, '&quot;')}">` : (d.observaciones || '')}</td>
     <td>
       ${botonVerPdfUnidad(d, anio, mes)}
       ${cerrado ? `<button class="btn-mini btn-secundario" data-action="abrir-correccion-mov" data-movimiento="${d.movimiento_id}"><span class="material-symbols-rounded">edit</span> Corregir aquí</button>` : ''}
@@ -478,15 +478,38 @@ function recalcularFilaDrilldownEnVivo(renglonId) {
   // la celda quede desactualizada visualmente hasta el siguiente guardado.
 }
 
+// El batch normalmente ya se conoce en memoria (se guardó al reabrir la
+// corrección en esta misma sesión) -- pero si la página se recargó con el
+// mes todavía EN_CORRECCION (abierto antes, o por otra sesión), se recupera
+// consultando la fila "marcador" de biovac_abrir_correccion para ese
+// movimiento, así el motivo original sigue heredándose en cada campo.
+async function obtenerBatchAbierto(movimientoId) {
+  if (estado.correccionesAbiertas[movimientoId]) return estado.correccionesAbiertas[movimientoId];
+  const { data } = await estado.db.from('biovac_correcciones')
+    .select('cascade_batch_id').eq('movimiento_id', movimientoId).eq('tipo', 'CORRECCION_JURISDICCIONAL')
+    .is('campo', null).order('creado_en', { ascending: false }).limit(1).maybeSingle();
+  if (data?.cascade_batch_id) estado.correccionesAbiertas[movimientoId] = data.cascade_batch_id;
+  return data?.cascade_batch_id || null;
+}
+
+// Cada campo editado en el drill-down queda auditado por separado (a
+// diferencia de la captura municipal normal, que no necesita esto porque
+// ahí el propio dueño del dato lo está tecleando) -- así la unidad afectada
+// puede ver exactamente qué cambió cuando reconozca la alerta.
 async function guardarCampoDrilldown(input) {
+  const usuario = usuarioActual();
+  if (!usuario) return;
   const renglonId = input.dataset.corrRenglon;
   const campo = input.dataset.corrCampo;
-  const valor = campo === 'observaciones' ? (input.value.trim() || null) : (Number(input.value) || 0);
-  const { data, error } = await estado.db.from('biovac_renglones').update({ [campo]: valor }).eq('id', renglonId)
-    .select('existencia_final_frascos').single();
+  const movimientoId = input.dataset.corrMovimiento;
+  const batchId = await obtenerBatchAbierto(movimientoId);
+  const { data: final, error } = await estado.db.rpc('biovac_guardar_campo_correccion_jurisdiccional', {
+    p_renglon_id: renglonId, p_campo: campo, p_valor: String(input.value ?? ''),
+    p_usuario: usuario, p_rol: (estado.perfil ? estado.perfil.rol : 'JURISDICCIONAL'), p_cascade_batch_id: batchId
+  });
   if (error) { toast('Error al guardar: ' + error.message, 'error'); return; }
   const celda = document.querySelector(`[data-drill-final="${renglonId}"]`);
-  if (celda) celda.textContent = data.existencia_final_frascos;
+  if (celda) celda.textContent = final;
 }
 
 // ---------------------------------------------------------------------------

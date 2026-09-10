@@ -89,7 +89,8 @@ const estado = {
   movimiento: null,
   renglones: [],
   correccionBatchId: null,
-  catalogoLotesCentral: {}
+  catalogoLotesCentral: {},
+  correccionesPendientes: []
 };
 
 function initDb() {
@@ -244,6 +245,68 @@ async function cargarCatalogo() {
     document.getElementById('avisoUsuario').innerHTML =
       '<span class="material-symbols-rounded">info</span> Sin sesión de SIREVAQ detectada: escribe tu nombre arriba para la auditoría.';
   }
+}
+
+// ---------------------------------------------------------------------------
+// Alerta de correcciones jurisdiccionales pendientes de revisar -- se
+// consulta por unidad (no por el movimiento que esté abierto en pantalla),
+// para que se note aunque la corrección haya sido sobre un mes distinto al
+// que el usuario está viendo ahora mismo. Queda visible hasta que alguien
+// la reconoce a propósito (biovac_reconocer_correccion) -- ver comentario
+// en biovac_jurisdiccion.sql sobre por qué "haberla visto" no basta.
+// ---------------------------------------------------------------------------
+
+const FIELD_LABEL = {
+  recibido_frascos: 'Recibido', aplicadas_a: 'Dosis aplicadas', aplicadas_b: 'Dosis aplicadas (1 mL)',
+  desechadas_a: 'Dosis desechadas', desechadas_b: 'Dosis desechadas (1 mL)', observaciones: 'Observaciones'
+};
+const CATEGORIA_LABEL_CORTA = { NORMAL: 'Normal', ARF: 'A.R.F.', CANJE: 'Canje' };
+
+async function cargarCorreccionesPendientes() {
+  const listas = await Promise.all(estado.unidades.map(async (u) => {
+    const { data, error } = await estado.db.rpc('biovac_correcciones_pendientes', { p_unidad_id: u.id });
+    if (error) { console.error('[BioVac] Error consultando correcciones pendientes:', error); return []; }
+    return (data || []).map((c) => ({ ...c, unidad_nombre: u.nombre }));
+  }));
+  estado.correccionesPendientes = listas.flat().sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en));
+  renderCorreccionesPendientes();
+}
+
+function renderCorreccionesPendientes() {
+  const lista = estado.correccionesPendientes || [];
+  const cont = document.getElementById('alertaCorreccionesPendientes');
+  if (!lista.length) { cont.style.display = 'none'; return; }
+  cont.style.display = 'block';
+  document.getElementById('alertaCorreccionesCount').textContent = lista.length;
+  document.getElementById('alertaCorreccionesLista').innerHTML = lista.map((c) => `
+    <div class="correccion-pendiente-item">
+      <div class="info">
+        <b>${(c.biologico || 'Biológico').replace(/\n/g, ' ')}</b> — lote ${c.numero_lote || '—'} (${CATEGORIA_LABEL_CORTA[c.categoria] || c.categoria || '—'}) — ${estado.unidades.length > 1 ? c.unidad_nombre + ' — ' : ''}${MESES.find((m) => m.v === c.mes)?.l || c.mes} ${c.anio}
+        <span class="detalle">${FIELD_LABEL[c.campo] || c.campo}: <span class="cambio">${c.valor_anterior ?? '—'} → ${c.valor_nuevo ?? '—'}</span></span>
+        <span class="meta">Por ${c.usuario} el ${new Date(c.creado_en).toLocaleString('es-MX')} · Motivo: ${c.motivo}</span>
+      </div>
+      <button class="btn-mini btn-secundario" data-action="reconocer-correccion" data-correccion="${c.correccion_id}"><span class="material-symbols-rounded">check</span> Enterado</button>
+    </div>`).join('');
+}
+
+async function reconocerCorreccion(correccionId) {
+  const usuario = usuarioActual();
+  if (!usuario) return;
+  const { error } = await estado.db.rpc('biovac_reconocer_correccion', { p_correccion_id: correccionId, p_usuario: usuario });
+  if (error) { toast('No se pudo marcar como revisado: ' + error.message, 'error'); return; }
+  estado.correccionesPendientes = (estado.correccionesPendientes || []).filter((c) => c.correccion_id !== correccionId);
+  renderCorreccionesPendientes();
+}
+
+async function reconocerTodasCorrecciones() {
+  const usuario = usuarioActual();
+  if (!usuario) return;
+  const movimientos = [...new Set((estado.correccionesPendientes || []).map((c) => c.movimiento_id))];
+  if (!movimientos.length) return;
+  await Promise.all(movimientos.map((mid) => estado.db.rpc('biovac_reconocer_correcciones_movimiento', { p_movimiento_id: mid, p_usuario: usuario })));
+  toast('Correcciones marcadas como revisadas.', 'ok');
+  estado.correccionesPendientes = [];
+  renderCorreccionesPendientes();
 }
 
 // ---------------------------------------------------------------------------
@@ -632,6 +695,12 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   } else if (editable && subcategoria === 'canje' && Number(dosis) > 0) {
     botonResolver = `<button class="btn-resolver canje" data-action="toggle-resolver" data-renglon="${r.id}"><span class="material-symbols-rounded">sync_alt</span> Canje</button>`;
     filaResolver = `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelResolverCanjeHtml(r.id, bio)}</td></tr>`;
+  } else if (editable && !subcategoria && Number(dosis) > 0) {
+    // Un lote Normal (o parte de él) se manda a dictamen: pasa a un renglón
+    // A.R.F. del mismo lote. Es el sentido inverso del botón "Dictamen" de
+    // arriba -- ese resuelve un A.R.F. ya existente, este lo crea.
+    botonResolver = `<button class="btn-resolver arf" data-action="toggle-resolver" data-renglon="${r.id}"><span class="material-symbols-rounded">gavel</span> Pasar a A.R.F.</button>`;
+    filaResolver = `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelPasarArfHtml(r.id, dosis)}</td></tr>`;
   }
 
   return `<tr class="${subcategoria ? 'categoria-' + subcategoria : ''}">
@@ -691,6 +760,26 @@ function panelResolverCanjeHtml(renglonId, bio) {
     </div>
     <div class="acciones">
       <button class="btn-primario btn-mini" data-action="confirmar-resolver-canje" data-renglon="${renglonId}"><span class="material-symbols-rounded">check</span> Registrar canje</button>
+      <button class="btn-fantasma btn-mini" data-action="cancelar-resolver" data-renglon="${renglonId}">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+function panelPasarArfHtml(renglonId, existenciaActual) {
+  return `<div class="panel-resolver" data-panel-pasar-arf="${renglonId}">
+    <p>Parte (o toda) la existencia de este lote se manda a dictamen: se resta de aquí y se traslada a un renglón A.R.F. del mismo lote. Existencia actual: ${existenciaActual} frasco(s).</p>
+    <div class="campos">
+      <div class="campo" style="width:160px">
+        <label>Cantidad a pasar (frascos)</label>
+        <input type="number" step="any" min="0" max="${existenciaActual}" data-monto-pasar-arf placeholder="0">
+      </div>
+      <div class="campo" style="width:300px">
+        <label>Motivo</label>
+        <input type="text" data-motivo-pasar-arf placeholder="Ej. Sospecha de falla en cadena de frío, se manda a dictamen">
+      </div>
+    </div>
+    <div class="acciones">
+      <button class="btn-primario btn-mini" data-action="confirmar-pasar-arf" data-renglon="${renglonId}"><span class="material-symbols-rounded">check</span> Pasar a A.R.F.</button>
       <button class="btn-fantasma btn-mini" data-action="cancelar-resolver" data-renglon="${renglonId}">Cancelar</button>
     </div>
   </div>`;
@@ -1156,6 +1245,27 @@ async function resolverCanje(renglonId, panel) {
   render();
 }
 
+// Sentido inverso de reactivarArf: parte (o toda) la existencia de un
+// renglón Normal se manda a dictamen y pasa a un renglón A.R.F. del mismo
+// lote (se crea si no existía, o se le suma si ya había uno con existencia
+// pendiente de un dictamen anterior).
+async function pasarNormalAArf(renglonId, panel) {
+  const usuario = usuarioActual();
+  if (!usuario) return;
+  const monto = Number(panel.querySelector('[data-monto-pasar-arf]').value);
+  if (!monto || monto <= 0) { toast('Indica cuántos frascos se pasan a A.R.F.', 'error'); return; }
+  const motivo = panel.querySelector('[data-motivo-pasar-arf]').value.trim();
+  if (!motivo) { toast('Escribe el motivo por el que se manda a dictamen.', 'error'); return; }
+  const { error } = await estado.db.rpc('biovac_reclasificar_normal_arf', {
+    p_renglon_id: renglonId, p_monto: monto, p_usuario: usuario,
+    p_rol: (estado.perfil ? estado.perfil.rol : 'MUNICIPAL'), p_motivo: motivo
+  });
+  if (error) { toast('No se pudo pasar a A.R.F.: ' + error.message, 'error'); return; }
+  toast('Lote pasado a A.R.F.', 'ok');
+  await cargarRenglones();
+  render();
+}
+
 // ---------------------------------------------------------------------------
 // Cabecera, cierre y corrección
 // ---------------------------------------------------------------------------
@@ -1502,7 +1612,14 @@ function renderResumenFinal(resumen) {
 document.addEventListener('DOMContentLoaded', async () => {
   initDb();
   await cargarSesionReal();
-  cargarCatalogo();
+  await cargarCatalogo();
+  cargarCorreccionesPendientes();
+
+  document.getElementById('btnReconocerTodasCorrecciones').addEventListener('click', reconocerTodasCorrecciones);
+  document.getElementById('alertaCorreccionesLista').addEventListener('click', (ev) => {
+    const btn = ev.target.closest('[data-action="reconocer-correccion"]');
+    if (btn) reconocerCorreccion(btn.dataset.correccion);
+  });
 
   document.getElementById('btnCargar').addEventListener('click', () => { estado.correccionBatchId = null; cargarMovimiento(); });
   document.getElementById('btnIniciarMovimiento').addEventListener('click', crearMovimiento);
@@ -1560,7 +1677,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (accion === 'toggle-resolver' || accion === 'cancelar-resolver') {
-      const panel = document.querySelector(`[data-panel-arf="${btn.dataset.renglon}"], [data-panel-canje="${btn.dataset.renglon}"]`);
+      const panel = document.querySelector(`[data-panel-arf="${btn.dataset.renglon}"], [data-panel-canje="${btn.dataset.renglon}"], [data-panel-pasar-arf="${btn.dataset.renglon}"]`);
       if (!panel) return;
       if (accion === 'toggle-resolver') {
         const abriendo = !panel.classList.contains('abierto');
@@ -1577,6 +1694,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (accion === 'confirmar-resolver-canje') {
       resolverCanje(btn.dataset.renglon, document.querySelector(`[data-panel-canje="${btn.dataset.renglon}"]`));
+      return;
+    }
+    if (accion === 'confirmar-pasar-arf') {
+      pasarNormalAArf(btn.dataset.renglon, document.querySelector(`[data-panel-pasar-arf="${btn.dataset.renglon}"]`));
       return;
     }
   });

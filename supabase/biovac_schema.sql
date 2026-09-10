@@ -185,7 +185,16 @@ create table if not exists biovac_correcciones (
   motivo text not null,
   tipo text not null check (tipo in ('EDICION','REAPERTURA','CORRECCION_JURISDICCIONAL','RECLASIFICACION')),
   cascade_batch_id uuid,
-  creado_en timestamptz not null default now()
+  creado_en timestamptz not null default now(),
+  -- Reconocimiento municipal (ver biovac_jurisdiccion.sql): cuando
+  -- jurisdicción corrige un dato de un municipio (tipo=CORRECCION_
+  -- JURISDICCIONAL), esa fila nace sin reconocer -- la UI municipal la
+  -- muestra como alerta persistente hasta que alguien la reconoce
+  -- explícitamente (no basta con "haberla visto"). Para el resto de los
+  -- tipos no se usa (queda en su default true al insertarse desde ahí).
+  reconocido_por_municipal boolean not null default true,
+  reconocido_en timestamptz,
+  reconocido_por text
 );
 
 create index if not exists idx_biovac_correcciones_movimiento on biovac_correcciones(movimiento_id);

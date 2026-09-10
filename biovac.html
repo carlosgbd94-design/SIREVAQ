@@ -14,7 +14,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.1"></script>
 <script defer src="biovac_importer.js?v=2026.2"></script>
-<script defer src="biovac_ui.js?v=2026.12"></script>
+<script defer src="biovac_ui.js?v=2026.14"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -60,6 +60,28 @@
   }
 
   .separador { border-top: 1px solid var(--outline-variant); margin-top: 16px; padding-top: 16px; }
+
+  /* Alerta de correcciones jurisdiccionales pendientes de revisar -- se
+     queda visible hasta que se reconoce a propósito (botón), no basta con
+     haberla visto, porque el dato es sensible y debe quedar quién y cuándo
+     se enteró. */
+  .alerta-correcciones {
+    background: var(--warning-bg); border: 1.5px solid var(--warning-border); border-radius: 20px;
+    padding: 14px 20px; margin-bottom: 16px; box-shadow: var(--shadow-1);
+  }
+  .alerta-correcciones-header { display: flex; align-items: center; gap: 12px; }
+  .alerta-correcciones-header > .material-symbols-rounded { color: var(--warning); font-size: 26px; flex: none; }
+  .alerta-correcciones-texto { flex: 1; }
+  .alerta-correcciones-texto strong { display: block; color: var(--warning); font-size: 13.5px; font-family: 'Poppins', sans-serif; }
+  .alerta-correcciones-texto p { margin: 2px 0 0; color: var(--text); font-size: 12px; }
+  .correccion-pendiente-item {
+    background: var(--surface); border: 1px solid var(--warning-border); border-radius: 12px;
+    padding: 10px 14px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .correccion-pendiente-item .info b { color: var(--primary); }
+  .correccion-pendiente-item .info .detalle { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .correccion-pendiente-item .info .detalle .cambio { color: var(--warning); font-weight: 700; }
+  .correccion-pendiente-item .info .meta { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; font-style: italic; }
 
   .barra { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
   .campo { display: flex; flex-direction: column; gap: 5px; }
@@ -453,6 +475,18 @@
 <body>
 
 <a class="volver" href="index.html"><span class="material-symbols-rounded">arrow_back</span> Volver a SIREVAQ</a>
+
+<div id="alertaCorreccionesPendientes" class="alerta-correcciones" style="display:none">
+  <div class="alerta-correcciones-header">
+    <span class="material-symbols-rounded">campaign</span>
+    <div class="alerta-correcciones-texto">
+      <strong>Jurisdicción corrigió <span id="alertaCorreccionesCount">0</span> dato(s) que debes revisar</strong>
+      <p>Verifica cada cambio contra lo que realmente pasó en tu unidad y márcalo como revisado.</p>
+    </div>
+    <button class="btn-mini btn-secundario" id="btnReconocerTodasCorrecciones"><span class="material-symbols-rounded">done_all</span> Marcar todo como revisado</button>
+  </div>
+  <div id="alertaCorreccionesLista"></div>
+</div>
 
 <div class="tarjeta panel-encabezado">
   <div class="fila-logo">

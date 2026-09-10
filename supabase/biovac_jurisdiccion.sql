@@ -67,3 +67,148 @@ as $$
   where u.jurisdiccion_id = p_jurisdiccion_id and u.activo
   order by u.nombre;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- 12. Guardar un campo desde el drill-down de corrección jurisdiccional, con
+--     auditoría POR CAMPO (a diferencia del marcador de apertura de
+--     biovac_abrir_correccion, que es solo el batch) -- así la alerta
+--     municipal puede decir exactamente qué biológico/lote/campo cambió, no
+--     solo "este mes se corrigió". Reusa el motivo con el que se abrió la
+--     corrección (capturado en la fila "marcador" del mismo
+--     cascade_batch_id) para no pedir un motivo aparte por cada celda.
+-- ---------------------------------------------------------------------------
+
+create or replace function biovac_guardar_campo_correccion_jurisdiccional(
+  p_renglon_id uuid,
+  p_campo text,
+  p_valor text,
+  p_usuario text,
+  p_rol text,
+  p_cascade_batch_id uuid
+) returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_movimiento_id uuid;
+  v_estado text;
+  v_valor_anterior text;
+  v_valor_nuevo text;
+  v_final numeric;
+  v_motivo_batch text;
+  v_campos_numericos text[] := array['recibido_frascos','aplicadas_a','aplicadas_b','desechadas_a','desechadas_b'];
+begin
+  if p_campo <> 'observaciones' and not (p_campo = any(v_campos_numericos)) then
+    raise exception 'Campo % no editable desde corrección jurisdiccional', p_campo;
+  end if;
+
+  select r.movimiento_id into v_movimiento_id from biovac_renglones r where r.id = p_renglon_id for update;
+  if v_movimiento_id is null then
+    raise exception 'Renglón % no existe', p_renglon_id;
+  end if;
+
+  select estado into v_estado from biovac_movimientos where id = v_movimiento_id;
+  if v_estado <> 'EN_CORRECCION' then
+    raise exception 'El mes debe estar en corrección para editar (estado actual: %)', v_estado;
+  end if;
+
+  execute format('select %I::text from biovac_renglones where id = $1', p_campo) into v_valor_anterior using p_renglon_id;
+
+  if p_campo = 'observaciones' then
+    execute format('update biovac_renglones set %I = $1 where id = $2', p_campo)
+      using nullif(trim(p_valor), ''), p_renglon_id;
+    v_valor_nuevo := nullif(trim(p_valor), '');
+  else
+    execute format('update biovac_renglones set %I = $1 where id = $2', p_campo)
+      using coalesce(p_valor::numeric, 0), p_renglon_id;
+    v_valor_nuevo := coalesce(p_valor::numeric, 0)::text;
+  end if;
+
+  select existencia_final_frascos into v_final from biovac_renglones where id = p_renglon_id;
+
+  if (p_campo <> 'observaciones' and coalesce(v_valor_anterior, '0') is distinct from v_valor_nuevo)
+     or (p_campo = 'observaciones' and coalesce(v_valor_anterior, '') is distinct from coalesce(v_valor_nuevo, '')) then
+
+    select motivo into v_motivo_batch
+    from biovac_correcciones
+    where cascade_batch_id = p_cascade_batch_id and campo is null
+    order by creado_en asc limit 1;
+
+    insert into biovac_correcciones
+      (movimiento_id, renglon_id, usuario, rol, campo, valor_anterior, valor_nuevo, motivo, tipo, cascade_batch_id, reconocido_por_municipal)
+    values
+      (v_movimiento_id, p_renglon_id, p_usuario, p_rol, p_campo, v_valor_anterior, v_valor_nuevo,
+       coalesce(v_motivo_batch, 'Corrección jurisdiccional'), 'CORRECCION_JURISDICCIONAL', p_cascade_batch_id, false);
+  end if;
+
+  return v_final;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 13. Correcciones jurisdiccionales pendientes de reconocer por una unidad
+--     (municipio) -- excluye la fila "marcador" de apertura del batch
+--     (campo is null), solo cambios de campo reales.
+-- ---------------------------------------------------------------------------
+
+create or replace function biovac_correcciones_pendientes(p_unidad_id uuid)
+returns table (
+  correccion_id uuid, movimiento_id uuid, anio int, mes int,
+  biologico text, numero_lote text, categoria text,
+  campo text, valor_anterior text, valor_nuevo text,
+  usuario text, motivo text, creado_en timestamptz
+)
+language sql
+stable
+as $$
+  select c.id, m.id, m.anio, m.mes,
+         cb.nombre_excel, l.numero_lote, r.categoria,
+         c.campo, c.valor_anterior, c.valor_nuevo,
+         c.usuario, c.motivo, c.creado_en
+  from biovac_correcciones c
+  join biovac_movimientos m on m.id = c.movimiento_id
+  left join biovac_renglones r on r.id = c.renglon_id
+  left join biovac_lotes l on l.id = r.lote_id
+  left join biovac_catalogo_biologicos cb on cb.id = l.biologico_id
+  where m.unidad_id = p_unidad_id
+    and c.tipo = 'CORRECCION_JURISDICCIONAL'
+    and c.reconocido_por_municipal = false
+    and c.campo is not null
+  order by c.creado_en desc;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 14. Reconocer una o todas las correcciones jurisdiccionales pendientes de
+--     un movimiento -- acción deliberada (no un simple "visto"): queda
+--     registrado quién y cuándo se enteró.
+-- ---------------------------------------------------------------------------
+
+create or replace function biovac_reconocer_correccion(p_correccion_id uuid, p_usuario text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update biovac_correcciones
+  set reconocido_por_municipal = true, reconocido_en = now(), reconocido_por = p_usuario
+  where id = p_correccion_id and tipo = 'CORRECCION_JURISDICCIONAL';
+$$;
+
+create or replace function biovac_reconocer_correcciones_movimiento(p_movimiento_id uuid, p_usuario text)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_n int;
+begin
+  update biovac_correcciones
+  set reconocido_por_municipal = true, reconocido_en = now(), reconocido_por = p_usuario
+  where movimiento_id = p_movimiento_id and tipo = 'CORRECCION_JURISDICCIONAL'
+    and reconocido_por_municipal = false and campo is not null;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;

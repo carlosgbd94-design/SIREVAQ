@@ -13,6 +13,9 @@
 --   7. biovac_aplicar_correccion(id, usuario) recalcula y cascada hacia adelante
 --   8. biovac_validar_concentrado(...)       chequeos jurisdicción (solo lectura)
 --   9. biovac_generar_informe_jurisdiccional(...)  snapshot para exportar
+--  10. biovac_reclasificar_arf_normal(...)   dictamen resuelto: A.R.F. -> Normal
+--  10b. biovac_reclasificar_normal_arf(...)  parte de un lote se manda a dictamen: Normal -> A.R.F.
+--  11. biovac_resolver_canje(...)            canje resuelto: lote nuevo entra como Normal
 --
 -- Los triggers usan un bypass de sesión (biovac.bypass_lock) para que el
 -- propio motor pueda escribir en meses ya CERRADOS al propagar una
@@ -612,6 +615,87 @@ begin
           'ARF (' || v_monto || ' frascos)', 'NORMAL (' || v_monto || ' frascos)', p_motivo, 'RECLASIFICACION');
 
   return v_normal_id;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 10b. Reclasificación Normal -> A.R.F. — sentido inverso de la anterior:
+--      parte (o toda) la existencia de un renglón Normal se manda a
+--      dictamen. Se resta primero de existencia_anterior_frascos y, si no
+--      alcanza, del recibido_frascos de este mes -- nunca se tocan
+--      aplicadas/desechadas, que tienen un significado distinto (dosis
+--      aplicadas/descartadas, no lotes trasladados a dictamen). El renglón
+--      A.R.F. destino se crea si no existe, o se le suma si ya había uno.
+-- ---------------------------------------------------------------------------
+
+create or replace function biovac_reclasificar_normal_arf(
+  p_renglon_id uuid,
+  p_monto numeric,
+  p_usuario text,
+  p_rol text,
+  p_motivo text
+) returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_movimiento_id uuid;
+  v_lote_id uuid;
+  v_categoria text;
+  v_final numeric;
+  v_anterior numeric;
+  v_estado text;
+  v_resta_anterior numeric;
+  v_resta_recibido numeric;
+  v_arf_id uuid;
+begin
+  select r.movimiento_id, r.lote_id, r.categoria, r.existencia_final_frascos, r.existencia_anterior_frascos
+    into v_movimiento_id, v_lote_id, v_categoria, v_final, v_anterior
+  from biovac_renglones r
+  where r.id = p_renglon_id
+  for update;
+
+  if v_movimiento_id is null then
+    raise exception 'Renglón % no existe', p_renglon_id;
+  end if;
+  if v_categoria <> 'NORMAL' then
+    raise exception 'Solo se puede pasar a A.R.F. un renglón Normal (categoría actual: %)', v_categoria;
+  end if;
+  if p_motivo is null or length(trim(p_motivo)) = 0 then
+    raise exception 'El motivo es obligatorio';
+  end if;
+  if p_monto is null or p_monto <= 0 then
+    raise exception 'La cantidad a pasar a A.R.F. debe ser mayor a cero';
+  end if;
+  if p_monto > v_final then
+    raise exception 'No puedes pasar a A.R.F. más de la existencia actual (% frascos)', v_final;
+  end if;
+
+  select estado into v_estado from biovac_movimientos where id = v_movimiento_id;
+  if v_estado not in ('BORRADOR','EN_CORRECCION') then
+    raise exception 'El mes debe estar en captura o corrección para reclasificar un lote (estado actual: %)', v_estado;
+  end if;
+
+  v_resta_anterior := least(p_monto, v_anterior);
+  v_resta_recibido := p_monto - v_resta_anterior;
+
+  update biovac_renglones
+  set existencia_anterior_frascos = existencia_anterior_frascos - v_resta_anterior,
+      recibido_frascos = recibido_frascos - v_resta_recibido
+  where id = p_renglon_id;
+
+  insert into biovac_renglones (movimiento_id, lote_id, categoria, existencia_anterior_frascos)
+  values (v_movimiento_id, v_lote_id, 'ARF', p_monto)
+  on conflict (movimiento_id, lote_id, categoria)
+  do update set existencia_anterior_frascos = biovac_renglones.existencia_anterior_frascos + excluded.existencia_anterior_frascos
+  returning id into v_arf_id;
+
+  insert into biovac_correcciones (movimiento_id, renglon_id, usuario, rol, campo, valor_anterior, valor_nuevo, motivo, tipo)
+  values (v_movimiento_id, v_arf_id, p_usuario, p_rol, 'categoria',
+          'NORMAL (' || p_monto || ' frascos)', 'ARF (' || p_monto || ' frascos)', p_motivo, 'RECLASIFICACION');
+
+  return v_arf_id;
 end;
 $$;
 
