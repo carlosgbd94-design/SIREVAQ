@@ -446,9 +446,12 @@ stable
 as $$
 begin
   return query
-  -- movimiento municipal faltante o no cerrado
-  select 'ERROR', 'MOVIMIENTO_NO_CERRADO',
-         'La unidad no tiene el movimiento de este mes cerrado (o no existe)',
+  -- movimiento municipal faltante o no cerrado -- ADVERTENCIA, no ERROR: el
+  -- concentrado en vivo ahora también muestra BORRADOR (ver
+  -- biovac_concentrado_jurisdiccion), así que no haber cerrado todavía es
+  -- el estado normal a mitad de mes, no una falla.
+  select 'ADVERTENCIA', 'MOVIMIENTO_NO_CERRADO',
+         'La unidad todavía no cierra el movimiento de este mes (o no existe)',
          u.nombre, null::text, null::text
   from biovac_unidades u
   where u.jurisdiccion_id = p_jurisdiccion_id and u.activo

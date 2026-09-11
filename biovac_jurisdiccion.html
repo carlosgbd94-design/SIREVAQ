@@ -216,6 +216,10 @@
 
   .tag-arf { font-size: 9px; font-weight: 800; color: var(--error); background: var(--error-bg); border: 1px solid var(--error-border); padding: 1px 8px; border-radius: 20px; margin-left: 6px; }
   .tag-canje { font-size: 9px; font-weight: 800; color: var(--canje); background: var(--canje-bg); border: 1px solid var(--canje-border); padding: 1px 8px; border-radius: 20px; margin-left: 6px; }
+  /* Renglón cuya suma incluye al menos un municipio que todavía no cierra
+     su mes -- el número puede seguir cambiando, a diferencia de un
+     concentrado 100% CERRADO que ya es definitivo. */
+  .tag-provisional { font-size: 9px; font-weight: 800; color: var(--warning); background: var(--warning-bg); border: 1px solid var(--warning-border); padding: 1px 8px; border-radius: 20px; margin-left: 6px; }
   .valor-final {
     display: inline-block; min-width: 34px; font-weight: 800; font-size: 15px; color: var(--primary);
     background: rgba(15,23,42,.06); border-radius: 8px; padding: 5px 8px;
@@ -223,7 +227,7 @@
   .existencia-negativa { color: var(--error); background: var(--error-bg); }
 
   .unidades-reportando { color: var(--muted); font-size: 11.5px; font-weight: 700; }
-  .unidades-reportando.incompleto { color: var(--error); font-weight: 800; }
+  .unidades-reportando.incompleto { color: var(--warning); font-weight: 800; }
 
   .drilldown {
     background: var(--surface-container); border: 1px solid var(--outline-variant); border-radius: 14px;

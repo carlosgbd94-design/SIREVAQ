@@ -191,7 +191,7 @@ async function cargarConcentrado() {
     { data: concentrado, error: eC }, { data: informes, error: eI }] = await Promise.all([
     estado.db.from('biovac_unidades').select('*').eq('jurisdiccion_id', jurisdiccionId).eq('activo', true).order('nombre'),
     estado.db.rpc('biovac_validar_concentrado', { p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes }),
-    estado.db.rpc('biovac_concentrado_jurisdiccion', { p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes }),
+    estado.db.rpc('biovac_concentrado_jurisdiccion', { p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes, p_incluir_borrador: true }),
     estado.db.from('biovac_informes_jurisdiccionales').select('*').eq('jurisdiccion_id', jurisdiccionId).eq('anio', anio).eq('mes', mes).order('generado_en', { ascending: false })
   ]);
   if (eU || eV || eC || eI) { toast('Error: ' + (eU || eV || eC || eI).message, 'error'); return; }
@@ -309,7 +309,7 @@ function renderConcentrado(filas) {
   }
   cerrarBiologico();
   if (bloqueActualId !== null) html += `</div>`;
-  cont.innerHTML = html || '<p>Sin movimientos cerrados para este periodo.</p>';
+  cont.innerHTML = html || '<p>Sin movimientos capturados para este periodo.</p>';
 }
 
 // Total del biológico en toda la jurisdicción: suma todos sus lotes
@@ -328,8 +328,9 @@ function renderTotalBiologico(filas) {
   const totalAplicadas = isSplit ? `${totalAplicadasA} / ${totalAplicadasB}` : totalAplicadasA;
   const totalDesechadas = isSplit ? `${totalDesechadasA} / ${totalDesechadasB}` : totalDesechadasA;
   const totalFinal = sumarCampo('existencia_final_frascos');
+  const algunProvisional = filas.some((f) => f.es_provisional);
   return `<tfoot><tr>
-    <td colspan="2">Total ${nombre}</td>
+    <td colspan="2">Total ${nombre}${algunProvisional ? ' <span class="tag-provisional">Provisional</span>' : ''}</td>
     <td>${sumarCampo('existencia_anterior_frascos')}</td>
     <td>${sumarCampo('recibido_frascos')}</td>
     <td>${totalAplicadas}</td>
@@ -341,7 +342,7 @@ function renderTotalBiologico(filas) {
 
 function renderFilaConcentrado(f) {
   const negativa = Number(f.existencia_final_frascos) < 0;
-  const incompleto = f.unidades_reportando < 4;
+  const incompleto = f.unidades_cerradas < f.unidades_reportando;
   const aplicadas = f.regla_especial === 'SPLIT_DOSE' ? `${f.aplicadas_a} / ${f.aplicadas_b}` : f.aplicadas_a;
   const desechadas = f.regla_especial === 'SPLIT_DOSE' ? `${f.desechadas_a} / ${f.desechadas_b}` : f.desechadas_a;
   const semaforo = semaforoCaducidad(f.caducidad);
@@ -349,6 +350,7 @@ function renderFilaConcentrado(f) {
     <td>
       <div class="lote-texto">${f.numero_lote}</div>
       ${f.categoria !== 'NORMAL' ? `<span class="tag-${f.categoria.toLowerCase()}">${f.categoria}</span>` : ''}
+      ${f.es_provisional ? `<span class="tag-provisional" title="Al menos un municipio todavía no cierra este mes -- el número puede cambiar">Provisional</span>` : ''}
     </td>
     <td><div class="caducidad-chip ${semaforo}"><span class="semaforo"></span>${formatMmmAa(f.caducidad)}</div></td>
     <td>${f.existencia_anterior_frascos}</td>
@@ -356,7 +358,7 @@ function renderFilaConcentrado(f) {
     <td>${aplicadas}</td>
     <td>${desechadas}</td>
     <td><span class="valor-final ${negativa ? 'existencia-negativa' : ''}">${f.existencia_final_frascos}</span></td>
-    <td class="unidades-reportando ${incompleto ? 'incompleto' : ''}">${f.unidades_reportando}/4</td>
+    <td class="unidades-reportando ${incompleto ? 'incompleto' : ''}">${f.unidades_cerradas}/${f.unidades_reportando} cerradas</td>
     <td><button class="btn-mini btn-secundario" data-action="drilldown" data-lote="${f.lote_id}" data-categoria="${f.categoria}"><span class="material-symbols-rounded">manage_search</span> Ver</button></td>
   </tr>`;
   if (estado.drilldownAbierto && estado.drilldownAbierto.loteId === f.lote_id && estado.drilldownAbierto.categoria === f.categoria) {

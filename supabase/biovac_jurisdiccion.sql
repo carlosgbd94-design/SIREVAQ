@@ -4,21 +4,30 @@
 -- Requiere haber corrido biovac_schema.sql y biovac_engine.sql antes.
 --
 -- El concentrado jurisdiccional NUNCA se almacena aparte: siempre se agrega
--- en vivo con SUM/GROUP BY sobre los movimientos municipales ya CERRADOS
--- (mismo patrón que ya usa este repo en rpc_concentrado_aplicaciones.sql).
+-- en vivo con SUM/GROUP BY sobre los movimientos municipales (mismo patrón
+-- que ya usa este repo en rpc_concentrado_aplicaciones.sql). Por default
+-- solo suma movimientos ya CERRADOS (comportamiento original, el que sigue
+-- usando "generar informe" y la exportación Excel/PDF jurisdiccional, que
+-- deben ser un dato oficial/definitivo, nunca mezclado con lo que un
+-- municipio todavía puede seguir editando). La pantalla EN VIVO
+-- (biovac_jurisdiccion_ui.js) pide p_incluir_borrador=true para no
+-- quedarse vacía mientras dura el mes -- cada renglón que dependa de al
+-- menos una unidad aún no cerrada se marca es_provisional=true.
 -- Solo "generar informe" (biovac_generar_informe_jurisdiccional, ya en
 -- biovac_engine.sql) toma una foto fija para el PDF/Excel oficial.
 -- ============================================================================
 
 -- 10. Concentrado en vivo: un renglón por (biológico, lote, categoría),
 --     sumado a través de las unidades de la jurisdicción.
-create or replace function biovac_concentrado_jurisdiccion(p_jurisdiccion_id uuid, p_anio int, p_mes int)
+create or replace function biovac_concentrado_jurisdiccion(
+  p_jurisdiccion_id uuid, p_anio int, p_mes int, p_incluir_borrador boolean default false
+)
 returns table (
   bloque_id uuid, pagina text, orden_bloque int, biologico_id uuid, orden_en_bloque int,
   nombre_excel text, clave text, regla_especial text, lote_id uuid, numero_lote text, caducidad date, categoria text,
   existencia_anterior_frascos numeric, recibido_frascos numeric,
   aplicadas_a numeric, aplicadas_b numeric, desechadas_a numeric, desechadas_b numeric,
-  existencia_final_frascos numeric, unidades_reportando int
+  existencia_final_frascos numeric, unidades_reportando int, unidades_cerradas int, es_provisional boolean
 )
 language sql
 stable
@@ -27,7 +36,10 @@ as $$
          cb.nombre_excel, cb.clave, cb.regla_especial, l.id, l.numero_lote, l.caducidad, r.categoria,
          sum(r.existencia_anterior_frascos), sum(r.recibido_frascos),
          sum(r.aplicadas_a), sum(r.aplicadas_b), sum(r.desechadas_a), sum(r.desechadas_b),
-         sum(r.existencia_final_frascos), count(distinct m.unidad_id)::int
+         sum(r.existencia_final_frascos),
+         count(distinct m.unidad_id)::int as unidades_reportando,
+         count(distinct m.unidad_id) filter (where m.estado = 'CERRADO')::int as unidades_cerradas,
+         count(distinct m.unidad_id) filter (where m.estado = 'CERRADO') < count(distinct m.unidad_id) as es_provisional
   from biovac_renglones r
   join biovac_movimientos m on m.id = r.movimiento_id
   join biovac_unidades u on u.id = m.unidad_id
@@ -36,7 +48,7 @@ as $$
   join biovac_bloques_catalogo bl on bl.id = cb.bloque_id
   where u.jurisdiccion_id = p_jurisdiccion_id
     and m.anio = p_anio and m.mes = p_mes
-    and m.estado = 'CERRADO'
+    and (p_incluir_borrador or m.estado = 'CERRADO')
   group by cb.bloque_id, bl.pagina, bl.orden, cb.id, cb.orden_en_bloque, cb.nombre_excel, cb.clave, cb.regla_especial,
            l.id, l.numero_lote, l.caducidad, r.categoria
   order by bl.pagina, bl.orden, cb.orden_en_bloque, r.categoria, l.numero_lote;
