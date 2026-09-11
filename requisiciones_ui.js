@@ -1179,12 +1179,26 @@ function renderDestinosMasivos() {
   cont.innerHTML = DESTINOS.map((m) => {
     const tieneDatos = estado.distMunicipio.some((d) => d.municipio === m.v && Number(d.cantidad) > 0);
     return `
-      <label class="destino-masivo-chk">
-        <input type="checkbox" class="chk-destino-masivo" value="${m.v}" ${tieneDatos ? 'checked' : ''}>
-        ${m.l} <span class="cuenta">${tieneDatos ? '' : '(sin repartir)'}</span>
-      </label>
+      <div class="destino-masivo-fila" data-tipo-destino="${esHospital(m.v) ? 'hospitales' : 'municipios'}">
+        <label class="destino-masivo-chk">
+          <input type="checkbox" class="chk-destino-masivo" value="${m.v}" ${tieneDatos ? 'checked' : ''}>
+          ${m.l} <span class="cuenta">${tieneDatos ? '' : '(sin repartir)'}</span>
+        </label>
+        <button type="button" class="icon-btn-pure btn-exportar-uno-destino" data-destino="${m.v}" title="Exportar solo ${m.l}">
+          <span class="material-symbols-rounded" style="font-size:17px">download</span>
+        </button>
+      </div>
     `;
   }).join('');
+  cont.querySelectorAll('.btn-exportar-uno-destino').forEach((btn) => {
+    btn.addEventListener('click', () => exportarUno('MUNICIPAL', btn.dataset.destino));
+  });
+}
+
+function aplicarFiltroDestinosMasivos(filtro) {
+  document.querySelectorAll('#destinosMasivos .destino-masivo-fila').forEach((fila) => {
+    fila.querySelector('.chk-destino-masivo').checked = filtro === 'todos' || fila.dataset.tipoDestino === filtro;
+  });
 }
 
 async function exportarMasivo() {
@@ -1276,4 +1290,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('click', () => togglePanelExportar(true));
   $('btnAbrirExplorador').addEventListener('click', toggleExplorador);
   $('btnCerrarMes').addEventListener('click', cerrarMes);
+  document.querySelectorAll('.chip-filtro[data-filtro-destino]').forEach((chip) => {
+    chip.addEventListener('click', () => aplicarFiltroDestinosMasivos(chip.dataset.filtroDestino));
+  });
 });
