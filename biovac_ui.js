@@ -89,6 +89,14 @@ const estado = {
   movimiento: null,
   renglones: [],
   correccionBatchId: null,
+  // true cuando quien reabrió la corrección actual NO es la propia unidad
+  // municipal (JURISDICCIONAL/ADMIN entrando directo a Movimiento de
+  // Biológico, en vez de hacerlo desde el drill-down de Concentrado
+  // Biológico) -- en ese caso cada campo editado se audita igual que en el
+  // drill-down (biovac_guardar_campo_correccion_jurisdiccional), para que
+  // el municipio reciba la misma alerta sin importar por cuál pantalla se
+  // hizo la corrección.
+  correccionEsJurisdiccional: false,
   catalogoLotesCentral: {},
   correccionesPendientes: []
 };
@@ -346,6 +354,17 @@ async function cargarMovimiento() {
   document.getElementById('panelSinMovimiento').style.display = 'none';
 
   estado.movimiento = movimiento;
+  // Si el mes ya estaba EN_CORRECCION desde antes de esta carga (se
+  // recargó la página, o lo reabrió otra sesión), se recupera si el batch
+  // abierto es jurisdiccional -- si no se detecta aquí, un guardado por
+  // celda caería por error en el camino normal (sin auditar por campo).
+  if (movimiento.estado === 'EN_CORRECCION' && !estado.correccionBatchId) {
+    const { data: marcador } = await estado.db.from('biovac_correcciones')
+      .select('cascade_batch_id, tipo').eq('movimiento_id', movimiento.id).eq('tipo', 'CORRECCION_JURISDICCIONAL')
+      .is('campo', null).order('creado_en', { ascending: false }).limit(1).maybeSingle();
+    estado.correccionBatchId = marcador?.cascade_batch_id || null;
+    estado.correccionEsJurisdiccional = Boolean(marcador?.cascade_batch_id);
+  }
   await cargarRenglones();
   render();
   if (movimiento.estado === 'BORRADOR') await ofrecerCargaDesdeRequisiciones();
@@ -997,16 +1016,34 @@ async function guardarCampoRenglon(input) {
     }
   }
 
-  const { data, error } = await estado.db.from('biovac_renglones').update({ [campo]: valor }).eq('id', renglonId)
-    .select('existencia_final_frascos').single();
-  if (error) { toast('Error al guardar: ' + error.message, 'error'); return; }
+  // Si quien está corrigiendo entró directo a Movimiento de Biológico sin
+  // ser la propia unidad (ver abrirCorreccion), cada campo se audita igual
+  // que en el drill-down de Concentrado Biológico -- mismo RPC, para que la
+  // unidad reciba la misma alerta sin importar desde qué pantalla se hizo.
+  const esCorreccionJurisdiccional = estado.correccionEsJurisdiccional && estado.movimiento.estado === 'EN_CORRECCION';
+  let final;
+  if (esCorreccionJurisdiccional) {
+    const usuario = usuarioActual();
+    if (!usuario) return;
+    const { data, error } = await estado.db.rpc('biovac_guardar_campo_correccion_jurisdiccional', {
+      p_renglon_id: renglonId, p_campo: campo, p_valor: valor == null ? '' : String(valor),
+      p_usuario: usuario, p_rol: (estado.perfil ? estado.perfil.rol : 'JURISDICCIONAL'), p_cascade_batch_id: estado.correccionBatchId
+    });
+    if (error) { toast('Error al guardar: ' + error.message, 'error'); return; }
+    final = data;
+  } else {
+    const { data, error } = await estado.db.from('biovac_renglones').update({ [campo]: valor }).eq('id', renglonId)
+      .select('existencia_final_frascos').single();
+    if (error) { toast('Error al guardar: ' + error.message, 'error'); return; }
+    final = data.existencia_final_frascos;
+  }
   camposSinGuardar.delete(input);
   destellarGuardado(input);
   if (r) {
     r[campo] = valor;
-    r.existencia_final_frascos = data.existencia_final_frascos;
+    r.existencia_final_frascos = final;
     const celda = document.querySelector(`[data-existencia-final="${renglonId}"]`);
-    if (celda) { celda.textContent = data.existencia_final_frascos; celda.classList.toggle('existencia-negativa', Number(data.existencia_final_frascos) < 0); }
+    if (celda) { celda.textContent = final; celda.classList.toggle('existencia-negativa', Number(final) < 0); }
   }
 }
 
@@ -1335,11 +1372,19 @@ async function abrirCorreccion() {
     pedirMotivo: true, placeholderMotivo: 'Ej. Se corrigió una cantidad mal capturada', textoAceptar: 'Reabrir'
   });
   if (!motivo) return;
+  // Quien reabre desde AQUÍ (Movimiento de Biológico) sin ser la propia
+  // unidad municipal está corrigiendo "desde arriba" igual que si lo
+  // hiciera desde el drill-down de Concentrado Biológico -- debe generar
+  // la misma alerta para el municipio, no una corrección silenciosa.
+  const rol = estado.perfil ? estado.perfil.rol : 'MUNICIPAL';
+  const esJurisdiccional = rol && rol !== 'MUNICIPAL';
   const { data, error } = await estado.db.rpc('biovac_abrir_correccion', {
-    p_movimiento_id: estado.movimiento.id, p_usuario: usuario, p_rol: (estado.perfil ? estado.perfil.rol : 'MUNICIPAL'), p_motivo: motivo.trim(), p_tipo: 'REAPERTURA'
+    p_movimiento_id: estado.movimiento.id, p_usuario: usuario, p_rol: rol, p_motivo: motivo.trim(),
+    p_tipo: esJurisdiccional ? 'CORRECCION_JURISDICCIONAL' : 'REAPERTURA'
   });
   if (error) { toast('No se pudo abrir corrección: ' + error.message, 'error'); return; }
   estado.correccionBatchId = data;
+  estado.correccionEsJurisdiccional = esJurisdiccional;
   toast('Mes reabierto para corrección. Edita lo necesario y pulsa "Guardar corrección".', 'ok');
   await cargarMovimiento();
 }
@@ -1359,6 +1404,7 @@ async function aplicarCorreccion() {
   if (error) { toast('No se pudo aplicar la corrección: ' + error.message, 'error'); return; }
   toast(`Corrección aplicada. Meses recalculados: ${data}.`, 'ok');
   estado.correccionBatchId = null;
+  estado.correccionEsJurisdiccional = false;
   await cargarMovimiento();
 }
 
@@ -1651,7 +1697,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btn) reconocerCorreccion(btn.dataset.correccion);
   });
 
-  document.getElementById('btnCargar').addEventListener('click', () => { estado.correccionBatchId = null; cargarMovimiento(); });
+  document.getElementById('btnCargar').addEventListener('click', () => { estado.correccionBatchId = null; estado.correccionEsJurisdiccional = false; cargarMovimiento(); });
   document.getElementById('btnIniciarMovimiento').addEventListener('click', crearMovimiento);
   document.getElementById('btnGuardarCabecera').addEventListener('click', guardarCabecera);
   document.getElementById('btnCerrarMes').addEventListener('click', cerrarMes);
