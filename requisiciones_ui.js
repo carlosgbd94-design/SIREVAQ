@@ -59,6 +59,20 @@ const CODIGO_A_LOTES_BIOLOGICO = {
   '3810': 'TD', '6056': 'VARICELA', '3820': 'SRP', '6317': 'INFLUENZA', '6501': 'VPH', '6509': 'VSR'
 };
 
+// Mismos colores que ya usa BioVac por biológico (CLAVE_COLORES en
+// biovac_ui.js) -- una vacuna se ve del mismo color en toda la app, no solo
+// aquí. Los selects de Biológico/Lote de Paso 2 y 3 eran texto plano puro
+// (sin nada que distinga un biológico de otro de un vistazo, reportado por
+// el usuario); ahora cada opción lleva un punto de color + la tarjeta de
+// vista previa junto a los selects repite el mismo color en grande.
+const COLOR_POR_CODIGO_ARTICULO = {
+  '146': '#3D405B', '148': '#3D405B', '150': '#264653', '6135': '#9ACD32', '2526': '#C43D3D',
+  '3825': '#4b5563', '3800': '#7B5EA7', '3801': '#3A86B7', '3802': '#0f172a', '3805': '#E9C46A',
+  '3808': '#E76F51', '3810': '#5C5C5C', '6056': '#059669', '3820': '#B23A48', '3821': '#B23A48',
+  '6317': '#C26750', '3832': '#0f172a', '6501': '#2A9D8F', '2': '#0f172a', '6509': '#A66B50'
+};
+function colorDeBio(bio) { return COLOR_POR_CODIGO_ARTICULO[bio?.codigo_articulo] || '#0f172a'; }
+
 const estado = {
   db: null,
   perfil: null,
@@ -101,6 +115,17 @@ function flashGuardado(el) {
 function ultimoDiaMes(anio, mes) {
   const dia = new Date(anio, mes, 0).getDate();
   return `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+// Para escribir una fecha en una celda de Excel (vía ExcelJS) hace falta
+// 'Z' -- ExcelJS serializa Date a número de serie usando sus componentes
+// UTC, así que un Date de medianoche LOCAL (America/Mexico_City, UTC-6)
+// se serializa con ".25" de fracción de día (6/24) en vez de un entero
+// limpio. formatMmmAa/parsearCaducidadInteligente de abajo SÍ deben seguir
+// en hora local (son para pantalla, no para Excel) -- no tocar esos.
+function fechaExcelUtc(fechaIso) {
+  const iso = fechaIso || new Date().toISOString().slice(0, 10);
+  return new Date(iso + 'T00:00:00Z');
 }
 
 function formatMmmAa(fechaIso) {
@@ -699,7 +724,7 @@ function renderSelectLotesPaso2() {
   const idsConSurtido = new Set(estado.items.filter((i) => Number(i.cantidad_surtida) > 0).map((i) => i.requi_biologico_id));
   const biologicos = estado.catalogo.filter((bio) => idsConSurtido.has(bio.id));
   selBio.innerHTML = biologicos.length
-    ? biologicos.map((bio) => `<option value="${bio.id}">${bio.nombre}</option>`).join('')
+    ? biologicos.map((bio) => `<option value="${bio.id}" style="color:${colorDeBio(bio)}">● ${bio.nombre}</option>`).join('')
     : '<option value="">Sin lotes surtidos capturados</option>';
   if (biologicos.some((b) => b.id === valorPrevio)) selBio.value = valorPrevio;
   selBio.onchange = renderSelectLotesPorBiologicoMunicipio;
@@ -711,10 +736,50 @@ function renderSelectLotesPorBiologicoMunicipio() {
   const biologicoId = $('selBiologicoMunicipio').value;
   const opciones = estado.items.filter((i) => i.requi_biologico_id === biologicoId && Number(i.cantidad_surtida) > 0);
   sel.innerHTML = opciones.length
-    ? opciones.map((i) => `<option value="${i.requi_biologico_id}::${i.lote_id}">Lote ${i.requi_lotes.numero_lote} (surtido: ${i.cantidad_surtida})</option>`).join('')
+    ? opciones.map((i) => `<option value="${i.requi_biologico_id}::${i.lote_id}">Lote ${i.requi_lotes.numero_lote} · Cad. ${formatMmmAa(i.requi_lotes.caducidad)} · Surtido ${i.cantidad_surtida}</option>`).join('')
     : '<option value="">Elige un biológico</option>';
-  sel.onchange = renderCajaRepartoMunicipio;
+  sel.onchange = () => { renderCajaRepartoMunicipio(); actualizarPreviewPaso2(); };
   renderCajaRepartoMunicipio();
+  actualizarPreviewPaso2();
+}
+
+// Los <select> nativos de Biológico/Lote no dejaban ver de un vistazo qué
+// se estaba por repartir -- texto plano, sin color ni caducidad (reportado
+// por el usuario: "no ayudan a identificar qué lote/vacuna"). El punto de
+// color en cada <option> (soportado por Chrome/Edge, se degrada a texto
+// plano en navegadores que lo ignoren) más esta tarjeta grande con el
+// mismo color, nombre y caducidad ya resuelven la identificación aunque el
+// desplegable en sí se quede nativo.
+function actualizarPreviewPaso2() {
+  const biologicoId = $('selBiologicoMunicipio').value;
+  const [, loteId] = $('selLoteParaMunicipio').value.split('::');
+  const bio = estado.catalogo.find((b) => b.id === biologicoId);
+  const item = estado.items.find((i) => i.requi_biologico_id === biologicoId && i.lote_id === loteId);
+  renderPreviewSeleccion('previewMunicipio', bio, item);
+}
+
+function renderPreviewSeleccion(contId, bio, item) {
+  const el = $(contId);
+  if (!el) return;
+  if (!bio) { el.style.display = 'none'; return; }
+  const color = colorDeBio(bio);
+  el.style.display = 'flex';
+  el.style.borderLeftColor = color;
+  const detalle = item
+    ? `<div class="preview-detalle">
+        <span class="preview-chip"><span class="material-symbols-rounded">qr_code_2</span>Lote ${item.requi_lotes.numero_lote}</span>
+        <span class="preview-chip"><span class="material-symbols-rounded">event</span>Caducidad ${formatMmmAa(item.requi_lotes.caducidad)}</span>
+      </div>`
+    : `<div class="preview-detalle"><span class="preview-chip">Elige un lote</span></div>`;
+  el.innerHTML = `
+    <div class="preview-icono" style="background: linear-gradient(135deg, ${color}1f, ${color}4d);">
+      <span class="material-symbols-rounded" style="color:${color}">medication_liquid</span>
+    </div>
+    <div>
+      <div class="preview-bio">${bio.nombre}</div>
+      ${detalle}
+    </div>
+  `;
 }
 
 function renderCajaRepartoMunicipio() {
@@ -738,26 +803,44 @@ function renderCajaRepartoMunicipio() {
     `;
   }).join('');
 
-  const yaRepartido = filas.reduce((acc, f) => acc + Number(f.cantidad || 0), 0);
-  const saldo = disponible - yaRepartido;
-  const conReparto = filas.filter((f) => Number(f.cantidad) > 0).length;
   caja.innerHTML = `
     <div style="margin-top:14px;">
-      <div class="franja-estado">
-        <div class="stat"><span>Disponible</span><b>${disponible}</b></div>
-        <div class="stat"><span>Repartido</span><b>${yaRepartido}</b></div>
-        <div class="stat saldo-${claseSaldo(saldo, disponible)}"><span>Saldo</span><b>${saldo}</b></div>
-        <div class="stat"><span>Destinos con reparto</span><b>${conReparto} / ${DESTINOS.length}</b></div>
-      </div>
+      <div class="franja-estado" id="statsRepartoMunicipio"></div>
       <div class="grid-destinos">${cards}</div>
     </div>
   `;
+  actualizarStatsRepartoMunicipio(biologicoId, loteId);
 
   caja.querySelectorAll('input[data-municipio]').forEach((inp) => {
     inp.addEventListener('change', () => guardarRepartoMunicipio(biologicoId, loteId, inp.dataset.municipio, inp));
   });
 }
 
+function actualizarStatsRepartoMunicipio(biologicoId, loteId) {
+  const el = $('statsRepartoMunicipio');
+  if (!el) return;
+  const item = estado.items.find((i) => i.requi_biologico_id === biologicoId && i.lote_id === loteId);
+  const disponible = item ? Number(item.cantidad_surtida) : 0;
+  const filas = estado.distMunicipio.filter((d) => d.requi_biologico_id === biologicoId && d.lote_id === loteId);
+  const yaRepartido = filas.reduce((acc, f) => acc + Number(f.cantidad || 0), 0);
+  const saldo = disponible - yaRepartido;
+  const conReparto = filas.filter((f) => Number(f.cantidad) > 0).length;
+  el.innerHTML = `
+    <div class="stat"><span>Disponible</span><b>${disponible}</b></div>
+    <div class="stat"><span>Repartido</span><b>${yaRepartido}</b></div>
+    <div class="stat saldo-${claseSaldo(saldo, disponible)}"><span>Saldo</span><b>${saldo}</b></div>
+    <div class="stat"><span>Destinos con reparto</span><b>${conReparto} / ${DESTINOS.length}</b></div>
+  `;
+}
+
+// Antes, al terminar CADA guardado se volvía a pedir toda la distribución y
+// se reconstruía el HTML completo de la caja (todos los <input> de golpe).
+// Si el usuario ya estaba tecleando el SIGUIENTE destino mientras ese
+// guardado (asíncrono) seguía en vuelo, ese input a medio teclear se
+// destruía y renacía con el valor viejo (el que ya estaba guardado en BD)
+// justo cuando el guardado anterior resolvía -- perdía lo tecleado sin
+// avisar. Ahora se actualiza `estado.distMunicipio` en memoria y solo se
+// refresca esta tarjeta puntual + los totales, sin tocar los demás inputs.
 async function guardarRepartoMunicipio(biologicoId, loteId, municipio, inputEl) {
   const cantidad = Number(inputEl.value) || 0;
   const { error } = await estado.db.from('requi_distribucion_municipio')
@@ -769,9 +852,11 @@ async function guardarRepartoMunicipio(biologicoId, loteId, municipio, inputEl) 
     return;
   }
   toast(`Guardado: ${municipio} = ${cantidad}`);
-  const { data: dm } = await estado.db.from('requi_distribucion_municipio').select('*').eq('requisicion_id', estado.requisicion.id);
-  estado.distMunicipio = dm || [];
-  renderCajaRepartoMunicipio();
+  let fila = estado.distMunicipio.find((d) => d.requi_biologico_id === biologicoId && d.lote_id === loteId && d.municipio === municipio);
+  if (fila) fila.cantidad = cantidad;
+  else estado.distMunicipio.push({ requisicion_id: estado.requisicion.id, municipio, requi_biologico_id: biologicoId, lote_id: loteId, cantidad });
+  flashGuardado(inputEl.closest('.destino-card'));
+  actualizarStatsRepartoMunicipio(biologicoId, loteId);
   renderSelectMunicipioYLotesPaso3();
   renderDestinosMasivos();
   sincronizarLotePublico(municipio, biologicoId, loteId, cantidad); // en segundo plano, no bloquea el guardado
@@ -832,7 +917,7 @@ function renderSelectBiologicosUnidad() {
   const idsAsignados = new Set(asignadosMunicipioUnidad().map((d) => d.requi_biologico_id));
   const biologicos = estado.catalogo.filter((bio) => idsAsignados.has(bio.id));
   selBio.innerHTML = biologicos.length
-    ? biologicos.map((bio) => `<option value="${bio.id}">${bio.nombre}</option>`).join('')
+    ? biologicos.map((bio) => `<option value="${bio.id}" style="color:${colorDeBio(bio)}">● ${bio.nombre}</option>`).join('')
     : '<option value="">Este municipio no tiene lotes asignados todavía (ver paso 2)</option>';
   if (biologicos.some((b) => b.id === valorPrevio)) selBio.value = valorPrevio;
   selBio.onchange = renderSelectLotesPaso3;
@@ -851,11 +936,21 @@ function renderSelectLotesPaso3() {
           .filter((u) => u.requi_biologico_id === d.requi_biologico_id && u.lote_id === d.lote_id)
           .reduce((acc, u) => acc + Number(u.cantidad || 0), 0);
         const saldo = Number(d.cantidad) - yaRepartidoAqui;
-        return `<option value="${d.requi_biologico_id}::${d.lote_id}">Lote ${item ? item.requi_lotes.numero_lote : '?'} — asignado ${d.cantidad}, saldo ${saldo}</option>`;
+        const caducidad = item ? formatMmmAa(item.requi_lotes.caducidad) : '—';
+        return `<option value="${d.requi_biologico_id}::${d.lote_id}">Lote ${item ? item.requi_lotes.numero_lote : '?'} · Cad. ${caducidad} · Saldo ${saldo}</option>`;
       }).join('')
     : '<option value="">Elige un biológico</option>';
-  sel.onchange = renderCajaRepartoUnidad;
+  sel.onchange = () => { renderCajaRepartoUnidad(); actualizarPreviewPaso3(); };
   renderCajaRepartoUnidad();
+  actualizarPreviewPaso3();
+}
+
+function actualizarPreviewPaso3() {
+  const biologicoId = $('selBiologicoUnidad').value;
+  const [, loteId] = $('selLoteParaUnidad').value.split('::');
+  const bio = estado.catalogo.find((b) => b.id === biologicoId);
+  const item = estado.items.find((i) => i.requi_biologico_id === biologicoId && i.lote_id === loteId);
+  renderPreviewSeleccion('previewUnidad', bio, item);
 }
 
 function renderCajaRepartoUnidad() {
@@ -864,12 +959,8 @@ function renderCajaRepartoUnidad() {
   const caja = $('cajaRepartoUnidad');
   if (!val) { caja.innerHTML = ''; return; }
   const [biologicoId, loteId] = val.split('::');
-  const asignacion = estado.distMunicipio.find((d) => d.municipio === municipio && d.requi_biologico_id === biologicoId && d.lote_id === loteId);
-  const disponible = asignacion ? Number(asignacion.cantidad) : 0;
   const unidadesMunicipio = estado.unidades.filter((u) => u.municipio === municipio);
   const filas = estado.distUnidad.filter((d) => d.requi_biologico_id === biologicoId && d.lote_id === loteId);
-  const yaRepartido = filas.reduce((acc, f) => acc + Number(f.cantidad || 0), 0);
-  const saldo = disponible - yaRepartido;
 
   // Orden alfabético fijo (no se reordena por asignación) -- reordenar en
   // cada guardado saltaría filas de lugar mientras se teclea varias unidades
@@ -878,7 +969,7 @@ function renderCajaRepartoUnidad() {
     const fila = filas.find((f) => f.unidad_id === u.id);
     const cantidad = fila ? Number(fila.cantidad) : 0;
     return `
-      <tr class="${cantidad > 0 ? 'con-asignacion' : ''}">
+      <tr class="${cantidad > 0 ? 'con-asignacion' : ''}" data-unidad-fila="${u.id}">
         <td>${u.nombre}</td>
         <td class="solo-edicion"><input type="number" min="0" value="${cantidad}" data-unidad="${u.id}"></td>
         <td class="solo-lectura" style="display:none;">${cantidad}</td>
@@ -887,14 +978,8 @@ function renderCajaRepartoUnidad() {
     `;
   }).join('');
 
-  const conReparto = filas.filter((f) => Number(f.cantidad) > 0).length;
   caja.innerHTML = `
-    <div class="franja-estado">
-      <div class="stat"><span>Disponible en ${municipio}</span><b>${disponible}</b></div>
-      <div class="stat"><span>Repartido</span><b>${yaRepartido}</b></div>
-      <div class="stat saldo-${claseSaldo(saldo, disponible)}"><span>Saldo</span><b>${saldo}</b></div>
-      <div class="stat"><span>Unidades con reparto</span><b>${conReparto} / ${unidadesMunicipio.length}</b></div>
-    </div>
+    <div class="franja-estado" id="statsRepartoUnidad"></div>
     <div class="tbl-scroll" style="margin-top:10px;">
       <table class="tbl-unidades">
         <thead><tr><th>Unidad</th><th>Cantidad</th><th style="text-align:center;">Exportar</th></tr></thead>
@@ -902,6 +987,7 @@ function renderCajaRepartoUnidad() {
       </table>
     </div>
   `;
+  actualizarStatsRepartoUnidad(biologicoId, loteId);
 
   caja.querySelectorAll('input[data-unidad]').forEach((inp) => {
     inp.addEventListener('change', () => guardarRepartoUnidad(biologicoId, loteId, inp.dataset.unidad, inp));
@@ -911,6 +997,30 @@ function renderCajaRepartoUnidad() {
   });
 }
 
+function actualizarStatsRepartoUnidad(biologicoId, loteId) {
+  const el = $('statsRepartoUnidad');
+  if (!el) return;
+  const municipio = $('selMunicipioUnidad').value;
+  const asignacion = estado.distMunicipio.find((d) => d.municipio === municipio && d.requi_biologico_id === biologicoId && d.lote_id === loteId);
+  const disponible = asignacion ? Number(asignacion.cantidad) : 0;
+  const unidadesMunicipio = estado.unidades.filter((u) => u.municipio === municipio);
+  const filas = estado.distUnidad.filter((d) => d.requi_biologico_id === biologicoId && d.lote_id === loteId);
+  const yaRepartido = filas.reduce((acc, f) => acc + Number(f.cantidad || 0), 0);
+  const saldo = disponible - yaRepartido;
+  const conReparto = filas.filter((f) => Number(f.cantidad) > 0).length;
+  el.innerHTML = `
+    <div class="stat"><span>Disponible en ${municipio}</span><b>${disponible}</b></div>
+    <div class="stat"><span>Repartido</span><b>${yaRepartido}</b></div>
+    <div class="stat saldo-${claseSaldo(saldo, disponible)}"><span>Saldo</span><b>${saldo}</b></div>
+    <div class="stat"><span>Unidades con reparto</span><b>${conReparto} / ${unidadesMunicipio.length}</b></div>
+  `;
+}
+
+// Mismo motivo que guardarRepartoMunicipio: ya no se vuelve a pedir toda la
+// distribución ni se reconstruye la tabla completa al terminar cada
+// guardado (eso destruía el <input> de la unidad que el usuario ya
+// estuviera tecleando a continuación, perdiendo lo escrito). Se actualiza
+// `estado.distUnidad` en memoria y solo se refresca esa fila + los totales.
 async function guardarRepartoUnidad(biologicoId, loteId, unidadId, inputEl) {
   const cantidad = Number(inputEl.value) || 0;
   const { error } = await estado.db.from('requi_distribucion_unidad')
@@ -922,9 +1032,12 @@ async function guardarRepartoUnidad(biologicoId, loteId, unidadId, inputEl) {
     return;
   }
   toast('Guardado.');
-  const { data: du } = await estado.db.from('requi_distribucion_unidad').select('*').eq('requisicion_id', estado.requisicion.id);
-  estado.distUnidad = du || [];
-  renderCajaRepartoUnidad();
+  let fila = estado.distUnidad.find((d) => d.requi_biologico_id === biologicoId && d.lote_id === loteId && d.unidad_id === unidadId);
+  if (fila) fila.cantidad = cantidad;
+  else estado.distUnidad.push({ requisicion_id: estado.requisicion.id, unidad_id: unidadId, requi_biologico_id: biologicoId, lote_id: loteId, cantidad });
+  const filaTr = document.querySelector(`tr[data-unidad-fila="${unidadId}"]`);
+  if (filaTr) { flashGuardado(filaTr); filaTr.classList.toggle('con-asignacion', cantidad > 0); }
+  actualizarStatsRepartoUnidad(biologicoId, loteId);
 }
 
 // ---------------------------------------------------------------------------
@@ -948,6 +1061,7 @@ async function obtenerPlantillaBuffer() {
 async function construirDatosDestino(nivel, destino) {
   let filasPorBiologico = {};
   let destinoNombre = '', destinoDireccion = '';
+  let unidadDestino = null;
 
   if (nivel === 'JURISDICCIONAL') {
     destinoNombre = 'JURISDICCIÓN SANITARIA N.1 (concentrado)';
@@ -967,9 +1081,9 @@ async function construirDatosDestino(nivel, destino) {
       cantidad: it.cantidad, numeroLote: it.requi_lotes.numero_lote, caducidad: it.requi_lotes.caducidad
     }));
   } else {
-    const unidad = estado.unidades.find((u) => u.id === destino);
-    const muniLabel = unidad ? MUNICIPIOS_REALES.find((m) => m.v === unidad.municipio) : null;
-    destinoNombre = unidad ? `C.S. ${unidad.nombre}` : '';
+    unidadDestino = estado.unidades.find((u) => u.id === destino);
+    const muniLabel = unidadDestino ? MUNICIPIOS_REALES.find((m) => m.v === unidadDestino.municipio) : null;
+    destinoNombre = unidadDestino ? `C.S. ${unidadDestino.nombre}` : '';
     destinoDireccion = muniLabel ? muniLabel.l : '';
     const { data } = await estado.db.from('requi_distribucion_unidad')
       .select('*, requi_lotes(numero_lote, caducidad)').eq('requisicion_id', estado.requisicion.id).eq('unidad_id', destino).gt('cantidad', 0);
@@ -981,14 +1095,20 @@ async function construirDatosDestino(nivel, destino) {
   const { data: firmasJuris } = await estado.db.from('requi_firmas').select('*')
     .eq('nivel', 'JURISDICCIONAL').eq('destino', 'JURISDICCION').maybeSingle();
 
-  // Entrega/Recibe: solo existe para JURISDICCIONAL y para un municipio
-  // real. Las unidades y los hospitales (que se tratan como unidad) SIEMPRE
-  // van en blanco -- firman a mano y anotan su propio nombre en el papel.
+  // Entrega/Recibe: para JURISDICCIONAL y un municipio real, ambos vienen
+  // del catálogo cacheado. Para una unidad, "recibe" siempre va en blanco
+  // -- la unidad firma a mano y anota su propio nombre en el papel -- pero
+  // "entrega" SÍ debe llevar nombre: es el mismo responsable municipal que
+  // entrega en las demás requisiciones de ese municipio, no alguien que
+  // firme en el papel. Antes ambos quedaban en blanco para unidades.
   let entregaRecibe = {};
   if (nivel === 'JURISDICCIONAL') entregaRecibe = firmasJuris || {};
   else if (nivel === 'MUNICIPAL' && !esHospital(destino)) {
     const { data } = await estado.db.from('requi_firmas').select('*').eq('nivel', 'MUNICIPAL').eq('destino', destino).maybeSingle();
     entregaRecibe = data || {};
+  } else if (nivel !== 'MUNICIPAL' && unidadDestino) {
+    const { data } = await estado.db.from('requi_firmas').select('*').eq('nivel', 'MUNICIPAL').eq('destino', unidadDestino.municipio).maybeSingle();
+    entregaRecibe = { entrega_nombre: data?.entrega_nombre, entrega_cargo: data?.entrega_cargo };
   }
   const firmas = {
     elaboro_nombre: firmasJuris?.elaboro_nombre, elaboro_cargo: firmasJuris?.elaboro_cargo,
@@ -1000,7 +1120,7 @@ async function construirDatosDestino(nivel, destino) {
   const mesInfo = MESES.find((m) => m.v === estado.requisicion.mes);
   const encabezado = {
     origenNombre: 'JURISDICCIÓN SANITARIA N.1', area: 'VACUNAS', origenDireccion: DIRECCION_JURISDICCION,
-    fechaEnvio: estado.requisicion.fecha_envio ? new Date(estado.requisicion.fecha_envio + 'T00:00:00') : new Date(),
+    fechaEnvio: fechaExcelUtc(estado.requisicion.fecha_envio),
     destinoNombre, folio: estado.requisicion.folio_oracle || '', destinoDireccion,
     mesLabel: mesInfo ? `${mesInfo.l.toUpperCase()} ${estado.requisicion.anio}` : ''
   };

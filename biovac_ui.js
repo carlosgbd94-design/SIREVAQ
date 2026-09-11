@@ -132,6 +132,18 @@ function toast(msg, tipo) {
   toast._t = setTimeout(() => { el.style.display = 'none'; }, 4500);
 }
 
+// Overlay de carga -- para operaciones con varias escrituras awaited en
+// secuencia (ej. cargar recibido desde Requisiciones) donde, sin esto, la
+// pantalla no daba ninguna señal de que algo seguía corriendo entre el
+// modal de confirmación y el toast final.
+function mostrarCargando(texto) {
+  document.getElementById('loadingTexto').textContent = texto || 'Cargando…';
+  document.getElementById('loadingOverlay').classList.add('abierto');
+}
+function ocultarCargando() {
+  document.getElementById('loadingOverlay').classList.remove('abierto');
+}
+
 // Reemplaza confirm()/prompt() nativos del navegador por un modal propio.
 // Sin pedirMotivo: resuelve true (Aceptar) / false (Cancelar o Escape).
 // Con pedirMotivo: resuelve el texto escrito (no vacío) / null si se cancela.
@@ -369,22 +381,29 @@ async function ofrecerCargaDesdeRequisiciones() {
     .eq('requisicion_id', requisicion.id).eq('municipio', unidad.municipio).gt('cantidad', 0);
   if (error || !reparto || !reparto.length) return;
 
+  // Antes se excluía cualquier biológico que ya tuviera UN renglón NORMAL
+  // para ese lote, sin importar si su "recibido" seguía en 0 -- un lote que
+  // ya traía existencia arrastrada del mes anterior (o una fila creada a
+  // mano sin llenar "recibido" todavía) contaba como "ya cargado" y el
+  // biológico ni siquiera aparecía en el modal, aunque Requisiciones sí
+  // hubiera repartido cantidad real (reportado por el usuario: BCG no se
+  // cargaba en el movimiento de Corregidora pese a tener reparto). Ahora
+  // solo se considera "ya cargado" si ese renglón YA tiene recibido > 0.
   const yaCargados = new Set(
-    estado.renglones.filter((r) => r.categoria === 'NORMAL')
+    estado.renglones.filter((r) => r.categoria === 'NORMAL' && Number(r.recibido_frascos) > 0)
       .map((r) => r.biovac_lotes.biologico_id + '::' + r.biovac_lotes.numero_lote)
   );
 
-  // dosis_por_frasco/frascos se calculan aquí, antes de mostrar el modal,
-  // para que el detalle que se le enseña al usuario sea EXACTAMENTE lo que
-  // luego se inserta -- no una aproximación aparte que podría desincronizarse.
+  // Requisiciones captura TODO en frascos (piezas físicas recibidas), igual
+  // que BioVac -- dosis_por_frasco solo aplica a "aplicadas"/"desechadas"
+  // (conteo de dosis puestas/tiradas), nunca a "recibido". Antes se dividía
+  // la cantidad entre dosis_por_frasco como si viniera en dosis, así que un
+  // multidosis (ej. Hepatitis B, 10 dosis/frasco) con 11 frascos repartidos
+  // se cargaba como 1.1 -- reportado por el usuario con captura real.
   const candidatos = reparto
     .filter((r) => r.requi_catalogo_biologicos.biovac_biologico_id)
     .filter((r) => !yaCargados.has(r.requi_catalogo_biologicos.biovac_biologico_id + '::' + r.requi_lotes.numero_lote))
-    .map((r) => {
-      const bio = estado.biologicos.find((b) => b.id === r.requi_catalogo_biologicos.biovac_biologico_id);
-      const dosisPorFrasco = bio ? Number(bio.dosis_por_frasco) || 1 : 1;
-      return { ...r, bio, dosisPorFrasco, frascos: Math.round((Number(r.cantidad) / dosisPorFrasco) * 100) / 100 };
-    });
+    .map((r) => ({ ...r, bio: estado.biologicos.find((b) => b.id === r.requi_catalogo_biologicos.biovac_biologico_id), frascos: Number(r.cantidad) }));
   if (!candidatos.length) return;
 
   // Con 1 solo lote un párrafo corrido se lee bien, pero con varios
@@ -394,43 +413,54 @@ async function ofrecerCargaDesdeRequisiciones() {
   const detalleHtml = candidatos.map((c) => `
     <div class="modal-detalle-item">
       <span class="bio">${c.requi_catalogo_biologicos.nombre}</span>
-      <div class="detalle-fila"><span>Lote ${c.requi_lotes.numero_lote}</span><b>${c.cantidad} pzas → ${c.frascos} frasco(s)</b></div>
+      <div class="detalle-fila"><span>Lote ${c.requi_lotes.numero_lote}</span><b>${c.frascos} frasco(s)</b></div>
     </div>
   `).join('');
   const aceptar = await mostrarModal({
     titulo: 'Cargar recibido desde Requisiciones',
     mensaje: `Requisiciones ya repartió ${candidatos.length} lote(s) a este municipio para este mes`
       + (requisicion.folio_oracle ? ` (folio ${requisicion.folio_oracle})` : '') + '. '
-      + '¿Deseas cargarlos aquí como recibido? Revisa la conversión a frascos antes de cerrar el mes.',
+      + '¿Deseas cargarlos aquí como recibido?',
     detalleHtml,
     textoAceptar: 'Sí, cargar'
   });
   if (!aceptar) return;
 
   let cargados = 0;
-  for (const c of candidatos) {
-    const bio = c.bio;
-    if (!bio) continue;
-    const dosisPorFrasco = c.dosisPorFrasco;
-    const frascos = c.frascos;
+  mostrarCargando(`Cargando ${candidatos.length} lote(s) desde Requisiciones…`);
+  try {
+    for (const c of candidatos) {
+      const bio = c.bio;
+      if (!bio) continue;
+      const frascos = c.frascos;
 
-    let { data: lote } = await estado.db.from('biovac_lotes')
-      .select('id').eq('biologico_id', bio.id).eq('numero_lote', c.requi_lotes.numero_lote).maybeSingle();
-    if (!lote) {
-      const { data: nuevo, error: errIns } = await estado.db.from('biovac_lotes')
-        .insert({ biologico_id: bio.id, numero_lote: c.requi_lotes.numero_lote, caducidad: c.requi_lotes.caducidad })
-        .select('id').single();
-      if (errIns) continue;
-      lote = nuevo;
+      let { data: lote } = await estado.db.from('biovac_lotes')
+        .select('id').eq('biologico_id', bio.id).eq('numero_lote', c.requi_lotes.numero_lote).maybeSingle();
+      if (!lote) {
+        const { data: nuevo, error: errIns } = await estado.db.from('biovac_lotes')
+          .insert({ biologico_id: bio.id, numero_lote: c.requi_lotes.numero_lote, caducidad: c.requi_lotes.caducidad })
+          .select('id').single();
+        if (errIns) continue;
+        lote = nuevo;
+      }
+
+      // upsert (no insert) -- el lote puede ya traer un renglón con recibido
+      // en 0 (existencia arrastrada del mes anterior, o una fila creada a
+      // mano) que la unicidad (movimiento_id, lote_id, categoria) rechazaría
+      // como duplicado; aquí sí se debe completar ese "recibido" en vez de
+      // fallar. existencia_anterior_frascos no se toca (no va en el payload),
+      // así que un arrastre ya cargado no se pierde -- y existencia_final se
+      // recalcula sola vía trigger (biovac_calc_existencia_final).
+      const { error: errRenglon } = await estado.db.from('biovac_renglones').upsert({
+        movimiento_id: estado.movimiento.id, lote_id: lote.id, categoria: 'NORMAL',
+        recibido_frascos: frascos,
+        observaciones: `Cargado desde Requisiciones (${frascos} frasco(s))`
+          + (requisicion.folio_oracle ? ` · folio ${requisicion.folio_oracle}` : '')
+      }, { onConflict: 'movimiento_id,lote_id,categoria' });
+      if (!errRenglon) cargados++;
     }
-
-    const { error: errRenglon } = await estado.db.from('biovac_renglones').insert({
-      movimiento_id: estado.movimiento.id, lote_id: lote.id, categoria: 'NORMAL',
-      recibido_frascos: frascos,
-      observaciones: `Cargado desde Requisiciones (${c.cantidad} pzas ÷ ${dosisPorFrasco}/frasco)`
-        + (requisicion.folio_oracle ? ` · folio ${requisicion.folio_oracle}` : '')
-    });
-    if (!errRenglon) cargados++;
+  } finally {
+    ocultarCargando();
   }
 
   if (cargados) {

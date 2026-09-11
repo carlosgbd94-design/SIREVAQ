@@ -399,6 +399,29 @@
     padding: 12px 18px; border-radius: 14px; font-size: 13px; max-width: 380px;
     box-shadow: var(--shadow-2); z-index: 999; display: none; font-weight: 600;
   }
+
+  /* Overlay de carga -- ej. mientras se insertan los renglones al aceptar
+     "Cargar recibido desde Requisiciones" (varias escrituras awaited en
+     secuencia, sin esto la pantalla se quedaba sin ninguna señal de que
+     algo seguía corriendo entre el modal de confirmación y el toast final).
+     z-index por encima de .modal-overlay (1000): puede mostrarse justo
+     después de cerrar ese modal. */
+  .loading-overlay {
+    position: fixed; inset: 0; background: rgba(15,23,42,.5); display: none;
+    align-items: center; justify-content: center; z-index: 1100; padding: 20px;
+  }
+  .loading-overlay.abierto { display: flex; }
+  .loading-caja {
+    background: var(--surface); border-radius: 20px; padding: 28px 34px; box-shadow: var(--shadow-2);
+    display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;
+  }
+  .loading-spinner {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 3.5px solid var(--outline-variant); border-top-color: var(--secondary);
+    animation: loading-girar .8s linear infinite;
+  }
+  @keyframes loading-girar { to { transform: rotate(360deg); } }
+  .loading-texto { font-size: 13px; font-weight: 700; color: var(--text); }
   .toast.error { background: var(--error); }
   .toast.ok { background: var(--success); }
 
@@ -583,6 +606,13 @@
       <button class="btn-fantasma" id="modalBtnCancelar">Cancelar</button>
       <button class="btn-primario" id="modalBtnAceptar">Aceptar</button>
     </div>
+  </div>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-caja">
+    <div class="loading-spinner"></div>
+    <span class="loading-texto" id="loadingTexto">Cargando…</span>
   </div>
 </div>
 

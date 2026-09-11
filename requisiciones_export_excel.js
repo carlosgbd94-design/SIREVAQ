@@ -137,7 +137,11 @@
           escribir(ws, `H${fila}`, r.cantidad);
         }
         if (r.numeroLote) escribir(ws, `I${fila}`, r.numeroLote);
-        if (r.caducidad) escribir(ws, `J${fila}`, new Date(r.caducidad + 'T00:00:00'));
+        // 'Z' -- ExcelJS serializa Date a número de serie con sus componentes
+        // UTC; una medianoche LOCAL (America/Mexico_City, UTC-6) sin 'Z' se
+        // serializa con ".25" de fracción de día en vez de un entero limpio
+        // (ej. OCT-27 aparecía como "46691.25" en el Excel exportado).
+        if (r.caducidad) escribir(ws, `J${fila}`, new Date(r.caducidad + 'T00:00:00Z'));
       });
     });
     return sobrantes;
