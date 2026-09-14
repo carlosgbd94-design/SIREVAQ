@@ -80,6 +80,13 @@ function nombreCompletoDePerfil(perfil) {
   return (perfil && PERFIL_ID_A_NOMBRE_COMPLETO[perfil.id]) || (perfil ? perfil.usuario : null);
 }
 
+// Valor especial de "Municipio" (no es un id real de biovac_unidades) que
+// arma el renglón jurisdiccional: la SUMA de todas las unidades, lote por
+// lote y Estatus por Estatus, con la misma tabla de captura de siempre en
+// modo solo lectura -- ver cargarMovimientoJurisdiccional(). Solo se ofrece
+// a JURISDICCIONAL/ADMIN, que son quienes ya pueden ver todas las unidades.
+const UNIDAD_JURISDICCION = '__JURISDICCION__';
+
 const estado = {
   db: null,
   perfil: null,
@@ -98,7 +105,8 @@ const estado = {
   // hizo la corrección.
   correccionEsJurisdiccional: false,
   catalogoLotesCentral: {},
-  correccionesPendientes: []
+  correccionesPendientes: [],
+  ultimasEdicionesJurisdiccion: new Map()
 };
 
 function initDb() {
@@ -247,7 +255,12 @@ async function cargarCatalogo() {
   estado.unidades = unidades;
 
   const selUnidad = document.getElementById('selUnidad');
-  selUnidad.innerHTML = unidades.map((u) => `<option value="${u.id}">${u.nombre} (${u.municipio})</option>`).join('');
+  const opcionesUnidad = unidades.map((u) => `<option value="${u.id}">${u.nombre} (${u.municipio})</option>`);
+  const rol = estado.perfil ? estado.perfil.rol : null;
+  if (rol === 'JURISDICCIONAL' || rol === 'ADMIN') {
+    opcionesUnidad.unshift(`<option value="${UNIDAD_JURISDICCION}">Jurisdicción (suma de las ${unidades.length} unidades)</option>`);
+  }
+  selUnidad.innerHTML = opcionesUnidad.join('');
 
   const selAnio = document.getElementById('selAnio');
   const anioActual = new Date().getFullYear();
@@ -339,6 +352,8 @@ async function cargarMovimiento() {
   const mes = Number(document.getElementById('selMes').value);
   if (!unidadId) return;
 
+  if (unidadId === UNIDAD_JURISDICCION) { await cargarMovimientoJurisdiccional(anio, mes); return; }
+
   const { data: movimiento, error } = await estado.db.from('biovac_movimientos')
     .select('*').eq('unidad_id', unidadId).eq('anio', anio).eq('mes', mes).maybeSingle();
   if (error) { toast('Error: ' + error.message, 'error'); return; }
@@ -349,6 +364,7 @@ async function cargarMovimiento() {
     document.getElementById('filaCabeceraMovimiento').style.display = 'none';
     document.getElementById('filaBotonesCabecera').style.display = 'none';
     document.getElementById('panelSinMovimiento').style.display = 'block';
+    document.getElementById('btnAbrirImportador').style.display = 'inline-flex';
     return;
   }
   document.getElementById('panelSinMovimiento').style.display = 'none';
@@ -368,6 +384,65 @@ async function cargarMovimiento() {
   await cargarRenglones();
   render();
   if (movimiento.estado === 'BORRADOR') await ofrecerCargaDesdeRequisiciones();
+}
+
+// ---------------------------------------------------------------------------
+// Renglón jurisdiccional: la MISMA tabla de captura, en modo solo lectura,
+// armada sumando los renglones de las unidades de la jurisdicción lote por
+// lote y Estatus por Estatus -- no es un biovac_movimientos real (no tiene
+// id, no se puede cerrar/corregir/exportar desde aquí), así que no se
+// guarda en la base ni se le puede editar nada; se recalcula siempre en
+// vivo con biovac_concentrado_jurisdiccion (el mismo RPC que ya usa
+// Concentrado Biológico, aquí incluyendo también BORRADOR/EN_CORRECCION
+// para no quedar vacío a media captura -- cada renglón que dependa de una
+// unidad aún no cerrada queda marcado en "Observaciones" como provisional).
+// ---------------------------------------------------------------------------
+
+async function cargarMovimientoJurisdiccional(anio, mes) {
+  const jurisdiccionId = estado.unidades[0]?.jurisdiccion_id;
+  if (!jurisdiccionId) { toast('No se pudo determinar la jurisdicción de tu perfil.', 'error'); return; }
+
+  // Los lotes siguen siendo 100% calculados en vivo sumando las unidades
+  // (nunca se duplican/guardan aparte) -- pero el movimiento jurisdiccional
+  // en sí es una entidad real de la que jurisdicción es responsable, así
+  // que su cabecera (responsable, fecha de corte) sí vive en su propia
+  // tabla (biovac_movimientos_jurisdiccionales), editable. Primer paso
+  // hacia que, a futuro, la suma de las unidades arme un movimiento
+  // jurisdiccional completo y editable por derecho propio.
+  const [{ data, error }, { data: cabecera, error: errCabecera }] = await Promise.all([
+    estado.db.rpc('biovac_concentrado_jurisdiccion', {
+      p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes, p_incluir_borrador: true
+    }),
+    estado.db.from('biovac_movimientos_jurisdiccionales')
+      .select('*').eq('jurisdiccion_id', jurisdiccionId).eq('anio', anio).eq('mes', mes).maybeSingle()
+  ]);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  if (errCabecera) { toast('Error: ' + errCabecera.message, 'error'); return; }
+
+  document.getElementById('panelSinMovimiento').style.display = 'none';
+  estado.correccionBatchId = null;
+  estado.correccionEsJurisdiccional = false;
+  estado.ultimasEdicionesJurisdiccion = new Map();
+  estado.movimiento = {
+    id: null, jurisdiccionId, anio, mes, estado: 'CONCENTRADO', fue_corregido: false,
+    responsable_elaboracion: cabecera?.responsable_elaboracion || null,
+    fecha_corte: cabecera?.fecha_corte || ultimoDiaMes(anio, mes)
+  };
+  estado.renglones = (data || []).map((f) => ({
+    id: `${f.lote_id}::${f.categoria}`,
+    categoria: f.categoria,
+    existencia_anterior_frascos: f.existencia_anterior_frascos,
+    recibido_frascos: f.recibido_frascos,
+    aplicadas_a: f.aplicadas_a, aplicadas_b: f.aplicadas_b,
+    desechadas_a: f.desechadas_a, desechadas_b: f.desechadas_b,
+    existencia_final_frascos: f.existencia_final_frascos,
+    observaciones: `${f.es_provisional ? 'Provisional -- ' : ''}${f.unidades_cerradas}/${f.unidades_reportando} unidades cerradas`,
+    biovac_lotes: {
+      id: f.lote_id, numero_lote: f.numero_lote, caducidad: f.caducidad,
+      dosis_por_frasco_override: f.dosis_por_frasco_override, biologico_id: f.biologico_id
+    }
+  }));
+  render();
 }
 
 // ---------------------------------------------------------------------------
@@ -492,13 +567,21 @@ async function ofrecerCargaDesdeRequisiciones() {
 }
 
 async function cargarRenglones() {
-  const { data, error } = await estado.db.from('biovac_renglones')
-    .select(`id, categoria, existencia_anterior_frascos, recibido_frascos, aplicadas_a, aplicadas_b, desechadas_a, desechadas_b, existencia_final_frascos, observaciones,
-      biovac_lotes ( id, numero_lote, caducidad, dosis_por_frasco_override, biologico_id,
-        biovac_catalogo_biologicos ( id, clave, nombre_excel, bloque_id, presentacion, dosis_por_frasco, regla_especial ) )`)
-    .eq('movimiento_id', estado.movimiento.id);
+  const [{ data, error }, { data: ediciones }] = await Promise.all([
+    estado.db.from('biovac_renglones')
+      .select(`id, categoria, existencia_anterior_frascos, recibido_frascos, aplicadas_a, aplicadas_b, desechadas_a, desechadas_b, existencia_final_frascos, observaciones,
+        biovac_lotes ( id, numero_lote, caducidad, dosis_por_frasco_override, biologico_id,
+          biovac_catalogo_biologicos ( id, clave, nombre_excel, bloque_id, presentacion, dosis_por_frasco, regla_especial ) )`)
+      .eq('movimiento_id', estado.movimiento.id),
+    // Quién tocó por última vez cada renglón desde jurisdicción -- se pinta
+    // como etiqueta "Editado por <usuario>" directo en la fila (ver
+    // renderRenglonFila), sin importar si esa alerta ya se reconoció: es un
+    // rastro permanente, no una notificación que deba desaparecer.
+    estado.db.rpc('biovac_ultimas_ediciones_jurisdiccionales', { p_movimiento_id: estado.movimiento.id })
+  ]);
   if (error) { toast('Error cargando renglones: ' + error.message, 'error'); return; }
   estado.renglones = data;
+  estado.ultimasEdicionesJurisdiccion = new Map((ediciones || []).map((e) => [e.renglon_id, e]));
 }
 
 async function crearMovimiento() {
@@ -527,9 +610,20 @@ function render() {
   document.getElementById('infoCorregido').textContent = m.fue_corregido ? '⚠ Corregido posteriormente' : '';
 
   const editable = m.estado === 'BORRADOR' || m.estado === 'EN_CORRECCION';
+  // El renglón jurisdiccional (m.id === null) no es un movimiento real --
+  // no hay nada que exportar/imprimir desde aquí (ya existe Concentrado
+  // Biológico para eso, con su propio motor de exportación) ni histórico
+  // que importarle a una "unidad" que no existe como tal. Pero SÍ es un
+  // movimiento del que jurisdicción es responsable -- su cabecera
+  // (responsable, fecha de corte) se puede editar y guardar aunque la
+  // tabla de lotes siga siendo de solo lectura (esos números siempre se
+  // calculan sumando las unidades, nunca se editan aquí directamente).
+  const esJurisdiccional = m.id === null;
+  const cabeceraEditable = editable || esJurisdiccional;
+
   const inpResp = document.getElementById('inpResponsable');
   inpResp.value = m.responsable_elaboracion || '';
-  inpResp.readOnly = !editable;
+  inpResp.readOnly = !cabeceraEditable;
 
   // La fecha de corte es mensual (último día del mes elegido) -- se
   // calcula sola, no se pide un día específico.
@@ -540,7 +634,11 @@ function render() {
   document.getElementById('btnCerrarMes').style.display = m.estado === 'BORRADOR' ? 'inline-block' : 'none';
   document.getElementById('btnAbrirCorreccion').style.display = m.estado === 'CERRADO' ? 'inline-block' : 'none';
   document.getElementById('btnAplicarCorreccion').style.display = m.estado === 'EN_CORRECCION' ? 'inline-block' : 'none';
-  document.getElementById('btnGuardarCabecera').disabled = !editable;
+  document.getElementById('btnGuardarCabecera').disabled = !cabeceraEditable;
+
+  document.getElementById('btnExportarExcel').style.display = esJurisdiccional ? 'none' : 'inline-flex';
+  document.getElementById('btnVerPdf').style.display = esJurisdiccional ? 'none' : 'inline-flex';
+  document.getElementById('btnAbrirImportador').style.display = esJurisdiccional ? 'none' : 'inline-flex';
 
   renderBloques(editable);
 }
@@ -752,9 +850,14 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     filaResolver = `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelPasarArfHtml(r.id, dosis)}</td></tr>`;
   }
 
+  const edicionJurisdiccion = estado.ultimasEdicionesJurisdiccion.get(r.id);
+  const tagEditado = edicionJurisdiccion
+    ? `<span class="tag-editado-jurisdiccion" title="${new Date(edicionJurisdiccion.creado_en).toLocaleString('es-MX')}">Editado por ${edicionJurisdiccion.usuario}</span>`
+    : '';
+
   return `<tr class="${subcategoria ? 'categoria-' + subcategoria : ''}">
     <td>
-      <div class="lote-texto">${lote.numero_lote}${botonResolver}</div>
+      <div class="lote-texto">${lote.numero_lote}${tagEditado}${botonResolver}</div>
     </td>
     <td>
       <div class="caducidad-chip ${semaforo}"><span class="semaforo"></span>${formatMmmAa(lote.caducidad)}</div>
@@ -1342,6 +1445,24 @@ async function guardarCabecera() {
   if (!usuario) return;
   const responsable = document.getElementById('inpResponsable').value.trim() || null;
   const fechaCorte = ultimoDiaMes(estado.movimiento.anio, estado.movimiento.mes);
+
+  if (estado.movimiento.id === null) {
+    // Cabecera del renglón jurisdiccional -- no hay un biovac_movimientos
+    // real que actualizar (los lotes siguen siendo 100% calculados en
+    // vivo), así que su responsable/fecha de corte vive en su propia
+    // tabla, una fila por (jurisdicción, año, mes).
+    const { error } = await estado.db.from('biovac_movimientos_jurisdiccionales')
+      .upsert({
+        jurisdiccion_id: estado.movimiento.jurisdiccionId, anio: estado.movimiento.anio, mes: estado.movimiento.mes,
+        responsable_elaboracion: responsable, fecha_corte: fechaCorte, actualizado_en: new Date().toISOString()
+      }, { onConflict: 'jurisdiccion_id,anio,mes' });
+    if (error) { toast('Error: ' + error.message, 'error'); return; }
+    estado.movimiento.responsable_elaboracion = responsable;
+    estado.movimiento.fecha_corte = fechaCorte;
+    toast('Datos guardados.', 'ok');
+    return;
+  }
+
   const { error } = await estado.db.from('biovac_movimientos')
     .update({ responsable_elaboracion: responsable, fecha_corte: fechaCorte }).eq('id', estado.movimiento.id);
   if (error) { toast('Error: ' + error.message, 'error'); return; }

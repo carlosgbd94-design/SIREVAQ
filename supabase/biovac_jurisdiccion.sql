@@ -15,6 +15,15 @@
 -- menos una unidad aún no cerrada se marca es_provisional=true.
 -- Solo "generar informe" (biovac_generar_informe_jurisdiccional, ya en
 -- biovac_engine.sql) toma una foto fija para el PDF/Excel oficial.
+--
+-- dosis_por_frasco_override va en el resultado porque Movimiento de
+-- Biológico (biovac_ui.js: cargarMovimientoJurisdiccional) reutiliza este
+-- mismo RPC para pintar un "renglón jurisdiccional" con el mismo
+-- renderizado de tabla que usa para un municipio real, y esa función lo
+-- necesita para recalcular la existencia final igual que lo haría con un
+-- renglón de verdad. l.id ya va en el GROUP BY (llave primaria de
+-- biovac_lotes), así que Postgres acepta esta columna adicional sin
+-- agregarla también ahí.
 -- ============================================================================
 
 -- 10. Concentrado en vivo: un renglón por (biológico, lote, categoría),
@@ -25,6 +34,7 @@ create or replace function biovac_concentrado_jurisdiccion(
 returns table (
   bloque_id uuid, pagina text, orden_bloque int, biologico_id uuid, orden_en_bloque int,
   nombre_excel text, clave text, regla_especial text, lote_id uuid, numero_lote text, caducidad date, categoria text,
+  dosis_por_frasco_override numeric,
   existencia_anterior_frascos numeric, recibido_frascos numeric,
   aplicadas_a numeric, aplicadas_b numeric, desechadas_a numeric, desechadas_b numeric,
   existencia_final_frascos numeric, unidades_reportando int, unidades_cerradas int, es_provisional boolean
@@ -34,6 +44,7 @@ stable
 as $$
   select cb.bloque_id, bl.pagina, bl.orden, cb.id, cb.orden_en_bloque,
          cb.nombre_excel, cb.clave, cb.regla_especial, l.id, l.numero_lote, l.caducidad, r.categoria,
+         l.dosis_por_frasco_override,
          sum(r.existencia_anterior_frascos), sum(r.recibido_frascos),
          sum(r.aplicadas_a), sum(r.aplicadas_b), sum(r.desechadas_a), sum(r.desechadas_b),
          sum(r.existencia_final_frascos),
@@ -223,4 +234,28 @@ begin
   get diagnostics v_n = row_count;
   return v_n;
 end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 15. Última edición jurisdiccional por renglón, dentro de un movimiento --
+--     registro permanente de "quién tocó esto por última vez desde
+--     jurisdicción" (independiente de si ya se reconoció la alerta:
+--     reconocer solo dice "ya lo vi", no debe borrar el rastro de quién
+--     editó). La UI municipal lo pinta como etiqueta "Editado por <usuario>"
+--     directo en la fila del lote, para que la edición jurisdiccional --
+--     que es la más reciente -- quede visible ahí mismo.
+-- ---------------------------------------------------------------------------
+
+create or replace function biovac_ultimas_ediciones_jurisdiccionales(p_movimiento_id uuid)
+returns table (renglon_id uuid, usuario text, rol text, creado_en timestamptz)
+language sql
+stable
+as $$
+  select distinct on (c.renglon_id) c.renglon_id, c.usuario, c.rol, c.creado_en
+  from biovac_correcciones c
+  where c.movimiento_id = p_movimiento_id
+    and c.tipo = 'CORRECCION_JURISDICCIONAL'
+    and c.campo is not null
+    and c.renglon_id is not null
+  order by c.renglon_id, c.creado_en desc;
 $$;

@@ -117,6 +117,29 @@ create table if not exists biovac_movimientos (
 create index if not exists idx_biovac_movimientos_unidad on biovac_movimientos(unidad_id, anio, mes);
 
 -- ---------------------------------------------------------------------------
+-- Cabecera del "movimiento jurisdiccional" (un renglón por jurisdicción +
+-- año + mes). Los lotes de ese movimiento siguen siendo 100% calculados en
+-- vivo sumando las unidades (biovac_concentrado_jurisdiccion) -- nunca se
+-- duplican/guardan aquí -- pero jurisdicción SÍ es responsable de ese
+-- movimiento como entidad, así que su cabecera (responsable, fecha de
+-- corte) es un registro real y editable. Primer paso hacia el diseño a
+-- futuro: unidades -> movimiento jurisdiccional completo y editable por
+-- derecho propio.
+-- ---------------------------------------------------------------------------
+
+create table if not exists biovac_movimientos_jurisdiccionales (
+  id uuid primary key default gen_random_uuid(),
+  jurisdiccion_id uuid not null references biovac_jurisdicciones(id),
+  anio int not null,
+  mes int not null check (mes between 1 and 12),
+  responsable_elaboracion text,
+  fecha_corte date,
+  creado_en timestamptz not null default now(),
+  actualizado_en timestamptz not null default now(),
+  unique (jurisdiccion_id, anio, mes)
+);
+
+-- ---------------------------------------------------------------------------
 -- Renglones (un renglón = un lote con actividad ese mes; agregar/quitar
 -- lote = insertar/borrar fila, sin arrastrar fórmulas).
 --

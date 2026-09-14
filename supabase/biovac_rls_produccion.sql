@@ -254,3 +254,20 @@ drop policy if exists biovac_informes_insert on biovac_informes_jurisdiccionales
 create policy biovac_informes_insert on biovac_informes_jurisdiccionales for insert to authenticated
   with check (exists (select 1 from perfiles p where p.id = auth.uid() and p.activo = 'SI'
     and upper(p.rol) in ('JURISDICCIONAL', 'ADMIN')));
+
+-- ---------------------------------------------------------------------------
+-- Cabecera del movimiento jurisdiccional: lectura para cualquier perfil
+-- activo, escritura solo JURISDICCIONAL/ADMIN (mismo criterio que ya usa
+-- biovac_movimientos_write para esos roles).
+-- ---------------------------------------------------------------------------
+
+alter table biovac_movimientos_jurisdiccionales enable row level security;
+
+drop policy if exists biovac_mov_jurisdiccion_select on biovac_movimientos_jurisdiccionales;
+create policy biovac_mov_jurisdiccion_select on biovac_movimientos_jurisdiccionales for select to authenticated
+  using (exists (select 1 from perfiles p where p.id = auth.uid() and p.activo = 'SI'));
+
+drop policy if exists biovac_mov_jurisdiccion_write on biovac_movimientos_jurisdiccionales;
+create policy biovac_mov_jurisdiccion_write on biovac_movimientos_jurisdiccionales for all to authenticated
+  using (exists (select 1 from perfiles p where p.id = auth.uid() and p.activo = 'SI' and upper(p.rol) in ('JURISDICCIONAL','ADMIN')))
+  with check (exists (select 1 from perfiles p where p.id = auth.uid() and p.activo = 'SI' and upper(p.rol) in ('JURISDICCIONAL','ADMIN')));

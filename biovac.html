@@ -14,7 +14,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.1"></script>
 <script defer src="biovac_importer.js?v=2026.2"></script>
-<script defer src="biovac_ui.js?v=2026.15"></script>
+<script defer src="biovac_ui.js?v=2026.18"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -145,6 +145,7 @@
   .estado-BORRADOR { background: #f1f5f9; color: var(--muted); }
   .estado-CERRADO { background: var(--success-bg); color: var(--success); }
   .estado-EN_CORRECCION { background: var(--warning-bg); color: var(--warning); }
+  .estado-CONCENTRADO { background: rgba(14,165,233,.12); color: var(--secondary); }
 
   #panelMovimiento { display: none; }
   .cabecera-movimiento {
@@ -265,6 +266,11 @@
   .subseccion.canje { color: var(--canje); }
   .tag-arf { font-size: 9px; font-weight: 800; color: var(--error); background: var(--error-bg); border: 1px solid var(--error-border); padding: 1px 8px; border-radius: 20px; margin-left: 6px; }
   .tag-canje { font-size: 9px; font-weight: 800; color: var(--canje); background: var(--canje-bg); border: 1px solid var(--canje-border); padding: 1px 8px; border-radius: 20px; margin-left: 6px; }
+  /* Rastro permanente de "esto lo tocó jurisdicción por última vez" --
+     independiente de si ya se reconoció la alerta correspondiente (ver
+     alerta-correcciones): reconocer solo dice "ya lo vi", no debe borrar
+     de la vista quién editó el dato. */
+  .tag-editado-jurisdiccion { font-size: 9px; font-weight: 800; color: var(--secondary); background: rgba(14,165,233,.12); border: 1px solid rgba(14,165,233,.3); padding: 1px 8px; border-radius: 20px; margin-left: 6px; }
   .valor-final {
     display: inline-block; min-width: 34px; font-weight: 800; font-size: 15px; color: var(--primary);
     background: rgba(15,23,42,.06); border-radius: 8px; padding: 5px 8px;
