@@ -26,6 +26,7 @@ const GROUP_HEAD = [
   'pinol_assets.js',
   'main.js',
   'influenza_module.js',
+  'sis_export_module.js',
 ];
 
 // Mismo orden exacto en el que index.html los carga hoy (final del <body>, linea ~7752-7755).

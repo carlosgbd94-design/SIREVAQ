@@ -106,7 +106,10 @@ const estado = {
   correccionEsJurisdiccional: false,
   catalogoLotesCentral: {},
   correccionesPendientes: [],
-  ultimasEdicionesJurisdiccion: new Map()
+  ultimasEdicionesJurisdiccion: new Map(),
+  // Totales de SIS-06-P por clave de biológico BioVac, para el subtotal
+  // comparativo junto al Total café (solo rol UNIDAD, ver Fase 3 del plan).
+  sis06pTotales: {}
 };
 
 function initDb() {
@@ -116,7 +119,7 @@ function initDb() {
 async function cargarSesionReal() {
   const { data: { session } } = await estado.db.auth.getSession();
   if (!session) return;
-  const { data: perfil } = await estado.db.from('perfiles').select('id, usuario, rol, municipio_asignado, municipios_allowed').eq('id', session.user.id).maybeSingle();
+  const { data: perfil } = await estado.db.from('perfiles').select('id, usuario, rol, municipio_asignado, municipios_allowed, clues, unidad, municipio').eq('id', session.user.id).maybeSingle();
   if (!perfil) return;
   estado.perfil = perfil;
   const nombreCompleto = nombreCompletoDePerfil(perfil);
@@ -262,6 +265,28 @@ async function cargarCatalogo() {
   }
   selUnidad.innerHTML = opcionesUnidad.join('');
 
+  // Rol UNIDAD: RLS ya limita `unidades` a su propia fila (por clues) --
+  // no tiene sentido un selector con una sola opción, así que se bloquea
+  // preseleccionada, igual que el resto de SIREVAQ trata USER.clues para
+  // este rol. También habilita el toggle Movimiento/SIS-06-P (ver §4).
+  if (rol === 'UNIDAD') {
+    if (unidades.length > 0) selUnidad.value = unidades[0].id;
+    selUnidad.disabled = true;
+    document.getElementById('labelSelUnidad').textContent = 'Unidad (CLUES)';
+  }
+
+  // MUNICIPAL/JURISDICCIONAL/ADMIN también entran al toggle SIS-06-P/CSV/
+  // Seguimiento (Fase 4: modo revisión + dashboard) -- a diferencia de
+  // UNIDAD, aquí el selector queda habilitado para poder elegir cualquier
+  // unidad de su alcance.
+  if (rol === 'UNIDAD' || rol === 'MUNICIPAL' || rol === 'JURISDICCIONAL' || rol === 'ADMIN') {
+    inicializarToggleSIS06P();
+  }
+  if (rol === 'MUNICIPAL' || rol === 'JURISDICCIONAL' || rol === 'ADMIN') {
+    const btnSeg = document.getElementById('btnSeccionSeguimiento');
+    if (btnSeg) btnSeg.style.display = 'inline-flex';
+  }
+
   const selAnio = document.getElementById('selAnio');
   const anioActual = new Date().getFullYear();
   const anios = [];
@@ -277,6 +302,104 @@ async function cargarCatalogo() {
     if (usuarioGuardado) document.getElementById('selUsuario').value = usuarioGuardado;
     document.getElementById('avisoUsuario').innerHTML =
       '<span class="material-symbols-rounded">info</span> Sin sesión de SIREVAQ detectada: escribe tu nombre arriba para la auditoría.';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Toggle Movimiento de Biológico / SIS-06-P (Fase 3, solo rol UNIDAD) --
+// ambas secciones comparten Usuario/Unidad/Año/Mes del encabezado, así que
+// no hace falta duplicar esos selects.
+// ---------------------------------------------------------------------------
+
+let _sis06pInicializado = false;
+
+function inicializarToggleSIS06P() {
+  document.getElementById('toggleSeccionUnidad').style.display = 'block';
+  const btnSis = document.getElementById('btnSeccionSIS06P');
+  const btnMov = document.getElementById('btnSeccionMovimiento');
+  const btnCsv = document.getElementById('btnSeccionCSV');
+  const btnSeg = document.getElementById('btnSeccionSeguimiento');
+  const botones = [btnSis, btnMov, btnCsv, btnSeg];
+
+  function ocultarTodo() {
+    botones.forEach((b) => b.classList.remove('activo'));
+    document.getElementById('panelSIS06P').style.display = 'none';
+    document.getElementById('panelCSV').style.display = 'none';
+    document.getElementById('panelSeguimiento').style.display = 'none';
+    document.getElementById('panelMovimiento').style.display = 'none';
+    document.getElementById('panelSinMovimiento').style.display = 'none';
+    document.getElementById('filaCabeceraMovimiento').style.display = 'none';
+    document.getElementById('filaBotonesCabecera').style.display = 'none';
+    document.getElementById('panelImportador').style.display = 'none';
+    document.getElementById('btnAbrirImportador').style.display = 'none';
+  }
+
+  btnSis.addEventListener('click', () => {
+    ocultarTodo();
+    btnSis.classList.add('activo');
+    document.getElementById('panelSIS06P').style.display = 'block';
+    if (!_sis06pInicializado) {
+      _sis06pInicializado = true;
+      window.SIS06PBiovac.init();
+    } else {
+      window.SIS06PBiovac.render();
+    }
+  });
+
+  btnMov.addEventListener('click', () => {
+    ocultarTodo();
+    btnMov.classList.add('activo');
+    document.getElementById('btnAbrirImportador').style.display = 'inline-flex';
+    cargarMovimiento();
+  });
+
+  btnCsv.addEventListener('click', async () => {
+    ocultarTodo();
+    btnCsv.classList.add('activo');
+    document.getElementById('panelCSV').style.display = 'block';
+    if (!_sis06pInicializado) { _sis06pInicializado = true; await window.SIS06PBiovac.init(); }
+    window.SIS06PBiovac.renderCSVPreview();
+  });
+
+  if (btnSeg) {
+    btnSeg.addEventListener('click', () => {
+      ocultarTodo();
+      btnSeg.classList.add('activo');
+      document.getElementById('panelSeguimiento').style.display = 'block';
+      if (window.SIS06PDashboard) window.SIS06PDashboard.render();
+    });
+  }
+
+  // Cambiar de unidad (roles revisores -- UNIDAD tiene el selector
+  // deshabilitado, este listener nunca dispara para ellos) invalida la
+  // caché de SIS06PBiovac: hay que releer sis06p_capturas/correcciones de
+  // la CLUES recién seleccionada, no solo volver a pintar con datos viejos.
+  document.getElementById('selUnidad').addEventListener('change', async () => {
+    if (btnSis.classList.contains('activo') || btnCsv.classList.contains('activo')) {
+      _sis06pInicializado = true;
+      await window.SIS06PBiovac.init();
+      if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
+    }
+  });
+
+  document.getElementById('selMes').addEventListener('change', () => {
+    if (btnSis.classList.contains('activo')) window.SIS06PBiovac.render();
+    if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
+    if (btnSeg.classList.contains('activo') && window.SIS06PDashboard) window.SIS06PDashboard.render();
+  });
+  document.getElementById('selAnio').addEventListener('change', () => {
+    if (btnSis.classList.contains('activo')) window.SIS06PBiovac.render();
+    if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
+    if (btnSeg.classList.contains('activo') && window.SIS06PDashboard) window.SIS06PDashboard.render();
+  });
+
+  // SIS-06-P es la sección base para UNIDAD (entra directo a capturar);
+  // los roles revisores entran directo a Seguimiento (para qué vinieron).
+  const rolActual = estado.perfil ? estado.perfil.rol : null;
+  if (rolActual === 'UNIDAD') {
+    btnSis.click();
+  } else if (btnSeg) {
+    btnSeg.click();
   }
 }
 
@@ -382,8 +505,56 @@ async function cargarMovimiento() {
     estado.correccionEsJurisdiccional = Boolean(marcador?.cascade_batch_id);
   }
   await cargarRenglones();
+  if (estado.perfil && estado.perfil.rol === 'UNIDAD') await cargarSIS06PTotalesParaComparar(anio, mes);
   render();
   if (movimiento.estado === 'BORRADOR') await ofrecerCargaDesdeRequisiciones();
+}
+
+// ---------------------------------------------------------------------------
+// Subtotal comparativo con SIS-06-P (Fase 3): la unidad ahora captura su
+// concentrado mensual SIS-06-P en la misma ventana (ver §4/§6 del plan) --
+// junto al Total café de cada biológico se muestra cuánto reportó ahí, solo
+// informativo, sin bloquear el guardado de ninguno de los dos lados.
+// ---------------------------------------------------------------------------
+
+// Mapeo best-effort entre la `clave` de catálogo de BioVac y el texto
+// `biologico` de sis_variables (catálogos construidos por separado, sin
+// llave común) -- cuando no hay mapeo, sencillamente no se muestra
+// comparación para ese biológico en vez de arriesgar un cruce equivocado.
+const SIS_BIOLOGICO_POR_CLAVE_BIOVAC = {
+  BCG: ['BCG'], HEPB: ['HEPATITIS B'], HEXAVALENTE: ['HEXAVALENTE'], DPT: ['DPT'],
+  ROTAVIRUS: ['ROTAVIRUS'], NEUMO_13V: ['NEUMOCOCCICA 13', 'NEUMOCÓCICA 13'],
+  NEUMO_20V: ['NEUMOCOCCICA 20', 'NEUMOCÓCICA 20'], HEPA: ['HEPATITIS A'],
+  SRP: ['SRP'], ANTIINFLUENZA: ['INFLUENZA'], SR: ['SR'], VPH: ['VPH'],
+  TD: ['TD'], TDPA: ['TDPA'], COVID_MODERNA: ['COVID-19'], COVID_PFIZER: ['COVID-19'],
+  VARICELA: ['VARICELA'], VSR: ['VSR']
+};
+
+async function cargarSIS06PTotalesParaComparar(anio, mes) {
+  estado.sis06pTotales = {};
+  const clues = estado.perfil.clues;
+  if (!clues) return;
+  try {
+    const [{ data: captura }, { data: sisVars }] = await Promise.all([
+      estado.db.from('sis06p_capturas').select('valores').eq('clues', clues).eq('mes', mes).eq('anio', anio).maybeSingle(),
+      estado.db.from('sis_variables').select('fila_excel, biologico').eq('activo', true)
+    ]);
+    if (!captura || !sisVars) return;
+    const valores = captura.valores || {};
+    const biologicoPorFila = new Map(sisVars.map((v) => [String(v.fila_excel), v.biologico]));
+    const totalesPorSisBiologico = {};
+    Object.entries(valores).forEach(([fila, v]) => {
+      const bio = biologicoPorFila.get(String(fila));
+      if (!bio) return;
+      totalesPorSisBiologico[bio] = (totalesPorSisBiologico[bio] || 0) + Number(v?.total || 0);
+    });
+    Object.entries(SIS_BIOLOGICO_POR_CLAVE_BIOVAC).forEach(([claveBiovac, nombresSis]) => {
+      const suma = nombresSis.reduce((acc, n) => acc + (totalesPorSisBiologico[n] || 0), 0);
+      if (suma > 0) estado.sis06pTotales[claveBiovac] = suma;
+    });
+  } catch (err) {
+    console.error('[SIS-06-P] Error al cargar totales para comparar:', err);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -808,6 +979,19 @@ function renderBiologico(bio, editable) {
     <td colspan="2"></td>
   </tr></tfoot>`;
   html += `</table></div>`;
+
+  const totalSIS06P = estado.sis06pTotales ? estado.sis06pTotales[bio.clave] : undefined;
+  if (totalSIS06P !== undefined) {
+    const totalAplicadas = totalAplicadasA + totalAplicadasB;
+    const coincide = totalSIS06P === totalAplicadas;
+    html += `<div style="margin-top:8px; padding:8px 12px; border-radius:10px; font-size:11.5px; font-weight:700;
+      background:${coincide ? 'var(--success-bg)' : 'var(--warning-bg)'};
+      color:${coincide ? 'var(--success)' : 'var(--warning)'};
+      border:1px solid ${coincide ? 'rgba(16,185,129,.3)' : 'var(--warning-border)'};">
+      <span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">${coincide ? 'check_circle' : 'compare_arrows'}</span>
+      SIS-06-P reportó ${totalSIS06P} dosis aplicadas de este biológico este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas} aplicadas -- revisa si la diferencia es correcta)`}.
+    </div>`;
+  }
 
   if (editable) {
     html += renderPanelAgregar(bio);

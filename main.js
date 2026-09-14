@@ -8054,6 +8054,31 @@ async function supabaseRequest(action = "", payload, options = {}) {
         return { ok: true };
       }
 
+      case "getsis_variables": {
+        const { data, error } = await supabase
+          .from('sis_variables')
+          .select('*')
+          .eq('activo', true)
+          .order('orden');
+        if (error) throw error;
+        return { ok: true, data: data || [] };
+      }
+
+      case "getsis06p_capturas": {
+        const { clues, municipio } = payload;
+        let query = supabase.from('sis06p_capturas').select('*');
+        if (clues) {
+          query = query.eq('clues', clues);
+        } else if (municipio) {
+          query = query.eq('municipio', municipio);
+        }
+        const { data, error } = await query
+          .order('anio', { ascending: false })
+          .order('mes', { ascending: false });
+        if (error) throw error;
+        return { ok: true, data: data || [] };
+      }
+
       case "getinfluenza_distribucion": {
         const { clues, municipio } = payload;
         let query = supabase.from('influenza_distribucion_frascos').select('*');

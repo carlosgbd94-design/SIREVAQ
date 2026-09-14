@@ -324,7 +324,7 @@
        (ensurePdfAssetsLoaded) solo al exportar el PDF de Resguardo.
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
-  <script src="dist/bundle-head.js?v=2026.31" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.37" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -569,6 +569,18 @@
                 title="Cargar Reporte de Sistema (CSV)"
                 onclick="document.getElementById('modalUploadCSV').classList.add('show')">
                 <span class="material-symbols-rounded">upload_file</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- SIS CONCENTRADO EXPORT BUTTON (ADMIN / JURISDICCIONAL / MUNICIPAL) -->
+          <div class="GlassContainer" id="glassBtnExportSISConcentrado" data-role-gate="ADMIN,JURISDICCIONAL,VISUALIZADOR_JURISDICCIONAL,MUNICIPAL"
+            style="--glass-icon-color: #0369a1; --corner-radius: 100px;">
+            <div class="GlassContent liquidGL header-liquid-glass">
+              <button class="header-action-btn" id="btnExportSISConcentrado" data-tooltip="Exportar Concentrado SIS (CSV)"
+                title="Exportar Concentrado SIS (CSV)"
+                onclick="if (typeof initSISExportModalDefaults === 'function') initSISExportModalDefaults(); document.getElementById('modalExportSISConcentrado').classList.add('show')">
+                <span class="material-symbols-rounded">download</span>
               </button>
             </div>
           </div>
@@ -1285,6 +1297,12 @@
               <span>Influenza</span>
             </button>
 
+            <button class="nav-tab" id="tabBIOVAC" data-role-gate="UNIDAD" style="display:none"
+              onclick="window.location.href='biovac.html'">
+              <span class="material-symbols-rounded">vaccines</span>
+              <span>Movimiento de Biológico</span>
+            </button>
+
             <button class="nav-tab" id="tabPINOL" data-role-gate="UNIDAD" style="display:none"
               onclick="activateCapture('PINOL')">
               <span class="material-symbols-rounded">inventory_2</span>
@@ -1782,6 +1800,10 @@
                     <span class="material-symbols-rounded text-sm">table_view</span>
                     <span>Excel</span>
                   </button>
+                  <button type="button" onclick="if (typeof exportInfluenzaExcelOficialUnidad === 'function') exportInfluenzaExcelOficialUnidad();" class="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-rounded text-sm">description</span>
+                    <span>Excel oficial</span>
+                  </button>
                   <button type="button" onclick="ExportManager.exportToPDF('secUnitHistorico', 'Historial_Influenza', 'portrait')" class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
                     <svg class="material-symbols-rounded" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"
                       style="display: inline-block; vertical-align: middle;">
@@ -1864,6 +1886,7 @@
             </div>
 
           </div>
+
 
           <!-- PINOL -->
           <div id="formPINOL" style="display:none" class="flex flex-col gap-8">
@@ -6617,6 +6640,77 @@
           class="h-10 px-6 rounded-full bg-primary text-primary-on text-[12px] font-bold shadow-sm transition-all hover:translate-y-[-1px] hover:shadow-md cursor-pointer border-none flex items-center gap-2 opacity-50 pointer-events-none">
           <span class="material-symbols-rounded text-[18px]">check_circle</span>
           Confirmar y Subir
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⬇️ MODAL EXPORTAR CONCENTRADO SIS (CSV, mismo formato que acepta la carga de arriba) -->
+  <div id="modalExportSISConcentrado"
+    class="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-surface-on/50 opacity-0 invisible transition-all duration-300 [&.show]:opacity-100 [&.show]:visible"
+    aria-hidden="true">
+    <div
+      class="w-full max-w-[440px] bg-surface border border-outline-variant/30 rounded-[28px] overflow-hidden shadow-[0_24px_48px_-12px_rgba(0,0,0,0.25)] transform scale-95 transition-transform duration-300 [[class~='show']_&]:scale-100 flex flex-col">
+      <div class="flex items-center justify-between p-6 bg-sky-500/5 border-b border-outline-variant/20">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-sky-500/10 flex items-center justify-center">
+            <span class="material-symbols-rounded" style="color:#0369a1;">download</span>
+          </div>
+          <div>
+            <h3 class="text-[16px] font-black text-primary m-0 tracking-tight">Exportar Concentrado SIS</h3>
+            <p class="text-[11px] font-medium text-primary/60 m-0">Genera el CSV (mismo formato de arriba) listo para subir a este panel</p>
+          </div>
+        </div>
+        <button type="button"
+          class="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-outline-variant/30 shadow-sm text-primary hover:bg-status-error hover:text-white hover:-translate-y-0.5 hover:shadow-md active:scale-95 transition-all cursor-pointer"
+          onclick="document.getElementById('modalExportSISConcentrado').classList.remove('show')">
+          <span class="material-symbols-rounded text-[18px]">close</span>
+        </button>
+      </div>
+
+      <div class="p-6 flex flex-col gap-4">
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <label for="sisExportMes" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Mes</label>
+            <select id="sisExportMes" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none">
+              <option value="1">Enero</option>
+              <option value="2">Febrero</option>
+              <option value="3">Marzo</option>
+              <option value="4">Abril</option>
+              <option value="5">Mayo</option>
+              <option value="6">Junio</option>
+              <option value="7">Julio</option>
+              <option value="8">Agosto</option>
+              <option value="9">Septiembre</option>
+              <option value="10">Octubre</option>
+              <option value="11">Noviembre</option>
+              <option value="12">Diciembre</option>
+            </select>
+          </div>
+          <div class="flex-1">
+            <label for="sisExportAnio" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Año</label>
+            <select id="sisExportAnio" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none">
+              <option value="2026">2026</option>
+              <option value="2025">2025</option>
+              <option value="2027">2027</option>
+            </select>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-500 font-medium leading-relaxed m-0">
+          Perfiles Municipales exportan solo sus municipios asignados; Jurisdiccional/Admin exportan la jurisdicción completa.
+          Si exportas por municipio, súbelo junto con los de los demás municipios de ese mes.
+        </p>
+      </div>
+
+      <div class="p-6 pt-0 flex justify-end gap-3">
+        <button type="button"
+          class="h-10 px-5 rounded-full bg-surface border border-outline-variant/50 text-[12px] font-bold text-primary hover:bg-surface-variant transition-colors cursor-pointer"
+          onclick="document.getElementById('modalExportSISConcentrado').classList.remove('show')">Cancelar</button>
+        <button type="button" id="btnConfirmExportSISConcentrado"
+          class="h-10 px-6 rounded-full bg-primary text-primary-on text-[12px] font-bold shadow-sm transition-all hover:translate-y-[-1px] hover:shadow-md cursor-pointer border-none flex items-center gap-2"
+          onclick="exportSISConcentrado({ mes: Number(document.getElementById('sisExportMes').value), anio: Number(document.getElementById('sisExportAnio').value) })">
+          <span class="material-symbols-rounded text-[18px]">download</span>
+          Descargar CSV
         </button>
       </div>
     </div>

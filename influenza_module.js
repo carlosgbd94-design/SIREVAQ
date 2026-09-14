@@ -1459,6 +1459,65 @@ function mapDateToMonthAndWeek(fechaStr) {
   };
 }
 
+// Versión para el propio botón de la unidad (Historial de Reportes): reusa
+// la misma plantilla/lógica de exportUnitReportExcel, pero lee de las
+// cachés que SÍ están pobladas en el flujo de captura de la unidad
+// (_influenzaMetasCache/_influenzaCapturasCache, ya filtradas a USER.clues
+// desde loadInfluenzaUnitData) en vez de _adminMetasArray/_adminCapturasArray
+// (cachés de un panel admin -- exportUnitReportExcel nunca llegó a
+// conectarse a ningún botón en el repo).
+async function exportInfluenzaExcelOficialUnidad() {
+  try {
+    showToast("Generando reporte de Excel...", true, "info");
+
+    const response = await fetch("./Análisis_Meta_Logro_Influenza_2025-2026_UNIDAD_DE_SALUD.xlsx");
+    if (!response.ok) throw new Error("No se pudo cargar la plantilla de Excel.");
+    const arrayBuffer = await response.arrayBuffer();
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(arrayBuffer);
+
+    const fechaCorte = document.getElementById("influenza_semana")?.value || new Date().toISOString().split("T")[0];
+    const sheetMeta = wb.getWorksheet('ANÁLIS DE META-LOGRO') || wb.worksheets[1];
+
+    if (sheetMeta) {
+      sheetMeta.getCell('A5').value = `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal 2025-2026 - ${USER.unidad} (${USER.clues})`;
+
+      INFLUENZA_RUBROS.forEach((rb, idx) => {
+        const metaVal = Number(_influenzaMetasCache[rb.id] || 0);
+        sheetMeta.getCell(9 + idx, 8).value = metaVal;
+
+        let totalLogro = 0;
+        _influenzaCapturasCache.forEach(c => {
+          if (c.fecha <= fechaCorte) totalLogro += Number(c.valores[rb.id] || 0);
+        });
+        sheetMeta.getCell(9 + idx, 7).value = totalLogro;
+      });
+
+      sheetMeta.getCell('G55').value = { formula: 'SUM(G9:G54)' };
+    }
+
+    const sheetsToRemove = ['INSTRUCTIVO', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL'];
+    sheetsToRemove.forEach(name => {
+      const sh = wb.getWorksheet(name);
+      if (sh) wb.removeWorksheet(sh.id);
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Análisis_Meta_Logro_Influenza_2025-2026_${String(USER.unidad || '').replace(/ /g, "_")}_${fechaCorte}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Reporte Excel descargado exitosamente.", true, "good");
+  } catch (err) {
+    console.error("Error al exportar reporte Excel (unidad):", err);
+    showToast("Error al generar el archivo Excel.", false, "bad");
+  }
+}
+
 async function exportUnitReportExcel(report, fecha) {
   try {
     showToast("Generando reporte de Excel...", true, "info");

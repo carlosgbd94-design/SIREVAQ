@@ -43,6 +43,9 @@ create policy biovac_catalogo_write on biovac_jurisdicciones for all to authenti
 -- municipio de captura, no es referencia universal -- un MUNICIPAL solo debe
 -- ver (y por tanto poder seleccionar) su(s) propio(s) municipio(s), igual
 -- que ya se filtra movimientos/renglones. JURISDICCIONAL/ADMIN ven todas.
+-- biovac_unidades.clues ya identificaba tanto pseudo-unidades (municipios/
+-- hospitales) como, desde la Fase 3, CLUES reales de unidad de salud --
+-- UNIDAD solo ve su propia fila (bu.clues = p.clues).
 drop policy if exists biovac_catalogo_select on biovac_unidades;
 create policy biovac_unidades_select on biovac_unidades for select to authenticated
   using (
@@ -56,6 +59,7 @@ create policy biovac_unidades_select on biovac_unidades for select to authentica
             or biovac_unidades.municipio = any (string_to_array(p.municipio_asignado, ','))
             or biovac_unidades.municipio = any (string_to_array(p.municipio, ','))
           ))
+          or (upper(p.rol) = 'UNIDAD' and biovac_unidades.clues = p.clues)
           or upper(p.rol) in ('JURISDICCIONAL', 'VISUALIZADOR_JURISDICCIONAL', 'ADMIN')
         )
     )
@@ -87,11 +91,11 @@ create policy biovac_lotes_select on biovac_lotes for select to authenticated
 drop policy if exists biovac_lotes_write on biovac_lotes;
 create policy biovac_lotes_write on biovac_lotes for insert to authenticated
   with check (exists (select 1 from perfiles p where p.id = auth.uid() and p.activo = 'SI'
-    and upper(p.rol) in ('MUNICIPAL', 'JURISDICCIONAL', 'ADMIN')));
+    and upper(p.rol) in ('UNIDAD', 'MUNICIPAL', 'JURISDICCIONAL', 'ADMIN')));
 drop policy if exists biovac_lotes_update on biovac_lotes;
 create policy biovac_lotes_update on biovac_lotes for update to authenticated
   using (exists (select 1 from perfiles p where p.id = auth.uid() and p.activo = 'SI'
-    and upper(p.rol) in ('MUNICIPAL', 'JURISDICCIONAL', 'ADMIN')));
+    and upper(p.rol) in ('UNIDAD', 'MUNICIPAL', 'JURISDICCIONAL', 'ADMIN')));
 
 -- ---------------------------------------------------------------------------
 -- Movimientos: MUNICIPAL solo su(s) municipio(s); JURISDICCIONAL/ADMIN toda
@@ -111,6 +115,7 @@ create policy biovac_movimientos_select on biovac_movimientos for select to auth
             or bu.municipio = any (string_to_array(p.municipio_asignado, ','))
             or bu.municipio = any (string_to_array(p.municipio, ','))
           ))
+          or (upper(p.rol) = 'UNIDAD' and bu.clues = p.clues)
           or upper(p.rol) in ('JURISDICCIONAL', 'VISUALIZADOR_JURISDICCIONAL', 'ADMIN')
         )
     )
@@ -129,6 +134,7 @@ create policy biovac_movimientos_write on biovac_movimientos for all to authenti
             or bu.municipio = any (string_to_array(p.municipio_asignado, ','))
             or bu.municipio = any (string_to_array(p.municipio, ','))
           ))
+          or (upper(p.rol) = 'UNIDAD' and bu.clues = p.clues)
           or upper(p.rol) in ('JURISDICCIONAL', 'ADMIN')
         )
     )
@@ -144,6 +150,7 @@ create policy biovac_movimientos_write on biovac_movimientos for all to authenti
             or bu.municipio = any (string_to_array(p.municipio_asignado, ','))
             or bu.municipio = any (string_to_array(p.municipio, ','))
           ))
+          or (upper(p.rol) = 'UNIDAD' and bu.clues = p.clues)
           or upper(p.rol) in ('JURISDICCIONAL', 'ADMIN')
         )
     )
@@ -170,6 +177,7 @@ create policy biovac_renglones_select on biovac_renglones for select to authenti
             or bu.municipio = any (string_to_array(p.municipio_asignado, ','))
             or bu.municipio = any (string_to_array(p.municipio, ','))
           ))
+          or (upper(p.rol) = 'UNIDAD' and bu.clues = p.clues)
           or upper(p.rol) in ('JURISDICCIONAL', 'VISUALIZADOR_JURISDICCIONAL', 'ADMIN')
         )
     )
@@ -189,6 +197,7 @@ create policy biovac_renglones_write on biovac_renglones for all to authenticate
             or bu.municipio = any (string_to_array(p.municipio_asignado, ','))
             or bu.municipio = any (string_to_array(p.municipio, ','))
           ))
+          or (upper(p.rol) = 'UNIDAD' and bu.clues = p.clues)
           or upper(p.rol) in ('JURISDICCIONAL', 'ADMIN')
         )
     )
@@ -205,6 +214,7 @@ create policy biovac_renglones_write on biovac_renglones for all to authenticate
             or bu.municipio = any (string_to_array(p.municipio_asignado, ','))
             or bu.municipio = any (string_to_array(p.municipio, ','))
           ))
+          or (upper(p.rol) = 'UNIDAD' and bu.clues = p.clues)
           or upper(p.rol) in ('JURISDICCIONAL', 'ADMIN')
         )
     )
@@ -231,6 +241,7 @@ create policy biovac_correcciones_select on biovac_correcciones for select to au
             or bu.municipio = any (string_to_array(p.municipio_asignado, ','))
             or bu.municipio = any (string_to_array(p.municipio, ','))
           ))
+          or (upper(p.rol) = 'UNIDAD' and bu.clues = p.clues)
           or upper(p.rol) in ('JURISDICCIONAL', 'VISUALIZADOR_JURISDICCIONAL', 'ADMIN')
         )
     )
@@ -239,7 +250,7 @@ create policy biovac_correcciones_select on biovac_correcciones for select to au
 drop policy if exists biovac_correcciones_insert on biovac_correcciones;
 create policy biovac_correcciones_insert on biovac_correcciones for insert to authenticated
   with check (exists (select 1 from perfiles p where p.id = auth.uid() and p.activo = 'SI'
-    and upper(p.rol) in ('MUNICIPAL', 'JURISDICCIONAL', 'ADMIN')));
+    and upper(p.rol) in ('UNIDAD', 'MUNICIPAL', 'JURISDICCIONAL', 'ADMIN')));
 
 -- ---------------------------------------------------------------------------
 -- Informes jurisdiccionales: lectura para cualquier perfil activo
