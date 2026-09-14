@@ -23294,7 +23294,11 @@ function filterArchivosGrid() {
     if (pathParts.length < 3) return false;
 
     const category = (pathParts[0] || "").toLowerCase();
-    const cluMun = (pathParts[1] || "").toUpperCase();
+    // 🛡️ Capacitación/Campaña usan ruta de 4 tramos (categoria/evento/CLUES_UNIDAD/archivo),
+    // así que el segmento con la CLUES es el [2], no el [1] (que ahí es el nombre del evento).
+    // Rutas heredadas de 3 tramos (sin carpeta de evento) siguen usando el [1].
+    const isEventPath = (category === "evidencia_de_capacitaciones" || category === "evidencias_de_campana") && pathParts.length >= 4;
+    const cluMun = ((isEventPath ? pathParts[2] : pathParts[1]) || "").toUpperCase();
 
     // ✅ REGLA: UNIDAD solo ve 'Supervisión' de su CLUES
     if (isUnidad) {
