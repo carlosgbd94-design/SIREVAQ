@@ -20683,7 +20683,8 @@ async function uploadCapEvidenceSlotFile(slotEl, file) {
   const isPDF = file.name.toLowerCase().endsWith(".pdf");
   const isImage = file.type.startsWith("image/");
   if (!isPDF && !isImage) {
-    showToast("Solo se aceptan fotos/escaneos (imagen) o PDF", false, "bad");
+    const ext = (file.name.split(".").pop() || "").toUpperCase();
+    showToast(`"${file.name}" es un archivo ${ext || "de tipo desconocido"}. Solo se aceptan fotos/escaneos (imagen) o PDF.`, false, "bad");
     return;
   }
 
@@ -20852,13 +20853,33 @@ $("uploadFileInput")?.addEventListener("change", (e) => {
     const isPDF = file.name.toLowerCase().endsWith(".pdf");
     const limit = isPDF ? 40 * 1024 * 1024 : 10 * 1024 * 1024;
     if (file.size > limit) {
-      const msg = isPDF 
-        ? "El PDF original supera el límite permitido de 40MB." 
+      const msg = isPDF
+        ? "El PDF original supera el límite permitido de 40MB."
         : "El archivo excede el límite de 10MB. Por favor selecciona un archivo más pequeño.";
       showToast(msg, false, "bad");
       resetUploadForm();
       return;
     }
+
+    // "Evidencias de campaña"/"Supervisión" son fotos o escaneos de algo que pasó
+    // realmente (misma naturaleza que "Evidencia de capacitaciones", ver
+    // uploadCapEvidenceSlotFile) -- un .xlsx u otro documento ahí no tiene sentido
+    // y antes se subía sin avisar nada. "Otros reportes" se deja sin restringir por
+    // ser catch-all. accept=".pdf,image/*" en el <input> es solo una sugerencia del
+    // SO: escribir el nombre exacto en el diálogo (en vez de elegirlo de la lista)
+    // deja pasar cualquier extensión igual, así que hay que validar aquí también.
+    const category = $("uploadCategory")?.value || "";
+    const requiresImageOrPdf = category === "Evidencias de campaña" || category === "Supervisión";
+    if (requiresImageOrPdf) {
+      const isImage = file.type.startsWith("image/");
+      if (!isPDF && !isImage) {
+        const ext = (file.name.split(".").pop() || "").toUpperCase();
+        showToast(`"${file.name}" es un archivo ${ext || "de tipo desconocido"}. Solo se aceptan fotos/escaneos (imagen) o PDF.`, false, "bad");
+        resetUploadForm();
+        return;
+      }
+    }
+
     if (fileNameLabel) {
       fileNameLabel.textContent = file.name + (isPDF && file.size > 2 * 1024 * 1024 ? " (Se comprimirá al subir)" : "");
     }
