@@ -56,13 +56,16 @@ const CLAVE_A_EXISTENCIA_BIOLOGICO = {
   VARICELA: ['VARICELA'], VPH: ['VPH'], VSR: ['VSR']
 };
 
-// El catálogo central nombra a los 4 municipios distinto de como los nombra
+// El catálogo central nombra a los municipios distinto de como los nombra
 // BioVac (con/sin acentos, con/sin "EL ") -- mapeo explícito en vez de
-// normalización difusa, porque son solo 4 y así un municipio nuevo mal
+// normalización difusa, porque son pocos destinos y así uno nuevo mal
 // escrito en cualquiera de los dos lados falla visiblemente (lista vacía)
-// en vez de emparejar con el equivocado.
+// en vez de emparejar con el equivocado. HENM y NHG son hospitales, no
+// municipios, pero comparten la misma matriz central de lotes (ver
+// biovac_agrega_unidades_hospitales.sql) con su propio nombre literal.
 const MUNICIPIO_BIOVAC_A_LOTES = {
-  QUERETARO: 'QUERÉTARO', CORREGIDORA: 'CORREGIDORA', MARQUES: 'EL MARQUÉS', HUIMILPAN: 'HUIMILPAN'
+  QUERETARO: 'QUERÉTARO', CORREGIDORA: 'CORREGIDORA', MARQUES: 'EL MARQUÉS', HUIMILPAN: 'HUIMILPAN',
+  HENM: 'HENM', NHG: 'NHG'
 };
 
 // perfiles.usuario guarda un nombre corto de login (ej. "CARLOS_BECERRA"),
