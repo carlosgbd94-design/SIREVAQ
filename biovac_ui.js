@@ -295,15 +295,18 @@ async function cargarCatalogo() {
     document.getElementById('labelSelUnidad').textContent = 'Unidad (CLUES)';
   }
 
-  // Selector aparte para "modo revisión" de SIS-06-P (MUNICIPAL revisa el
-  // envío de SUS unidades, JURISDICCIONAL/ADMIN el de cualquiera) -- nunca
-  // en la misma vista que el Movimiento municipal/hospital: ese sigue
-  // siendo #selUnidad de arriba. RLS ya limita `unidadesClues` al alcance
-  // real de cada rol (MUNICIPAL solo su municipio).
+  // Selector aparte para "modo revisión" del SIS de cada unidad (paloteo
+  // SIS-06-P + Movimiento de Biológico + CSV) -- SOLO MUNICIPAL, sobre SUS
+  // propias unidades. JURISDICCIONAL/ADMIN NO baja a nivel unidad para
+  // nada de esto: lo único que ve más allá de municipios/hospitales es el
+  // seguimiento de estatus (tabla de solo lectura, sin datos capturados) --
+  // lo que se concentra hacia jurisdicción es Movimiento de Biológico
+  // (municipio/hospital), no el detalle de cada unidad.
   const selUnidadRevision = document.getElementById('selUnidadRevision');
   if (selUnidadRevision) {
-    selUnidadRevision.innerHTML = unidadesClues
-      .map((u) => `<option value="${u.id}">${u.clues} -- ${u.nombre} (${u.municipio})</option>`).join('');
+    selUnidadRevision.innerHTML = rol === 'MUNICIPAL'
+      ? unidadesClues.map((u) => `<option value="${u.id}">${u.clues} -- ${u.nombre} (${u.municipio})</option>`).join('')
+      : '';
   }
 
   // MUNICIPAL/JURISDICCIONAL/ADMIN también entran al toggle SIS-06-P/CSV/
@@ -352,16 +355,20 @@ function inicializarToggleSIS06P() {
   const btnSeg = document.getElementById('btnSeccionSeguimiento');
   const botones = [btnSis, btnMov, btnCsv, btnSeg];
 
-  // El selector de "unidad a revisar" (CLUES) solo aplica a roles que
-  // revisan SIS-06-P de terceros -- UNIDAD siempre ve la suya propia, no
-  // elige nada aquí. Vive aparte de #selUnidad (que sigue siendo, para
-  // estos mismos roles, el municipio/hospital de Movimiento) para no volver
-  // a mezclar las dos vistas.
+  // El selector de "unidad a revisar" (CLUES) y las pestañas SIS-06-P/CSV
+  // son SOLO para MUNICIPAL (revisa/edita el SIS de SUS propias unidades).
+  // JURISDICCIONAL/ADMIN no bajan a nivel unidad para nada de esto -- solo
+  // ven Movimiento de Biológico (municipio/hospital, lo único que se
+  // concentra hacia arriba) y Seguimiento (estatus, sin datos capturados).
   const rolActual = estado.perfil ? estado.perfil.rol : null;
   const wrapRevision = document.getElementById('wrapUnidadRevision');
   const selUnidadRevision = document.getElementById('selUnidadRevision');
-  const esRevisor = rolActual === 'MUNICIPAL' || rolActual === 'JURISDICCIONAL' || rolActual === 'ADMIN';
-  if (wrapRevision) wrapRevision.style.display = esRevisor ? 'flex' : 'none';
+  const esMunicipal = rolActual === 'MUNICIPAL';
+  if (wrapRevision) wrapRevision.style.display = esMunicipal ? 'flex' : 'none';
+  if (rolActual === 'JURISDICCIONAL' || rolActual === 'ADMIN') {
+    btnSis.style.display = 'none';
+    btnCsv.style.display = 'none';
+  }
 
   function ocultarTodo() {
     botones.forEach((b) => b.classList.remove('activo'));

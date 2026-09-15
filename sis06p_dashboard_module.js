@@ -80,8 +80,14 @@
 
   // Saltar directo a modo revisión de una unidad desde la fila del
   // dashboard -- usa #selUnidadRevision (CLUES), no #selUnidad (ese es el
-  // municipio/hospital de Movimiento, vista aparte).
+  // municipio/hospital de Movimiento, vista aparte). Solo MUNICIPAL baja a
+  // nivel unidad: JURISDICCIONAL/ADMIN ven este mismo Seguimiento (estatus,
+  // sin datos capturados) pero no pueden entrar al detalle de una unidad.
   function irARevisarUnidad(clues) {
+    if (!estado.perfil || estado.perfil.rol !== 'MUNICIPAL') {
+      toast('Solo municipal puede ver el detalle de una unidad -- aquí solo se ve el estatus general.', 'error');
+      return;
+    }
     const selUnidadRevision = document.getElementById('selUnidadRevision');
     const opt = Array.from(selUnidadRevision.options).find((o) => {
       const u = (estado.unidadesClues || estado.unidades || []).find((x) => x.id === o.value);
