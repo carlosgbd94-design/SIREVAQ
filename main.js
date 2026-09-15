@@ -7522,6 +7522,11 @@ async function supabaseRequest(action = "", payload, options = {}) {
           const xhr = new XMLHttpRequest();
           xhr.open("POST", edgeFunctionUrl, true);
           xhr.setRequestHeader("apikey", supabaseAnonKey);
+          // Sin timeout, una conexión pobre/inestable (típico en unidades rurales) deja
+          // el xhr colgado sin onload NI onerror: el usuario ve "Subiendo…" para siempre
+          // y, si no lo nota, siente que "no pasó nada". 2 min es holgado para el límite
+          // de 40MB de PDF, pero corta la espera indefinida.
+          xhr.timeout = 120000;
 
           if (options.onUploadProgress && xhr.upload) {
             xhr.upload.addEventListener("progress", (event) => {
@@ -7550,7 +7555,8 @@ async function supabaseRequest(action = "", payload, options = {}) {
               }
             }
           };
-          xhr.onerror = () => reject(new Error("Error de red durante la transmisión"));
+          xhr.onerror = () => reject(new Error("Error de red durante la transmisión. Revisa tu conexión a internet e intenta de nuevo."));
+          xhr.ontimeout = () => reject(new Error("La subida tardó demasiado (conexión lenta o inestable). Intenta de nuevo con mejor señal."));
           xhr.send(formData);
         });
 
@@ -20720,7 +20726,7 @@ async function uploadCapEvidenceSlotFile(slotEl, file) {
     setDocSlotState(slotEl, { uploaded: true, disabled: false, loading: false });
   } catch (err) {
     console.error("Error subiendo documento de evidencia:", err);
-    showToast("Error al subir: " + err.message, false, "bad");
+    showToast("Error al subir: " + (err?.message || String(err) || "Error desconocido"), false, "bad");
     setDocSlotState(slotEl, { uploaded: slotEl.classList.contains("is-done"), disabled: false, loading: false });
   }
 }
@@ -20730,8 +20736,20 @@ document.querySelectorAll(".js1-doc-slot").forEach(slot => {
   const input = slot.querySelector(".js1-doc-slot-input");
   if (!btn || !input) return;
 
+  // Un botón deshabilitado que solo hace "return" es indistinguible, para el usuario,
+  // de que la página no reaccionó a su clic. Antes de ignorar el clic, decirle POR QUÉ
+  // no puede subir todavía (sin capacitación elegida / plazo vencido / cargando estado).
   btn.addEventListener("click", () => {
-    if (btn.disabled) return;
+    if (btn.disabled) {
+      if (slot.classList.contains("is-locked")) {
+        showToast("El plazo de 30 días para subir este documento ya venció.", false, "bad");
+      } else if (!$("uploadCapacitacionSelect")?.value) {
+        showToast("Selecciona primero la capacitación, arriba.", false, "warn");
+      } else {
+        showToast("Espera a que termine de cargar el estado actual e intenta de nuevo.", false, "warn");
+      }
+      return;
+    }
     input.click();
   });
 
@@ -20846,6 +20864,11 @@ $("uploadFileInput")?.addEventListener("change", (e) => {
     }
     if (btnBrowse) btnBrowse.classList.add("hasFile");
     if (btnDoUpload) btnDoUpload.disabled = false;
+    // Elegir el archivo aquí solo lo deja listo — falta presionar "Subir evidencia" para
+    // que la carga realmente empiece. Sin este toast, ese paso intermedio (una etiqueta
+    // de texto que cambia y un botón que se habilita en otra parte de la pantalla) es
+    // fácil de pasar por alto, y el usuario siente que "no pasó nada" al elegir el archivo.
+    showToast(`"${file.name}" listo. Presiona "Subir evidencia" para completar la carga.`, true, "info");
   } else {
     resetUploadForm();
   }
