@@ -552,8 +552,13 @@ begin
   left join sis06p_capturas c
     on c.clues = bu.clues and c.mes = p_mes and c.anio = p_anio
   where bu.activo = true
+    -- Las filas "pseudo" (municipios/hospitales, clues 'JS1-...') son solo
+    -- para la captura de Movimiento a nivel municipal/hospital -- nunca
+    -- envían SIS-06-P por sí mismas, así que no pintan nada en este
+    -- seguimiento (antes salían siempre como "SIN_INICIAR", puro ruido).
+    and bu.clues not like 'JS1-%'
     and (v_rol in ('JURISDICCIONAL','ADMIN') or bu.municipio = any(v_municipios_allowed))
-  order by bu.municipio, bu.nombre;
+  order by bu.clues;
 end;
 $$;
 

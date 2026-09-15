@@ -248,7 +248,7 @@ async function cargarCatalogo() {
   const [{ data: bloques, error: e1 }, { data: biologicos, error: e2 }, { data: unidades, error: e3 }] = await Promise.all([
     estado.db.from('biovac_bloques_catalogo').select('*').order('pagina').order('orden'),
     estado.db.from('biovac_catalogo_biologicos').select('*').order('orden_en_bloque'),
-    estado.db.from('biovac_unidades').select('*').eq('activo', true).order('nombre')
+    estado.db.from('biovac_unidades').select('*').eq('activo', true).order('clues')
   ]);
   if (e1 || e2 || e3) { toast('Error cargando catálogo: ' + (e1 || e2 || e3).message, 'error'); return; }
   estado.bloques = bloques;
@@ -257,28 +257,59 @@ async function cargarCatalogo() {
   // suyas); si no hay sesión real (uso standalone), unidades trae las 4.
   estado.unidades = unidades;
 
-  const selUnidad = document.getElementById('selUnidad');
-  const opcionesUnidad = unidades.map((u) => `<option value="${u.id}">${u.nombre} (${u.municipio})</option>`);
+  // `biovac_unidades` mezcla dos cosas distintas bajo la misma tabla: filas
+  // "pseudo" (municipios/hospitales, clues con prefijo "JS1-", una por
+  // municipio + 2 hospitales -- el nivel al que siempre ha operado
+  // Movimiento de Biológico) y, desde Fase 3, filas reales por CLUES (~74
+  // unidades de salud individuales). Mezclarlas en un solo selector es
+  // justo el "relajo" reportado: jurisdiccional viendo 80 opciones cuando
+  // solo debía ver 6, y HENM apareciendo dos veces (su fila pseudo Y su
+  // CLUES real, QTSSA001740, ambas literalmente llamadas "HENM"). Se
+  // separan aquí en dos listas -- cada selector usa solo la que le toca.
+  const unidadesPseudo = unidades.filter((u) => u.clues && u.clues.startsWith('JS1-'));
+  const unidadesClues = unidades.filter((u) => !(u.clues && u.clues.startsWith('JS1-')));
+  estado.unidadesPseudo = unidadesPseudo;
+  estado.unidadesClues = unidadesClues;
+
   const rol = estado.perfil ? estado.perfil.rol : null;
+
+  // Selector del encabezado (Movimiento de Biológico, nivel municipio/
+  // hospital) -- SOLO pseudo-unidades para MUNICIPAL/JURISDICCIONAL/ADMIN.
+  // UNIDAD sigue viendo su propia fila real (RLS ya la limita a esa sola).
+  const selUnidad = document.getElementById('selUnidad');
+  const unidadesParaSelUnidad = rol === 'UNIDAD' ? unidadesClues : unidadesPseudo;
+  const opcionesUnidad = unidadesParaSelUnidad.map((u) => `<option value="${u.id}">${u.nombre} (${u.municipio})</option>`);
   if (rol === 'JURISDICCIONAL' || rol === 'ADMIN') {
-    opcionesUnidad.unshift(`<option value="${UNIDAD_JURISDICCION}">Jurisdicción (suma de las ${unidades.length} unidades)</option>`);
+    opcionesUnidad.unshift(`<option value="${UNIDAD_JURISDICCION}">Jurisdicción (suma de las ${unidadesPseudo.length} unidades)</option>`);
   }
   selUnidad.innerHTML = opcionesUnidad.join('');
 
-  // Rol UNIDAD: RLS ya limita `unidades` a su propia fila (por clues) --
-  // no tiene sentido un selector con una sola opción, así que se bloquea
-  // preseleccionada, igual que el resto de SIREVAQ trata USER.clues para
-  // este rol. También habilita el toggle Movimiento/SIS-06-P (ver §4).
+  // Rol UNIDAD: RLS ya limita `unidadesClues` a su propia fila (por clues)
+  // -- no tiene sentido un selector con una sola opción, así que se
+  // bloquea preseleccionada, igual que el resto de SIREVAQ trata
+  // USER.clues para este rol. También habilita el toggle Movimiento/
+  // SIS-06-P (ver §4).
   if (rol === 'UNIDAD') {
-    if (unidades.length > 0) selUnidad.value = unidades[0].id;
+    if (unidadesClues.length > 0) selUnidad.value = unidadesClues[0].id;
     selUnidad.disabled = true;
     document.getElementById('labelSelUnidad').textContent = 'Unidad (CLUES)';
   }
 
+  // Selector aparte para "modo revisión" de SIS-06-P (MUNICIPAL revisa el
+  // envío de SUS unidades, JURISDICCIONAL/ADMIN el de cualquiera) -- nunca
+  // en la misma vista que el Movimiento municipal/hospital: ese sigue
+  // siendo #selUnidad de arriba. RLS ya limita `unidadesClues` al alcance
+  // real de cada rol (MUNICIPAL solo su municipio).
+  const selUnidadRevision = document.getElementById('selUnidadRevision');
+  if (selUnidadRevision) {
+    selUnidadRevision.innerHTML = unidadesClues
+      .map((u) => `<option value="${u.id}">${u.clues} -- ${u.nombre} (${u.municipio})</option>`).join('');
+  }
+
   // MUNICIPAL/JURISDICCIONAL/ADMIN también entran al toggle SIS-06-P/CSV/
   // Seguimiento (Fase 4: modo revisión + dashboard) -- a diferencia de
-  // UNIDAD, aquí el selector queda habilitado para poder elegir cualquier
-  // unidad de su alcance.
+  // UNIDAD, aquí el selector de revisión queda habilitado para poder
+  // elegir cualquier unidad de su alcance.
   if (rol === 'UNIDAD' || rol === 'MUNICIPAL' || rol === 'JURISDICCIONAL' || rol === 'ADMIN') {
     inicializarToggleSIS06P();
   }
@@ -320,6 +351,17 @@ function inicializarToggleSIS06P() {
   const btnCsv = document.getElementById('btnSeccionCSV');
   const btnSeg = document.getElementById('btnSeccionSeguimiento');
   const botones = [btnSis, btnMov, btnCsv, btnSeg];
+
+  // El selector de "unidad a revisar" (CLUES) solo aplica a roles que
+  // revisan SIS-06-P de terceros -- UNIDAD siempre ve la suya propia, no
+  // elige nada aquí. Vive aparte de #selUnidad (que sigue siendo, para
+  // estos mismos roles, el municipio/hospital de Movimiento) para no volver
+  // a mezclar las dos vistas.
+  const rolActual = estado.perfil ? estado.perfil.rol : null;
+  const wrapRevision = document.getElementById('wrapUnidadRevision');
+  const selUnidadRevision = document.getElementById('selUnidadRevision');
+  const esRevisor = rolActual === 'MUNICIPAL' || rolActual === 'JURISDICCIONAL' || rolActual === 'ADMIN';
+  if (wrapRevision) wrapRevision.style.display = esRevisor ? 'flex' : 'none';
 
   function ocultarTodo() {
     botones.forEach((b) => b.classList.remove('activo'));
@@ -370,17 +412,33 @@ function inicializarToggleSIS06P() {
     });
   }
 
-  // Cambiar de unidad (roles revisores -- UNIDAD tiene el selector
-  // deshabilitado, este listener nunca dispara para ellos) invalida la
-  // caché de SIS06PBiovac: hay que releer sis06p_capturas/correcciones de
-  // la CLUES recién seleccionada, no solo volver a pintar con datos viejos.
+  // rol UNIDAD: #selUnidad ES su propia CLUES (bloqueado, una sola opción),
+  // así que sigue siendo la fuente para SIS-06-P/CSV en ese caso. Roles
+  // revisores: #selUnidad ahora es SOLO el municipio/hospital de
+  // Movimiento -- cambiar de unidad ahí ya no debe tocar SIS-06-P/CSV, eso
+  // lo maneja #selUnidadRevision por separado.
   document.getElementById('selUnidad').addEventListener('change', async () => {
+    if (rolActual !== 'UNIDAD') return;
     if (btnSis.classList.contains('activo') || btnCsv.classList.contains('activo')) {
       _sis06pInicializado = true;
       await window.SIS06PBiovac.init();
       if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
     }
   });
+
+  // Cambiar la unidad a revisar (roles revisores únicamente) invalida la
+  // caché de SIS06PBiovac: hay que releer sis06p_capturas/correcciones de
+  // la CLUES recién seleccionada, no solo volver a pintar con datos viejos.
+  if (selUnidadRevision) {
+    selUnidadRevision.addEventListener('change', async () => {
+      if (btnMov.classList.contains('activo')) { cargarMovimiento(); return; }
+      if (btnSis.classList.contains('activo') || btnCsv.classList.contains('activo')) {
+        _sis06pInicializado = true;
+        await window.SIS06PBiovac.init();
+        if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
+      }
+    });
+  }
 
   document.getElementById('selMes').addEventListener('change', () => {
     if (btnSis.classList.contains('activo')) window.SIS06PBiovac.render();
@@ -395,7 +453,6 @@ function inicializarToggleSIS06P() {
 
   // SIS-06-P es la sección base para UNIDAD (entra directo a capturar);
   // los roles revisores entran directo a Seguimiento (para qué vinieron).
-  const rolActual = estado.perfil ? estado.perfil.rol : null;
   if (rolActual === 'UNIDAD') {
     btnSis.click();
   } else if (btnSeg) {
@@ -469,8 +526,27 @@ async function reconocerTodasCorrecciones() {
 // Cargar / renderizar movimiento
 // ---------------------------------------------------------------------------
 
+// "El SIS de una unidad" (paloteo SIS-06-P + Movimiento de Biológico + CSV +
+// SIS-SS-CE-H + Influenza) es lo que un revisor (MUNICIPAL/JURISDICCIONAL/
+// ADMIN) puede ver Y EDITAR por unidad -- pero solo Movimiento de Biológico
+// es lo que además se concentra hacia arriba (unidad -> municipal ->
+// jurisdiccional). Por eso Movimiento tiene DOS fuentes posibles: el
+// municipio/hospital pseudo de #selUnidad (su propia captura, de siempre) o,
+// si el revisor eligió una unidad real en #selUnidadRevision, el Movimiento
+// de ESA unidad -- RLS ya le da lectura/escritura ahí (biovac_movimientos_
+// write ya cubre MUNICIPAL sobre cualquier unidad de su municipio, y
+// JURISDICCIONAL/ADMIN sobre todas), aquí solo falta poder apuntar a ella.
+function unidadIdMovimientoActivo() {
+  const rol = estado.perfil ? estado.perfil.rol : null;
+  if (rol !== 'UNIDAD') {
+    const selRevision = document.getElementById('selUnidadRevision');
+    if (selRevision && selRevision.value) return selRevision.value;
+  }
+  return document.getElementById('selUnidad').value;
+}
+
 async function cargarMovimiento() {
-  const unidadId = document.getElementById('selUnidad').value;
+  const unidadId = unidadIdMovimientoActivo();
   const anio = Number(document.getElementById('selAnio').value);
   const mes = Number(document.getElementById('selMes').value);
   if (!unidadId) return;
@@ -535,21 +611,39 @@ async function cargarSIS06PTotalesParaComparar(anio, mes) {
   const clues = estado.perfil.clues;
   if (!clues) return;
   try {
-    const [{ data: captura }, { data: sisVars }] = await Promise.all([
+    const [{ data: captura }, { data: sisVars }, { data: capturasInf }] = await Promise.all([
       estado.db.from('sis06p_capturas').select('valores').eq('clues', clues).eq('mes', mes).eq('anio', anio).maybeSingle(),
-      estado.db.from('sis_variables').select('fila_excel, biologico').eq('activo', true)
+      estado.db.from('sis_variables').select('fila_excel, biologico').eq('activo', true),
+      estado.db.from('influenza_capturas').select('fecha, valores').eq('clues', clues)
     ]);
-    if (!captura || !sisVars) return;
-    const valores = captura.valores || {};
-    const biologicoPorFila = new Map(sisVars.map((v) => [String(v.fila_excel), v.biologico]));
     const totalesPorSisBiologico = {};
-    Object.entries(valores).forEach(([fila, v]) => {
-      const bio = biologicoPorFila.get(String(fila));
-      if (!bio) return;
-      totalesPorSisBiologico[bio] = (totalesPorSisBiologico[bio] || 0) + Number(v?.total || 0);
+    if (captura && sisVars) {
+      const valores = captura.valores || {};
+      const biologicoPorFila = new Map(sisVars.map((v) => [String(v.fila_excel), v.biologico]));
+      Object.entries(valores).forEach(([fila, v]) => {
+        const bio = biologicoPorFila.get(String(fila));
+        if (!bio) return;
+        totalesPorSisBiologico[bio] = (totalesPorSisBiologico[bio] || 0) + Number(v?.total || 0);
+      });
+    }
+    // Influenza se captura semana con semana en su propio módulo (meta/logro
+    // de campaña), no dentro del paloteo SIS-06-P -- sus claves BIE/BIO ya
+    // se conectan solas al CSV (window.INFLUENZA_SIS_MAPPING, ver
+    // sis_export_module.js/sis06p_biovac_module.js). Aquí se suma el mismo
+    // total mensual (todas las semanas cuyo inicio cae en este mes
+    // calendario) y se agrega al subtotal comparativo del biológico
+    // ANTIINFLUENZA de Movimiento -- mismo criterio de "comparar, no
+    // sobreescribir" que ya se usa para el resto de biológicos.
+    let totalInfluenzaMes = 0;
+    (capturasInf || []).forEach((c) => {
+      if (!c.fecha) return;
+      const d = new Date(c.fecha + 'T12:00:00');
+      if ((d.getMonth() + 1) !== Number(mes) || d.getFullYear() !== Number(anio)) return;
+      Object.values(c.valores || {}).forEach((v) => { totalInfluenzaMes += Number(v || 0); });
     });
     Object.entries(SIS_BIOLOGICO_POR_CLAVE_BIOVAC).forEach(([claveBiovac, nombresSis]) => {
-      const suma = nombresSis.reduce((acc, n) => acc + (totalesPorSisBiologico[n] || 0), 0);
+      let suma = nombresSis.reduce((acc, n) => acc + (totalesPorSisBiologico[n] || 0), 0);
+      if (claveBiovac === 'ANTIINFLUENZA') suma += totalInfluenzaMes;
       if (suma > 0) estado.sis06pTotales[claveBiovac] = suma;
     });
   } catch (err) {
@@ -758,7 +852,7 @@ async function cargarRenglones() {
 async function crearMovimiento() {
   const usuario = usuarioActual();
   if (!usuario) return;
-  const unidadId = document.getElementById('selUnidad').value;
+  const unidadId = unidadIdMovimientoActivo();
   const anio = Number(document.getElementById('selAnio').value);
   const mes = Number(document.getElementById('selMes').value);
   const { error } = await estado.db.from('biovac_movimientos')
@@ -984,12 +1078,13 @@ function renderBiologico(bio, editable) {
   if (totalSIS06P !== undefined) {
     const totalAplicadas = totalAplicadasA + totalAplicadasB;
     const coincide = totalSIS06P === totalAplicadas;
+    const fuente = bio.clave === 'ANTIINFLUENZA' ? 'SIS-06-P + Influenza (semanal) reportaron' : 'SIS-06-P reportó';
     html += `<div style="margin-top:8px; padding:8px 12px; border-radius:10px; font-size:11.5px; font-weight:700;
       background:${coincide ? 'var(--success-bg)' : 'var(--warning-bg)'};
       color:${coincide ? 'var(--success)' : 'var(--warning)'};
       border:1px solid ${coincide ? 'rgba(16,185,129,.3)' : 'var(--warning-border)'};">
       <span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">${coincide ? 'check_circle' : 'compare_arrows'}</span>
-      SIS-06-P reportó ${totalSIS06P} dosis aplicadas de este biológico este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas} aplicadas -- revisa si la diferencia es correcta)`}.
+      ${fuente} ${totalSIS06P} dosis aplicadas de este biológico este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas} aplicadas -- revisa si la diferencia es correcta)`}.
     </div>`;
   }
 
@@ -1744,7 +1839,7 @@ async function exportarExcel() {
 }
 
 function verPdf() {
-  const unidadId = document.getElementById('selUnidad').value;
+  const unidadId = unidadIdMovimientoActivo();
   const anio = document.getElementById('selAnio').value;
   const mes = document.getElementById('selMes').value;
   window.open(`biovac_print.html?unidad=${unidadId}&anio=${anio}&mes=${mes}`, '_blank');

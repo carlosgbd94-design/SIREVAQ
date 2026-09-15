@@ -90,9 +90,12 @@
     if (estado.perfil.rol === 'UNIDAD') {
       return { clues: estado.perfil.clues, unidad: estado.perfil.unidad, municipio: estado.perfil.municipio };
     }
-    const selVal = document.getElementById('selUnidad')?.value;
-    if (!selVal || selVal === UNIDAD_JURISDICCION) return null;
-    const u = (estado.unidades || []).find((x) => x.id === selVal);
+    // Roles revisores: la CLUES a revisar sale de #selUnidadRevision, NUNCA
+    // de #selUnidad -- ese sigue siendo el municipio/hospital de Movimiento
+    // (dos vistas separadas a propósito, ver biovac_ui.js).
+    const selVal = document.getElementById('selUnidadRevision')?.value;
+    if (!selVal) return null;
+    const u = (estado.unidadesClues || estado.unidades || []).find((x) => x.id === selVal);
     if (!u) return null;
     return { clues: u.clues, unidad: u.nombre, municipio: u.municipio };
   }
@@ -256,6 +259,20 @@
     const btnEnviar = document.getElementById('btnEnviarSIS06P');
     const btnValidar = document.getElementById('btnMarcarValidado');
     const btnImprimir = document.getElementById('btnImprimirSIS06P');
+
+    // El Excel oficial es el documento final -- no tiene caso (y puede
+    // confundir) entregarlo antes de que el municipal valide el concentrado,
+    // porque hasta ese momento la información todavía puede corregirse. Se
+    // habilita para cualquier rol una vez que ESTE concentrado quedó en
+    // VALIDADO, sin importar quién lo esté mirando.
+    const btnExportar = document.getElementById('btnExportarSISCompleto');
+    if (btnExportar) {
+      const puedeExportar = estadoActual === 'VALIDADO';
+      btnExportar.disabled = !puedeExportar;
+      btnExportar.title = puedeExportar
+        ? 'Exportar Excel oficial: SIS-06-P y, si ya iniciaste el movimiento de este mes, también Movimiento de Biológico'
+        : 'Disponible hasta que el municipal valide el concentrado SIS-06-P de este mes';
+    }
 
     if (esUnidad) {
       if (btnGuardar) btnGuardar.style.display = estadoActual === 'BORRADOR' ? 'inline-flex' : 'none';
@@ -675,14 +692,144 @@
 
   const COL_TOTAL = 25, COL_AFRO = 22, COL_INDIGENA = 23, COL_MIGRANTE = 24;
 
-  async function exportarExcelOficial() {
+  // Llena la hoja real "MOV-DE-BIOLÓGICO" de la plantilla con el mismo motor
+  // que ya usan las exportaciones municipal/jurisdiccional de Movimiento de
+  // Biológico (construirWorkbookDesdeDatos, en biovac_export_excel.js) --
+  // ese motor NO depende del layout fijo de la plantilla: limpia todo bajo
+  // el encabezado y reconstruye bloque por bloque (tantos renglones de lote/
+  // A.R.F./Canje como haga falta ese mes), tomando el estilo real de la
+  // propia hoja (fila 13=normal, 16=A.R.F., 18=Total, verificado contra
+  // SINBA-VER_26_2026.xlsx) -- por eso es adaptativo de verdad, no limitado
+  // a 3 renglones normales + 2 de A.R.F./Canje. El morado de Canje (vs. rojo
+  // de A.R.F.) ya lo resuelve ese mismo motor por categoría, sin nada extra
+  // aquí.
+  async function llenarMovimientoOficial(wb, unidadBiovac, movimiento) {
+    const wsMov = wb.getWorksheet('MOV-DE-BIOLÓGICO');
+    if (!wsMov) throw new Error('La plantilla no tiene la hoja "MOV-DE-BIOLÓGICO".');
+
+    const [{ data: bloques }, { data: biologicos }] = await Promise.all([
+      estado.db.from('biovac_bloques_catalogo').select('*').order('pagina').order('orden'),
+      estado.db.from('biovac_catalogo_biologicos').select('*').order('orden_en_bloque')
+    ]);
+    const { data: renglonesDb } = await estado.db.from('biovac_renglones')
+      .select(`categoria, existencia_anterior_frascos, recibido_frascos, aplicadas_a, aplicadas_b, desechadas_a, desechadas_b, observaciones,
+        biovac_lotes ( numero_lote, caducidad, dosis_por_frasco_override, biologico_id )`)
+      .eq('movimiento_id', movimiento.id);
+
+    const diaCorte = movimiento.fecha_corte ? Number(movimiento.fecha_corte.slice(8, 10)) : new Date(movimiento.anio, movimiento.mes, 0).getDate();
+    const datosHeader = {
+      mesNombre: MESES_NOMBRE_MAYUS[movimiento.mes - 1], dia: diaCorte, anio: movimiento.anio,
+      municipio: unidadBiovac.nombre, responsable: movimiento.responsable_elaboracion || ''
+    };
+    await window.BiovacExportExcel.construirWorkbookDesdeDatos({
+      ws: wsMov, bloques: bloques || [], biologicos: biologicos || [], renglonesDb: renglonesDb || [],
+      anio: movimiento.anio, mes: movimiento.mes, datosHeader
+    });
+
+    // El override genérico del motor (pensado para biovac_plantilla.xlsx,
+    // donde esa posición es un número plano) escribe el año como NÚMERO en
+    // I7 -- pero en esta plantilla esa celda es la que originalmente traía
+    // ÍNDICE!U3 (una FECHA completa, con formato que solo muestra el año).
+    // Escribir 2026 como número ahí lo vuelve un serial de fecha absurdo
+    // (Excel lo lee como 18-jul-1905). Se corrige con la fecha real.
+    const fechaCorte = new Date(Date.UTC(movimiento.anio, movimiento.mes - 1, diaCorte));
+    wsMov.getCell('I7').value = fechaCorte;
+    wsMov.getCell('J7').value = fechaCorte;
+  }
+
+  const MESES_NOMBRE_MAYUS = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+
+  // ---------------------------------------------------------------------------
+  // La hoja ÍNDICE del workbook original solo existía para que alguien
+  // eligiera a mano (desde un selector) la unidad/mes/responsable que
+  // alimentaba, por fórmula, TODAS las demás hojas (SINBA-SIS-06-P,
+  // MOV-DE-BIOLÓGICO, SIS-SS-CE-H-2026 y SIS-SS-IE Mensual -- verificado
+  // celda por celda con un script contra el archivo real). Como esos datos
+  // ya los conocemos directo de la app, no hace falta el selector: se
+  // sustituye cada fórmula conocida por su valor ya resuelto, en TODO el
+  // libro, y solo entonces se puede quitar la hoja ÍNDICE sin dejar ningún
+  // #REF! colgado en ninguna de las otras 4 hojas (incluidas las que este
+  // módulo no llena todavía, como SIS-SS-CE-H-2026).
+  // ---------------------------------------------------------------------------
+
+  function mapaReemplazosIndice(ctx) {
+    return {
+      'IF(ÍNDICE!C4=0," ",ÍNDICE!C4)': ctx.unidad,
+      'IF(ÍNDICE!G4=0," ",ÍNDICE!G4)': ctx.clues,
+      'IF(ÍNDICE!J4=0," ",ÍNDICE!J4)': ctx.responsable,
+      'IF(ÍNDICE!O4=0," ",ÍNDICE!O4)': ctx.mesNombre,
+      'IF(ÍNDICE!S3=0," ",ÍNDICE!S3)': ctx.dia,
+      'IF(ÍNDICE!U3=0," ",ÍNDICE!U3)': ctx.fechaCorte,
+      'IFERROR(VLOOKUP(ÍNDICE!O4,DATOS!J81:K92,2,0)," ")': ctx.mesCodigo,
+      // Localidad (vía VLOOKUP contra DATOS!E94:F168) -- no se captura en
+      // ningún lado del sistema, se deja en blanco a propósito (mismo
+      // criterio ya usado para H6 desde Fase 3b).
+      'IFERROR(VLOOKUP(ÍNDICE!C4,DATOS!E94:F168,2,0)," ")': '',
+      'TEXT(IF(ÍNDICE!$U$3=0," ",ÍNDICE!$U$3),"AAAA")': String(ctx.anio),
+      'TEXT(ÍNDICE!$U$3,"aaaa")': String(ctx.anio),
+      '"Del 1ro al "&IF(SUM(ÍNDICE!S3)=0," ",SUM(ÍNDICE!S3)&" de")': `Del 1ro al ${ctx.dia} de`,
+      '"del "&TEXT(ÍNDICE!$U$3,"aaaa")': `del ${ctx.anio}`
+    };
+  }
+
+  function resolverReferenciasIndiceYQuitarHoja(wb, ctx) {
+    const mapa = mapaReemplazosIndice(ctx);
+    wb.eachSheet((ws) => {
+      if (ws.name === 'ÍNDICE') return;
+      ws.eachRow({ includeEmpty: false }, (row) => {
+        row.eachCell({ includeEmpty: false }, (cell) => {
+          const v = cell.value;
+          if (v && typeof v === 'object' && typeof v.formula === 'string') {
+            if (Object.prototype.hasOwnProperty.call(mapa, v.formula)) {
+              cell.value = mapa[v.formula];
+            } else if (/ÍNDICE/i.test(v.formula)) {
+              console.warn('[SIS-06-P] Fórmula sin mapear referenciando ÍNDICE, se deja en blanco:', ws.name, cell.address, v.formula);
+              cell.value = '';
+            }
+          }
+        });
+      });
+    });
+    const wsIndice = wb.getWorksheet('ÍNDICE');
+    if (wsIndice) wb.removeWorksheet(wsIndice.id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Exportación oficial UNIFICADA: un solo .xlsx con SIS-06-P y, si la unidad
+  // ya inició su Movimiento de Biológico de este mes, también esa hoja -- para
+  // la unidad su "SIS" es un solo documento, no un archivo por pestaña (el CSV
+  // sigue siendo la única excepción real, con su propio botón en la pestaña
+  // CSV, porque alimenta un pipeline distinto -- carga a RDA).
+  // ---------------------------------------------------------------------------
+
+  async function exportarSISOficialCompleto() {
+    const activa = datosUnidadActiva();
+    if (!activa) { toast('Selecciona una unidad (CLUES) específica.', 'error'); return; }
+
+    await init();
+
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
     const captura = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
-    if (!captura) { toast('No hay concentrado guardado para este mes/año.', 'error'); return; }
+    const unidadBiovac = (estado.unidades || []).find((u) => u.clues === activa.clues);
 
-    mostrarCargando('Generando Excel con la plantilla oficial...');
+    // Misma regla que deshabilita el botón en render() -- se repite aquí
+    // porque esta función es la fuente de verdad real (el botón deshabilitado
+    // ya debería impedir el clic, pero no hay que confiar solo en eso).
+    if (!captura || captura.estado !== 'VALIDADO') {
+      toast('El concentrado SIS-06-P debe estar Validado por el municipal antes de poder exportarlo.', 'error');
+      return;
+    }
+
+    mostrarCargando('Generando Excel oficial...');
     try {
+      let movimiento = null;
+      if (unidadBiovac) {
+        const { data: mov } = await estado.db.from('biovac_movimientos')
+          .select('*').eq('unidad_id', unidadBiovac.id).eq('anio', anio).eq('mes', mes).maybeSingle();
+        movimiento = mov || null;
+      }
+
       const resp = await fetch('SINBA-VER_26_2026.xlsx');
       if (!resp.ok) throw new Error('No se pudo cargar la plantilla oficial (SINBA-VER_26_2026.xlsx).');
       const buffer = await resp.arrayBuffer();
@@ -692,22 +839,23 @@
       const ws = wb.getWorksheet('SINBA-SIS-06-P');
       if (!ws) throw new Error('La plantilla no tiene la hoja "SINBA-SIS-06-P".');
 
+      const diaCorte = new Date(anio, mes, 0).getDate();
+      const responsableGeneral = captura.capturado_por || (movimiento && movimiento.responsable_elaboracion) || '';
+
       // H6 (localidad, via VLOOKUP contra DATOS!E94:F168) se deja intacta --
-      // esa columna es la LOCALIDAD de la unidad (ej. "JURICA PUEBLO"), no el
-      // municipio, y no la capturamos en ningún lado -- verificado contra un
-      // ejemplo real (LOMAS.xlsx) antes de escribir esto, mejor dejarla en
-      // blanco (fórmula sin resolver) que meter un dato equivocado en un
+      // esa columna es la LOCALIDAD de la unidad (ej. "JURICA PUEBLO"), no
+      // el municipio, y no la capturamos en ningún lado -- verificado contra
+      // un ejemplo real (LOMAS.xlsx) antes de escribir esto, mejor dejarla
+      // en blanco (fórmula sin resolver) que meter un dato equivocado en un
       // reporte oficial.
-      ws.getCell('A6').value = captura.unidad || '';
-      ws.getCell('B6').value = captura.clues;
-      ws.getCell('L6').value = captura.capturado_por || '';
+      ws.getCell('A6').value = captura.unidad || activa.unidad || '';
+      ws.getCell('B6').value = captura.clues || activa.clues;
+      ws.getCell('L6').value = responsableGeneral;
       // W3 = código de mes de 2 dígitos ("08" para agosto, NO el nombre) y
       // V3 = días del mes (NO el año) -- también verificado contra
-      // LOMAS.xlsx: W3="08", V3=31 para un reporte de agosto. El año no se
-      // captura en esta hoja (vive implícito en el nombre del archivo de la
-      // plantilla, ej. SINBA-VER_26_2026.xlsx).
+      // LOMAS.xlsx: W3="08", V3=31 para un reporte de agosto.
       ws.getCell('W3').value = String(mes).padStart(2, '0');
-      ws.getCell('V3').value = new Date(anio, mes, 0).getDate();
+      ws.getCell('V3').value = diaCorte;
 
       const valores = captura.valores || {};
       _sisVariablesCache.forEach((v) => {
@@ -724,17 +872,51 @@
         if (migrante > 0) ws.getCell(row, COL_MIGRANTE).value = migrante;
       });
 
+      let movimientoIncluido = false;
+      let movimientoErrorMsg = null;
+      if (movimiento && unidadBiovac && window.BiovacExportExcel) {
+        try {
+          await llenarMovimientoOficial(wb, unidadBiovac, movimiento);
+          movimientoIncluido = true;
+        } catch (errMov) {
+          console.error('[SIS-06-P] No se pudo llenar Movimiento de Biológico en el Excel:', errMov);
+          movimientoErrorMsg = errMov.message;
+        }
+      }
+
+      // Ya se conocen unidad/clues/mes/año/responsable/fecha de corte --
+      // sustituye toda referencia restante a ÍNDICE (en las 4 hojas, no solo
+      // en las que este módulo llena) por su valor resuelto y quita la hoja,
+      // que ya quedó obsoleta.
+      resolverReferenciasIndiceYQuitarHoja(wb, {
+        unidad: captura.unidad || activa.unidad || (unidadBiovac && unidadBiovac.nombre) || '',
+        clues: captura.clues || activa.clues,
+        responsable: responsableGeneral,
+        mesNombre: MESES_NOMBRE_MAYUS[mes - 1],
+        mesCodigo: String(mes).padStart(2, '0'),
+        dia: diaCorte,
+        anio,
+        fechaCorte: new Date(Date.UTC(anio, mes - 1, diaCorte))
+      });
+
       const outBuffer = await wb.xlsx.writeBuffer();
       const blob = new Blob([outBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `SINBA-SIS-06-P_${captura.clues}_${mes}_${anio}.xlsx`;
+      link.download = `SIS_${activa.clues}_${mes}_${anio}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      toast('✅ Excel generado con la plantilla oficial.', 'ok');
+
+      if (movimientoErrorMsg) {
+        toast('Excel generado solo con SIS-06-P -- no se pudo incluir Movimiento de Biológico: ' + movimientoErrorMsg, 'error');
+      } else if (movimientoIncluido) {
+        toast('✅ Excel generado: SIS-06-P + Movimiento de Biológico.', 'ok');
+      } else {
+        toast('✅ Excel generado con SIS-06-P (aún no inicias el Movimiento de Biológico de este mes).', 'ok');
+      }
     } catch (err) {
       console.error('[SIS-06-P] Error al exportar Excel oficial:', err);
       toast('Error al exportar: ' + err.message, 'error');
@@ -756,8 +938,8 @@
     if (btnAceptarTodos) btnAceptarTodos.addEventListener('click', aceptarTodosCambios);
     const btnCSV = document.getElementById('btnDescargarCSVUnidad');
     if (btnCSV) btnCSV.addEventListener('click', downloadCSV);
-    const btnExcel = document.getElementById('btnExportarExcelOficial');
-    if (btnExcel) btnExcel.addEventListener('click', exportarExcelOficial);
+    const btnExcel = document.getElementById('btnExportarSISCompleto');
+    if (btnExcel) btnExcel.addEventListener('click', exportarSISOficialCompleto);
   });
 
   window.SIS06PBiovac = { init, render, save, renderCSVPreview };

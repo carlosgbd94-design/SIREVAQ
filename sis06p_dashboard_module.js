@@ -78,17 +78,19 @@
     });
   }
 
-  // Saltar directo a modo revisión de una unidad desde la fila del dashboard.
+  // Saltar directo a modo revisión de una unidad desde la fila del
+  // dashboard -- usa #selUnidadRevision (CLUES), no #selUnidad (ese es el
+  // municipio/hospital de Movimiento, vista aparte).
   function irARevisarUnidad(clues) {
-    const selUnidad = document.getElementById('selUnidad');
-    const opt = Array.from(selUnidad.options).find((o) => {
-      const u = (estado.unidades || []).find((x) => x.id === o.value);
+    const selUnidadRevision = document.getElementById('selUnidadRevision');
+    const opt = Array.from(selUnidadRevision.options).find((o) => {
+      const u = (estado.unidadesClues || estado.unidades || []).find((x) => x.id === o.value);
       return u && u.clues === clues;
     });
     if (!opt) { toast('No se encontró esa unidad en tu alcance.', 'error'); return; }
-    selUnidad.value = opt.value;
+    selUnidadRevision.value = opt.value;
     document.getElementById('btnSeccionSIS06P').click();
-    selUnidad.dispatchEvent(new Event('change'));
+    selUnidadRevision.dispatchEvent(new Event('change'));
   }
 
   window.SIS06PDashboard = { render };

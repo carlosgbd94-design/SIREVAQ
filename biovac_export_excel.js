@@ -533,5 +533,5 @@
     return wb.xlsx.writeBuffer();
   }
 
-  return { exportarExcel, construirWorkbook, exportarExcelJurisdiccional, construirWorkbookJurisdiccional };
+  return { exportarExcel, construirWorkbook, exportarExcelJurisdiccional, construirWorkbookJurisdiccional, construirWorkbookDesdeDatos };
 });
