@@ -136,6 +136,10 @@ Deno.serve(async (req) => {
       ContentType: fileContentType,
       Body: new Uint8Array(fileBody),
       ContentLength: fileBody.byteLength,
+      // Los archivos se pueden "reemplazar" (mismo Key = misma ruta): sin este header
+      // un navegador/CDN puede quedarse sirviendo la copia vieja desde su propio caché
+      // en vez de revalidar contra R2, aunque el objeto ya se haya sobrescrito.
+      CacheControl: "no-cache, must-revalidate",
     });
 
     await s3.send(command);

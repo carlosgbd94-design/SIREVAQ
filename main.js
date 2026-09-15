@@ -7559,19 +7559,25 @@ async function supabaseRequest(action = "", payload, options = {}) {
         const { data: { user } } = await supabase.auth.getUser();
         const ownerId = user?.id || USER?.id || USER?.uid || null;
 
+        // 'name' es PRIMARY KEY en r2_objects: al reemplazar (mismo folderPath) un
+        // .insert() simple choca con la fila existente y falla en silencio, dejando
+        // el tamaño/tipo/fecha del archivo ORIGINAL en la base aunque en R2 el objeto
+        // ya se haya sobrescrito. upsert (onConflict: 'name') mantiene el metadato
+        // sincronizado con el archivo realmente vigente.
         const { error: dbError } = await supabase
           .from('r2_objects')
-          .insert({
+          .upsert({
             name: folderPath,
             bucket_id: 'sirevaq-evidencias',
             owner: ownerId,
             public_url: publicUrl,
+            updated_at: new Date().toISOString(),
             metadata: {
               size: file.size,
               mimetype: file.type,
               cacheControl: '3600'
             }
-          });
+          }, { onConflict: 'name' });
 
         if (dbError) {
           console.warn("Registro en r2_objects falló, pero el archivo fue subido con éxito a R2:", dbError);
