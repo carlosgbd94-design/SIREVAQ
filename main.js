@@ -23402,7 +23402,10 @@ function filterArchivosGrid() {
     }
 
     cluesId = cluesUnidadStr.split("_")[0] || "Desconocido";
-    const dObj = new Date(f.created_at);
+    // updated_at refleja la fecha real del reemplazo (created_at se queda fijo en la
+    // primera subida); se usa como fuente de la fecha mostrada, del orden y del filtro
+    // por rango de fechas para que un documento reemplazado no parezca "viejo".
+    const dObj = new Date(f.updated_at || f.created_at);
     const dateStr = dObj.toLocaleDateString();
 
     // Buscar municipio de la CLUES (usando UNIT_CATALOG si está disponible)
