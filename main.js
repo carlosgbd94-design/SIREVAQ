@@ -23160,6 +23160,25 @@ window.renderLiveViewTimeline = function() {
         color: "#10b981"
       });
     }
+
+    // Préstamos entre municipios: la tabla de arriba ya avisa QUE un lote es
+    // préstamo (badge 🤝), pero no de dónde vino -- aquí sí, un evento por
+    // cada renglón prestado, con el municipio de origen y el motivo.
+    const loanRows = res.data.filter(r =>
+      r.tipo === "PRESTAMO_DESABASTO" || r.tipo === "Préstamo por desabasto" ||
+      r.tipo === "PRESTAMO_ARF" || r.tipo === "Préstamo por ARF"
+    );
+    loanRows.forEach(r => {
+      const esDesabasto = r.tipo === "PRESTAMO_DESABASTO" || r.tipo === "Préstamo por desabasto";
+      const origen = r.municipio_origen ? escapeHtml(r.municipio_origen) : "municipio no especificado";
+      logs.push({
+        title: `Préstamo recibido: ${escapeHtml(r.biologico || "—")}`,
+        desc: `${Number(r.cantidad || 0)} frasco(s) del lote ${escapeHtml(r.lote || "—")}, prestados por ${origen}.`,
+        time: esDesabasto ? "Motivo: Desabasto" : "Motivo: A.R.F.",
+        icon: "handshake",
+        color: esDesabasto ? "#d97706" : "#0284c7"
+      });
+    });
   }
 
   container.innerHTML = logs.map(l => `
