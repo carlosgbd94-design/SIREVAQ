@@ -20672,10 +20672,9 @@ async function uploadCapEvidenceSlotFile(slotEl, file) {
   const capFecha = option?.getAttribute("data-date");
 
   if (capFecha) {
-    const eventDate = new Date(capFecha + "T00:00:00");
-    const limitDate = new Date(eventDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-    if (new Date() > limitDate) {
-      showToast(`El plazo de subida para esta capacitación venció el ${limitDate.toLocaleDateString()}`, false, "bad");
+    const deadline = getEventoDeadlineStatus(capFecha);
+    if (deadline && deadline.tone === "bad") {
+      showToast("El plazo de 30 días para subir esta capacitación ya venció.", false, "bad");
       return;
     }
   }
@@ -20920,11 +20919,9 @@ async function handleFileUploadFlow() {
     const option = select.options[select.selectedIndex];
     const dateStr = option?.getAttribute("data-date");
     if (dateStr) {
-      const eventDate = new Date(dateStr + "T00:00:00");
-      const limitDate = new Date(eventDate.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
-      const now = new Date();
-      if (now > limitDate) {
-        showToast(`El plazo de subida para esta capacitación ha vencido el ${limitDate.toLocaleDateString()}`, false, "bad");
+      const deadline = getEventoDeadlineStatus(dateStr);
+      if (deadline && deadline.tone === "bad") {
+        showToast("El plazo de 30 días para subir esta capacitación ya venció.", false, "bad");
         return;
       }
     }
@@ -20938,11 +20935,9 @@ async function handleFileUploadFlow() {
     const option = select.options[select.selectedIndex];
     const dateStr = option?.getAttribute("data-date");
     if (dateStr) {
-      const eventDate = new Date(dateStr + "T00:00:00");
-      const limitDate = new Date(eventDate.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
-      const now = new Date();
-      if (now > limitDate) {
-        showToast(`El plazo de subida para esta campaña ha vencido el ${limitDate.toLocaleDateString()}`, false, "bad");
+      const deadline = getEventoDeadlineStatus(dateStr);
+      if (deadline && deadline.tone === "bad") {
+        showToast("El plazo de 30 días para subir esta campaña ya venció.", false, "bad");
         return;
       }
     }
