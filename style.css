@@ -984,9 +984,6 @@ body:has(#loginWrapper:not(.hidden)) {
 
 .liquidGL {
     background: rgba(255, 255, 255, 0.15) !important; /* Casi transparente para Liquid Glass puro */
-    /* backdrop-filter: lo aplica en vivo initHeaderGlass() (main.js) vía estilo inline
-       con !important, que siempre gana sobre esta regla — se quita de aquí para no
-       dejar una declaración muerta que confunda a futuras ediciones. */
     border: 1px solid rgba(255, 255, 255, 0.4) !important;
     box-shadow: 
         inset 1.5px 1.5px 1px rgba(255, 255, 255, 0.4),
@@ -6464,30 +6461,14 @@ input[disabled] {
 .GlassContent {
     position: relative !important;
     background: transparent !important; /* NO WHITE BLUR - RULE 16 */
-    /* backdrop-filter: lo aplica en vivo initHeaderGlass() (main.js) vía estilo inline
-       con !important, que siempre gana sobre esta regla — se quita de aquí para no
-       dejar una declaración muerta que confunda a futuras ediciones. */
     border: 1px solid rgba(255, 255, 255, 0.35) !important;
     border-radius: inherit;
-    box-shadow: 
-        inset 0 1px 1px rgba(255, 255, 255, 0.4), /* Top Bevel highlight */
-        inset 0 -1px 2px rgba(0, 0, 0, 0.05),      /* Bottom Depth */
-        0 8px 32px rgba(0, 0, 0, 0.1) !important;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1) !important;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.25s ease;
     z-index: 2;
     overflow: visible !important;
-}
-
-/* SVG Displacement Filter for CSS-fallback refraction */
-.GlassContent::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    filter: url(#liquid-refraction) !important;
-    opacity: 0.6;
-    pointer-events: none;
 }
 
 /* Specular Reflection (Glass Shine) */
@@ -6505,15 +6486,13 @@ input[disabled] {
 }
 
 /* ==========================================================================
-   HEADER LIQUID GLASS (Frosted Displacement)
+   HEADER GLASS (blur simple, sin displacement/turbulencia SVG)
    ========================================================================== */
 .header-liquid-glass {
-    backdrop-filter: blur(10px) saturate(1.5) !important; /* fallback */
-    -webkit-backdrop-filter: blur(10px) saturate(1.5) !important;
+    backdrop-filter: blur(16px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
     background: rgba(255, 255, 255, 0.05) !important;
-    box-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.08) inset,
-                0 0 10px 4px rgba(255, 255, 255, 0.03) inset,
-                0 8px 24px rgba(0, 0, 0, 0.1) !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1) !important;
     border: 1px solid rgba(255, 255, 255, 0.04) !important;
 }
 
@@ -6521,9 +6500,8 @@ input[disabled] {
 .GlassContainer:hover .GlassContent {
     border-color: rgba(255, 255, 255, 0.6) !important;
     transform: translateY(-2px) translateZ(0);
-    box-shadow: 
-        inset 0 1px 2px rgba(255, 255, 255, 0.6),
-        0 12px 40px rgba(0, 0, 0, 0.15) !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15) !important;
+    will-change: transform, box-shadow;
 }
 
 /* Heavy Text Rule (Rule 36) */
@@ -6533,11 +6511,11 @@ input[disabled] {
 }
 
 /* --- 4. GPU ACCELERATION --- */
-.gpu-accelerated, .GlassContent, .btn-premium-action {
+.gpu-accelerated, .btn-premium-action {
     transform: translateZ(0);
     backface-visibility: hidden;
     perspective: 1000px;
-    will-change: transform, opacity, backdrop-filter;
+    will-change: transform, opacity;
 }
 
 body.bioConfirmOpen {
@@ -7713,37 +7691,8 @@ input, textarea, select, [contenteditable] {
     box-shadow: 0 12px 25px rgba(0, 51, 102, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
 }
 
-/* --- 4. SENIOR UX LIQUID GLASS SYSTEM (Apple 2026 Standard) --- */
-.GlassContainer {
-    position: relative !important;
-    display: inline-flex !important;
-    border-radius: inherit;
-    z-index: 10;
-}
-
-.GlassContent {
-    position: relative !important;
-    background: var(--glass-bg, rgba(255, 255, 255, 0.05)) !important; /* Higher Transparency */
-
-    /* backdrop-filter: lo aplica en vivo initHeaderGlass() (main.js) vía estilo inline
-       con !important, que siempre gana sobre esta regla — se quita de aquí para no
-       dejar una declaración muerta que confunda a futuras ediciones. */
-
-    /* THE PHYSICAL BEVEL SYSTEM */
-    border: 1px solid rgba(255, 255, 255, 0.4) !important;
-    border-radius: var(--corner-radius, 100px) !important;
-    box-shadow: 
-        /* 1. Sharp Specular Bevel (Top-Left) */
-        inset 1.5px 1.5px 1px rgba(255, 255, 255, 0.7),
-        /* 2. Bottom Refractive Shadow (Depth) */
-        inset -1.5px -1.5px 2px rgba(0, 0, 0, 0.25),
-        /* 3. Outer Premium Glow */
-        0 12px 40px rgba(0, 0, 0, 0.2) !important;
-    
-    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-    z-index: 2;
-    overflow: hidden !important;
-}/* Restore Liquid Glass Purity (High Transparency) & Institutional Elegant Colors */
+/* Colores/tamaños por botón del header (el look de vidrio en sí vive en la
+   única definición de .GlassContainer/.GlassContent, sección 3 arriba) */
 #glassBtnExport { --glass-bg: rgba(255, 255, 255, 0.05) !important; --glass-icon-color: #1E3A8A !important; --corner-radius: 100px !important; } /* Deep Navy */
 #glassBtnUpload { --glass-bg: rgba(255, 255, 255, 0.05) !important; --glass-icon-color: #0F766E !important; --corner-radius: 100px !important; } /* Deep Teal */
 #glassBtnExplorer { --glass-bg: rgba(255, 255, 255, 0.05) !important; --glass-icon-color: #4338CA !important; --corner-radius: 100px !important; } /* Deep Indigo */
@@ -7757,23 +7706,6 @@ input, textarea, select, [contenteditable] {
 
 .header-action-btn .material-symbols-rounded {
     color: inherit !important;
-}
-
-/* No specular overlay - pure refractive glass */
-.GlassContent::after {
-    display: none !important;
-}
-
-.GlassContainer:hover .GlassContent {
-    transform: translateY(-3px) scale(1.03);
-    box-shadow: 
-        inset 2px 2px 2px rgba(255, 255, 255, 0.8),
-        0 20px 40px rgba(0, 0, 0, 0.25) !important;
-}
-
-/* Global GPU Acceleration */
-.gpu-accelerated, .GlassContent, .btn-premium-action {
-    transform: translateZ(0);
 }
 
 .header-action-btn {

@@ -679,7 +679,6 @@ document.addEventListener("DOMContentLoaded", () => {
       hideOverlay();
       startFactsRotation();
       initWeather();
-      initHeaderGlass();
       checkPasskeySupport();
     }
   })();
@@ -24438,119 +24437,6 @@ if (!window.originalActivateMain) {
  * como para tarjetas/modales puntuales (se regeneran solo cuando se abren,
  * no en cada resize global).
  */
-function applyLiquidGlassEffect(items, svgContainerId, filterPrefix) {
-  let svgContainer = document.getElementById(svgContainerId);
-  if (!svgContainer) {
-    svgContainer = document.createElement('div');
-    svgContainer.id = svgContainerId;
-    svgContainer.style.width = '0';
-    svgContainer.style.height = '0';
-    svgContainer.style.position = 'absolute';
-    svgContainer.style.overflow = 'hidden';
-    document.body.appendChild(svgContainer);
-  }
-
-  let svgDefs = '<svg xmlns="http://www.w3.org/2000/svg"><defs>';
-
-  // Parámetros del efecto (afinados para píldoras/tarjetas chicas, no para
-  // tarjetas grandes de demo). Antes STRENGTH=70/BLUR=1.6 se veían
-  // "derretidos" o dejaban ver el texto de fondo — ver conversación previa.
-  const STRENGTH = 14;    // desplazamiento base del refractado
-  const ABERRATION = 1.5; // separación extra por canal R/G/B (el "efecto lente")
-  const EDGE_DEPTH = 8;   // qué tan angosto es el borde que refracta (el centro queda plano)
-  const BLUR = 6;         // desenfoque final del vidrio
-
-  items.forEach((item, index) => {
-    const rect = item.getBoundingClientRect();
-    const width = Math.max(10, Math.round(rect.width));
-    const height = Math.max(10, Math.round(rect.height));
-    const computedStyle = window.getComputedStyle(item);
-    let radius = parseInt(computedStyle.borderTopLeftRadius) || 28;
-    const maxRadius = Math.min(width / 2, height / 2);
-    if (radius > maxRadius) radius = maxRadius;
-
-    const y1 = Math.min(100, Math.ceil((radius / height) * 15));
-    const y2 = Math.max(0, Math.floor(100 - (radius / height) * 15));
-    const x1 = Math.min(100, Math.ceil((radius / width) * 15));
-    const x2 = Math.max(0, Math.floor(100 - (radius / width) * 15));
-
-    const scaleR = STRENGTH + ABERRATION * 2;
-    const scaleG = STRENGTH + ABERRATION;
-    const scaleB = STRENGTH;
-
-    // Mapa de desplazamiento: el centro queda plano (vidrio "real" no distorsiona
-    // el centro), solo el borde abulta — igual que en el prototipo de referencia.
-    const mapSvg = `<svg height="${height}" width="${width}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-                <linearGradient id="glassY-${index}" x1="0" x2="0" y1="${y1}%" y2="${y2}%">
-                    <stop offset="0%" stop-color="#0F0" />
-                    <stop offset="100%" stop-color="#000" />
-                </linearGradient>
-                <linearGradient id="glassX-${index}" x1="${x1}%" x2="${x2}%" y1="0" y2="0">
-                    <stop offset="0%" stop-color="#F00" />
-                    <stop offset="100%" stop-color="#000" />
-                </linearGradient>
-            </defs>
-            <rect x="0" y="0" height="${height}" width="${width}" fill="#808080" />
-            <g style="filter:blur(2px)">
-                <rect x="0" y="0" height="${height}" width="${width}" fill="#000080" />
-                <rect x="0" y="0" height="${height}" width="${width}" fill="url(#glassY-${index})" style="mix-blend-mode:screen" />
-                <rect x="0" y="0" height="${height}" width="${width}" fill="url(#glassX-${index})" style="mix-blend-mode:screen" />
-                <rect x="${EDGE_DEPTH}" y="${EDGE_DEPTH}" height="${Math.max(0, height - 2 * EDGE_DEPTH)}" width="${Math.max(0, width - 2 * EDGE_DEPTH)}" fill="#808080" rx="${radius}" ry="${radius}" style="filter:blur(${EDGE_DEPTH}px)" />
-            </g>
-        </svg>`;
-
-    const encodedMap = btoa(unescape(encodeURIComponent(mapSvg)));
-    const dataUri = `data:image/svg+xml;base64,${encodedMap}`;
-
-    // Aberración cromática real: 3 desplazamientos independientes (uno por
-    // canal R/G/B, con distinta fuerza cada uno) recombinados con feBlend.
-    // Igual que en referenceIOS26Oficial.html.
-    svgDefs += `
-            <filter id="${filterPrefix}-${index}" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
-                <feImage x="0" y="0" width="${width}" height="${height}" href="${dataUri}" result="map" />
-
-                <feDisplacementMap in="SourceGraphic" in2="map" scale="${scaleR}" xChannelSelector="R" yChannelSelector="G" />
-                <feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="dispR" />
-
-                <feDisplacementMap in="SourceGraphic" in2="map" scale="${scaleG}" xChannelSelector="R" yChannelSelector="G" />
-                <feColorMatrix type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="dispG" />
-
-                <feDisplacementMap in="SourceGraphic" in2="map" scale="${scaleB}" xChannelSelector="R" yChannelSelector="G" />
-                <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="dispB" />
-
-                <feBlend in="dispR" in2="dispG" mode="screen" result="rgBlend" />
-                <feBlend in="rgBlend" in2="dispB" mode="screen" result="refraction" />
-
-                <!-- Desenfoque final (CONTROL DE TRANSPARENCIA / BLUR) -->
-                <feGaussianBlur in="refraction" stdDeviation="${BLUR}" result="frosted" />
-
-                <!-- Realce leve de brillo -->
-                <feComponentTransfer in="frosted">
-                    <feFuncR type="linear" slope="1.05"/>
-                    <feFuncG type="linear" slope="1.05"/>
-                    <feFuncB type="linear" slope="1.05"/>
-                </feComponentTransfer>
-            </filter>
-        `;
-
-    item.style.setProperty('backdrop-filter', `url(#${filterPrefix}-${index})`, 'important');
-    item.style.setProperty('-webkit-backdrop-filter', `url(#${filterPrefix}-${index})`, 'important');
-  });
-
-  svgDefs += '</defs></svg>';
-  svgContainer.innerHTML = svgDefs;
-}
-
-function initHeaderGlass() {
-  applyLiquidGlassEffect(document.querySelectorAll('.header-liquid-glass'), 'header-glass-svg-container', 'headerGlassFilter');
-}
-
-window.addEventListener('resize', () => {
-  if (window.headerGlassTimeout) clearTimeout(window.headerGlassTimeout);
-  window.headerGlassTimeout = setTimeout(initHeaderGlass, 200);
-});
-
 // Event Delegation global master
 document.addEventListener('click', (e) => {
   // 1. Cierre de modales
