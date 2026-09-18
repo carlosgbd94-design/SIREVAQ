@@ -6439,20 +6439,6 @@ input[disabled] {
     overflow: visible !important;
 }
 
-/* Specular Reflection (Glass Shine) */
-.GlassContent::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; height: 45%;
-    background: linear-gradient(to bottom, 
-        rgba(255, 255, 255, 0.3) 0%, 
-        rgba(255, 255, 255, 0) 100%);
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 3;
-    opacity: 0.8;
-}
-
 /* ==========================================================================
    HEADER GLASS (blur simple, sin displacement/turbulencia SVG)
    ========================================================================== */
