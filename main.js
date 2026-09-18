@@ -222,6 +222,11 @@ let BATCH_FILTER = "all";
 let BATCH_SEARCH_QUERY = "";
 let BATCH_CATALOG = [];
 let UNIT_BATCHES = [];
+// Lotes NORMAL de TODOS los municipios (sin filtrar al propio) -- solo se usa
+// cuando el "Origen" de una fila de Existencia es Préstamo (desabasto/A.R.F.),
+// para poder capturar un lote que a tu municipio nunca se le surtió pero que
+// físicamente te prestó otro. Requisición sigue restringida a UNIT_BATCHES.
+let ALL_LOTES_NORMAL = [];
 
 // 🏆 GLOBAL ERROR BOUNDARY (Senior Safety Net)
 // Solo reacciona a errores que vienen de nuestros propios scripts. Sin este
@@ -674,7 +679,6 @@ document.addEventListener("DOMContentLoaded", () => {
       hideOverlay();
       startFactsRotation();
       initWeather();
-      initHeaderGlass();
       checkPasskeySupport();
     }
   })();
@@ -5495,7 +5499,8 @@ async function supabaseRequest(action = "", payload, options = {}) {
             cantidad: qty,
             capturado_por: nombreResp,
             tipo: it.tipo || "REQUISICION",
-            fecha_apertura: it.fecha_apertura || null
+            fecha_apertura: it.fecha_apertura || null,
+            municipio_origen: it.municipio_origen || null
           });
         });
 
@@ -5806,7 +5811,8 @@ async function supabaseRequest(action = "", payload, options = {}) {
               cantidad: it.cantidad,
               fecha_recepcion: it.fecha_recepcion,
               tipo: it.tipo || "REQUISICION",
-              fecha_apertura: it.fecha_apertura || null
+              fecha_apertura: it.fecha_apertura || null,
+              municipio_origen: it.municipio_origen || null
             })),
             ...(srSummary || {})
           };
@@ -9301,6 +9307,20 @@ async function loadBatchesForSession(user) {
 
     // 1. Lotes
     const allLotes = (lotesResult && lotesResult.ok && lotesResult.data) ? lotesResult.data : [];
+
+    // 1.b Catálogo NORMAL sin filtrar por municipio -- ver declaración de
+    // ALL_LOTES_NORMAL. Se arma aquí porque allLotes ya trae TODOS los
+    // municipios (getLotesByMunicipio no filtra server-side); no hace falta
+    // otra consulta.
+    const seenAllNormal = new Set();
+    ALL_LOTES_NORMAL = allLotes.filter(l => {
+      if (l.tipo && l.tipo !== "NORMAL") return false;
+      const key = `${l.biologico}_${l.lote}_${l.municipio}`;
+      if (seenAllNormal.has(key)) return false;
+      seenAllNormal.add(key);
+      return true;
+    });
+
     // FILTRO DE LOTES SEGURO Y ANTIMALCRIADEZ DE JS
     const userMuni = normalizeTextKey_(user.municipio || AppState.municipio);
     const seenLotes = new Set();
@@ -10018,7 +10038,7 @@ window.addSRRow = function (data = null) {
         </div>
       </td>
       <td class="p-4 py-3" data-label="Origen">
-        <select class="sr-tipo-select w-full bg-slate-50 border-2 border-slate-400 rounded-xl px-2.5 py-2 text-[13px] font-black text-slate-900 focus:border-primary focus:bg-white focus:shadow-[0_4px_10px_rgba(0,51,102,0.08)] outline-none transition-all">
+        <select class="sr-tipo-select w-full bg-slate-50 border-2 border-slate-400 rounded-xl px-2.5 py-2 text-[13px] font-black text-slate-900 focus:border-primary focus:bg-white focus:shadow-[0_4px_10px_rgba(0,51,102,0.08)] outline-none transition-all" onchange="handleSRTipoChange(this)">
           <option value="REQUISICION" ${(!data || data.tipo === 'REQUISICION' || data.tipo === 'Recibido con requisición') ? 'selected' : ''}>Requisición</option>
           <option value="PRESTAMO_DESABASTO" ${(data?.tipo === 'PRESTAMO_DESABASTO' || data?.tipo === 'Préstamo por desabasto') ? 'selected' : ''}>Préstamo (Desabasto)</option>
           <option value="PRESTAMO_ARF" ${(data?.tipo === 'PRESTAMO_ARF' || data?.tipo === 'Préstamo por ARF') ? 'selected' : ''}>Préstamo (ARF)</option>
@@ -10304,6 +10324,8 @@ window.handleSRBioChange = function (selectEl, preselectLote = null) {
 
   const loteSelect = cache.loteSelect || tr.querySelector(".sr-lote-select");
   const cadCell = cache.cadCell || tr.querySelector(".sr-cad-cell");
+  const tipoSelect = cache.tipoSelect || tr.querySelector(".sr-tipo-select");
+  const esPrestamo = !!(tipoSelect && String(tipoSelect.value || "").startsWith("PRESTAMO"));
 
   loteSelect.innerHTML = '<option value="">Selecciona lote…</option>';
   cadCell.textContent = "—";
@@ -10311,7 +10333,12 @@ window.handleSRBioChange = function (selectEl, preselectLote = null) {
 
   if (!bio) return;
 
-  const filtered = UNIT_BATCHES.filter(l =>
+  // Requisición: solo lotes surtidos a tu propio municipio (UNIT_BATCHES).
+  // Préstamo (desabasto/A.R.F.): el lote nunca fue surtido a tu municipio a
+  // propósito -- se abre a ALL_LOTES_NORMAL (todos los municipios) para
+  // poder encontrarlo, mostrando de dónde viene en la etiqueta.
+  const fuente = esPrestamo ? ALL_LOTES_NORMAL : UNIT_BATCHES;
+  const filtered = fuente.filter(l =>
     String(l.biologico || "").trim().toUpperCase() === bio
   );
 
@@ -10325,9 +10352,10 @@ window.handleSRBioChange = function (selectEl, preselectLote = null) {
   filtered.forEach(l => {
     const opt = document.createElement("option");
     opt.value = l.lote;
-    opt.textContent = l.lote;
+    opt.textContent = esPrestamo ? `${l.lote} — ${l.municipio || "?"}` : l.lote;
     opt.dataset.cad = l.caducidad;
     opt.dataset.rec = l.fecha_recepcion || "";
+    opt.dataset.municipio = l.municipio || "";
     if (preselectLoteUpper && String(l.lote).trim().toUpperCase() === preselectLoteUpper) {
       opt.selected = true;
     }
@@ -10341,6 +10369,20 @@ window.handleSRBioChange = function (selectEl, preselectLote = null) {
 
   // Inyectar validación dinámica
   refreshSRValidation(tr);
+}
+
+// Cambiar el "Origen" (Requisición <-> Préstamo) cambia de dónde sale la
+// lista de lotes disponibles -- se re-arma el dropdown de lote desde cero
+// (sin preselección) para que el usuario elija explícitamente de la fuente
+// correcta en vez de arrastrar un lote que ya no aplica a ese Origen.
+window.handleSRTipoChange = function (selectEl) {
+  const tr = selectEl.closest("tr");
+  if (!tr) return;
+  const cache = tr._cache || {};
+  const bioSelect = cache.bioSelect || tr.querySelector(".sr-bio-select");
+  if (bioSelect && bioSelect.value) {
+    window.handleSRBioChange(bioSelect);
+  }
 }
 
 function refreshSRValidation(tr) {
@@ -15102,9 +15144,10 @@ async function performSaveSR() {
       // se resuelve en un solo paso (modal de revisión en lote) justo antes de guardar.
     }
 
+    const loteSelect = row.loteSelect || tr.querySelector(".sr-lote-select");
+    const selectedOpt = loteSelect?.selectedOptions?.[0];
+
     if (lote) {
-      const loteSelect = row.loteSelect || tr.querySelector(".sr-lote-select");
-      const selectedOpt = loteSelect?.selectedOptions?.[0];
       const cad = selectedOpt?.dataset?.cad;
       if (cad && isBatchExpired(cad)) {
         rowErrors.push(`el lote ${lote} de ${bio} está caducado (${formatToMmmAa(cad)})`);
@@ -15117,7 +15160,16 @@ async function performSaveSR() {
       errors.push(`Fila ${index + 1}: ${rowErrors.join(", ")}`);
     } else {
       tr.style.background = "";
-      const itemObj = { biologico: bio, lote, cantidad: Number(cant), fecha_recepcion: recep, tipo: tipo, fecha_apertura: tr.dataset.fechaApertura || null };
+      // municipio_origen: de qué municipio viene el lote prestado -- se lee
+      // del propio option elegido en el dropdown (mismo criterio que ya usa
+      // data-cad para la caducidad), nunca se le pide al usuario un campo
+      // aparte. Solo aplica a Préstamo; en Requisición el lote ya es tuyo.
+      const esPrestamo = tipo && tipo.startsWith("PRESTAMO");
+      const itemObj = {
+        biologico: bio, lote, cantidad: Number(cant), fecha_recepcion: recep, tipo: tipo,
+        fecha_apertura: tr.dataset.fechaApertura || null,
+        municipio_origen: esPrestamo ? (selectedOpt?.dataset?.municipio || null) : null
+      };
       items.push(itemObj);
       tr._pendingSaveItem = itemObj;
     }
@@ -23108,6 +23160,25 @@ window.renderLiveViewTimeline = function() {
         color: "#10b981"
       });
     }
+
+    // Préstamos entre municipios: la tabla de arriba ya avisa QUE un lote es
+    // préstamo (badge 🤝), pero no de dónde vino -- aquí sí, un evento por
+    // cada renglón prestado, con el municipio de origen y el motivo.
+    const loanRows = res.data.filter(r =>
+      r.tipo === "PRESTAMO_DESABASTO" || r.tipo === "Préstamo por desabasto" ||
+      r.tipo === "PRESTAMO_ARF" || r.tipo === "Préstamo por ARF"
+    );
+    loanRows.forEach(r => {
+      const esDesabasto = r.tipo === "PRESTAMO_DESABASTO" || r.tipo === "Préstamo por desabasto";
+      const origen = r.municipio_origen ? escapeHtml(r.municipio_origen) : "municipio no especificado";
+      logs.push({
+        title: `Préstamo recibido: ${escapeHtml(r.biologico || "—")}`,
+        desc: `${Number(r.cantidad || 0)} frasco(s) del lote ${escapeHtml(r.lote || "—")}, prestados por ${origen}.`,
+        time: esDesabasto ? "Motivo: Desabasto" : "Motivo: A.R.F.",
+        icon: "handshake",
+        color: esDesabasto ? "#d97706" : "#0284c7"
+      });
+    });
   }
 
   container.innerHTML = logs.map(l => `
@@ -24380,119 +24451,6 @@ if (!window.originalActivateMain) {
  * como para tarjetas/modales puntuales (se regeneran solo cuando se abren,
  * no en cada resize global).
  */
-function applyLiquidGlassEffect(items, svgContainerId, filterPrefix) {
-  let svgContainer = document.getElementById(svgContainerId);
-  if (!svgContainer) {
-    svgContainer = document.createElement('div');
-    svgContainer.id = svgContainerId;
-    svgContainer.style.width = '0';
-    svgContainer.style.height = '0';
-    svgContainer.style.position = 'absolute';
-    svgContainer.style.overflow = 'hidden';
-    document.body.appendChild(svgContainer);
-  }
-
-  let svgDefs = '<svg xmlns="http://www.w3.org/2000/svg"><defs>';
-
-  // Parámetros del efecto (afinados para píldoras/tarjetas chicas, no para
-  // tarjetas grandes de demo). Antes STRENGTH=70/BLUR=1.6 se veían
-  // "derretidos" o dejaban ver el texto de fondo — ver conversación previa.
-  const STRENGTH = 14;    // desplazamiento base del refractado
-  const ABERRATION = 1.5; // separación extra por canal R/G/B (el "efecto lente")
-  const EDGE_DEPTH = 8;   // qué tan angosto es el borde que refracta (el centro queda plano)
-  const BLUR = 6;         // desenfoque final del vidrio
-
-  items.forEach((item, index) => {
-    const rect = item.getBoundingClientRect();
-    const width = Math.max(10, Math.round(rect.width));
-    const height = Math.max(10, Math.round(rect.height));
-    const computedStyle = window.getComputedStyle(item);
-    let radius = parseInt(computedStyle.borderTopLeftRadius) || 28;
-    const maxRadius = Math.min(width / 2, height / 2);
-    if (radius > maxRadius) radius = maxRadius;
-
-    const y1 = Math.min(100, Math.ceil((radius / height) * 15));
-    const y2 = Math.max(0, Math.floor(100 - (radius / height) * 15));
-    const x1 = Math.min(100, Math.ceil((radius / width) * 15));
-    const x2 = Math.max(0, Math.floor(100 - (radius / width) * 15));
-
-    const scaleR = STRENGTH + ABERRATION * 2;
-    const scaleG = STRENGTH + ABERRATION;
-    const scaleB = STRENGTH;
-
-    // Mapa de desplazamiento: el centro queda plano (vidrio "real" no distorsiona
-    // el centro), solo el borde abulta — igual que en el prototipo de referencia.
-    const mapSvg = `<svg height="${height}" width="${width}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-                <linearGradient id="glassY-${index}" x1="0" x2="0" y1="${y1}%" y2="${y2}%">
-                    <stop offset="0%" stop-color="#0F0" />
-                    <stop offset="100%" stop-color="#000" />
-                </linearGradient>
-                <linearGradient id="glassX-${index}" x1="${x1}%" x2="${x2}%" y1="0" y2="0">
-                    <stop offset="0%" stop-color="#F00" />
-                    <stop offset="100%" stop-color="#000" />
-                </linearGradient>
-            </defs>
-            <rect x="0" y="0" height="${height}" width="${width}" fill="#808080" />
-            <g style="filter:blur(2px)">
-                <rect x="0" y="0" height="${height}" width="${width}" fill="#000080" />
-                <rect x="0" y="0" height="${height}" width="${width}" fill="url(#glassY-${index})" style="mix-blend-mode:screen" />
-                <rect x="0" y="0" height="${height}" width="${width}" fill="url(#glassX-${index})" style="mix-blend-mode:screen" />
-                <rect x="${EDGE_DEPTH}" y="${EDGE_DEPTH}" height="${Math.max(0, height - 2 * EDGE_DEPTH)}" width="${Math.max(0, width - 2 * EDGE_DEPTH)}" fill="#808080" rx="${radius}" ry="${radius}" style="filter:blur(${EDGE_DEPTH}px)" />
-            </g>
-        </svg>`;
-
-    const encodedMap = btoa(unescape(encodeURIComponent(mapSvg)));
-    const dataUri = `data:image/svg+xml;base64,${encodedMap}`;
-
-    // Aberración cromática real: 3 desplazamientos independientes (uno por
-    // canal R/G/B, con distinta fuerza cada uno) recombinados con feBlend.
-    // Igual que en referenceIOS26Oficial.html.
-    svgDefs += `
-            <filter id="${filterPrefix}-${index}" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
-                <feImage x="0" y="0" width="${width}" height="${height}" href="${dataUri}" result="map" />
-
-                <feDisplacementMap in="SourceGraphic" in2="map" scale="${scaleR}" xChannelSelector="R" yChannelSelector="G" />
-                <feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="dispR" />
-
-                <feDisplacementMap in="SourceGraphic" in2="map" scale="${scaleG}" xChannelSelector="R" yChannelSelector="G" />
-                <feColorMatrix type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="dispG" />
-
-                <feDisplacementMap in="SourceGraphic" in2="map" scale="${scaleB}" xChannelSelector="R" yChannelSelector="G" />
-                <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="dispB" />
-
-                <feBlend in="dispR" in2="dispG" mode="screen" result="rgBlend" />
-                <feBlend in="rgBlend" in2="dispB" mode="screen" result="refraction" />
-
-                <!-- Desenfoque final (CONTROL DE TRANSPARENCIA / BLUR) -->
-                <feGaussianBlur in="refraction" stdDeviation="${BLUR}" result="frosted" />
-
-                <!-- Realce leve de brillo -->
-                <feComponentTransfer in="frosted">
-                    <feFuncR type="linear" slope="1.05"/>
-                    <feFuncG type="linear" slope="1.05"/>
-                    <feFuncB type="linear" slope="1.05"/>
-                </feComponentTransfer>
-            </filter>
-        `;
-
-    item.style.setProperty('backdrop-filter', `url(#${filterPrefix}-${index})`, 'important');
-    item.style.setProperty('-webkit-backdrop-filter', `url(#${filterPrefix}-${index})`, 'important');
-  });
-
-  svgDefs += '</defs></svg>';
-  svgContainer.innerHTML = svgDefs;
-}
-
-function initHeaderGlass() {
-  applyLiquidGlassEffect(document.querySelectorAll('.header-liquid-glass'), 'header-glass-svg-container', 'headerGlassFilter');
-}
-
-window.addEventListener('resize', () => {
-  if (window.headerGlassTimeout) clearTimeout(window.headerGlassTimeout);
-  window.headerGlassTimeout = setTimeout(initHeaderGlass, 200);
-});
-
 // Event Delegation global master
 document.addEventListener('click', (e) => {
   // 1. Cierre de modales

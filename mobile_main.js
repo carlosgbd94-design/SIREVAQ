@@ -77,6 +77,12 @@
     let biologicosCatalogo = [];
     let biologicosParams = [];
     let lotesCatalogo = [];
+    // Lotes NORMAL de TODOS los municipios (sin filtrar al propio) -- solo se
+    // usa cuando el "Origen" de una tarjeta de Existencia es Préstamo
+    // (desabasto/A.R.F.), para poder capturar un lote que nunca se le surtió
+    // a tu municipio pero que físicamente te prestó otro. Mismo criterio que
+    // ALL_LOTES_NORMAL en main.js (escritorio).
+    let allLotesNormal = [];
 
     let hasTodaySR = false;
     let hasTodayCONS = false;
@@ -666,6 +672,19 @@
         }
     };
 
+    // Misma normalización que normalizeTextKey_ en main.js, para comparar municipios
+    // de forma consistente entre escritorio y móvil (acentos/mayúsculas/alias).
+    const normalizeMunicipioKey = (v) => {
+        let s = String(v ?? "")
+            .trim()
+            .toUpperCase()
+            .normalize("NFD")
+            .replace(/[̀-ͯ]/g, "")
+            .replace(/\s+/g, " ");
+        if (s === "MARQUES" || s === "EL MARQUES") return "EL MARQUES";
+        return s;
+    };
+
     const fetchLotes = async () => {
         const { data, error } = await supabaseClient.from('lotes').select('*');
         if (error) {
@@ -674,8 +693,25 @@
             return;
         }
         if (data) {
-            lotesCatalogo = data;
-            
+            const isAdmin = currentProfile && (currentProfile.rol === 'ADMIN' || currentProfile.rol === 'JURISDICCIONAL');
+            const userMuni = normalizeMunicipioKey(currentProfile?.municipio);
+
+            // Los lotes A.R.F./Canje solo se usan en Movimiento de Biológico --
+            // nunca deben ofrecerse en la captura de existencia de las unidades
+            // (mismo criterio que loadBatchesForSession en main.js).
+            lotesCatalogo = data.filter(l => {
+                if (l.tipo && l.tipo !== "NORMAL") return false;
+
+                if (isAdmin || !userMuni) return true;
+                if (!l.municipio) return false;
+                const loteMuni = normalizeMunicipioKey(l.municipio);
+                return loteMuni === "*" || loteMuni === "TODOS" || loteMuni.includes(userMuni);
+            });
+
+            // allLotesNormal: mismo filtro de tipo, pero SIN restringir por
+            // municipio -- ver declaración arriba.
+            allLotesNormal = data.filter(l => !l.tipo || l.tipo === "NORMAL");
+
             const container = document.getElementById('srCardsContainer');
             if (container) container.innerHTML = '';
             
@@ -836,6 +872,7 @@
         const cadBadge = card.querySelector('.sr-cad-badge');
         const qtyInput = card.querySelector('.sr-qty-input');
         const aperturaBadge = card.querySelector('.sr-apertura-badge');
+        const tipoSelect = card.querySelector('.sr-tipo-select');
 
         // 💉 Fecha de apertura del frasco (si viene de una captura previa). Se marca como
         // NO "fresca" porque es un valor arrastrado (prefill/edición) — si el usuario
@@ -872,7 +909,13 @@
                 return;
             }
 
-            const filteredLotes = lotesCatalogo.filter(l => 
+            // Requisición: solo lotes surtidos a tu propio municipio (lotesCatalogo).
+            // Préstamo (desabasto/A.R.F.): el lote nunca fue surtido a tu municipio
+            // a propósito -- se abre a allLotesNormal (todos los municipios),
+            // mostrando de dónde viene en la etiqueta (mismo criterio que main.js).
+            const esPrestamo = !!(tipoSelect && String(tipoSelect.value || '').startsWith('PRESTAMO'));
+            const fuenteLotes = esPrestamo ? allLotesNormal : lotesCatalogo;
+            const filteredLotes = fuenteLotes.filter(l =>
                 normalizeString(l.biologico) === normalizeString(selectedBio)
             );
 
@@ -883,8 +926,8 @@
                 return;
             }
 
-            loteSelect.innerHTML = '<option value="">Selecciona lote...</option>' + filteredLotes.map(l => 
-                `<option value="${l.lote}" data-cad="${l.caducidad}" ${preselectedLote === l.lote ? 'selected' : ''}>${l.lote}</option>`
+            loteSelect.innerHTML = '<option value="">Selecciona lote...</option>' + filteredLotes.map(l =>
+                `<option value="${l.lote}" data-cad="${l.caducidad}" data-municipio="${l.municipio || ''}" ${preselectedLote === l.lote ? 'selected' : ''}>${esPrestamo ? `${l.lote} — ${l.municipio || '?'}` : l.lote}</option>`
             ).join('');
             loteSelect.disabled = false;
 
@@ -902,6 +945,15 @@
         bioSelect.addEventListener('change', () => {
             updateLoteDropdown(bioSelect.value);
         });
+
+        // Cambiar el Origen (Requisición <-> Préstamo) cambia de dónde sale la
+        // lista de lotes -- se re-arma desde cero (sin preselección) para que
+        // el usuario elija explícitamente de la fuente correcta.
+        if (tipoSelect) {
+            tipoSelect.addEventListener('change', () => {
+                if (bioSelect.value) updateLoteDropdown(bioSelect.value);
+            });
+        }
 
         loteSelect.addEventListener('change', () => {
             const opt = loteSelect.selectedOptions[0];
@@ -2828,8 +2880,8 @@
                     }
 
                     let cad = "";
+                    const selectedOpt = loteSelect?.selectedOptions?.[0];
                     if (lote && loteSelect) {
-                        const selectedOpt = loteSelect.selectedOptions[0];
                         cad = selectedOpt?.dataset?.cad || "";
                         if (cad) {
                             let cadDate = new Date(cad + "T23:59:59");
@@ -2843,10 +2895,15 @@
                         hasInvalid = true;
                         errors.push(`Tarjeta ${index + 1}: ${rowErrors.join(", ")}`);
                     } else {
-                        const matchedBio = biologicosCatalogo.find(b => 
+                        const matchedBio = biologicosCatalogo.find(b =>
                             normalizeString(b.biologico) === normalizeString(bio)
                         );
                         if (matchedBio) {
+                            // municipio_origen: de qué municipio viene el lote prestado -- se
+                            // lee del propio option elegido (mismo criterio que data-cad),
+                            // nunca se le pide un campo aparte al usuario. Solo aplica a
+                            // Préstamo; en Requisición el lote ya es tuyo.
+                            const esPrestamoTipo = tipo && tipo.startsWith("PRESTAMO");
                             const itemObj = {
                                 id: matchedBio.id,
                                 biologico: bio,
@@ -2855,7 +2912,8 @@
                                 recepcion: recep,
                                 caducidad: cad,
                                 tipo: tipo,
-                                fecha_apertura: card.dataset.fechaApertura || null
+                                fecha_apertura: card.dataset.fechaApertura || null,
+                                municipio_origen: esPrestamoTipo ? (selectedOpt?.dataset?.municipio || null) : null
                             };
                             items.push(itemObj);
                             card._pendingSaveItem = itemObj;
@@ -2989,7 +3047,8 @@
                         cantidad: qty,
                         capturado_por: nombreSR.toUpperCase(),
                         tipo: it.tipo || "REQUISICION",
-                        fecha_apertura: it.fecha_apertura || null
+                        fecha_apertura: it.fecha_apertura || null,
+                        municipio_origen: it.municipio_origen || null
                     });
                 });
 
