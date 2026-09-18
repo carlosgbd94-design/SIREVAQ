@@ -13761,6 +13761,7 @@ function setLoggedInUI(user, status) {
   USER = user;
   document.body.setAttribute("data-role", USER.rol);
   STATUS = (status && status.data) ? status.data : (status || null);
+  loadDeferredFeatureLibraries();
 
   // Sincronizar enlace dinámico de Soporte por WhatsApp para pre-identificar al usuario
   const waLink = document.getElementById("whatsappSupportLink");
@@ -15778,6 +15779,47 @@ function ensurePdfAssetsLoaded() {
     document.head.appendChild(script);
   });
   return _pdfAssetsLoadPromise;
+}
+
+/**
+ * Carga en segundo plano las librerías de terceros que solo usan las
+ * funciones de exportación/gráficas del dashboard (Excel, PDF, ZIP, CSV,
+ * gráficas, confetti). Antes venían con <script defer> en el <head> de
+ * index.html, así que TODAS bloqueaban el evento DOMContentLoaded -- y por
+ * lo tanto el chequeo de sesión -- hasta terminar de descargarse y ejecutarse,
+ * aunque el visitante ni siquiera hubiera iniciado sesión todavía. Ninguna de
+ * estas se usa en la pantalla de login ni durante el chequeo de sesión, así
+ * que ahora se inyectan aquí, una sola vez, justo cuando ya se confirmó que
+ * hay sesión y se va a mostrar el dashboard -- para entonces el usuario tarda
+ * varios segundos en navegar a una función de exportación, tiempo de sobra
+ * para que terminen de cargar en segundo plano sin bloquear nada.
+ * Las funciones que las usan (generateProfessionalXLSX, exportInfluenzaExcelOficialUnidad,
+ * SirevaqUtils.exportToExcel, etc.) ya validan "si la librería no está" antes
+ * de usarla, así que esto es seguro incluso si el usuario hace clic antes de
+ * que termine de cargar en una conexión muy lenta.
+ */
+let _deferredLibsLoaded = false;
+function loadDeferredFeatureLibraries() {
+  if (_deferredLibsLoaded) return;
+  _deferredLibsLoaded = true;
+  const urls = [
+    "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
+    "https://unpkg.com/canvas-confetti@1.6.0/dist/confetti.browser.js",
+  ];
+  urls.forEach((src) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onerror = () => console.warn(`[SIREVAQ] No se pudo cargar en segundo plano: ${src}`);
+    document.head.appendChild(script);
+  });
 }
 
 /**

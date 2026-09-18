@@ -27,12 +27,14 @@
   <!-- Sentry Error Monitoring -->
   <script src="https://js.sentry-cdn.com/ad5eb763bc0b321edddbb0ce59e2c0f0.min.js" crossorigin="anonymous"></script>
 
-  <!-- Dexie.js (IndexedDB Wrapper), SheetJS (XLSX Export) & Lucide Icons -->
+  <!-- Dexie.js (IndexedDB Wrapper) & Lucide Icons -->
   <!-- defer: no bloquean el parseo/primer render; siguen ejecutando en este
        mismo orden (justo antes de bundle-head.js) porque los scripts defer
        corren en orden de documento, asi que la dependencia se conserva. -->
+  <!-- xlsx.full.min.js (SheetJS) se movió a loadDeferredFeatureLibraries() en
+       main.js: solo lo usan funciones de exportación del dashboard, nunca la
+       pantalla de login, así que no tiene por qué bloquear DOMContentLoaded. -->
   <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
   <script src="https://unpkg.com/lucide@latest" defer></script>
 
   <!-- Módulos de Optimización y Modales SIREVAQ -->
@@ -74,7 +76,7 @@
 
   <!-- Estilos -->
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="style.css?v=2026.84" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.85" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -278,16 +280,13 @@
 
   <!-- Scripts externos -->
   <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script defer
-    src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script defer src="https://unpkg.com/canvas-confetti@1.6.0/dist/confetti.browser.js"></script>
+
+  <!-- ExcelJS, ECharts, PapaParse, html2pdf/html2canvas/jsPDF(-autotable), JSZip y
+       canvas-confetti se movieron a loadDeferredFeatureLibraries() en main.js:
+       solo las usan funciones de exportación/gráficas del dashboard (nunca la
+       pantalla de login), así que se cargan en segundo plano recién cuando ya
+       se confirmó la sesión, en vez de bloquear DOMContentLoaded en cada carga
+       de la página -- incluida la de un visitante que ni sesión tiene. -->
 
   <!-- Modern Libraries (Dates, Validation, Animations) -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.10/dayjs.min.js"></script>
@@ -302,6 +301,12 @@
        en vez de eso se ve un aviso claro con botón de recarga. -->
   <script>
     function sirevaqShowBundleLoadError(parte) {
+      // El overlay de carga arranca visible por defecto (ver #overlay más abajo) para
+      // que nunca se vea el dashboard/login sin gatear mientras cargan los bundles.
+      // Si un bundle falla, ese overlay nunca lo va a ocultar nadie (esa lógica vive
+      // adentro de main.js, que es justo lo que falló) — hay que soltarlo aquí a mano.
+      var ov = document.getElementById('overlay');
+      if (ov) ov.classList.remove('show');
       if (document.getElementById('sirevaqBundleErrorBanner')) return;
       var b = document.createElement('div');
       b.id = 'sirevaqBundleErrorBanner';
@@ -324,7 +329,7 @@
        (ensurePdfAssetsLoaded) solo al exportar el PDF de Resguardo.
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
-  <script src="dist/bundle-head.js?v=2026.38" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.39" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -6102,7 +6107,7 @@
   </div>
   </div>
 
-  <div id="overlay" class="overlay" aria-hidden="true">
+  <div id="overlay" class="overlay show" aria-hidden="true">
     <div class="overlay-content overlay-borderless">
       <div class="logo-orbit-stage" style="margin-bottom: 8px;">
         <div class="orbit-ambient"></div>
