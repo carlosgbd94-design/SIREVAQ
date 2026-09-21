@@ -329,7 +329,7 @@
        (ensurePdfAssetsLoaded) solo al exportar el PDF de Resguardo.
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
-  <script src="dist/bundle-head.js?v=2026.39" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.40" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -5121,6 +5121,12 @@
                     <svg viewBox="0 0 24 24"><path d="M4 2h16a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 2v4h16V4H4zm0 6v10h16V10H4zm2 2h3v2H6v-2zm5 0h3v2h-3v-2zm5 0h3v2h-3v-2zm-10 4h3v2H6v-2zm5 0h3v2h-3v-2zm5 0h3v2h-3v-2z"/></svg>
                   </button>
 
+                  <!-- Ícono Sugerencias Pendientes del Motor de Reabasto Inteligente -->
+                  <button id="spmBtnSugerencias" class="spm-btn-icon-custom" title="Ver Sugerencias Pendientes del Motor de Reabasto Inteligente" onclick="window.spmLoadSugerenciasPendientes()" style="position:relative;">
+                    <svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2v.29c3.44.87 6 4 6 7.71v4l2 2v1H2v-1l2-2v-4c0-3.71 2.56-6.84 6-7.71V4a2 2 0 0 1 2-2zm0 19a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 21z"/></svg>
+                    <span id="spmSugerenciasBadge" style="display:none; position:absolute; top:-4px; right:-4px; background:#dc2626; color:#fff; font-size:10px; font-weight:800; border-radius:9px; min-width:18px; height:18px; align-items:center; justify-content:center; padding:0 4px;">0</span>
+                  </button>
+
                   <!-- Ícono Guardar Cambios en Supabase -->
                   <button class="spm-btn-icon-custom spm-btn-icon-primary-custom" title="Guardar Cambios en la base de datos (biologicos_params)" onclick="window.spmSaveCurrentUnitParams()">
                     <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -8435,7 +8441,7 @@
 
   <!-- Empaquetado: bundle-body.js = rda_calculator + rda_parser + param_calculator
        + rda_ui, en ese mismo orden. Generado por build-bundle.js. -->
-  <script src="dist/bundle-body.js?v=2026.23" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
+  <script src="dist/bundle-body.js?v=2026.25" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
 
   <!-- FEEDBACK FAB & MODAL -->
   <style>
@@ -9583,6 +9589,9 @@
       </p>
       <div class="notif-modal-footer">
         <button type="button" onclick="closeNotifDetailModal()" class="notif-btn-ghost">Cerrar</button>
+        <button type="button" id="notifDetailModalGoToBtn" class="notif-btn-primary" style="display:none;">
+          <span class="material-symbols-rounded">inventory_2</span> Ver Sugerencias Pendientes
+        </button>
         <button type="button" id="notifDetailModalReadBtn" class="notif-btn-primary">
           <span class="material-symbols-rounded">done_all</span> Marcar como Leída
         </button>
@@ -9655,6 +9664,26 @@
       <div class="spm-preview-foot">
         <button type="button" class="ghostBtn" style="height:38px; padding:0 18px; border-radius:12px; font-weight:700; cursor:pointer; border:1px solid #cbd5e1; background:#fff; color:#64748b; font-size:12.5px;" onclick="window.spmCancelCalcPreview()">Cancelar</button>
         <button type="button" id="spmBtnCalcPreviewConfirm" style="height:38px; padding:0 22px; border-radius:12px; font-weight:700; cursor:pointer; border:none; background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%); color:#fff; font-size:12.5px;" onclick="window.spmConfirmCalcSave()">Confirmar y Guardar en Supabase</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Sugerencias Pendientes del Motor de Reabasto Inteligente (Fase 6) --
+       vive fuera de #panelADMIN por la misma razón que spmCalcPreviewModal arriba. -->
+  <div id="spmSugerenciasModal" class="spm-preview-overlay" style="display:none;">
+    <div class="spm-preview-card">
+      <div class="spm-preview-head">
+        <h3>Sugerencias Pendientes — Reabasto Inteligente</h3>
+        <button type="button" class="spm-btn-icon-custom" onclick="window.spmCerrarSugerenciasModal()" title="Cerrar">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="spm-preview-summary" id="spmSugerenciasSummary"></div>
+      <div class="spm-preview-body" id="spmSugerenciasBody"></div>
+      <div class="spm-preview-foot">
+        <button type="button" class="ghostBtn" style="height:38px; padding:0 18px; border-radius:12px; font-weight:700; cursor:pointer; border:1px solid #cbd5e1; background:#fff; color:#64748b; font-size:12.5px;" onclick="window.spmCerrarSugerenciasModal()">Cerrar</button>
+        <button type="button" id="spmBtnDescartarSugerencias" style="height:38px; padding:0 18px; border-radius:12px; font-weight:700; cursor:pointer; border:1px solid #fca5a5; background:#fff; color:#b91c1c; font-size:12.5px;" onclick="window.spmDescartarTodasSugerencias()">Descartar Todo</button>
+        <button type="button" id="spmBtnAplicarSugerencias" style="height:38px; padding:0 22px; border-radius:12px; font-weight:700; cursor:pointer; border:none; background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%); color:#fff; font-size:12.5px;" onclick="window.spmAplicarTodasSugerencias()">Aplicar Todo en Supabase</button>
       </div>
     </div>
   </div>

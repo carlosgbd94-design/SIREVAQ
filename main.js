@@ -2357,6 +2357,24 @@ window.openNotifDetailModal = function(id, title, message, date, sender, scope, 
     };
   }
 
+  // Enlace directo a la pantalla de aprobación del motor de reabasto inteligente
+  // (Fase 6): solo se muestra para notificaciones de ese tipo específico.
+  const goToBtn = document.getElementById('notifDetailModalGoToBtn');
+  if (goToBtn) {
+    const isReabastoNotif = String(type || '').toUpperCase() === 'PARAMS_PENDIENTES';
+    goToBtn.style.display = isReabastoNotif ? 'inline-flex' : 'none';
+    goToBtn.onclick = async () => {
+      closeNotifDetailModal();
+      if (typeof markNotificationReadFlow === 'function') {
+        await markNotificationReadFlow(id);
+      }
+      if (typeof window.activateOpsTab === 'function') window.activateOpsTab('PARAMS');
+      setTimeout(() => {
+        if (typeof window.spmLoadSugerenciasPendientes === 'function') window.spmLoadSugerenciasPendientes();
+      }, 400);
+    };
+  }
+
   modal.classList.remove('hidden');
 };
 

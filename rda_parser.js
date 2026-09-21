@@ -1130,6 +1130,17 @@ class RDAParser {
                 window.refreshRDADashboard();
             }
 
+            // Disparo del motor de reabasto inteligente (best-effort): un CSV nuevo es
+            // justo el momento en que cambian los datos que ese motor usa. No debe
+            // bloquear ni ensuciar el flujo de carga si falla -- por eso va en su propio
+            // try/catch, sin overlay ni toast propios.
+            try {
+                const { error: reabastoErr } = await window.supabase.rpc('calcular_reabasto_pendientes', { p_anio: targetYear });
+                if (reabastoErr) console.warn('[RDA Parser] Motor de reabasto inteligente no se pudo recalcular tras el CSV:', reabastoErr);
+            } catch (reabastoEx) {
+                console.warn('[RDA Parser] Motor de reabasto inteligente no se pudo recalcular tras el CSV:', reabastoEx);
+            }
+
         } catch (err) {
             console.error('[RDA Parser] ❌ Error en carga masiva:', err);
             if (typeof hideOverlay === 'function') hideOverlay();

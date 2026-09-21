@@ -36,31 +36,36 @@ const OFFICIAL_BIO_ORDER = [
     "INFLUENZA"
 ];
 
-// Lista de variables SIS de Influenza: fuente única en influenza_module.js (window.INFLUENZA_SIS_MAPPING),
-// que carga antes que este archivo. Se deriva aquí para no mantener una copia hardcodeada duplicada.
-if (!window.INFLUENZA_SIS_MAPPING) {
-    console.error("[param_calculator] window.INFLUENZA_SIS_MAPPING no está definido — revisa que influenza_module.js cargue antes que param_calculator.js en index.html");
-}
-const INFLUENZA_SIS_VARS = window.INFLUENZA_SIS_MAPPING ? Object.values(window.INFLUENZA_SIS_MAPPING) : [];
+// Mapeo de variables SIS por vacuna para la Calculadora Admin: fuente única en la tabla
+// `biologico_sis_variable_mapping` de Supabase (antes vivía hardcodeado aquí, duplicado
+// del que necesita el motor SQL de reabasto -- dos copias independientes de la misma lista
+// es justo el tipo de cosa que se desincroniza sin que nadie lo note). Se carga una vez por
+// sesión de panel; ver spmLoadBioSisMapping().
+window._spmBioSisMapping = null;
 
-// Mapeo de variables SIS por vacuna para la Calculadora Admin
-const BIO_SIS_MAPPING = {
-    "BCG": ['VBC01', 'VBC02', 'BIO50', 'BIO03', 'VBC03'],
-    "HEPATITIS B": ['VAC06', 'VHB01', 'VHB02', 'VHB03', 'VHB04', 'VHB05', 'VHB06'],
-    "HEXAVALENTE": ['VAC67', 'VAC68', 'VAC69', 'VAC70', 'VHX01', 'VHX02', 'VHX03', 'VHX04'],
-    "DPT": ['VAC12', 'VAC13'],
-    "ROTAVIRUS": ['VRV01', 'VRV02', 'VRV03', 'VRV04'],
-    "NEUMOCÓCICA 13": ['VAC17', 'VAC18', 'VAC19', 'VNC01', 'VNC02', 'VNC03', 'VNC04'],
-    "NEUMOCOCICA 13": ['VAC17', 'VAC18', 'VAC19', 'VNC01', 'VNC02', 'VNC03', 'VNC04'],
-    "SRP": ['VAC23', 'VTV01', 'VTV02', 'VTV03'],
-    "SR": ['VAC82', 'VAC91', 'VDV01', 'VDV02', 'VDV03', 'VDV04', 'VDV05', 'VDV06'],
-    "VPH": ['VPH05', 'VPH06', 'VPH07', 'VPH08', 'VPH12', 'VPH13', 'VPH14'],
-    "VARICELA": ['VAR02', 'VAR03'],
-    "HEPATITIS A": ['VHA01', 'VHA02', 'BIO88'],
-    "TD": ['VAC39', 'VAC40', 'VAC47', 'VAC48', 'VTD01', 'VTD02', 'VAC55', 'VAC56', 'VTT01', 'VTT02', 'VTT03', 'VTT04', 'VTT05', 'VTT06', 'VTT07', 'VTT08', 'VTT09', 'VTT10', 'VTT11', 'VTT12'],
-    "TDPA": ['VAC63', 'VDP01'],
-    "TDPa": ['VAC63', 'VDP01'],
-    "INFLUENZA": INFLUENZA_SIS_VARS
+window.spmLoadBioSisMapping = async function() {
+    if (window._spmBioSisMapping) return window._spmBioSisMapping;
+
+    const { data, error } = await window.supabase
+        .from('biologico_sis_variable_mapping')
+        .select('biologico, variable_sis');
+
+    if (error) {
+        console.error("[param_calculator] No se pudo cargar biologico_sis_variable_mapping:", error);
+        if (typeof showToast === 'function') {
+            showToast("No se pudo cargar el mapeo Biológico↔SIS. La Calculadora Admin no puede calcular sin él.", false, 'bad');
+        }
+        return {};
+    }
+
+    const mapping = {};
+    (data || []).forEach(row => {
+        if (!mapping[row.biologico]) mapping[row.biologico] = [];
+        mapping[row.biologico].push(row.variable_sis);
+    });
+
+    window._spmBioSisMapping = mapping;
+    return mapping;
 };
 
 // Cantidad de dosis estándar por frasco para cada biológico
@@ -69,7 +74,7 @@ const DEFAULT_DOSES_PER_BOTTLE = {
     "BCG": 10, "HEPATITIS B": 10, "HEXAVALENTE": 1, "DPT": 10,
     "ROTAVIRUS": 1, "NEUMOCÓCICA 13": 1, "NEUMOCOCICA 13": 1,
     "SRP": 1, "SR": 10, "VPH": 1, "VARICELA": 1, "HEPATITIS A": 1,
-    "TD": 10, "TDPA": 1, "TDPa": 1, "INFLUENZA": 10
+    "TD": 10, "TDPA": 1, "TDPa": 1, "INFLUENZA": 10, "VSR": 1
 };
 
 // 1. INICIALIZADOR PRINCIPAL DE LA CONSOLA CON CONTROL ESTRICTO DE ROLES
@@ -143,6 +148,10 @@ window.initConsoleParametros = async function() {
     const bufferWrap = document.getElementById('spmBufferPctWrap');
     if (bufferWrap) {
         bufferWrap.style.setProperty('display', (roleRaw.includes("ADMIN") || roleRaw.includes("JURISDICCIONAL")) ? "flex" : "none", "important");
+    }
+    const btnSugerencias = document.getElementById('spmBtnSugerencias');
+    if (btnSugerencias) {
+        btnSugerencias.style.setProperty('display', (roleRaw.includes("ADMIN") || roleRaw.includes("JURISDICCIONAL")) ? "inline-flex" : "none", "important");
     }
 
     await window.spmLoadAllData();
@@ -569,6 +578,13 @@ window.spmRunAdminCalculation = async function() {
         return;
     }
 
+    const bioSisMapping = await window.spmLoadBioSisMapping();
+    if (Object.keys(bioSisMapping).length === 0) {
+        // spmLoadBioSisMapping ya mostró el toast de error -- abortar sin calcular nada
+        // en vez de seguir con un mapeo vacío (eso daría 0 en todos los biológicos).
+        return;
+    }
+
     const currentYear = new Date().getFullYear(); // Año en curso dinámico
 
     const bufferInput = document.getElementById('spmBufferPct');
@@ -693,7 +709,7 @@ window.spmRunAdminCalculation = async function() {
         const changes = [];
         window._spmUnitsList.forEach(u => {
             OFFICIAL_BIO_ORDER.forEach(bio => {
-                const vars = BIO_SIS_MAPPING[bio] || [];
+                const vars = bioSisMapping[bio] || [];
 
                 // Total de dosis aplicadas por cada mes evaluado (Enero..lastMonth; mes sin datos = 0)
                 const monthlyTotals = [];
@@ -907,11 +923,241 @@ window.spmConfirmCalcSave = async function() {
     }
 };
 
+// 9. FASE 6 — SUGERENCIAS PENDIENTES DEL MOTOR DE REABASTO INTELIGENTE (server-side)
+// Lee biologicos_params_sugeridos (escrita por calcular_reabasto_pendientes() en Supabase)
+// y deja aplicar/descartar el lote completo -- nunca escribe directo, siempre pasa por
+// esta aprobación humana explícita.
+window._spmSugerenciasCache = null;
+
+const SPM_TIPO_CAMBIO_LABEL = {
+    RIESGO_DESABASTO: 'Riesgo de desabasto',
+    POSIBLE_SOBREABASTO: 'Posible sobreabasto',
+    DATO_ATIPICO_REVISAR: 'Dato atípico — revisar',
+    SIN_CAMBIO_RELEVANTE: 'Sin cambio relevante'
+};
+const SPM_TIPO_CAMBIO_COLOR = {
+    RIESGO_DESABASTO: '#fee2e2',
+    POSIBLE_SOBREABASTO: '#dcfce7',
+    DATO_ATIPICO_REVISAR: '#fef3c7',
+    SIN_CAMBIO_RELEVANTE: '#f1f5f9'
+};
+
+/** Refresca el número en el badge rojo del ícono de Sugerencias Pendientes. */
+window.spmRefreshSugerenciasBadge = async function() {
+    const badge = document.getElementById('spmSugerenciasBadge');
+    if (!badge) return;
+    try {
+        const { count, error } = await window.supabase
+            .from('biologicos_params_sugeridos')
+            .select('id', { count: 'exact', head: true });
+        if (error) throw error;
+
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : String(count);
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    } catch (e) {
+        console.warn('[param_calculator] No se pudo refrescar el badge de sugerencias:', e);
+    }
+};
+
+/** Carga las sugerencias pendientes de Supabase y abre el modal de revisión. */
+window.spmLoadSugerenciasPendientes = async function() {
+    if (typeof showOverlay === 'function') showOverlay('Cargando sugerencias pendientes...', 'Reabasto Inteligente');
+    try {
+        const { data, error } = await window.supabase
+            .from('biologicos_params_sugeridos')
+            .select('*')
+            .order('tipo_cambio')
+            .order('municipio')
+            .order('unidad')
+            .order('biologico');
+        if (error) throw error;
+
+        window._spmSugerenciasCache = data || [];
+        window.spmRenderSugerenciasModal(window._spmSugerenciasCache);
+
+        const modal = document.getElementById('spmSugerenciasModal');
+        if (modal) modal.style.display = 'flex';
+    } catch (e) {
+        console.error('[param_calculator] Error al cargar sugerencias pendientes:', e);
+        if (typeof showToast === 'function') showToast('Error al cargar sugerencias: ' + e.message, false, 'bad');
+    } finally {
+        if (typeof hideOverlay === 'function') hideOverlay();
+    }
+};
+
+window.spmRenderSugerenciasModal = function(rows) {
+    const summary = document.getElementById('spmSugerenciasSummary');
+    const body = document.getElementById('spmSugerenciasBody');
+    const btnAplicar = document.getElementById('spmBtnAplicarSugerencias');
+    const btnDescartar = document.getElementById('spmBtnDescartarSugerencias');
+    if (!summary || !body) return;
+
+    if (!rows || rows.length === 0) {
+        summary.textContent = 'No hay sugerencias pendientes en este momento.';
+        body.innerHTML = `<div style="padding:30px; text-align:center; color:#64748b; font-size:13px;">El motor de reabasto inteligente no tiene cambios pendientes de aprobación.</div>`;
+        if (btnAplicar) btnAplicar.style.display = 'none';
+        if (btnDescartar) btnDescartar.style.display = 'none';
+        return;
+    }
+
+    if (btnAplicar) btnAplicar.style.display = 'inline-flex';
+    if (btnDescartar) btnDescartar.style.display = 'inline-flex';
+
+    const counts = {};
+    rows.forEach(r => { counts[r.tipo_cambio] = (counts[r.tipo_cambio] || 0) + 1; });
+    const countsText = Object.keys(SPM_TIPO_CAMBIO_LABEL)
+        .filter(k => counts[k])
+        .map(k => `${counts[k]} ${SPM_TIPO_CAMBIO_LABEL[k].toLowerCase()}`)
+        .join(' · ');
+    summary.textContent = `${rows.length} sugerencia(s) pendientes — ${countsText}`;
+
+    const rowsHtml = rows.map(r => {
+        const color = SPM_TIPO_CAMBIO_COLOR[r.tipo_cambio] || '#ffffff';
+        const atipicoTag = r.dato_atipico_detectado ? ' ⚠️' : '';
+        return `
+            <tr style="background:${color};">
+                <td>${escapeHtml(r.municipio || '')}</td>
+                <td>${escapeHtml(r.unidad || '')}</td>
+                <td>${escapeHtml(r.biologico || '')}</td>
+                <td>${SPM_TIPO_CAMBIO_LABEL[r.tipo_cambio] || r.tipo_cambio}${atipicoTag}</td>
+                <td class="spm-preview-diff">${r.promedio_frascos_actual} &rarr; <strong>${r.promedio_frascos_sugerido}</strong></td>
+                <td class="spm-preview-diff">${r.min_dosis_actual} &rarr; <strong>${r.min_dosis_sugerido}</strong></td>
+                <td class="spm-preview-diff">${r.max_dosis_actual} &rarr; <strong>${r.max_dosis_sugerido}</strong></td>
+                <td style="text-align:center;">${r.ciclos_insuficientes_recientes ?? 0}</td>
+            </tr>
+        `;
+    }).join('');
+
+    body.innerHTML = `
+        <table class="spm-preview-table">
+            <thead>
+                <tr>
+                    <th>Municipio</th><th>Unidad</th><th>Biológico</th><th>Categoría</th>
+                    <th>Promedio (frascos)</th><th>Mínimo (dosis)</th><th>Máximo (dosis)</th><th>Sem. en cero c/consumo</th>
+                </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+        </table>
+    `;
+};
+
+window.spmCerrarSugerenciasModal = function() {
+    const modal = document.getElementById('spmSugerenciasModal');
+    if (modal) modal.style.display = 'none';
+};
+
+/** Copia TODAS las sugerencias cargadas a biologicos_params (aprobación humana explícita). */
+window.spmAplicarTodasSugerencias = async function() {
+    const rows = window._spmSugerenciasCache || [];
+    if (rows.length === 0) return;
+
+    const confirmApply = await window.showConfirmDialog(
+        'Aplicar Sugerencias de Reabasto Inteligente',
+        `¿Aplicar las ${rows.length} sugerencias pendientes a biologicos_params? Esto reemplaza el Promedio/Mínimo/Máximo vigente de cada unidad+biológico listado.`
+    );
+    if (!confirmApply) return;
+
+    if (typeof showOverlay === 'function') showOverlay(`Aplicando ${rows.length} sugerencias en Supabase...`, 'Reabasto Inteligente');
+
+    try {
+        const username = window.spmGetCurrentUsername();
+        const nowIso = new Date().toISOString();
+        const records = rows.map(r => ({
+            clues: r.clues,
+            unidad: r.unidad,
+            municipio: r.municipio,
+            biologico: r.biologico,
+            promedio_frascos: r.promedio_frascos_sugerido,
+            min_dosis: r.min_dosis_sugerido,
+            max_dosis: r.max_dosis_sugerido,
+            multiplo_pedido: DEFAULT_DOSES_PER_BOTTLE[String(r.biologico).toUpperCase()] || 1,
+            activo: 'SI',
+            updated_by: username,
+            updated_at: nowIso
+        }));
+
+        const batchSize = 200;
+        let saved = 0;
+        for (let i = 0; i < records.length; i += batchSize) {
+            const batch = records.slice(i, i + batchSize);
+            const { error } = await window.supabase
+                .from('biologicos_params')
+                .upsert(batch, { onConflict: 'clues,biologico' });
+            if (error) throw new Error(`Se aplicaron ${saved} de ${records.length} antes de fallar: ${error.message}`);
+            saved += batch.length;
+        }
+
+        const ids = rows.map(r => r.id);
+        const { error: delError } = await window.supabase
+            .from('biologicos_params_sugeridos')
+            .delete()
+            .in('id', ids);
+        if (delError) console.warn('[param_calculator] Sugerencias aplicadas pero no se pudieron limpiar de la tabla de staging:', delError);
+
+        window._spmSugerenciasCache = null;
+        window.spmCerrarSugerenciasModal();
+        window.spmRefreshSugerenciasBadge();
+
+        records.forEach(rec => {
+            window._spmParamsMap[`${rec.clues}|${rec.biologico}`] = rec;
+        });
+        if (window._spmActiveClues) {
+            const activeUnit = window._spmUnitsList.find(u => u.clues === window._spmActiveClues);
+            if (activeUnit) window.spmRenderUnitMatrix(activeUnit);
+        }
+        window.spmFilterUnitsByMuni(document.getElementById('spmParamMuniSelect')?.value || '');
+
+        if (typeof showToast === 'function') showToast(`¡${saved} sugerencias aplicadas con éxito!`, true, 'good');
+    } catch (e) {
+        console.error('[param_calculator] Error al aplicar sugerencias:', e);
+        if (typeof showToast === 'function') showToast('Error al aplicar sugerencias: ' + e.message, false, 'bad');
+    } finally {
+        if (typeof hideOverlay === 'function') hideOverlay();
+    }
+};
+
+/** Descarta TODAS las sugerencias cargadas sin aplicarlas (el motor las regenerará si sigue aplicando el criterio). */
+window.spmDescartarTodasSugerencias = async function() {
+    const rows = window._spmSugerenciasCache || [];
+    if (rows.length === 0) return;
+
+    const confirmDiscard = await window.showConfirmDialog(
+        'Descartar Sugerencias Pendientes',
+        `¿Descartar las ${rows.length} sugerencias pendientes sin aplicarlas? El motor las volverá a generar en su próxima corrida si las condiciones siguen igual.`
+    );
+    if (!confirmDiscard) return;
+
+    if (typeof showOverlay === 'function') showOverlay('Descartando sugerencias...', 'Reabasto Inteligente');
+    try {
+        const ids = rows.map(r => r.id);
+        const { error } = await window.supabase
+            .from('biologicos_params_sugeridos')
+            .delete()
+            .in('id', ids);
+        if (error) throw error;
+
+        window._spmSugerenciasCache = null;
+        window.spmCerrarSugerenciasModal();
+        window.spmRefreshSugerenciasBadge();
+        if (typeof showToast === 'function') showToast('Sugerencias descartadas.', true, 'warn');
+    } catch (e) {
+        console.error('[param_calculator] Error al descartar sugerencias:', e);
+        if (typeof showToast === 'function') showToast('Error al descartar: ' + e.message, false, 'bad');
+    } finally {
+        if (typeof hideOverlay === 'function') hideOverlay();
+    }
+};
+
 // Escuchar cambios de sub-panel en el panel Admin para inicializar automáticamente
 document.addEventListener("click", (e) => {
     if (e.target && (e.target.id === "tabAdminParametros" || e.target.closest("#tabAdminParametros"))) {
         setTimeout(() => {
             window.initConsoleParametros();
+            window.spmRefreshSugerenciasBadge();
         }, 100);
     }
 });
