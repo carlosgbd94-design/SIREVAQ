@@ -8197,6 +8197,17 @@ async function supabaseRequest(action = "", payload, options = {}) {
         return _rawApiCall(payload);
     }
   } catch (err) {
+    const isJwtExpired = err?.code === "PGRST303" || /jwt expired/i.test(err?.message || "");
+    if (isJwtExpired && !options._jwtRetried) {
+      console.warn(`[Supabase] JWT vencido en "${action}", intentando refrescar sesión...`);
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+      if (!refreshError && refreshed?.session) {
+        TOKEN = refreshed.session.access_token;
+        return supabaseRequest(action, payload, { ...options, _jwtRetried: true });
+      }
+      console.warn("[Supabase] No se pudo refrescar la sesión, cerrando sesión local:", refreshError);
+      clearSession();
+    }
     console.error(`[Supabase Error] ${action}:`, err);
     return { ok: false, error: err.message || String(err) };
   }
@@ -13928,7 +13939,9 @@ function setLoggedInUI(user, status) {
     if (typeof loadExportOptions === "function") loadExportOptions().catch(() => { });
   }
 
-  runPostLoginInit(user);
+  runPostLoginInit(user).catch(err => {
+    console.warn("[runPostLoginInit] Error en inicialización post-login (posible sesión/JWT vencido):", err);
+  });
 }
 
 function updateDynamicGreeting(timeGreeting = null, customSubtitle = null) {
