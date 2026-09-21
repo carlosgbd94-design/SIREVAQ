@@ -498,6 +498,18 @@ textarea {
   border: none !important;
   border-radius: 0 !important;
   background: transparent !important;
+  /* Mismo problema de especificidad que el resto de este bloque (ver comentario
+     de arriba): el reset global también fija height/padding-top/padding-bottom/
+     font-size con !important, y con menos especificidad el motor de floating
+     labels (mas abajo, "MODERN FLOATING LABELS ENGINE") nunca lograba reservar
+     el espacio vertical para que la label pudiera flotar arriba sin encimarse
+     con el texto del input. Se repiten aqui esas propiedades para igualar la
+     especificidad y ganar. */
+  height: 60px !important;
+  padding-top: 24px !important;
+  padding-bottom: 8px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
 }
 /* Box-shadow queda fuera de la regla de arriba a propósito: el truco de
    autocompletado de Chrome (-webkit-autofill) en ese mismo reset global
