@@ -484,8 +484,11 @@ window.spmToggleCalcMode = function() {
     const mode = document.getElementById('spmCalcMode')?.value;
     const colchonWrap = document.getElementById('spmColchonInputWrap');
     const serviceWrap = document.getElementById('spmServiceLevelWrap');
-    if (colchonWrap) colchonWrap.style.display = (mode === 'nivel_servicio') ? 'none' : 'flex';
-    if (serviceWrap) serviceWrap.style.display = (mode === 'nivel_servicio') ? 'flex' : 'none';
+    const leadTimeWrap = document.getElementById('spmLeadTimeWrap');
+    const usesServiceLevel = (mode === 'nivel_servicio' || mode === 'reabasto_inteligente');
+    if (colchonWrap) colchonWrap.style.display = usesServiceLevel ? 'none' : 'flex';
+    if (serviceWrap) serviceWrap.style.display = usesServiceLevel ? 'flex' : 'none';
+    if (leadTimeWrap) leadTimeWrap.style.display = (mode === 'reabasto_inteligente') ? 'flex' : 'none';
 };
 
 /** Muestra/oculta la explicación de "Colchón fijo" vs "Nivel de servicio". */
@@ -501,6 +504,58 @@ document.addEventListener('click', (e) => {
     if (!wrap || !panel || panel.style.display === 'none') return;
     if (!wrap.contains(e.target)) panel.style.display = 'none';
 });
+
+// 8x. HELPERS PUROS DEL MODO "REABASTO INTELIGENTE" (sin efectos secundarios, fáciles de probar)
+/** Cantidad de semanas que tiene un mes calendario dado (mes en 1-12). */
+function spmWeeksInMonth(year, month) {
+    return new Date(year, month, 0).getDate() / 7;
+}
+
+/**
+ * Calcula el "punto de reorden" (Promedio) considerando no solo la variabilidad del consumo,
+ * sino también el tiempo que tarda en llegar la remesa después del cierre de la ventana de
+ * captura. La unidad debe sobrevivir con lo que le quede en existencia + lo que pida durante
+ * TODO ese periodo de cobertura (semanas hasta el próximo pedido + semanas de entrega), no solo
+ * durante el mes. A mayor incertidumbre en la fecha de entrega (leadTimeStdWeeks), mayor colchón,
+ * aunque el consumo promedio no cambie.
+ *
+ * @param {number[]} monthlyTotals Dosis totales aplicadas por mes, de Enero (idx 0) al último mes cargado.
+ * @param {number} year Año evaluado (para calcular semanas reales de cada mes).
+ * @param {number} zScore Z del nivel de servicio elegido (90/95/99%).
+ * @param {number} leadTimeWeeksMean Semanas promedio entre el cierre de captura y la llegada de la remesa.
+ * @param {number} leadTimeStdWeeks Variabilidad esperada de esa fecha de entrega, en semanas.
+ * @returns {number} Dosis objetivo a tener disponibles (existencia + pedido) al cierre de la ventana.
+ */
+function spmComputeSmartReplenishmentTarget(monthlyTotals, year, zScore, leadTimeWeeksMean, leadTimeStdWeeks) {
+    const n = monthlyTotals.length;
+    if (n === 0) return 0;
+
+    // Ritmo semanal estimado de cada mes evaluado (total del mes / semanas reales de ese mes)
+    const weeklyRates = monthlyTotals.map((total, idx) => {
+        const weeks = spmWeeksInMonth(year, idx + 1);
+        return weeks > 0 ? total / weeks : 0;
+    });
+
+    const meanWeekly = weeklyRates.reduce((a, b) => a + b, 0) / n;
+    const varianceWeekly = weeklyRates.reduce((acc, v) => acc + Math.pow(v - meanWeekly, 2), 0) / n;
+
+    // Periodo de revisión: semanas promedio entre un pedido y el siguiente (tamaño real de los
+    // meses evaluados, ~4.3 semanas), más el lead time de entrega
+    const avgWeeksPerMonth = weeklyRates.length
+        ? monthlyTotals.reduce((acc, _, idx) => acc + spmWeeksInMonth(year, idx + 1), 0) / n
+        : 0;
+    const safeLeadMean = Math.max(0, Number(leadTimeWeeksMean) || 0);
+    const safeLeadStd = Math.max(0, Number(leadTimeStdWeeks) || 0);
+    const coverageWeeks = avgWeeksPerMonth + safeLeadMean;
+
+    // Varianza combinada: variabilidad del consumo durante toda la cobertura + variabilidad
+    // propia de la fecha de entrega (fórmula estándar de stock de seguridad con lead time variable)
+    const combinedVariance = (coverageWeeks * varianceWeekly) + (meanWeekly * meanWeekly * safeLeadStd * safeLeadStd);
+    const combinedStdDev = Math.sqrt(Math.max(0, combinedVariance));
+
+    const target = (meanWeekly * coverageWeeks) + ((Number(zScore) || 0) * combinedStdDev);
+    return Number.isFinite(target) ? Math.max(0, target) : 0;
+}
 
 window.spmRunAdminCalculation = async function() {
     // Respaldo por si el botón queda visible para Municipal por algún problema de CSS (ya
@@ -526,15 +581,31 @@ window.spmRunAdminCalculation = async function() {
     // y Máximo NO cambian de fórmula (siguen usando el colchón fijo), y el piso operativo de
     // MIN_DOSIS_FLOOR sigue aplicando igual en ambos modos.
     const calcModeEl = document.getElementById('spmCalcMode');
-    const calcMode = calcModeEl?.value === 'nivel_servicio' ? 'nivel_servicio' : 'colchon_fijo';
+    const calcModeRaw = calcModeEl?.value;
+    const calcMode = (calcModeRaw === 'nivel_servicio' || calcModeRaw === 'reabasto_inteligente') ? calcModeRaw : 'colchon_fijo';
+    const usesServiceLevel = (calcMode === 'nivel_servicio' || calcMode === 'reabasto_inteligente');
     const SPM_Z_SCORES = { '90': 1.28, '95': 1.65, '99': 2.33 };
     const serviceLevelEl = document.getElementById('spmServiceLevel');
-    const serviceLevelPct = calcMode === 'nivel_servicio' ? (serviceLevelEl?.value || '95') : null;
+    const serviceLevelPct = usesServiceLevel ? (serviceLevelEl?.value || '95') : null;
     const zScore = SPM_Z_SCORES[serviceLevelPct] || 1.65;
 
-    const confirmMsg = calcMode === 'nivel_servicio'
-        ? `¿Deseas calcular automáticamente los promedios de productividad SIS del año ${currentYear} para todas las unidades activas? El Promedio usará el modo "Nivel de servicio" (${serviceLevelPct}%, z=${zScore}) sobre la variabilidad real de consumo; Mínimo y Máximo siguen usando el colchón fijo del ${bufferPct}%.`
-        : `¿Deseas calcular automáticamente los promedios de productividad SIS del año ${currentYear} (con +${bufferPct}% colchón técnico) para todas las unidades activas?`;
+    // Modo "Reabasto inteligente": además del nivel de servicio, el Promedio cubre las semanas
+    // que tarda en llegar la remesa (y su incertidumbre), no solo el mes en curso.
+    const leadTimeWeeksEl = document.getElementById('spmLeadTimeWeeks');
+    const leadTimeStdEl = document.getElementById('spmLeadTimeStdWeeks');
+    let leadTimeWeeksMean = parseFloat(leadTimeWeeksEl?.value);
+    if (!Number.isFinite(leadTimeWeeksMean) || leadTimeWeeksMean < 0) leadTimeWeeksMean = 2;
+    let leadTimeStdWeeks = parseFloat(leadTimeStdEl?.value);
+    if (!Number.isFinite(leadTimeStdWeeks) || leadTimeStdWeeks < 0) leadTimeStdWeeks = 1;
+
+    let confirmMsg;
+    if (calcMode === 'reabasto_inteligente') {
+        confirmMsg = `¿Deseas calcular automáticamente los promedios de productividad SIS del año ${currentYear} para todas las unidades activas? El Promedio usará el modo "Reabasto inteligente" (${serviceLevelPct}%, z=${zScore}), cubriendo ~${leadTimeWeeksMean} semana(s) de entrega (±${leadTimeStdWeeks} sem. de incertidumbre) además del mes en curso; Mínimo y Máximo siguen usando el colchón fijo del ${bufferPct}%.`;
+    } else if (calcMode === 'nivel_servicio') {
+        confirmMsg = `¿Deseas calcular automáticamente los promedios de productividad SIS del año ${currentYear} para todas las unidades activas? El Promedio usará el modo "Nivel de servicio" (${serviceLevelPct}%, z=${zScore}) sobre la variabilidad real de consumo; Mínimo y Máximo siguen usando el colchón fijo del ${bufferPct}%.`;
+    } else {
+        confirmMsg = `¿Deseas calcular automáticamente los promedios de productividad SIS del año ${currentYear} (con +${bufferPct}% colchón técnico) para todas las unidades activas?`;
+    }
 
     const confirmCalc = await window.showConfirmDialog(
         "Ejecutar Calculadora de Aplicaciones SIS",
@@ -642,7 +713,9 @@ window.spmRunAdminCalculation = async function() {
                 // Colchón técnico (ajustable, 10% por defecto) sobre Mínimo y Máximo en ambos
                 // modos; el Promedio usa colchón fijo O nivel de servicio, según spmCalcMode.
                 let avgWithBuffer;
-                if (calcMode === 'nivel_servicio') {
+                if (calcMode === 'reabasto_inteligente') {
+                    avgWithBuffer = spmComputeSmartReplenishmentTarget(monthlyTotals, currentYear, zScore, leadTimeWeeksMean, leadTimeStdWeeks);
+                } else if (calcMode === 'nivel_servicio') {
                     const variance = monthlyTotals.reduce((a, v) => a + Math.pow(v - rawAvg, 2), 0) / monthlyTotals.length;
                     const stdDev = Math.sqrt(variance);
                     avgWithBuffer = rawAvg + zScore * stdDev;
@@ -658,8 +731,11 @@ window.spmRunAdminCalculation = async function() {
                 const promedioFrascos = Math.ceil(avgWithBuffer / defaultMultiplo);
                 // Mínimo nunca por debajo de 5 dosis (piso operativo)
                 const minDosis = Math.max(MIN_DOSIS_FLOOR, Math.round(minWithBuffer));
-                // Máximo nunca por debajo del mínimo (caso de meses en 0)
-                const maxDosis = Math.max(minDosis, Math.round(maxWithBuffer));
+                // Máximo nunca por debajo del mínimo (caso de meses en 0) NI por debajo del propio
+                // objetivo de Promedio (en "Reabasto inteligente" el Promedio cubre varias semanas
+                // de cobertura y puede superar el máximo histórico mensual — el Máximo mostrado en
+                // pantalla debe seguir siendo, por definición, mayor o igual al Promedio).
+                const maxDosis = Math.max(minDosis, Math.round(maxWithBuffer), Math.round(avgWithBuffer));
 
                 const key = `${u.clues}|${bio}`;
                 const existing = window._spmParamsMap[key] || {};
@@ -698,7 +774,7 @@ window.spmRunAdminCalculation = async function() {
         //    solo ocurre si el usuario confirma desde el modal (spmConfirmCalcSave)
         window._spmPendingCalcRecords = changes.map(c => c.record);
 
-        window.spmShowCalcPreview(changes, { currentYear, lastMonth, numMonths, missingMonths });
+        window.spmShowCalcPreview(changes, { currentYear, lastMonth, numMonths, missingMonths, calcMode, serviceLevelPct, zScore, leadTimeWeeksMean, leadTimeStdWeeks });
 
     } catch (e) {
         console.error("Error al ejecutar Calculadora Admin:", e);
@@ -721,7 +797,12 @@ window.spmShowCalcPreview = function(changes, meta) {
     if (!modal || !body || !summary) return;
 
     const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-    summary.textContent = `Periodo evaluado: Enero a ${MONTH_NAMES[meta.lastMonth]} ${meta.currentYear} (${meta.numMonths} meses) · ${changes.length} parámetros con cambios de ${window._spmUnitsList.length * OFFICIAL_BIO_ORDER.length} evaluados`;
+    const modeLabel = meta.calcMode === 'reabasto_inteligente'
+        ? ` · Modo: Reabasto inteligente (${meta.serviceLevelPct}%, z=${meta.zScore}, entrega ~${meta.leadTimeWeeksMean} sem. ±${meta.leadTimeStdWeeks})`
+        : meta.calcMode === 'nivel_servicio'
+            ? ` · Modo: Nivel de servicio (${meta.serviceLevelPct}%, z=${meta.zScore})`
+            : '';
+    summary.textContent = `Periodo evaluado: Enero a ${MONTH_NAMES[meta.lastMonth]} ${meta.currentYear} (${meta.numMonths} meses) · ${changes.length} parámetros con cambios de ${window._spmUnitsList.length * OFFICIAL_BIO_ORDER.length} evaluados${modeLabel}`;
 
     if (changes.length === 0) {
         body.innerHTML = `<div style="padding:30px; text-align:center; color:#64748b; font-size:13px;">No hay cambios respecto a los valores actualmente guardados. No es necesario guardar nada.</div>`;

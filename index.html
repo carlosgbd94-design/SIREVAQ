@@ -5069,6 +5069,7 @@
                   <select id="spmCalcMode" class="spm-pill-select-custom" style="flex:0 0 210px; width:210px;" onchange="window.spmToggleCalcMode()" title="Método de cálculo del colchón de seguridad">
                     <option value="colchon_fijo">Colchón fijo</option>
                     <option value="nivel_servicio">Nivel de servicio</option>
+                    <option value="reabasto_inteligente">Reabasto inteligente</option>
                   </select>
 
                   <div id="spmCalcModeInfoWrap" style="position:relative; flex:0 0 32px;">
@@ -5080,7 +5081,9 @@
                       <div style="font-size:12.5px; font-weight:800; color:#0f172a;">Colchón fijo</div>
                       <div style="font-size:12px; color:#475569; line-height:1.45; margin:2px 0 10px;">Suma un % constante (por defecto 10%) al Mínimo y Máximo históricos observados. Simple y predecible, pero aplica el mismo margen a una unidad con consumo estable que a una con consumo muy variable.</div>
                       <div style="font-size:12.5px; font-weight:800; color:#0f172a;">Nivel de servicio</div>
-                      <div style="font-size:12px; color:#475569; line-height:1.45; margin:2px 0;">Calcula el Promedio (punto de reorden) usando la variabilidad real del consumo mensual: a mayor variabilidad, mayor colchón, aunque el promedio sea el mismo. El % elegido (90/95/99%) es la probabilidad de no quedarse sin stock; a mayor %, mayor colchón. El Mínimo y Máximo se siguen calculando igual que en Colchón fijo.</div>
+                      <div style="font-size:12px; color:#475569; line-height:1.45; margin:2px 0 10px;">Calcula el Promedio (punto de reorden) usando la variabilidad real del consumo mensual: a mayor variabilidad, mayor colchón, aunque el promedio sea el mismo. El % elegido (90/95/99%) es la probabilidad de no quedarse sin stock; a mayor %, mayor colchón. El Mínimo y Máximo se siguen calculando igual que en Colchón fijo.</div>
+                      <div style="font-size:12.5px; font-weight:800; color:#0f172a;">Reabasto inteligente</div>
+                      <div style="font-size:12px; color:#475569; line-height:1.45; margin:2px 0;">Igual que Nivel de servicio, pero el Promedio también cubre el tiempo que tarda en llegar la remesa: suma las semanas hasta el siguiente pedido más las semanas de entrega ("Entrega en"), y aumenta el colchón si esa fecha de entrega es incierta ("±"). Así una unidad que agota su existencia antes de que llegue el pedido queda mejor cubierta. El Mínimo y Máximo se siguen calculando igual que en Colchón fijo.</div>
                     </div>
                   </div>
 
@@ -5098,6 +5101,17 @@
                       <option value="95" selected>95% (z=1.65)</option>
                       <option value="99">99% (z=2.33)</option>
                     </select>
+                  </div>
+
+                  <div id="spmLeadTimeWrap" style="display:none; align-items:center; gap:6px; flex-wrap:nowrap; flex:0 0 auto;">
+                    <label for="spmLeadTimeWeeks" style="font-size:11px; font-weight:800; color:#64748b; white-space:nowrap; flex:0 0 auto;">Entrega en (sem.)</label>
+                    <div style="width:48px; flex:0 0 48px;">
+                      <input type="number" id="spmLeadTimeWeeks" value="2" min="0" max="12" step="0.5" class="spm-input-num-clean" title="Semanas promedio entre el cierre de la ventana de captura y la llegada real de la remesa">
+                    </div>
+                    <label for="spmLeadTimeStdWeeks" style="font-size:11px; font-weight:800; color:#64748b; white-space:nowrap; flex:0 0 auto;">± (sem.)</label>
+                    <div style="width:48px; flex:0 0 48px;">
+                      <input type="number" id="spmLeadTimeStdWeeks" value="1" min="0" max="6" step="0.5" class="spm-input-num-clean" title="Qué tan incierta es esa fecha de entrega (p.ej. 1 = podría llegar hasta ~1 semana antes o después de lo esperado). A mayor incertidumbre, mayor colchón.">
+                    </div>
                   </div>
                 </div>
 
@@ -8421,7 +8435,7 @@
 
   <!-- Empaquetado: bundle-body.js = rda_calculator + rda_parser + param_calculator
        + rda_ui, en ese mismo orden. Generado por build-bundle.js. -->
-  <script src="dist/bundle-body.js?v=2026.22" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
+  <script src="dist/bundle-body.js?v=2026.23" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
 
   <!-- FEEDBACK FAB & MODAL -->
   <style>
