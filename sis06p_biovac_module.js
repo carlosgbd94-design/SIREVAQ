@@ -713,12 +713,13 @@
     }
   }
 
-  // biovac.html no carga main.js (ver comentario de cabecera de este
-  // archivo), así que no hay acceso a fanOutNotification()/
-  // resolveNotificationRecipients() -- se inserta aquí, a mano, el mismo par
-  // de tablas (notificaciones + notificaciones_perfil) con la misma forma
-  // de registro que ya usa el resto de la app (ver main.js, case
-  // "sendnotification"), dirigida solo a la CLUES que se acaba de validar.
+  // Basta con insertar la notificación maestra -- verificado contra la base
+  // real: notificaciones tiene un trigger AFTER INSERT
+  // (trg_fanout_notification / fanout_notification_trigger()) que ya
+  // resuelve destinatarios por target_scope='CLUES' del lado del servidor
+  // (unidad + municipal/jurisdiccional/admin), el mismo mecanismo que usa
+  // el resto de la app -- repetir ese reparto a mano aquí (como en un
+  // intento anterior) solo duplicaba filas en notificaciones_perfil.
   // Best-effort: si falla, se avisa por consola pero NUNCA se revierte la
   // validación ya aplicada -- la notificación es un plus, no una condición
   // del flujo.
@@ -726,7 +727,7 @@
     try {
       const hoy = new Date();
       const ymd = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
-      const record = {
+      const { error } = await estado.db.from('notificaciones').insert({
         id: 'NOTIF:' + btoa(activa.clues + ':' + Date.now()),
         created_ts: hoy.toISOString(),
         created_date: ymd,
@@ -740,25 +741,8 @@
         title: 'Concentrado SIS-06-P validado',
         message: `El concentrado SIS-06-P de ${mesNombre(mes)} ${anio} ya fue validado -- ya puedes descargar, exportar e imprimir el Excel oficial.`,
         status: 'UNREAD'
-      };
-      const { error: errNotif } = await estado.db.from('notificaciones').insert(record);
-      if (errNotif) throw errNotif;
-
-      const [{ data: perfiles }, { data: legacy }] = await Promise.all([
-        estado.db.from('perfiles').select('usuario').eq('clues', activa.clues),
-        estado.db.from('usuarios_legacy').select('usuario').eq('clues', activa.clues)
-      ]);
-      const destinatarios = new Set();
-      (perfiles || []).forEach((p) => p.usuario && destinatarios.add(p.usuario));
-      (legacy || []).forEach((p) => p.usuario && destinatarios.add(p.usuario));
-      destinatarios.add(activa.clues); // cuentas de unidad sin perfil propio inician sesión con su CLUES como usuario
-      if (destinatarios.size) {
-        const filas = Array.from(destinatarios).map((usuario) => ({
-          notificacion_id: record.id, usuario, status: 'UNREAD', deleted: false
-        }));
-        const { error: errPerfil } = await estado.db.from('notificaciones_perfil').insert(filas);
-        if (errPerfil && errPerfil.code !== '23505') throw errPerfil;
-      }
+      });
+      if (error) throw error;
     } catch (err) {
       console.error('[SIS-06-P] No se pudo notificar a la unidad tras validar (la validación ya quedó aplicada):', err);
     }
@@ -1137,6 +1121,25 @@
 
       const wb = new ExcelJS.Workbook();
       await wb.xlsx.load(buffer);
+
+      // Las 4 tablas de Excel en DATOS (QUERÉTARO/MARQUÉS/CORREGIDORA/
+      // HUIMILPAN -- listas de unidades por municipio) solo alimentaban el
+      // selector desplegable de la hoja ÍNDICE (data validation
+      // INDIRECT($B$4)), que ya no existe -- aquí la unidad/CLUES se
+      // conocen directo de la app. Se quitan aquí (no se usan para nada
+      // más) porque ExcelJS reescribe mal su <autoFilter>/totalsRowShown al
+      // guardar (agrega un filterColumn que no traía la plantilla e invierte
+      // headerRowCount/totalsRowShown) -- verificado contra Excel real: el
+      // archivo generado quedaba "dañado" y Excel lo reparaba solo, quitando
+      // ese autoFilter de todas formas. Mejor quitar las tablas por
+      // completo que dejar que ExcelJS las corrompa.
+      const wsDatos = wb.getWorksheet('DATOS');
+      if (wsDatos && wsDatos.tables) {
+        Object.keys(wsDatos.tables).forEach((nombreTabla) => {
+          try { wsDatos.removeTable(nombreTabla); } catch (errTabla) { console.warn('[SIS-06-P] No se pudo quitar tabla', nombreTabla, errTabla); }
+        });
+      }
+
       const ws = wb.getWorksheet('SINBA-SIS-06-P');
       if (!ws) throw new Error('La plantilla no tiene la hoja "SINBA-SIS-06-P".');
 
@@ -1185,17 +1188,15 @@
         }
       }
 
-      let influenzaIncluida = false;
-      try {
-        influenzaIncluida = llenarInfluenzaOficial(wb, mes, anio);
-      } catch (errInf) {
-        console.error('[SIS-06-P] No se pudo llenar SIS-SS-IE Mensual (Influenza) en el Excel:', errInf);
-      }
-
       // Ya se conocen unidad/clues/mes/año/responsable/fecha de corte --
       // sustituye toda referencia restante a ÍNDICE (en las 4 hojas, no solo
       // en las que este módulo llena) por su valor resuelto y quita la hoja,
-      // que ya quedó obsoleta.
+      // que ya quedó obsoleta. ANTES de llenar Influenza a propósito --
+      // probado contra Excel real (no solo openpyxl/XML): escribir en
+      // SIS-SS-IE Mensual ANTES de recorrer+quitar ÍNDICE deja el .xlsx
+      // marcado como dañado al abrirlo (Excel lo repara solo, pero igual
+      // asusta al usuario) -- invertido el orden, abre limpio. No se
+      // encontró la causa exacta dentro de ExcelJS, pero el orden importa.
       resolverReferenciasIndiceYQuitarHoja(wb, {
         unidad: captura.unidad || activa.unidad || (unidadBiovac && unidadBiovac.nombre) || '',
         clues: captura.clues || activa.clues,
@@ -1206,6 +1207,13 @@
         anio,
         fechaCorte: new Date(Date.UTC(anio, mes - 1, diaCorte))
       });
+
+      let influenzaIncluida = false;
+      try {
+        influenzaIncluida = llenarInfluenzaOficial(wb, mes, anio);
+      } catch (errInf) {
+        console.error('[SIS-06-P] No se pudo llenar SIS-SS-IE Mensual (Influenza) en el Excel:', errInf);
+      }
 
       // SIS-SS-CE-H-2026 trae fórmulas propias de la plantilla que leen en
       // vivo de SINBA-SIS-06-P / MOV-DE-BIOLÓGICO (verificado celda por
