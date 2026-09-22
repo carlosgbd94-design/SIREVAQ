@@ -38,6 +38,16 @@ function formatMmmAa(fechaIso) {
   if (isNaN(d.getTime())) return fechaIso;
   return `${MESES_ABREV3[d.getMonth()]}-${String(d.getFullYear()).slice(2)}`;
 }
+// En frascos MULTIDOSIS, existencia_final_frascos/existencia_anterior_frascos
+// son una división entre dosis_por_frasco -- si aplicadas/desechadas no caen
+// en un múltiplo exacto, arrastra decimales largos que no aportan nada al
+// usuario (no se puede tener un tercio de frasco físico). Se muestra
+// redondeado a 2 decimales; UNIDOSIS siempre da enteros, así que no le afecta.
+function redondearFrascos(valor) {
+  const n = Number(valor);
+  if (!isFinite(n)) return 0;
+  return Math.round(n * 100) / 100;
+}
 function loteVencido(caducidadIso) {
   if (!caducidadIso) return false;
   return caducidadIso < new Date().toISOString().slice(0, 10);
@@ -327,11 +337,11 @@ function renderTotalBiologico(filas) {
   const totalDesechadasB = sumarCampo('desechadas_b');
   const totalAplicadas = isSplit ? `${totalAplicadasA} / ${totalAplicadasB}` : totalAplicadasA;
   const totalDesechadas = isSplit ? `${totalDesechadasA} / ${totalDesechadasB}` : totalDesechadasA;
-  const totalFinal = sumarCampo('existencia_final_frascos');
+  const totalFinal = redondearFrascos(sumarCampo('existencia_final_frascos'));
   const algunProvisional = filas.some((f) => f.es_provisional);
   return `<tfoot><tr>
     <td colspan="2">Total ${nombre}${algunProvisional ? ' <span class="tag-provisional">Provisional</span>' : ''}</td>
-    <td>${sumarCampo('existencia_anterior_frascos')}</td>
+    <td>${redondearFrascos(sumarCampo('existencia_anterior_frascos'))}</td>
     <td>${sumarCampo('recibido_frascos')}</td>
     <td>${totalAplicadas}</td>
     <td>${totalDesechadas}</td>
@@ -353,11 +363,11 @@ function renderFilaConcentrado(f) {
       ${f.es_provisional ? `<span class="tag-provisional" title="Al menos un municipio todavía no cierra este mes -- el número puede cambiar">Provisional</span>` : ''}
     </td>
     <td><div class="caducidad-chip ${semaforo}"><span class="semaforo"></span>${formatMmmAa(f.caducidad)}</div></td>
-    <td>${f.existencia_anterior_frascos}</td>
+    <td>${redondearFrascos(f.existencia_anterior_frascos)}</td>
     <td>${f.recibido_frascos}</td>
     <td>${aplicadas}</td>
     <td>${desechadas}</td>
-    <td><span class="valor-final ${negativa ? 'existencia-negativa' : ''}">${f.existencia_final_frascos}</span></td>
+    <td><span class="valor-final ${negativa ? 'existencia-negativa' : ''}">${redondearFrascos(f.existencia_final_frascos)}</span></td>
     <td class="unidades-reportando ${incompleto ? 'incompleto' : ''}">${f.unidades_cerradas}/${f.unidades_reportando} cerradas</td>
     <td><button class="btn-mini btn-secundario" data-action="drilldown" data-lote="${f.lote_id}" data-categoria="${f.categoria}"><span class="material-symbols-rounded">manage_search</span> Ver</button></td>
   </tr>`;
@@ -415,13 +425,13 @@ function renderFilaDrilldown(d, anio, mes) {
   return `<tr data-fila-renglon="${d.renglon_id}">
     <td><b>${d.unidad_nombre}</b></td>
     <td><span class="estado-badge estado-${d.movimiento_estado}">${d.movimiento_estado.replace('_', ' ')}</span></td>
-    <td>${d.existencia_anterior_frascos}</td>
+    <td>${redondearFrascos(d.existencia_anterior_frascos)}</td>
     <td>${campo('recibido_frascos', d.recibido_frascos)}</td>
     <td>${campo('aplicadas_a', d.aplicadas_a)}</td>
     <td>${campo('aplicadas_b', d.aplicadas_b)}</td>
     <td>${campo('desechadas_a', d.desechadas_a)}</td>
     <td>${campo('desechadas_b', d.desechadas_b)}</td>
-    <td class="existencia-final" data-drill-final="${d.renglon_id}">${d.existencia_final_frascos}</td>
+    <td class="existencia-final" data-drill-final="${d.renglon_id}">${redondearFrascos(d.existencia_final_frascos)}</td>
     <td>${enCorreccion ? `<input type="text" data-corr-renglon="${d.renglon_id}" data-corr-campo="observaciones" data-corr-movimiento="${d.movimiento_id}" value="${(d.observaciones || '').replace(/"/g, '&quot;')}">` : (d.observaciones || '')}</td>
     <td>
       ${botonVerPdfUnidad(d, anio, mes)}
@@ -511,7 +521,7 @@ async function guardarCampoDrilldown(input) {
   });
   if (error) { toast('Error al guardar: ' + error.message, 'error'); return; }
   const celda = document.querySelector(`[data-drill-final="${renglonId}"]`);
-  if (celda) celda.textContent = final;
+  if (celda) celda.textContent = redondearFrascos(final);
 }
 
 // ---------------------------------------------------------------------------

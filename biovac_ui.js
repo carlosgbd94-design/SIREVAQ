@@ -243,6 +243,18 @@ function ultimoDiaMes(anio, mes) {
   return `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
 }
 
+// En frascos MULTIDOSIS, la existencia (anterior o final) es una división
+// entre dosis_por_frasco -- si aplicadas/desechadas no caen en un múltiplo
+// exacto, arrastra decimales largos (ej. 74.333333333333336) que no aportan
+// nada al usuario (no se puede tener un tercio de frasco físico) y se ven
+// mal en pantalla. Se muestra redondeado a 2 decimales; UNIDOSIS siempre da
+// enteros, así que no le afecta.
+function redondearFrascos(valor) {
+  const n = Number(valor);
+  if (!isFinite(n)) return 0;
+  return Math.round(n * 100) / 100;
+}
+
 // ---------------------------------------------------------------------------
 // Carga inicial: catálogo + unidades + selects de año/mes
 // ---------------------------------------------------------------------------
@@ -1110,17 +1122,17 @@ function renderBiologico(bio, editable) {
   // final; el ARF/canje sí suma al total impreso, aunque no cuente como
   // "dado de baja" en la lógica de negocio.
   const sumarCampo = (campo) => renglonesBio.reduce((acc, r) => acc + (Number(r[campo]) || 0), 0);
-  const totalAnt = sumarCampo('existencia_anterior_frascos');
+  const totalAnt = redondearFrascos(sumarCampo('existencia_anterior_frascos'));
   const totalRecibido = sumarCampo('recibido_frascos');
   const totalAplicadasA = sumarCampo('aplicadas_a');
   const totalAplicadasB = sumarCampo('aplicadas_b');
   const totalDesechadasA = sumarCampo('desechadas_a');
   const totalDesechadasB = sumarCampo('desechadas_b');
-  const totalFinal = renglonesBio.reduce((acc, r) => acc + (Number(BiovacEngine.calcExistenciaFinal({
+  const totalFinal = redondearFrascos(renglonesBio.reduce((acc, r) => acc + (Number(BiovacEngine.calcExistenciaFinal({
     presentacion: bio.presentacion, dosisPorFrasco: bio.dosis_por_frasco, dosisPorFrascoOverride: r.biovac_lotes.dosis_por_frasco_override,
     reglaEspecial: bio.regla_especial, existenciaAnterior: r.existencia_anterior_frascos, recibido: r.recibido_frascos,
     aplicadasA: r.aplicadas_a, aplicadasB: r.aplicadas_b, desechadasA: r.desechadas_a, desechadasB: r.desechadas_b
-  })) || 0), 0);
+  })) || 0), 0));
   html += `<tfoot><tr>
     <td colspan="2">Total ${bio.nombre_excel.replace(/\n/g, ' ')}</td>
     <td data-total-ant="${bio.id}">${totalAnt}</td>
@@ -1145,11 +1157,11 @@ function renderBiologico(bio, editable) {
 
 function renderRenglonFila(r, bio, editable, split, subcategoria) {
   const lote = r.biovac_lotes;
-  const dosis = BiovacEngine.calcExistenciaFinal({
+  const dosis = redondearFrascos(BiovacEngine.calcExistenciaFinal({
     presentacion: bio.presentacion, dosisPorFrasco: bio.dosis_por_frasco, dosisPorFrascoOverride: lote.dosis_por_frasco_override,
     reglaEspecial: bio.regla_especial, existenciaAnterior: r.existencia_anterior_frascos, recibido: r.recibido_frascos,
     aplicadasA: r.aplicadas_a, aplicadasB: r.aplicadas_b, desechadasA: r.desechadas_a, desechadasB: r.desechadas_b
-  });
+  }));
   const negativa = dosis < 0;
   const cols = numColumnas(split);
   const caducado = Number(dosis) > 0 && loteVencido(lote.caducidad);
@@ -1191,7 +1203,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
       ${vencidoArf ? '<div class="badge-vencido"><span class="material-symbols-rounded">warning</span> Caducado</div>' : ''}
       ${bloqueadoNormal ? '<div class="badge-vencido"><span class="material-symbols-rounded">warning</span> Debe desecharse</div>' : ''}
     </td>
-    <td class="col-anterior">${r.existencia_anterior_frascos || 0}</td>
+    <td class="col-anterior">${redondearFrascos(r.existencia_anterior_frascos) || 0}</td>
     <td class="col-mov">${campo('recibido_frascos', r.recibido_frascos)}</td>
     <td class="col-mov${split ? ' col-dosis-05' : ''}">${campo('aplicadas_a', r.aplicadas_a)}</td>
     ${split ? `<td class="col-mov col-dosis-1">${campo('aplicadas_b', r.aplicadas_b)}</td>` : ''}
@@ -1318,12 +1330,12 @@ function recalcularFilaEnVivo(renglonId) {
   const bio = estado.biologicos.find((b) => b.id === r.biovac_lotes.biologico_id);
   const valores = {};
   inputs.forEach((inp) => { if (inp.dataset.campo !== 'observaciones') valores[inp.dataset.campo] = Number(inp.value) || 0; });
-  const dosis = BiovacEngine.calcExistenciaFinal({
+  const dosis = redondearFrascos(BiovacEngine.calcExistenciaFinal({
     presentacion: bio.presentacion, dosisPorFrasco: bio.dosis_por_frasco, dosisPorFrascoOverride: r.biovac_lotes.dosis_por_frasco_override,
     reglaEspecial: bio.regla_especial, existenciaAnterior: r.existencia_anterior_frascos,
     recibido: valores.recibido_frascos ?? r.recibido_frascos, aplicadasA: valores.aplicadas_a ?? r.aplicadas_a,
     aplicadasB: valores.aplicadas_b ?? r.aplicadas_b, desechadasA: valores.desechadas_a ?? r.desechadas_a, desechadasB: valores.desechadas_b ?? r.desechadas_b
-  });
+  }));
   const celda = document.querySelector(`[data-existencia-final="${renglonId}"]`);
   if (celda) { celda.textContent = dosis; celda.classList.toggle('existencia-negativa', dosis < 0); }
   recalcularTotalBio(bio.id);
@@ -1365,13 +1377,13 @@ function recalcularTotalBio(bioId) {
     const celda = document.querySelector(`[${attr}="${bioId}"]`);
     if (celda) celda.textContent = valor;
   };
-  setCelda('data-total-ant', totales.ant);
+  setCelda('data-total-ant', redondearFrascos(totales.ant));
   setCelda('data-total-recibido', totales.recibido);
   setCelda('data-total-aplicadas-a', totales.aplicadasA);
   setCelda('data-total-aplicadas-b', totales.aplicadasB);
   setCelda('data-total-desechadas-a', totales.desechadasA);
   setCelda('data-total-desechadas-b', totales.desechadasB);
-  setCelda('data-total-final', totales.final);
+  setCelda('data-total-final', redondearFrascos(totales.final));
 
   // Mismo aviso comparativo de renderBiologico(), refrescado en vivo con lo
   // que ya se tecleó (aunque no se haya guardado todavía) -- así la unidad
@@ -1485,7 +1497,7 @@ async function guardarCampoRenglon(input) {
     r[campo] = valor;
     r.existencia_final_frascos = final;
     const celda = document.querySelector(`[data-existencia-final="${renglonId}"]`);
-    if (celda) { celda.textContent = final; celda.classList.toggle('existencia-negativa', Number(final) < 0); }
+    if (celda) { celda.textContent = redondearFrascos(final); celda.classList.toggle('existencia-negativa', Number(final) < 0); }
   }
 }
 
