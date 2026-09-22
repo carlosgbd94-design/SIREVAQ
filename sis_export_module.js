@@ -144,6 +144,12 @@ async function exportSISConcentrado({ mes, anio }) {
     capturas.forEach(c => {
       rows = rows.concat(buildSISCSVRowsForCaptura(c, _sisVariablesByFilaExcel));
     });
+    // El catálogo sis_variables (104 filas del paloteo SIS-06-P) no tiene
+    // ninguna fila de Influenza (ni "INFLUENZA" como biológico, ni las 46
+    // claves BIE/BIO de INFLUENZA_SIS_MAPPING) -- verificado contra la base
+    // real -- así que buildSISCSVRowsForCaptura nunca emite esas claves.
+    // Influenza SIEMPRE se agrega aparte, para toda CLUES con capturas esta
+    // ventana, sin riesgo de duplicar nada.
     cluesInfo.forEach(({ clues, municipio }) => {
       const capturasDeEstaClues = capturasInfluenza.filter(c => c.clues === clues);
       rows = rows.concat(buildInfluenzaCSVRows(clues, municipio, mes, anio, capturasDeEstaClues));

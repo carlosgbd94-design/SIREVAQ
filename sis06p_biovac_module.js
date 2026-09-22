@@ -639,6 +639,14 @@
     }
   }
 
+  // Para rol UNIDAD, paloteo (SIS-06-P) y Movimiento de Biológico NO son dos
+  // cosas separadas -- son un solo archivo, "el SIS" -- así que "Enviar" es
+  // UN solo botón que bloquea las dos. Si Movimiento de este mes sigue en
+  // BORRADOR, se cierra aquí mismo (mismo motor que el botón "Cerrar mes" de
+  // esa pestaña, biovac_cerrar_mes) ANTES de mandar SIS-06-P a validación --
+  // si el cierre falla (ej. existencia final negativa, frasco BCG/SR a
+  // medio resolver), se aborta TODO el envío sin tocar el estado de
+  // SIS-06-P, para no dejar "medio documento" enviado.
   async function enviarParaValidacion() {
     const activa = datosUnidadActiva();
     if (!activa) return;
@@ -647,8 +655,33 @@
     const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
     if (!currentReport) { toast('Guarda tu concentrado antes de enviarlo.', 'error'); return; }
 
-    mostrarCargando('Enviando concentrado para validación...');
+    const unidadBiovac = (estado.unidades || []).find((u) => u.clues === activa.clues);
+    if (!unidadBiovac) { toast('No se encontró la unidad en el catálogo de BioVac.', 'error'); return; }
+
+    mostrarCargando('Verificando Movimiento de Biológico...');
     try {
+      const { data: movimiento } = await estado.db.from('biovac_movimientos')
+        .select('id, estado').eq('unidad_id', unidadBiovac.id).eq('anio', anio).eq('mes', mes).maybeSingle();
+
+      if (!movimiento) {
+        toast('El SIS es un solo documento: primero inicia y captura el Movimiento de Biológico de este mes, luego envíalo.', 'error');
+        return;
+      }
+      if (movimiento.estado === 'EN_CORRECCION') {
+        toast('El Movimiento de Biológico de este mes está en corrección -- guárdala (botón "Guardar corrección") antes de poder enviar el SIS.', 'error');
+        return;
+      }
+      if (movimiento.estado === 'BORRADOR') {
+        mostrarCargando('Cerrando Movimiento de Biológico...');
+        const usuario = nombreCompletoDePerfil(estado.perfil);
+        const { error: errCierre } = await estado.db.rpc('biovac_cerrar_mes', { p_movimiento_id: movimiento.id, p_usuario: usuario });
+        if (errCierre) {
+          toast('No se pudo cerrar Movimiento de Biológico, así que tampoco se envió el SIS: ' + errCierre.message, 'error');
+          return;
+        }
+      }
+
+      mostrarCargando('Enviando concentrado para validación...');
       const { error } = await estado.db.rpc('sis06p_enviar_para_validacion', {
         p_captura_id: currentReport.id, p_usuario: nombreCompletoDePerfil(estado.perfil)
       });
@@ -656,12 +689,78 @@
       const { data: capturas } = await estado.db.from('sis06p_capturas').select('*').eq('clues', activa.clues);
       _sis06pCapturasCache = capturas || [];
       render();
-      toast('✅ Concentrado enviado para validación.', 'ok');
+      toast('✅ SIS enviado para validación (SIS-06-P + Movimiento de Biológico, ya bloqueados para edición).', 'ok');
+
+      // Si la pestaña Movimiento ya tenía cargado este mismo movimiento,
+      // se refresca para que su badge de estado (BORRADOR->CERRADO) y el
+      // bloqueo de edición se reflejen sin tener que recargar la página --
+      // best-effort: si esta función no existe o falla, el envío YA quedó
+      // aplicado en base de datos de todas formas.
+      try {
+        if (typeof cargarMovimiento === 'function' && estado.movimiento
+          && estado.movimiento.unidad_id === unidadBiovac.id
+          && Number(estado.movimiento.anio) === anio && Number(estado.movimiento.mes) === mes) {
+          await cargarMovimiento();
+        }
+      } catch (errRefresh) {
+        console.warn('[SIS-06-P] No se pudo refrescar la pestaña Movimiento (el envío ya quedó aplicado):', errRefresh);
+      }
     } catch (err) {
       console.error('[SIS-06-P] Error al enviar:', err);
       toast('No se pudo enviar: ' + err.message, 'error');
     } finally {
       ocultarCargando();
+    }
+  }
+
+  // biovac.html no carga main.js (ver comentario de cabecera de este
+  // archivo), así que no hay acceso a fanOutNotification()/
+  // resolveNotificationRecipients() -- se inserta aquí, a mano, el mismo par
+  // de tablas (notificaciones + notificaciones_perfil) con la misma forma
+  // de registro que ya usa el resto de la app (ver main.js, case
+  // "sendnotification"), dirigida solo a la CLUES que se acaba de validar.
+  // Best-effort: si falla, se avisa por consola pero NUNCA se revierte la
+  // validación ya aplicada -- la notificación es un plus, no una condición
+  // del flujo.
+  async function notificarUnidadValidacion(activa, mes, anio) {
+    try {
+      const hoy = new Date();
+      const ymd = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+      const record = {
+        id: 'NOTIF:' + btoa(activa.clues + ':' + Date.now()),
+        created_ts: hoy.toISOString(),
+        created_date: ymd,
+        from_usuario: estado.perfil.usuario,
+        from_rol: estado.perfil.rol,
+        target_scope: 'CLUES',
+        target_municipio: activa.municipio || null,
+        target_clues: activa.clues,
+        target_usuario: null,
+        type: 'INFO',
+        title: 'Concentrado SIS-06-P validado',
+        message: `El concentrado SIS-06-P de ${mesNombre(mes)} ${anio} ya fue validado -- ya puedes descargar, exportar e imprimir el Excel oficial.`,
+        status: 'UNREAD'
+      };
+      const { error: errNotif } = await estado.db.from('notificaciones').insert(record);
+      if (errNotif) throw errNotif;
+
+      const [{ data: perfiles }, { data: legacy }] = await Promise.all([
+        estado.db.from('perfiles').select('usuario').eq('clues', activa.clues),
+        estado.db.from('usuarios_legacy').select('usuario').eq('clues', activa.clues)
+      ]);
+      const destinatarios = new Set();
+      (perfiles || []).forEach((p) => p.usuario && destinatarios.add(p.usuario));
+      (legacy || []).forEach((p) => p.usuario && destinatarios.add(p.usuario));
+      destinatarios.add(activa.clues); // cuentas de unidad sin perfil propio inician sesión con su CLUES como usuario
+      if (destinatarios.size) {
+        const filas = Array.from(destinatarios).map((usuario) => ({
+          notificacion_id: record.id, usuario, status: 'UNREAD', deleted: false
+        }));
+        const { error: errPerfil } = await estado.db.from('notificaciones_perfil').insert(filas);
+        if (errPerfil && errPerfil.code !== '23505') throw errPerfil;
+      }
+    } catch (err) {
+      console.error('[SIS-06-P] No se pudo notificar a la unidad tras validar (la validación ya quedó aplicada):', err);
     }
   }
 
@@ -690,6 +789,7 @@
       _sis06pCapturasCache = capturas || [];
       render();
       toast('✅ Concentrado marcado como validado.', 'ok');
+      notificarUnidadValidacion(activa, mes, anio);
     } catch (err) {
       console.error('[SIS-06-P] Error al validar:', err);
       toast('No se pudo validar: ' + err.message, 'error');
@@ -742,25 +842,32 @@
   // que ya acepta el panel RDA -- vista previa + descarga, solo de esta CLUES.
   // ---------------------------------------------------------------------------
 
-  // Suma las capturas semanales de Influenza que caen dentro del mes/año
-  // calendario pedido y las traduce a filas SIS vía INFLUENZA_SIS_MAPPING.
-  // Solo emite filas si hubo al menos una semana capturada ese mes -- si no,
-  // no hay nada que decir de Influenza ese periodo.
-  function buildInfluenzaCSVRows(clues, municipio, mes, anio) {
+  // Suma, por rubro (r1..r46), las capturas SEMANALES reales de Influenza
+  // (panel semanal de la unidad -- ahí dice "meta-logro" pero lo que se
+  // teclea ahí son aplicaciones reales) que caen dentro del mes/año
+  // calendario pedido.
+  function sumasInfluenzaPorRubro(mes, anio) {
     const enMes = _influenzaCapturasCache.filter((c) => {
       if (!c.fecha) return false;
       const d = new Date(c.fecha + 'T12:00:00');
       return (d.getMonth() + 1) === mes && d.getFullYear() === anio;
     });
-    if (enMes.length === 0) return [];
-
     const sumas = {};
     enMes.forEach((c) => {
       Object.entries(c.valores || {}).forEach(([rubro, val]) => {
         sumas[rubro] = (sumas[rubro] || 0) + Number(val || 0);
       });
     });
+    return sumas;
+  }
 
+  // Suma las capturas semanales de Influenza que caen dentro del mes/año
+  // calendario pedido y las traduce a filas SIS vía INFLUENZA_SIS_MAPPING.
+  // Solo emite filas si hubo al menos una semana capturada ese mes -- si no,
+  // no hay nada que decir de Influenza ese periodo.
+  function buildInfluenzaCSVRows(clues, municipio, mes, anio) {
+    const sumas = sumasInfluenzaPorRubro(mes, anio);
+    if (Object.keys(sumas).length === 0) return [];
     return Object.entries(INFLUENZA_SIS_MAPPING).map(([rubro, clave]) => ({
       CLUES: clues, MUNICIPIO: municipio, VARIABLE_SIS: clave, MES: mes, ANIO: anio, VALOR: sumas[rubro] || 0
     }));
@@ -946,12 +1053,54 @@
     if (wsIndice) wb.removeWorksheet(wsIndice.id);
   }
 
+  // Fila 11 = r1/BIE01 ... fila 56 = r46/BIE61, en el MISMO orden que
+  // INFLUENZA_SIS_MAPPING (verificado celda por celda contra la plantilla
+  // real) -- columnas H..L son "SEMANA 1".."SEMANA 5" del mes reportado, NO
+  // una semana de campaña fija. El panel de Influenza no numera sus
+  // capturas por semana-del-mes, solo trae una `fecha` por captura, así que
+  // aquí se ordenan cronológicamente las capturas de ese mes calendario y
+  // se reparten en orden a las 5 columnas -- si por algún motivo hubiera
+  // más de 5 en un mismo mes (no debería, un mes tiene cuando mucho 5
+  // viernes), la(s) sobrante(s) se suman dentro de la 5ta en vez de
+  // perderse, para que el TOTAL (columna G, fórmula de la propia plantilla)
+  // siga siendo exacto.
+  const FILA_INFLUENZA_INICIO = 11;
+  const COL_SEMANA_INICIO = 8; // H
+
+  function llenarInfluenzaOficial(wb, mes, anio) {
+    const ws = wb.getWorksheet('SIS-SS-IE Mensual');
+    if (!ws) return false;
+
+    const enMes = (_influenzaCapturasCache || [])
+      .filter((c) => {
+        if (!c.fecha) return false;
+        const d = new Date(c.fecha + 'T12:00:00');
+        return (d.getMonth() + 1) === mes && d.getFullYear() === anio;
+      })
+      .sort((a, b) => a.fecha.localeCompare(b.fecha));
+    if (enMes.length === 0) return false;
+
+    const rubros = Object.keys(INFLUENZA_SIS_MAPPING);
+    enMes.forEach((captura, idx) => {
+      const col = COL_SEMANA_INICIO + Math.min(idx, 4);
+      rubros.forEach((rubro, i) => {
+        const val = Number((captura.valores || {})[rubro] || 0);
+        if (!val) return;
+        const cell = ws.getCell(FILA_INFLUENZA_INICIO + i, col);
+        cell.value = Number(cell.value || 0) + val;
+      });
+    });
+    return true;
+  }
+
   // ---------------------------------------------------------------------------
-  // Exportación oficial UNIFICADA: un solo .xlsx con SIS-06-P y, si la unidad
-  // ya inició su Movimiento de Biológico de este mes, también esa hoja -- para
-  // la unidad su "SIS" es un solo documento, no un archivo por pestaña (el CSV
-  // sigue siendo la única excepción real, con su propio botón en la pestaña
-  // CSV, porque alimenta un pipeline distinto -- carga a RDA).
+  // Exportación oficial UNIFICADA: un solo .xlsx con SIS-06-P, Influenza
+  // (SIS-SS-IE Mensual, tomada del panel semanal), SIS-SS-CE-H-2026 y, si la
+  // unidad ya inició su Movimiento de Biológico de este mes, también esa
+  // hoja -- para la unidad su "SIS" es un solo documento, no un archivo por
+  // pestaña (el CSV sigue siendo la única excepción real, con su propio
+  // botón en la pestaña CSV, porque alimenta un pipeline distinto -- carga
+  // a RDA).
   // ---------------------------------------------------------------------------
 
   async function exportarSISOficialCompleto() {
@@ -1036,6 +1185,13 @@
         }
       }
 
+      let influenzaIncluida = false;
+      try {
+        influenzaIncluida = llenarInfluenzaOficial(wb, mes, anio);
+      } catch (errInf) {
+        console.error('[SIS-06-P] No se pudo llenar SIS-SS-IE Mensual (Influenza) en el Excel:', errInf);
+      }
+
       // Ya se conocen unidad/clues/mes/año/responsable/fecha de corte --
       // sustituye toda referencia restante a ÍNDICE (en las 4 hojas, no solo
       // en las que este módulo llena) por su valor resuelto y quita la hoja,
@@ -1051,6 +1207,20 @@
         fechaCorte: new Date(Date.UTC(anio, mes - 1, diaCorte))
       });
 
+      // SIS-SS-CE-H-2026 trae fórmulas propias de la plantilla que leen en
+      // vivo de SINBA-SIS-06-P / MOV-DE-BIOLÓGICO (verificado celda por
+      // celda, ver sinba_dev/dependencies.js) -- nunca se tocan aquí, solo
+      // se le escriben valores a esas 2 hojas fuente. SIS-SS-IE Mensual, en
+      // cambio, SÍ se llena directo arriba (llenarInfluenzaOficial) -- sus
+      // fórmulas propias (G11:G56, fila 57-58) solo sirven para sumar lo que
+      // ya se escribió, no para traerlo de otra hoja. En ambos casos, Excel
+      // normalmente muestra el valor CACHEADO que traía la plantilla (casi
+      // siempre vacío/0) hasta que alguien presiona F9, porque no sabe que
+      // esas celdas cambiaron por fuera de sus propias fórmulas --
+      // fullCalcOnLoad fuerza el recálculo completo al abrir el archivo.
+      wb.calcProperties = wb.calcProperties || {};
+      wb.calcProperties.fullCalcOnLoad = true;
+
       const outBuffer = await wb.xlsx.writeBuffer();
       const blob = new Blob([outBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
@@ -1062,12 +1232,13 @@
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
+      const hojasExtra = 'SIS-SS-CE-H-2026' + (influenzaIncluida ? ' + SIS-SS-IE Mensual (Influenza)' : '');
       if (movimientoErrorMsg) {
         toast('Excel generado solo con SIS-06-P -- no se pudo incluir Movimiento de Biológico: ' + movimientoErrorMsg, 'error');
       } else if (movimientoIncluido) {
-        toast('✅ Excel generado: SIS-06-P + Movimiento de Biológico.', 'ok');
+        toast(`✅ Excel generado: SIS-06-P + Movimiento de Biológico + ${hojasExtra}.`, 'ok');
       } else {
-        toast('✅ Excel generado con SIS-06-P (aún no inicias el Movimiento de Biológico de este mes).', 'ok');
+        toast(`✅ Excel generado con SIS-06-P + ${hojasExtra} (aún no inicias el Movimiento de Biológico de este mes).`, 'ok');
       }
     } catch (err) {
       console.error('[SIS-06-P] Error al exportar Excel oficial:', err);
@@ -1094,5 +1265,5 @@
     if (btnExcel) btnExcel.addEventListener('click', exportarSISOficialCompleto);
   });
 
-  window.SIS06PBiovac = { init, render, save, renderCSVPreview };
+  window.SIS06PBiovac = { init, render, save, renderCSVPreview, exportarSISOficialCompleto };
 })();

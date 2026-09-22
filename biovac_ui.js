@@ -645,14 +645,23 @@ const SIS_BIOLOGICO_POR_CLAVE_BIOVAC = {
 
 async function cargarSIS06PTotalesParaComparar(anio, mes) {
   estado.sis06pTotales = {};
+  // Se guarda junto a los totales (misma llamada, mismo captura) el estado
+  // ENVIADO/VALIDADO del concentrado SIS-06-P de este mes -- lo usa render()
+  // para no dejar exportar/imprimir el Excel oficial (SIS-06-P + Movimiento)
+  // desde ESTA pestaña hasta que el municipal lo haya validado (antes de
+  // esto, el botón de aquí exportaba un archivo aparte, solo de Movimiento,
+  // sin ninguna de las dos reglas: siempre disponible y sin las otras 3
+  // hojas del documento oficial).
+  estado.sis06pEstadoActual = 'BORRADOR';
   const clues = estado.perfil.clues;
   if (!clues) return;
   try {
     const [{ data: captura }, { data: sisVars }, { data: capturasInf }] = await Promise.all([
-      estado.db.from('sis06p_capturas').select('valores').eq('clues', clues).eq('mes', mes).eq('anio', anio).maybeSingle(),
+      estado.db.from('sis06p_capturas').select('valores, estado').eq('clues', clues).eq('mes', mes).eq('anio', anio).maybeSingle(),
       estado.db.from('sis_variables').select('fila_excel, biologico').eq('activo', true),
       estado.db.from('influenza_capturas').select('fecha, valores').eq('clues', clues)
     ]);
+    estado.sis06pEstadoActual = captura ? captura.estado : 'BORRADOR';
     const totalesPorSisBiologico = {};
     if (captura && sisVars) {
       const valores = captura.valores || {};
@@ -663,14 +672,13 @@ async function cargarSIS06PTotalesParaComparar(anio, mes) {
         totalesPorSisBiologico[bio] = (totalesPorSisBiologico[bio] || 0) + Number(v?.total || 0);
       });
     }
-    // Influenza se captura semana con semana en su propio módulo (meta/logro
-    // de campaña), no dentro del paloteo SIS-06-P -- sus claves BIE/BIO ya
-    // se conectan solas al CSV (window.INFLUENZA_SIS_MAPPING, ver
-    // sis_export_module.js/sis06p_biovac_module.js). Aquí se suma el mismo
-    // total mensual (todas las semanas cuyo inicio cae en este mes
-    // calendario) y se agrega al subtotal comparativo del biológico
-    // ANTIINFLUENZA de Movimiento -- mismo criterio de "comparar, no
-    // sobreescribir" que ya se usa para el resto de biológicos.
+    // Verificado contra el catálogo real (sis_variables): el paloteo SIS-06-P
+    // (104 variables) NO tiene ninguna fila de Influenza -- ni "INFLUENZA"
+    // como biológico, ni las 46 claves BIE/BIO del mapeo. Influenza vive
+    // ÚNICAMENTE en influenza_capturas (panel semanal, aplicaciones reales),
+    // así que el subtotal comparativo de ANTIINFLUENZA sale por completo de
+    // ahí -- no hay "doble conteo" posible porque el lado SIS-06-P de esta
+    // suma siempre es 0 para Influenza.
     let totalInfluenzaMes = 0;
     (capturasInf || []).forEach((c) => {
       if (!c.fecha) return;
@@ -938,7 +946,22 @@ function render() {
   document.getElementById('btnAplicarCorreccion').style.display = m.estado === 'EN_CORRECCION' ? 'inline-block' : 'none';
   document.getElementById('btnGuardarCabecera').disabled = !cabeceraEditable;
 
-  document.getElementById('btnExportarExcel').style.display = esJurisdiccional ? 'none' : 'inline-flex';
+  // El botón "Exportar Excel" de esta pestaña ahora genera el mismo Excel
+  // oficial 1:1 (SIS-06-P + Movimiento + SIS-SS-CE-H-2026) que la pestaña
+  // SIS-06-P, en vez de un archivo aparte solo con Movimiento -- así que
+  // sigue la MISMA regla: para la unidad, solo disponible hasta que el
+  // municipal marque VALIDADO el concentrado SIS-06-P de este mes. Los
+  // roles revisores conservan el export rápido de solo-Movimiento (lo
+  // necesitan para revisar ANTES de validar, cuando por definición SIS-06-P
+  // todavía no está VALIDADO).
+  const esUnidad = estado.perfil && estado.perfil.rol === 'UNIDAD';
+  const btnExportarExcel = document.getElementById('btnExportarExcel');
+  const puedeExportarUnidad = !esUnidad || estado.sis06pEstadoActual === 'VALIDADO';
+  btnExportarExcel.style.display = esJurisdiccional ? 'none' : 'inline-flex';
+  btnExportarExcel.disabled = esJurisdiccional ? false : !puedeExportarUnidad;
+  btnExportarExcel.title = (!esJurisdiccional && esUnidad && !puedeExportarUnidad)
+    ? 'Disponible hasta que el municipal valide el concentrado SIS-06-P de este mes'
+    : 'Exportar Excel oficial (SIS-06-P + Movimiento de Biológico)';
   document.getElementById('btnVerPdf').style.display = esJurisdiccional ? 'none' : 'inline-flex';
   document.getElementById('btnAbrirImportador').style.display = esJurisdiccional ? 'none' : 'inline-flex';
 
@@ -1049,7 +1072,7 @@ function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, 
   if (totalSIS06P === undefined) return '';
   const totalAplicadas = totalAplicadasA + totalAplicadasB;
   const coincide = totalSIS06P === totalAplicadas;
-  const fuente = bio.clave === 'ANTIINFLUENZA' ? 'SIS-06-P + Influenza (semanal) reportaron' : 'SIS-06-P reportó';
+  const fuente = bio.clave === 'ANTIINFLUENZA' ? 'Influenza (panel semanal) reportó' : 'SIS-06-P reportó';
   // Al paloteo semanal de Influenza (meta/logro de campaña) le corresponde
   // un concentrado MENSUAL real aquí -- si nunca se traslada a "aplicadas"
   // del lote, la existencia final (y el arrastre al mes siguiente) se
@@ -1920,6 +1943,22 @@ async function aplicarCorreccion() {
 
 async function exportarExcel() {
   const btn = document.getElementById('btnExportarExcel');
+  // Para la unidad, "exportar" desde CUALQUIER pestaña es siempre el mismo
+  // documento oficial 1:1 (SIS-06-P + Movimiento + SIS-SS-CE-H-2026), con la
+  // misma regla de validación -- se delega a exportarSISOficialCompleto()
+  // (sis06p_biovac_module.js) en vez de generar aquí un archivo aparte solo
+  // con Movimiento (eso era exactamente lo que producía un Excel incompleto
+  // y descargable sin esperar la validación municipal). Los roles revisores
+  // conservan el export rápido de solo-Movimiento para su propia revisión.
+  const esUnidad = estado.perfil && estado.perfil.rol === 'UNIDAD';
+  if (esUnidad) {
+    if (window.SIS06PBiovac && window.SIS06PBiovac.exportarSISOficialCompleto) {
+      await window.SIS06PBiovac.exportarSISOficialCompleto();
+    } else {
+      toast('No se pudo cargar el exportador oficial del SIS.', 'error');
+    }
+    return;
+  }
   const htmlOriginal = btn.innerHTML;
   btn.disabled = true; btn.title = 'Generando…'; btn.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span>';
   try {
