@@ -2358,15 +2358,31 @@ window.openNotifDetailModal = function(id, title, message, date, sender, scope, 
   }
 
   // Enlace directo a la pantalla de aprobación del motor de reabasto inteligente
-  // (Fase 6): solo se muestra para notificaciones de ese tipo específico.
+  // (Fase 6), o al módulo BioVac ya con clues/mes/año resueltos cuando el
+  // municipal validó el SIS-06-P de una unidad (ver notificarUnidadValidacion
+  // en sis06p_biovac_module.js) -- un solo botón, el destino cambia según el
+  // `type` de la notificación.
   const goToBtn = document.getElementById('notifDetailModalGoToBtn');
   if (goToBtn) {
     const isReabastoNotif = String(type || '').toUpperCase() === 'PARAMS_PENDIENTES';
-    goToBtn.style.display = isReabastoNotif ? 'inline-flex' : 'none';
+    const isSisValidadoNotif = String(type || '').toUpperCase() === 'SIS_VALIDADO' && meta && meta.clues;
+    goToBtn.style.display = (isReabastoNotif || isSisValidadoNotif) ? 'inline-flex' : 'none';
+    if (isSisValidadoNotif) {
+      goToBtn.innerHTML = '<span class="material-symbols-rounded">vaccines</span> Ir a mi SIS';
+    } else if (isReabastoNotif) {
+      goToBtn.innerHTML = '<span class="material-symbols-rounded">inventory_2</span> Ver Sugerencias Pendientes';
+    }
     goToBtn.onclick = async () => {
       closeNotifDetailModal();
       if (typeof markNotificationReadFlow === 'function') {
         await markNotificationReadFlow(id);
+      }
+      if (isSisValidadoNotif) {
+        const params = new URLSearchParams({
+          clues: meta.clues || '', mes: meta.mes || '', anio: meta.anio || '', seccion: 'sis06p'
+        });
+        window.location.href = 'biovac.html?' + params.toString();
+        return;
       }
       if (typeof window.activateOpsTab === 'function') window.activateOpsTab('PARAMS');
       setTimeout(() => {

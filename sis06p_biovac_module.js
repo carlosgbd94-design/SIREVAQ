@@ -462,9 +462,10 @@
         // p.ej.), se muestra UNA sola vez con colspan en vez de repetirlo en
         // las dos columnas.
         const mismaCelda = v.dosis && v.dosis === v.grupo_poblacional;
-        const celdaDosis = `${v.dosis || '—'}${v.edad ? `<br><span style="font-size:10px; color:#94a3b8; font-weight:600;">${v.edad}</span>` : ''}`;
+        const edadHtml = v.edad ? `<br><span style="font-size:10px; color:#94a3b8; font-weight:600;">${v.edad}</span>` : '';
+        const celdaDosis = `${v.dosis || '—'}${edadHtml}`;
         const celdasGrupoDosis = mismaCelda
-          ? `<td colspan="2" style="padding:10px;"><span style="font-size:12px; font-weight:600; color:#334155;">${v.grupo_poblacional || v.dosis}</span></td>`
+          ? `<td colspan="2" style="padding:10px;"><span style="font-size:12px; font-weight:600; color:#334155;">${v.grupo_poblacional || v.dosis}${edadHtml}</span></td>`
           : `<td style="padding:10px;"><span style="font-size:12px; font-weight:600; color:#334155;">${v.grupo_poblacional || ''}</span></td>
              <td style="padding:10px; text-align:center; font-size:11px; font-weight:700; color:#475569; line-height:1.5;">${celdaDosis}</td>`;
 
@@ -727,6 +728,10 @@
     try {
       const hoy = new Date();
       const ymd = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+      // type='SIS_VALIDADO' + meta_json es lo que main.js (openNotifDetailModal)
+      // usa para mostrar el botón "Ir a mi SIS" y armar el enlace directo a
+      // biovac.html con clues/mes/año ya resueltos -- sin esto la unidad
+      // tendría que volver a seleccionar mes/año a mano.
       const { error } = await estado.db.from('notificaciones').insert({
         id: 'NOTIF:' + btoa(activa.clues + ':' + Date.now()),
         created_ts: hoy.toISOString(),
@@ -737,9 +742,10 @@
         target_municipio: activa.municipio || null,
         target_clues: activa.clues,
         target_usuario: null,
-        type: 'INFO',
+        type: 'SIS_VALIDADO',
         title: 'Concentrado SIS-06-P validado',
         message: `El concentrado SIS-06-P de ${mesNombre(mes)} ${anio} ya fue validado -- ya puedes descargar, exportar e imprimir el Excel oficial.`,
+        meta_json: JSON.stringify({ source: 'SIS06P', clues: activa.clues, mes, anio }),
         status: 'UNREAD'
       });
       if (error) throw error;
@@ -1273,5 +1279,11 @@
     if (btnExcel) btnExcel.addEventListener('click', exportarSISOficialCompleto);
   });
 
-  window.SIS06PBiovac = { init, render, save, renderCSVPreview, exportarSISOficialCompleto };
+  // INFLUENZA_SIS_MAPPING se expone para que sis06p_dashboard_module.js (el
+  // export oficial por municipio, ver renderExportOficial/exportarCSVOficialMunicipio)
+  // pueda reutilizar la misma fuente de verdad en vez de duplicarla una
+  // tercera vez -- ya se duplicó una vez desde influenza_module.js (Fase 3c)
+  // porque biovac.html no carga ese archivo; no hace falta duplicarla otra
+  // vez dentro del propio biovac.html, donde ambos módulos sí conviven.
+  window.SIS06PBiovac = { init, render, save, renderCSVPreview, exportarSISOficialCompleto, INFLUENZA_SIS_MAPPING };
 })();

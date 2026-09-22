@@ -506,9 +506,13 @@ function inicializarToggleSIS06P() {
 // en biovac_jurisdiccion.sql sobre por qué "haberla visto" no basta.
 // ---------------------------------------------------------------------------
 
+// aplicadas_b/desechadas_b son la dosis "completa" (adulto) en biológicos
+// SPLIT_DOSE (Hepatitis B, COVID Moderna) -- el mL exacto varía por
+// biológico (ver ML_DOSIS_FRACCIONADA), así que aquí se usa un texto
+// genérico en vez de un mL fijo que sería incorrecto para alguno de ellos.
 const FIELD_LABEL = {
-  recibido_frascos: 'Recibido', aplicadas_a: 'Dosis aplicadas', aplicadas_b: 'Dosis aplicadas (1 mL)',
-  desechadas_a: 'Dosis desechadas', desechadas_b: 'Dosis desechadas (1 mL)', observaciones: 'Observaciones'
+  recibido_frascos: 'Recibido', aplicadas_a: 'Dosis aplicadas', aplicadas_b: 'Dosis aplicadas (dosis completa)',
+  desechadas_a: 'Dosis desechadas', desechadas_b: 'Dosis desechadas (dosis completa)', observaciones: 'Observaciones'
 };
 const CATEGORIA_LABEL_CORTA = { NORMAL: 'Normal', ARF: 'A.R.F.', CANJE: 'Canje' };
 
@@ -620,7 +624,18 @@ async function cargarMovimiento() {
   await cargarRenglones();
   if (estado.perfil && estado.perfil.rol === 'UNIDAD') await cargarSIS06PTotalesParaComparar(anio, mes);
   render();
-  if (movimiento.estado === 'BORRADOR') await ofrecerCargaDesdeRequisiciones();
+  if (movimiento.estado === 'BORRADOR') {
+    // Pseudo-unidad (municipio/hospital, clues 'JS1-...') -> reparto a nivel
+    // municipio (requi_distribucion_municipio); CLUES real -> reparto a
+    // nivel unidad de salud (requi_distribucion_unidad). No depende del rol
+    // de quien mira: un MUNICIPAL revisando el Movimiento de una unidad real
+    // (vía #selUnidadRevision) también debe recibir el reparto por CLUES,
+    // nunca el de todo su municipio completo.
+    const unidad = estado.unidades.find((u) => u.id === unidadId);
+    const esPseudoMunicipio = unidad && unidad.clues && unidad.clues.startsWith('JS1-');
+    if (esPseudoMunicipio) await ofrecerCargaDesdeRequisiciones();
+    else if (unidad) await ofrecerCargaDesdeRequisicionesUnidad(unidad.clues);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -771,62 +786,56 @@ async function cargarMovimientoJurisdiccional(anio, mes) {
 // este movimiento (para no pisar una captura manual ya hecha).
 // ---------------------------------------------------------------------------
 
-async function ofrecerCargaDesdeRequisiciones() {
-  const unidad = estado.unidades.find((u) => u.id === estado.movimiento.unidad_id);
-  if (!unidad) return;
-
-  const { data: requisicion } = await estado.db.from('requi_requisiciones')
-    .select('id, folio_oracle')
-    .eq('anio', estado.movimiento.anio).eq('mes', estado.movimiento.mes).maybeSingle();
-  if (!requisicion) return;
-
-  const { data: reparto, error } = await estado.db.from('requi_distribucion_municipio')
-    .select(`cantidad, requi_catalogo_biologicos ( nombre, biovac_biologico_id ), requi_lotes ( numero_lote, caducidad )`)
-    .eq('requisicion_id', requisicion.id).eq('municipio', unidad.municipio).gt('cantidad', 0);
-  if (error || !reparto || !reparto.length) return;
-
-  // Antes se excluía cualquier biológico que ya tuviera UN renglón NORMAL
-  // para ese lote, sin importar si su "recibido" seguía en 0 -- un lote que
-  // ya traía existencia arrastrada del mes anterior (o una fila creada a
-  // mano sin llenar "recibido" todavía) contaba como "ya cargado" y el
-  // biológico ni siquiera aparecía en el modal, aunque Requisiciones sí
-  // hubiera repartido cantidad real (reportado por el usuario: BCG no se
-  // cargaba en el movimiento de Corregidora pese a tener reparto). Ahora
-  // solo se considera "ya cargado" si ese renglón YA tiene recibido > 0.
-  const yaCargados = new Set(
+// Antes se excluía cualquier biológico que ya tuviera UN renglón NORMAL
+// para ese lote, sin importar si su "recibido" seguía en 0 -- un lote que
+// ya traía existencia arrastrada del mes anterior (o una fila creada a
+// mano sin llenar "recibido" todavía) contaba como "ya cargado" y el
+// biológico ni siquiera aparecía en el modal, aunque Requisiciones sí
+// hubiera repartido cantidad real (reportado por el usuario: BCG no se
+// cargaba en el movimiento de Corregidora pese a tener reparto). Ahora
+// solo se considera "ya cargado" si ese renglón YA tiene recibido > 0.
+// Compartido por ambos niveles (municipio y unidad/CLUES).
+function _lotesYaCargadosComoRecibido() {
+  return new Set(
     estado.renglones.filter((r) => r.categoria === 'NORMAL' && Number(r.recibido_frascos) > 0)
       .map((r) => r.biovac_lotes.biologico_id + '::' + r.biovac_lotes.numero_lote)
   );
+}
 
-  // Requisiciones captura TODO en frascos (piezas físicas recibidas), igual
-  // que BioVac -- dosis_por_frasco solo aplica a "aplicadas"/"desechadas"
-  // (conteo de dosis puestas/tiradas), nunca a "recibido". Antes se dividía
-  // la cantidad entre dosis_por_frasco como si viniera en dosis, así que un
-  // multidosis (ej. Hepatitis B, 10 dosis/frasco) con 11 frascos repartidos
-  // se cargaba como 1.1 -- reportado por el usuario con captura real.
-  const candidatos = reparto
+// Requisiciones captura TODO en frascos (piezas físicas recibidas), igual
+// que BioVac -- dosis_por_frasco solo aplica a "aplicadas"/"desechadas"
+// (conteo de dosis puestas/tiradas), nunca a "recibido". Antes se dividía
+// la cantidad entre dosis_por_frasco como si viniera en dosis, así que un
+// multidosis (ej. Hepatitis B, 10 dosis/frasco) con 11 frascos repartidos
+// se cargaba como 1.1 -- reportado por el usuario con captura real.
+function _candidatosDesdeReparto(reparto, folioOracle) {
+  const yaCargados = _lotesYaCargadosComoRecibido();
+  return reparto
     .filter((r) => r.requi_catalogo_biologicos.biovac_biologico_id)
     .filter((r) => !yaCargados.has(r.requi_catalogo_biologicos.biovac_biologico_id + '::' + r.requi_lotes.numero_lote))
-    .map((r) => ({ ...r, bio: estado.biologicos.find((b) => b.id === r.requi_catalogo_biologicos.biovac_biologico_id), frascos: Number(r.cantidad) }));
-  if (!candidatos.length) return;
+    .map((r) => ({
+      ...r, folioOracle,
+      bio: estado.biologicos.find((b) => b.id === r.requi_catalogo_biologicos.biovac_biologico_id),
+      frascos: Number(r.cantidad)
+    }));
+}
 
-  // Con 1 solo lote un párrafo corrido se lee bien, pero con varios
-  // biológicos/lotes a la vez se volvía una sola oración larguísima sin
-  // ninguna separación visual -- ahora cada uno es su propia tarjeta, con
-  // el mismo dato de frascos que de verdad se va a guardar.
-  const detalleHtml = candidatos.map((c) => `
+// Con 1 solo lote un párrafo corrido se lee bien, pero con varios
+// biológicos/lotes a la vez se volvía una sola oración larguísima sin
+// ninguna separación visual -- ahora cada uno es su propia tarjeta, con
+// el mismo dato de frascos que de verdad se va a guardar.
+function _detalleHtmlCandidatos(candidatos) {
+  return candidatos.map((c) => `
     <div class="modal-detalle-item">
       <span class="bio">${c.requi_catalogo_biologicos.nombre}</span>
       <div class="detalle-fila"><span>Lote ${c.requi_lotes.numero_lote}</span><b>${c.frascos} frasco(s)</b></div>
     </div>
   `).join('');
+}
+
+async function _confirmarYCargarCandidatos(candidatos, { titulo, mensaje }) {
   const aceptar = await mostrarModal({
-    titulo: 'Cargar recibido desde Requisiciones',
-    mensaje: `Requisiciones ya repartió ${candidatos.length} lote(s) a este municipio para este mes`
-      + (requisicion.folio_oracle ? ` (folio ${requisicion.folio_oracle})` : '') + '. '
-      + '¿Deseas cargarlos aquí como recibido?',
-    detalleHtml,
-    textoAceptar: 'Sí, cargar'
+    titulo, mensaje, detalleHtml: _detalleHtmlCandidatos(candidatos), textoAceptar: 'Sí, cargar'
   });
   if (!aceptar) return;
 
@@ -859,7 +868,7 @@ async function ofrecerCargaDesdeRequisiciones() {
         movimiento_id: estado.movimiento.id, lote_id: lote.id, categoria: 'NORMAL',
         recibido_frascos: frascos,
         observaciones: `Cargado desde Requisiciones (${frascos} frasco(s))`
-          + (requisicion.folio_oracle ? ` · folio ${requisicion.folio_oracle}` : '')
+          + (c.folioOracle ? ` · folio ${c.folioOracle}` : '')
       }, { onConflict: 'movimiento_id,lote_id,categoria' });
       if (!errRenglon) cargados++;
     }
@@ -874,6 +883,86 @@ async function ofrecerCargaDesdeRequisiciones() {
   } else {
     toast('No se pudo cargar ningún lote desde Requisiciones.', 'error');
   }
+}
+
+async function ofrecerCargaDesdeRequisiciones() {
+  const unidad = estado.unidades.find((u) => u.id === estado.movimiento.unidad_id);
+  if (!unidad) return;
+
+  const { data: requisicion } = await estado.db.from('requi_requisiciones')
+    .select('id, folio_oracle')
+    .eq('anio', estado.movimiento.anio).eq('mes', estado.movimiento.mes).maybeSingle();
+  if (!requisicion) return;
+
+  const { data: reparto, error } = await estado.db.from('requi_distribucion_municipio')
+    .select(`cantidad, requi_catalogo_biologicos ( nombre, biovac_biologico_id ), requi_lotes ( numero_lote, caducidad )`)
+    .eq('requisicion_id', requisicion.id).eq('municipio', unidad.municipio).gt('cantidad', 0);
+  if (error || !reparto || !reparto.length) return;
+
+  const candidatos = _candidatosDesdeReparto(reparto, requisicion.folio_oracle);
+  if (!candidatos.length) return;
+
+  await _confirmarYCargarCandidatos(candidatos, {
+    titulo: 'Cargar recibido desde Requisiciones',
+    mensaje: `Requisiciones ya repartió ${candidatos.length} lote(s) a este municipio para este mes`
+      + (requisicion.folio_oracle ? ` (folio ${requisicion.folio_oracle})` : '') + '. '
+      + '¿Deseas cargarlos aquí como recibido?'
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Mismo puente con Requisiciones, ahora a nivel UNIDAD DE SALUD (CLUES) --
+// requi_distribucion_unidad es el reparto municipio/hospital -> unidad real
+// (requi_unidades.clues), un nivel más abajo del que usa
+// ofrecerCargaDesdeRequisiciones (ese es municipio/hospital -> pseudo-unidad
+// de Movimiento). Se activa para CUALQUIER movimiento de una CLUES real,
+// sin importar qué rol lo esté viendo (UNIDAD capturando el suyo, o
+// MUNICIPAL/JURISDICCIONAL/ADMIN revisándolo) -- ver cargarMovimiento().
+// Si esa CLUES todavía no está dada de alta en requi_unidades (aún no hay
+// reparto por unidad capturado en Requisiciones para su municipio), no pasa
+// nada: mismo criterio de "silencio" que el nivel municipio.
+// ---------------------------------------------------------------------------
+
+async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
+  if (!unidadClues) return;
+
+  const { data: requisicion } = await estado.db.from('requi_requisiciones')
+    .select('id, folio_oracle')
+    .eq('anio', estado.movimiento.anio).eq('mes', estado.movimiento.mes).maybeSingle();
+  if (!requisicion) return;
+
+  const { data: requiUnidad } = await estado.db.from('requi_unidades')
+    .select('id').eq('clues', unidadClues).maybeSingle();
+  if (!requiUnidad) return;
+
+  const { data: reparto, error } = await estado.db.from('requi_distribucion_unidad')
+    .select(`cantidad, requi_catalogo_biologicos ( nombre, biovac_biologico_id ), requi_lotes ( numero_lote, caducidad )`)
+    .eq('requisicion_id', requisicion.id).eq('unidad_id', requiUnidad.id).gt('cantidad', 0);
+  if (error || !reparto || !reparto.length) return;
+
+  const candidatos = _candidatosDesdeReparto(reparto, requisicion.folio_oracle);
+  if (!candidatos.length) return;
+
+  const esUnidad = estado.perfil && estado.perfil.rol === 'UNIDAD';
+  // Rol UNIDAD: aviso muy descriptivo (a petición explícita) de qué es un
+  // "lote" -- con una analogía de manzanas, para quien nunca haya manejado
+  // el concepto en otro sistema. Roles revisores (MUNICIPAL/JURISDICCIONAL/
+  // ADMIN) ya conocen el término -- mismo aviso corto que a nivel municipio.
+  const mensaje = esUnidad
+    ? `Tu jurisdicción ya te asignó ${candidatos.length} lote(s) de biológico este mes -- `
+      + '¿qué es un "lote"? Imagina que en vez de vacunas fueran manzanas: un lote es como una '
+      + 'caja concreta de manzanas que llegó en un solo embarque, con su propio número de lote '
+      + '(la etiqueta de esa caja) y su propia fecha de caducidad. Todas las manzanas de esa caja '
+      + 'se cuentan y se controlan juntas -- si llega otra caja después, aunque sean las mismas '
+      + 'manzanas, es OTRO lote con su propio número. Así se controla también tu biológico: cada '
+      + 'lote que recibes se registra por separado en tu Movimiento de este mes (cuántos frascos '
+      + 'llegaron, cuántos aplicaste, cuántos te sobraron). ¿Deseas cargar aquí como "recibido" '
+      + 'los lotes que ya te asignó tu jurisdicción?'
+    : `Requisiciones ya repartió ${candidatos.length} lote(s) a esta unidad para este mes`
+      + (requisicion.folio_oracle ? ` (folio ${requisicion.folio_oracle})` : '') + '. '
+      + '¿Deseas cargarlos aquí como recibido?';
+
+  await _confirmarYCargarCandidatos(candidatos, { titulo: 'Cargar recibido desde Requisiciones', mensaje });
 }
 
 async function cargarRenglones() {
@@ -1006,16 +1095,27 @@ function colgroupRenglones(split) {
   </colgroup>`;
 }
 
-function encabezadoColumnas(split) {
-  // Cuando hay dosis fraccionada (Hepatitis B), cada columna de "aplicadas"
-  // y "desechadas" se separa en dos: una fila de subencabezado marca cuál
-  // corresponde a 0.5 mL (fraccionada) y cuál a 1 mL (completa) -- de otro
+// mL de la dosis fraccionada (pediátrica) y completa (adulto) por biológico
+// -- la proporción siempre es 2:1 (2 fraccionadas = 1 completa en consumo de
+// frasco, ver SPLIT_DOSE en biovac_engine.js/.sql), pero el mL exacto de cada
+// una cambia según el biológico: Hepatitis B es 0.5/1 mL, COVID Moderna es
+// 0.25/0.5 mL (Pfizer no aplica dosis pediátrica, así que no usa SPLIT_DOSE).
+const ML_DOSIS_FRACCIONADA = {
+  HEPB: ['0.5 mL', '1 mL'],
+  COVID_MODERNA: ['0.25 mL', '0.5 mL']
+};
+
+function encabezadoColumnas(split, clave) {
+  // Cuando hay dosis fraccionada, cada columna de "aplicadas" y "desechadas"
+  // se separa en dos: una fila de subencabezado marca cuál corresponde a la
+  // dosis fraccionada (pediátrica) y cuál a la completa (adulto) -- de otro
   // modo, con solo el título del grupo arriba, no se distingue a simple
   // vista qué recuadro es cuál dosis.
   const rs = split ? ' rowspan="2"' : '';
+  const [mlFraccionada, mlCompleta] = ML_DOSIS_FRACCIONADA[clave] || ['Fraccionada', 'Completa'];
   const subfila = split ? `<tr class="fila-subencabezado">
-    <th class="col-dosis-05">0.5 mL</th><th class="col-dosis-1">1 mL</th>
-    <th class="col-dosis-05">0.5 mL</th><th class="col-dosis-1">1 mL</th>
+    <th class="col-dosis-05">${mlFraccionada}</th><th class="col-dosis-1">${mlCompleta}</th>
+    <th class="col-dosis-05">${mlFraccionada}</th><th class="col-dosis-1">${mlCompleta}</th>
   </tr>` : '';
   return `<thead>
     <tr>
@@ -1124,7 +1224,7 @@ function renderBiologico(bio, editable) {
       <div class="bio-meta"><h2>${bio.nombre_excel.replace(/\n/g, ' ')}</h2>${resumenHtml}</div>
     </div>
     <div class="tabla-wrap">
-    <table class="renglones">${colgroupRenglones(split)}${encabezadoColumnas(split)}<tbody>`;
+    <table class="renglones">${colgroupRenglones(split)}${encabezadoColumnas(split, bio.clave)}<tbody>`;
 
   if (normales.length === 0) html += `<tr><td colspan="${cols}" style="color:var(--muted); text-align:left; font-style:italic">Sin lotes normales capturados.</td></tr>`;
   for (const r of normales) html += renderRenglonFila(r, bio, editable, split);
@@ -2227,6 +2327,47 @@ function renderResumenFinal(resumen) {
 }
 
 // ---------------------------------------------------------------------------
+// Enlace directo desde la notificación "Concentrado SIS-06-P validado" (ver
+// notificarUnidadValidacion en sis06p_biovac_module.js y openNotifDetailModal
+// en main.js/index.html): ?clues=...&mes=...&anio=...&seccion=sis06p --
+// mismo criterio de query params que ya usa biovac_print_ui.js para su
+// propio "enlace directo". Deja a la unidad (o al municipal que la revisa)
+// ya parada en la pestaña SIS-06-P del mes que se acaba de validar, sin
+// tener que volver a elegir mes/año/unidad a mano.
+// ---------------------------------------------------------------------------
+
+async function aplicarEnlaceDirectoNotificacion() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('seccion') !== 'sis06p') return;
+  const clues = params.get('clues');
+  if (!clues) return;
+
+  const mes = params.get('mes');
+  const anio = params.get('anio');
+  if (mes) document.getElementById('selMes').value = mes;
+  if (anio) document.getElementById('selAnio').value = anio;
+
+  const rol = estado.perfil ? estado.perfil.rol : null;
+  if (rol === 'UNIDAD') {
+    // #selUnidad ya está bloqueado en la CLUES propia -- solo falta abrir
+    // la pestaña SIS-06-P con el mes/año ya resueltos.
+    document.getElementById('btnSeccionSIS06P')?.click();
+  } else if (rol === 'MUNICIPAL') {
+    const selUnidadRevision = document.getElementById('selUnidadRevision');
+    const opt = selUnidadRevision && Array.from(selUnidadRevision.options).find((o) => {
+      const u = (estado.unidadesClues || estado.unidades || []).find((x) => x.id === o.value);
+      return u && u.clues === clues;
+    });
+    if (!opt) return; // unidad fuera de su alcance -- nada que hacer aquí
+    selUnidadRevision.value = opt.value;
+    document.getElementById('btnSeccionSIS06P')?.click();
+    selUnidadRevision.dispatchEvent(new Event('change'));
+  }
+  // JURISDICCIONAL/ADMIN no bajan a nivel unidad para SIS-06-P (ver
+  // inicializarToggleSIS06P) -- el enlace no aplica para ellos.
+}
+
+// ---------------------------------------------------------------------------
 // Arranque y delegación de eventos
 // ---------------------------------------------------------------------------
 
@@ -2235,6 +2376,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await cargarSesionReal();
   await cargarCatalogo();
   cargarCorreccionesPendientes();
+  await aplicarEnlaceDirectoNotificacion();
 
   document.getElementById('btnReconocerTodasCorrecciones').addEventListener('click', reconocerTodasCorrecciones);
   document.getElementById('alertaCorreccionesLista').addEventListener('click', (ev) => {

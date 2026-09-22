@@ -26,7 +26,7 @@ insert into sis_variables (fila_excel, biologico, grupo_poblacional, dosis, edad
 (13, 'BCG', '29 DÍAS A 11 MESES', 'ÚNICA', null, 'BIO50', 'VBF53', 'VBI53', 'VBC53', 3),
 (14, 'BCG', '1 A 4 AÑOS', 'ÚNICA', null, 'BIO03', 'VBF54', 'VBI54', 'VBC54', 4),
 (15, 'BCG', '5 A 13 AÑOS', 'ÚNICA', null, 'VBC03', 'VBF55', 'VBI55', 'VBC55', 5),
-(16, 'HEPATITIS B', 'ÚNICA', 'ÚNICA', null, 'VAC06', 'VHF51', 'VHI51', 'VHB51', 6),
+(16, 'HEPATITIS B', 'ÚNICA', 'ÚNICA', 'Recién nacido (primeras 24 horas)', 'VAC06', 'VHF51', 'VHI51', 'VHB51', 6),
 (17, 'HEPATITIS B', 'MAYORES DE 11 AÑOS (SIN ANTECEDENTE VACUNAL)', 'PRIMERA', null, 'VHB01', 'VHF52', 'VHI52', 'VHB52', 7),
 (18, 'HEPATITIS B', 'MAYORES DE 11 AÑOS (SIN ANTECEDENTE VACUNAL)', 'SEGUNDA', null, 'VHB02', 'VHF53', 'VHI53', 'VHB53', 8),
 (19, 'HEPATITIS B', 'POBLACIÓN EN RIESGO', 'PRIMERA', null, 'VHB03', 'VHF54', 'VHI54', 'VHB54', 9),
