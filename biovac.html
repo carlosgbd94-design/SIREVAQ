@@ -14,8 +14,8 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.2"></script>
 <script defer src="biovac_importer.js?v=2026.2"></script>
-<script defer src="biovac_ui.js?v=2026.26"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.9"></script>
+<script defer src="biovac_ui.js?v=2026.28"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.14"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.3"></script>
 <style>
   :root {
@@ -151,6 +151,44 @@
   .estado-CONCENTRADO { background: rgba(14,165,233,.12); color: var(--secondary); }
   .estado-ENVIADO { background: var(--warning-bg); color: var(--warning); }
   .estado-VALIDADO { background: var(--success-bg); color: var(--success); }
+
+  /* Tarjetas de biológico del paloteo SIS-06-P -- planas a propósito: sin
+     bisel/borde de color a los lados ni sombras embebidas. El color oficial
+     del biológico (mismo que RDA) se expresa con un degradado suave en el
+     ícono + un lavado de color casi imperceptible detrás del encabezado --
+     "flat" con textura, no un bloque de color plano ni un relieve 3D. */
+  .sis-card { background: var(--surface); border-radius: 18px; overflow: hidden; }
+  .sis-card-header {
+    width: 100%; display: flex; flex-direction: column; align-items: stretch; gap: 9px;
+    padding: 13px 16px; text-align: left; background-color: transparent; border: none; cursor: pointer; box-shadow: none;
+    transition: background-color .15s ease;
+  }
+  .sis-card-header:hover { background-color: var(--surface-container); }
+  .sis-card-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sis-icon-chip {
+    width: 32px; height: 32px; border-radius: 10px; flex: none; display: flex;
+    align-items: center; justify-content: center; color: #fff;
+  }
+  .sis-icon-chip .material-symbols-rounded { font-size: 17px; }
+  .sis-card-title {
+    font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sis-card-count { font-size: 10px; font-weight: 800; padding: 2px 9px; border-radius: 20px; }
+  /* Barra de avance (variables capturadas / total) -- un detalle que se
+     gana su lugar mostrando algo real (cuánto falta) en vez de ser solo
+     decoración; se llena con el mismo degradado del ícono. */
+  .sis-progress-track { height: 3px; border-radius: 3px; background: var(--outline-variant); overflow: hidden; }
+  .sis-progress-fill { height: 100%; border-radius: 3px; transition: width .25s ease; }
+  /* Despliegue animado por altura -- box-sizing:border-box para que el
+     borde superior también desaparezca (no solo el contenido) cuando
+     max-height llega a 0, en vez de quedar flotando como una rayita suelta. */
+  .sis-card-body {
+    box-sizing: border-box; overflow: hidden; max-height: 0; opacity: 0;
+    border-top: 1px solid var(--outline-variant);
+    transition: max-height .32s cubic-bezier(.4,0,.2,1), opacity .22s ease;
+  }
+  .sis-card-body.abierto { opacity: 1; }
 
   #panelMovimiento { display: none; }
   .cabecera-movimiento {

@@ -46,23 +46,64 @@
     r44: "BIE59", r45: "BIE60", r46: "BIE61"
   };
 
-  const _SIS_ACCENT_PALETTE = [
-    { border: '#0ea5e9', bg: '#e0f2fe', bgSoft: '#f0f9ff', text: '#0369a1' },
-    { border: '#8b5cf6', bg: '#ede9fe', bgSoft: '#f5f3ff', text: '#6d28d9' },
-    { border: '#10b981', bg: '#d1fae5', bgSoft: '#ecfdf5', text: '#047857' },
-    { border: '#f59e0b', bg: '#fef3c7', bgSoft: '#fffbeb', text: '#b45309' },
-    { border: '#ec4899', bg: '#fce7f3', bgSoft: '#fdf2f8', text: '#be185d' },
-    { border: '#14b8a6', bg: '#ccfbf1', bgSoft: '#f0fdfa', text: '#0f766e' },
-    { border: '#f43f5e', bg: '#ffe4e6', bgSoft: '#fff1f2', text: '#be123c' },
-    { border: '#6366f1', bg: '#e0e7ff', bgSoft: '#eef2ff', text: '#4338ca' },
-    { border: '#84cc16', bg: '#ecfccb', bgSoft: '#f7fee7', text: '#4d7c0f' },
-    { border: '#06b6d4', bg: '#cffafe', bgSoft: '#ecfeff', text: '#0e7490' }
-  ];
-  function accentDeBiologico(biologico) {
+  // Mismos colores oficiales por biológico que ya usa el resto de SIREVAQ
+  // en RDA (window.BIOLOGICO_COLORS en main.js / CLAVE_COLORES en
+  // biovac_ui.js) -- aquí mapeados directo por el nombre `biologico` de
+  // sis_variables, que no comparte llave con esos otros catálogos. Los
+  // pocos biológicos que solo existen en sis_variables (sueros,
+  // antitoxinas, "Otros biológicos") no tienen color oficial en RDA -- se
+  // quedan con el acento de respaldo en vez de inventarles uno.
+  const _SIS_COLOR_POR_BIOLOGICO = {
+    'BCG': '#3A86B7',
+    'HEPATITIS B': '#C43D3D',
+    'HEXAVALENTE ACELULAR DPaT + IPV + Hib + HB': '#9ACD32',
+    'DPT': '#E9C46A',
+    'ROTAVIRUS RV1': '#264653',
+    'NEUMOCÓCICA CONJUGADA (13 VALENTE)': '#3D405B',
+    'NEUMOCÓCICA CONJUGADA (20 VALENTE)': '#3D405B',
+    'S R P  TRIPLE VIRAL': '#B23A48',
+    'SR DOBLE VIRAL': '#7B5EA7',
+    'VARICELA*': '#059669',
+    'HEPATITIS A': '#4b5563',
+    'VPH': '#2A9D8F',
+    'Td TETÁNICO DIFTÉRICO': '#5C5C5C',
+    'Tdpa': '#E76F51',
+    'COVID-19': '#4A4A4A',
+    'VSR': '#A66B50'
+  };
+  function _normBio(str) {
+    return String(str || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+  }
+  const _SIS_COLOR_LOOKUP = Object.fromEntries(
+    Object.entries(_SIS_COLOR_POR_BIOLOGICO).map(([k, v]) => [_normBio(k), v])
+  );
+  const _RESPALDO_HEX = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#14b8a6', '#6366f1'];
+  function _hexDeRespaldo(biologico) {
     let hash = 0;
     const str = String(biologico || '');
     for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
-    return _SIS_ACCENT_PALETTE[hash % _SIS_ACCENT_PALETTE.length];
+    return _RESPALDO_HEX[hash % _RESPALDO_HEX.length];
+  }
+  // Mezcla un hex con blanco (pct 0-1) -- para el tono claro del degradado
+  // del ícono, sin recurrir a un segundo color inventado por biológico.
+  function _mezclarConBlanco(hex, pct) {
+    const [r, g, b] = hexToRgb(hex).split(',').map((n) => parseInt(n.trim(), 10));
+    const mix = (c) => Math.round(c + (255 - c) * pct);
+    return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+  }
+  // `hexToRgb` es global de biovac_ui.js (cargado antes que este archivo,
+  // mismo criterio que MESES/mesNombre).
+  function accentDeBiologico(biologico) {
+    const hex = _SIS_COLOR_LOOKUP[_normBio(biologico)] || _hexDeRespaldo(biologico);
+    return {
+      hex,
+      light: _mezclarConBlanco(hex, .32),
+      glow: `rgba(${hexToRgb(hex)}, .45)`,
+      tint: `rgba(${hexToRgb(hex)}, .14)`,
+      tintSoft: `rgba(${hexToRgb(hex)}, .07)`,
+      wash: `rgba(${hexToRgb(hex)}, .06)`
+    };
   }
 
   // Reutiliza el catálogo global `MESES` ya definido en biovac_ui.js
@@ -70,6 +111,16 @@
   function mesNombre(m) {
     const found = (typeof MESES !== 'undefined' ? MESES : []).find((x) => x.v === Number(m));
     return found ? found.l : String(m);
+  }
+
+  // "YYYY-MM-DD" (lo que regresa sis06p_ventana_envio, un `date` de
+  // Postgres) -> "30 de septiembre de 2026" -- formato largo en español de
+  // México, para que la fecha se lea de corrido en vez de como ISO crudo.
+  function fechaLargaMX(fechaIso) {
+    if (!fechaIso) return '';
+    const [anio, mes, dia] = String(fechaIso).split('-').map(Number);
+    if (!anio || !mes || !dia) return String(fechaIso);
+    return `${dia} de ${mesNombre(mes).toLowerCase()} de ${anio}`;
   }
 
   // ---------------------------------------------------------------------------
@@ -151,7 +202,15 @@
   function labelDeFila(filaExcel) {
     const v = _sisVariablesCache.find((x) => Number(x.fila_excel) === Number(filaExcel));
     if (!v) return `Fila ${filaExcel}`;
-    return `${v.biologico} -- ${v.grupo_poblacional || ''}${v.dosis ? ' · ' + v.dosis : ''}`;
+    // Mismo criterio de deduplicación que la tabla de captura: no repetir
+    // dosis si es idéntica al grupo poblacional (así vienen varias filas en
+    // la hoja real), y sumar la edad cuando la fila la trae, para que dos
+    // filas que solo se distinguen por edad (Td, VPH) no se vean iguales
+    // en este panel tampoco.
+    const descripcion = (v.dosis && v.dosis !== v.grupo_poblacional)
+      ? `${v.grupo_poblacional || ''} · ${v.dosis}`
+      : (v.grupo_poblacional || v.dosis || '');
+    return `${v.biologico} -- ${descripcion}${v.edad ? ' (' + v.edad + ')' : ''}`;
   }
 
   function renderPanelCambiosPendientes() {
@@ -218,12 +277,16 @@
       return;
     }
     banner.style.display = 'block';
+    // Las fechas son el dato que de verdad importa en este aviso -- se
+    // resaltan más grandes/oscuras que el resto del texto para que salten a
+    // la vista sin tener que leer la frase completa.
+    const destacada = (fecha) => `<strong style="font-size:13.5px; font-weight:900; letter-spacing:.01em;">${fecha}</strong>`;
     if (_ventanaCache.dentro_envio) {
       banner.style.cssText += 'background:var(--success-bg); color:var(--success);';
-      banner.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">check_circle</span> Ya puedes enviar tu concentrado -- ventana de envío abierta hasta el ${_ventanaCache.fin_envio}.`;
+      banner.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">check_circle</span> Ya puedes enviar tu concentrado -- tienes hasta el ${destacada(fechaLargaMX(_ventanaCache.fin_envio))} para hacerlo.`;
     } else {
       banner.style.cssText += 'background:var(--warning-bg); color:var(--warning);';
-      banner.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">schedule</span> Puedes ir prellenando -- el envío se habilita del ${_ventanaCache.inicio_envio} al ${_ventanaCache.fin_envio}.`;
+      banner.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">schedule</span> Todavía puedes ir prellenando tu concentrado -- el envío se habilita del ${destacada(fechaLargaMX(_ventanaCache.inicio_envio))} al ${destacada(fechaLargaMX(_ventanaCache.fin_envio))}.`;
     }
   }
 
@@ -301,39 +364,58 @@
     });
 
     groups.forEach((vars, biologico) => {
-      const capturadas = vars.filter((v) => {
-        const row = currentValores[String(v.fila_excel)];
-        return row && Number(row.total || 0) > 0;
-      }).length;
+      // "Capturada" = la fila YA se guardó como parte del concentrado (existe
+      // en `valores`), no "quedó en algo distinto de cero" -- muchas filas
+      // (antitoxinas, sueros, rezagos) legítimamente no tienen aplicaciones
+      // la mayoría de los meses, y contarlas como "pendientes" para siempre
+      // desinforma tanto el badge X/Y como la barra de avance. Reportes
+      // guardados ANTES de este cambio seguirán mostrando huecos en sus
+      // filas que de verdad eran cero (esos meses nunca guardaron esa fila),
+      // hasta que se vuelvan a guardar.
+      const capturadas = vars.filter((v) => currentValores[String(v.fila_excel)] !== undefined).length;
       const accent = accentDeBiologico(biologico);
 
       const card = document.createElement('div');
-      card.style.cssText = `background:#fff; border:1px solid var(--outline-variant); border-left:4px solid ${accent.border}; border-radius:16px; overflow:hidden;`;
+      card.className = 'sis-card';
+
+      const pct = vars.length ? Math.round((capturadas / vars.length) * 100) : 0;
 
       const header = document.createElement('button');
       header.type = 'button';
-      header.style.cssText = 'width:100%; display:flex; align-items:center; justify-content:space-between; padding:12px 16px; text-align:left; background:transparent; border:none; cursor:pointer; box-shadow:none;';
+      header.className = 'sis-card-header';
+      // El degradado de fondo es la "personalidad" de cada tarjeta -- muy
+      // sutil (6% de opacidad) y en `background-image`, aparte de
+      // `background-color`, para que el :hover (definido en CSS) se pueda
+      // seguir viendo encima sin pelearse con un estilo inline.
+      header.style.backgroundImage = `linear-gradient(120deg, ${accent.wash}, rgba(255,255,255,0) 65%)`;
       header.innerHTML = `
-        <span style="display:flex; align-items:center; gap:10px;">
-          <span style="width:24px; height:24px; border-radius:8px; background:${accent.bg}; color:${accent.text}; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0;">
-            <span class="material-symbols-rounded" style="font-size:15px;">vaccines</span>
+        <div class="sis-card-row">
+          <span style="display:flex; align-items:center; gap:12px; min-width:0;">
+            <span class="sis-icon-chip" style="background-image:linear-gradient(135deg, ${accent.light}, ${accent.hex}); box-shadow:0 3px 10px -3px ${accent.glow};">
+              <span class="material-symbols-rounded">vaccines</span>
+            </span>
+            <span class="sis-card-title">${biologico}</span>
           </span>
-          <span style="font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:${accent.text};">${biologico}</span>
-        </span>
-        <span style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:10px; font-weight:800; background:${capturadas > 0 ? accent.bg : '#f1f5f9'}; color:${capturadas > 0 ? accent.text : '#94a3b8'}; border:1px solid ${capturadas > 0 ? accent.border : '#e2e8f0'}; padding:2px 9px; border-radius:20px;">${capturadas}/${vars.length}</span>
-          <span class="material-symbols-rounded sis-chevron" style="font-size:18px; color:#94a3b8; transition:transform .2s;">expand_more</span>
-        </span>
+          <span style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
+            <span class="sis-card-count" style="background:${capturadas > 0 ? accent.tint : '#f1f5f9'}; color:${capturadas > 0 ? accent.hex : '#94a3b8'};">${capturadas}/${vars.length}</span>
+            <span class="material-symbols-rounded sis-chevron" style="font-size:18px; color:#94a3b8; transition:transform .32s cubic-bezier(.4,0,.2,1);">expand_more</span>
+          </span>
+        </div>
+        <div class="sis-progress-track">
+          <div class="sis-progress-fill" style="width:${pct}%; background-image:linear-gradient(90deg, ${accent.light}, ${accent.hex});"></div>
+        </div>
       `;
 
       const body = document.createElement('div');
-      body.style.display = 'none';
+      body.className = 'sis-card-body';
       body.innerHTML = `
-        <div style="overflow-x:auto; border-top:1px solid #f1f5f9;">
+        <div style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px;">
             <thead>
               <tr style="background:#f8fafc; border-bottom:1px solid var(--outline-variant);">
-                <th style="padding:10px; text-align:left; font-weight:600; color:#475569;">Grupo poblacional / Dosis</th>
+                <th style="padding:10px; text-align:left; font-weight:600; color:#475569;">Grupo poblacional</th>
+                <th style="padding:10px; text-align:center; width:140px; font-weight:600; font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:.03em;">Dosis</th>
+                <th style="padding:10px; text-align:center; width:90px; font-weight:600; font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:.03em;">Clave</th>
                 <th style="padding:10px; text-align:center; width:110px; font-weight:800; font-size:11px; color:#334155;">TOTAL</th>
                 <th style="padding:10px; text-align:center; width:88px; font-weight:500; font-size:10px; color:#94a3b8;">Afromex.</th>
                 <th style="padding:10px; text-align:center; width:88px; font-weight:500; font-size:10px; color:#94a3b8;">Indígena</th>
@@ -354,8 +436,8 @@
         const dis = soloLectura ? 'disabled' : '';
         const mkTotal = (val) => `
           <input type="number" min="0" step="1" id="sisb_${v.fila_excel}_total" data-fila="${v.fila_excel}" data-kind="total" ${dis}
-            style="width:88px; max-width:100%; text-align:center; font-weight:800; font-size:13px; color:${accent.text};
-              background:${soloLectura ? '#f1f5f9' : accent.bgSoft}; border:1.5px solid ${accent.border}; border-radius:9px; padding:6px 8px; outline:none;"
+            style="width:88px; max-width:100%; text-align:center; font-weight:800; font-size:13px; color:${accent.hex};
+              background:${soloLectura ? '#f1f5f9' : accent.tintSoft}; border:1.5px solid ${accent.hex}; border-radius:9px; padding:6px 8px; outline:none;"
             value="${val !== undefined && val !== null ? val : ''}" placeholder="0">`;
         const mkSub = (kind, val) => `
           <input type="number" min="0" step="1" id="sisb_${v.fila_excel}_${kind}" data-fila="${v.fila_excel}" data-kind="${kind}" ${dis}
@@ -363,15 +445,32 @@
               background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:5px 6px; outline:none;"
             value="${val !== undefined && val !== null ? val : ''}" placeholder="0">`;
 
+        // Clave vive en su propia columna, no ya metida dentro del texto de
+        // la descripción -- antes el badge quedaba "esclavo" de qué tan
+        // largo saliera ese texto (se encimaba o se iba a una línea rara
+        // cuando la descripción era larga, ver VPH).
         const claveBadge = v.clave_general
-          ? `<span style="display:inline-block;margin-left:6px;font-size:9px;font-weight:700;font-family:monospace;background:#f1f5f9;color:#64748b;padding:1px 6px;border-radius:6px;">${v.clave_general}</span>`
-          : `<span style="display:inline-block;margin-left:6px;font-size:9px;font-weight:700;text-transform:uppercase;background:#e2e8f0;color:#94a3b8;padding:1px 6px;border-radius:20px;">No se reporta en RDA</span>`;
+          ? `<span style="display:inline-block;font-size:9px;font-weight:700;font-family:monospace;background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:6px;white-space:nowrap;">${v.clave_general}</span>`
+          : `<span style="display:inline-block;font-size:9px;font-weight:700;text-transform:uppercase;background:#e2e8f0;color:#94a3b8;padding:2px 7px;border-radius:20px;">No RDA</span>`;
+
+        // Grupo poblacional y Dosis son columnas reales en la hoja
+        // (BIOLÓGICO | DOSIS/GRUPO POBLACIONAL, con "dosis" -- ÚNICA,
+        // PRIMERA, SEGUNDA... y a veces la franja de edad debajo, apilada
+        // en la misma celda -- como su propia sub-columna, ver imagen del
+        // formato real). Cuando la fila viene de una celda fusionada en el
+        // Excel (mismo texto en ambas: "PRIMERA 2 A 11 MESES" en Hexavalente,
+        // p.ej.), se muestra UNA sola vez con colspan en vez de repetirlo en
+        // las dos columnas.
+        const mismaCelda = v.dosis && v.dosis === v.grupo_poblacional;
+        const celdaDosis = `${v.dosis || '—'}${v.edad ? `<br><span style="font-size:10px; color:#94a3b8; font-weight:600;">${v.edad}</span>` : ''}`;
+        const celdasGrupoDosis = mismaCelda
+          ? `<td colspan="2" style="padding:10px;"><span style="font-size:12px; font-weight:600; color:#334155;">${v.grupo_poblacional || v.dosis}</span></td>`
+          : `<td style="padding:10px;"><span style="font-size:12px; font-weight:600; color:#334155;">${v.grupo_poblacional || ''}</span></td>
+             <td style="padding:10px; text-align:center; font-size:11px; font-weight:700; color:#475569; line-height:1.5;">${celdaDosis}</td>`;
 
         row.innerHTML = `
-          <td style="padding:10px;">
-            <span style="font-size:12px; font-weight:600; color:#334155;">${v.grupo_poblacional || ''}${v.dosis ? ' · ' + v.dosis : ''}</span>
-            ${claveBadge}
-          </td>
+          ${celdasGrupoDosis}
+          <td style="padding:10px; text-align:center;">${claveBadge}</td>
           <td style="padding:10px; text-align:center;">${mkTotal(rowVal.total)}</td>
           <td style="padding:10px; text-align:center;">${mkSub('afro', rowVal.afro)}</td>
           <td style="padding:10px; text-align:center;">${mkSub('indigena', rowVal.indigena)}</td>
@@ -398,16 +497,61 @@
         }
       });
 
+      // Despliegue animado por altura (max-height), no un salto de
+      // display:none/block -- ese no se puede animar. Se anima hacia un
+      // valor numérico (scrollHeight) y, ya abierto, se suelta a "none" para
+      // que el contenido pueda crecer/encogerse libre (p.ej. al reacomodarse
+      // el layout) sin quedar recortado por una altura vieja congelada.
       header.addEventListener('click', () => {
-        const abierto = body.style.display !== 'none';
-        body.style.display = abierto ? 'none' : 'block';
-        header.querySelector('.sis-chevron').style.transform = abierto ? 'rotate(0deg)' : 'rotate(180deg)';
+        const abriendo = !body.classList.contains('abierto');
+        header.querySelector('.sis-chevron').style.transform = abriendo ? 'rotate(180deg)' : 'rotate(0deg)';
+        if (abriendo) {
+          body.classList.add('abierto');
+          body.style.maxHeight = body.scrollHeight + 'px';
+          body.addEventListener('transitionend', function alTerminar(ev) {
+            if (ev.propertyName !== 'max-height') return;
+            body.removeEventListener('transitionend', alTerminar);
+            if (body.classList.contains('abierto')) body.style.maxHeight = 'none';
+          });
+        } else {
+          // Si venía de "none" (ya asentado, totalmente abierto), primero
+          // hay que fijarlo a un número -- de "none" a "0" no anima, salta.
+          body.style.maxHeight = body.scrollHeight + 'px';
+          void body.offsetHeight; // fuerza reflow para que el navegador registre ese valor antes de cambiarlo
+          body.classList.remove('abierto');
+          body.style.maxHeight = '0px';
+        }
       });
 
       card.appendChild(header);
       card.appendChild(body);
       container.appendChild(card);
     });
+  }
+
+  // Nivel UNIDAD, guardar el paloteo SIS-06-P con dosis reales ES la señal
+  // de que este mes ya se está capturando -- no tiene sentido además
+  // pedirle un clic aparte en "Iniciar movimiento de este mes" (ese botón
+  // sigue teniendo sentido para MUNICIPAL, que arranca desde un Excel
+  // importado, no desde el paloteo de una unidad). Se crea el movimiento
+  // en silencio la primera vez que hay algo que reportar; si ya existe, no
+  // se toca -- nunca se pisa lo que la unidad ya esté capturando ahí.
+  async function autoCrearMovimientoSiFalta(clues, mes, anio, totalReportado) {
+    if (totalReportado <= 0) return;
+    try {
+      const unidadBiovac = (estado.unidades || []).find((u) => u.clues === clues);
+      if (!unidadBiovac) return;
+      const { data: existente } = await estado.db.from('biovac_movimientos')
+        .select('id').eq('unidad_id', unidadBiovac.id).eq('anio', anio).eq('mes', mes).maybeSingle();
+      if (existente) return;
+      await estado.db.from('biovac_movimientos').insert({
+        unidad_id: unidadBiovac.id, anio, mes,
+        responsable_elaboracion: nombreCompletoDePerfil(estado.perfil) || '',
+        fecha_corte: ultimoDiaMes(anio, mes)
+      });
+    } catch (err) {
+      console.warn('[SIS-06-P] No se pudo auto-crear el movimiento de este mes:', err);
+    }
   }
 
   async function save() {
@@ -437,7 +581,14 @@
       const indigena = parseInt(document.getElementById(`sisb_${v.fila_excel}_indigena`)?.value) || 0;
       const migrante = parseInt(document.getElementById(`sisb_${v.fila_excel}_migrante`)?.value) || 0;
       if (afro > total || indigena > total || migrante > total) hasSubconteoError = true;
-      if (total || afro || indigena || migrante) valores[v.fila_excel] = { total, afro, indigena, migrante };
+      // Se guarda la fila SIEMPRE, aunque quede en cero -- si no, un renglón
+      // que la unidad sí revisó y de verdad no tuvo aplicaciones este mes
+      // (frecuente en antitoxinas/sueros/rezagos) queda indistinguible de
+      // uno que nunca se tocó, y el conteo de "capturadas" (barra de avance,
+      // badge X/Y) lo cuenta como pendiente para siempre. No afecta CSV/
+      // Excel/comparativo con Movimiento -- esos ya trataban "falta la
+      // fila" y "fila en cero" exactamente igual (default a 0).
+      valores[v.fila_excel] = { total, afro, indigena, migrante };
     });
 
     if (hasSubconteoError) {
@@ -478,6 +629,7 @@
       render();
 
       const totalReportado = Object.values(valores).reduce((s, v) => s + Number(v.total || 0), 0);
+      if (esUnidad) await autoCrearMovimientoSiFalta(clues, mes, anio, totalReportado);
       toast(`✅ ${esUnidad ? 'Concentrado' : 'Corrección'} guardado · ${totalReportado} dosis en ${Object.keys(valores).length} variables.`, 'ok');
     } catch (err) {
       console.error('[SIS-06-P] Error al guardar:', err);

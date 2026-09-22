@@ -401,7 +401,11 @@ function inicializarToggleSIS06P() {
   btnMov.addEventListener('click', () => {
     ocultarTodo();
     btnMov.classList.add('activo');
-    document.getElementById('btnAbrirImportador').style.display = 'inline-flex';
+    // "Importar histórico" espera el Excel oficial de Movimiento de
+    // Biológico a nivel MUNICIPIO -- una unidad nunca tiene ese archivo
+    // (su fuente es el paloteo SIS-06-P/Influenza capturado aquí mismo),
+    // así que el botón no aplica para rol UNIDAD.
+    document.getElementById('btnAbrirImportador').style.display = rolActual === 'UNIDAD' ? 'none' : 'inline-flex';
     cargarMovimiento();
   });
 
@@ -450,15 +454,26 @@ function inicializarToggleSIS06P() {
     });
   }
 
+  // Movimiento de Biológico se recarga solo (sin pedir "Cargar movimiento")
+  // al cambiar mes/año -- pero SOLO para rol UNIDAD: para MUNICIPAL/
+  // JURISDICCIONAL/ADMIN, cambiar el mes aquí es un gesto deliberado de
+  // revisión (a veces sobre una unidad ajena, con RLS de por medio) y no
+  // hay que tocar ese flujo ya establecido.
+  function recargarMovimientoSiActivoUnidad() {
+    if (rolActual === 'UNIDAD' && btnMov.classList.contains('activo')) cargarMovimiento();
+  }
+
   document.getElementById('selMes').addEventListener('change', () => {
     if (btnSis.classList.contains('activo')) window.SIS06PBiovac.render();
     if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
     if (btnSeg.classList.contains('activo') && window.SIS06PDashboard) window.SIS06PDashboard.render();
+    recargarMovimientoSiActivoUnidad();
   });
   document.getElementById('selAnio').addEventListener('change', () => {
     if (btnSis.classList.contains('activo')) window.SIS06PBiovac.render();
     if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
     if (btnSeg.classList.contains('activo') && window.SIS06PDashboard) window.SIS06PDashboard.render();
+    recargarMovimientoSiActivoUnidad();
   });
 
   // SIS-06-P es la sección base para UNIDAD (entra directo a capturar);
@@ -573,7 +588,7 @@ async function cargarMovimiento() {
     document.getElementById('filaCabeceraMovimiento').style.display = 'none';
     document.getElementById('filaBotonesCabecera').style.display = 'none';
     document.getElementById('panelSinMovimiento').style.display = 'block';
-    document.getElementById('btnAbrirImportador').style.display = 'inline-flex';
+    document.getElementById('btnAbrirImportador').style.display = (estado.perfil && estado.perfil.rol === 'UNIDAD') ? 'none' : 'inline-flex';
     return;
   }
   document.getElementById('panelSinMovimiento').style.display = 'none';
@@ -1009,6 +1024,41 @@ function loteVencido(caducidadIso) {
   return caducidadIso < finDeMes;
 }
 
+// Aviso comparativo paloteo (SIS-06-P/Influenza) vs. lo que se está dando
+// de baja aquí en Movimiento -- el paloteo se llena PRIMERO y no tiene
+// lotes; la validación real solo puede pasar aquí, al capturar "aplicadas"
+// por lote, comparando la SUMA de todos los lotes del biológico contra el
+// total ya reportado en el paloteo. `recalcularTotalBio()` vuelve a llamar
+// esta misma función en cada tecleo (leyendo los inputs aún sin guardar),
+// así que el semáforo coincide/no-coincide se actualiza en vivo mientras
+// se captura, sin esperar a "Guardar" -- nunca bloquea, solo avisa.
+function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, normalesLotes) {
+  const totalSIS06P = estado.sis06pTotales ? estado.sis06pTotales[bio.clave] : undefined;
+  if (totalSIS06P === undefined) return '';
+  const totalAplicadas = totalAplicadasA + totalAplicadasB;
+  const coincide = totalSIS06P === totalAplicadas;
+  const fuente = bio.clave === 'ANTIINFLUENZA' ? 'SIS-06-P + Influenza (semanal) reportaron' : 'SIS-06-P reportó';
+  // Al paloteo semanal de Influenza (meta/logro de campaña) le corresponde
+  // un concentrado MENSUAL real aquí -- si nunca se traslada a "aplicadas"
+  // del lote, la existencia final (y el arrastre al mes siguiente) se
+  // queda mal aunque el paloteo esté completo. Con un solo lote normal
+  // abierto el traslado es inequívoco, así que se OFRECE un botón (nunca
+  // se escribe solo -- mismo criterio que ofrecerCargaDesdeRequisiciones);
+  // con 2+ lotes se deja en manual porque no hay forma de saber cómo
+  // repartir el total entre ellos.
+  const puedeUsarTotal = editable && estado.perfil && estado.perfil.rol === 'UNIDAD' && bio.clave === 'ANTIINFLUENZA'
+    && !coincide && totalSIS06P > 0 && normalesLotes.length === 1 && Number(normalesLotes[0].aplicadas_a || 0) === 0;
+  return `<div data-sis06p-compara="${bio.id}" style="margin-top:8px; padding:8px 12px; border-radius:10px; font-size:11.5px; font-weight:700;
+      background:${coincide ? 'var(--success-bg)' : 'var(--warning-bg)'};
+      color:${coincide ? 'var(--success)' : 'var(--warning)'};
+      border:1px solid ${coincide ? 'rgba(16,185,129,.3)' : 'var(--warning-border)'};
+      display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+      <span><span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">${coincide ? 'check_circle' : 'compare_arrows'}</span>
+      ${fuente} ${totalSIS06P} dosis aplicadas de este biológico este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas} aplicadas -- revisa si la diferencia es correcta)`}.</span>
+      ${puedeUsarTotal ? `<button type="button" class="btn-mini btn-secundario" data-action="usar-total-influenza" data-renglon="${normalesLotes[0].id}" data-total="${totalSIS06P}"><span class="material-symbols-rounded">sync</span> Usar este total aquí</button>` : ''}
+    </div>`;
+}
+
 function renderBiologico(bio, editable) {
   const renglonesBio = estado.renglones.filter((r) => r.biovac_lotes.biologico_id === bio.id);
   const normales = renglonesBio.filter((r) => r.categoria === 'NORMAL');
@@ -1084,19 +1134,7 @@ function renderBiologico(bio, editable) {
   </tr></tfoot>`;
   html += `</table></div>`;
 
-  const totalSIS06P = estado.sis06pTotales ? estado.sis06pTotales[bio.clave] : undefined;
-  if (totalSIS06P !== undefined) {
-    const totalAplicadas = totalAplicadasA + totalAplicadasB;
-    const coincide = totalSIS06P === totalAplicadas;
-    const fuente = bio.clave === 'ANTIINFLUENZA' ? 'SIS-06-P + Influenza (semanal) reportaron' : 'SIS-06-P reportó';
-    html += `<div style="margin-top:8px; padding:8px 12px; border-radius:10px; font-size:11.5px; font-weight:700;
-      background:${coincide ? 'var(--success-bg)' : 'var(--warning-bg)'};
-      color:${coincide ? 'var(--success)' : 'var(--warning)'};
-      border:1px solid ${coincide ? 'rgba(16,185,129,.3)' : 'var(--warning-border)'};">
-      <span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">${coincide ? 'check_circle' : 'compare_arrows'}</span>
-      ${fuente} ${totalSIS06P} dosis aplicadas de este biológico este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas} aplicadas -- revisa si la diferencia es correcta)`}.
-    </div>`;
-  }
+  html += htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, normales);
 
   if (editable) {
     html += renderPanelAgregar(bio);
@@ -1334,6 +1372,18 @@ function recalcularTotalBio(bioId) {
   setCelda('data-total-desechadas-a', totales.desechadasA);
   setCelda('data-total-desechadas-b', totales.desechadasB);
   setCelda('data-total-final', totales.final);
+
+  // Mismo aviso comparativo de renderBiologico(), refrescado en vivo con lo
+  // que ya se tecleó (aunque no se haya guardado todavía) -- así la unidad
+  // ve si "lo dado de baja aquí" ya coincide con el paloteo SIN esperar a
+  // guardar cada celda y recargar el bloque completo.
+  const panelExistente = document.querySelector(`[data-sis06p-compara="${bioId}"]`);
+  if (panelExistente) {
+    const editable = estado.movimiento && (estado.movimiento.estado === 'BORRADOR' || estado.movimiento.estado === 'EN_CORRECCION');
+    const normalesLotes = renglonesBio.filter((r) => r.categoria === 'NORMAL');
+    const nuevoHtml = htmlComparacionSIS06P(bio, totales.aplicadasA, totales.aplicadasB, editable, normalesLotes);
+    if (nuevoHtml) panelExistente.outerHTML = nuevoHtml;
+  }
 }
 
 // Espejo, en el cliente, de las dos seguridades que en la base de datos
@@ -1437,6 +1487,40 @@ async function guardarCampoRenglon(input) {
     const celda = document.querySelector(`[data-existencia-final="${renglonId}"]`);
     if (celda) { celda.textContent = final; celda.classList.toggle('existencia-negativa', Number(final) < 0); }
   }
+}
+
+// Traslada el concentrado mensual de Influenza (paloteo semanal ya sumado
+// en estado.sis06pTotales.ANTIINFLUENZA) al campo "aplicadas" del único
+// lote normal abierto ese mes -- ver comentario en renderBiologico() sobre
+// por qué solo se ofrece con exactamente un lote. Mismo camino de guardado
+// que guardarCampoRenglon (una celda a la vez, vía biovac_renglones.update)
+// para que quede auditado igual que cualquier otra edición manual.
+async function usarTotalInfluenzaEnRenglon(renglonId, total) {
+  const r = estado.renglones.find((x) => x.id === renglonId);
+  if (!r) return;
+  const confirmado = await mostrarModal({
+    titulo: 'Usar total de Influenza',
+    mensaje: `Se registrarán ${total} dosis aplicadas en este lote, con lo acumulado del paloteo semanal de Influenza de este mes. Después puedes seguir corrigiéndolo a mano si hace falta. ¿Confirmas?`,
+    textoAceptar: 'Usar este total'
+  });
+  if (!confirmado) return;
+
+  const bio = estado.biologicos.find((b) => b.id === r.biovac_lotes.biologico_id);
+  const dosisProspectiva = BiovacEngine.calcExistenciaFinal({
+    presentacion: bio.presentacion, dosisPorFrasco: bio.dosis_por_frasco, dosisPorFrascoOverride: r.biovac_lotes.dosis_por_frasco_override,
+    reglaEspecial: bio.regla_especial, existenciaAnterior: r.existencia_anterior_frascos, recibido: r.recibido_frascos,
+    aplicadasA: total, aplicadasB: r.aplicadas_b, desechadasA: r.desechadas_a, desechadasB: r.desechadas_b
+  });
+  const errorValidacion = validarGuardadoRenglon(r, bio, dosisProspectiva);
+  if (errorValidacion) { toast(errorValidacion, 'error'); return; }
+
+  const { data, error } = await estado.db.from('biovac_renglones').update({ aplicadas_a: total }).eq('id', renglonId)
+    .select('existencia_final_frascos').single();
+  if (error) { toast('Error al guardar: ' + error.message, 'error'); return; }
+  r.aplicadas_a = total;
+  r.existencia_final_frascos = data.existencia_final_frascos;
+  render();
+  toast('✅ Total de Influenza aplicado en el movimiento.', 'ok');
 }
 
 async function eliminarRenglon(renglonId) {
@@ -2149,6 +2233,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const accion = btn.dataset.action;
 
     if (accion === 'eliminar-renglon') { eliminarRenglon(btn.dataset.renglon); return; }
+    if (accion === 'usar-total-influenza') { usarTotalInfluenzaEnRenglon(btn.dataset.renglon, Number(btn.dataset.total)); return; }
 
     if (accion === 'toggle-agregar' || accion === 'cancelar-agregar' || accion === 'confirmar-agregar') {
       const panel = document.querySelector(`[data-panel-agregar="${btn.dataset.bio}"]`);

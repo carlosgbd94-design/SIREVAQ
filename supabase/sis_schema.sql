@@ -27,6 +27,12 @@ create table if not exists sis_variables (
   biologico text not null,
   grupo_poblacional text,
   dosis text,
+  -- Columna D real de SINBA-SIS-06-P cuando trae información nueva aparte
+  -- de biologico/grupo_poblacional/dosis (franja de edad) -- p.ej. VPH
+  -- violación sexual, Td embarazadas/población. Null cuando esa columna no
+  -- aporta nada nuevo (solo repite B/C). Ver sis_variables_add_edad_y_
+  -- corrige_dosis (migración) para el porqué.
+  edad text,
   clave_general text unique,
   clave_afro text,
   clave_indigena text,
