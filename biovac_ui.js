@@ -411,6 +411,7 @@ function inicializarToggleSIS06P() {
     ocultarTodo();
     btnSis.classList.add('activo');
     document.getElementById('panelSIS06P').style.display = 'block';
+    if (wrapRevision) wrapRevision.style.display = esMunicipal ? 'flex' : 'none';
     if (!_sis06pInicializado) {
       _sis06pInicializado = true;
       window.SIS06PBiovac.init();
@@ -422,6 +423,7 @@ function inicializarToggleSIS06P() {
   btnMov.addEventListener('click', () => {
     ocultarTodo();
     btnMov.classList.add('activo');
+    if (wrapRevision) wrapRevision.style.display = esMunicipal ? 'flex' : 'none';
     // "Importar histórico" espera el Excel oficial de Movimiento de
     // Biológico a nivel MUNICIPIO -- una unidad nunca tiene ese archivo
     // (su fuente es el paloteo SIS-06-P/Influenza capturado aquí mismo),
@@ -434,6 +436,7 @@ function inicializarToggleSIS06P() {
     ocultarTodo();
     btnCsv.classList.add('activo');
     document.getElementById('panelCSV').style.display = 'block';
+    if (wrapRevision) wrapRevision.style.display = esMunicipal ? 'flex' : 'none';
     if (!_sis06pInicializado) { _sis06pInicializado = true; await window.SIS06PBiovac.init(); }
     window.SIS06PBiovac.renderCSVPreview();
   });
@@ -443,6 +446,10 @@ function inicializarToggleSIS06P() {
       ocultarTodo();
       btnSeg.classList.add('activo');
       document.getElementById('panelSeguimiento').style.display = 'block';
+      // "Unidad a revisar" filtra Movimiento/SIS-06-P/CSV de UNA CLUES --
+      // Seguimiento en cambio muestra el estatus de TODAS a la vez, así que
+      // el selector no aplica aquí (reportado: aparecía sin venir a cuento).
+      if (wrapRevision) wrapRevision.style.display = 'none';
       if (window.SIS06PDashboard) window.SIS06PDashboard.render();
     });
   }

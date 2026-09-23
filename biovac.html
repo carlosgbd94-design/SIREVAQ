@@ -740,11 +740,13 @@
        mes quedaron en estado Validado. -->
   <div id="seguimientoExportOficial" style="display:none; flex-direction:column; gap:8px; margin-bottom:18px;"></div>
 
-  <!-- ADMIN/MUNICIPAL: tabla plana, una fila por CLUES (ver sis06p_dashboard_module.js). -->
-  <div id="seguimientoVistaTabla" class="tabla-wrap">
+  <!-- ADMIN/MUNICIPAL: tabla plana, una fila por CLUES (ver sis06p_dashboard_module.js).
+       max-height/overflow propios, mismo criterio que #panelCSV: esta lista puede
+       llegar a ~85 CLUES y alarga demasiado la página si no tiene scroll interno. -->
+  <div id="seguimientoVistaTabla" class="tabla-wrap" style="max-height:60vh; overflow-y:auto;">
     <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
       <thead>
-        <tr style="background:#f8fafc; border-bottom:1px solid var(--outline-variant);">
+        <tr style="background:#f8fafc; border-bottom:1px solid var(--outline-variant); position:sticky; top:0; z-index:2;">
           <th style="padding:9px; text-align:left; font-size:10px; text-transform:uppercase; color:var(--muted);">Municipio</th>
           <th style="padding:9px; text-align:left; font-size:10px; text-transform:uppercase; color:var(--muted);">CLUES</th>
           <th style="padding:9px; text-align:left; font-size:10px; text-transform:uppercase; color:var(--muted);">Unidad</th>
