@@ -2522,7 +2522,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let uploadedFiles = [];
 
-  btnFeedbackFAB.addEventListener('click', () => feedbackModal.classList.add('show'));
+  // Al abrir, preseleccionar la sección del formulario según la pestaña
+  // activa (SIS-06-P/Movimiento/CSV/Seguimiento) -- así el reporte llega
+  // clasificado correctamente aunque el usuario no piense en cambiarlo,
+  // que es la causa más común de reportes mal etiquetados como "General".
+  const NOMBRE_PESTANA = {
+    sis06p: 'SIS-06-P (SINBA)',
+    movimiento: 'Movimiento de Biológico',
+    csv: 'CSV',
+    seguimiento: 'Seguimiento'
+  };
+
+  btnFeedbackFAB.addEventListener('click', () => {
+    const tabActiva = document.querySelector('#toggleSeccionUnidad .btn-secundario.activo');
+    const seccion = tabActiva?.dataset.seccion;
+    const feedbackModule = document.getElementById('feedbackModule');
+    const feedbackSubtitle = document.getElementById('feedbackModalSubtitle');
+    if (seccion && feedbackModule) {
+      const opt = feedbackModule.querySelector(`option[data-tab="${seccion}"]`);
+      if (opt) feedbackModule.value = opt.value;
+    }
+    if (feedbackSubtitle) {
+      const etiqueta = NOMBRE_PESTANA[seccion] || 'Movimiento de Biológico';
+      feedbackSubtitle.textContent = `Reporta un error o sugiere mejoras — ${etiqueta}`;
+    }
+    feedbackModal.classList.add('show');
+  });
 
   const renderPreviews = () => {
     if (!feedbackPreviewGrid) return;
@@ -2623,22 +2648,44 @@ document.addEventListener('DOMContentLoaded', () => {
     const unidadTexto = unidadSel?.selectedOptions[0]?.textContent || 'N/A';
     const periodo = estado.movimiento ? `${MESES.find((m) => m.v === estado.movimiento.mes)?.l || estado.movimiento.mes} ${estado.movimiento.anio} (${estado.movimiento.estado})` : 'N/A (sin movimiento cargado)';
 
+    // Pestaña activa + unidad que un revisor (MUNICIPAL/JURISDICCIONAL/ADMIN)
+    // haya elegido en #selUnidadRevision -- sin esto un reporte de un revisor
+    // llegaba diciendo solo el municipio, sin la CLUES real donde vio el bug.
+    const tabActivaBtn = document.querySelector('#toggleSeccionUnidad .btn-secundario.activo');
+    const pestanaTexto = NOMBRE_PESTANA[tabActivaBtn?.dataset.seccion] || 'N/A';
+    const selUnidadRevision = document.getElementById('selUnidadRevision');
+    const unidadRevisionTexto = (selUnidadRevision && selUnidadRevision.offsetParent !== null && selUnidadRevision.selectedOptions[0])
+      ? selUnidadRevision.selectedOptions[0].textContent
+      : null;
+
     let embedColor = 3447003;
     let typeEmoji = '❓ Pregunta/Duda';
     if (type === 'Sugerencia') { embedColor = 16766720; typeEmoji = '💡 Sugerencia'; }
     else if (type === 'Error') { embedColor = 15158332; typeEmoji = '🚨 Reporte de Error'; }
 
+    const fields = [
+      { name: '👤 Usuario', value: userName, inline: true },
+      { name: '🔑 Rol', value: userRole, inline: true },
+      { name: '🏥 Unidad', value: unidadTexto, inline: true },
+      { name: '📅 Periodo', value: periodo, inline: true },
+      { name: '🛠️ Sección afectada', value: moduleVal, inline: true },
+      { name: '📑 Pestaña activa', value: pestanaTexto, inline: true }
+    ];
+    if (unidadRevisionTexto) fields.push({ name: '🔎 Unidad en revisión (CLUES)', value: unidadRevisionTexto, inline: true });
+
+    // Se adjuntan los errores recientes de consola sin importar el tipo de
+    // reporte elegido: una "Sugerencia" o "Pregunta" a veces esconde un bug
+    // que el usuario no identificó como tal, y perder esa pista aquí
+    // significa no poder reproducirlo después.
+    if (window.RECENT_ERRORS && window.RECENT_ERRORS.length > 0) {
+      fields.push({ name: '💻 Errores recientes de consola', value: '```js\n' + window.RECENT_ERRORS.join('\n') + '\n```', inline: false });
+    }
+
     const embed = {
       title: `[Movimiento de Biológico] ${typeEmoji}`,
       description: `**Mensaje del Usuario:**\n${message}`,
       color: embedColor,
-      fields: [
-        { name: '👤 Usuario', value: userName, inline: true },
-        { name: '🔑 Rol', value: userRole, inline: true },
-        { name: '🏥 Unidad', value: unidadTexto, inline: true },
-        { name: '📅 Periodo', value: periodo, inline: true },
-        { name: '🛠️ Sección afectada', value: moduleVal, inline: true }
-      ],
+      fields,
       footer: { text: 'SIREVAQ · Movimiento de Biológico' },
       timestamp: new Date().toISOString()
     };

@@ -9,6 +9,29 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1">
+<script>
+// Captura global de errores recientes para adjuntar al reporte de feedback
+// (mismo mecanismo que main.js, pero esta página no lo carga -- ver
+// btnFeedbackFAB en biovac_ui.js). Debe ir ANTES de los scripts diferidos
+// para no perderse errores de arranque (ej. fallo cargando Supabase/engine).
+window.RECENT_ERRORS = [];
+window.onerror = function (message, source, lineno, colno) {
+  window.RECENT_ERRORS.push(`${new Date().toLocaleTimeString()} - Error: ${message} at ${(source || '').split('/').pop()}:${lineno}:${colno}`);
+  if (window.RECENT_ERRORS.length > 15) window.RECENT_ERRORS.shift();
+};
+window.onunhandledrejection = function (event) {
+  window.RECENT_ERRORS.push(`${new Date().toLocaleTimeString()} - Promise rechazada: ${event.reason}`);
+  if (window.RECENT_ERRORS.length > 15) window.RECENT_ERRORS.shift();
+};
+(function () {
+  const originalConsoleError = console.error;
+  console.error = function (...args) {
+    window.RECENT_ERRORS.push(`${new Date().toLocaleTimeString()} - Console: ${args.map((x) => (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(' ')}`);
+    if (window.RECENT_ERRORS.length > 15) window.RECENT_ERRORS.shift();
+    originalConsoleError.apply(console, args);
+  };
+})();
+</script>
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
@@ -830,7 +853,7 @@
     <div class="feedback-modal-header">
       <div class="feedback-header-text">
         <h3 class="feedback-modal-title">Soporte Técnico</h3>
-        <p class="feedback-modal-subtitle">Reporta un error o sugiere mejoras — Movimiento de Biológico</p>
+        <p class="feedback-modal-subtitle" id="feedbackModalSubtitle">Reporta un error o sugiere mejoras — Movimiento de Biológico</p>
       </div>
       <button type="button" id="btnCloseFeedbackHeader" class="feedback-close-x">✕</button>
     </div>
@@ -865,16 +888,34 @@
       </div>
 
       <div class="feedback-input-group">
-        <label for="feedbackModule" class="feedback-form-label">¿En qué parte de Movimiento de Biológico ocurre?</label>
+        <label for="feedbackModule" class="feedback-form-label">¿En qué parte del sistema ocurre?</label>
         <div class="feedback-input-wrapper">
           <select id="feedbackModule" required class="feedback-select">
             <option value="General">General / Sistema</option>
-            <option value="Captura de renglones">Captura de renglones (recibido/aplicadas/desechadas)</option>
-            <option value="Agregar lote">Agregar lote</option>
-            <option value="A.R.F. / Canje">A.R.F. / Canje</option>
-            <option value="Importar histórico">Importar histórico</option>
-            <option value="Cierre / Corrección de mes">Cierre / Corrección de mes</option>
-            <option value="Exportar Excel/PDF">Exportar Excel / PDF</option>
+            <optgroup label="Movimiento de Biológico">
+              <option value="Movimiento -- Captura de renglones" data-tab="movimiento">Captura de renglones (recibido/aplicadas/desechadas)</option>
+              <option value="Movimiento -- Agregar lote">Agregar lote</option>
+              <option value="Movimiento -- A.R.F. / Canje">A.R.F. / Canje</option>
+              <option value="Movimiento -- Importar histórico">Importar histórico</option>
+              <option value="Movimiento -- Cierre / Corrección de mes">Cierre / Corrección de mes</option>
+              <option value="Movimiento -- Exportar Excel/PDF">Exportar Excel / PDF</option>
+            </optgroup>
+            <optgroup label="SIS-06-P (SINBA)">
+              <option value="SIS-06-P -- Paloteo / captura" data-tab="sis06p">Paloteo / captura de claves</option>
+              <option value="SIS-06-P -- Envío / validación">Envío para validación o marcar Validado</option>
+              <option value="SIS-06-P -- Correcciones">Correcciones / EN_CORRECCION</option>
+            </optgroup>
+            <optgroup label="CSV">
+              <option value="CSV -- Exportación a RDA" data-tab="csv">Exportación / descarga del CSV</option>
+            </optgroup>
+            <optgroup label="Seguimiento">
+              <option value="Seguimiento -- Estatus por unidad" data-tab="seguimiento">Estatus por unidad/municipio (Sin iniciar/Capturando/Enviado/Validado)</option>
+              <option value="Seguimiento -- Comparativo paloteo vs. aplicado">Comparativo paloteo (SIS-06-P) vs. aplicado</option>
+              <option value="Seguimiento -- Aviso de validación">Aviso de validación / enlace directo</option>
+              <option value="Seguimiento -- CSV oficial del concentrado">Descarga del CSV oficial del concentrado municipal</option>
+            </optgroup>
+            <option value="Cuenta / permisos / sesión">Cuenta, permisos o sesión</option>
+            <option value="Otro">Otro</option>
           </select>
           <span class="material-symbols-rounded feedback-select-arrow">expand_more</span>
         </div>
