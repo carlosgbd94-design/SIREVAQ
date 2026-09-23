@@ -324,6 +324,25 @@ async function cargarCatalogo() {
       : '';
   }
 
+  // #selAnio/#selMes se llenan ANTES de inicializarToggleSIS06P(): esa
+  // función, al final, hace click() en la pestaña por defecto (Seguimiento
+  // para roles revisores, SIS-06-P para UNIDAD) y eso dispara su render()
+  // de forma SÍNCRONA -- si los selects de año/mes todavía no tienen
+  // opciones en ese momento, `Number(selMes.value)` da 0, no el mes real.
+  // Bug real encontrado por logs de Supabase: llegaban a la API peticiones
+  // con "mes=eq.0&anio=eq.0" (sis06p_capturas nunca tiene esos valores, así
+  // que la primera pintada de Seguimiento/comparativo salía vacía hasta que
+  // el usuario tocaba a mano el selector de mes o año).
+  const selAnio = document.getElementById('selAnio');
+  const anioActual = new Date().getFullYear();
+  const anios = [];
+  for (let a = anioActual - 1; a <= anioActual + 1; a++) anios.push(a);
+  selAnio.innerHTML = anios.map((a) => `<option value="${a}" ${a === anioActual ? 'selected' : ''}>${a}</option>`).join('');
+
+  const selMes = document.getElementById('selMes');
+  const mesActual = new Date().getMonth() + 1;
+  selMes.innerHTML = MESES.map((m) => `<option value="${m.v}" ${m.v === mesActual ? 'selected' : ''}>${m.l}</option>`).join('');
+
   // MUNICIPAL/JURISDICCIONAL/ADMIN también entran al toggle SIS-06-P/CSV/
   // Seguimiento (Fase 4: modo revisión + dashboard) -- a diferencia de
   // UNIDAD, aquí el selector de revisión queda habilitado para poder
@@ -335,16 +354,6 @@ async function cargarCatalogo() {
     const btnSeg = document.getElementById('btnSeccionSeguimiento');
     if (btnSeg) btnSeg.style.display = 'inline-flex';
   }
-
-  const selAnio = document.getElementById('selAnio');
-  const anioActual = new Date().getFullYear();
-  const anios = [];
-  for (let a = anioActual - 1; a <= anioActual + 1; a++) anios.push(a);
-  selAnio.innerHTML = anios.map((a) => `<option value="${a}" ${a === anioActual ? 'selected' : ''}>${a}</option>`).join('');
-
-  const selMes = document.getElementById('selMes');
-  const mesActual = new Date().getMonth() + 1;
-  selMes.innerHTML = MESES.map((m) => `<option value="${m.v}" ${m.v === mesActual ? 'selected' : ''}>${m.l}</option>`).join('');
 
   if (!estado.perfil) {
     const usuarioGuardado = localStorage.getItem('biovac_usuario');
@@ -597,6 +606,14 @@ async function cargarMovimiento() {
   const { data: movimiento, error } = await estado.db.from('biovac_movimientos')
     .select('*').eq('unidad_id', unidadId).eq('anio', anio).eq('mes', mes).maybeSingle();
   if (error) { toast('Error: ' + error.message, 'error'); return; }
+
+  // Si el usuario ya cambió a otra pestaña (SIS-06-P/CSV/Seguimiento) mientras
+  // esta consulta estaba en vuelo, no hay que pintar nada de Movimiento --
+  // de lo contrario el panel reaparece encima de la pestaña que sí está
+  // activa ahora, sin importar a cuál se haya cambiado (bug reportado: el
+  // panel de Movimiento se despliega solo, sin importar la pestaña).
+  const btnMovAlTerminar = document.getElementById('btnSeccionMovimiento');
+  if (btnMovAlTerminar && !btnMovAlTerminar.classList.contains('activo')) return;
 
   if (!movimiento) {
     estado.movimiento = null;
@@ -997,6 +1014,13 @@ async function crearMovimiento() {
 }
 
 function render() {
+  // Mismo resguardo que cargarMovimiento(): si para cuando esto corre el
+  // usuario ya no está en la pestaña Movimiento (la cambió mientras algo
+  // async estaba en vuelo -- guardar cabecera, cerrar mes, etc.), no hay que
+  // reaparecer el panel encima de la pestaña activa.
+  const btnMovRender = document.getElementById('btnSeccionMovimiento');
+  if (btnMovRender && !btnMovRender.classList.contains('activo')) return;
+
   const m = estado.movimiento;
   document.getElementById('panelMovimiento').style.display = 'block';
   document.getElementById('filaCabeceraMovimiento').style.display = 'contents';

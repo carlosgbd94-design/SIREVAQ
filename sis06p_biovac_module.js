@@ -829,7 +829,20 @@
 
   // ---------------------------------------------------------------------------
   // Pestaña CSV: mismas filas (CLUES, MUNICIPIO, VARIABLE_SIS, MES, ANIO, VALOR)
-  // que ya acepta el panel RDA -- vista previa + descarga, solo de esta CLUES.
+  // que ya acepta el panel RDA.
+  //
+  // Para rol UNIDAD sigue siendo solo su propia CLUES (buildCSVRowsActuales,
+  // ya tenía sentido: una unidad solo tiene una CLUES). Para MUNICIPAL
+  // (único rol revisor que llega a esta pestaña, ver btnCsv.style.display en
+  // biovac_ui.js) el listado ahora es el municipio COMPLETO -- todas sus
+  // CLUES reales, una fila por variable por cada una, con VALOR=0 para las
+  // que todavía no capturan nada -- y se va "llenando sola" porque se
+  // consulta en vivo cada vez que se abre esta pestaña o cambia mes/año,
+  // nunca desde una caché de una sola unidad. Antes esto mostraba solo la
+  // CLUES seleccionada en "unidad a revisar", que es para lo que sirve el
+  // modo revisión del SIS-06-P (editar/validar una unidad a la vez), pero no
+  // tiene sentido para el CSV: el municipio necesita ver el concentrado
+  // completo para poder armar lo que se sube al departamento de estadística.
   // ---------------------------------------------------------------------------
 
   // Suma, por rubro (r1..r46), las capturas SEMANALES reales de Influenza
@@ -890,16 +903,128 @@
     return rows.concat(buildInfluenzaCSVRows(clues, municipio, mes, anio));
   }
 
-  function renderCSVPreview() {
+  // Municipio completo: todas las CLUES reales activas de ese municipio
+  // (excluye la pseudo-unidad 'JS1-...', que no tiene paloteo SIS-06-P
+  // propio), consultado fresco cada vez -- nunca desde _sis06pCapturasCache
+  // (esa caché es y sigue siendo de una sola CLUES a la vez, la usan además
+  // la captura/impresión/Excel oficial de este mismo módulo, no se toca).
+  async function buildCSVRowsMunicipioCompleto(municipio, mes, anio) {
+    const { data: unidadesReales, error: eU } = await estado.db.from('biovac_unidades')
+      .select('clues, nombre').eq('municipio', municipio).eq('activo', true).not('clues', 'like', 'JS1-%').order('clues');
+    if (eU) throw eU;
+    const listaUnidades = unidadesReales || [];
+    if (listaUnidades.length === 0) return [];
+    const cluesList = listaUnidades.map((u) => u.clues);
+
+    if (_sisVariablesCache.length === 0) {
+      const { data: vars, error: e1 } = await estado.db.from('sis_variables').select('*').eq('activo', true).order('orden');
+      if (e1) throw e1;
+      _sisVariablesCache = vars || [];
+    }
+
+    const [{ data: capturas, error: eC }, { data: capturasInf, error: eI }] = await Promise.all([
+      estado.db.from('sis06p_capturas').select('clues, valores').in('clues', cluesList).eq('mes', mes).eq('anio', anio),
+      estado.db.from('influenza_capturas').select('clues, fecha, valores').in('clues', cluesList)
+    ]);
+    if (eC) throw eC;
+    if (eI) console.error('[SIS-06-P] Error cargando influenza para CSV municipal:', eI);
+
+    const capturaPorClues = new Map((capturas || []).map((c) => [c.clues, c]));
+    const infPorClues = new Map();
+    (capturasInf || []).forEach((c) => {
+      if (!infPorClues.has(c.clues)) infPorClues.set(c.clues, []);
+      infPorClues.get(c.clues).push(c);
+    });
+
+    const rows = [];
+    listaUnidades.forEach((u) => {
+      // Sin captura todavía -> valores vacíos, así que cada variable con
+      // clave sale con VALOR=0 (misma regla que una unidad que sí capturó
+      // pero puso 0): la fila existe siempre, para que el listado completo
+      // se vea desde el día 1 y solo se vaya "llenando" con números reales.
+      const captura = capturaPorClues.get(u.clues);
+      const valores = captura ? (captura.valores || {}) : {};
+      _sisVariablesCache.forEach((v) => {
+        const val = valores[String(v.fila_excel)] || {};
+        const total = Number(val.total || 0);
+        if (v.clave_general) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_general, MES: mes, ANIO: anio, VALOR: total });
+        const afro = Number(val.afro || 0);
+        if (v.clave_afro && afro > 0) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_afro, MES: mes, ANIO: anio, VALOR: afro });
+        const indigena = Number(val.indigena || 0);
+        if (v.clave_indigena && indigena > 0) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_indigena, MES: mes, ANIO: anio, VALOR: indigena });
+        const migrante = Number(val.migrante || 0);
+        if (v.clave_migrante && migrante > 0) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_migrante, MES: mes, ANIO: anio, VALOR: migrante });
+      });
+
+      const infEnMes = (infPorClues.get(u.clues) || []).filter((c) => {
+        if (!c.fecha) return false;
+        const d = new Date(c.fecha + 'T12:00:00');
+        return (d.getMonth() + 1) === Number(mes) && d.getFullYear() === Number(anio);
+      });
+      if (infEnMes.length > 0) {
+        const sumas = {};
+        infEnMes.forEach((c) => {
+          Object.entries(c.valores || {}).forEach(([rubro, val]) => { sumas[rubro] = (sumas[rubro] || 0) + Number(val || 0); });
+        });
+        Object.entries(INFLUENZA_SIS_MAPPING).forEach(([rubro, clave]) => {
+          rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: clave, MES: mes, ANIO: anio, VALOR: sumas[rubro] || 0 });
+        });
+      }
+    });
+
+    // Ordenado por CLUES ascendente -- sort de JS es estable, así que dentro
+    // de cada CLUES las filas conservan el orden del catálogo.
+    rows.sort((a, b) => String(a.CLUES).localeCompare(String(b.CLUES)));
+    return rows;
+  }
+
+  function esRolUnidad() { return Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD'); }
+
+  async function filasCSVSegunRol() {
+    if (esRolUnidad()) return buildCSVRowsActuales();
+    const activa = datosUnidadActiva();
+    if (!activa) return [];
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    return buildCSVRowsMunicipioCompleto(activa.municipio, mes, anio);
+  }
+
+  async function renderCSVPreview() {
     const tbody = document.getElementById('csvUnidadTbody');
     if (!tbody) return;
-    const rows = buildCSVRowsActuales();
+    const esUnidad = esRolUnidad();
+
+    const titulo = document.getElementById('csvPanelTitulo');
+    const subtitulo = document.getElementById('csvPanelSubtitulo');
+    if (titulo && subtitulo) {
+      if (esUnidad) {
+        titulo.textContent = 'CSV -- lo que se subirá a RDA';
+        subtitulo.textContent = 'Mes seleccionado arriba, una fila por clave SIS con su valor -- mismo formato que ya acepta el panel RDA.';
+      } else {
+        titulo.textContent = 'CSV -- concentrado completo del municipio';
+        subtitulo.textContent = 'Todas las CLUES del municipio, una fila por clave SIS -- se va llenando conforme cada unidad captura (0 mientras no ha capturado).';
+      }
+    }
+
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:14px; text-align:center; color:var(--muted);">Cargando…</td></tr>';
+    let rows;
+    try {
+      rows = await filasCSVSegunRol();
+    } catch (err) {
+      console.error('[SIS-06-P] Error cargando vista previa CSV:', err);
+      tbody.innerHTML = `<tr><td colspan="5" style="padding:14px; text-align:center; color:var(--error);">Error: ${err.message || err}</td></tr>`;
+      return;
+    }
     if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" style="padding:14px; text-align:center; color:var(--muted); font-style:italic;">No hay concentrado guardado para este mes/año todavía -- captúralo en la pestaña SIS-06-P y guarda.</td></tr>';
+      const msg = esUnidad
+        ? 'No hay concentrado guardado para este mes/año todavía -- captúralo en la pestaña SIS-06-P y guarda.'
+        : 'No hay unidades activas en este municipio.';
+      tbody.innerHTML = `<tr><td colspan="5" style="padding:14px; text-align:center; color:var(--muted); font-style:italic;">${msg}</td></tr>`;
       return;
     }
     tbody.innerHTML = rows.map((r) => `
       <tr style="border-bottom:1px solid #f1f5f9;">
+        <td style="padding:8px 9px; font-family:monospace; color:var(--muted);">${r.CLUES}</td>
         <td style="padding:8px 9px; font-family:monospace; font-weight:700; color:var(--primary);">${r.VARIABLE_SIS}</td>
         <td style="padding:8px 9px;">${mesNombre(r.MES)}</td>
         <td style="padding:8px 9px;">${r.ANIO}</td>
@@ -908,9 +1033,16 @@
     `).join('');
   }
 
-  function downloadCSV() {
-    const rows = buildCSVRowsActuales();
-    if (rows.length === 0) { toast('No hay concentrado guardado para este mes/año.', 'error'); return; }
+  async function downloadCSV() {
+    const esUnidad = esRolUnidad();
+    let rows;
+    try {
+      rows = await filasCSVSegunRol();
+    } catch (err) {
+      toast(err.message || 'Error al generar el CSV.', 'error');
+      return;
+    }
+    if (rows.length === 0) { toast('No hay datos para descargar.', 'error'); return; }
     const headers = ['CLUES', 'MUNICIPIO', 'VARIABLE_SIS', 'MES', 'ANIO', 'VALOR'];
     const csvLines = [headers.join(',')].concat(
       rows.map((r) => headers.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(','))
@@ -919,7 +1051,9 @@
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `SIS06P_${rows[0].CLUES}_${rows[0].MES}_${rows[0].ANIO}.csv`;
+    link.download = esUnidad
+      ? `SIS06P_${rows[0].CLUES}_${rows[0].MES}_${rows[0].ANIO}.csv`
+      : `SIS06P_${rows[0].MUNICIPIO}_${rows[0].MES}_${rows[0].ANIO}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

@@ -264,10 +264,13 @@
   // contenido de cada fila sea el mismo dato.
   // ---------------------------------------------------------------------------
 
-  // Un botón por municipio a cargo del MUNICIPAL en sesión (normalmente uno
-  // solo, pero un perfil puede tener más de uno en municipios_allowed) --
-  // habilitado solo cuando TODAS las unidades de ese municipio en `filas`
-  // (ya acotadas por el RPC al mes/año elegidos arriba) quedaron Validado.
+  // Un bloque por municipio a cargo del MUNICIPAL en sesión (normalmente uno
+  // solo, pero un perfil puede tener más de uno en municipios_allowed):
+  // botón de descarga (habilitado solo cuando TODAS las unidades de ese
+  // municipio en `filas` -- ya acotadas por el RPC al mes/año elegidos
+  // arriba -- quedaron Validado) + la tabla comparativa Paloteo vs Aplicado
+  // (ver cargarComparativoAplicado), que no depende de la validación: sirve
+  // precisamente para revisar ANTES de que todo quede validado.
   function renderExportOficial(filas, mes, anio) {
     const cont = document.getElementById('seguimientoExportOficial');
     if (!cont) return;
@@ -288,8 +291,11 @@
       const completo = unidadesGrupo.length > 0 && nValidado === unidadesGrupo.length;
       const etiqueta = MUNICIPIO_LABEL[municipio] || municipio;
 
+      const tarjeta = document.createElement('div');
+      tarjeta.style.cssText = 'border-radius:14px; background:' + (completo ? 'var(--success-bg)' : '#f8fafc') + '; border:1px solid ' + (completo ? 'var(--success)' : 'var(--outline-variant)') + '; overflow:hidden;';
+
       const barra = document.createElement('div');
-      barra.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 16px; border-radius:14px; background:' + (completo ? 'var(--success-bg)' : '#f8fafc') + '; border:1px solid ' + (completo ? 'var(--success)' : 'var(--outline-variant)') + ';';
+      barra.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 16px;';
       barra.innerHTML = `
         <span style="font-size:12.5px; font-weight:700; color:${completo ? 'var(--success)' : 'var(--muted)'};">
           ${completo ? '✅' : '⏳'} ${etiqueta}: ${nValidado}/${unidadesGrupo.length} unidad(es) validada(s)${completo ? '' : ' -- faltan por validar para poder exportar'}
@@ -303,8 +309,148 @@
       btn.innerHTML = '<span class="material-symbols-rounded">download</span> Descargar CSV oficial';
       btn.addEventListener('click', () => exportarCSVOficialMunicipio(municipio, mes, anio));
       barra.appendChild(btn);
-      cont.appendChild(barra);
+      tarjeta.appendChild(barra);
+
+      const comparativoCont = document.createElement('div');
+      comparativoCont.style.cssText = 'padding:0 16px 14px;';
+      comparativoCont.innerHTML = '<div style="font-size:11.5px; color:var(--muted); padding:6px 0;">Cargando comparativo paloteo vs. aplicado…</div>';
+      tarjeta.appendChild(comparativoCont);
+      cont.appendChild(tarjeta);
+
+      renderComparativoAplicado(comparativoCont, municipio, mes, anio);
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Comparativo Paloteo (SIS-06-P) vs. Aplicado (Movimiento de Biológico),
+  // por biológico, para TODO el municipio -- la misma validación que ya
+  // existe en biovac_ui.js (htmlComparacionSIS06P/cargarSIS06PTotalesParaComparar)
+  // pero sumando TODAS las CLUES reales del municipio en vez de una sola, y
+  // sin desglose por lote ("aquí no hay lotes", el archivo real "SIS
+  // QUERETARO AGOSTO 2026.xlsx" -- hoja SEGUIMIENTO DE BIOLOGICO -- tampoco
+  // lo tiene: un solo número de "Aplicado" por biológico y CLUES).
+  //
+  // La "conversión de Hepatitis B/COVID" es literalmente sumar aplicadas_a
+  // (dosis fraccionada/pediátrica) + aplicadas_b (dosis completa/adulto) en
+  // UN solo total de dosis -- NUNCA la división entre 2 que sí usa
+  // BiovacEngine.calcExistenciaFinal (esa es para convertir a FRASCOS
+  // consumidos, un cálculo distinto; aquí ambos lados de la comparación
+  // están en dosis, no en frascos, así que no aplica esa división).
+  // ---------------------------------------------------------------------------
+
+  async function cargarComparativoAplicado(municipio, mes, anio) {
+    // Solo CLUES reales (las pseudo-unidad de municipio/hospital, clues
+    // 'JS1-...', no tienen paloteo SIS-06-P propio con el que comparar).
+    const { data: unidadesReales, error: eU } = await estado.db.from('biovac_unidades')
+      .select('id, clues').eq('municipio', municipio).eq('activo', true).not('clues', 'like', 'JS1-%');
+    if (eU) throw eU;
+    const cluesList = (unidadesReales || []).map((u) => u.clues);
+    const unidadIds = (unidadesReales || []).map((u) => u.id);
+    if (unidadIds.length === 0) return [];
+
+    const { data: movimientos, error: eM } = await estado.db.from('biovac_movimientos')
+      .select('id').in('unidad_id', unidadIds).eq('anio', anio).eq('mes', mes);
+    if (eM) throw eM;
+    const movimientoIds = (movimientos || []).map((m) => m.id);
+
+    let renglones = [];
+    if (movimientoIds.length > 0) {
+      const { data, error: eR } = await estado.db.from('biovac_renglones')
+        .select('aplicadas_a, aplicadas_b, biovac_lotes(biologico_id)').in('movimiento_id', movimientoIds);
+      if (eR) throw eR;
+      renglones = data || [];
+    }
+    const aplicadoPorBiologicoId = {};
+    renglones.forEach((r) => {
+      const bioId = r.biovac_lotes && r.biovac_lotes.biologico_id;
+      if (!bioId) return;
+      aplicadoPorBiologicoId[bioId] = (aplicadoPorBiologicoId[bioId] || 0) + Number(r.aplicadas_a || 0) + Number(r.aplicadas_b || 0);
+    });
+
+    const [{ data: capturas, error: eC }, { data: sisVars, error: eV }] = await Promise.all([
+      estado.db.from('sis06p_capturas').select('valores').in('clues', cluesList).eq('mes', mes).eq('anio', anio),
+      estado.db.from('sis_variables').select('fila_excel, biologico').eq('activo', true)
+    ]);
+    if (eC) throw eC;
+    if (eV) throw eV;
+    const biologicoPorFila = new Map((sisVars || []).map((v) => [String(v.fila_excel), v.biologico]));
+    const totalesPorSisBiologico = {};
+    (capturas || []).forEach((cap) => {
+      Object.entries(cap.valores || {}).forEach(([fila, v]) => {
+        const bio = biologicoPorFila.get(String(fila));
+        if (!bio) return;
+        totalesPorSisBiologico[bio] = (totalesPorSisBiologico[bio] || 0) + Number(v?.total || 0);
+      });
+    });
+
+    // Influenza (ANTIINFLUENZA en BioVac) no vive en sis06p_capturas -- mismo
+    // criterio que cargarSIS06PTotalesParaComparar: se suma aparte desde
+    // influenza_capturas y se agrega solo a esa clave.
+    let totalInfluenzaMes = 0;
+    if (cluesList.length > 0) {
+      const { data: capturasInf } = await estado.db.from('influenza_capturas').select('fecha, valores').in('clues', cluesList);
+      (capturasInf || []).forEach((c) => {
+        if (!c.fecha) return;
+        const d = new Date(c.fecha + 'T12:00:00');
+        if ((d.getMonth() + 1) !== Number(mes) || d.getFullYear() !== Number(anio)) return;
+        Object.values(c.valores || {}).forEach((v) => { totalInfluenzaMes += Number(v || 0); });
+      });
+    }
+
+    const filas = [];
+    (estado.biologicos || []).forEach((bio) => {
+      const nombresSis = SIS_BIOLOGICO_POR_CLAVE_BIOVAC[bio.clave];
+      if (!nombresSis) return;
+      let paloteo = nombresSis.reduce((acc, n) => acc + (totalesPorSisBiologico[n] || 0), 0);
+      if (bio.clave === 'ANTIINFLUENZA') paloteo += totalInfluenzaMes;
+      const aplicado = aplicadoPorBiologicoId[bio.id] || 0;
+      if (paloteo === 0 && aplicado === 0) return;
+      filas.push({ nombre: (bio.nombre_excel || bio.clave).replace(/\n/g, ' '), paloteo, aplicado, coincide: paloteo === aplicado });
+    });
+    return filas;
+  }
+
+  async function renderComparativoAplicado(cont, municipio, mes, anio) {
+    try {
+      const filas = await cargarComparativoAplicado(municipio, mes, anio);
+      if (filas.length === 0) {
+        cont.innerHTML = '<div style="font-size:11.5px; color:var(--muted); font-style:italic; padding:6px 0;">Sin paloteo ni movimiento capturado todavía para comparar.</div>';
+        return;
+      }
+      const nDiff = filas.filter((f) => !f.coincide).length;
+      cont.innerHTML = `
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); margin:4px 0 8px;">
+          Comparativo paloteo (SIS-06-P) vs. aplicado (Movimiento de Biológico)${nDiff > 0 ? ` -- ${nDiff} con diferencia` : ' -- todo coincide'}
+        </div>
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+          <thead><tr style="border-bottom:1px solid var(--outline-variant);">
+            <th style="text-align:left; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Biológico</th>
+            <th style="text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Paloteo</th>
+            <th style="text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Aplicado</th>
+            <th style="text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Estado</th>
+          </tr></thead>
+          <tbody>
+            ${filas.map((f) => `
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:6px 8px;">${f.nombre}</td>
+                <td style="padding:6px 8px; text-align:center; font-weight:700;">${f.paloteo}</td>
+                <td style="padding:6px 8px; text-align:center; font-weight:700;">${f.aplicado}</td>
+                <td style="padding:6px 8px; text-align:center;">
+                  <span style="font-size:10px; font-weight:800; padding:2px 9px; border-radius:20px; background:${f.coincide ? 'var(--success-bg)' : 'var(--warning-bg)'}; color:${f.coincide ? 'var(--success)' : 'var(--warning)'};">
+                    ${f.coincide ? 'Coincide' : 'Revisar'}
+                  </span>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        </div>
+      `;
+    } catch (err) {
+      console.error('[SIS-06-P] Error cargando comparativo paloteo vs aplicado:', err);
+      cont.innerHTML = `<div style="font-size:11.5px; color:var(--error);">Error al cargar el comparativo: ${err.message || err}</div>`;
+    }
   }
 
   async function exportarCSVOficialMunicipio(municipio, mes, anio) {

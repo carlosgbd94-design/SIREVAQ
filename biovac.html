@@ -14,9 +14,9 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.2"></script>
 <script defer src="biovac_importer.js?v=2026.2"></script>
-<script defer src="biovac_ui.js?v=2026.30"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.18"></script>
-<script defer src="sis06p_dashboard_module.js?v=2026.5"></script>
+<script defer src="biovac_ui.js?v=2026.32"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.19"></script>
+<script defer src="sis06p_dashboard_module.js?v=2026.6"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -692,16 +692,24 @@
         <span class="material-symbols-rounded" style="color:var(--secondary);">description</span>
       </div>
       <div>
-        <h2>CSV -- lo que se subirá a RDA</h2>
-        <p class="subtitulo">Mes seleccionado arriba, una fila por clave SIS con su valor -- mismo formato que ya acepta el panel RDA.</p>
+        <h2 id="csvPanelTitulo">CSV -- lo que se subirá a RDA</h2>
+        <p class="subtitulo" id="csvPanelSubtitulo">Mes seleccionado arriba, una fila por clave SIS con su valor -- mismo formato que ya acepta el panel RDA.</p>
       </div>
     </div>
     <button class="btn-primario btn-mini" id="btnDescargarCSVUnidad"><span class="material-symbols-rounded">download</span> Descargar CSV</button>
   </div>
-  <div class="tabla-wrap">
+  <!-- max-height/overflow propios (no en .tabla-wrap, que es compartida por
+       tablas cortas en toda la página) -- el municipio completo son ~85
+       CLUES x ~140 claves, miles de filas, así que esto necesita su propio
+       scroll interno en vez de alargar la página entera. Encabezado sticky
+       (mismo criterio que .summaryTable en index.html: fondo sólido no
+       blanco + z-index, si no las filas se ven "debajo" del encabezado al
+       hacer scroll). -->
+  <div class="tabla-wrap" style="max-height:60vh; overflow-y:auto;">
     <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
       <thead>
-        <tr style="background:#f8fafc; border-bottom:1px solid var(--outline-variant);">
+        <tr style="background:#f8fafc; border-bottom:1px solid var(--outline-variant); position:sticky; top:0; z-index:2;">
+          <th style="padding:9px; text-align:left; font-size:10px; text-transform:uppercase; color:var(--muted);">CLUES</th>
           <th style="padding:9px; text-align:left; font-size:10px; text-transform:uppercase; color:var(--muted);">Clave SIS</th>
           <th style="padding:9px; text-align:left; font-size:10px; text-transform:uppercase; color:var(--muted);">Mes</th>
           <th style="padding:9px; text-align:left; font-size:10px; text-transform:uppercase; color:var(--muted);">Año</th>
