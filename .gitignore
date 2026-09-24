@@ -9,3 +9,6 @@ test-results/
 *.json
 !package.json
 !deno.json
+# Config del servidor de pruebas (playwright.config.js -> npx serve). Sin ella, en el CI serve usa
+# cleanUrls y redirige /mobile.html a /mobile (la carpeta de la app React), rompiendo las pruebas de movil.
+!serve.json
