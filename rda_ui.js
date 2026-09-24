@@ -2008,6 +2008,7 @@ async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob =
                 updateOverlayProgress(30, 100, "Construyendo plantilla vectorial y encabezados...", "Procesando Documento", "EXPORTACIÓN PDF");
             }
             
+            if (typeof window.ensureJsPdfLoaded === 'function') await window.ensureJsPdfLoaded();
             const jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
             if (!jsPDF) { throw new Error("La librería jsPDF no está cargada en el DOM."); }
 

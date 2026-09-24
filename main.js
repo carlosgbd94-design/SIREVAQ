@@ -15816,10 +15816,45 @@ function ensurePdfAssetsLoaded() {
  * de usarla, así que esto es seguro incluso si el usuario hace clic antes de
  * que termine de cargar en una conexión muy lenta.
  */
+/**
+ * jsPDF + jspdf-autotable. El plugin se engancha a window.jspdf al ejecutarse,
+ * asi que DEBE correr despues de jsPDF; los <script> inyectados dinamicamente
+ * son async y pueden ejecutarse en cualquier orden (error "doc.autoTable is
+ * not a function"). Por eso se cargan en cadena y quien necesite generar un
+ * PDF espera esta promesa en vez de asumir que ya terminaron.
+ */
+let _jsPdfLoadPromise = null;
+function _loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`No se pudo cargar ${src}`));
+    document.head.appendChild(script);
+  });
+}
+function ensureJsPdfLoaded() {
+  const ready = () => window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && typeof window.jspdf.jsPDF.API.autoTable === "function";
+  if (ready()) return Promise.resolve();
+  if (_jsPdfLoadPromise) return _jsPdfLoadPromise;
+  _jsPdfLoadPromise = (async () => {
+    if (!(window.jspdf && window.jspdf.jsPDF)) {
+      await _loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+    }
+    if (!ready()) {
+      await _loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js");
+    }
+    if (!ready()) throw new Error("jsPDF/autoTable no disponibles. Verifica tu conexion a internet.");
+  })().catch((e) => { _jsPdfLoadPromise = null; throw e; });
+  return _jsPdfLoadPromise;
+}
+window.ensureJsPdfLoaded = ensureJsPdfLoaded;
+
 let _deferredLibsLoaded = false;
 function loadDeferredFeatureLibraries() {
   if (_deferredLibsLoaded) return;
   _deferredLibsLoaded = true;
+  ensureJsPdfLoaded().catch((e) => console.warn("[SIREVAQ] " + e.message));
   const urls = [
     "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
     "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
@@ -15827,8 +15862,6 @@ function loadDeferredFeatureLibraries() {
     "https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js",
     "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js",
     "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js",
     "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
     "https://unpkg.com/canvas-confetti@1.6.0/dist/confetti.browser.js",
   ];
@@ -15846,7 +15879,7 @@ function loadDeferredFeatureLibraries() {
 async function generarPDFResguardoSR(municipios, fIni, fFin, isUnitExport = false) {
   showOverlay("Preparando PDF...", "PDF");
   try {
-    await ensurePdfAssetsLoaded();
+    await Promise.all([ensurePdfAssetsLoaded(), ensureJsPdfLoaded()]);
     const groups = {};
 
     if (isUnitExport) {
