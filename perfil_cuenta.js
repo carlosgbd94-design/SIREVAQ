@@ -164,7 +164,9 @@
     document.addEventListener('keydown', onKey, true);
     build(body);
     const first = body.querySelector('input');
-    if (first) setTimeout(() => first.focus(), 60);
+    // Solo si nada dentro del diálogo tiene ya el foco: si la persona (o una prueba automática)
+    // ya empezó a escribir en otro campo, no se lo quitamos.
+    if (first) setTimeout(() => { if (!root.activeElement) first.focus(); }, 60);
   }
 
   function field(id, label, inputAttrs, hint, withEye) {
@@ -284,7 +286,7 @@
           el('div', { class: 'row' }, cancel, submit),
           el('div', { class: 'center' }, resend));
         body.replaceChildren(slot, form);
-        setTimeout(() => code.input.focus(), 40);
+        setTimeout(() => { if (!root.activeElement) code.input.focus(); }, 40);
 
         const tick = () => {
           const left = cooldownLeft();
