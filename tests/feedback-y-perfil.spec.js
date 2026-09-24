@@ -6,6 +6,9 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 
+// Margen extra: estas pruebas pueden correr en paralelo con otras que cargan páginas completas.
+expect.configure({ timeout: 10000 });
+
 async function pagina(page) {
   // Origen real (localhost) para que exista localStorage; la página es una hoja en blanco.
   await page.route('**/__blank', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body></body></html>' }));
@@ -39,16 +42,25 @@ test.describe('Respuestas automáticas de feedback', () => {
     });
   }
 
-  test('una Sugerencia nunca se detiene por parecerse a una duda', async ({ page }) => {
+  test('una propuesta (por su texto) no se detiene aunque mencione la contraseña', async ({ page }) => {
     await pagina(page);
-    const m = await page.evaluate(() => window.FeedbackAutoReply.match('Sugiero agregar recuperar contraseña olvidada', { type: 'Sugerencia' }));
+    const m = await page.evaluate(() => window.FeedbackAutoReply.match('Sugiero agregar una opción para recuperar la contraseña olvidada', {}));
     expect(m).toBeNull();
+  });
+
+  test('con el tipo "Sugerencia" preseleccionado (default real del formulario) SÍ responde', async ({ page }) => {
+    await pagina(page);
+    const id = await page.evaluate(() => {
+      const m = window.FeedbackAutoReply.match('se me olvidó mi contraseña', { type: 'Sugerencia' });
+      return m ? m.rule.id : null;
+    });
+    expect(id).toBe('password_forgot');
   });
 
   test('detiene el envío hasta elegir "enviar de todos modos"', async ({ page }) => {
     await pagina(page);
     await page.evaluate(() => {
-      document.body.innerHTML = `<form id="f"><div class="feedback-input-group"><select id="t"><option>Pregunta</option></select>
+      document.body.innerHTML = `<form id="f"><div class="feedback-input-group"><select id="t"><option value="Sugerencia">Sugerencia</option><option value="Pregunta">Pregunta</option></select>
         <textarea id="m"></textarea></div><button type="submit">Enviar</button></form>`;
       window.__enviados = 0;
       const f = document.getElementById('f');

@@ -25814,11 +25814,14 @@ document.addEventListener("DOMContentLoaded", () => {
           showToast('¡Gracias! Hemos recibido tu mensaje y capturas correctamente.', true, 'good');
           closeModal();
         } else {
-          throw new Error("Error al enviar a Discord");
+          throw new Error("Error al enviar el feedback");
         }
       } catch (error) {
         console.error("Error sending feedback:", error);
         showToast('Hubo un problema al enviar tu mensaje. Intenta de nuevo más tarde.', false, 'bad');
+      } finally {
+        // Antes solo se restauraba al fallar: tras un envío exitoso el botón se quedaba
+        // deshabilitado en "Enviando..." y no se podía mandar un segundo mensaje sin recargar.
         submitBtn.innerHTML = originalBtnText;
         submitBtn.disabled = false;
       }

@@ -2716,6 +2716,8 @@ document.addEventListener('DOMContentLoaded', () => {
       closeModal();
     } catch (err) {
       toast('Hubo un problema al enviar tu mensaje. Intenta de nuevo más tarde.', 'error');
+    } finally {
+      // Antes solo se restauraba al fallar: tras un envío exitoso el botón quedaba deshabilitado.
       submitBtn.innerHTML = originalBtnText;
       submitBtn.disabled = false;
     }

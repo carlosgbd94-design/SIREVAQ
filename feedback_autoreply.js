@@ -39,6 +39,8 @@
     /(no (puedo|logro|consigo|me deja|me permite|me sale|me da acceso)( \w+){0,2} (entrar|ingresar|iniciar|acceder|abrir)|no (he )?(podido|pude) (entrar|ingresar|iniciar|acceder)|(usuario|contrasena|clave) (incorrect|invalid|equivocad)|credenciales (incorrect|invalid))/;
   const RE_CHANGE = /(cambiar|cambio|modificar|actualizar|nueva|poner otra|cambiarla)/;
   const RE_MAIL = /(correo|email|e-mail|mail|enlace|link|liga|codigo|token)/;
+  // Señales de que el mensaje es una idea/propuesta y no una duda
+  const RE_SUGGESTION = /\b(sugiero|sugerencia|sugerimos|recomiendo|recomendaria|propongo|ojala|me gustaria que|seria bueno|seria util|deberian|podrian (agregar|a[nñ]adir|poner|mejorar))\b/;
 
   // Selectores del botón "¿Olvidaste tu contraseña?" según la pantalla
   const FORGOT_BUTTONS = ['#btnForgotPassword', '#btnForgotPasswordMobile'];
@@ -245,8 +247,11 @@
     const t = norm(text);
     if (t.length < 8) return null;
     ctx = ctx || {};
-    // Una sugerencia no debería frenarse por parecerse a una duda conocida
-    if (ctx.type && norm(ctx.type) === 'sugerencia') return null;
+    // Una sugerencia ("sugiero agregar recuperar contraseña") no debe frenarse por parecerse a
+    // una duda conocida. Se decide por el TEXTO y no por el selector "Tipo de mensaje": el
+    // formulario abre con "Sugerencia" preseleccionada y casi nadie lo cambia, así que usar el
+    // selector desactivaría las respuestas automáticas en la práctica.
+    if (has(t, RE_SUGGESTION)) return null;
     for (const rule of RULES) {
       let ok = false;
       try { ok = rule.test(t); } catch (e) { ok = false; }
