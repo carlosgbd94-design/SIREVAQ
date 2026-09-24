@@ -5,10 +5,11 @@ const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+// Se normalizan los saltos de línea: en un clon de Windows (autocrlf) main.js trae CRLF.
+const src = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8').split('\r\n').join('\n');
 const inicio = src.indexOf('const ACTIVE_CAMPAIGN_TTL_MS');
-const fin = src.indexOf('/**\n * 🔐 handleLoginFlow');
-const bloque = src.slice(inicio, fin);
+const iInvalidar = src.indexOf('function invalidateActiveCampaign');
+const bloque = src.slice(inicio, src.indexOf('\n}', iInvalidar) + 2); // hasta cerrar invalidateActiveCampaign
 
 async function montar(page) {
   await page.goto('/__blank_camp');
