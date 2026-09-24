@@ -24542,6 +24542,7 @@ if (!window.originalActivateMain) {
  */
 // Event Delegation global master
 document.addEventListener('click', (e) => {
+  if (!(e.target instanceof Element)) return;
   // 1. Cierre de modales
   const closeBtn = e.target.closest('.modal-close-btn') || e.target.closest('[data-modal-close]');
   if (closeBtn) {
@@ -25616,6 +25617,8 @@ function animateKpiCounter(el, targetVal) {
 
 // ===== RASTREADOR DE SPOTLIGHT GLOW PARA TARJETAS PREMIUM =====
 document.addEventListener("mousemove", (e) => {
+  // e.target puede ser document/window u otro nodo sin closest()
+  if (!(e.target instanceof Element)) return;
   const card = e.target.closest(".kpiCard, .liveFeedItem, .glow-card");
   if (!card) return;
   const rect = card.getBoundingClientRect();
