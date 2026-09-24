@@ -26,6 +26,7 @@ const GROUP_HEAD = [
   'pinol_assets.js',
   'feedback_autoreply.js',
   'perfil_cuenta.js',
+  'desabasto_center.js', // antes que main.js: main.js usa window.DesabastoCenter al cargar
   'main.js',
   'influenza_module.js',
   'sis_export_module.js',

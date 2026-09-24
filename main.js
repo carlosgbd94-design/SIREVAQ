@@ -1256,6 +1256,10 @@ function showSmartToastNotification(notif = {}) {
 }
 
 function openNotificationPanelAndHighlight(notifId) {
+  if (notifId === DESAB_DIGEST_ID && typeof openDesabastoCenter === 'function') {
+    openDesabastoCenter();
+    return;
+  }
   const btn = document.getElementById("btnTopNotifications");
   if (btn) btn.click();
 }
@@ -1821,6 +1825,39 @@ async function fanOutNotification(notificacionId, recipients = []) {
 
 // ===== FIN FAN-OUT =====
 
+let DESAB_TOAST_IDS = new Set();
+let DESAB_TOAST_TIMER = null;
+const DESAB_TOAST_WINDOW_MS = 3000;
+
+function queueDesabastoRealtimeToast(n) {
+  DESAB_TOAST_IDS.add(n.id);
+  clearTimeout(DESAB_TOAST_TIMER);
+  DESAB_TOAST_TIMER = setTimeout(async () => {
+    const pendingIds = DESAB_TOAST_IDS;
+    DESAB_TOAST_IDS = new Set();
+    try {
+      await loadNotifications({ silent: true });
+
+      // Avisar solo de lo que realmente cae en mi alcance (el canal realtime trae todas las altas)
+      const digest = (LIVE_STATE.notifications || []).find(x => x && x.id === DESAB_DIGEST_ID);
+      const mine = digest ? (digest.digest_ids || []).filter(id => pendingIds.has(id)).length : 0;
+      if (!mine || (window.DesabastoCenter && window.DesabastoCenter.isOpen())) return;
+
+      const meta = parseNotifMetaLoose_(digest.meta_json);
+      showSmartToastNotification({
+        id: DESAB_DIGEST_ID,
+        type: 'ALERTA_DESABASTO',
+        title: digest.title,
+        message: meta.units_count > 1
+          ? `${mine} alerta${mine === 1 ? '' : 's'} nueva${mine === 1 ? '' : 's'}. ${digest.message}`
+          : digest.message
+      });
+    } catch (e) {
+      console.warn('[Realtime] No se pudo procesar el aviso de desabasto:', e);
+    }
+  }, DESAB_TOAST_WINDOW_MS);
+}
+
 function initNotificationsRealtime() {
   if (!window.supabase || !TOKEN || !USER) return;
 
@@ -1849,6 +1886,13 @@ function initNotificationsRealtime() {
         const n = payload.new;
         if (!n) return;
         console.log("[Realtime] Nueva notificación maestra en tiempo real:", n.id, n.target_scope);
+
+        // Una tarde de capturas dispara muchas altas de desabasto seguidas: se juntan y se
+        // avisa una sola vez (un toast + un solo refresco de la bandeja).
+        if (String(n.type || '').toUpperCase() === 'ALERTA_DESABASTO') {
+          queueDesabastoRealtimeToast(n);
+          return;
+        }
 
         if (typeof loadNotifications === 'function') {
           loadNotifications({ silent: true }).catch(() => { });
@@ -2073,6 +2117,65 @@ function parseNotifMeta(metaJson) {
     return null;
   }
 }
+
+// ===== DESABASTO: CONSOLIDACIÓN EN UNA SOLA TARJETA =====
+// Cada captura con ceros inserta una fila ALERTA_DESABASTO por unidad. En vez de listar
+// una tarjeta por unidad (y una copia por destinatario), la bandeja muestra UNA tarjeta
+// resumen ("N unidades con desabasto") cuyo detalle se atiende en el Centro de Desabasto.
+// La consolidación y el modal viven en desabasto_center.js; los ids reales de las alertas
+// quedan en `digest_ids` para que leer/borrar la tarjeta actúe sobre todas las que agrupa.
+const DESAB_DIGEST_ID = window.DesabastoCenter ? window.DesabastoCenter.DIGEST_ID : 'DESABASTO_DIGEST';
+
+function parseNotifMetaLoose_(raw) {
+  return window.DesabastoCenter.parseMeta(raw);
+}
+
+function buildDesabastoDigest(items) {
+  return window.DesabastoCenter.buildDigest(items);
+}
+
+// Ids reales detrás de una notificación (la tarjeta de desabasto agrupa varias alertas).
+function expandNotifIds_(payload) {
+  if (Array.isArray(payload?.ids) && payload.ids.length) return payload.ids;
+  const id = payload?.id;
+  if (id === DESAB_DIGEST_ID) {
+    const digest = (Array.isArray(LIVE_STATE?.notifications) ? LIVE_STATE.notifications : []).find(n => n && n.id === id);
+    return digest?.digest_ids || [];
+  }
+  return id ? [id] : [];
+}
+
+function getDesabastoUnitsFromState() {
+  const digest = (Array.isArray(LIVE_STATE?.notifications) ? LIVE_STATE.notifications : []).find(n => n && n.id === DESAB_DIGEST_ID);
+  return digest ? (parseNotifMetaLoose_(digest.meta_json).units || []) : [];
+}
+
+async function openDesabastoCenter() {
+  if (!window.DesabastoCenter) {
+    showToast("El centro de desabasto no está disponible. Recarga la página.", false);
+    return;
+  }
+  window.DesabastoCenter.open({
+    getUnits: getDesabastoUnitsFromState,
+    toast: (msg, ok = true) => showToast(msg, ok),
+    markRead: async () => {
+      await apiCall("markNotificationRead", { id: DESAB_DIGEST_ID });
+      // Sin el filtro "solo no leídas" de applyLocalNotificationRead: el modal sigue abierto y
+      // necesita conservar la tarjeta en el estado.
+      LIVE_STATE.notifications = (LIVE_STATE.notifications || []).map(n =>
+        n && n.id === DESAB_DIGEST_ID ? Object.assign({}, n, { status: "READ", is_read: "SI" }) : n);
+      const resState = rerenderNotificationsFromState();
+      if (resState && typeof resState.unreadLocal === "number") LAST_NOTIF_UNREAD = resState.unreadLocal;
+    },
+    resolve: async (ids) => {
+      const r = await apiCall("resolveDesabasto", { ids });
+      if (!r || !r.ok) throw new Error((r && r.error) || "No se pudo verificar la alerta de desabasto");
+      await loadNotifications({ silent: true }); // ya refresca el modal
+    }
+  });
+}
+window.openDesabastoCenter = openDesabastoCenter;
+// ===== FIN DESABASTO DIGEST =====
 
 function normalizeNotifSearchText(value) {
   return String(value || "")
@@ -2330,6 +2433,12 @@ window.openNotifDetailModal = function(id, title, message, date, sender, scope, 
     notif = LIVE_STATE.notifications.find(n => String(n.id) === String(id));
   }
 
+  // La tarjeta consolidada de desabasto tiene su propio modal (filtros, verificar por unidad).
+  if (notif && notif.is_digest) {
+    openDesabastoCenter();
+    return;
+  }
+
   if (notif) {
     title = title || notif.title || 'Comunicado';
     message = message || notif.message || '';
@@ -2531,7 +2640,7 @@ function buildNotificationsHtml(items = []) {
             
             <div class="notifCompactActions">
               <button type="button" class="notifIconPureBtn notifIconPureBtn-info" title="Ver comunicado completo" onclick="openNotifDetailModal('${escapeAttr(item.id || "")}')"><span class="material-symbols-rounded">visibility</span></button>
-              ${isDesabastoActive
+              ${isDesabastoActive && !item.is_digest
         ? `<button type="button" class="notifIconPureBtn notifIconPureBtn-success" title="Marcar como Verificado" onclick="resolveDesabastoFlow('${escapeAttr(item.id || "")}')"><span class="material-symbols-rounded">check_circle</span></button>`
         : ``
       }
@@ -2553,7 +2662,8 @@ function buildNotificationsHtml(items = []) {
           
           <div class="notifBody snippet" style="cursor:pointer;" onclick="openNotifDetailModal('${escapeAttr(item.id || "")}')">
             ${formatNotifBody(item.title, item.message, item.from_usuario)}
-            ${(isDesabastoActive && meta?.missing?.length) ? `<div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:4px;">${meta.missing.map(v => `<span style="background:var(--md-sys-color-error-container); color:var(--md-sys-color-on-error-container); padding:2px 6px; border-radius:6px; font-size:9px; font-weight:700;">${v}</span>`).join("")}</div>` : ''}
+            ${(isDesabastoActive && meta?.missing?.length) ? `<div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:4px;">${meta.missing.slice(0, 8).map(v => `<span style="background:var(--md-sys-color-error-container); color:var(--md-sys-color-on-error-container); padding:2px 6px; border-radius:6px; font-size:9px; font-weight:700;">${escapeHtml(v)}</span>`).join("")}${meta.missing.length > 8 ? `<span style="padding:2px 6px; font-size:9px; font-weight:700;">+${meta.missing.length - 8} más</span>` : ''}</div>` : ''}
+            ${item.is_digest ? `<div style="margin-top:8px;"><button type="button" class="notifDigestOpenBtn" onclick="event.stopPropagation(); openDesabastoCenter();">Ver ${meta?.units_count === 1 ? 'la unidad' : 'las unidades'} y verificar <span class="material-symbols-rounded" style="font-size:14px; vertical-align:-3px;">arrow_forward</span></button></div>` : ''}
           </div>
         </div>
       </div>
@@ -2787,6 +2897,7 @@ async function loadNotifications(options = {}) {
       LIVE_STATE.notifications = items;
       applyNotificationsViewState(items, unread);
       LAST_NOTIF_UNREAD = unread;
+      if (window.DesabastoCenter) window.DesabastoCenter.refresh();
 
       if (delta > 0) {
         showWarnToast(`Tienes ${delta} notificación(es) nueva(s)`, {
@@ -3132,7 +3243,13 @@ async function deleteNotificationFlow(id) {
       return;
     }
 
-    const ok = await window.showConfirmDialog("Eliminar Notificación", "¿Deseas eliminar esta notificación?");
+    const isDesabastoDigest = id === DESAB_DIGEST_ID;
+    const ok = await window.showConfirmDialog(
+      "Eliminar Notificación",
+      isDesabastoDigest
+        ? "Esto quita de tu bandeja todas las alertas de desabasto actuales (no las resuelve). ¿Continuar?"
+        : "¿Deseas eliminar esta notificación?"
+    );
     if (!ok) return;
 
     showOverlay("Eliminando notificación…", "Notificaciones");
@@ -5948,57 +6065,9 @@ async function supabaseRequest(action = "", payload, options = {}) {
           }
         });
 
-        // Smart Grouping / Digest para Notificaciones Municipales:
-        // Si el usuario es de rol MUNICIPAL, agrupar múltiples alertas de desabasto del mismo municipio y mismo día en 1 solo Digest
-        let finalItems = items;
-        if (userRole === 'MUNICIPAL') {
-          const desabastoByMuniDate = new Map();
-          const nonDesabastoItems = [];
-
-          items.forEach(n => {
-            const isDesab = n.type === 'ALERTA_DESABASTO';
-            if (isDesab) {
-              const meta = typeof n.meta_json === 'string' ? JSON.parse(n.meta_json || '{}') : (n.meta_json || {});
-              const key = `${meta.municipio || n.target_municipio || 'MUNI'}:${n.created_date || n.created_ts?.slice(0, 10)}`;
-              if (!desabastoByMuniDate.has(key)) {
-                desabastoByMuniDate.set(key, []);
-              }
-              desabastoByMuniDate.get(key).push({ notif: n, meta: meta });
-            } else {
-              nonDesabastoItems.push(n);
-            }
-          });
-
-          const digestItems = [];
-          desabastoByMuniDate.forEach((group, key) => {
-            if (group.length === 1) {
-              digestItems.push(group[0].notif);
-            } else {
-              // Crear tarjeta acumulativa Digest
-              const activeCount = group.filter(g => g.meta.status === 'activa').length;
-              const unitsSet = new Set(group.map(g => g.meta.unidad || g.meta.clues).filter(Boolean));
-              const first = group[0].notif;
-              const firstMeta = group[0].meta;
-
-              digestItems.push(Object.assign({}, first, {
-                id: `DIGEST:${key}:${Date.now()}`,
-                title: `🚨 ${unitsSet.size} Unidades con Desabasto`,
-                message: `Resumen municipal: ${unitsSet.size} unidades de ${firstMeta.municipio || 'su municipio'} han reportado desabasto en Esquema Básico.`,
-                is_digest: true,
-                digest_count: group.length,
-                digest_units: Array.from(unitsSet),
-                meta_json: JSON.stringify(Object.assign({}, firstMeta, {
-                  is_digest: true,
-                  units_count: unitsSet.size,
-                  units_list: Array.from(unitsSet),
-                  status: activeCount > 0 ? 'activa' : 'resuelta'
-                }))
-              }));
-            }
-          });
-
-          finalItems = [...nonDesabastoItems, ...digestItems];
-        }
+        // Todas las alertas de desabasto (de cualquier rol) se consolidan en UNA sola tarjeta;
+        // el detalle por unidad vive en el modal del Centro de Desabasto.
+        const finalItems = buildDesabastoDigest(items);
 
         finalItems.sort((a, b) => new Date(b.created_ts || 0) - new Date(a.created_ts || 0));
         const unreadCount = finalItems.filter(n => String(n.status).toUpperCase() !== 'READ').length;
@@ -7201,45 +7270,63 @@ async function supabaseRequest(action = "", payload, options = {}) {
         const targetUsuario = String(USER?.usuario || AppState?.user?.usuario || payload.usuario || "").trim();
         if (!targetUsuario) throw new Error("No hay usuario autenticado para registrar la lectura.");
 
-        // Per-profile: marcar SOLO mi copia como leída (upsert por si no existía fila per-profile)
-        const { error } = await supabase
-          .from('notificaciones_perfil')
-          .upsert({
-            notificacion_id: payload.id,
-            usuario: targetUsuario,
-            status: 'READ',
-            read_ts: new Date().toISOString()
-          }, { onConflict: 'notificacion_id,usuario' });
-        if (error) throw error;
+        // Per-profile: marcar SOLO mi copia como leída (upsert por si no existía fila per-profile).
+        // La tarjeta consolidada de desabasto agrupa varias alertas: se marcan todas.
+        const readTs = new Date().toISOString();
+        const rows = expandNotifIds_(payload).map(notifId => ({
+          notificacion_id: notifId,
+          usuario: targetUsuario,
+          status: 'READ',
+          read_ts: readTs
+        }));
+        if (rows.length) {
+          const { error } = await supabase
+            .from('notificaciones_perfil')
+            .upsert(rows, { onConflict: 'notificacion_id,usuario' });
+          if (error) throw error;
+        }
         return { ok: true };
       }
 
       case "resolvedesabasto": {
         const targetUsuario = String(USER?.usuario || AppState?.user?.usuario || payload.usuario || "").trim();
-        // Obtenemos la notificación primero para actualizar meta_json
-        const { data: notifDesab } = await supabase.from('notificaciones').select('meta_json').eq('id', payload.id).single();
-        if (!notifDesab) throw new Error("Notificación no encontrada");
+        const ids = expandNotifIds_(payload);
+        if (!ids.length) throw new Error("No se recibió la alerta a verificar");
 
-        let metaDesab = {};
-        try { metaDesab = JSON.parse(notifDesab.meta_json || "{}"); } catch (e) { }
-        metaDesab.status = "resuelta";
-
-        // 1. Actualizar meta_json global (afecta visualización para todos)
-        await supabase
+        // Solo las alertas todavía activas: releer meta_json y actualizarlo (afecta a todos los usuarios)
+        const { data: rowsDesab, error: selDesabErr } = await supabase
           .from('notificaciones')
-          .update({ meta_json: JSON.stringify(metaDesab) })
-          .eq('id', payload.id);
+          .select('id, meta_json')
+          .in('id', ids);
+        if (selDesabErr) throw selDesabErr;
+        if (!rowsDesab || !rowsDesab.length) throw new Error("Notificación no encontrada");
 
-        // 2. Marcar MI copia como leída en notificaciones_perfil (upsert)
+        const resolvedTs = new Date().toISOString();
+        const updates = await Promise.all(rowsDesab.map(async (row) => {
+          const metaDesab = parseNotifMetaLoose_(row.meta_json);
+          if (metaDesab.status === "resuelta") return null;
+          metaDesab.status = "resuelta";
+          metaDesab.resolved_ts = resolvedTs;
+          metaDesab.resolved_by = targetUsuario || null;
+          const { error } = await supabase
+            .from('notificaciones')
+            .update({ meta_json: JSON.stringify(metaDesab) })
+            .eq('id', row.id);
+          return error || null;
+        }));
+        const failed = updates.find(Boolean);
+        if (failed) throw failed;
+
+        // Marcar MI copia como leída en notificaciones_perfil (upsert)
         if (targetUsuario) {
           const { error: errorDesab } = await supabase
             .from('notificaciones_perfil')
-            .upsert({
-              notificacion_id: payload.id,
+            .upsert(ids.map(notifId => ({
+              notificacion_id: notifId,
               usuario: targetUsuario,
               status: 'READ',
-              read_ts: new Date().toISOString()
-            }, { onConflict: 'notificacion_id,usuario' });
+              read_ts: resolvedTs
+            })), { onConflict: 'notificacion_id,usuario' });
           if (errorDesab) console.warn("[Notif] Error actualizando perfil desabasto:", errorDesab);
         }
         return { ok: true };
@@ -7249,16 +7336,21 @@ async function supabaseRequest(action = "", payload, options = {}) {
         const targetUsuario = String(USER?.usuario || AppState?.user?.usuario || payload.usuario || "").trim();
         if (!targetUsuario) throw new Error("No hay usuario autenticado.");
 
-        // Per-profile: soft-delete SOLO mi copia (upsert)
-        const { error: delError } = await supabase
-          .from('notificaciones_perfil')
-          .upsert({
-            notificacion_id: payload.id,
-            usuario: targetUsuario,
-            deleted: true,
-            deleted_ts: new Date().toISOString()
-          }, { onConflict: 'notificacion_id,usuario' });
-        if (delError) throw delError;
+        // Per-profile: soft-delete SOLO mi copia (upsert). La tarjeta consolidada de desabasto
+        // agrupa varias alertas: se ocultan todas.
+        const delTs = new Date().toISOString();
+        const delRows = expandNotifIds_(payload).map(notifId => ({
+          notificacion_id: notifId,
+          usuario: targetUsuario,
+          deleted: true,
+          deleted_ts: delTs
+        }));
+        if (delRows.length) {
+          const { error: delError } = await supabase
+            .from('notificaciones_perfil')
+            .upsert(delRows, { onConflict: 'notificacion_id,usuario' });
+          if (delError) throw delError;
+        }
         return { ok: true };
       }
 

@@ -4689,6 +4689,20 @@ input[disabled] {
   font-size: 12px;
 }
 
+/* Tarjeta consolidada de desabasto: acceso al Centro de Desabasto (texto plano, sin caja) */
+button.notifDigestOpenBtn {
+  min-height: 0;
+  padding: 4px 0;
+  border-radius: 0;
+  background: transparent;
+  color: #be123c;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 4px;
+}
+button.notifDigestOpenBtn:hover { text-decoration: underline; }
+html.dark button.notifDigestOpenBtn { color: #fb7185; }
+
 .notifCompactActions {
   display: flex;
   gap: 4px;
