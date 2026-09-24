@@ -135,6 +135,44 @@ if (!window.supabase || typeof window.supabase.createClient !== 'function') {
 
 
 /**
+ * Campaña activa (tabla `campanas`), compartida.
+ * Se pedía por separado en 5 lugares (resumen de captura x2, histórico, estadísticas de
+ * influenza...) y al cargar la página salían varias peticiones idénticas a la vez (aviso
+ * "N+1 API Call" de Sentry). Ahora todas comparten UNA petición en curso y su resultado se
+ * reutiliza 60 s. Devuelve la misma forma que Supabase ({ data, error }), así que quien la
+ * usaba no cambia. Se invalida solo al crear/activar/desactivar campañas.
+ */
+const ACTIVE_CAMPAIGN_TTL_MS = 60000;
+let _activeCampaignPromise = null;
+let _activeCampaignAt = 0;
+
+function getActiveCampaign() {
+  const now = Date.now();
+  if (_activeCampaignPromise && now - _activeCampaignAt < ACTIVE_CAMPAIGN_TTL_MS) {
+    return _activeCampaignPromise;
+  }
+  _activeCampaignAt = now;
+  const req = window.supabase.from('campanas').select('*').eq('activo', true).maybeSingle();
+  // Los errores no se cachean: el siguiente llamado vuelve a intentar
+  const p = Promise.resolve(req).then(
+    (res) => {
+      if (res && res.error && _activeCampaignPromise === p) _activeCampaignPromise = null;
+      return res;
+    },
+    (err) => {
+      if (_activeCampaignPromise === p) _activeCampaignPromise = null;
+      throw err;
+    }
+  );
+  _activeCampaignPromise = p;
+  return p;
+}
+
+function invalidateActiveCampaign() {
+  _activeCampaignPromise = null;
+}
+
+/**
  * 🔐 handleLoginFlow: Unified Authentication Bridge
  * Used by desktop views.
  */
@@ -6115,7 +6153,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
         let resInf = [];
         if (tipo === "INF") {
-          const { data: activeCamp } = await supabase.from('campanas').select('*').eq('activo', true).maybeSingle();
+          const { data: activeCamp } = await getActiveCampaign();
           const camp = activeCamp ? activeCamp.nombre.replace("Campaña Influenza ", "") : "2025-2026";
           const { data: infData } = await supabase.from('influenza_capturas').select('*').eq('fecha', fIniStr).eq('anio_campana', camp);
           resInf = infData || [];
@@ -7339,7 +7377,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
           }
           return { ok: true, data: filteredData, meta: { fecha: filteredData.length ? filteredData[0].fecha_pedido_programada : targetFecha, tipo } };
         } else if (tipo === "INF") {
-          const { data: activeCamp } = await supabase.from('campanas').select('*').eq('activo', true).maybeSingle();
+          const { data: activeCamp } = await getActiveCampaign();
           const camp = activeCamp ? activeCamp.nombre.replace("Campaña Influenza ", "") : "2025-2026";
           const { data, error } = await window.supabase
             .from('influenza_capturas')
@@ -8119,6 +8157,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
             .ilike('nombre', 'Campaña Influenza%');
         }
 
+        invalidateActiveCampaign();
         const nameStart = new Date(fecha_inicio + "T00:00:00").getFullYear();
         const nameEnd = new Date(fecha_fin + "T00:00:00").getFullYear();
         const record = {
@@ -8135,6 +8174,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
             .update(record)
             .eq('id', id)
             .select('id, nombre, fecha, activo, fecha_inicio, fecha_fin');
+          invalidateActiveCampaign();
           if (error) throw error;
           return { ok: true, data: data };
         } else {
@@ -8142,6 +8182,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
             .from('campanas')
             .insert(record)
             .select('id, nombre, fecha, activo, fecha_inicio, fecha_fin');
+          invalidateActiveCampaign();
           if (error) throw error;
           return { ok: true, data: data };
         }
@@ -14808,7 +14849,7 @@ async function reloadCaptureSummary(force = false) {
 
     try {
       try {
-        const { data: activeCamp } = await window.supabase.from('campanas').select('*').eq('activo', true).maybeSingle();
+        const { data: activeCamp } = await getActiveCampaign();
         const selectEl = document.getElementById("summaryTipo");
         if (selectEl) {
           const hasInf = Array.from(selectEl.options).some(opt => opt.value === "INF");
@@ -14897,7 +14938,7 @@ async function reloadCaptureSummarySilent(force = false) {
 
     try {
       try {
-        const { data: activeCamp } = await window.supabase.from('campanas').select('*').eq('activo', true).maybeSingle();
+        const { data: activeCamp } = await getActiveCampaign();
         const selectEl = document.getElementById("summaryTipo");
         if (selectEl) {
           const hasInf = Array.from(selectEl.options).some(opt => opt.value === "INF");
@@ -16695,6 +16736,7 @@ window.toggleCapacitacionStatus = async function (id, newStatus) {
       .from("capacitaciones")
       .update({ activo: newStatus })
       .eq("id", id);
+    invalidateActiveCampaign();
 
     hideOverlay();
     if (error) throw error;
@@ -16870,6 +16912,7 @@ $("btnSaveNewCap")?.addEventListener("click", async () => {
         fecha: fecha,
         activo: true
       });
+    invalidateActiveCampaign();
 
     hideOverlay();
     if (error) {
@@ -19013,7 +19056,7 @@ async function getHistoryMetrics(mes, _ignored, force = false) {
       let allCampMetas = [];
 
       try {
-        const { data: activeCamp } = await window.supabase.from('campanas').select('*').eq('activo', true).maybeSingle();
+        const { data: activeCamp } = await getActiveCampaign();
         if (activeCamp) {
           campName = activeCamp.nombre.replace("Campaña Influenza ", "");
           const [y, mn] = m.split("-").map(Number);
