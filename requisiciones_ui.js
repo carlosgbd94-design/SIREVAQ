@@ -1209,6 +1209,7 @@ async function exportarMasivo() {
 
   toast('Generando paquete…');
   try {
+    if (window.ensureLibsLoaded) await window.ensureLibsLoaded('jszip');
     const zip = new JSZip();
     const plantillaBuffer = await obtenerPlantillaBuffer();
     const sobrantesTotal = new Set();

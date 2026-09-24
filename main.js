@@ -15817,61 +15817,65 @@ function ensurePdfAssetsLoaded() {
  * que termine de cargar en una conexión muy lenta.
  */
 /**
- * jsPDF + jspdf-autotable. El plugin se engancha a window.jspdf al ejecutarse,
- * asi que DEBE correr despues de jsPDF; los <script> inyectados dinamicamente
- * son async y pueden ejecutarse en cualquier orden (error "doc.autoTable is
- * not a function"). Por eso se cargan en cadena y quien necesite generar un
- * PDF espera esta promesa en vez de asumir que ya terminaron.
+ * Carga ordenada de las librerias diferidas. Antes eran <script defer> en
+ * index.html, y defer GARANTIZA ejecutar en orden de documento; los <script>
+ * inyectados dinamicamente son async por defecto y corren en el orden en que
+ * terminan de descargarse. Eso rompia dependencias (jspdf-autotable debe correr
+ * despues de jsPDF y se engancha a window.jspdf: "doc.autoTable is not a
+ * function"). Con script.async = false los scripts inyectados ejecutan en el
+ * orden en que se insertaron, igual que antes. Cada URL queda en un registro
+ * para poder esperarla (ensureLibsLoaded / ensureJsPdfLoaded) en vez de asumir
+ * que ya termino de cargar.
  */
-let _jsPdfLoadPromise = null;
-function _loadScriptOnce(src) {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = src;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`No se pudo cargar ${src}`));
-    document.head.appendChild(script);
-  });
-}
-function ensureJsPdfLoaded() {
-  const ready = () => window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && typeof window.jspdf.jsPDF.API.autoTable === "function";
-  if (ready()) return Promise.resolve();
-  if (_jsPdfLoadPromise) return _jsPdfLoadPromise;
-  _jsPdfLoadPromise = (async () => {
-    if (!(window.jspdf && window.jspdf.jsPDF)) {
-      await _loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
-    }
-    if (!ready()) {
-      await _loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js");
-    }
-    if (!ready()) throw new Error("jsPDF/autoTable no disponibles. Verifica tu conexion a internet.");
-  })().catch((e) => { _jsPdfLoadPromise = null; throw e; });
-  return _jsPdfLoadPromise;
-}
-window.ensureJsPdfLoaded = ensureJsPdfLoaded;
-
+const DEFERRED_LIB_URLS = {
+  xlsx: "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+  exceljs: "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
+  echarts: "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js",
+  papaparse: "https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js",
+  html2pdf: "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js",
+  html2canvas: "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+  jspdf: "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+  autotable: "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js",
+  jszip: "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
+  confetti: "https://unpkg.com/canvas-confetti@1.6.0/dist/confetti.browser.js",
+};
+const _deferredLibPromises = {};
 let _deferredLibsLoaded = false;
 function loadDeferredFeatureLibraries() {
   if (_deferredLibsLoaded) return;
   _deferredLibsLoaded = true;
-  ensureJsPdfLoaded().catch((e) => console.warn("[SIREVAQ] " + e.message));
-  const urls = [
-    "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
-    "https://unpkg.com/canvas-confetti@1.6.0/dist/confetti.browser.js",
-  ];
-  urls.forEach((src) => {
-    const script = document.createElement("script");
-    script.src = src;
-    script.onerror = () => console.warn(`[SIREVAQ] No se pudo cargar en segundo plano: ${src}`);
-    document.head.appendChild(script);
+  Object.entries(DEFERRED_LIB_URLS).forEach(([name, src]) => {
+    _deferredLibPromises[name] = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = false; // ejecutar en orden de insercion (como el antiguo defer)
+      script.onload = () => resolve();
+      script.onerror = () => {
+        console.warn(`[SIREVAQ] No se pudo cargar en segundo plano: ${src}`);
+        reject(new Error(`No se pudo cargar ${src}`));
+      };
+      document.head.appendChild(script);
+    });
+    _deferredLibPromises[name].catch(() => {}); // evita "unhandled rejection"; quien espera lo maneja
   });
 }
+
+/** Espera a que terminen (y ejecuten) las librerias diferidas indicadas. */
+function ensureLibsLoaded(...names) {
+  loadDeferredFeatureLibraries();
+  return Promise.all(names.map((n) => _deferredLibPromises[n]));
+}
+
+/** jsPDF + autoTable listos (el plugin exige jsPDF ya ejecutado). */
+async function ensureJsPdfLoaded() {
+  await ensureLibsLoaded("html2pdf", "jspdf", "autotable");
+  const api = window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API;
+  if (!api || typeof api.autoTable !== "function") {
+    throw new Error("jsPDF/autoTable no disponibles. Verifica tu conexion a internet.");
+  }
+}
+window.ensureJsPdfLoaded = ensureJsPdfLoaded;
+window.ensureLibsLoaded = ensureLibsLoaded;
 
 /**
  * Generador de PDF de Resguardo Profesional Oficial (Cliente)

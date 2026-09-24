@@ -2878,6 +2878,7 @@ const _prepareClonedDocForHDImage = (clonedDoc, contentEl) => {
 // lanzaba ningún error de JS (por eso el intento de respaldo automático nunca se activaba), así
 // que se optó por quedarse con html2canvas, que sí renderiza estos íconos correctamente.
 async function _captureRdaContentAsCanvas(content, scale) {
+    if (window.ensureLibsLoaded) await window.ensureLibsLoaded('html2canvas');
     return await html2canvas(content, {
         scale,
         useCORS: true,

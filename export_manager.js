@@ -140,6 +140,7 @@
 
     try {
       if (window.showToast) window.showToast('Generando PDF en alta resolución...', 'info');
+      if (window.ensureLibsLoaded) await window.ensureLibsLoaded('html2pdf');
       await window.html2pdf().set(opt).from(element).save();
       if (window.showToast) window.showToast('🟢 PDF generado con éxito.', 'success');
     } catch (err) {
@@ -167,6 +168,7 @@
     try {
       if (window.showToast) window.showToast('Generando imagen HD para compartir...', 'info');
 
+      if (window.ensureLibsLoaded) await window.ensureLibsLoaded('html2canvas');
       const canvas = await window.html2canvas(element, {
         scale: 2.5, // Alta resolución
         backgroundColor: '#0f172a', // Fondo slate elegante
