@@ -24,6 +24,8 @@ const GROUP_HEAD = [
   'stock_predictor.js',
   'export_manager.js',
   'pinol_assets.js',
+  'feedback_autoreply.js',
+  'perfil_cuenta.js',
   'main.js',
   'influenza_module.js',
   'sis_export_module.js',

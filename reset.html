@@ -589,7 +589,7 @@
 
           if (updateError) throw updateError;
 
-          // Sync databases (perfiles & usuarios_legacy)
+          // Sync database (perfiles)
           if (user) {
             try {
               // Update perfiles table
@@ -598,22 +598,6 @@
                 .update({ must_change: false })
                 .eq('id', user.id);
 
-              // Update usuarios_legacy table
-              const userEmail = user.email;
-              if (userEmail) {
-                const { data: legacyUser } = await window.supabaseClientInstance
-                  .from('usuarios_legacy')
-                  .select('usuario')
-                  .eq('email', userEmail)
-                  .maybeSingle();
-
-                if (legacyUser && legacyUser.usuario) {
-                  await window.supabaseClientInstance
-                    .from('usuarios_legacy')
-                    .update({ must_change: false })
-                    .eq('usuario', legacyUser.usuario);
-                }
-              }
             } catch (dbErr) {
               console.warn("[Auth Sync Error] No se pudieron sincronizar las tablas complementarias:", dbErr);
             }

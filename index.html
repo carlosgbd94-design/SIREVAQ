@@ -329,7 +329,7 @@
        (ensurePdfAssetsLoaded) solo al exportar el PDF de Resguardo.
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
-  <script src="dist/bundle-head.js?v=2026.42" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.45" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -695,6 +695,42 @@
                   </div>
                 </div>
                 <div class="theme-toggle-switch"></div>
+              </div>
+
+              <!-- Datos de contacto (nombre y teléfono) -->
+              <div
+                class="flex items-center justify-between p-4 bg-surface rounded-2xl border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:border-primary/20 group cursor-pointer"
+                role="button" tabindex="0" id="btnProfileContact" aria-label="Editar nombre y teléfono de contacto"
+                onclick="window.openContactoModal()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openContactoModal()}">
+                <div class="flex items-center gap-4 min-w-0">
+                  <div
+                    class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors bg-primary/5 group-hover:bg-primary/10">
+                    <span class="material-symbols-rounded text-primary/60 text-[20px]">badge</span>
+                  </div>
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-[9px] font-black text-primary/30 uppercase tracking-widest mb-0.5">Datos de contacto</span>
+                    <span id="profileContactSummary" class="text-[12px] font-bold text-primary leading-tight break-words">Agrega tu nombre y teléfono</span>
+                  </div>
+                </div>
+                <span class="material-symbols-rounded text-primary/30 text-[20px]">chevron_right</span>
+              </div>
+
+              <!-- Cambiar contraseña (con código por correo) -->
+              <div
+                class="flex items-center justify-between p-4 bg-surface rounded-2xl border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:border-primary/20 group cursor-pointer"
+                role="button" tabindex="0" id="btnProfileChangePassword" aria-label="Cambiar contraseña"
+                onclick="window.openChangePasswordFlow()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openChangePasswordFlow()}">
+                <div class="flex items-center gap-4 min-w-0">
+                  <div
+                    class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors bg-primary/5 group-hover:bg-primary/10">
+                    <span class="material-symbols-rounded text-primary/60 text-[20px]">lock_reset</span>
+                  </div>
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-[9px] font-black text-primary/30 uppercase tracking-widest mb-0.5">Seguridad</span>
+                    <span class="text-[12px] font-bold text-primary leading-tight">Cambiar contraseña</span>
+                  </div>
+                </div>
+                <span class="material-symbols-rounded text-primary/30 text-[20px]">chevron_right</span>
               </div>
 
               <!-- Acciones del perfil (Biometría y Salir) -->
@@ -6914,8 +6950,7 @@
         </div>
         <div class="modalTitle" id="createUserModalTitle" style="font-weight:900; margin-bottom:8px;">Alta de Usuario</div>
         <div class="modalSub" id="createUserModalSub" style="color:var(--md-sys-color-on-surface-variant); line-height:1.5;">
-          La contraseña inicial será <b>JS1-2026-Temp</b> y el usuario será forzado a cambiarla en su primer inicio de
-          sesión.
+          Se enviará un enlace al correo de la persona para que cree su propia contraseña. No hay contraseña provisional.
         </div>
       </div>
 

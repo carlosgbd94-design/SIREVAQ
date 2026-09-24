@@ -1,17 +1,32 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.0"
 
+// Reseteo de contraseña por un ADMIN — sin contraseñas fijas.
+//
+// Antes: se ponía siempre "JS1-2026-Temp" (la misma para todos, conocida por todos los admins).
+// Ahora:
+//   1) la contraseña actual se invalida poniendo una aleatoria que NADIE conoce,
+//   2) se envía al correo de la persona un enlace de Supabase (plantilla "Reset Password")
+//      para que ella misma cree su contraseña en reset.html.
+// El orden importa: cambiar la contraseña en Auth invalida los tokens de recuperación
+// pendientes, así que primero se cambia y DESPUÉS se envía el correo.
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const JS1_SALT = "JS1_SALT_2026_MX";
-async function hashPassword(text: string) {
-  const msgUint8 = new TextEncoder().encode(text + JS1_SALT);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+function randomPassword(): string {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  // Base64 sin símbolos problemáticos + sufijo para cumplir reglas de complejidad
+  return btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, 'x') + 'Aa1!'
+}
+
+function maskEmail(email: string): string {
+  const [l, d] = email.split('@')
+  if (!d) return email
+  return (l.length <= 3 ? l[0] + '***' : l.slice(0, 3) + '***' + l.slice(-2)) + '@' + d
 }
 
 serve(async (req) => {
@@ -31,7 +46,7 @@ serve(async (req) => {
     // 1. Validar Token
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('No se encontró cabecera de autorización');
-    
+
     const token = authHeader.replace(/bearer /i, '');
     if (token === 'null' || token === 'undefined' || !token) {
       throw new Error('Sesión no válida. Por favor, cierra sesión y vuelve a entrar.');
@@ -40,7 +55,7 @@ serve(async (req) => {
     // Cliente para validación de usuario
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
-    
+
     if (authError || !user) {
       throw new Error(`Token inválido o sesión expirada: ${authError?.message || 'Error desconocido'}`);
     }
@@ -62,12 +77,13 @@ serve(async (req) => {
     // 4. Leer Payload
     const payload = await req.json();
     const { usuario: internalID } = payload;
-    
+    const redirectTo = typeof payload.redirectTo === 'string' ? payload.redirectTo : undefined;
+
     if (!internalID) {
       throw new Error('El ID de usuario es obligatorio');
     }
 
-    // Buscar el usuario real en 'perfiles' para obtener su Auth ID
+    // Buscar el usuario real en 'perfiles' para obtener su Auth ID y correo
     const { data: targetProfile, error: targetError } = await supabaseAdmin
       .from('perfiles')
       .select('id, email')
@@ -77,14 +93,15 @@ serve(async (req) => {
     if (targetError || !targetProfile) {
       throw new Error('No se encontró el perfil del usuario en la base de datos');
     }
+    if (!targetProfile.email) {
+      throw new Error('Este usuario no tiene un correo registrado, no se le puede enviar el enlace');
+    }
 
-    const tempPassword = 'JS1-2026-Temp';
-
-    // 5. Actualizar usuario en Auth
+    // 5. Invalidar la contraseña actual (aleatoria, desconocida) y exigir cambio
     const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
       targetProfile.id,
-      { 
-        password: tempPassword,
+      {
+        password: randomPassword(),
         user_metadata: { force_password_change: true }
       }
     );
@@ -93,7 +110,7 @@ serve(async (req) => {
       throw new Error(`Error al resetear la contraseña en Auth: ${updateAuthError.message}`);
     }
 
-    // 6. Actualizar en tabla perfiles (marcar must_change = true)
+    // 6. Marcar must_change en perfiles y limpiar cualquier hash heredado en usuarios_legacy
     const { error: updatePerfilError } = await supabaseAdmin
       .from('perfiles')
       .update({ must_change: true })
@@ -101,17 +118,26 @@ serve(async (req) => {
 
     if (updatePerfilError) console.error("Error al actualizar perfiles:", updatePerfilError);
 
-    // 7. Actualizar en tabla usuarios_legacy
-    const legacyHash = await hashPassword(tempPassword);
     const { error: legacyError } = await supabaseAdmin
       .from('usuarios_legacy')
-      .update({ password: legacyHash, must_change: true })
+      .update({ password: null, must_change: true })
       .eq('usuario', internalID);
 
     if (legacyError) console.error("Error al actualizar legacy:", legacyError);
 
+    // 7. Enviar el enlace para que la persona cree su propia contraseña
+    const { error: mailError } = await supabaseClient.auth.resetPasswordForEmail(targetProfile.email, { redirectTo });
+    const masked = maskEmail(targetProfile.email);
+
+    if (mailError) {
+      throw new Error(
+        `La contraseña anterior ya quedó invalidada, pero no se pudo enviar el correo a ${masked} (${mailError.message}). ` +
+        `Vuelve a pulsar "Restablecer" en unos minutos o pídele que use "¿Olvidaste tu contraseña?".`
+      );
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, message: 'Contraseña reiniciada a JS1-2026-Temp exitosamente' }),
+      JSON.stringify({ ok: true, message: `Se envió un enlace para crear una contraseña nueva a ${masked}. La contraseña anterior ya no funciona.` }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 

@@ -6,12 +6,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const JS1_SALT = "JS1_SALT_2026_MX";
-async function hashPassword(text: string) {
-  const msgUint8 = new TextEncoder().encode(text + JS1_SALT);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+// Alta de usuarios por un ADMIN — sin contraseñas fijas.
+//
+// Antes: todos los usuarios nuevos nacían con "JS1-2026-Temp". Ahora la cuenta se crea con una
+// contraseña aleatoria que nadie conoce y se envía al correo de la persona un enlace de
+// Supabase (plantilla "Reset Password") para que cree la suya en reset.html.
+
+function randomPassword(): string {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, 'x') + 'Aa1!'
+}
+
+function maskEmail(email: string): string {
+  const [l, d] = email.split('@')
+  if (!d) return email
+  return (l.length <= 3 ? l[0] + '***' : l.slice(0, 3) + '***' + l.slice(-2)) + '@' + d
 }
 
 serve(async (req) => {
@@ -63,18 +73,18 @@ serve(async (req) => {
     // 4. Leer Payload
     const payload = await req.json();
     const { email: authEmail, usuario: internalID, municipio, clues, unidad, rol } = payload;
+    const redirectTo = typeof payload.redirectTo === 'string' ? payload.redirectTo : undefined;
     
     if (!authEmail || !internalID || !rol) {
       throw new Error('El correo de acceso, el ID de usuario y el rol son obligatorios');
     }
 
     const email = authEmail.trim().toLowerCase();
-    const tempPassword = 'JS1-2026-Temp';
 
     // 5. Crear usuario en Auth
     const { data: newAuthUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
-      password: tempPassword,
+      password: randomPassword(),
       email_confirm: true,
       user_metadata: { 
         usuario_id: internalID,
@@ -103,10 +113,9 @@ serve(async (req) => {
     if (perfilError) console.error("Error crítico en perfiles:", perfilError);
 
     // 7. Upsert en tabla usuarios_legacy
-    const legacyHash = await hashPassword(tempPassword);
     const { error: legacyError } = await supabaseAdmin.from('usuarios_legacy').upsert({
       usuario: internalID, // Guardar el ID interno
-      password: legacyHash,
+      password: null,
       rol: rol.toUpperCase(),
       municipio: municipio || '',
       clues: clues || '',
@@ -117,8 +126,15 @@ serve(async (req) => {
 
     if (legacyError) console.error("Error crítico en legacy:", legacyError);
 
+    // 8. Enviar el enlace para que la persona cree su propia contraseña
+    const { error: mailError } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+    const masked = maskEmail(email);
+    const message = mailError
+      ? `Usuario creado, pero NO se pudo enviar el correo a ${masked} (${mailError.message}). Usa "Restablecer contraseña" en la lista de usuarios para reenviarlo.`
+      : `Usuario creado. Se envió un enlace a ${masked} para que cree su contraseña.`;
+
     return new Response(
-      JSON.stringify({ ok: true, message: 'Usuario creado exitosamente con contraseña JS1-2026-Temp' }),
+      JSON.stringify({ ok: true, message, emailSent: !mailError }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 

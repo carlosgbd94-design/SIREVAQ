@@ -451,8 +451,9 @@
             currentProfile = data;
         }
         const dataProfile = currentProfile;
-        document.getElementById('profileName').textContent = dataProfile.usuario || currentUser.email;
+        document.getElementById('profileName').textContent = dataProfile.nombre || dataProfile.usuario || currentUser.email;
         document.getElementById('profileRole').textContent = dataProfile.rol || 'UNIDAD';
+        refreshProfileContactUiMobile();
         
         const isAdmin = dataProfile.rol === 'ADMIN' || dataProfile.rol === 'JURISDICCIONAL';
         document.getElementById('profileClues').textContent = dataProfile.clues || (isAdmin ? 'QTSSA012154 (Jurisdicción 1)' : 'Ninguna');
@@ -473,6 +474,60 @@
                 btnSetBCGMobile.classList.add('hidden');
             }
         }
+    };
+
+    // --- Perfil > Cuenta: datos de contacto y cambio de contraseña con código por correo ---
+    // Los diálogos viven en perfil_cuenta.js (compartido con el escritorio).
+    const refreshProfileContactUiMobile = () => {
+        const p = currentProfile || {};
+        const t = String(p.telefono || '');
+        const tel = t.length === 10 ? `${t.slice(0, 3)} ${t.slice(3, 6)} ${t.slice(6)}` : t;
+        const partes = [p.nombre, tel].filter(Boolean);
+        const summary = document.getElementById('profileContactSummaryMobile');
+        if (summary) summary.textContent = partes.length ? partes.join(' · ') : 'Agrega tu nombre y teléfono';
+        const nameEl = document.getElementById('profileName');
+        if (nameEl && currentUser) nameEl.textContent = p.nombre || p.usuario || currentUser.email;
+    };
+
+    const ensurePerfilCuenta = () => {
+        if (!window.PerfilCuenta) {
+            showToast("No se pudo cargar el módulo de perfil. Recarga la página.", "error");
+            return false;
+        }
+        if (!window.__perfilCuentaInit) {
+            window.PerfilCuenta.init({
+                getClient: () => supabaseClient,
+                getUser: () => ({
+                    uid: currentUser?.id,
+                    email: currentUser?.email,
+                    nombre: currentProfile?.nombre || '',
+                    telefono: currentProfile?.telefono || ''
+                }),
+                redirectTo: window.location.origin + window.location.pathname.replace('mobile.html', '') + 'reset.html',
+                toast: (msg, kind) => showToast(msg, kind === 'bad' ? 'error' : 'success'),
+                onContactSaved: (c) => {
+                    if (currentProfile) { currentProfile.nombre = c.nombre; currentProfile.telefono = c.telefono; }
+                    refreshProfileContactUiMobile();
+                },
+                onPasswordChanged: async () => {
+                    if (currentUser?.id) await supabaseClient.from('perfiles').update({ must_change: false }).eq('id', currentUser.id);
+                }
+            });
+            window.__perfilCuentaInit = true;
+        }
+        return true;
+    };
+
+    window.openContactoModal = () => {
+        if (!ensurePerfilCuenta()) return;
+        document.getElementById('profileDropdown')?.classList.add('hidden');
+        window.PerfilCuenta.openContacto();
+    };
+    // También lo usa feedback_autoreply.js ("Cambiar mi contraseña")
+    window.openChangePasswordFlow = () => {
+        if (!ensurePerfilCuenta()) return;
+        document.getElementById('profileDropdown')?.classList.add('hidden');
+        window.PerfilCuenta.openCambiarPassword();
     };
 
     const normalizeString = (str) => {
@@ -3471,40 +3526,35 @@
 
         const btn = document.getElementById('btnForgotSendMobile');
         const btnLabel = btn?.querySelector('span:last-child');
-        let finalEmail = emailOrUser;
-
         try {
             if (btn) { btn.disabled = true; }
             if (btnLabel) { btnLabel.textContent = 'Enviando...'; }
 
-            if (!emailOrUser.includes("@")) {
-                const { data, error } = await supabaseClient
-                    .from('usuarios_legacy')
-                    .select('email')
-                    .ilike('usuario', emailOrUser)
-                    .maybeSingle();
-
-                if (error) throw error;
-                if (!data || !data.email) {
-                    showToast("El usuario no tiene un correo registrado o no existe", "error");
-                    return;
+            // La búsqueda usuario -> correo la hace el servidor (recover-access); el navegador
+            // solo recibe el correo enmascarado. El redirectTo apunta a reset.html (página
+            // responsiva compartida con desktop) para que el enlace funcione en cualquier dispositivo.
+            let res;
+            const { data, error } = await supabaseClient.functions.invoke('recover-access', {
+                body: {
+                    identifier: emailOrUser,
+                    mode: 'recovery',
+                    redirectTo: window.location.origin + window.location.pathname.replace('mobile.html', '') + 'reset.html'
                 }
-                finalEmail = data.email;
+            });
+            if (error) {
+                try { res = await error.context.json(); } catch (e) { res = null; }
+                if (!res) res = { ok: false, message: error.message || "No se pudo contactar al servidor" };
+            } else {
+                res = data || { ok: false, message: "Respuesta vacía del servidor" };
             }
 
-            // El redirectTo apunta a reset.html (página responsiva compartida con desktop)
-            // para asegurar que el link funcione sin importar el dispositivo donde se abra el correo.
-            const { error } = await supabaseClient.auth.resetPasswordForEmail(finalEmail, {
-                redirectTo: window.location.origin + window.location.pathname.replace('mobile.html', '') + 'reset.html'
-            });
-
-            if (error) {
-                showToast(error.message || "No se pudo enviar el enlace", "error");
+            if (!res.ok) {
+                showToast(res.message || "No se pudo enviar el enlace", "error");
                 return;
             }
 
             localStorage.setItem("JS1_last_reset_request", Date.now().toString());
-            showToast(`Enlace enviado a ${maskEmailMobile(finalEmail)}. Revisa también tu bandeja de SPAM.`, "success");
+            showToast(`Enlace enviado a ${res.masked}. Revisa también tu bandeja de SPAM.`, "success");
             closeForgotModalMobile();
         } catch (e) {
             console.error(e);
@@ -3537,6 +3587,8 @@
         document.getElementById('chkBiometria')?.addEventListener('change', (e) => handleRegisterBiometrics(e.target.checked));
 
         document.getElementById('btnThemeToggleProfile')?.addEventListener('click', toggleTheme);
+        document.getElementById('btnProfileContactMobile')?.addEventListener('click', () => window.openContactoModal());
+        document.getElementById('btnProfileChangePasswordMobile')?.addEventListener('click', () => window.openChangePasswordFlow());
         document.getElementById('btnLogout')?.addEventListener('click', async () => {
             await supabaseClient.auth.signOut();
             location.reload();
@@ -3739,6 +3791,18 @@
             });
         }
 
+        // Respuestas automáticas para dudas con solución conocida (ver feedback_autoreply.js)
+        if (fbForm) {
+            window.FeedbackAutoReply?.attach({
+                textarea: document.getElementById('fbMobileMessage'),
+                form: fbForm,
+                typeSelect: document.getElementById('fbMobileType'),
+                getContext: () => ({ loggedIn: !!currentProfile }),
+                onClose: () => fbOverlay.classList.add('hidden'),
+                onResolved: () => { fbOverlay.classList.add('hidden'); fbForm.reset(); }
+            });
+        }
+
         if (fbUploadArea && fbImagesInput) {
             fbUploadArea.addEventListener('click', () => {
                 fbImagesInput.click();
@@ -3867,7 +3931,7 @@
                     embed.image = { url: "attachment://image_0.png" };
                 }
 
-                const DISCORD_WEBHOOK_URL = atob("aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTUxNjE5OTgzNTQzNzM3MTU1My8yU19XYW1qck9PcE5ybUdYbHV3QTdTcmRTa3FhZXNiTXY1aXpzWVByQlN4dnJPaDg0LWZIYThHQlFEanNVYWVLc0VIUw==");
+                const FEEDBACK_ENDPOINT = SUPABASE_URL + "/functions/v1/send-feedback"; // Edge Function; el webhook de Discord ya no vive en el navegador
 
                 const formData = new FormData();
                 formData.append("payload_json", JSON.stringify({ embeds: [embed] }));
@@ -3878,8 +3942,9 @@
                 });
 
                 try {
-                    const response = await fetch(DISCORD_WEBHOOK_URL, {
+                    const response = await fetch(FEEDBACK_ENDPOINT, {
                         method: "POST",
+                        headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY },
                         body: formData
                     });
 

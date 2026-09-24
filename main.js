@@ -4961,7 +4961,7 @@ async function saveMyPasswordFlow() {
 
     if (error) throw error;
 
-    // 🔐 Sincronizar cambio con las tablas perfiles y usuarios_legacy
+    // 🔐 Sincronizar el cambio con la tabla perfiles
     try {
       const userUid = USER.uid || USER.id || (await window.supabase.auth.getUser()).data.user?.id;
 
@@ -4971,14 +4971,6 @@ async function saveMyPasswordFlow() {
           .from('perfiles')
           .update({ must_change: false })
           .eq('id', userUid);
-      }
-
-      // Actualizar tabla usuarios_legacy
-      if (USER.usuario) {
-        await window.supabase
-          .from('usuarios_legacy')
-          .update({ must_change: false })
-          .eq('usuario', USER.usuario);
       }
     } catch (dbErr) {
       console.warn("[Auth Sync] No se pudieron sincronizar las tablas de la base de datos:", dbErr);
@@ -5009,6 +5001,68 @@ async function saveMyPasswordFlow() {
     hideOverlay();
   }
 }
+
+// ===== PERFIL > CUENTA: datos de contacto y cambio de contraseña con código por correo =====
+// La UI de los diálogos vive en perfil_cuenta.js (compartida con mobile.html); aquí solo
+// se conecta con la sesión de esta pantalla.
+function refreshProfileContactUi(user) {
+  const u = user || USER || {};
+  const summary = $("profileContactSummary");
+  if (summary) {
+    const t = String(u.telefono || "");
+    const tel = t.length === 10 ? `${t.slice(0, 3)} ${t.slice(3, 6)} ${t.slice(6)}` : t;
+    const partes = [u.nombre, tel].filter(Boolean);
+    summary.textContent = partes.length ? partes.join(" · ") : "Agrega tu nombre y teléfono";
+  }
+  if ($("userNameFull")) $("userNameFull").textContent = u.nombre || u.usuario || "Usuario";
+}
+
+function ensurePerfilCuenta() {
+  if (!window.PerfilCuenta) {
+    showToast("No se pudo cargar el módulo de perfil. Recarga la página.", false, "bad");
+    return false;
+  }
+  if (!window.__perfilCuentaInit) {
+    window.PerfilCuenta.init({
+      getClient: () => window.supabase,
+      getUser: () => USER,
+      redirectTo: window.location.origin + window.location.pathname.replace("index.html", "") + "reset.html",
+      toast: (msg, kind) => showToast(msg, kind !== "bad", kind === "bad" ? "bad" : "good"),
+      onContactSaved: (c) => {
+        if (!USER) return;
+        USER.nombre = c.nombre;
+        USER.telefono = c.telefono;
+        saveSession(TOKEN, USER);
+        refreshProfileContactUi(USER);
+      },
+      onPasswordChanged: async () => {
+        // verifyOtp() abrió una sesión nueva: refrescar el token guardado y marcar el cambio
+        const { data } = await window.supabase.auth.getSession();
+        if (data && data.session) TOKEN = data.session.access_token;
+        if (USER) {
+          USER.mustChange = false;
+          window.MUST_CHANGE_PASSWORD = false;
+          saveSession(TOKEN, USER);
+          if (USER.uid) await window.supabase.from("perfiles").update({ must_change: false }).eq("id", USER.uid);
+        }
+      }
+    });
+    window.__perfilCuentaInit = true;
+  }
+  return true;
+}
+
+window.openContactoModal = function () {
+  if (!ensurePerfilCuenta()) return;
+  $("profileDropdown")?.classList.add("hidden");
+  window.PerfilCuenta.openContacto();
+};
+
+window.openChangePasswordFlow = function () {
+  if (!ensurePerfilCuenta()) return;
+  $("profileDropdown")?.classList.add("hidden");
+  window.PerfilCuenta.openCambiarPassword();
+};
 
 function openForgotModal() {
   const ov = $("forgotOverlay");
@@ -5053,6 +5107,28 @@ function maskEmailAddress(email) {
   return local.substring(0, 3) + "***" + local.substring(local.length - 2) + "@" + domain;
 }
 
+/**
+ * Recuperación de acceso desde el inicio de sesión (sin sesión activa).
+ * La búsqueda usuario -> correo la hace la Edge Function `recover-access` con la service role;
+ * el navegador nunca recibe el correo completo (solo enmascarado). Así public.usuarios_legacy
+ * ya no necesita ser legible con la llave anónima.
+ * Devuelve { ok, masked } o { ok:false, code, message }.
+ */
+async function invokeRecoverAccess(identifier, mode, redirectTo) {
+  const { data, error } = await window.supabase.functions.invoke("recover-access", {
+    body: { identifier, mode, redirectTo }
+  });
+  if (error) {
+    // En respuestas no-2xx el detalle viene en el cuerpo de la respuesta
+    try {
+      const body = await error.context.json();
+      if (body) return body;
+    } catch (e) { /* sin cuerpo */ }
+    return { ok: false, code: "NETWORK", message: error.message || "No se pudo contactar al servidor" };
+  }
+  return data || { ok: false, code: "EMPTY", message: "Respuesta vacía del servidor" };
+}
+
 async function requestPasswordResetFlow() {
   const lastRequest = localStorage.getItem("JS1_last_reset_request");
   const now = Date.now();
@@ -5074,56 +5150,20 @@ async function requestPasswordResetFlow() {
   }
 
 
-  // Si no contiene '@', asumimos que es un usuario y buscamos su correo en usuarios_legacy
-  let finalEmail = emailOrUser;
-  if (!emailOrUser.includes("@")) {
-    // Cerramos el modal antes de mostrar overlay de carga
-    closeForgotModal();
-    showOverlay("Buscando correo de usuario...", "Verificando");
-    try {
-      const { data, error } = await window.supabase
-        .from('usuarios_legacy')
-        .select('email')
-        .ilike('usuario', emailOrUser)
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (!data || !data.email) {
-        hideOverlay();
-        showToast("El usuario no tiene un correo registrado o no existe", false, "bad");
-        // Volvemos a abrir el modal
-        openForgotModal();
-        if ($("forgotUsuario")) $("forgotUsuario").value = emailOrUser;
-        return;
-      }
-      finalEmail = data.email;
-    } catch (e) {
-      console.error("Error al buscar usuario:", e);
-      hideOverlay();
-      showToast("Error al verificar el usuario. Reintenta.", false, "bad");
-      openForgotModal();
-      if ($("forgotUsuario")) $("forgotUsuario").value = emailOrUser;
-        return;
-    } finally {
-      hideOverlay();
-    }
-  } else {
-    // Si ya era un correo, cerramos el modal
-    closeForgotModal();
-  }
-
-  // Mostramos la pantalla de carga global del sistema
+  // Cerramos el modal y mostramos la pantalla de carga global del sistema.
+  // La búsqueda usuario -> correo la hace el servidor (recover-access), no el navegador.
+  closeForgotModal();
   showOverlay("Estamos enviando el enlace de recuperación…", "Recuperando acceso");
 
   try {
-    // Usamos el cliente global window.supabase inicializado en main.js
-    const { data, error } = await window.supabase.auth.resetPasswordForEmail(finalEmail, {
-      redirectTo: window.location.origin + window.location.pathname.replace('index.html', '') + 'reset.html'
-    });
+    const res = await invokeRecoverAccess(
+      emailOrUser,
+      "recovery",
+      window.location.origin + window.location.pathname.replace('index.html', '') + 'reset.html'
+    );
 
-    if (error) {
-      showToast(error.message || "No se pudo enviar el enlace", false, "bad");
+    if (!res.ok) {
+      showToast(res.message || "No se pudo enviar el enlace", false, "bad");
       openForgotModal();
       if ($("forgotUsuario")) $("forgotUsuario").value = emailOrUser;
       return;
@@ -5131,8 +5171,7 @@ async function requestPasswordResetFlow() {
 
     // Guardamos el timestamp en localStorage sólo si el envío fue exitoso
     localStorage.setItem("JS1_last_reset_request", Date.now().toString());
-    const masked = maskEmailAddress(finalEmail);
-    showToast(`Correo de recuperación enviado con éxito a ${masked}. Por favor, verifica tu bandeja de SPAM o correos no deseados antes de solicitar una nueva recuperación.`, true, "good");
+    showToast(`Correo de recuperación enviado con éxito a ${res.masked}. Por favor, verifica tu bandeja de SPAM o correos no deseados antes de solicitar una nueva recuperación.`, true, "good");
   } catch (e) {
     console.error(e);
     showToast("Error al solicitar recuperación", false, "bad");
@@ -5163,67 +5202,29 @@ async function requestMagicLinkFlow() {
     return;
   }
 
-  // Si no contiene '@', asumimos que es un usuario y buscamos su correo en usuarios_legacy
-  let finalEmail = emailOrUser;
-  if (!emailOrUser.includes("@")) {
-    closeMagicLinkModal();
-    showOverlay("Buscando correo de usuario...", "Verificando");
-    try {
-      const { data, error } = await window.supabase
-        .from('usuarios_legacy')
-        .select('email')
-        .ilike('usuario', emailOrUser)
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (!data || !data.email) {
-        hideOverlay();
-        showToast("El usuario no tiene un correo registrado o no existe", false, "bad");
-        openMagicLinkModal();
-        if ($("magicLinkUsuario")) $("magicLinkUsuario").value = emailOrUser;
-        return;
-      }
-      finalEmail = data.email;
-    } catch (e) {
-      console.error("Error al buscar usuario:", e);
-      hideOverlay();
-      showToast("Error al verificar el usuario. Reintenta.", false, "bad");
-      openMagicLinkModal();
-      if ($("magicLinkUsuario")) $("magicLinkUsuario").value = emailOrUser;
-      return;
-    } finally {
-      hideOverlay();
-    }
-  } else {
-    closeMagicLinkModal();
-  }
-
+  closeMagicLinkModal();
   showOverlay("Estamos enviando tu enlace de acceso…", "Acceso sin contraseña");
 
   try {
-    // shouldCreateUser: false — el enlace mágico SOLO debe funcionar para cuentas ya
-    // aprovisionadas por un administrador (ver supabase/functions/admin-create-user).
-    // Permitir la creación automática de usuarios aquí abriría una vía para que cualquier
-    // correo obtenga una cuenta activa con rol UNIDAD (ver trigger public.handle_new_user).
-    const { error } = await window.supabase.auth.signInWithOtp({
-      email: finalEmail,
-      options: {
-        shouldCreateUser: false,
-        emailRedirectTo: window.location.origin + window.location.pathname.replace('index.html', '') + 'index.html'
-      }
-    });
+    // recover-access usa shouldCreateUser:false — el enlace mágico SOLO debe funcionar para
+    // cuentas ya aprovisionadas por un administrador (ver supabase/functions/admin-create-user).
+    // Permitir la creación automática de usuarios abriría una vía para que cualquier correo
+    // obtenga una cuenta activa con rol UNIDAD (ver trigger public.handle_new_user).
+    const res = await invokeRecoverAccess(
+      emailOrUser,
+      "magiclink",
+      window.location.origin + window.location.pathname.replace('index.html', '') + 'index.html'
+    );
 
-    if (error) {
-      showToast(error.message || "No se pudo enviar el enlace", false, "bad");
+    if (!res.ok) {
+      showToast(res.message || "No se pudo enviar el enlace", false, "bad");
       openMagicLinkModal();
       if ($("magicLinkUsuario")) $("magicLinkUsuario").value = emailOrUser;
       return;
     }
 
     localStorage.setItem("JS1_last_magiclink_request", Date.now().toString());
-    const masked = maskEmailAddress(finalEmail);
-    showToast(`Enlace de acceso enviado a ${masked}. Revisa tu bandeja de entrada (y SPAM) y ábrelo desde este mismo dispositivo.`, true, "good");
+    showToast(`Enlace de acceso enviado a ${res.masked}. Revisa tu bandeja de entrada (y SPAM) y ábrelo desde este mismo dispositivo.`, true, "good");
   } catch (e) {
     console.error(e);
     showToast("Error al solicitar el enlace de acceso", false, "bad");
@@ -5360,82 +5361,6 @@ async function supabaseRequest(action = "", payload, options = {}) {
         if (error) throw error;
         
         return { ok: true };
-      }
-
-      case "login": {
-        const { data, error } = await supabase
-          .from('usuarios_legacy')
-          .select('*')
-          .ilike('usuario', payload.usuario)
-          .limit(1);
-
-        if (error) throw error;
-        console.log(`[Supabase DEBUG] Login user raw:`, data);
-        const userRaw = data && data.length > 0 ? data[0] : null;
-
-        if (!userRaw) {
-          throw new Error("Usuario no encontrado.");
-        }
-
-        // Mapeo flexible
-        const userObj = {
-          usuario: userRaw.usuario || userRaw.USUARIO || "",
-          password: userRaw.password || userRaw.PASSWORD || "",
-          municipio: userRaw.municipio || userRaw.MUNICIPIO || "",
-          municipios_allowed: userRaw.municipios_allowed || userRaw.MUNICIPIOS_ALLOWED || null,
-          clues: userRaw.clues || userRaw.CLUES || "",
-          unidad: userRaw.unidad || userRaw.UNIDAD || "",
-          rol: userRaw.rol || userRaw.ROL || "",
-          activo: userRaw.activo || userRaw.ACTIVO || userRaw.ESTATUS || "SI",
-          must_change: userRaw.must_change || userRaw.MUST_CHANGE || false
-        };
-
-        if (String(userObj.activo).toUpperCase() !== 'SI') {
-          throw new Error("El usuario no está activo.");
-        }
-
-        const dataFromDb = userObj;
-        const inputHash = await hashPassword(payload.password);
-
-        if (dataFromDb.password !== inputHash) {
-          throw new Error("Contraseña incorrecta.");
-        }
-
-        return {
-          ok: true,
-          data: {
-            token: btoa(dataFromDb.usuario + ":" + Date.now()), // Token temporal compatible
-            mustChange: !!dataFromDb.must_change,
-            user: {
-              usuario: dataFromDb.usuario,
-              municipio: dataFromDb.municipio,
-              municipiosAllowed: (function () {
-                // Priorizar municipios_allowed, fallback a municipio
-                const raw = dataFromDb.municipios_allowed || dataFromDb.municipio;
-                if (!raw) return [];
-                if (Array.isArray(raw)) return raw;
-                return String(raw).split(/[;,]/).map(x => x.trim().toUpperCase()).filter(Boolean);
-              })(),
-              clues: (function () {
-                const c = dataFromDb.clues;
-                const r = String(dataFromDb.rol).toUpperCase();
-                return (r !== "UNIDAD" && !c) ? "QTSSA012154" : c;
-              })(),
-              unidad: (function () {
-                const u = dataFromDb.unidad;
-                const r = String(dataFromDb.rol).toUpperCase();
-                const rawUni = (r !== "UNIDAD" && !u) ? "OFICINAS DE LA JURISDICCIÓN SANITARIA" : u;
-                const upper = String(rawUni || "").toUpperCase().trim();
-                if (upper.includes("FELIPE NUÑEZ LARA") || upper.includes("NIÑO Y LA MUJER") || upper === "HENM") {
-                  return "HENM";
-                }
-                return rawUni;
-              })(),
-              rol: dataFromDb.rol,
-              email: dataFromDb.email || ""
-            }
-          }
-        };
       }
 
       case "whoami": {
@@ -7476,7 +7401,9 @@ async function supabaseRequest(action = "", payload, options = {}) {
             municipio: payload.municipio,
             clues: payload.clues,
             unidad: payload.unidad,
-            rol: payload.rol
+            rol: payload.rol,
+            // A dónde lleva el enlace del correo con el que la persona crea su contraseña
+            redirectTo: window.location.origin + window.location.pathname.replace('index.html', '') + 'reset.html'
           },
           headers: {
             Authorization: `Bearer ${sessionToken}`
@@ -7697,7 +7624,8 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
         const { data, error } = await supabase.functions.invoke('admin-reset-password', {
           body: {
-            usuario: payload.usuario
+            usuario: payload.usuario,
+            redirectTo: window.location.origin + window.location.pathname.replace('index.html', '') + 'reset.html'
           },
           headers: {
             Authorization: `Bearer ${sessionToken}`
@@ -11055,6 +10983,7 @@ function buildUserFromPerfil(uid, email, perfil) {
     rol: rol,
     usuario: (perfil && perfil.usuario) || email,
     nombre: (perfil && perfil.nombre) || "",
+    telefono: (perfil && perfil.telefono) || "",
     clues: userClues,
     unidad: userUnidad,
     municipio: municipio,
@@ -13846,6 +13775,7 @@ function setLoggedInUI(user, status) {
 
   if ($("who")) $("who").textContent = `${user.clues || "—"} — ${user.unidad || "—"}`;
   if ($("userNameFull")) $("userNameFull").textContent = user.nombre || user.usuario || "Usuario";
+  if (typeof refreshProfileContactUi === "function") refreshProfileContactUi(user);
   if ($("rolTxt")) $("rolTxt").textContent = (user.rol || "UNIDAD").replace(/^Perfil:\s*/i, "");
 
   const capTab = $("btnTabCAP");
@@ -17184,7 +17114,7 @@ window.openCreateUserModal = function openCreateUserModal() {
   if ($("createUserModalEyebrowTxt")) $("createUserModalEyebrowTxt").textContent = "Nuevo Acceso Institucional";
   if ($("createUserModalIcon")) $("createUserModalIcon").textContent = "person_add";
   if ($("createUserModalTitle")) $("createUserModalTitle").textContent = "Alta de Usuario";
-  if ($("createUserModalSub")) $("createUserModalSub").innerHTML = "La contraseña inicial será <b>JS1-2026-Temp</b> y el usuario será forzado a cambiarla en su primer inicio de sesión.";
+  if ($("createUserModalSub")) $("createUserModalSub").innerHTML = "Se enviará un enlace al correo de la persona para que cree su propia contraseña. No hay contraseña provisional.";
   if ($("createUsuarioIDLabel")) $("createUsuarioIDLabel").textContent = "ID de Usuario";
   if ($("createUserModalBtnIcon")) $("createUserModalBtnIcon").textContent = "check_circle";
   if ($("createUserModalBtnTxt")) $("createUserModalBtnTxt").textContent = "Registrar";
@@ -17796,6 +17726,9 @@ function renderUsersRows(users) {
           const newActive = String(currentActive || "SI").toUpperCase() !== "SI";
           r = await apiCall({ action: "adminSetActive", usuario: targetUser, activo: newActive });
         } else if (action === "reset") {
+          hideOverlay();
+          if (!confirm(`Se invalidará la contraseña actual de ${targetUser} y se le enviará un enlace a su correo para crear una nueva. ¿Continuar?`)) return;
+          showOverlay("Procesando...", "Admin");
           r = await apiCall({ action: "adminResetPassword", usuario: targetUser });
         } else if (action === "delete") {
           r = await apiCall({ action: "adminDeleteUser", usuario: targetUser });
@@ -25629,7 +25562,9 @@ document.addEventListener("mousemove", (e) => {
 });
 
 // ===== DISCORD FEEDBACK LOGIC =====
-const DISCORD_WEBHOOK_URL = atob("aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTUxNjE5OTgzNTQzNzM3MTU1My8yU19XYW1qck9PcE5ybUdYbHV3QTdTcmRTa3FhZXNiTXY1aXpzWVByQlN4dnJPaDg0LWZIYThHQlFEanNVYWVLc0VIUw==");
+// El Feedback ya NO viaja directo a Discord (el webhook estaba público en este archivo):
+// se envía a la Edge Function send-feedback, que guarda el webhook como secret.
+const FEEDBACK_ENDPOINT = SUPABASE_URL + "/functions/v1/send-feedback";
 
 document.addEventListener("DOMContentLoaded", () => {
   const btnFeedbackFAB = document.getElementById("btnFeedbackFAB");
@@ -25698,7 +25633,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (btnCloseFeedbackHeader) {
       btnCloseFeedbackHeader.addEventListener("click", closeModal);
     }
-    
+
+    // Respuestas automáticas para dudas con solución conocida (contraseña olvidada,
+    // correo que no llega, etc.). Ver feedback_autoreply.js.
+    window.FeedbackAutoReply?.attach({
+      textarea: document.getElementById("feedbackMessage"),
+      form: formFeedback,
+      typeSelect: document.getElementById("feedbackType"),
+      getContext: () => ({ loggedIn: !!(typeof USER !== "undefined" && USER && USER.uid) }),
+      onClose: closeModal,
+      onResolved: closeModal
+    });
+
     // Cerrar si se hace click fuera del modal o con Escape
     feedbackModal.addEventListener("click", (e) => {
       if (!e.target.closest(".feedback-modal-card")) {
@@ -25858,8 +25804,9 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       try {
-        const response = await fetch(DISCORD_WEBHOOK_URL, {
+        const response = await fetch(FEEDBACK_ENDPOINT, {
           method: "POST",
+          headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY },
           body: formData
         });
 

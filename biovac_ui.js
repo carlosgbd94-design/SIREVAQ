@@ -2505,7 +2505,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // el campo de texto libre) en vez del `USER` global de main.js.
 // ---------------------------------------------------------------------------
 
-const DISCORD_WEBHOOK_URL = atob("aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTUxNjE5OTgzNTQzNzM3MTU1My8yU19XYW1qck9PcE5ybUdYbHV3QTdTcmRTa3FhZXNiTXY1aXpzWVByQlN4dnJPaDg0LWZIYThHQlFEanNVYWVLc0VIUw==");
+const FEEDBACK_ENDPOINT = SUPABASE_URL + '/functions/v1/send-feedback'; // Edge Function; el webhook de Discord ya no vive en el navegador
 
 document.addEventListener('DOMContentLoaded', () => {
   const btnFeedbackFAB = document.getElementById('btnFeedbackFAB');
@@ -2586,6 +2586,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnCancelFeedback?.addEventListener('click', closeModal);
   btnCloseFeedbackHeader?.addEventListener('click', closeModal);
+
+  // Respuestas automáticas para dudas con solución conocida (ver feedback_autoreply.js).
+  // En BioVac la sesión real vive en `estado.perfil`.
+  window.FeedbackAutoReply?.attach({
+    textarea: document.getElementById('feedbackMessage'),
+    form: formFeedback,
+    typeSelect: document.getElementById('feedbackType'),
+    getContext: () => ({ loggedIn: !!estado.perfil }),
+    onClose: closeModal,
+    onResolved: closeModal
+  });
   feedbackModal.addEventListener('click', (e) => { if (!e.target.closest('.feedback-modal-card')) closeModal(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && feedbackModal.classList.contains('show')) closeModal(); });
 
@@ -2699,8 +2710,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     try {
-      const response = await fetch(DISCORD_WEBHOOK_URL, { method: 'POST', body: formData });
-      if (!response.ok) throw new Error('Error al enviar a Discord');
+      const response = await fetch(FEEDBACK_ENDPOINT, { method: 'POST', headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY }, body: formData });
+      if (!response.ok) throw new Error('Error al enviar el feedback');
       toast('¡Gracias! Hemos recibido tu mensaje y capturas correctamente.', 'ok');
       closeModal();
     } catch (err) {
