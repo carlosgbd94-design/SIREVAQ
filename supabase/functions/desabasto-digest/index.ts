@@ -265,25 +265,31 @@ function htmlFor(units: Alerta[], today: string, platformUrl: string) {
   const sections = groups.map(([muni, list]) => {
     const rows = list.map((u) => `
         <tr>
-          <td style="padding:10px 14px;border-top:1px solid #f1f5f9;font-size:14px;font-weight:600;color:#1e293b;">${esc(u.unidad)}<div style="font-family:monospace;font-size:11px;font-weight:400;color:#64748b;">${esc(u.clues)}</div></td>
-          <td style="padding:10px 14px;border-top:1px solid #f1f5f9;font-size:13px;font-weight:600;color:#991b1b;">${esc(u.missing.join(', ') || 'No especificado')}</td>
+          <td style="padding:10px 12px;border-top:1px solid #f1f5f9;">
+            <div style="font-size:14px;font-weight:700;color:#1e293b;line-height:1.3;word-break:break-word;">${esc(u.unidad)}</div>
+            <div style="font-family:monospace;font-size:11px;color:#64748b;margin-top:2px;">${esc(u.clues)}</div>
+            <div style="font-size:13px;font-weight:700;color:#991b1b;margin-top:5px;">${esc(u.missing.join(', ') || 'No especificado')}</div>
+          </td>
         </tr>`).join('')
     return `
       <div style="margin-top:22px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
-        <div style="background:#f8fafc;padding:12px 14px;font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#0f172a;">
-          📍 ${esc(muni)} <span style="float:right;color:#b91c1c;">${list.length} unidad${list.length === 1 ? '' : 'es'}</span>
-        </div>
-        <table style="width:100%;border-collapse:collapse;"><tbody>${rows}</tbody></table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#f8fafc;"><tr>
+          <td style="padding:12px;font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#0f172a;">📍 ${esc(muni)}</td>
+          <td align="right" style="padding:12px;white-space:nowrap;font-size:12px;font-weight:800;color:#b91c1c;">${list.length} unidad${list.length === 1 ? '' : 'es'}</td>
+        </tr></table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;"><tbody>${rows}</tbody></table>
       </div>`
   }).join('')
 
-  return `
-<div style="font-family:'Inter','Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:640px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #fecaca;">
-  <div style="background:linear-gradient(135deg,#b91c1c 0%,#ef4444 100%);padding:28px 20px;text-align:center;">
+  return `<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="x-apple-disable-message-reformatting"></head>
+<body style="margin:0;padding:8px;background:#f1f5f9;">
+<div style="font-family:'Inter','Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:640px;margin:0 auto;background:#ffffff;border-radius:14px;border:1px solid #fecaca;">
+  <div style="background:linear-gradient(135deg,#b91c1c 0%,#ef4444 100%);padding:26px 16px;text-align:center;border-radius:13px 13px 0 0;">
     <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:800;">🚨 Desabasto de Esquema Básico</h1>
     <p style="color:#fee2e2;margin:8px 0 0 0;font-size:14px;font-weight:500;">${units.length} unidad${units.length === 1 ? '' : 'es'} · ${groups.length} municipio${groups.length === 1 ? '' : 's'} · ${esc(today)}</p>
   </div>
-  <div style="padding:28px 26px;color:#334155;line-height:1.55;">
+  <div style="padding:24px 16px;color:#334155;line-height:1.55;">
     <p style="margin:0 0 14px 0;font-size:14px;color:#475569;">Estas unidades capturaron sin existencias desde el último aviso:</p>
     <div>${chips}</div>
     ${sections}
@@ -291,9 +297,10 @@ function htmlFor(units: Alerta[], today: string, platformUrl: string) {
       <a href="${esc(platformUrl)}" style="background:#b91c1c;color:#ffffff;padding:13px 30px;border-radius:8px;font-weight:600;font-size:15px;text-decoration:none;display:inline-block;">Ver en la Plataforma</a>
     </div>
   </div>
-  <div style="background:#f8fafc;padding:18px;text-align:center;border-top:1px solid #e2e8f0;">
+  <div style="background:#f8fafc;padding:18px 14px;text-align:center;border-top:1px solid #e2e8f0;border-radius:0 0 13px 13px;">
     <p style="margin:0;color:#64748b;font-size:12px;font-weight:500;">Jurisdicción Sanitaria 1 - SIREVAQ</p>
     <p style="margin:5px 0 0 0;color:#94a3b8;font-size:11px;">Correo automático de no-reply. Los desabastos se consolidan en un solo aviso por corrida.</p>
   </div>
-</div>`
+</div>
+</body></html>`
 }
