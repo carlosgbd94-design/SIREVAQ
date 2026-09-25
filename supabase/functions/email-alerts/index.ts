@@ -184,6 +184,32 @@ serve(async (req) => {
         return { unidad: unit.unidad, clues: unit.clues, ok }
       }
 
+      // Prueba: { "action": "send-summaries", "test_to": "correo@ejemplo.com" } manda SOLO el
+      // resumen general a ese correo (asunto con [PRUEBA]), sin tocar a los destinatarios reales.
+      const testTo = typeof payload.test_to === 'string' ? payload.test_to.trim() : ''
+      if (testTo) {
+        const byMuniTest: Record<string, UnitStatus[]> = {}
+        let doneTest = 0
+        activeUnits.forEach(u => {
+          const st = statusOf(u)
+          if (st.ok) doneTest++
+          const k = normalizeMuni(u.municipio)
+          if (!byMuniTest[k]) byMuniTest[k] = []
+          byMuniTest[k].push(st)
+        })
+        const pctTest = activeUnits.length > 0 ? Math.round((doneTest / activeUnits.length) * 100) : 0
+        await transporter.sendMail({
+          from: gmailUser,
+          to: testTo,
+          subject: `[PRUEBA] [GENERAL] Reporte JS1 ${reportType} (${pctTest}% Global) - ${todayYmd}`,
+          text: `Prueba del resumen general: ${doneTest}/${activeUnits.length} completadas.`,
+          html: adminSummaryEmail({ reportType, todayYmd, byMuni: byMuniTest, total: activeUnits.length, totalDone: doneTest }),
+          replyTo: 'no-reply@js1reportes.com'
+        })
+        transporter.close()
+        return json({ ok: true, message: `Correo de prueba enviado a ${testTo}.` })
+      }
+
       // Enviar a perfiles MUNICIPALES (solo sus unidades correspondientes)
       const summarySends: Promise<void>[] = []
       const municipalProfiles = (profiles || []).filter(p => p.rol === 'MUNICIPAL' && p.email)
