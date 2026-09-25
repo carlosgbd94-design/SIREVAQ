@@ -26,15 +26,22 @@ body.con-dock { padding-bottom: 104px; }
 
 .dock-sis {
   position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 900;
-  width: min(1180px, calc(100vw - 28px)); display: flex; align-items: center; gap: 8px;
+  /* Adaptativa: mide lo que contiene (pestañas + estatus + acciones visibles),
+     no un ancho fijo -- con pocas pestañas/botones (p. ej. municipal) se
+     recoge; con muchos (unidad) crece hasta el tope de la pantalla. */
+  width: max-content; max-width: min(1180px, calc(100vw - 28px)); display: flex; align-items: center; gap: 8px;
   padding: 6px; border-radius: 999px; color: #0f172a;
-  background: rgba(255,255,255,.62);
-  -webkit-backdrop-filter: blur(26px) saturate(170%); backdrop-filter: blur(26px) saturate(170%);
-  border: 1px solid rgba(255,255,255,.78);
-  box-shadow: 0 0 0 1px rgba(15,23,42,.05), 0 10px 32px rgba(15,23,42,.14);
+  /* Vidrio de verdad: casi transparente y NEUTRO (sin tinte de color). Lo que
+     lo hace ver como vidrio es lo que difumina de lo que pasa por detrás
+     (blur + saturación), un borde de luz fino y una sombra suave -- no un
+     color propio. Sobre una zona vacía se ve tenue, como en One UI. */
+  background: rgba(255,255,255,.26);
+  -webkit-backdrop-filter: blur(24px) saturate(185%) brightness(1.06); backdrop-filter: blur(24px) saturate(185%) brightness(1.06);
+  border: 1px solid rgba(255,255,255,.6);
+  box-shadow: 0 0 0 1px rgba(15,23,42,.07), 0 12px 32px rgba(15,23,42,.18);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .dock-sis { background: rgba(255,255,255,.97); }
+  .dock-sis { background: rgba(255,255,255,.94); }
 }
 
 .dock-hojas { position: relative; display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; flex: 0 1 auto; border-radius: 999px; }
@@ -44,8 +51,12 @@ body.con-dock { padding-bottom: 104px; }
    pestaña activa; se desliza de una a otra (ver dock_glass.js). */
 .hoja-tinta {
   position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px; pointer-events: none; z-index: 0;
-  background: rgba(15,23,42,.08);
-  background: color-mix(in srgb, var(--hoja, #0284c7) 16%, transparent);
+  /* Selección con el color de su hoja, bien visible sobre el vidrio: relleno
+     tonal + un aro fino del mismo color (plano, sin sombras internas). */
+  background: rgba(255,255,255,.55);
+  background: color-mix(in srgb, var(--hoja, #0284c7) 26%, rgba(255,255,255,.5));
+  box-shadow: 0 0 0 1px rgba(15,23,42,.06);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--hoja, #0284c7) 42%, transparent);
   transition: transform .36s cubic-bezier(.2,.9,.25,1), width .36s cubic-bezier(.2,.9,.25,1), background-color .3s ease;
 }
 .hoja-tab {
@@ -67,36 +78,40 @@ body.con-dock { padding-bottom: 104px; }
 .hoja-pildora.aviso { background: #fef3c7; color: #b45309; }
 .hoja-pildora.punto { width: 8px; height: 8px; padding: 0; background: #f59e0b; }
 
-.dock-estado { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 0 8px; }
+.dock-estado { flex: 0 1 auto; min-width: 0; max-width: 290px; display: flex; flex-direction: column; gap: 1px; padding: 0 10px; }
 .dock-estado b { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #0f172a; font-family: 'Poppins', sans-serif; white-space: nowrap; }
 .dock-estado small { font-size: 11px; color: #5b6b80; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dock-punto { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; flex: none; }
 .dock-punto.enviado { background: #f59e0b; }
 .dock-punto.validado { background: #16a34a; }
 
-.dock-acciones { display: flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
+.dock-acciones { display: flex; align-items: center; gap: 4px; flex: none; margin-left: 2px; }
+/* Si ningún botón de acción está visible (p. ej. un rol sin nada que guardar),
+   el contenedor desaparece por completo: si no, el "gap" de la cápsula deja un
+   margen derecho mayor que el izquierdo (asimetría). */
+.dock-acciones:not(:has(.dock-btn:not([style*="display: none"]):not([style*="display:none"]))) { display: none; }
 /* Acciones: cápsulas rellenas/tonales (con etiqueta) e iconos limpios (sin
    etiqueta, sin contenedor), siguiendo la convención de la app; el efecto de
    hover solo aplica a punteros reales (en táctil quedaría "pegado"). */
 .dock-btn {
-  display: inline-flex; align-items: center; gap: 6px; background: transparent; color: #4b5b70; border: none; cursor: pointer;
-  border-radius: 999px; padding: 10px 12px; font: 800 12.5px 'Poppins', sans-serif; white-space: nowrap; box-shadow: none;
-  transition: background-color .2s ease, color .2s ease, transform .2s ease;
+  display: inline-flex; align-items: center; gap: 6px; background: rgba(15,23,42,.07); color: #334155; border: none; cursor: pointer;
+  border-radius: 999px; padding: 10px 16px; font: 800 12.5px 'Poppins', sans-serif; white-space: nowrap; box-shadow: none;
+  transition: background-color .2s ease, color .2s ease;
 }
 .dock-btn .material-symbols-rounded { font-size: 20px; }
 .dock-btn:disabled { cursor: not-allowed; }
-.dock-guardar { background: #0284c7; color: #fff; padding: 10px 18px; }
-.dock-guardar.en-reposo { background: rgba(15,23,42,.06); color: #64748b; }
-.dock-enviar { background: #0f172a; color: #fff; padding: 10px 18px; }
-.dock-enviar:disabled { background: rgba(15,23,42,.06); color: #94a3b8; opacity: 1; }
-.dock-validar { background: #16a34a; color: #fff; padding: 10px 18px; }
+.dock-btn:disabled { opacity: .55; }
+.dock-guardar { background: #0284c7; color: #fff; }
+.dock-guardar.en-reposo { background: rgba(15,23,42,.07); color: #475569; }
+.dock-enviar { background: #0f172a; color: #fff; }
+.dock-enviar:disabled { background: rgba(15,23,42,.07); color: #64748b; opacity: .7; }
+.dock-validar { background: #16a34a; color: #fff; }
 .dock-validar .material-symbols-rounded { color: inherit; }
 @media (hover: hover) and (pointer: fine) {
-  .dock-btn:hover:not(:disabled) { color: #0284c7; transform: translateY(-2px); }
-  .dock-guardar:hover:not(:disabled) { background: #0369a1; color: #fff; transform: none; }
-  .dock-guardar.en-reposo:hover:not(:disabled) { background: rgba(15,23,42,.1); color: #0f172a; }
-  .dock-enviar:hover:not(:disabled) { background: #1e293b; color: #fff; transform: none; }
-  .dock-validar:hover:not(:disabled) { background: #15803d; color: #fff; transform: none; }
+  .dock-btn:hover:not(:disabled) { background: rgba(15,23,42,.13); color: #0f172a; }
+  .dock-guardar:hover:not(:disabled) { background: #0369a1; color: #fff; }
+  .dock-enviar:hover:not(:disabled) { background: #1e293b; color: #fff; }
+  .dock-validar:hover:not(:disabled) { background: #15803d; color: #fff; }
 }
 body.con-dock .feedback-fab { bottom: 92px; right: 18px; width: 48px; height: 48px; }
 body.con-dock .feedback-fab .material-symbols-rounded { font-size: 22px; }
@@ -104,7 +119,7 @@ body.con-dock .toast { bottom: 96px; }
 
 @media (max-width: 900px) { .dock-estado small, .hoja-largo { display: none; } .hoja-pildora { padding: 1px 6px; } }
 @media (max-width: 760px) {
-  .dock-sis { bottom: 8px; width: calc(100vw - 16px); padding: 5px; gap: 4px; }
+  .dock-sis { bottom: 8px; max-width: calc(100vw - 16px); padding: 5px; gap: 4px; }
   .dock-estado { display: none !important; }
   .hoja-tab { padding: 10px 9px; }
   .hoja-tab:not(.activo) .hoja-nombre { display: none; }
@@ -112,6 +127,6 @@ body.con-dock .toast { bottom: 96px; }
   /* Exportar solo existe una vez validado: mientras está deshabilitado no ocupa lugar en el móvil. */
   #btnExportarSISCompleto:disabled { display: none; }
   .dock-etiqueta { display: none; }
-  .dock-guardar, .dock-enviar, .dock-validar { padding: 10px 13px; }
+  .dock-btn { padding: 10px 13px; }
   body.con-dock .feedback-fab { bottom: 84px; right: 12px; }
 }

@@ -482,6 +482,44 @@ const MUNICIPIOS_HOSPITAL = ['HENM', 'NHG'];
 
 let _sis06pInicializado = false;
 
+// ---------------------------------------------------------------------------
+// Barra de hojas en la pestaña Movimiento para roles revisores
+// (MUNICIPAL/JURISDICCIONAL/ADMIN): ahí no hay un SINBA-SIS que guardar o
+// exportar, pero sí un Movimiento -- así que Guardar y Exportar de la barra
+// hacen lo mismo que los botones de su cabecera (guardar datos, exportar a
+// Excel) y se reflejan su disponibilidad. La unidad usa siempre las acciones
+// del SINBA-SIS.
+// ---------------------------------------------------------------------------
+
+function dockEnModoMovimiento() {
+  const rol = estado.perfil ? estado.perfil.rol : null;
+  if (!rol || rol === 'UNIDAD' || !toggleSeccionesVisible()) return false;
+  const btnMov = document.getElementById('btnSeccionMovimiento');
+  return Boolean(btnMov && btnMov.classList.contains('activo'));
+}
+
+function sincronizarDockMovimiento() {
+  if (!dockEnModoMovimiento()) return;
+  const g = document.getElementById('btnGuardarSIS06P');
+  const x = document.getElementById('btnExportarSISCompleto');
+  const hdrG = document.getElementById('btnGuardarCabecera');
+  const hdrX = document.getElementById('btnExportarExcel');
+  const hayMov = Boolean(estado.movimiento);
+  if (g) {
+    g.style.display = hayMov ? 'inline-flex' : 'none';
+    g.disabled = Boolean(hdrG && hdrG.disabled);
+    g.classList.remove('en-reposo');
+    const ico = document.getElementById('iconoGuardarSIS'); if (ico) ico.textContent = 'save';
+    const etq = document.getElementById('etiquetaGuardarSIS'); if (etq) etq.textContent = 'Guardar';
+    g.title = 'Guardar los datos del Movimiento';
+  }
+  if (x) {
+    x.style.display = (hayMov && hdrX && hdrX.style.display !== 'none') ? 'inline-flex' : 'none';
+    x.disabled = Boolean(hdrX && hdrX.disabled);
+    x.title = 'Exportar el Movimiento a Excel';
+  }
+}
+
 // La "tinta" de la barra de hojas (resaltado tonal que se desliza a la pestaña
 // activa) la maneja dock_glass.js, compartido con requisiciones.html.
 function instalarTintaHojas() {
@@ -530,9 +568,20 @@ function inicializarToggleSIS06P() {
     if (rolActual === 'ADMIN') { btnSis.style.display = 'none'; btnCeh.style.display = 'none'; btnInf.style.display = 'none'; }
     btnCsv.style.display = 'none';
   }
+  // La barra se ajusta a lo que cada rol puede hacer: Guardar y Exportar solo
+  // tienen sentido con un SINBA-SIS a la vista (la unidad, o un revisor con
+  // una unidad elegida -- ver actualizarDock en sis06p_biovac_module.js, que
+  // los muestra en ese caso). Sin eso no ocupan lugar en la barra.
+  if (rolActual !== 'UNIDAD') {
+    ['btnGuardarSIS06P', 'btnExportarSISCompleto', 'btnEnviarSIS06P', 'btnMarcarValidado', 'btnImprimirSIS06P'].forEach((id) => {
+      const b = document.getElementById(id);
+      if (b) b.style.display = 'none';
+    });
+  }
 
   function ocultarTodo() {
     botones.forEach((b) => b.classList.remove('activo'));
+    if (window.SIS06PBiovac && window.SIS06PBiovac.actualizarDock) window.SIS06PBiovac.actualizarDock();
     document.getElementById('panelSIS06P').style.display = 'none';
     document.getElementById('panelCEH').style.display = 'none';
     document.getElementById('panelInfluenza').style.display = 'none';
@@ -805,6 +854,7 @@ async function cargarMovimiento() {
     ['panelMovimiento', 'panelSinMovimiento', 'filaCabeceraMovimiento', 'filaBotonesCabecera', 'panelImportador']
       .forEach((id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
     if (avisoDerivado) avisoDerivado.style.display = 'block';
+    sincronizarDockMovimiento();
     return;
   }
 
@@ -828,6 +878,7 @@ async function cargarMovimiento() {
     document.getElementById('filaCabeceraMovimiento').style.display = 'none';
     document.getElementById('filaBotonesCabecera').style.display = 'none';
     document.getElementById('panelSinMovimiento').style.display = 'block';
+    sincronizarDockMovimiento();
     document.getElementById('btnAbrirImportador').style.display = (estado.perfil && estado.perfil.rol === 'UNIDAD') ? 'none' : 'inline-flex';
     return;
   }
@@ -1324,6 +1375,7 @@ function render() {
   document.getElementById('btnAbrirImportador').style.display = (esJurisdiccional || esUnidad) ? 'none' : 'inline-flex';
 
   renderBloques(editable);
+  sincronizarDockMovimiento();
 }
 
 function renderBloques(editable) {
@@ -2695,6 +2747,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   inpUsuario.addEventListener('input', () => { if (window.SIS06PBiovac) window.SIS06PBiovac.marcarResponsableManual(); });
   inpUsuario.addEventListener('change', () => { if (window.SIS06PBiovac) window.SIS06PBiovac.guardarResponsable(); });
 
+  // Guardar/Exportar de la barra, en modo Movimiento (roles revisores): hacen lo
+  // de los botones de la cabecera del Movimiento (captura: corre antes que las
+  // acciones del SINBA-SIS y las frena).
+  [['btnGuardarSIS06P', () => guardarCabecera()], ['btnExportarSISCompleto', () => exportarExcel()]].forEach(([id, accion]) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener('click', (ev) => {
+      if (!dockEnModoMovimiento()) return;
+      ev.stopImmediatePropagation();
+      ev.preventDefault();
+      accion();
+    }, true);
+  });
   document.getElementById('btnIniciarMovimiento').addEventListener('click', crearMovimiento);
   document.getElementById('btnGuardarCabecera').addEventListener('click', guardarCabecera);
   document.getElementById('btnCerrarMes').addEventListener('click', cerrarMes);

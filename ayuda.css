@@ -1,0 +1,80 @@
+/* ===========================================================================
+   Ayuda contextual de SIREVAQ (ayuda.js): botón "?" sin contenedor + ventana
+   de ayuda adaptativa (centrada en escritorio, hoja desde abajo en móvil).
+   Usa las variables de color de la página (--primary, --muted, --surface,
+   --outline-variant, --secondary).
+   =========================================================================== */
+
+.ayuda-btn {
+  display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;
+  background: transparent; border: none; box-shadow: none; padding: 2px; margin: 0 0 0 4px;
+  border-radius: 50%; color: var(--muted, #64748b); cursor: pointer; line-height: 1;
+  transition: color .2s ease, transform .25s cubic-bezier(.34,1.56,.64,1);
+}
+.ayuda-btn .material-symbols-rounded { font-size: 19px; }
+.ayuda-btn:focus-visible { outline: 2px solid var(--secondary, #0ea5e9); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  .ayuda-btn:hover { color: var(--secondary, #0ea5e9); transform: translateY(-2px) scale(1.15); }
+}
+
+/* Franja de ayuda de una hoja (texto corto + botón "?") */
+.ayuda-franja {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 12px; padding: 8px 14px; border-radius: 14px; background: var(--surface-container, #f1f4f8);
+  font-size: 12px; font-weight: 600; color: var(--muted, #64748b); line-height: 1.45;
+}
+
+.ayuda-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,42,.5); display: none;
+  align-items: center; justify-content: center; z-index: 1200; padding: 20px;
+}
+.ayuda-overlay.abierto { display: flex; animation: ayudaFondo .18s ease; }
+.ayuda-hoja {
+  background: var(--surface, #fff); border-radius: 22px; width: 100%; max-width: 540px;
+  max-height: min(86vh, 700px); display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 16px 48px rgba(15,23,42,.28); animation: ayudaEntra .24s cubic-bezier(.16,1,.3,1);
+}
+.ayuda-asa { display: none; width: 40px; height: 4px; border-radius: 4px; background: var(--outline-variant, #e2e8f0); margin: 8px auto 0; flex: none; }
+.ayuda-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 18px 20px 8px; flex: none; }
+.ayuda-cab h3 { margin: 0; font: 800 16px/1.3 'Poppins', sans-serif; color: var(--primary, #0f172a); }
+.ayuda-cab p { margin: 4px 0 0; font-size: 12px; color: var(--muted, #64748b); line-height: 1.45; }
+.ayuda-cerrar {
+  flex: none; display: inline-flex; background: transparent; border: none; box-shadow: none; cursor: pointer; padding: 6px; border-radius: 50%;
+  color: var(--muted, #64748b);
+}
+@media (hover: hover) and (pointer: fine) { .ayuda-cerrar:hover { color: var(--primary, #0f172a); } }
+.ayuda-cuerpo { padding: 2px 20px 14px; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1 1 auto; }
+.ayuda-pie { display: flex; justify-content: flex-end; padding: 12px 20px 16px; border-top: 1px solid var(--outline-variant, #e2e8f0); flex: none; }
+.ayuda-pie button {
+  background: #fff; color: var(--primary, #0f172a); border: 1.5px solid rgba(15,23,42,.16); border-radius: 999px;
+  padding: 10px 22px; font: 800 13px 'Poppins', sans-serif; cursor: pointer;
+}
+
+.ayuda-tit { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: var(--muted, #64748b); margin: 14px 0 2px; }
+.ayuda-item { display: flex; gap: 11px; padding: 9px 0; border-bottom: 1px solid #f1f5f9; }
+.ayuda-item > .material-symbols-rounded { flex: none; margin-top: 1px; }
+.ayuda-item b { display: block; font-size: 13px; color: var(--primary, #0f172a); }
+.ayuda-item span.t, .ayuda-paso span.t { display: block; font-size: 12px; color: var(--muted, #64748b); line-height: 1.5; }
+.ayuda-paso { display: flex; gap: 11px; padding: 7px 0; }
+.ayuda-num {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--primary, #0f172a); color: #fff;
+  font: 800 11px 'Poppins', sans-serif; display: flex; align-items: center; justify-content: center;
+}
+.ayuda-paso b { color: var(--primary, #0f172a); font-size: 13px; }
+.ayuda-nota {
+  margin: 12px 0 2px; padding: 10px 13px; border-radius: 12px; background: #f0f9ff; border: 1px solid #bae6fd;
+  font-size: 12px; color: #075985; line-height: 1.5;
+}
+
+@keyframes ayudaFondo { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ayudaEntra { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes ayudaSube { from { transform: translateY(100%); } to { transform: none; } }
+@media (max-width: 640px) {
+  .ayuda-overlay { align-items: flex-end; padding: 0; }
+  .ayuda-hoja { max-width: none; border-radius: 24px 24px 0 0; max-height: 88vh; max-height: 88dvh; animation: ayudaSube .28s cubic-bezier(.16,1,.3,1); }
+  .ayuda-asa { display: block; }
+  .ayuda-pie button { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ayuda-overlay.abierto, .ayuda-hoja { animation: none; }
+}

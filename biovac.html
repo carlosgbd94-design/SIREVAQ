@@ -33,15 +33,17 @@ window.onunhandledrejection = function (event) {
 })();
 </script>
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="dock_glass.css?v=1">
-<script defer src="dock_glass.js?v=1"></script>
+<link rel="stylesheet" href="dock_glass.css?v=6">
+<link rel="stylesheet" href="ayuda.css?v=1">
+<script defer src="ayuda.js?v=1"></script>
+<script defer src="dock_glass.js?v=4"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.2"></script>
 <script defer src="biovac_importer.js?v=2026.2"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
-<script defer src="biovac_ui.js?v=2026.42"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.31"></script>
+<script defer src="biovac_ui.js?v=2026.44"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.34"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.9"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.1"></script>
 <style>
@@ -217,6 +219,11 @@ window.onunhandledrejection = function (event) {
   }
   .sis-card-body.abierto { opacity: 1; }
 
+  /* Guardar del Movimiento vive en la barra flotante (ahí se espeja este botón,
+     que se conserva oculto porque render() le fija el estado disabled). Si su
+     grupo se queda sin botones visibles, la cajita gris desaparece también. */
+  #btnGuardarCabecera { display: none !important; }
+  .fila-botones-cabecera .grupo-acciones:not(:has(button:not(#btnGuardarCabecera):not([style*="display: none"]):not([style*="display:none"]))) { display: none; }
   #toggleSeccionUnidad .grupo-acciones .btn-secundario { white-space: nowrap; }
   /* Contenedores desplegables de la hoja SIS-SS-CE-H (<details>): sin la
      flecha nativa; el chevron propio gira al abrir. */
@@ -288,7 +295,7 @@ window.onunhandledrejection = function (event) {
   /* ===== Ruta del mes (cómo funciona el SINBA-SIS, con el paso actual) ===== */
   .ruta-mes { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; }
   .ruta-pasos { flex: 1; display: flex; margin: 0; padding: 0; list-style: none; min-width: 0; }
-  .ruta-paso { position: relative; flex: 1 1 0; min-width: 0; padding-right: 10px; display: flex; gap: 9px; align-items: flex-start; }
+  .ruta-paso { position: relative; flex: 1 1 0; min-width: 0; padding-right: 10px; display: flex; gap: 0; align-items: flex-start; }
   .ruta-paso::before {
     content: ''; position: absolute; top: 13px; left: 30px; right: 6px; height: 2px; border-radius: 2px; background: var(--outline-variant);
   }
@@ -303,7 +310,7 @@ window.onunhandledrejection = function (event) {
   .ruta-paso.hecho .ruta-num { background: var(--success); border-color: var(--success); color: #fff; }
   .ruta-paso.actual .ruta-num { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: 0 0 0 4px rgba(15,23,42,.1); }
   .ruta-paso.alerta .ruta-num { background: var(--warning); border-color: var(--warning); color: #fff; box-shadow: 0 0 0 4px rgba(180,83,9,.15); }
-  .ruta-txt { min-width: 0; padding-top: 1px; background: var(--surface); position: relative; z-index: 1; padding-right: 8px; }
+  .ruta-txt { min-width: 0; padding: 1px 8px 0 9px; background: var(--surface); position: relative; z-index: 1; }
   .ruta-txt b { display: block; font-size: 12px; color: var(--primary); font-family: 'Poppins', sans-serif; }
   .ruta-txt small { display: block; font-size: 11px; color: var(--muted); line-height: 1.35; margin-top: 1px; }
   .ruta-paso.actual .ruta-txt small { color: var(--text); font-weight: 600; }
@@ -838,11 +845,11 @@ window.onunhandledrejection = function (event) {
     <small id="dockEstadoDetalle"></small>
   </div>
   <div class="dock-acciones">
-    <button type="button" class="dock-btn" id="btnImprimirSIS06P" style="display:none;" title="Imprimir el concentrado SIS-06-P validado"><span class="material-symbols-rounded">print</span></button>
+    <button type="button" class="dock-btn" id="btnImprimirSIS06P" style="display:none;" title="Imprimir el concentrado SIS-06-P validado"><span class="material-symbols-rounded">print</span><span class="dock-etiqueta">Imprimir</span></button>
     <button type="button" class="dock-btn dock-validar" id="btnMarcarValidado" style="display:none;" title="Marcar como Validado"><span class="material-symbols-rounded">verified</span><span class="dock-etiqueta">Validar</span></button>
     <button type="button" class="dock-btn dock-enviar" id="btnEnviarSIS06P" style="display:none;" title="Enviar el SINBA-SIS para validación"><span class="material-symbols-rounded">send</span><span class="dock-etiqueta">Enviar</span></button>
     <button type="button" class="dock-btn dock-guardar en-reposo" id="btnGuardarSIS06P" title="Guardar concentrado SIS-06-P"><span class="material-symbols-rounded" id="iconoGuardarSIS">check</span><span class="dock-etiqueta" id="etiquetaGuardarSIS">Guardado</span></button>
-    <button type="button" class="dock-btn" id="btnExportarSISCompleto" title="Exportar el Excel oficial del SINBA-SIS (SIS-06-P, Movimiento de Biológico, SIS-SS-CE-H e Influenza)"><span class="material-symbols-rounded">download</span></button>
+    <button type="button" class="dock-btn" id="btnExportarSISCompleto" title="Exportar el Excel oficial del SINBA-SIS (SIS-06-P, Movimiento de Biológico, SIS-SS-CE-H e Influenza)"><span class="material-symbols-rounded">download</span><span class="dock-etiqueta">Exportar</span></button>
   </div>
 </nav>
 
@@ -851,8 +858,8 @@ window.onunhandledrejection = function (event) {
     <div style="display:flex; align-items:center; gap:14px;">
       <div style="width:44px; height:44px; border-radius:14px; background:#f0f9ff; border:1px solid #bae6fd; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0;">📋</div>
       <div>
-        <h2>Concentrado Mensual SIS-06-P <span id="sis06pBadgeEstado" class="estado-badge"></span> <span id="sis06pChipSinGuardar" class="estado-badge" style="display:none; background:var(--warning-bg); color:var(--warning);">Cambios sin guardar</span></h2>
-        <p class="subtitulo">Registro de Aplicación de Biológicos -- captura el concentrado del mes, no el paloteo diario.</p>
+        <h2>Concentrado Mensual SIS-06-P <span id="sis06pBadgeEstado" class="estado-badge"></span> <span id="sis06pChipSinGuardar" class="estado-badge" style="display:none; background:var(--warning-bg); color:var(--warning);">Cambios sin guardar</span><button type="button" class="ayuda-btn" data-ayuda="sis06p" title="Cómo funciona SIS-06-P" aria-label="Cómo funciona SIS-06-P"><span class="material-symbols-rounded">help</span></button></h2>
+        <p class="subtitulo">Tu concentrado del mes por variable: el total y, dentro de él, afromexicanos, indígenas y migrantes. De aquí se arma SIS-SS-CE-H.</p>
       </div>
     </div>
   </div>
@@ -892,8 +899,8 @@ window.onunhandledrejection = function (event) {
       <span class="material-symbols-rounded" style="color:var(--secondary);">table_view</span>
     </div>
     <div style="flex:1; min-width:220px;">
-      <h2>SIS-SS-CE-H <span id="cehBadgeEstado" class="estado-badge"></span></h2>
-      <p class="subtitulo">Informe mensual de actividades · Sección III · Aplicación de biológicos. Se llena sola con lo capturado en SIS-06-P e Influenza -- aquí no se captura nada.</p>
+      <h2>SIS-SS-CE-H <span id="cehBadgeEstado" class="estado-badge"></span><button type="button" class="ayuda-btn" data-ayuda="ceh" title="Cómo leer SIS-SS-CE-H" aria-label="Cómo leer SIS-SS-CE-H"><span class="material-symbols-rounded">help</span></button></h2>
+      <p class="subtitulo">Tu hoja de claves del mes, armada sola desde SIS-06-P e Influenza. Solo lectura.</p>
     </div>
   </div>
   <div id="cehEncabezado" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:10px; margin-bottom:14px;"></div>
@@ -912,8 +919,8 @@ window.onunhandledrejection = function (event) {
         <span class="material-symbols-rounded" style="color:#C26750;">vaccines</span>
       </div>
       <div>
-        <h2>Influenza <span id="infBadgeEstado" class="estado-badge"></span></h2>
-        <p class="subtitulo">Concentrado mensual de dosis aplicadas de antiinfluenza estacional (SIS-SS-IE). Se arma solo con los reportes semanales de Meta-Logro Influenza de este mes.</p>
+        <h2>Influenza <span id="infBadgeEstado" class="estado-badge"></span><button type="button" class="ayuda-btn" data-ayuda="influenza" title="Cómo funciona Influenza en el SINBA-SIS" aria-label="Cómo funciona Influenza en el SINBA-SIS"><span class="material-symbols-rounded">help</span></button></h2>
+        <p class="subtitulo">Dosis de antiinfluenza del mes por semana, leídas de Meta-Logro. Solo lectura.</p>
       </div>
     </div>
   </div>
@@ -937,7 +944,9 @@ window.onunhandledrejection = function (event) {
         <p class="subtitulo" id="csvPanelSubtitulo">Mes seleccionado arriba, una fila por clave SIS con su valor -- mismo formato que ya acepta el panel RDA.</p>
       </div>
     </div>
+    <div style="display:flex; align-items:center; gap:8px;"><button type="button" class="ayuda-btn" data-ayuda="csv" title="Qué contiene el CSV" aria-label="Qué contiene el CSV"><span class="material-symbols-rounded">help</span></button>
     <button class="btn-primario btn-mini" id="btnDescargarCSVUnidad"><span class="material-symbols-rounded">download</span> Descargar CSV</button>
+    </div>
   </div>
   <!-- max-height/overflow propios (no en .tabla-wrap, que es compartida por
        tablas cortas en toda la página) -- el municipio completo son ~85
@@ -971,6 +980,7 @@ window.onunhandledrejection = function (event) {
       <h2 id="seguimientoTitulo">Seguimiento SIS-06-P</h2>
       <p class="subtitulo" id="seguimientoSubtitulo">Quién ya envió su concentrado del mes seleccionado arriba, y quién falta.</p>
     </div>
+    <button type="button" class="ayuda-btn" data-ayuda="seguimiento" title="Cómo funciona el seguimiento" aria-label="Cómo funciona el seguimiento"><span class="material-symbols-rounded">help</span></button>
   </div>
 
   <div id="seguimientoVentana" style="display:none; margin-bottom:14px;"></div>
@@ -1082,6 +1092,7 @@ window.onunhandledrejection = function (event) {
 </div>
 
 <div id="panelMovimiento">
+  <div class="ayuda-franja"><span>Recibido, aplicadas y desechadas por lote. Lo aplicado debe cuadrar con tu paloteo de SIS-06-P.</span><button type="button" class="ayuda-btn" data-ayuda="movimiento" title="Cómo funciona Movimiento de Biológico" aria-label="Cómo funciona Movimiento de Biológico"><span class="material-symbols-rounded">help</span></button></div>
   <div id="contenedorBloques"></div>
 </div>
 

@@ -10,8 +10,10 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1">
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="dock_glass.css?v=1">
-<script defer src="dock_glass.js?v=1"></script>
+<link rel="stylesheet" href="dock_glass.css?v=6">
+<link rel="stylesheet" href="ayuda.css?v=1">
+<script defer src="ayuda.js?v=1"></script>
+<script defer src="dock_glass.js?v=4"></script>
 <script defer src="requi_engine.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -288,7 +290,7 @@
   <div class="tarjeta">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; position:relative;">
       <div>
-        <h1>Requisiciones de Biológicos</h1>
+        <h1>Requisiciones de Biológicos <button type="button" class="ayuda-btn" data-ayuda="requi" title="Cómo funcionan las requisiciones" aria-label="Cómo funcionan las requisiciones"><span class="material-symbols-rounded">help</span></button></h1>
         <p class="subtitulo">Jurisdicción Sanitaria N.1 → Municipios/Hospitales → Unidades</p>
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
@@ -416,7 +418,7 @@
     <!-- PASO 1 -->
     <div class="paso-panel activo" id="panelPaso1">
       <div class="tarjeta">
-        <h2 style="margin:0 0 10px;"><span class="material-symbols-rounded">inventory</span> Lo que llegó del almacén estatal</h2>
+        <h2 style="margin:0 0 10px;"><span class="material-symbols-rounded">inventory</span> Lo que llegó del almacén estatal<button type="button" class="ayuda-btn" data-ayuda="requi1" title="Cómo funciona el paso 1" aria-label="Cómo funciona el paso 1"><span class="material-symbols-rounded">help</span></button></h2>
         <p class="hint">Da clic en un biológico para ver/agregar sus lotes recibidos — sin límite de lotes. El comparador te avisa si el lote ya existe o parece un error de captura antes de guardarlo.</p>
         <div class="tbl-scroll">
           <table class="tbl">
@@ -430,7 +432,7 @@
     <!-- PASO 2 -->
     <div class="paso-panel" id="panelPaso2">
       <div class="tarjeta">
-        <h2><span class="material-symbols-rounded">alt_route</span> Reparto a Municipios y Hospitales</h2>
+        <h2><span class="material-symbols-rounded">alt_route</span> Reparto a Municipios y Hospitales<button type="button" class="ayuda-btn" data-ayuda="requi2" title="Cómo funciona el paso 2" aria-label="Cómo funciona el paso 2"><span class="material-symbols-rounded">help</span></button></h2>
         <p class="hint">Cada hospital es su propio destino, igual que un municipio — no se reparte más adentro.</p>
         <div class="barra">
           <div class="campo" style="min-width:220px;">
@@ -450,7 +452,7 @@
     <!-- PASO 3 -->
     <div class="paso-panel" id="panelPaso3">
       <div class="tarjeta">
-        <h2><span class="material-symbols-rounded">local_hospital</span> Reparto a Unidades</h2>
+        <h2><span class="material-symbols-rounded">local_hospital</span> Reparto a Unidades<button type="button" class="ayuda-btn" data-ayuda="requi3" title="Cómo funciona el paso 3" aria-label="Cómo funciona el paso 3"><span class="material-symbols-rounded">help</span></button></h2>
         <p class="hint">Elige municipio y luego el lote a repartir — las unidades que ya tienen algo asignado se marcan en verde para ubicarlas rápido.</p>
         <div class="barra">
           <div class="campo">

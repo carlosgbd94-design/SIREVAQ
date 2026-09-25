@@ -2250,38 +2250,7 @@
             <span class="ruta-txt"><b>${p.t}</b><small>${_esc(p.x)}</small></span>
           </li>`).join('')}
       </ol>
-      <button type="button" class="btn-icono ruta-ayuda" id="btnComoFunciona" title="Cómo funciona el SINBA-SIS" aria-label="Cómo funciona el SINBA-SIS"><span class="material-symbols-rounded">help</span></button>`;
-    const ayuda = document.getElementById('btnComoFunciona');
-    if (ayuda) ayuda.addEventListener('click', abrirComoFunciona);
-  }
-
-  function abrirComoFunciona() {
-    const hoja = (icono, color, nombre, texto) => `
-      <div style="display:flex; gap:11px; padding:9px 0; border-bottom:1px solid #f1f5f9;">
-        <span class="material-symbols-rounded" style="color:${color}; flex:none; margin-top:1px;">${icono}</span>
-        <div><b style="font-size:13px; color:var(--primary);">${nombre}</b><div style="font-size:12px; color:var(--muted); line-height:1.5;">${texto}</div></div>
-      </div>`;
-    const paso = (n, nombre, texto) => `
-      <div style="display:flex; gap:11px; padding:7px 0;">
-        <span style="flex:none; width:22px; height:22px; border-radius:50%; background:var(--primary); color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; font-family:'Poppins',sans-serif;">${n}</span>
-        <div style="font-size:12px; color:var(--muted); line-height:1.5;"><b style="color:var(--primary); font-size:13px;">${nombre}.</b> ${texto}</div>
-      </div>`;
-    const tit = (t) => `<div style="font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:14px 0 2px;">${t}</div>`;
-    abrirDetalleSIS({
-      titulo: 'Cómo funciona el SINBA-SIS',
-      subtitulo: 'Un solo archivo mensual con cuatro hojas: se llena, se concilia, se envía y se valida completo.',
-      cuerpo: `
-        ${tit('Las cuatro hojas')}
-        ${hoja('summarize', '#0ea5e9', 'SIS-06-P', 'Tu concentrado del mes: dosis aplicadas por variable (con afromexicanos, indígenas y migrantes como subconjunto del total).')}
-        ${hoja('inventory_2', '#d97706', 'Movimiento de Biológico', 'Existencias, recibido, aplicadas y desechadas por lote. La existencia pasa sola al mes siguiente.')}
-        ${hoja('table_view', '#16a34a', 'SIS-SS-CE-H', 'La hoja de claves: se arma sola con SIS-06-P e Influenza. Aquí no se captura nada.')}
-        ${hoja('vaccines', '#C26750', 'Influenza', 'Se lee del panel de Meta-Logro (ahí se valida contra tu meta). Aquí ves el corte del mes por semana; para cambiarlo vas a Meta-Logro.')}
-        ${tit('El mes en cuatro pasos')}
-        ${paso(1, 'Captura', 'Puedes ir prellenando desde una semana antes de cerrar el mes. Guarda con el botón de la barra de abajo.')}
-        ${paso(2, 'Concilia', 'Las dosis aplicadas del paloteo y las del Movimiento deben coincidir, biológico por biológico. Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT) usa el comodín de sustitución.')}
-        ${paso(3, 'Envía', 'Solo del último día del mes a la semana siguiente. Al enviar, todo el archivo se bloquea, incluida Influenza.')}
-        ${paso(4, 'Validación', 'El municipal revisa; si corrige algo, tú ves cada cambio y lo aceptas. Ya validado puedes exportar el Excel oficial e imprimir.')}`
-    });
+      <button type="button" class="ayuda-btn ruta-ayuda" data-ayuda="sinba" title="Cómo funciona el SINBA-SIS" aria-label="Cómo funciona el SINBA-SIS"><span class="material-symbols-rounded">help</span></button>`;
   }
 
   // Píldoras vivas de cada hoja (barra de abajo).
@@ -2316,6 +2285,9 @@
   // Línea de estatus + botón Guardar de la barra de hojas.
   function actualizarDock() {
     actualizarPildoras();
+    // En la pestaña Movimiento de un rol revisor, Guardar/Exportar de la barra
+    // pertenecen al Movimiento (ver sincronizarDockMovimiento en biovac_ui.js).
+    if (typeof dockEnModoMovimiento === 'function' && dockEnModoMovimiento()) return;
     const btnG = document.getElementById('btnGuardarSIS06P');
     const icoG = document.getElementById('iconoGuardarSIS');
     const etqG = document.getElementById('etiquetaGuardarSIS');
@@ -2328,9 +2300,17 @@
       btnG.title = reposo ? 'Todo guardado' : 'Guardar concentrado SIS-06-P';
     }
 
+    // Exportar solo aplica con un SINBA-SIS a la vista: la unidad siempre; un
+    // revisor cuando eligió una unidad que ya tiene captura. Guardar (y el
+    // resto de acciones) los decide render() según rol/estatus.
+    const btnExp = document.getElementById('btnExportarSISCompleto');
+    const activaDock = datosUnidadActiva();
+    if (btnExp) btnExp.style.display = (esUnidadSesion() || (activaDock && captura)) ? 'inline-flex' : 'none';
+    if (btnG && !esUnidadSesion()) btnG.style.display = (activaDock && captura && captura.estado !== 'BORRADOR') ? 'inline-flex' : 'none';
+
     const caja = document.getElementById('dockEstado');
     if (!caja) return;
-    if (!datosUnidadActiva()) { caja.style.display = 'none'; return; }
+    if (!activaDock) { caja.style.display = 'none'; return; }
     const { est, filas, difs, v } = estadoRuta();
     const esU = esUnidadSesion();
     let detalle = '';
@@ -2424,6 +2404,6 @@
   // vez dentro del propio biovac.html, donde ambos módulos sí conviven.
   window.SIS06PBiovac = {
     init, render, save, hayCambiosSinGuardar: () => _sinGuardar, renderCSVPreview, exportarSISOficialCompleto, INFLUENZA_SIS_MAPPING,
-    renderCEH, renderInfluenza, aplicarResponsable, guardarResponsable, marcarResponsableManual, refrescarConciliacion
+    renderCEH, renderInfluenza, aplicarResponsable, guardarResponsable, marcarResponsableManual, refrescarConciliacion, actualizarDock
   };
 })();

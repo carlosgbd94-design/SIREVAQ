@@ -14,7 +14,8 @@
     if (!activa || activa.offsetWidth === 0) { tinta.style.width = '0px'; return; }
     tinta.style.width = activa.offsetWidth + 'px';
     tinta.style.transform = 'translateX(' + activa.offsetLeft + 'px)';
-    tinta.style.setProperty('--hoja', getComputedStyle(activa).getPropertyValue('--hoja').trim() || '#0284c7');
+    const color = getComputedStyle(activa).getPropertyValue('--hoja').trim() || '#0284c7';
+    tinta.style.setProperty('--hoja', color);
     // En una barra desbordada (móvil) la pestaña activa siempre queda a la vista.
     if (typeof activa.scrollIntoView === 'function' && cont.scrollWidth > cont.clientWidth) {
       activa.scrollIntoView({ block: 'nearest', inline: 'nearest' });
