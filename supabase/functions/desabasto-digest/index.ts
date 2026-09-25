@@ -28,7 +28,7 @@ const REPORTED_WINDOW_DAYS = 14
 type Alerta = { id: string; created_ts: string; clues: string; unidad: string; municipio: string; missing: string[] }
 
 const normalizeMuni = (m: string) =>
-  String(m || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase()
+  String(m || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase()
 
 const esc = (s: unknown) =>
   String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -51,6 +51,31 @@ function allowedMunis(p: any): string[] {
   return []
 }
 
+
+// Une las alertas ACTIVAS por unidad (CLUES): una unidad puede tener varias filas.
+function consolidate(rows: { id: string; created_ts: string; meta_json: unknown }[]): Map<string, Alerta> {
+  const byClues = new Map<string, Alerta>()
+  for (const row of rows) {
+    const m = parseMeta(row.meta_json)
+    if (m.status !== 'activa') continue // ya se resolvió antes de que saliera el correo
+    const clues = String(m.clues || '').trim().toUpperCase()
+    if (!clues) continue
+    const missing: string[] = Array.isArray(m.missing) ? m.missing : []
+    const prev = byClues.get(clues)
+    if (prev) {
+      prev.missing = Array.from(new Set([...prev.missing, ...missing]))
+      prev.id = row.id
+      prev.created_ts = row.created_ts
+    } else {
+      byClues.set(clues, {
+        id: row.id, created_ts: row.created_ts, clues,
+        unidad: m.unidad || clues, municipio: m.municipio || '', missing: Array.from(new Set(missing))
+      })
+    }
+  }
+  return byClues
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -69,6 +94,38 @@ serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
     const sinceMs = (days: number) => new Date(Date.now() - days * 86400000).toISOString()
+
+    // Prueba: { "test_to": "correo@ejemplo.com" } manda SOLO a ese correo el resumen con los
+    // desabastos activos de los últimos días (sin importar si ya se enviaron) y no marca nada.
+    const testTo = typeof payload?.test_to === 'string' ? payload.test_to.trim() : ''
+    if (testTo) {
+      const { data: recent, error: recErr } = await supabaseAdmin
+        .from('notificaciones')
+        .select('id, created_ts, meta_json')
+        .eq('type', 'ALERTA_DESABASTO')
+        .gte('created_ts', sinceMs(REPORTED_WINDOW_DAYS))
+        .order('created_ts', { ascending: true })
+      if (recErr) throw new Error(`Error leyendo alertas para la prueba: ${recErr.message}`)
+      const sample = Array.from(consolidate(recent || []).values())
+      if (sample.length === 0) return json({ ok: false, message: 'No hay desabastos activos para armar la prueba.' })
+
+      const testTransporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: gmailUser, pass: gmailPassword },
+      })
+      const label = new Intl.DateTimeFormat('es-MX', {
+        timeZone: 'America/Mexico_City', day: '2-digit', month: 'short', year: 'numeric',
+      }).format(new Date()).replace(/\./g, '')
+      await testTransporter.sendMail({
+        from: gmailUser,
+        to: testTo,
+        subject: `[PRUEBA] ${subjectFor(sample, label)}`,
+        text: textFor(sample, label),
+        html: htmlFor(sample, label, platformUrl),
+        replyTo: 'no-reply@js1reportes.com',
+      })
+      testTransporter.close()
+      return json({ ok: true, message: `Correo de prueba enviado a ${testTo} (${sample.length} unidades).` })
+    }
 
     // 1. Alertas pendientes de correo
     const { data: pendingRows, error: pendErr } = await supabaseAdmin
@@ -103,25 +160,7 @@ serve(async (req) => {
     }
 
     // 3. Consolidar por unidad (una unidad puede tener varias alertas pendientes)
-    const byClues = new Map<string, Alerta>()
-    for (const row of pendingRows) {
-      const m = parseMeta(row.meta_json)
-      if (m.status !== 'activa') continue // ya se resolvió antes de que saliera el correo
-      const clues = String(m.clues || '').trim().toUpperCase()
-      if (!clues) continue
-      const missing: string[] = Array.isArray(m.missing) ? m.missing : []
-      const prev = byClues.get(clues)
-      if (prev) {
-        prev.missing = Array.from(new Set([...prev.missing, ...missing]))
-        prev.id = row.id
-        prev.created_ts = row.created_ts
-      } else {
-        byClues.set(clues, {
-          id: row.id, created_ts: row.created_ts, clues,
-          unidad: m.unidad || clues, municipio: m.municipio || '', missing: Array.from(new Set(missing))
-        })
-      }
-    }
+    const byClues = consolidate(pendingRows)
     const units: Alerta[] = Array.from(byClues.values()).filter((u) => {
       const known = alreadyReported.get(u.clues)
       return !(known && u.missing.length > 0 && u.missing.every((b) => known.has(b)))

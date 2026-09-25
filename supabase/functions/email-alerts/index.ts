@@ -51,7 +51,7 @@ serve(async (req) => {
 
     // Normalizador de municipios para evitar fallos por acentos
     const normalizeMuni = (m: string) => {
-      return String(m || '').normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toUpperCase()
+      return String(m || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase()
     }
 
     const todayYmd = formatter.format(localTime) // YYYY-MM-DD
@@ -184,30 +184,55 @@ serve(async (req) => {
         return { unidad: unit.unidad, clues: unit.clues, ok }
       }
 
-      // Prueba: { "action": "send-summaries", "test_to": "correo@ejemplo.com" } manda SOLO el
-      // resumen general a ese correo (asunto con [PRUEBA]), sin tocar a los destinatarios reales.
+      // Prueba: { "action": "send-summaries", "test_to": "correo@ejemplo.com" } manda SOLO un
+      // resumen a ese correo (asunto con [PRUEBA]), sin tocar a los destinatarios reales.
+      // "test_kind": "general" (por defecto) o "municipal" (con los municipios del perfil de ese
+      // correo si existe; si no, todos los municipios).
       const testTo = typeof payload.test_to === 'string' ? payload.test_to.trim() : ''
       if (testTo) {
-        const byMuniTest: Record<string, UnitStatus[]> = {}
-        let doneTest = 0
-        activeUnits.forEach(u => {
-          const st = statusOf(u)
-          if (st.ok) doneTest++
-          const k = normalizeMuni(u.municipio)
-          if (!byMuniTest[k]) byMuniTest[k] = []
-          byMuniTest[k].push(st)
-        })
-        const pctTest = activeUnits.length > 0 ? Math.round((doneTest / activeUnits.length) * 100) : 0
-        await transporter.sendMail({
-          from: gmailUser,
-          to: testTo,
-          subject: `[PRUEBA] [GENERAL] Reporte JS1 ${reportType} (${pctTest}% Global) - ${todayYmd}`,
-          text: `Prueba del resumen general: ${doneTest}/${activeUnits.length} completadas.`,
-          html: adminSummaryEmail({ reportType, todayYmd, byMuni: byMuniTest, total: activeUnits.length, totalDone: doneTest }),
-          replyTo: 'no-reply@js1reportes.com'
-        })
+        let subject: string
+        let html: string
+        let text: string
+        if (payload.test_kind === 'municipal') {
+          const mine = (profiles || []).find(p => String(p.email || '').trim().toLowerCase() === testTo.toLowerCase())
+          let munis: string[] = []
+          if (mine && Array.isArray(mine.municipios_allowed) && mine.municipios_allowed.length > 0) {
+            munis = mine.municipios_allowed.map(normalizeMuni)
+          } else if (mine?.municipio) {
+            munis = String(mine.municipio).split(',').map(normalizeMuni)
+          }
+          const scoped = (munis.length === 0 || munis.includes('*'))
+            ? activeUnits
+            : activeUnits.filter(u => munis.includes(normalizeMuni(u.municipio)))
+          if (scoped.length === 0) throw new Error('Sin unidades para armar la prueba municipal.')
+          const label = (munis.length === 0 || munis.includes('*')) ? 'TODOS LOS MUNICIPIOS' : munis.join(', ')
+          const statuses = scoped.map(statusOf)
+          const done = statuses.filter(s => s.ok).length
+          const pct = Math.round((done / scoped.length) * 100)
+          subject = `[PRUEBA] Reporte ${reportType}: Región ${label} (${pct}% Capturado) - ${todayYmd}`
+          text = `Prueba del resumen municipal: ${done} de ${scoped.length} unidades completadas.`
+          html = scopeSummaryEmail({
+            reportType, regionLabel: `Región: ${label}`, todayYmd, units: statuses,
+            who: 'Estimado(a) Coordinador(a),', tone: 'blue', whose: 'las unidades a tu cargo'
+          })
+        } else {
+          const byMuniTest: Record<string, UnitStatus[]> = {}
+          let doneTest = 0
+          activeUnits.forEach(u => {
+            const st = statusOf(u)
+            if (st.ok) doneTest++
+            const k = normalizeMuni(u.municipio)
+            if (!byMuniTest[k]) byMuniTest[k] = []
+            byMuniTest[k].push(st)
+          })
+          const pctTest = activeUnits.length > 0 ? Math.round((doneTest / activeUnits.length) * 100) : 0
+          subject = `[PRUEBA] [GENERAL] Reporte JS1 ${reportType} (${pctTest}% Global) - ${todayYmd}`
+          text = `Prueba del resumen general: ${doneTest}/${activeUnits.length} completadas.`
+          html = adminSummaryEmail({ reportType, todayYmd, byMuni: byMuniTest, total: activeUnits.length, totalDone: doneTest })
+        }
+        await transporter.sendMail({ from: gmailUser, to: testTo, subject, text, html, replyTo: 'no-reply@js1reportes.com' })
         transporter.close()
-        return json({ ok: true, message: `Correo de prueba enviado a ${testTo}.` })
+        return json({ ok: true, message: `Correo de prueba (${payload.test_kind || 'general'}) enviado a ${testTo}.` })
       }
 
       // Enviar a perfiles MUNICIPALES (solo sus unidades correspondientes)
