@@ -33,13 +33,15 @@ window.onunhandledrejection = function (event) {
 })();
 </script>
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="dock_glass.css?v=1">
+<script defer src="dock_glass.js?v=1"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.2"></script>
 <script defer src="biovac_importer.js?v=2026.2"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
-<script defer src="biovac_ui.js?v=2026.39"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.22"></script>
+<script defer src="biovac_ui.js?v=2026.42"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.31"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.9"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.1"></script>
 <style>
@@ -214,6 +216,157 @@ window.onunhandledrejection = function (event) {
     transition: max-height .32s cubic-bezier(.4,0,.2,1), opacity .22s ease;
   }
   .sis-card-body.abierto { opacity: 1; }
+
+  #toggleSeccionUnidad .grupo-acciones .btn-secundario { white-space: nowrap; }
+  /* Contenedores desplegables de la hoja SIS-SS-CE-H (<details>): sin la
+     flecha nativa; el chevron propio gira al abrir. */
+  details.ceh-acc > summary { list-style: none; }
+  details.ceh-acc > summary::-webkit-details-marker { display: none; }
+  details.ceh-acc .ceh-chev { transition: transform .2s ease; }
+  details.ceh-acc[open] > summary .ceh-chev { transform: rotate(180deg); }
+
+  /* Hojas SIS-SS-CE-H / Influenza -- adaptativas: en pantalla ancha se ven
+     todas las columnas; en angosta (<=640px) se ocultan las secundarias
+     (.ceh-sub: Afro/Indíg./Migr.; .inf-sem: semanas 1-5), la tabla deja de
+     desplazarse de lado y cada fila se toca para abrir su detalle en el modal. */
+  .ceh-tabla { width: 100%; min-width: 500px; border-collapse: collapse; table-layout: fixed; }
+  .inf-tabla { width: 100%; min-width: 560px; border-collapse: collapse; table-layout: fixed; }
+  .inf-tabla-simple { width: 100%; min-width: 300px; border-collapse: collapse; table-layout: fixed; }
+  .fila-tocable { cursor: pointer; transition: background-color .12s ease; }
+  .fila-tocable:hover, .fila-tocable:focus-visible { background: #f1f7fb; outline: none; }
+  .solo-angosta { display: none; }
+  @media (max-width: 640px) {
+    .ceh-tabla, .inf-tabla-simple { min-width: 0; }
+    .ceh-sub { display: none; }
+    .solo-angosta { display: block; }
+    .ocultar-angosta { display: none; }
+  }
+
+  /* Modal de detalle (hojas del SINBA-SIS): ventana centrada en pantalla
+     ancha; en angosta es una hoja que sube desde abajo (más cómoda con el
+     pulgar) con su propio scroll interno. */
+  .detalle-overlay {
+    position: fixed; inset: 0; background: rgba(15,23,42,.5); display: none;
+    align-items: center; justify-content: center; z-index: 1100; padding: 20px;
+  }
+  .detalle-overlay.abierto { display: flex; animation: detalleFondo .18s ease; }
+  .detalle-hoja {
+    background: var(--surface); border-radius: 20px; width: 100%; max-width: 520px;
+    max-height: min(86vh, 680px); display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: var(--shadow-2); animation: detalleEntra .22s cubic-bezier(.16,1,.3,1);
+  }
+  .detalle-asa { display: none; width: 40px; height: 4px; border-radius: 4px; background: var(--outline-variant); margin: 8px auto 0; flex: none; }
+  .detalle-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 18px 20px 10px; flex: none; }
+  .detalle-cab h3 { margin: 0; font-family: 'Poppins', sans-serif; font-size: 15.5px; color: var(--primary); line-height: 1.3; }
+  .detalle-cab p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+  .detalle-cuerpo { padding: 4px 20px 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1 1 auto; }
+  .detalle-pie { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; padding: 12px 20px 16px; border-top: 1px solid var(--outline-variant); flex: none; }
+  .detalle-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .detalle-kpi { background: var(--surface-container); border-radius: 12px; padding: 9px 12px; }
+  .detalle-kpi .t { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .detalle-kpi .v { font-size: 20px; font-weight: 800; color: var(--primary); margin-top: 2px; font-family: 'Poppins', sans-serif; }
+  .detalle-kpi .c { margin-top: 3px; }
+  .detalle-tabla { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .detalle-tabla th { text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--outline-variant); }
+  .detalle-tabla td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; }
+  .detalle-tabla .num { text-align: right; font-weight: 800; color: var(--primary); }
+  @keyframes detalleFondo { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes detalleEntra { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+  @keyframes detalleSube { from { transform: translateY(100%); } to { transform: none; } }
+  @media (max-width: 640px) {
+    .detalle-overlay { align-items: flex-end; padding: 0; }
+    .detalle-hoja { max-width: none; border-radius: 22px 22px 0 0; max-height: 88vh; max-height: 88dvh; animation: detalleSube .26s cubic-bezier(.16,1,.3,1); }
+    .detalle-asa { display: block; }
+    .detalle-pie .btn-primario, .detalle-pie .btn-secundario { flex: 1 1 auto; justify-content: center; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .detalle-overlay.abierto, .detalle-hoja { animation: none; }
+  }
+
+  /* La barra flotante de hojas (.dock-sis, .hoja-tab, .dock-btn ...) vive en dock_glass.css, compartida con requisiciones.html. */
+
+  /* ===== Ruta del mes (cómo funciona el SINBA-SIS, con el paso actual) ===== */
+  .ruta-mes { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; }
+  .ruta-pasos { flex: 1; display: flex; margin: 0; padding: 0; list-style: none; min-width: 0; }
+  .ruta-paso { position: relative; flex: 1 1 0; min-width: 0; padding-right: 10px; display: flex; gap: 9px; align-items: flex-start; }
+  .ruta-paso::before {
+    content: ''; position: absolute; top: 13px; left: 30px; right: 6px; height: 2px; border-radius: 2px; background: var(--outline-variant);
+  }
+  .ruta-paso:last-child::before { display: none; }
+  .ruta-paso.hecho::before { background: var(--success); }
+  .ruta-num {
+    position: relative; z-index: 1; flex: none; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; background: var(--surface-container); color: var(--muted); border: 2px solid var(--outline-variant);
+    font-family: 'Poppins', sans-serif;
+  }
+  .ruta-num .material-symbols-rounded { font-size: 15px; }
+  .ruta-paso.hecho .ruta-num { background: var(--success); border-color: var(--success); color: #fff; }
+  .ruta-paso.actual .ruta-num { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: 0 0 0 4px rgba(15,23,42,.1); }
+  .ruta-paso.alerta .ruta-num { background: var(--warning); border-color: var(--warning); color: #fff; box-shadow: 0 0 0 4px rgba(180,83,9,.15); }
+  .ruta-txt { min-width: 0; padding-top: 1px; background: var(--surface); position: relative; z-index: 1; padding-right: 8px; }
+  .ruta-txt b { display: block; font-size: 12px; color: var(--primary); font-family: 'Poppins', sans-serif; }
+  .ruta-txt small { display: block; font-size: 11px; color: var(--muted); line-height: 1.35; margin-top: 1px; }
+  .ruta-paso.actual .ruta-txt small { color: var(--text); font-weight: 600; }
+  .ruta-paso.alerta .ruta-txt small { color: var(--warning); font-weight: 700; }
+  .ruta-ayuda { flex: none; color: var(--muted); }
+  @media (max-width: 760px) {
+    .ruta-pasos { flex-wrap: wrap; row-gap: 10px; }
+    .ruta-paso { flex: 1 1 46%; }
+    .ruta-paso::before { display: none; }
+  }
+
+  /* ===== Botón protagonista: editar semanas de Influenza en Meta-Logro ===== */
+  .inf-cta {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    padding: 14px 18px; margin-bottom: 14px; border-radius: 18px; background: #fdf2ee; border: 1.5px solid #f4cdbf;
+  }
+  .inf-cta-txt { min-width: 220px; flex: 1; }
+  .inf-cta-txt b { display: block; font-size: 13.5px; color: #7c2d12; font-family: 'Poppins', sans-serif; }
+  .inf-cta-txt span { font-size: 12px; color: #9a3412; line-height: 1.45; }
+  .inf-cta-btn {
+    background: #C26750; color: #fff; padding: 14px 24px; border-radius: 16px; font-size: 14px; font-weight: 800; gap: 9px;
+    box-shadow: 0 6px 18px -6px rgba(194,103,80,.7);
+  }
+  .inf-cta-btn:hover:not(:disabled) { background: #a8513a; transform: translateY(-1px); box-shadow: 0 10px 22px -6px rgba(194,103,80,.8); }
+  .inf-cta-btn:disabled { background: #cbd5e1; color: #64748b; box-shadow: none; opacity: 1; }
+  .inf-cta-btn .material-symbols-rounded { font-size: 21px; }
+  .inf-cta.bloqueada { background: #f1f5f9; border-color: var(--outline-variant); }
+  .inf-cta.bloqueada .inf-cta-txt b { color: var(--primary); }
+  .inf-cta.bloqueada .inf-cta-txt span { color: var(--muted); }
+  @media (max-width: 760px) { .inf-cta-btn { width: 100%; justify-content: center; } }
+
+  /* ===== Influenza en pantalla angosta: selector de semana =====
+     Ocultar las semanas hacía impráctico validarlas: ahora un selector de
+     chips (Total / Sem 1..5 / Todas) elige QUÉ columna se ve a lo ancho; "Todas"
+     deja la tabla completa con desplazamiento y la columna Variable fija. */
+  .inf-chips { display: none; }
+  @media (max-width: 760px) {
+    .inf-chips { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
+    .inf-chips::-webkit-scrollbar { display: none; }
+    .inf-chip {
+      flex: none; background: #fff; color: var(--primary); border: 1.5px solid var(--outline-variant); border-radius: 14px;
+      padding: 7px 12px; font-size: 12px; font-weight: 800; gap: 6px; line-height: 1.15; box-shadow: none;
+    }
+    .inf-chip small { display: block; font-size: 9.5px; font-weight: 600; color: var(--muted); }
+    .inf-chip.sin-reporte { border-style: dashed; color: var(--muted); }
+    .inf-chip.activo { background: #C26750; border-color: #C26750; color: #fff; }
+    .inf-chip.activo small { color: rgba(255,255,255,.85); }
+    .inf-vista .inf-sem { display: none; }
+    .inf-vista .inf-tabla { min-width: 0; }
+    .inf-vista[data-vista="s1"] .inf-w1, .inf-vista[data-vista="s2"] .inf-w2, .inf-vista[data-vista="s3"] .inf-w3,
+    .inf-vista[data-vista="s4"] .inf-w4, .inf-vista[data-vista="s5"] .inf-w5 { display: table-cell; }
+    .inf-vista[data-vista="s1"] col.inf-w1, .inf-vista[data-vista="s2"] col.inf-w2, .inf-vista[data-vista="s3"] col.inf-w3,
+    .inf-vista[data-vista="s4"] col.inf-w4, .inf-vista[data-vista="s5"] col.inf-w5 { display: table-column; }
+    .inf-vista[data-vista="s1"] td.inf-w1, .inf-vista[data-vista="s2"] td.inf-w2, .inf-vista[data-vista="s3"] td.inf-w3,
+    .inf-vista[data-vista="s4"] td.inf-w4, .inf-vista[data-vista="s5"] td.inf-w5 { font-size: 15px; background: #fdf8f6; }
+    .inf-vista[data-vista="todas"] .inf-sem { display: table-cell; }
+    .inf-vista[data-vista="todas"] col.inf-sem { display: table-column; }
+    .inf-vista[data-vista="todas"] .inf-tabla { min-width: 560px; }
+    .inf-vista[data-vista="todas"] .inf-tabla tr > :first-child { position: sticky; left: 0; background: #fff; z-index: 1; box-shadow: 1px 0 0 var(--outline-variant); }
+    .inf-vista[data-vista="todas"] .inf-tabla thead tr > :first-child { background: #f8fafc; }
+    .solo-angosta-inf { display: block; }
+  }
+  .solo-angosta-inf { display: none; }
 
   #panelMovimiento { display: none; }
   .cabecera-movimiento {
@@ -597,8 +750,8 @@ window.onunhandledrejection = function (event) {
       <img id="imgLogoApp" alt="SIREVAQ" src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png">
       <div class="divisor"></div>
       <div>
-        <h1>Movimiento de Biológico <span id="badgeEstado" class="estado-badge"></span><span id="avisoUsuario"></span></h1>
-        <p class="subtitulo">Registra las entradas y salidas de cada lote; la existencia pasa sola al mes siguiente.</p>
+        <h1><span id="tituloPagina">Movimiento de Biológico</span> <span id="badgeEstado" class="estado-badge"></span><span id="avisoUsuario"></span></h1>
+        <p class="subtitulo" id="subtituloPagina">Registra las entradas y salidas de cada lote; la existencia pasa sola al mes siguiente.</p>
       </div>
     </div>
     <div id="filaBotonesCabecera" class="fila-botones-cabecera" style="display:none">
@@ -614,10 +767,12 @@ window.onunhandledrejection = function (event) {
     </div>
   </div>
 
+  <div id="rutaMes" class="ruta-mes" style="display:none; margin-top:14px;"></div>
+
   <div class="barra separador">
     <div class="campo">
-      <label for="selUsuario">Usuario / capturista</label>
-      <input type="text" id="selUsuario" placeholder="Nombre de quien captura">
+      <label for="selUsuario" id="labelSelUsuario">Usuario / capturista</label>
+      <input type="text" id="selUsuario" placeholder="Nombre de quien captura" autocomplete="off">
     </div>
     <div class="campo">
       <label for="selUnidad" id="labelSelUnidad">Municipio</label>
@@ -631,8 +786,9 @@ window.onunhandledrejection = function (event) {
       <label for="selMes">Mes</label>
       <select id="selMes"></select>
     </div>
-    <div class="campo">
-      <button class="btn-primario" id="btnCargar"><span class="material-symbols-rounded">folder_open</span> Cargar movimiento</button>
+    <div class="campo" id="wrapUnidadRevision" style="display:none;">
+      <label for="selUnidadRevision">Unidad a revisar (CLUES)</label>
+      <select id="selUnidadRevision" style="min-width:280px;"></select>
     </div>
     <div class="campo">
       <button class="btn-secundario" id="btnAbrirImportador" title="Importar el histórico de meses anteriores desde un Excel ya llenado"><span class="material-symbols-rounded">upload_file</span> Importar histórico</button>
@@ -651,35 +807,44 @@ window.onunhandledrejection = function (event) {
   </div>
 </div>
 
-<div id="toggleSeccionUnidad" class="tarjeta" style="display:none; padding:10px 14px;">
-  <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-    <div class="grupo-acciones" style="display:inline-flex;">
-      <button class="btn-secundario btn-mini activo" id="btnSeccionSIS06P" data-seccion="sis06p">
-        <span class="material-symbols-rounded">summarize</span> SIS-06-P (SINBA)
-      </button>
-      <button class="btn-secundario btn-mini" id="btnSeccionMovimiento" data-seccion="movimiento">
-        <span class="material-symbols-rounded">inventory_2</span> Movimiento de Biológico
-      </button>
-      <button class="btn-secundario btn-mini" id="btnSeccionCSV" data-seccion="csv">
-        <span class="material-symbols-rounded">description</span> CSV
-      </button>
-      <button class="btn-secundario btn-mini" id="btnSeccionSeguimiento" data-seccion="seguimiento" style="display:none;">
-        <span class="material-symbols-rounded">fact_check</span> Seguimiento
-      </button>
-    </div>
-    <div class="grupo-acciones">
-      <button class="btn-icono" id="btnImprimirSIS06P" style="display:none;" title="Imprimir el concentrado SIS-06-P validado"><span class="material-symbols-rounded">print</span></button>
-      <button class="btn-icono" id="btnMarcarValidado" style="display:none;" title="Marcar como Validado"><span class="material-symbols-rounded" style="color:var(--success);">verified</span></button>
-      <button class="btn-icono" id="btnEnviarSIS06P" style="display:none;" title="Enviar el concentrado SIS-06-P para validación"><span class="material-symbols-rounded">send</span></button>
-      <button class="btn-icono azul" id="btnGuardarSIS06P" title="Guardar concentrado SIS-06-P"><span class="material-symbols-rounded">save</span></button>
-      <button class="btn-icono" id="btnExportarSISCompleto" title="Exportar Excel oficial: SIS-06-P y, si ya iniciaste el movimiento de este mes, también Movimiento de Biológico"><span class="material-symbols-rounded">download</span></button>
-    </div>
+<!-- Barra de hojas fija (abajo, siempre a la mano): las hojas del libro
+     SINBA-SIS como pestañas de Excel, con su estado en vivo, y a la derecha
+     Guardar / Enviar / Exportar sin tener que subir. Se muestra desde
+     biovac_ui.js (inicializarToggleSIS06P). Los ids de los botones no cambian. -->
+<nav id="toggleSeccionUnidad" class="dock-sis" style="display:none;" aria-label="Hojas del SINBA-SIS">
+  <div class="dock-hojas" id="dockHojas" role="tablist">
+    <span class="hoja-tinta" id="hojaTinta" aria-hidden="true"></span>
+    <button type="button" class="hoja-tab activo" id="btnSeccionSIS06P" data-seccion="sis06p" role="tab" style="--hoja:#0284c7;">
+      <span class="material-symbols-rounded">summarize</span><span class="hoja-nombre">SIS-06-P</span><span class="hoja-pildora" id="pildoraSIS06P"></span>
+    </button>
+    <button type="button" class="hoja-tab" id="btnSeccionMovimiento" data-seccion="movimiento" role="tab" style="--hoja:#d97706;">
+      <span class="material-symbols-rounded">inventory_2</span><span class="hoja-nombre">Movimiento<span class="hoja-largo"> de Biológico</span></span><span class="hoja-pildora" id="pildoraMovimiento"></span>
+    </button>
+    <button type="button" class="hoja-tab" id="btnSeccionCEH" data-seccion="ceh" role="tab" style="--hoja:#16a34a;">
+      <span class="material-symbols-rounded">table_view</span><span class="hoja-nombre">SIS-SS-CE-H</span><span class="hoja-pildora" id="pildoraCEH"></span>
+    </button>
+    <button type="button" class="hoja-tab" id="btnSeccionInfluenza" data-seccion="influenza" role="tab" style="--hoja:#C26750;">
+      <span class="material-symbols-rounded">vaccines</span><span class="hoja-nombre">Influenza</span><span class="hoja-pildora" id="pildoraInfluenza"></span>
+    </button>
+    <button type="button" class="hoja-tab" id="btnSeccionCSV" data-seccion="csv" role="tab" style="--hoja:#7c3aed;">
+      <span class="material-symbols-rounded">description</span><span class="hoja-nombre">CSV</span>
+    </button>
+    <button type="button" class="hoja-tab" id="btnSeccionSeguimiento" data-seccion="seguimiento" role="tab" style="--hoja:#db2777; display:none;">
+      <span class="material-symbols-rounded">fact_check</span><span class="hoja-nombre">Seguimiento</span>
+    </button>
   </div>
-  <div id="wrapUnidadRevision" class="campo" style="display:none; margin-top:10px; max-width:420px;">
-    <label for="selUnidadRevision">Unidad a revisar (CLUES) -- SIS-06-P</label>
-    <select id="selUnidadRevision" style="width:100%;"></select>
+  <div class="dock-estado" id="dockEstado" style="display:none;">
+    <b><span class="dock-punto" id="dockPunto"></span><span id="dockEstadoTitulo">Borrador</span></b>
+    <small id="dockEstadoDetalle"></small>
   </div>
-</div>
+  <div class="dock-acciones">
+    <button type="button" class="dock-btn" id="btnImprimirSIS06P" style="display:none;" title="Imprimir el concentrado SIS-06-P validado"><span class="material-symbols-rounded">print</span></button>
+    <button type="button" class="dock-btn dock-validar" id="btnMarcarValidado" style="display:none;" title="Marcar como Validado"><span class="material-symbols-rounded">verified</span><span class="dock-etiqueta">Validar</span></button>
+    <button type="button" class="dock-btn dock-enviar" id="btnEnviarSIS06P" style="display:none;" title="Enviar el SINBA-SIS para validación"><span class="material-symbols-rounded">send</span><span class="dock-etiqueta">Enviar</span></button>
+    <button type="button" class="dock-btn dock-guardar en-reposo" id="btnGuardarSIS06P" title="Guardar concentrado SIS-06-P"><span class="material-symbols-rounded" id="iconoGuardarSIS">check</span><span class="dock-etiqueta" id="etiquetaGuardarSIS">Guardado</span></button>
+    <button type="button" class="dock-btn" id="btnExportarSISCompleto" title="Exportar el Excel oficial del SINBA-SIS (SIS-06-P, Movimiento de Biológico, SIS-SS-CE-H e Influenza)"><span class="material-symbols-rounded">download</span></button>
+  </div>
+</nav>
 
 <div id="panelSIS06P" class="tarjeta" style="display:none;">
   <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:12px; flex-wrap:wrap;">
@@ -715,6 +880,51 @@ window.onunhandledrejection = function (event) {
 </div>
 
 <div id="sis06pVistaImprimible" style="display:none;"></div>
+
+<!-- Hoja SIS-SS-CE-H: réplica de SOLO LECTURA de la hoja de claves del archivo
+     SINBA-SIS. No se captura aquí -- en el Excel oficial sus totales son
+     fórmulas que jalan de SIS-06-P, y aquí igual. Después de las claves de esa
+     hoja van las de Influenza (SIS-SS-IE). Se llena en sis06p_biovac_module.js
+     (renderCEH). -->
+<div id="panelCEH" class="tarjeta" style="display:none;">
+  <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px; flex-wrap:wrap;">
+    <div style="width:44px; height:44px; border-radius:14px; background:#f1f5f9; border:1px solid var(--outline-variant); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+      <span class="material-symbols-rounded" style="color:var(--secondary);">table_view</span>
+    </div>
+    <div style="flex:1; min-width:220px;">
+      <h2>SIS-SS-CE-H <span id="cehBadgeEstado" class="estado-badge"></span></h2>
+      <p class="subtitulo">Informe mensual de actividades · Sección III · Aplicación de biológicos. Se llena sola con lo capturado en SIS-06-P e Influenza -- aquí no se captura nada.</p>
+    </div>
+  </div>
+  <div id="cehEncabezado" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:10px; margin-bottom:14px;"></div>
+  <div id="cehAviso" style="display:none; margin-bottom:12px; padding:9px 13px; border-radius:12px; font-size:12px; font-weight:700; background:var(--warning-bg); color:var(--warning); border:1px solid var(--warning-border);"></div>
+  <div id="cehContenido"></div>
+</div>
+
+<!-- Hoja Influenza (SIS-SS-IE Mensual): lectura del corte del mes. La fuente
+     única es el panel de Meta-Logro Influenza (validación contra la meta, un
+     reporte por semana); aquí solo se ve lo que ese panel ya reportó. Se llena
+     en sis06p_biovac_module.js (renderInfluenza). -->
+<div id="panelInfluenza" class="tarjeta" style="display:none;">
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:14px; flex-wrap:wrap;">
+    <div style="display:flex; align-items:center; gap:14px; flex:1; min-width:240px;">
+      <div style="width:44px; height:44px; border-radius:14px; background:#fdf2ee; border:1px solid #f4cdbf; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+        <span class="material-symbols-rounded" style="color:#C26750;">vaccines</span>
+      </div>
+      <div>
+        <h2>Influenza <span id="infBadgeEstado" class="estado-badge"></span></h2>
+        <p class="subtitulo">Concentrado mensual de dosis aplicadas de antiinfluenza estacional (SIS-SS-IE). Se arma solo con los reportes semanales de Meta-Logro Influenza de este mes.</p>
+      </div>
+    </div>
+  </div>
+  <div class="inf-cta" id="infCta" style="display:none;">
+    <div class="inf-cta-txt"><b id="infCtaTitulo">¿Algo no cuadra con tus semanas?</b><span id="infCtaTexto">Las semanas se corrigen en Meta-Logro, donde se validan contra tu meta. Tu SIS-06-P se guarda solo antes de salir.</span></div>
+    <button type="button" class="inf-cta-btn" id="btnEditarEnMetaLogro" title="Guarda tu SIS y abre el panel de Influenza (Meta-Logro), donde se captura y se valida contra la meta"><span class="material-symbols-rounded">edit_note</span> Editar semanas en Meta-Logro <span class="material-symbols-rounded">arrow_outward</span></button>
+  </div>
+  <div id="infAviso" style="display:none; margin-bottom:12px; padding:9px 13px; border-radius:12px; font-size:12px; font-weight:700;"></div>
+  <div id="infConciliacion" style="display:none; margin-bottom:14px;"></div>
+  <div id="infContenido"></div>
+</div>
 
 <div id="panelCSV" class="tarjeta" style="display:none;">
   <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:16px; flex-wrap:wrap;">
@@ -819,6 +1029,24 @@ window.onunhandledrejection = function (event) {
   <div id="revisionImportador"></div>
 </div>
 
+<!-- Detalle de una fila de las hojas SIS-SS-CE-H / Influenza (adaptativo:
+     ventana centrada en escritorio, hoja desde abajo en móvil). Se llena en
+     sis06p_biovac_module.js (abrirDetalleSIS). -->
+<div id="detalleSISOverlay" class="detalle-overlay" aria-hidden="true">
+  <div class="detalle-hoja" role="dialog" aria-modal="true" aria-labelledby="detalleSISTitulo">
+    <div class="detalle-asa"></div>
+    <div class="detalle-cab">
+      <div style="min-width:0;">
+        <h3 id="detalleSISTitulo"></h3>
+        <p id="detalleSISSub"></p>
+      </div>
+      <button type="button" class="btn-icono" id="detalleSISCerrar" title="Cerrar" aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
+    </div>
+    <div class="detalle-cuerpo" id="detalleSISCuerpo"></div>
+    <div class="detalle-pie" id="detalleSISPie"></div>
+  </div>
+</div>
+
 <div id="modalOverlay" class="modal-overlay">
   <div class="modal-caja">
     <h3 id="modalTitulo"></h3>
@@ -915,10 +1143,14 @@ window.onunhandledrejection = function (event) {
               <option value="Movimiento -- Cierre / Corrección de mes">Cierre / Corrección de mes</option>
               <option value="Movimiento -- Exportar Excel/PDF">Exportar Excel / PDF</option>
             </optgroup>
-            <optgroup label="SIS-06-P (SINBA)">
+            <optgroup label="SIS-06-P">
               <option value="SIS-06-P -- Paloteo / captura" data-tab="sis06p">Paloteo / captura de claves</option>
-              <option value="SIS-06-P -- Envío / validación">Envío para validación o marcar Validado</option>
+              <option value="SIS-06-P -- Envío / validación">Envío del SINBA-SIS para validación o marcar Validado</option>
               <option value="SIS-06-P -- Correcciones">Correcciones / EN_CORRECCION</option>
+            </optgroup>
+            <optgroup label="SIS-SS-CE-H e Influenza">
+              <option value="SIS-SS-CE-H -- Hoja de claves" data-tab="ceh">Hoja SIS-SS-CE-H (claves y totales)</option>
+              <option value="Influenza -- Hoja del SINBA-SIS" data-tab="influenza">Hoja Influenza (corte mensual / Meta-Logro)</option>
             </optgroup>
             <optgroup label="CSV">
               <option value="CSV -- Exportación a RDA" data-tab="csv">Exportación / descarga del CSV</option>

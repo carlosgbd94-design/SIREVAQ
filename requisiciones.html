@@ -10,6 +10,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1">
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="dock_glass.css?v=1">
+<script defer src="dock_glass.js?v=1"></script>
 <script defer src="requi_engine.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -92,7 +94,7 @@
      persistente (no solo al pasar el mouse) y distinto del gris del
      encabezado -- antes no había ninguno y el :hover (gris, igual al
      thead) se confundía con "esto es un header". Azul = mismo lenguaje que
-     .paso-tab.activo / .pill-new en el resto de la página. */
+     .hoja-tab.activo / .pill-new en el resto de la página. */
   table.tbl tr.fila-bio.activa td { background: #eff6ff; border-bottom-color: #bfdbfe; }
   table.tbl tr.fila-bio.activa td:first-child { border-left: 3px solid var(--secondary); }
   table.tbl tr.fila-bio.activa:hover td { background: #e0f2fe; }
@@ -156,14 +158,7 @@
   .toast.show { opacity: 1; transform: translateY(0); }
   .toast.err { background: var(--error); }
 
-  .pasos { display: flex; gap: 8px; margin-bottom: 16px; }
-  .paso-tab {
-    flex: 1; padding: 12px 16px; border-radius: 14px; background: #fff; border: 1.5px solid var(--outline-variant);
-    cursor: pointer; text-align: center; font-weight: 800; font-size: 12.5px; color: var(--muted);
-    transition: all .25s cubic-bezier(.4,0,.2,1);
-  }
-  .paso-tab:hover { border-color: #cbd5e1; color: var(--primary); }
-  .paso-tab.activo { border-color: var(--secondary); color: var(--secondary); background: #f0f9ff; box-shadow: 0 2px 6px rgba(14,165,233,.12); }
+  /* El selector de pasos es ahora la barra flotante de vidrio (dock_glass.css). */
   .paso-panel { display: none; }
   .paso-panel.activo { display: block; }
 
@@ -349,9 +344,6 @@
         <button class="btn-icono solo-edicion" id="btnGuardarCabecera" title="Guardar (crea la requisición del mes si no existe)"><span class="material-symbols-rounded">save</span></button>
       </div>
       <span id="badgesEstadoRequisicion" style="display:none; gap:6px; align-items:center;"></span>
-      <button class="btn btn-outline btn-sm solo-edicion" id="btnCerrarMes" style="display:none; margin-left:auto;">
-        <span class="material-symbols-rounded" style="font-size:14px">lock</span> Cerrar mes
-      </button>
     </div>
     <div class="hint" id="hintCabecera" style="margin-top:12px; display:none;"></div>
 
@@ -400,11 +392,26 @@
   </div>
 
   <div id="contenidoRequisicion" style="display:none;">
-    <div class="pasos">
-      <div class="paso-tab activo" data-paso="1"><span class="material-symbols-rounded">inventory</span> 1. Lo surtido (Jurisdicción)</div>
-      <div class="paso-tab" data-paso="2"><span class="material-symbols-rounded">alt_route</span> 2. Reparto a Municipios/Hospitales</div>
-      <div class="paso-tab" data-paso="3"><span class="material-symbols-rounded">local_hospital</span> 3. Reparto a Unidades</div>
-    </div>
+    <!-- Barra flotante de pasos (One UI, vidrio ligero): los tres pasos de la
+         requisición siempre a la mano, con cuántos biológicos/destinos/unidades
+         ya llevan reparto, y "Cerrar mes" sin tener que subir la página. -->
+    <nav class="dock-sis" id="dockPasos" aria-label="Pasos de la requisición">
+      <div class="dock-hojas" id="dockPasosTabs" role="tablist">
+        <span class="hoja-tinta" aria-hidden="true"></span>
+        <button type="button" class="hoja-tab paso-tab activo" data-paso="1" role="tab" style="--hoja:#0284c7;" title="1. Lo surtido (Jurisdicción)">
+          <span class="material-symbols-rounded">inventory</span><span class="hoja-nombre">1 · Lo surtido<span class="hoja-largo"> (Jurisdicción)</span></span><span class="hoja-pildora" id="pildoraPaso1"></span>
+        </button>
+        <button type="button" class="hoja-tab paso-tab" data-paso="2" role="tab" style="--hoja:#d97706;" title="2. Reparto a Municipios/Hospitales">
+          <span class="material-symbols-rounded">alt_route</span><span class="hoja-nombre">2 · Municipios<span class="hoja-largo"> y hospitales</span></span><span class="hoja-pildora" id="pildoraPaso2"></span>
+        </button>
+        <button type="button" class="hoja-tab paso-tab" data-paso="3" role="tab" style="--hoja:#16a34a;" title="3. Reparto a Unidades">
+          <span class="material-symbols-rounded">local_hospital</span><span class="hoja-nombre">3 · Unidades</span><span class="hoja-pildora" id="pildoraPaso3"></span>
+        </button>
+      </div>
+      <div class="dock-acciones">
+        <button type="button" class="dock-btn dock-enviar solo-edicion" id="btnCerrarMes" style="display:none;" title="Cerrar el mes: marca la requisición como enviada"><span class="material-symbols-rounded">lock</span><span class="dock-etiqueta">Cerrar mes</span></button>
+      </div>
+    </nav>
 
     <!-- PASO 1 -->
     <div class="paso-panel activo" id="panelPaso1">

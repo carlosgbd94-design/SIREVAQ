@@ -1,0 +1,117 @@
+/* ===========================================================================
+   Barra flotante de pestañas/pasos (SIREVAQ) -- estilo One UI 8.5.
+   Compartida por biovac.html (hojas del SINBA-SIS) y requisiciones.html
+   (pasos de la requisición). Marcado esperado:
+
+     <nav class="dock-sis">
+       <div class="dock-hojas" id="...">            <- DockGlass.instalar(este)
+         <span class="hoja-tinta"></span>
+         <button class="hoja-tab [activo]" style="--hoja:#0284c7">
+           <span class="material-symbols-rounded">icono</span>
+           <span class="hoja-nombre">Nombre<span class="hoja-largo"> (solo en ancho)</span></span>
+           <span class="hoja-pildora"></span>
+         </button> ...
+       </div>
+       <div class="dock-estado">...</div>            <- opcional
+       <div class="dock-acciones"><button class="dock-btn">...</button></div>
+     </nav>
+
+   Rasgos de One UI 8.5 (barra de pestañas flotante): cápsula con márgenes a
+   los bordes, fondo de vidrio esmerilado (blur + translúcido) y un resaltado
+   de selección tonal. A propósito NO es "liquid glass": sin refracción,
+   brillos ni biseles -- vidrio ligero, una sola sombra suave.
+   =========================================================================== */
+
+body.con-dock { padding-bottom: 104px; }
+
+.dock-sis {
+  position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 900;
+  width: min(1180px, calc(100vw - 28px)); display: flex; align-items: center; gap: 8px;
+  padding: 6px; border-radius: 999px; color: #0f172a;
+  background: rgba(255,255,255,.62);
+  -webkit-backdrop-filter: blur(26px) saturate(170%); backdrop-filter: blur(26px) saturate(170%);
+  border: 1px solid rgba(255,255,255,.78);
+  box-shadow: 0 0 0 1px rgba(15,23,42,.05), 0 10px 32px rgba(15,23,42,.14);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dock-sis { background: rgba(255,255,255,.97); }
+}
+
+.dock-hojas { position: relative; display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; flex: 0 1 auto; border-radius: 999px; }
+.dock-hojas::-webkit-scrollbar { display: none; }
+
+/* Resaltado de selección: cápsula tonal (translúcida) con el color de la
+   pestaña activa; se desliza de una a otra (ver dock_glass.js). */
+.hoja-tinta {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px; pointer-events: none; z-index: 0;
+  background: rgba(15,23,42,.08);
+  background: color-mix(in srgb, var(--hoja, #0284c7) 16%, transparent);
+  transition: transform .36s cubic-bezier(.2,.9,.25,1), width .36s cubic-bezier(.2,.9,.25,1), background-color .3s ease;
+}
+.hoja-tab {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; flex: none;
+  background: transparent; color: #4b5b70; border: none; border-radius: 999px; cursor: pointer;
+  padding: 10px 16px; font: 700 12.5px 'Poppins', sans-serif; white-space: nowrap; box-shadow: none;
+  transition: color .2s ease;
+}
+.hoja-tab:hover { color: #0f172a; }
+.hoja-tab.activo { color: #0f172a; font-weight: 800; }
+.hoja-tab .material-symbols-rounded { font-size: 19px; transition: color .2s ease; }
+.hoja-tab.activo .material-symbols-rounded { color: var(--hoja, #0284c7); font-variation-settings: 'FILL' 1; }
+.hoja-pildora {
+  font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 999px; line-height: 1.5;
+  background: rgba(15,23,42,.08); color: #475569; letter-spacing: 0;
+}
+.hoja-pildora:empty { display: none; }
+.hoja-pildora.ok { background: #dcfce7; color: #15803d; }
+.hoja-pildora.aviso { background: #fef3c7; color: #b45309; }
+.hoja-pildora.punto { width: 8px; height: 8px; padding: 0; background: #f59e0b; }
+
+.dock-estado { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 0 8px; }
+.dock-estado b { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #0f172a; font-family: 'Poppins', sans-serif; white-space: nowrap; }
+.dock-estado small { font-size: 11px; color: #5b6b80; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock-punto { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; flex: none; }
+.dock-punto.enviado { background: #f59e0b; }
+.dock-punto.validado { background: #16a34a; }
+
+.dock-acciones { display: flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
+/* Acciones: cápsulas rellenas/tonales (con etiqueta) e iconos limpios (sin
+   etiqueta, sin contenedor), siguiendo la convención de la app; el efecto de
+   hover solo aplica a punteros reales (en táctil quedaría "pegado"). */
+.dock-btn {
+  display: inline-flex; align-items: center; gap: 6px; background: transparent; color: #4b5b70; border: none; cursor: pointer;
+  border-radius: 999px; padding: 10px 12px; font: 800 12.5px 'Poppins', sans-serif; white-space: nowrap; box-shadow: none;
+  transition: background-color .2s ease, color .2s ease, transform .2s ease;
+}
+.dock-btn .material-symbols-rounded { font-size: 20px; }
+.dock-btn:disabled { cursor: not-allowed; }
+.dock-guardar { background: #0284c7; color: #fff; padding: 10px 18px; }
+.dock-guardar.en-reposo { background: rgba(15,23,42,.06); color: #64748b; }
+.dock-enviar { background: #0f172a; color: #fff; padding: 10px 18px; }
+.dock-enviar:disabled { background: rgba(15,23,42,.06); color: #94a3b8; opacity: 1; }
+.dock-validar { background: #16a34a; color: #fff; padding: 10px 18px; }
+.dock-validar .material-symbols-rounded { color: inherit; }
+@media (hover: hover) and (pointer: fine) {
+  .dock-btn:hover:not(:disabled) { color: #0284c7; transform: translateY(-2px); }
+  .dock-guardar:hover:not(:disabled) { background: #0369a1; color: #fff; transform: none; }
+  .dock-guardar.en-reposo:hover:not(:disabled) { background: rgba(15,23,42,.1); color: #0f172a; }
+  .dock-enviar:hover:not(:disabled) { background: #1e293b; color: #fff; transform: none; }
+  .dock-validar:hover:not(:disabled) { background: #15803d; color: #fff; transform: none; }
+}
+body.con-dock .feedback-fab { bottom: 92px; right: 18px; width: 48px; height: 48px; }
+body.con-dock .feedback-fab .material-symbols-rounded { font-size: 22px; }
+body.con-dock .toast { bottom: 96px; }
+
+@media (max-width: 900px) { .dock-estado small, .hoja-largo { display: none; } .hoja-pildora { padding: 1px 6px; } }
+@media (max-width: 760px) {
+  .dock-sis { bottom: 8px; width: calc(100vw - 16px); padding: 5px; gap: 4px; }
+  .dock-estado { display: none !important; }
+  .hoja-tab { padding: 10px 9px; }
+  .hoja-tab:not(.activo) .hoja-nombre { display: none; }
+  .hoja-tab:not(.activo) .hoja-pildora { position: absolute; top: 3px; right: 2px; font-size: 8.5px; padding: 0 5px; }
+  /* Exportar solo existe una vez validado: mientras está deshabilitado no ocupa lugar en el móvil. */
+  #btnExportarSISCompleto:disabled { display: none; }
+  .dock-etiqueta { display: none; }
+  .dock-guardar, .dock-enviar, .dock-validar { padding: 10px 13px; }
+  body.con-dock .feedback-fab { bottom: 84px; right: 12px; }
+}

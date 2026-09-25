@@ -128,10 +128,29 @@ async function cargarSesionReal() {
   const nombreCompleto = nombreCompletoDePerfil(perfil);
   const inp = document.getElementById('selUsuario');
   inp.value = nombreCompleto;
-  inp.readOnly = true;
+  if (perfil.rol === 'UNIDAD') {
+    // En la unidad, "quien elabora" el SINBA-SIS no siempre es quien tiene la
+    // sesión (varias personas capturan con la misma cuenta): el campo se
+    // puede editar y ese nombre es el RESPONSABLE que sale en las 4 hojas del
+    // archivo (SIS-06-P, Movimiento, SIS-SS-CE-H e Influenza). La auditoría
+    // (quién guardó/envió/corrigió) NO usa este campo: sigue siendo la
+    // sesión real, para que el rastro no se pueda cambiar tecleando.
+    let recordado = null;
+    try { recordado = localStorage.getItem('sis_responsable_' + perfil.clues); } catch (e) { /* sin storage */ }
+    if (recordado) inp.value = recordado;
+    inp.readOnly = false;
+    document.getElementById('labelSelUsuario').textContent = 'Responsable / capturista';
+    inp.placeholder = 'Quién elabora el SINBA-SIS';
+    inp.title = 'Nombre de quien elabora la información: sale como responsable en todas las hojas del SINBA-SIS. Puedes cambiarlo.';
+  } else {
+    inp.readOnly = true;
+  }
+  // Con sesión real no se muestra ningún chip: el "Sesión real: ..." parecía
+  // un aviso de pruebas y no le dice nada a quien opera. Solo se avisa cuando
+  // NO hay sesión (ver más abajo, en cargarCatalogo/arranque).
   const aviso = document.getElementById('avisoUsuario');
-  aviso.classList.add('aviso-ok');
-  aviso.innerHTML = `<span class="material-symbols-rounded">verified_user</span> Sesión real: ${nombreCompleto} (${perfil.rol}).`;
+  aviso.classList.remove('aviso-ok');
+  aviso.innerHTML = '';
 }
 
 function usuarioActual() {
@@ -143,6 +162,18 @@ function usuarioActual() {
   }
   localStorage.setItem('biovac_usuario', v);
   return v;
+}
+
+// Nombre que se guarda como "responsable de la información" del SINBA-SIS
+// (biovac_movimientos.responsable_elaboracion / sis06p_capturas.capturado_por).
+// Para UNIDAD es lo que se teclee en el encabezado (con la sesión como
+// respaldo si se deja vacío); para el resto de roles no cambia nada.
+function responsableElaboracion() {
+  if (estado.perfil && estado.perfil.rol === 'UNIDAD') {
+    const v = document.getElementById('selUsuario').value.trim();
+    return v || nombreCompletoDePerfil(estado.perfil);
+  }
+  return usuarioActual();
 }
 
 function toast(msg, tipo) {
@@ -412,7 +443,7 @@ async function confirmarSalidaSIS06P() {
 
 function instalarGuardasSIS06P() {
   const btnSis = document.getElementById('btnSeccionSIS06P');
-  ['btnSeccionMovimiento', 'btnSeccionCSV', 'btnSeccionSeguimiento'].forEach((id) => {
+  ['btnSeccionMovimiento', 'btnSeccionCEH', 'btnSeccionInfluenza', 'btnSeccionCSV', 'btnSeccionSeguimiento'].forEach((id) => {
     const btn = document.getElementById(id);
     if (!btn) return;
     // Captura en el propio botón: corre ANTES que el manejador normal de
@@ -451,14 +482,24 @@ const MUNICIPIOS_HOSPITAL = ['HENM', 'NHG'];
 
 let _sis06pInicializado = false;
 
+// La "tinta" de la barra de hojas (resaltado tonal que se desliza a la pestaña
+// activa) la maneja dock_glass.js, compartido con requisiciones.html.
+function instalarTintaHojas() {
+  if (window.DockGlass) window.DockGlass.instalar(document.getElementById('dockHojas'));
+}
+
 function inicializarToggleSIS06P() {
-  document.getElementById('toggleSeccionUnidad').style.display = 'block';
+  document.getElementById('toggleSeccionUnidad').style.display = 'flex';
+  document.body.classList.add('con-dock');
+  instalarTintaHojas();
   instalarGuardasSIS06P();
   const btnSis = document.getElementById('btnSeccionSIS06P');
   const btnMov = document.getElementById('btnSeccionMovimiento');
+  const btnCeh = document.getElementById('btnSeccionCEH');
+  const btnInf = document.getElementById('btnSeccionInfluenza');
   const btnCsv = document.getElementById('btnSeccionCSV');
   const btnSeg = document.getElementById('btnSeccionSeguimiento');
-  const botones = [btnSis, btnMov, btnCsv, btnSeg];
+  const botones = [btnSis, btnMov, btnCeh, btnInf, btnCsv, btnSeg];
 
   // El selector de "unidad a revisar" (CLUES) y las pestañas SIS-06-P/CSV
   // son SOLO para MUNICIPAL (revisa/edita el SIS de SUS propias unidades).
@@ -473,14 +514,28 @@ function inicializarToggleSIS06P() {
   // CLUES de los hospitales (ver cargarCatalogo) -- es su "municipal".
   const veRevision = esMunicipal || rolActual === 'JURISDICCIONAL';
   if (wrapRevision) wrapRevision.style.display = veRevision ? 'flex' : 'none';
+  // Para la unidad, SIS-06-P + Movimiento de Biológico + SIS-SS-CE-H +
+  // Influenza son las 4 hojas de UN solo archivo (el SINBA-SIS) -- no hay
+  // CSV: el CSV solo existe concentrado a nivel municipal, nunca por unidad.
+  if (rolActual === 'UNIDAD') {
+    btnCsv.style.display = 'none';
+    document.getElementById('tituloPagina').textContent = 'SINBA-SIS';
+    // En lugar de un texto genérico, la "ruta del mes": cómo funciona el
+    // SINBA-SIS y en qué paso va este mes (se pinta en sis06p_biovac_module.js).
+    document.getElementById('subtituloPagina').style.display = 'none';
+    document.getElementById('rutaMes').style.display = 'flex';
+    document.title = 'SINBA-SIS — SIREVAQ';
+  }
   if (rolActual === 'JURISDICCIONAL' || rolActual === 'ADMIN') {
-    if (rolActual === 'ADMIN') btnSis.style.display = 'none';
+    if (rolActual === 'ADMIN') { btnSis.style.display = 'none'; btnCeh.style.display = 'none'; btnInf.style.display = 'none'; }
     btnCsv.style.display = 'none';
   }
 
   function ocultarTodo() {
     botones.forEach((b) => b.classList.remove('activo'));
     document.getElementById('panelSIS06P').style.display = 'none';
+    document.getElementById('panelCEH').style.display = 'none';
+    document.getElementById('panelInfluenza').style.display = 'none';
     document.getElementById('panelCSV').style.display = 'none';
     document.getElementById('panelSeguimiento').style.display = 'none';
     document.getElementById('panelMovimiento').style.display = 'none';
@@ -518,6 +573,22 @@ function inicializarToggleSIS06P() {
     cargarMovimiento();
   });
 
+  // SIS-SS-CE-H e Influenza son hojas derivadas (solo lectura): se pintan
+  // desde las cachés de SIS06PBiovac, sin tocar el paloteo que se esté
+  // tecleando (por eso llaman renderCEH/renderInfluenza, nunca render()).
+  function abrirHojaDerivada(btn, panelId, renderFn) {
+    return async () => {
+      ocultarTodo();
+      btn.classList.add('activo');
+      document.getElementById(panelId).style.display = 'block';
+      if (wrapRevision) wrapRevision.style.display = veRevision ? 'flex' : 'none';
+      if (!_sis06pInicializado) { _sis06pInicializado = true; await window.SIS06PBiovac.init(); }
+      window.SIS06PBiovac[renderFn]();
+    };
+  }
+  btnCeh.addEventListener('click', abrirHojaDerivada(btnCeh, 'panelCEH', 'renderCEH'));
+  btnInf.addEventListener('click', abrirHojaDerivada(btnInf, 'panelInfluenza', 'renderInfluenza'));
+
   btnCsv.addEventListener('click', async () => {
     ocultarTodo();
     btnCsv.classList.add('activo');
@@ -545,13 +616,23 @@ function inicializarToggleSIS06P() {
   // revisores: #selUnidad ahora es SOLO el municipio/hospital de
   // Movimiento -- cambiar de unidad ahí ya no debe tocar SIS-06-P/CSV, eso
   // lo maneja #selUnidadRevision por separado.
+  // Vuelve a leer lo de la unidad/mes/año elegidos y pinta la hoja activa.
+  // init() relee TODO (capturas, ventana de envío, conciliación con
+  // Movimiento): con solo render() la ventana y la conciliación se quedaban
+  // con las del mes anterior al cambiar de mes/año.
+  async function refrescarHojasSIS() {
+    const hojas = [btnSis, btnCeh, btnInf, btnCsv];
+    if (!hojas.some((b) => b && b.classList.contains('activo'))) return;
+    _sis06pInicializado = true;
+    await window.SIS06PBiovac.init();
+    if (btnCeh.classList.contains('activo')) window.SIS06PBiovac.renderCEH();
+    if (btnInf.classList.contains('activo')) window.SIS06PBiovac.renderInfluenza();
+    if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
+  }
+
   document.getElementById('selUnidad').addEventListener('change', async () => {
     if (rolActual !== 'UNIDAD') return;
-    if (btnSis.classList.contains('activo') || btnCsv.classList.contains('activo')) {
-      _sis06pInicializado = true;
-      await window.SIS06PBiovac.init();
-      if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
-    }
+    await refrescarHojasSIS();
   });
 
   // Cambiar la unidad a revisar (roles revisores únicamente) invalida la
@@ -559,36 +640,20 @@ function inicializarToggleSIS06P() {
   // la CLUES recién seleccionada, no solo volver a pintar con datos viejos.
   if (selUnidadRevision) {
     selUnidadRevision.addEventListener('change', async () => {
-      if (btnMov.classList.contains('activo')) { cargarMovimiento(); return; }
-      if (btnSis.classList.contains('activo') || btnCsv.classList.contains('activo')) {
-        _sis06pInicializado = true;
-        await window.SIS06PBiovac.init();
-        if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
-      }
+      if (btnMov.classList.contains('activo')) { recargarMovimientoPorFiltro(); return; }
+      await refrescarHojasSIS();
     });
   }
 
-  // Movimiento de Biológico se recarga solo (sin pedir "Cargar movimiento")
-  // al cambiar mes/año -- pero SOLO para rol UNIDAD: para MUNICIPAL/
-  // JURISDICCIONAL/ADMIN, cambiar el mes aquí es un gesto deliberado de
-  // revisión (a veces sobre una unidad ajena, con RLS de por medio) y no
-  // hay que tocar ese flujo ya establecido.
-  function recargarMovimientoSiActivoUnidad() {
-    if (rolActual === 'UNIDAD' && btnMov.classList.contains('activo')) cargarMovimiento();
+  // El Movimiento de Biológico se recarga solo al cambiar unidad/mes/año
+  // (ver recargarMovimientoPorFiltro, registrado una sola vez al arrancar).
+  // Aquí solo se refrescan las hojas del SINBA-SIS y el Seguimiento.
+  function alCambiarMesOAnio() {
+    refrescarHojasSIS();
+    if (btnSeg.classList.contains('activo') && window.SIS06PDashboard) window.SIS06PDashboard.render();
   }
-
-  document.getElementById('selMes').addEventListener('change', () => {
-    if (btnSis.classList.contains('activo')) window.SIS06PBiovac.render();
-    if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
-    if (btnSeg.classList.contains('activo') && window.SIS06PDashboard) window.SIS06PDashboard.render();
-    recargarMovimientoSiActivoUnidad();
-  });
-  document.getElementById('selAnio').addEventListener('change', () => {
-    if (btnSis.classList.contains('activo')) window.SIS06PBiovac.render();
-    if (btnCsv.classList.contains('activo')) window.SIS06PBiovac.renderCSVPreview();
-    if (btnSeg.classList.contains('activo') && window.SIS06PDashboard) window.SIS06PDashboard.render();
-    recargarMovimientoSiActivoUnidad();
-  });
+  document.getElementById('selMes').addEventListener('change', alCambiarMesOAnio);
+  document.getElementById('selAnio').addEventListener('change', alCambiarMesOAnio);
 
   // SIS-06-P es la sección base para UNIDAD (entra directo a capturar);
   // los roles revisores entran directo a Seguimiento (para qué vinieron).
@@ -705,6 +770,28 @@ function movimientoEsDerivado(unidadId, anio, mes) {
   return (estado.unidadesClues || []).some((x) => x.municipio === u.municipio);
 }
 
+function toggleSeccionesVisible() {
+  const toggle = document.getElementById('toggleSeccionUnidad');
+  return Boolean(toggle && toggle.style.display !== 'none');
+}
+
+// La página muestra el Movimiento cuando su pestaña está activa -- o siempre,
+// si no hay pestañas.
+function seccionMovimientoActiva() {
+  if (!toggleSeccionesVisible()) return true;
+  return document.getElementById('btnSeccionMovimiento').classList.contains('activo');
+}
+
+// Al cambiar unidad/año/mes con el Movimiento a la vista se vuelve a abrir
+// solo. Es el mismo gesto que antes hacía el botón "Cargar movimiento":
+// también suelta cualquier corrección abierta del mes anterior.
+function recargarMovimientoPorFiltro() {
+  if (!seccionMovimientoActiva()) return;
+  estado.correccionBatchId = null;
+  estado.correccionEsJurisdiccional = false;
+  cargarMovimiento();
+}
+
 async function cargarMovimiento() {
   const unidadId = unidadIdMovimientoActivo();
   const anio = Number(document.getElementById('selAnio').value);
@@ -759,7 +846,10 @@ async function cargarMovimiento() {
     estado.correccionEsJurisdiccional = Boolean(marcador?.cascade_batch_id);
   }
   await cargarRenglones();
-  if (estado.perfil && estado.perfil.rol === 'UNIDAD') await cargarSIS06PTotalesParaComparar(anio, mes);
+  if (estado.perfil && estado.perfil.rol === 'UNIDAD') {
+    await cargarSIS06PTotalesParaComparar(anio, mes);
+    if (window.SIS06PBiovac) window.SIS06PBiovac.aplicarResponsable();
+  }
   render();
   if (movimiento.estado === 'BORRADOR') {
     // Pseudo-unidad (municipio/hospital, clues 'JS1-...') -> reparto a nivel
@@ -1153,7 +1243,7 @@ async function crearMovimiento() {
   const mes = Number(document.getElementById('selMes').value);
   if (movimientoEsDerivado(unidadId, anio, mes)) { toast('Desde octubre el Movimiento del municipio se concentra desde sus unidades: ya no se captura.', 'error'); return; }
   const { error } = await estado.db.from('biovac_movimientos')
-    .insert({ unidad_id: unidadId, anio, mes, responsable_elaboracion: usuario, fecha_corte: ultimoDiaMes(anio, mes) });
+    .insert({ unidad_id: unidadId, anio, mes, responsable_elaboracion: responsableElaboracion(), fecha_corte: ultimoDiaMes(anio, mes) });
   if (error) { toast('Error: ' + error.message, 'error'); return; }
   toast('Movimiento creado.', 'ok');
   await cargarMovimiento();
@@ -1193,6 +1283,10 @@ function render() {
   const inpResp = document.getElementById('inpResponsable');
   inpResp.value = m.responsable_elaboracion || '';
   inpResp.readOnly = !cabeceraEditable;
+  // UNIDAD: el responsable ya está en el encabezado (uno solo para las 4
+  // hojas del SINBA-SIS) -- no se repite aquí.
+  const campoResp = inpResp.closest('.campo');
+  if (campoResp) campoResp.style.display = (estado.perfil && estado.perfil.rol === 'UNIDAD') ? 'none' : '';
 
   // La fecha de corte es mensual (último día del mes elegido) -- se
   // calcula sola, no se pide un día específico.
@@ -1818,6 +1912,9 @@ async function guardarCampoRenglon(input) {
     const celda = document.querySelector(`[data-existencia-final="${renglonId}"]`);
     if (celda) { celda.textContent = redondearFrascos(final); celda.classList.toggle('existencia-negativa', Number(final) < 0); }
   }
+  // La píldora de Movimiento y la ruta del mes (barra de hojas) leen la
+  // conciliación con el paloteo: se vuelve a pedir al servidor tras guardar.
+  if (window.SIS06PBiovac && window.SIS06PBiovac.refrescarConciliacion) window.SIS06PBiovac.refrescarConciliacion();
 }
 
 // Traslada el concentrado mensual de Influenza (paloteo semanal ya sumado
@@ -1852,6 +1949,7 @@ async function usarTotalInfluenzaEnRenglon(renglonId, total) {
   r.existencia_final_frascos = data.existencia_final_frascos;
   render();
   toast('✅ Total de Influenza aplicado en el movimiento.', 'ok');
+  if (window.SIS06PBiovac && window.SIS06PBiovac.refrescarConciliacion) window.SIS06PBiovac.refrescarConciliacion();
 }
 
 async function eliminarRenglon(renglonId) {
@@ -2147,7 +2245,10 @@ async function pasarNormalAArf(renglonId, panel) {
 async function guardarCabecera() {
   const usuario = usuarioActual();
   if (!usuario) return;
-  const responsable = document.getElementById('inpResponsable').value.trim() || null;
+  // UNIDAD: el responsable es el del encabezado (uno solo para todo el
+  // SINBA-SIS); el resto de roles lo sigue capturando en la cabecera del Movimiento.
+  const esUnidadCab = estado.perfil && estado.perfil.rol === 'UNIDAD';
+  const responsable = (esUnidadCab ? responsableElaboracion() : document.getElementById('inpResponsable').value.trim()) || null;
   const fechaCorte = ultimoDiaMes(estado.movimiento.anio, estado.movimiento.mes);
 
   if (estado.movimiento.id === null) {
@@ -2581,7 +2682,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btn) reconocerCorreccion(btn.dataset.correccion);
   });
 
-  document.getElementById('btnCargar').addEventListener('click', () => { estado.correccionBatchId = null; estado.correccionEsJurisdiccional = false; cargarMovimiento(); });
+  // Ya no hay botón "Cargar movimiento": el Movimiento se abre solo al elegir
+  // la pestaña y se recarga solo al cambiar unidad/año/mes. Sin pestañas
+  // (uso sin sesión o rol sin acceso al SINBA-SIS) la página ES el
+  // Movimiento, así que se abre directo.
+  ['selUnidad', 'selAnio', 'selMes'].forEach((id) => document.getElementById(id).addEventListener('change', recargarMovimientoPorFiltro));
+  if (!toggleSeccionesVisible()) cargarMovimiento();
+
+  // Responsable editable de la unidad: se guarda al salir del campo (ver
+  // guardarResponsable en sis06p_biovac_module.js).
+  const inpUsuario = document.getElementById('selUsuario');
+  inpUsuario.addEventListener('input', () => { if (window.SIS06PBiovac) window.SIS06PBiovac.marcarResponsableManual(); });
+  inpUsuario.addEventListener('change', () => { if (window.SIS06PBiovac) window.SIS06PBiovac.guardarResponsable(); });
+
   document.getElementById('btnIniciarMovimiento').addEventListener('click', crearMovimiento);
   document.getElementById('btnGuardarCabecera').addEventListener('click', guardarCabecera);
   document.getElementById('btnCerrarMes').addEventListener('click', cerrarMes);
@@ -2693,14 +2806,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // clasificado correctamente aunque el usuario no piense en cambiarlo,
   // que es la causa más común de reportes mal etiquetados como "General".
   const NOMBRE_PESTANA = {
-    sis06p: 'SIS-06-P (SINBA)',
+    sis06p: 'SIS-06-P',
     movimiento: 'Movimiento de Biológico',
+    ceh: 'SIS-SS-CE-H',
+    influenza: 'Influenza',
     csv: 'CSV',
     seguimiento: 'Seguimiento'
   };
 
   btnFeedbackFAB.addEventListener('click', () => {
-    const tabActiva = document.querySelector('#toggleSeccionUnidad .btn-secundario.activo');
+    const tabActiva = document.querySelector('#toggleSeccionUnidad .hoja-tab.activo');
     const seccion = tabActiva?.dataset.seccion;
     const feedbackModule = document.getElementById('feedbackModule');
     const feedbackSubtitle = document.getElementById('feedbackModalSubtitle');
@@ -2828,7 +2943,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Pestaña activa + unidad que un revisor (MUNICIPAL/JURISDICCIONAL/ADMIN)
     // haya elegido en #selUnidadRevision -- sin esto un reporte de un revisor
     // llegaba diciendo solo el municipio, sin la CLUES real donde vio el bug.
-    const tabActivaBtn = document.querySelector('#toggleSeccionUnidad .btn-secundario.activo');
+    const tabActivaBtn = document.querySelector('#toggleSeccionUnidad .hoja-tab.activo');
     const pestanaTexto = NOMBRE_PESTANA[tabActivaBtn?.dataset.seccion] || 'N/A';
     const selUnidadRevision = document.getElementById('selUnidadRevision');
     const unidadRevisionTexto = (selUnidadRevision && selUnidadRevision.offsetParent !== null && selUnidadRevision.selectedOptions[0])

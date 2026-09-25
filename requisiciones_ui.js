@@ -317,6 +317,7 @@ async function cargarRequisicion() {
   renderEstadoRequisicion();
   if (!data) {
     $('contenidoRequisicion').style.display = 'none';
+    document.body.classList.remove('con-dock');
     $('hintCabecera').style.display = 'block';
     $('hintCabecera').innerHTML = estado.puedeEditar
       ? 'No existe requisición para este mes todavía. Presiona el botón de guardar (💾) para crearla.'
@@ -424,6 +425,8 @@ async function cargarDatosRequisicion() {
   estado.distMunicipio = dm || [];
   estado.distUnidad = du || [];
   $('contenidoRequisicion').style.display = 'block';
+  document.body.classList.add('con-dock');
+  actualizarPildorasDock();
   renderPaso1();
   renderSelectLotesPaso2();
   renderSelectMunicipioYLotesPaso3();
@@ -691,6 +694,7 @@ async function agregarLoteSurtido(biologicoId) {
 
   const idxExistente = estado.items.findIndex((i) => i.id === itemGuardado.id);
   if (idxExistente === -1) estado.items.push(itemGuardado); else estado.items[idxExistente] = itemGuardado;
+  actualizarPildorasDock();
 
   toast('Lote registrado.');
   actualizarFilaBiologico(biologicoId, true);
@@ -702,6 +706,7 @@ async function quitarItemSurtido(itemId, biologicoId) {
   const { error } = await estado.db.from('requi_items_jurisdiccion').delete().eq('id', itemId);
   if (error) { toast('No se pudo quitar: ' + error.message, true); return; }
   estado.items = estado.items.filter((i) => i.id !== itemId);
+  actualizarPildorasDock();
   toast('Lote quitado.');
   actualizarFilaBiologico(biologicoId, true);
   renderSelectLotesPaso2();
@@ -855,6 +860,7 @@ async function guardarRepartoMunicipio(biologicoId, loteId, municipio, inputEl) 
   let fila = estado.distMunicipio.find((d) => d.requi_biologico_id === biologicoId && d.lote_id === loteId && d.municipio === municipio);
   if (fila) fila.cantidad = cantidad;
   else estado.distMunicipio.push({ requisicion_id: estado.requisicion.id, municipio, requi_biologico_id: biologicoId, lote_id: loteId, cantidad });
+  actualizarPildorasDock();
   flashGuardado(inputEl.closest('.destino-card'));
   actualizarStatsRepartoMunicipio(biologicoId, loteId);
   renderSelectMunicipioYLotesPaso3();
@@ -1035,6 +1041,7 @@ async function guardarRepartoUnidad(biologicoId, loteId, unidadId, inputEl) {
   let fila = estado.distUnidad.find((d) => d.requi_biologico_id === biologicoId && d.lote_id === loteId && d.unidad_id === unidadId);
   if (fila) fila.cantidad = cantidad;
   else estado.distUnidad.push({ requisicion_id: estado.requisicion.id, unidad_id: unidadId, requi_biologico_id: biologicoId, lote_id: loteId, cantidad });
+  actualizarPildorasDock();
   const filaTr = document.querySelector(`tr[data-unidad-fila="${unidadId}"]`);
   if (filaTr) { flashGuardado(filaTr); filaTr.classList.toggle('con-asignacion', cantidad > 0); }
   actualizarStatsRepartoUnidad(biologicoId, loteId);
@@ -1264,6 +1271,21 @@ function toggleResponsables() {
   icono.style.transform = abierto ? 'rotate(0deg)' : 'rotate(180deg)';
 }
 
+// Píldoras vivas de la barra de pasos: cuántos biológicos ya tienen lotes
+// surtidos (1), a cuántos destinos ya se les repartió (2) y a cuántas
+// unidades (3). Se recalcula tras cada guardado.
+function actualizarPildorasDock() {
+  const poner = (id, n, titulo) => {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = n > 0 ? String(n) : '';
+    el.title = n > 0 ? titulo : '';
+  };
+  poner('pildoraPaso1', new Set((estado.items || []).map((i) => i.requi_biologico_id)).size, 'biológicos con lotes surtidos');
+  poner('pildoraPaso2', new Set((estado.distMunicipio || []).filter((d) => Number(d.cantidad) > 0).map((d) => d.municipio)).size, 'destinos con reparto');
+  poner('pildoraPaso3', new Set((estado.distUnidad || []).filter((d) => Number(d.cantidad) > 0).map((d) => d.unidad_id)).size, 'unidades con reparto');
+}
+
 function activarPaso(n) {
   document.querySelectorAll('.paso-tab').forEach((t) => t.classList.toggle('activo', t.dataset.paso === String(n)));
   document.querySelectorAll('.paso-panel').forEach((p) => p.classList.remove('activo'));
@@ -1280,6 +1302,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await cargarRequisicion();
 
   document.querySelectorAll('.paso-tab').forEach((tab) => tab.addEventListener('click', () => activarPaso(tab.dataset.paso)));
+  if (window.DockGlass) window.DockGlass.instalar($('dockPasosTabs'));
   $('btnCargar').addEventListener('click', cargarRequisicion);
   $('btnGuardarCabecera').addEventListener('click', guardarCabecera);
   $('btnPdfJurisdiccional').addEventListener('click', () => exportarUno('JURISDICCIONAL', ''));

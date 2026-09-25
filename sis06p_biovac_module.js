@@ -42,6 +42,8 @@
     _sinGuardar = valor;
     const chip = document.getElementById('sis06pChipSinGuardar');
     if (chip) chip.style.display = valor ? 'inline-block' : 'none';
+    actualizarDock();
+    renderRutaMes();
   }
   document.addEventListener('input', (ev) => {
     const id = ev.target && ev.target.id;
@@ -51,26 +53,36 @@
     if (_sinGuardar) { ev.preventDefault(); ev.returnValue = ''; }
   });
 
-  // Copia de window.INFLUENZA_SIS_MAPPING (fuente única de verdad real:
-  // influenza_module.js:57-72) -- biovac.html no carga influenza_module.js
-  // (es de otra página/bundle), así que se duplica aquí solo esta constante
-  // pequeña. Si cambia allá, hay que reflejarlo aquí.
-  const INFLUENZA_SIS_MAPPING = {
-    r1: "BIE01", r2: "BIE28", r3: "BIE29", r4: "BIE30", r5: "BIE31",
-    r6: "BIE04", r7: "BIE32", r8: "BIE33", r9: "BIE34", r10: "BIE35",
-    r11: "BIE36", r12: "BIE37", r13: "BIE38", r14: "BIE39", r15: "BIE40",
-    r16: "BIO96", r17: "BIO97",
-    r18: "BIE09", r19: "BIE10", r20: "BIE41",
-    r21: "BIE12", r22: "BIE13", r23: "BIE42",
-    r24: "BIE15", r25: "BIE16", r26: "BIE43",
-    r27: "BIE18", r28: "BIE19", r29: "BIE44",
-    r30: "BIE48", r31: "BIE49", r32: "BIE50",
-    r33: "BIE24", r34: "BIE25", r35: "BIE46",
-    r36: "BIE51", r37: "BIE52", r38: "BIE53",
-    r39: "BIE54", r40: "BIE55",
-    r41: "BIE56", r42: "BIE57", r43: "BIE58",
-    r44: "BIE59", r45: "BIE60", r46: "BIE61"
-  };
+  // Catálogo de Influenza (hoja SIS-SS-IE): rubro (r1..r46, el mismo id que
+  // guarda el panel Meta-Logro en influenza_capturas.valores) -> categoría/
+  // grupo/edad + clave SIS. Copia de INFLUENZA_RUBROS + INFLUENZA_SIS_MAPPING
+  // (fuente única real: influenza_module.js:2-72) -- biovac.html no carga
+  // influenza_module.js (es de otra página/bundle), así que se duplica aquí.
+  // Si cambia allá, hay que reflejarlo aquí. Los ids se asignan en orden
+  // (r1, r2, ...), igual que allá.
+  const _INF_5_9_19_59 = ['5 a 9 años', '10 a 19 años', '20 a 59 años'];
+  const _INF_GRUPOS_DEF = [
+    ['Población blanco', 'Primera dosis', ['6 a 11 meses', '12 a 23 meses', '24 a 35 meses', '36 a 47 meses', '48 a 59 meses'], ['BIE01', 'BIE28', 'BIE29', 'BIE30', 'BIE31']],
+    ['Población blanco', 'Segunda dosis', ['7 a 11 meses', '12 a 23 meses', '24 a 35 meses', '36 a 47 meses', '48 a 59 meses'], ['BIE04', 'BIE32', 'BIE33', 'BIE34', 'BIE35']],
+    ['Población blanco', 'Revacunación', ['18 a 23 meses', '24 a 35 meses', '36 a 47 meses', '48 a 59 meses', '60 años y más'], ['BIE36', 'BIE37', 'BIE38', 'BIE39', 'BIE40']],
+    ['Población de riesgo de 5 a 59 años', 'Grupos de riesgo', ['Embarazadas', 'Personal de salud en unidades médicas'], ['BIO96', 'BIO97']],
+    ['Población de riesgo de 5 a 59 años', 'Personas que viven con VIH/SIDA', _INF_5_9_19_59, ['BIE09', 'BIE10', 'BIE41']],
+    ['Población de riesgo de 5 a 59 años', 'Diabetes mellitus', _INF_5_9_19_59, ['BIE12', 'BIE13', 'BIE42']],
+    ['Población de riesgo de 5 a 59 años', 'Obesidad mórbida', _INF_5_9_19_59, ['BIE15', 'BIE16', 'BIE43']],
+    ['Población de riesgo de 5 a 59 años', 'Personas con cardiopatías agudas o crónicas', _INF_5_9_19_59, ['BIE18', 'BIE19', 'BIE44']],
+    ['Población de riesgo de 5 a 59 años', 'Personas con enfermedad pulmonar crónica, incluye EPOC y asma', _INF_5_9_19_59, ['BIE48', 'BIE49', 'BIE50']],
+    ['Población de riesgo de 5 a 59 años', 'Personas con cáncer', _INF_5_9_19_59, ['BIE24', 'BIE25', 'BIE46']],
+    ['Población de riesgo de 5 a 59 años', 'Enfermedades cardiacas o pulmonares congénitas, u otros padecimientos crónicos que requieran consumo prolongado de salicilatos', ['5 a 9 años', '10 a 19 años'], ['BIE51', 'BIE52']],
+    ['Población de riesgo de 5 a 59 años', 'Personas con insuficiencia renal', _INF_5_9_19_59, ['BIE53', 'BIE54', 'BIE55']],
+    ['Población de riesgo de 5 a 59 años', 'Personas con inmunosupresión adquirida por enfermedad o tratamiento, excepto VIH /SIDA', _INF_5_9_19_59, ['BIE56', 'BIE57', 'BIE58']],
+    ['Población de riesgo de 5 a 59 años', 'Otros grupos', _INF_5_9_19_59, ['BIE59', 'BIE60', 'BIE61']]
+  ];
+  const INFLUENZA_FILAS = [];
+  _INF_GRUPOS_DEF.forEach(([categoria, grupo, edades, claves]) => {
+    edades.forEach((edad, i) => INFLUENZA_FILAS.push({ id: 'r' + (INFLUENZA_FILAS.length + 1), categoria, grupo, edad, clave: claves[i] }));
+  });
+  const INFLUENZA_SIS_MAPPING = {};
+  INFLUENZA_FILAS.forEach((f) => { INFLUENZA_SIS_MAPPING[f.id] = f.clave; });
 
   // Mismos colores oficiales por biológico que ya usa el resto de SIREVAQ
   // en RDA (window.BIOLOGICO_COLORS en main.js / CLAVE_COLORES en
@@ -182,6 +194,9 @@
     const container = document.getElementById('sis06pCaptureGroupsContainer');
     if (!activa) {
       if (container) container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Selecciona una unidad (CLUES) específica arriba -- "Jurisdicción (suma)" no aplica a SIS-06-P.</div>';
+      renderCEH();
+      renderInfluenza();
+      actualizarDock();
       return;
     }
     try {
@@ -195,7 +210,7 @@
       if (e2) throw e2;
       _sis06pCapturasCache = capturas || [];
 
-      const { data: capturasInf, error: e3 } = await estado.db.from('influenza_capturas').select('fecha, valores').eq('clues', activa.clues);
+      const { data: capturasInf, error: e3 } = await estado.db.from('influenza_capturas').select('fecha, valores, sin_movimiento, capturado_por').eq('clues', activa.clues);
       if (e3) throw e3;
       _influenzaCapturasCache = capturasInf || [];
 
@@ -427,6 +442,13 @@
     }
     container.innerHTML = '';
     marcarSinGuardar(false); // los inputs se reconstruyen desde lo guardado
+    // Las otras dos hojas del SINBA-SIS (solo lectura) y el responsable se
+    // derivan de las mismas cachés -- se refrescan siempre que esta se repinta.
+    renderCEH();
+    renderInfluenza();
+    aplicarResponsable();
+    renderRutaMes();
+    actualizarDock();
 
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
@@ -462,8 +484,8 @@
       const puedeExportar = estadoActual === 'VALIDADO';
       btnExportar.disabled = !puedeExportar;
       btnExportar.title = puedeExportar
-        ? 'Exportar Excel oficial: SIS-06-P y, si ya iniciaste el movimiento de este mes, también Movimiento de Biológico'
-        : 'Disponible hasta que el municipal valide el concentrado SIS-06-P de este mes';
+        ? 'Exportar el Excel oficial del SINBA-SIS (SIS-06-P, Movimiento de Biológico, SIS-SS-CE-H e Influenza)'
+        : 'Disponible hasta que el municipal valide el SINBA-SIS de este mes';
     }
 
     if (esUnidad) {
@@ -680,7 +702,7 @@
       if (existente) return;
       await estado.db.from('biovac_movimientos').insert({
         unidad_id: unidadBiovac.id, anio, mes,
-        responsable_elaboracion: nombreCompletoDePerfil(estado.perfil) || '',
+        responsable_elaboracion: responsableElaboracion() || '',
         fecha_corte: ultimoDiaMes(anio, mes)
       });
     } catch (err) {
@@ -756,7 +778,11 @@
         unidad: activa.unidad,
         municipio: activa.municipio,
         mes, anio, valores, ajustes,
-        capturado_por: currentReport ? currentReport.capturado_por : nombreActor,
+        // "Responsable de la información": la unidad lo elige en el
+        // encabezado (puede no ser quien tiene la sesión); un revisor que
+        // corrige no lo cambia. La auditoría real va en ultimo_editor_usuario
+        // + historial_ediciones (siempre la sesión).
+        capturado_por: esUnidad ? responsableElaboracion() : (currentReport ? currentReport.capturado_por : nombreActor),
         historial_ediciones: hist,
         ultimo_editor_usuario: nombreActor,
         updated_at: new Date().toISOString()
@@ -956,80 +982,17 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Pestaña CSV: mismas filas (CLUES, MUNICIPIO, VARIABLE_SIS, MES, ANIO, VALOR)
-  // que ya acepta el panel RDA.
-  //
-  // Para rol UNIDAD sigue siendo solo su propia CLUES (buildCSVRowsActuales,
-  // ya tenía sentido: una unidad solo tiene una CLUES). Para MUNICIPAL
-  // (único rol revisor que llega a esta pestaña, ver btnCsv.style.display en
-  // biovac_ui.js) el listado ahora es el municipio COMPLETO -- todas sus
+  // Pestaña CSV (SOLO MUNICIPAL -- la unidad no tiene CSV: su entregable es
+  // el SINBA-SIS completo, y el CSV solo existe concentrado a nivel municipal):
+  // mismas filas (CLUES, MUNICIPIO, VARIABLE_SIS, MES, ANIO, VALOR) que ya
+  // acepta el panel RDA. El listado es el municipio COMPLETO -- todas sus
   // CLUES reales, una fila por variable por cada una, con VALOR=0 para las
   // que todavía no capturan nada -- y se va "llenando sola" porque se
   // consulta en vivo cada vez que se abre esta pestaña o cambia mes/año,
-  // nunca desde una caché de una sola unidad. Antes esto mostraba solo la
-  // CLUES seleccionada en "unidad a revisar", que es para lo que sirve el
-  // modo revisión del SIS-06-P (editar/validar una unidad a la vez), pero no
-  // tiene sentido para el CSV: el municipio necesita ver el concentrado
-  // completo para poder armar lo que se sube al departamento de estadística.
+  // nunca desde una caché de una sola unidad: el municipio necesita ver el
+  // concentrado completo para poder armar lo que se sube al departamento de
+  // estadística.
   // ---------------------------------------------------------------------------
-
-  // Suma, por rubro (r1..r46), las capturas SEMANALES reales de Influenza
-  // (panel semanal de la unidad -- ahí dice "meta-logro" pero lo que se
-  // teclea ahí son aplicaciones reales) que caen dentro del mes/año
-  // calendario pedido.
-  function sumasInfluenzaPorRubro(mes, anio) {
-    const enMes = _influenzaCapturasCache.filter((c) => {
-      if (!c.fecha) return false;
-      const d = new Date(c.fecha + 'T12:00:00');
-      return (d.getMonth() + 1) === mes && d.getFullYear() === anio;
-    });
-    const sumas = {};
-    enMes.forEach((c) => {
-      Object.entries(c.valores || {}).forEach(([rubro, val]) => {
-        sumas[rubro] = (sumas[rubro] || 0) + Number(val || 0);
-      });
-    });
-    return sumas;
-  }
-
-  // Suma las capturas semanales de Influenza que caen dentro del mes/año
-  // calendario pedido y las traduce a filas SIS vía INFLUENZA_SIS_MAPPING.
-  // Solo emite filas si hubo al menos una semana capturada ese mes -- si no,
-  // no hay nada que decir de Influenza ese periodo.
-  function buildInfluenzaCSVRows(clues, municipio, mes, anio) {
-    const sumas = sumasInfluenzaPorRubro(mes, anio);
-    if (Object.keys(sumas).length === 0) return [];
-    return Object.entries(INFLUENZA_SIS_MAPPING).map(([rubro, clave]) => ({
-      CLUES: clues, MUNICIPIO: municipio, VARIABLE_SIS: clave, MES: mes, ANIO: anio, VALOR: sumas[rubro] || 0
-    }));
-  }
-
-  function buildCSVRowsActuales() {
-    const activa = datosUnidadActiva();
-    if (!activa) return [];
-    const mes = Number(document.getElementById('selMes').value);
-    const anio = Number(document.getElementById('selAnio').value);
-    const clues = activa.clues;
-    const municipio = activa.municipio;
-    const captura = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
-
-    const rows = [];
-    if (captura) {
-      const valores = captura.valores || {};
-      _sisVariablesCache.forEach((v) => {
-        const val = valores[String(v.fila_excel)] || {};
-        const total = Number(val.total || 0);
-        if (v.clave_general) rows.push({ CLUES: captura.clues, MUNICIPIO: captura.municipio, VARIABLE_SIS: v.clave_general, MES: mes, ANIO: anio, VALOR: total });
-        const afro = Number(val.afro || 0);
-        if (v.clave_afro && afro > 0) rows.push({ CLUES: captura.clues, MUNICIPIO: captura.municipio, VARIABLE_SIS: v.clave_afro, MES: mes, ANIO: anio, VALOR: afro });
-        const indigena = Number(val.indigena || 0);
-        if (v.clave_indigena && indigena > 0) rows.push({ CLUES: captura.clues, MUNICIPIO: captura.municipio, VARIABLE_SIS: v.clave_indigena, MES: mes, ANIO: anio, VALOR: indigena });
-        const migrante = Number(val.migrante || 0);
-        if (v.clave_migrante && migrante > 0) rows.push({ CLUES: captura.clues, MUNICIPIO: captura.municipio, VARIABLE_SIS: v.clave_migrante, MES: mes, ANIO: anio, VALOR: migrante });
-      });
-    }
-    return rows.concat(buildInfluenzaCSVRows(clues, municipio, mes, anio));
-  }
 
   // Municipio completo: todas las CLUES reales activas de ese municipio
   // (excluye la pseudo-unidad 'JS1-...', que no tiene paloteo SIS-06-P
@@ -1106,10 +1069,7 @@
     return rows;
   }
 
-  function esRolUnidad() { return Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD'); }
-
   async function filasCSVSegunRol() {
-    if (esRolUnidad()) return buildCSVRowsActuales();
     const activa = datosUnidadActiva();
     if (!activa) return [];
     const mes = Number(document.getElementById('selMes').value);
@@ -1120,18 +1080,12 @@
   async function renderCSVPreview() {
     const tbody = document.getElementById('csvUnidadTbody');
     if (!tbody) return;
-    const esUnidad = esRolUnidad();
 
     const titulo = document.getElementById('csvPanelTitulo');
     const subtitulo = document.getElementById('csvPanelSubtitulo');
     if (titulo && subtitulo) {
-      if (esUnidad) {
-        titulo.textContent = 'CSV -- lo que se subirá a RDA';
-        subtitulo.textContent = 'Mes seleccionado arriba, una fila por clave SIS con su valor -- mismo formato que ya acepta el panel RDA.';
-      } else {
-        titulo.textContent = 'CSV -- concentrado completo del municipio';
-        subtitulo.textContent = 'Todas las CLUES del municipio, una fila por clave SIS -- se va llenando conforme cada unidad captura (0 mientras no ha capturado).';
-      }
+      titulo.textContent = 'CSV -- concentrado completo del municipio';
+      subtitulo.textContent = 'Todas las CLUES del municipio, una fila por clave SIS -- se va llenando conforme cada unidad captura (0 mientras no ha capturado).';
     }
 
     tbody.innerHTML = '<tr><td colspan="5" style="padding:14px; text-align:center; color:var(--muted);">Cargando…</td></tr>';
@@ -1144,10 +1098,7 @@
       return;
     }
     if (rows.length === 0) {
-      const msg = esUnidad
-        ? 'No hay concentrado guardado para este mes/año todavía -- captúralo en la pestaña SIS-06-P y guarda.'
-        : 'No hay unidades activas en este municipio.';
-      tbody.innerHTML = `<tr><td colspan="5" style="padding:14px; text-align:center; color:var(--muted); font-style:italic;">${msg}</td></tr>`;
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:14px; text-align:center; color:var(--muted); font-style:italic;">No hay unidades activas en este municipio.</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map((r) => `
@@ -1162,7 +1113,6 @@
   }
 
   async function downloadCSV() {
-    const esUnidad = esRolUnidad();
     let rows;
     try {
       rows = await filasCSVSegunRol();
@@ -1179,9 +1129,7 @@
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = esUnidad
-      ? `SIS06P_${rows[0].CLUES}_${rows[0].MES}_${rows[0].ANIO}.csv`
-      : `SIS06P_${rows[0].MUNICIPIO}_${rows[0].MES}_${rows[0].ANIO}.csv`;
+    link.download = `SIS06P_${rows[0].MUNICIPIO}_${rows[0].MES}_${rows[0].ANIO}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1524,7 +1472,934 @@
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Responsable de la información (solo rol UNIDAD). Un solo nombre para las 4
+  // hojas del SINBA-SIS; se puede editar en el encabezado. Se guarda en
+  // sis06p_capturas.capturado_por y biovac_movimientos.responsable_elaboracion
+  // (de ahí lo leen el Excel oficial y las cabeceras). No toca la auditoría:
+  // quién guardó/envió/corrigió sigue saliendo de la sesión real.
+  // ---------------------------------------------------------------------------
+
+  let _responsableManual = false;
+  function marcarResponsableManual() { _responsableManual = true; }
+
+  function esUnidadSesion() { return Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD'); }
+
+  function capturaDelMesActual() {
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    return _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio) || null;
+  }
+
+  // Refleja en el campo lo YA guardado del mes elegido (SIS-06-P primero, luego
+  // Movimiento); si todavía no hay nada guardado conserva lo que la persona
+  // haya tecleado o, si no, el último nombre usado en esta unidad / la sesión.
+  // Después del envío el nombre queda fijo (solo lectura), igual que el resto.
+  function aplicarResponsable() {
+    if (!esUnidadSesion()) return;
+    const inp = document.getElementById('selUsuario');
+    if (!inp) return;
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const captura = capturaDelMesActual();
+    const mov = (estado.movimiento && Number(estado.movimiento.mes) === mes && Number(estado.movimiento.anio) === anio)
+      ? estado.movimiento.responsable_elaboracion : null;
+    const guardado = (captura && captura.capturado_por) || mov || null;
+
+    const bloqueado = Boolean(captura && captura.estado !== 'BORRADOR');
+    inp.readOnly = bloqueado;
+    inp.title = bloqueado
+      ? 'El SINBA-SIS ya fue enviado: el responsable quedó fijo. Si hay que cambiarlo, pídelo al municipal.'
+      : 'Nombre de quien elabora la información: sale como responsable en todas las hojas del SINBA-SIS. Puedes cambiarlo.';
+
+    if (document.activeElement === inp && !bloqueado) return; // no pisar lo que se está tecleando
+    if (guardado) { inp.value = guardado; return; }
+    if (_responsableManual) return;
+    let recordado = null;
+    try { recordado = localStorage.getItem('sis_responsable_' + estado.perfil.clues); } catch (e) { /* sin storage */ }
+    inp.value = recordado || nombreCompletoDePerfil(estado.perfil) || '';
+  }
+
+  async function guardarResponsable() {
+    if (!esUnidadSesion()) return;
+    const inp = document.getElementById('selUsuario');
+    let nombre = inp.value.trim();
+    if (!nombre) { nombre = nombreCompletoDePerfil(estado.perfil) || ''; inp.value = nombre; } // vacío no se guarda
+    _responsableManual = true;
+    try { localStorage.setItem('sis_responsable_' + estado.perfil.clues, nombre); } catch (e) { /* sin storage */ }
+
+    const clues = estado.perfil.clues;
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const captura = capturaDelMesActual();
+    if (captura && captura.estado !== 'BORRADOR') { aplicarResponsable(); return; }
+
+    let guardadoAlgo = false;
+    try {
+      if (captura && captura.capturado_por !== nombre) {
+        const { error } = await estado.db.from('sis06p_capturas').update({ capturado_por: nombre })
+          .eq('id', captura.id).eq('estado', 'BORRADOR');
+        if (error) throw error;
+        captura.capturado_por = nombre;
+        guardadoAlgo = true;
+      }
+      const unidadBiovac = (estado.unidades || []).find((u) => u.clues === clues);
+      if (unidadBiovac) {
+        const { data: filas, error } = await estado.db.from('biovac_movimientos').update({ responsable_elaboracion: nombre })
+          .eq('unidad_id', unidadBiovac.id).eq('anio', anio).eq('mes', mes).eq('estado', 'BORRADOR').select('id');
+        if (error) throw error;
+        if (filas && filas.length) {
+          guardadoAlgo = true;
+          if (estado.movimiento && estado.movimiento.id === filas[0].id) estado.movimiento.responsable_elaboracion = nombre;
+        }
+      }
+      if (guardadoAlgo) toast('Responsable actualizado en el SINBA-SIS de este mes.', 'ok');
+    } catch (err) {
+      console.error('[SINBA-SIS] No se pudo guardar el responsable:', err);
+      toast('No se pudo guardar el responsable: ' + (err.message || err), 'error');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hojas derivadas del SINBA-SIS (solo lectura): SIS-SS-CE-H e Influenza.
+  // ---------------------------------------------------------------------------
+
+  const _esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const _vacioSiCero = (n) => (Number(n) > 0 ? Number(n) : '');
+  const MSG_SIN_UNIDAD = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Selecciona una unidad (CLUES) específica arriba para ver esta hoja.</div>';
+
+  function etiquetaEstadoSIS(e) {
+    return e === 'VALIDADO' ? 'Información validada' : e === 'ENVIADO' ? 'Enviado -- pendiente de validación' : 'Borrador';
+  }
+
+  function tarjetaDato(titulo, valor) {
+    return `<div style="background:var(--surface-container); border-radius:12px; padding:9px 13px;">
+      <div style="font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);">${titulo}</div>
+      <div style="font-size:13px; font-weight:700; color:var(--primary); margin-top:2px; word-break:break-word;">${valor ? _esc(valor) : '—'}</div>
+    </div>`;
+  }
+
+  // Responsable que se muestra en las hojas: para la unidad, lo del campo
+  // del encabezado (así se ve al instante lo que se acaba de teclear).
+  function responsableParaMostrar(captura) {
+    if (esUnidadSesion()) {
+      const v = (document.getElementById('selUsuario') || {}).value;
+      return (v && v.trim()) || (captura && captura.capturado_por) || '';
+    }
+    return (captura && captura.capturado_por) || '';
+  }
+
+  // Corte mensual de Influenza: suma, por rubro y por semana, los reportes de
+  // Meta-Logro (influenza_capturas, un renglón por semana con fecha = viernes)
+  // que caen en el mes calendario elegido. Se lee EN VIVO -- el SIS no guarda
+  // una copia, así que no puede duplicar ni quedar desfasado. Mismo criterio
+  // (orden por fecha, semanas 1-5 en columnas) que llenarInfluenzaOficial.
+  function influenzaCorteDelMes(mes, anio) {
+    const semanas = (_influenzaCapturasCache || [])
+      .filter((c) => {
+        if (!c.fecha) return false;
+        const d = new Date(c.fecha + 'T12:00:00');
+        return (d.getMonth() + 1) === mes && d.getFullYear() === anio;
+      })
+      .sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const porRubro = {};
+    INFLUENZA_FILAS.forEach((f) => { porRubro[f.id] = [0, 0, 0, 0, 0]; });
+    semanas.forEach((c, idx) => {
+      const col = Math.min(idx, 4);
+      INFLUENZA_FILAS.forEach((f) => { porRubro[f.id][col] += Number((c.valores || {})[f.id] || 0); });
+    });
+    return { semanas, porRubro };
+  }
+
+  const _sumaFila = (arr) => arr.reduce((s, n) => s + n, 0);
+
+  function fechaCortaMX(fechaIso) {
+    const d = new Date(fechaIso + 'T12:00:00');
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  // Filas Categoría > Grupo > edad de Influenza, con `celdas(f)` aportando las
+  // columnas de valores. Comparte estructura entre CE-H (una columna) y la
+  // hoja Influenza (TOTAL + 5 semanas). Con `soloCategoria` solo emite esa
+  // categoría y sin su renglón de encabezado (la tarjeta ya lo lleva).
+  function filasInfluenzaHtml(colSpanTotal, celdas, soloCategoria, colsOcultables) {
+    // Las filas de encabezado (categoría/grupo) abarcan todas las columnas; las
+    // que se ocultan en pantalla angosta (.inf-sem) van en una celda aparte,
+    // para que al ocultarlas no queden columnas fantasma quitándole ancho a
+    // "Variable".
+    const extra = Number(colsOcultables) || 0;
+    const spanVisible = colSpanTotal - extra;
+    const relleno = extra ? `<td class="inf-sem" colspan="${extra}"></td>` : '';
+    let html = '';
+    let cat = null;
+    let grp = null;
+    INFLUENZA_FILAS.forEach((f) => {
+      if (soloCategoria && f.categoria !== soloCategoria) return;
+      if (f.categoria !== cat) {
+        cat = f.categoria; grp = null;
+        if (!soloCategoria) {
+          html += `<tr><td colspan="${spanVisible}" style="padding:5px 10px; background:#fdf2ee; color:#C26750; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em;">${_esc(cat)}</td>${relleno}</tr>`;
+        }
+      }
+      if (f.grupo !== grp) {
+        grp = f.grupo;
+        html += `<tr><td colspan="${spanVisible}" style="padding:4px 8px 1px; font-size:11px; font-weight:700; color:#334155; line-height:1.25;">${_esc(grp)}</td>${relleno}</tr>`;
+      }
+      html += `<tr class="fila-tocable" data-inf="${f.id}" tabindex="0" style="border-bottom:1px solid #f1f5f9;">
+        <td style="padding:4px 8px 4px 18px; font-size:11.5px; color:#475569;">${_esc(f.edad)}</td>
+        <td style="padding:2px 4px; text-align:center;"><span style="display:inline-block;font-size:8.5px;font-weight:700;font-family:monospace;background:#f1f5f9;color:#64748b;padding:1px 5px;border-radius:5px;">${f.clave}</span></td>
+        ${celdas(f)}
+      </tr>`;
+    });
+    return html;
+  }
+
+  const _TH = 'padding:8px 8px; text-align:center; font-size:10px; text-transform:uppercase; color:var(--muted); font-weight:700;';
+  const _TD_NUM = 'padding:3px 6px; text-align:center; font-weight:800; font-size:12px; color:var(--primary);';
+
+  // Réplica de la hoja SIS-SS-CE-H-2026 (Sección III, Aplicación de
+  // biológicos): Variable | Clave + Total de dosis | Clave + A Afromexicanos |
+  // Clave + A Indígenas | Clave + A Migrantes. En el Excel oficial sus totales
+  // son fórmulas sobre SIS-06-P (vacío si es 0) -- aquí igual, nada se captura.
+  // Después de las claves de esa hoja van las de Influenza (SIS-SS-IE).
+  // Estado de la vista SIS-SS-CE-H que sobrevive a los repintados: contenedores
+  // abiertos (por llave) y el filtro "solo con captura".
+  const _cehAbiertos = new Set();
+  let _cehSoloConDatos = false;
+
+  function renderCEH() {
+    const cont = document.getElementById('cehContenido');
+    if (!cont) return;
+    const enc = document.getElementById('cehEncabezado');
+    const aviso = document.getElementById('cehAviso');
+    const badge = document.getElementById('cehBadgeEstado');
+    const activa = datosUnidadActiva();
+    if (!activa) {
+      if (enc) enc.innerHTML = '';
+      if (aviso) aviso.style.display = 'none';
+      if (badge) badge.textContent = '';
+      cont.innerHTML = MSG_SIN_UNIDAD;
+      return;
+    }
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const captura = capturaDelMesActual();
+    const valores = captura ? (captura.valores || {}) : {};
+
+    if (badge) {
+      const e = captura ? captura.estado : 'BORRADOR';
+      badge.className = 'estado-badge estado-' + e;
+      badge.textContent = etiquetaEstadoSIS(e);
+    }
+    if (enc) {
+      enc.innerHTML = tarjetaDato('Nombre de la unidad', (captura && captura.unidad) || activa.unidad)
+        + tarjetaDato('CLUES', activa.clues)
+        + tarjetaDato('Responsable de la información', responsableParaMostrar(captura))
+        + tarjetaDato('Mes', mesNombre(mes))
+        + tarjetaDato('Año', String(anio));
+    }
+    if (aviso) {
+      let msg = '';
+      if (_sinGuardar) msg = 'Tienes cambios sin guardar en SIS-06-P: esta hoja muestra solo lo ya guardado.';
+      else if (!captura) msg = 'Todavía no hay SIS-06-P guardado de este mes: los totales aparecen vacíos hasta que lo captures y guardes.';
+      aviso.textContent = msg;
+      aviso.style.display = msg ? 'block' : 'none';
+    }
+
+    // ---- Sección III: aplicación de biológicos (solo variables con clave) ----
+    // Igual que la hoja real (bloques lado a lado, no una tira larga): cada
+    // biológico es un contenedor desplegable con su tabla compacta (una línea
+    // por variable), y los contenedores se acomodan en columnas (CSS columns,
+    // ancho mínimo por columna) -- en pantalla ancha 2-3 columnas, en angosta
+    // una. Todos nacen contraídos, con un resumen de lo capturado en la
+    // cabecera, para no obligar a recorrer 20 tablas; el estado abierto/
+    // cerrado se recuerda al repintar.
+    // Adaptativo: en pantalla angosta (CSS, .ceh-sub) solo quedan Variable |
+    // Clave | Total y cada fila se toca para abrir su detalle (Afromexicanos,
+    // Indígenas, Migrantes) en el modal -- sin desplazamiento horizontal.
+    const grupos = new Map();
+    _sisVariablesCache.forEach((v) => {
+      if (!(v.clave_general || v.clave_afro || v.clave_indigena || v.clave_migrante)) return;
+      if (!grupos.has(v.biologico)) grupos.set(v.biologico, []);
+      grupos.get(v.biologico).push(v);
+    });
+    const chip = (c) => `<span style="display:inline-block;font-size:8.5px;font-weight:700;font-family:monospace;background:#f1f5f9;color:#64748b;padding:1px 4px;border-radius:5px;">${c}</span>`;
+    const claveTd = (c, sub) => `<td class="${sub ? 'ceh-sub' : ''}" style="padding:3px 2px; text-align:center;">${c ? chip(c) : '<span style="color:#e2e8f0;">·</span>'}</td>`;
+    const _TH_C = 'padding:5px 2px; text-align:center; font-size:8.5px; text-transform:uppercase; color:var(--muted); font-weight:700; letter-spacing:.02em;';
+
+    let totalDosisCEH = 0;
+    let biologicosConDatos = 0;
+    let tarjetasBio = '';
+    grupos.forEach((vars, biologico) => {
+      const accent = accentDeBiologico(biologico);
+      let dosisBio = 0;
+      let conDatos = 0;
+      const celdaVal = (clave, n, sub) => {
+        const con = clave && Number(n) > 0;
+        return `<td class="${sub ? 'ceh-sub' : ''}" style="padding:3px 2px; text-align:center; font-weight:800; font-size:12px; color:${con ? accent.hex : 'var(--primary)'}; ${con ? `background:${accent.tintSoft};` : ''}">${clave ? _vacioSiCero(n) : ''}</td>`;
+      };
+      const filas = vars.map((v) => {
+        const val = valores[String(v.fila_excel)] || {};
+        if (v.clave_general && Number(val.total) > 0) { dosisBio += Number(val.total); conDatos += 1; }
+        const partes = [v.dosis && v.dosis !== v.grupo_poblacional ? v.dosis : '', v.edad || ''].filter(Boolean).join(' · ');
+        const completo = [v.grupo_poblacional || v.dosis || '', partes].filter(Boolean).join(' · ');
+        return `<tr class="fila-tocable" data-fila="${v.fila_excel}" tabindex="0" style="border-top:1px solid #f1f5f9;">
+          <td title="${_esc(completo)}" style="padding:4px 8px; font-size:11.5px; line-height:1.25; color:#334155;"><span style="font-weight:600;">${_esc(v.grupo_poblacional || v.dosis || '')}</span>${partes ? ` <span style="color:#94a3b8; font-weight:600; font-size:10.5px;">· ${_esc(partes)}</span>` : ''}</td>
+          ${claveTd(v.clave_general)}${celdaVal(v.clave_general, val.total)}
+          ${claveTd(v.clave_afro, true)}${celdaVal(v.clave_afro, val.afro, true)}
+          ${claveTd(v.clave_indigena, true)}${celdaVal(v.clave_indigena, val.indigena, true)}
+          ${claveTd(v.clave_migrante, true)}${celdaVal(v.clave_migrante, val.migrante, true)}
+        </tr>`;
+      }).join('');
+      totalDosisCEH += dosisBio;
+      if (dosisBio > 0) biologicosConDatos += 1;
+      if (_cehSoloConDatos && dosisBio === 0) return;
+      const cuerpo = `
+        <div style="overflow-x:auto;"><table class="ceh-tabla">
+          <colgroup><col><col style="width:46px"><col style="width:34px">${'<col class="ceh-sub" style="width:46px"><col class="ceh-sub" style="width:34px">'.repeat(3)}</colgroup>
+          <thead><tr style="background:#f8fafc;">
+            <th style="${_TH_C} text-align:left; padding-left:8px;">Variable</th>
+            <th style="${_TH_C}">Clave</th><th style="${_TH_C}">Total</th>
+            <th class="ceh-sub" style="${_TH_C}">Clave</th><th class="ceh-sub" style="${_TH_C}" title="A Afromexicanos">Afro</th>
+            <th class="ceh-sub" style="${_TH_C}">Clave</th><th class="ceh-sub" style="${_TH_C}" title="A Indígenas">Indíg.</th>
+            <th class="ceh-sub" style="${_TH_C}">Clave</th><th class="ceh-sub" style="${_TH_C}" title="A Migrantes">Migr.</th>
+          </tr></thead>
+          <tbody>${filas}</tbody>
+        </table></div>`;
+      tarjetasBio += acordeonSIS('bio:' + biologico, biologico, accent.tint, accent.hex, resumenChipSIS(dosisBio, conDatos, vars.length), cuerpo, _cehAbiertos);
+    });
+
+    const barra = `
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        <button type="button" class="btn-secundario btn-mini" id="cehExpandirTodo"><span class="material-symbols-rounded">unfold_more</span> Expandir todo</button>
+        <button type="button" class="btn-secundario btn-mini" id="cehContraerTodo"><span class="material-symbols-rounded">unfold_less</span> Contraer todo</button>
+        <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--primary); cursor:pointer; margin-left:4px;">
+          <input type="checkbox" id="cehSoloConDatos" ${_cehSoloConDatos ? 'checked' : ''}> Solo biológicos con captura
+        </label>
+        <span style="margin-left:auto; font-size:12px; font-weight:700; color:var(--muted);">${totalDosisCEH} dosis en ${biologicosConDatos} de ${grupos.size} biológicos</span>
+        <span class="solo-angosta" style="flex-basis:100%; font-size:11.5px; font-weight:600; color:var(--muted);">Toca una fila para ver el detalle (Afromexicanos, Indígenas, Migrantes).</span>
+      </div>`;
+
+    const tablaBiologicos = grupos.size === 0
+      ? '<div style="padding:14px; text-align:center; color:var(--muted); font-style:italic;">Catálogo de variables no disponible.</div>'
+      : (tarjetasBio
+        ? `<div style="column-width:540px; column-gap:14px;">${tarjetasBio}</div>`
+        : '<div style="padding:14px; text-align:center; color:var(--muted); font-style:italic;">Ningún biológico tiene captura este mes.</div>');
+
+    // ---- Influenza (SIS-SS-IE), a continuación de las claves de CE-H ----
+    const corte = influenzaCorteDelMes(mes, anio);
+    const totales = (f) => _sumaFila(corte.porRubro[f.id]);
+    const categoriasInf = [...new Set(INFLUENZA_FILAS.map((f) => f.categoria))];
+    const tarjetasInf = categoriasInf.map((cat) => {
+      const filasCat = INFLUENZA_FILAS.filter((f) => f.categoria === cat);
+      const dosisCat = filasCat.reduce((s, f) => s + totales(f), 0);
+      const conDatosCat = filasCat.filter((f) => totales(f) > 0).length;
+      const cuerpo = `
+        <div style="overflow-x:auto;"><table class="inf-tabla-simple">
+          <colgroup><col><col style="width:64px"><col style="width:52px"></colgroup>
+          <thead><tr style="background:#f8fafc;">
+            <th style="${_TH_C} text-align:left; padding-left:8px;">Variable</th><th style="${_TH_C}">Clave</th><th style="${_TH_C}">Total</th>
+          </tr></thead>
+          <tbody>${filasInfluenzaHtml(3, (f) => `<td style="${_TD_NUM}">${_vacioSiCero(totales(f))}</td>`, cat)}</tbody>
+        </table></div>`;
+      return acordeonSIS('inf:' + cat, cat, '#fdf2ee', '#C26750', resumenChipSIS(dosisCat, conDatosCat, filasCat.length), cuerpo, _cehAbiertos);
+    }).join('');
+    const tablaInfluenza = `
+      <div style="display:flex; align-items:center; gap:10px; margin:14px 0 10px; flex-wrap:wrap;">
+        <span class="material-symbols-rounded" style="color:#C26750;">vaccines</span>
+        <h2 style="font-size:14.5px;">Influenza · claves de la hoja SIS-SS-IE</h2>
+        <span style="font-size:11.5px; color:var(--muted); font-weight:600;">${corte.semanas.length ? `${corte.semanas.length} reporte(s) semanal(es) de Meta-Logro en ${mesNombre(mes)}` : 'Sin reportes semanales de Meta-Logro este mes'}</span>
+      </div>
+      <div style="column-width:420px; column-gap:14px;">${tarjetasInf}</div>`;
+
+    cont.innerHTML = barra + tablaBiologicos + tablaInfluenza;
+
+    // Recordar qué contenedores están abiertos (renderCEH se repite al guardar,
+    // cambiar de mes, etc.) y cablear la barra de herramientas.
+    cablearAcordeones(cont, _cehAbiertos);
+    const btnExp = document.getElementById('cehExpandirTodo');
+    const btnCon = document.getElementById('cehContraerTodo');
+    if (btnExp) btnExp.addEventListener('click', () => cont.querySelectorAll('details.ceh-acc').forEach((d) => { d.open = true; }));
+    if (btnCon) btnCon.addEventListener('click', () => cont.querySelectorAll('details.ceh-acc').forEach((d) => { d.open = false; }));
+    const chk = document.getElementById('cehSoloConDatos');
+    if (chk) chk.addEventListener('change', () => { _cehSoloConDatos = chk.checked; renderCEH(); });
+    cablearFilasTocables(cont);
+  }
+
+  // Hoja Influenza (SIS-SS-IE Mensual): TOTAL + semanas 1-5, con TOTAL DE DOSIS
+  // APLICADAS y TOTAL EN FRASCOS (10 dosis por frasco), como la hoja oficial.
+  // SOLO LECTURA: la captura y la validación contra la meta viven en el panel
+  // Meta-Logro Influenza; desde aquí solo se navega a él.
+  // Vista de columnas de Influenza en pantalla angosta: 'total', 's1'..'s5' o
+  // 'todas' (ver el selector de chips). Se recuerda por mes/año.
+  let _infVista = null;
+  let _infVistaClave = '';
+
+  function renderInfluenza() {
+    const cont = document.getElementById('infContenido');
+    if (!cont) return;
+    const aviso = document.getElementById('infAviso');
+    const conc = document.getElementById('infConciliacion');
+    const badge = document.getElementById('infBadgeEstado');
+    const cta = document.getElementById('infCta');
+    const btnEditar = document.getElementById('btnEditarEnMetaLogro');
+    const activa = datosUnidadActiva();
+    if (!activa) {
+      if (aviso) aviso.style.display = 'none';
+      if (conc) conc.style.display = 'none';
+      if (badge) badge.textContent = '';
+      if (cta) cta.style.display = 'none';
+      cont.innerHTML = MSG_SIN_UNIDAD;
+      return;
+    }
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const captura = capturaDelMesActual();
+    const estadoSIS = captura ? captura.estado : 'BORRADOR';
+    const corte = influenzaCorteDelMes(mes, anio);
+    const n = corte.semanas.length;
+
+    if (badge) {
+      badge.className = 'estado-badge estado-' + estadoSIS;
+      badge.textContent = etiquetaEstadoSIS(estadoSIS);
+    }
+
+    // Botón protagonista hacia Meta-Logro: solo la unidad edita Influenza, y
+    // solo mientras el SINBA-SIS del mes siga en borrador (el servidor
+    // también lo exige). Cuando está congelada la tarjeta lo explica.
+    if (cta) {
+      const bloqueada = estadoSIS !== 'BORRADOR';
+      cta.style.display = esUnidadSesion() ? 'flex' : 'none';
+      cta.classList.toggle('bloqueada', bloqueada);
+      document.getElementById('infCtaTitulo').textContent = bloqueada
+        ? 'Influenza de este mes está congelada'
+        : (n === 0 ? 'Todavía no hay semanas reportadas' : '¿Algo no cuadra con tus semanas?');
+      document.getElementById('infCtaTexto').textContent = bloqueada
+        ? 'Ya enviaste el SINBA-SIS, así que el corte no cambia desde la unidad. Si hay que corregirlo, pídelo al municipal.'
+        : (n === 0
+          ? 'El reporte de cada semana se captura en Meta-Logro (jueves o viernes); aquí aparece solo.'
+          : 'Las semanas se corrigen en Meta-Logro, donde se validan contra tu meta. Tu SIS-06-P se guarda solo antes de salir.');
+      if (btnEditar) {
+        btnEditar.disabled = bloqueada;
+        btnEditar.title = bloqueada
+          ? 'El SINBA-SIS de este mes ya fue enviado: Influenza quedó congelada.'
+          : 'Guarda tu SIS-06-P y abre el panel de Influenza (Meta-Logro), donde se captura y se valida contra la meta.';
+      }
+    }
+
+    if (aviso) {
+      let msg = ''; let estilo = '';
+      if (estadoSIS !== 'BORRADOR') {
+        msg = 'Corte congelado: este SINBA-SIS ya fue enviado, así que Influenza de este mes ya no cambia desde la unidad.';
+        estilo = 'background:#f1f5f9; color:#64748b;';
+      } else if (n === 0) {
+        msg = `Todavía no hay reportes semanales de Influenza en ${mesNombre(mes)}. Se capturan cada jueves o viernes en Meta-Logro Influenza; aquí aparecen solos.`;
+        estilo = 'background:var(--warning-bg); color:var(--warning); border:1px solid var(--warning-border);';
+      } else {
+        msg = `Corte de ${mesNombre(mes)}: ${n} reporte(s) semanal(es) de Meta-Logro. Si un reporte cambia allá, aquí se actualiza solo -- no hay nada que copiar ni capturar dos veces.`;
+        estilo = 'background:var(--success-bg); color:var(--success);';
+      }
+      aviso.style.cssText = `display:block; margin-bottom:12px; padding:9px 13px; border-radius:12px; font-size:12px; font-weight:700; ${estilo}`;
+      aviso.textContent = msg;
+    }
+
+    // Conciliación con la baja en Movimiento de Biológico (biológico
+    // Antiinfluenza): mismo cálculo del servidor que bloquea Enviar/Validar.
+    if (conc) {
+      const fila = Array.isArray(_conciliacionCache) ? _conciliacionCache.find((f) => f.grupo === 'INFLUENZA') : null;
+      if (!fila || (Number(fila.paloteo) === 0 && Number(fila.aplicado) === 0)) {
+        conc.style.display = 'none';
+      } else {
+        const ok = Boolean(fila.coincide);
+        conc.style.cssText = `display:block; margin-bottom:14px; padding:10px 14px; border-radius:12px; font-size:12px; font-weight:700; ${ok
+          ? 'background:var(--success-bg); color:var(--success);'
+          : 'background:var(--warning-bg); color:var(--warning); border:1px solid var(--warning-border);'}`;
+        conc.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">${ok ? 'check_circle' : 'compare_arrows'}</span>
+          ${ok
+            ? `Las ${Number(fila.paloteo)} dosis de Influenza de este mes coinciden con lo dado de baja en Movimiento de Biológico.`
+            : `Influenza reporta ${Number(fila.paloteo)} dosis y en Movimiento de Biológico hay ${Number(fila.aplicado)} aplicadas: deben ser iguales para poder enviar el SINBA-SIS.`}
+          ${ok ? '' : '<button type="button" class="btn-mini btn-secundario" id="btnIrAMovimientoDesdeInfluenza" style="margin-left:8px;"><span class="material-symbols-rounded">inventory_2</span> Ir a Movimiento de Biológico</button>'}`;
+        const irMov = document.getElementById('btnIrAMovimientoDesdeInfluenza');
+        if (irMov) irMov.addEventListener('click', () => document.getElementById('btnSeccionMovimiento').click());
+      }
+    }
+
+    // ---- Resumen del mes + contenedores por categoría ----
+    // Pantalla ancha: cada categoría muestra TOTAL + semanas 1-5. Pantalla
+    // angosta: un selector de chips (Total / Sem 1..5 / Todas) elige QUÉ
+    // columna se ve a lo ancho -- ocultar las semanas hacía impráctico
+    // validarlas; "Todas" deja la tabla completa con la columna Variable fija.
+    // En ambos casos, al tocar una fila el modal muestra su desglose semanal.
+    // Los totales del mes (dosis, frascos de 10 dosis, semanas) van arriba en
+    // tarjetas -- lo que en la hoja oficial son las dos filas de pie.
+    const totalColumna = [0, 1, 2, 3, 4].map((c) => INFLUENZA_FILAS.reduce((s, f) => s + corte.porRubro[f.id][c], 0));
+    const totalGeneral = _sumaFila(totalColumna);
+    const kpi = (t, v, extra) => `<div class="detalle-kpi"><div class="t">${t}</div><div class="v">${v}</div>${extra || ''}</div>`;
+    const resumen = `
+      <div class="detalle-kpis" style="margin-bottom:12px;">
+        ${kpi('Dosis aplicadas', totalGeneral)}
+        ${kpi('Total en frascos', frascosDe(totalGeneral), '<div class="c" style="font-size:10.5px; color:var(--muted); font-weight:600;">10 dosis por frasco</div>')}
+        ${kpi('Semanas reportadas', `${n} <span style="font-size:12px; color:var(--muted); font-weight:700;">de 5</span>`)}
+        <button type="button" id="infVerSemanas" class="btn-secundario" style="justify-content:center; align-self:stretch;"><span class="material-symbols-rounded">calendar_view_week</span> Detalle por semana</button>
+      </div>`;
+
+    const claveVista = `${mes}-${anio}`;
+    if (_infVistaClave !== claveVista || !['total', 'todas', 's1', 's2', 's3', 's4', 's5'].includes(_infVista)) {
+      _infVistaClave = claveVista;
+      _infVista = n > 0 ? 's' + Math.min(n, 5) : 'total'; // por omisión, la semana más reciente reportada
+    }
+    const chip = (vista, texto, sub, extraCls) => `<button type="button" class="inf-chip ${_infVista === vista ? 'activo' : ''} ${extraCls || ''}" data-inf-vista="${vista}">${texto}${sub ? `<small>${sub}</small>` : ''}</button>`;
+    const chips = `
+      <div class="inf-chips" role="group" aria-label="Columna a mostrar">
+        ${chip('total', 'Total', '')}
+        ${[0, 1, 2, 3, 4].map((c) => chip('s' + (c + 1), 'Sem ' + (c + 1), corte.semanas[c] ? fechaCortaMX(corte.semanas[c].fecha) : 'sin reporte', corte.semanas[c] ? '' : 'sin-reporte')).join('')}
+        ${chip('todas', 'Todas', 'desliza →')}
+      </div>
+      <div class="solo-angosta-inf" style="margin-bottom:10px; font-size:11.5px; font-weight:600; color:var(--muted);">Elige una semana arriba para verla completa; toca una fila para su detalle.</div>`;
+
+    const thSemana = (c) => {
+      const cap = corte.semanas[c];
+      return `<th class="inf-sem inf-w${c + 1}" style="${_TH}">Sem ${c + 1}<br><span style="font-weight:600; font-size:9px; text-transform:none;">${cap ? fechaCortaMX(cap.fecha) : '—'}</span></th>`;
+    };
+    const categorias = [...new Set(INFLUENZA_FILAS.map((f) => f.categoria))];
+    const contenedores = categorias.map((cat) => {
+      const filasCat = INFLUENZA_FILAS.filter((f) => f.categoria === cat);
+      const dosisCat = filasCat.reduce((s, f) => s + _sumaFila(corte.porRubro[f.id]), 0);
+      const conDatosCat = filasCat.filter((f) => _sumaFila(corte.porRubro[f.id]) > 0).length;
+      const cuerpo = `
+        <div style="overflow-x:auto;"><table class="inf-tabla">
+          <colgroup><col><col style="width:64px"><col style="width:52px">${[1, 2, 3, 4, 5].map((k) => `<col class="inf-sem inf-w${k}" style="width:54px">`).join('')}</colgroup>
+          <thead><tr style="background:#f8fafc; border-bottom:1px solid var(--outline-variant);">
+            <th style="${_TH} text-align:left; padding-left:8px;">Variable</th><th style="${_TH}">Clave</th><th style="${_TH} color:var(--primary);">Total</th>
+            ${[0, 1, 2, 3, 4].map(thSemana).join('')}
+          </tr></thead>
+          <tbody>${filasInfluenzaHtml(8, (f) => {
+            const fila = corte.porRubro[f.id];
+            return `<td style="${_TD_NUM} background:#fdf8f6;">${_vacioSiCero(_sumaFila(fila))}</td>`
+              + [0, 1, 2, 3, 4].map((c) => `<td class="inf-sem inf-w${c + 1}" style="${_TD_NUM} font-weight:600; color:#64748b;">${_vacioSiCero(fila[c])}</td>`).join('');
+          }, cat, 5)}</tbody>
+        </table></div>`;
+      return acordeonSIS('infhoja:' + cat, cat, '#fdf2ee', '#C26750', resumenChipSIS(dosisCat, conDatosCat, filasCat.length), cuerpo, _cehAbiertos);
+    }).join('');
+
+    cont.innerHTML = resumen + `<div class="inf-vista" data-vista="${_infVista}">${chips}<div style="column-width:600px; column-gap:14px;">${contenedores}</div></div>`;
+    cablearAcordeones(cont, _cehAbiertos);
+    cablearFilasTocables(cont);
+    if (cont.dataset.chips !== '1') {
+      cont.dataset.chips = '1';
+      cont.addEventListener('click', (ev) => {
+        const b = ev.target.closest('[data-inf-vista]');
+        if (!b || !cont.contains(b)) return;
+        _infVista = b.dataset.infVista;
+        const vista = cont.querySelector('.inf-vista');
+        if (vista) vista.dataset.vista = _infVista;
+        cont.querySelectorAll('.inf-chip').forEach((c) => c.classList.toggle('activo', c.dataset.infVista === _infVista));
+        centrarChipInfluenza(cont);
+      });
+    }
+    const btnSem = document.getElementById('infVerSemanas');
+    if (btnSem) btnSem.addEventListener('click', abrirDetalleSemanasInfluenza);
+    centrarChipInfluenza(cont);
+  }
+
+  // Deja el chip activo a la vista dentro de la tira de chips (sin mover la página).
+  function centrarChipInfluenza(cont) {
+    const tira = cont.querySelector('.inf-chips');
+    const activo = tira && tira.querySelector('.inf-chip.activo');
+    if (!tira || !activo || tira.scrollWidth <= tira.clientWidth) return;
+    tira.scrollLeft = activo.offsetLeft - (tira.clientWidth - activo.offsetWidth) / 2;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Piezas compartidas por las hojas derivadas: contenedores desplegables,
+  // filas tocables y el modal de detalle (adaptativo, ver CSS .detalle-*).
+  // ---------------------------------------------------------------------------
+
+  const frascosDe = (dosis) => Math.round((Number(dosis) / 10) * 100) / 100;
+  const _chipClave = (c) => `<span style="display:inline-block;font-size:9px;font-weight:700;font-family:monospace;background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:6px;">${_esc(c)}</span>`;
+
+  // Contenedor desplegable (<details>) con cabecera coloreada + resumen.
+  function acordeonSIS(llave, titulo, tint, hex, resumen, cuerpo, abiertos) {
+    return `
+      <details data-ceh-llave="${_esc(llave)}" ${abiertos.has(llave) ? 'open' : ''} class="ceh-acc" style="break-inside:avoid; margin:0 0 10px; border:1px solid var(--outline-variant); border-radius:12px; overflow:hidden; background:#fff;">
+        <summary style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:${tint}; color:${hex}; cursor:pointer; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em;">
+          <span class="material-symbols-rounded ceh-chev" style="font-size:17px;">expand_more</span>
+          <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${_esc(titulo)}">${_esc(titulo)}</span>
+          ${resumen}
+        </summary>
+        ${cuerpo}
+      </details>`;
+  }
+  function resumenChipSIS(dosis, conDatos, total) {
+    return dosis > 0
+      ? `<span style="flex:none; background:#fff; color:var(--primary); font-size:10px; font-weight:800; padding:2px 9px; border-radius:20px; text-transform:none; letter-spacing:0;">${dosis} dosis · ${conDatos}/${total}</span>`
+      : '<span style="flex:none; font-size:10px; font-weight:700; opacity:.7; text-transform:none; letter-spacing:0;">sin captura</span>';
+  }
+  // Recuerda qué contenedores están abiertos (las hojas se repintan al guardar,
+  // cambiar de mes, etc.).
+  function cablearAcordeones(cont, abiertos) {
+    cont.querySelectorAll('details.ceh-acc').forEach((d) => d.addEventListener('toggle', () => {
+      if (d.open) abiertos.add(d.dataset.cehLlave); else abiertos.delete(d.dataset.cehLlave);
+    }));
+  }
+
+  // Filas tocables (delegación, una sola vez por contenedor: el contenedor
+  // persiste aunque su contenido se repinte).
+  function cablearFilasTocables(cont) {
+    if (cont.dataset.tocables === '1') return;
+    cont.dataset.tocables = '1';
+    const abrir = (tr) => {
+      if (tr.dataset.fila) abrirDetalleCEHFila(tr.dataset.fila);
+      else if (tr.dataset.inf) abrirDetalleInfluenzaFila(tr.dataset.inf);
+    };
+    cont.addEventListener('click', (ev) => {
+      const tr = ev.target.closest('tr[data-fila], tr[data-inf]');
+      if (tr && cont.contains(tr)) abrir(tr);
+    });
+    cont.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      const tr = ev.target.closest && ev.target.closest('tr[data-fila], tr[data-inf]');
+      if (tr && ev.target === tr) { ev.preventDefault(); abrir(tr); }
+    });
+  }
+
+  let _detalleSISRetorno = null;
+  // Modal de detalle: ventana centrada en escritorio, hoja desde abajo en
+  // móvil (CSS). Cierra con la X, tocando el fondo o con Escape, y devuelve el
+  // foco a lo que lo abrió. `acciones` = botones extra [{texto, icono, clase,
+  // onClick}] antes del "Cerrar".
+  function abrirDetalleSIS({ titulo, subtitulo, cuerpo, acciones }) {
+    const ov = document.getElementById('detalleSISOverlay');
+    if (!ov) return;
+    document.getElementById('detalleSISTitulo').textContent = titulo || '';
+    document.getElementById('detalleSISSub').textContent = subtitulo || '';
+    document.getElementById('detalleSISCuerpo').innerHTML = cuerpo || '';
+    const pie = document.getElementById('detalleSISPie');
+    pie.innerHTML = '';
+    (acciones || []).forEach((a) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = a.clase || 'btn-secundario';
+      b.innerHTML = (a.icono ? `<span class="material-symbols-rounded">${a.icono}</span> ` : '') + _esc(a.texto);
+      b.addEventListener('click', a.onClick);
+      pie.appendChild(b);
+    });
+    const cerrar = document.createElement('button');
+    cerrar.type = 'button';
+    cerrar.className = 'btn-secundario';
+    cerrar.textContent = 'Cerrar';
+    cerrar.addEventListener('click', cerrarDetalleSIS);
+    pie.appendChild(cerrar);
+    _detalleSISRetorno = document.activeElement;
+    ov.classList.add('abierto');
+    ov.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    document.getElementById('detalleSISCuerpo').scrollTop = 0;
+    document.getElementById('detalleSISCerrar').focus();
+  }
+  function cerrarDetalleSIS() {
+    const ov = document.getElementById('detalleSISOverlay');
+    if (!ov || !ov.classList.contains('abierto')) return;
+    ov.classList.remove('abierto');
+    ov.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    if (_detalleSISRetorno && typeof _detalleSISRetorno.focus === 'function') _detalleSISRetorno.focus();
+    _detalleSISRetorno = null;
+  }
+
+  // Detalle de una variable de SIS-SS-CE-H: total + subconteos con su clave.
+  function abrirDetalleCEHFila(filaExcel) {
+    const v = _sisVariablesCache.find((x) => String(x.fila_excel) === String(filaExcel));
+    if (!v) return;
+    const captura = capturaDelMesActual();
+    const val = ((captura && captura.valores) || {})[String(v.fila_excel)] || {};
+    const accent = accentDeBiologico(v.biologico);
+    const item = (t, clave, n) => (clave
+      ? `<div class="detalle-kpi"><div class="t">${t}</div><div class="v" style="color:${Number(n) > 0 ? accent.hex : 'var(--muted)'};">${Number(n) > 0 ? Number(n) : '—'}</div><div class="c">${_chipClave(clave)}</div></div>`
+      : '');
+    const partes = [v.dosis && v.dosis !== v.grupo_poblacional ? v.dosis : '', v.edad || ''].filter(Boolean).join(' · ');
+    abrirDetalleSIS({
+      titulo: v.grupo_poblacional || v.dosis || v.biologico,
+      subtitulo: [v.biologico, partes].filter(Boolean).join(' · '),
+      cuerpo: `
+        <div class="detalle-kpis">
+          ${item('Total de dosis', v.clave_general, val.total)}
+          ${item('A afromexicanos', v.clave_afro, val.afro)}
+          ${item('A indígenas', v.clave_indigena, val.indigena)}
+          ${item('A migrantes', v.clave_migrante, val.migrante)}
+        </div>
+        <p style="font-size:11.5px; color:var(--muted); line-height:1.5; margin:0;">Afromexicanos, indígenas y migrantes son subconjuntos del total: no se suman aparte. Estos valores vienen de SIS-06-P${captura ? '' : ' (todavía sin guardar este mes)'}.</p>`
+    });
+  }
+
+  // Desglose semanal de un rubro de Influenza (con acceso directo a editar).
+  function abrirDetalleInfluenzaFila(id) {
+    const f = INFLUENZA_FILAS.find((x) => x.id === id);
+    if (!f) return;
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const corte = influenzaCorteDelMes(mes, anio);
+    const fila = corte.porRubro[id];
+    const total = _sumaFila(fila);
+    const captura = capturaDelMesActual();
+    const editable = esUnidadSesion() && (!captura || captura.estado === 'BORRADOR');
+    const semanas = [0, 1, 2, 3, 4].map((c) => {
+      const cap = corte.semanas[c];
+      return `<tr><td>Semana ${c + 1}</td>
+        <td>${cap ? fechaCortaMX(cap.fecha) + (cap.sin_movimiento ? ' · <span style="color:var(--muted);">sin movimiento</span>' : '') : '<span style="color:var(--muted);">sin reporte</span>'}</td>
+        <td class="num">${cap ? fila[c] : '—'}</td></tr>`;
+    }).join('');
+    abrirDetalleSIS({
+      titulo: f.edad,
+      subtitulo: `${f.grupo} · ${f.categoria}`,
+      cuerpo: `
+        <div class="detalle-kpis">
+          <div class="detalle-kpi"><div class="t">Clave SIS</div><div class="v" style="font-size:16px;">${_esc(f.clave)}</div></div>
+          <div class="detalle-kpi"><div class="t">Dosis del mes</div><div class="v">${total}</div>${total > 0 ? `<div class="c" style="font-size:10.5px; color:var(--muted); font-weight:600;">${frascosDe(total)} ${frascosDe(total) === 1 ? 'frasco' : 'frascos'}</div>` : ''}</div>
+        </div>
+        <table class="detalle-tabla"><thead><tr><th>Semana</th><th>Viernes</th><th style="text-align:right;">Dosis</th></tr></thead><tbody>${semanas}</tbody></table>
+        <p style="font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0;">Se captura semana a semana en Meta-Logro Influenza (ahí se valida contra la meta); aquí solo se lee el corte del mes.</p>`,
+      acciones: editable ? [{ texto: 'Editar en Meta-Logro', icono: 'edit_note', clase: 'btn-primario', onClick: () => { cerrarDetalleSIS(); irAMetaLogroInfluenza(); } }] : []
+    });
+  }
+
+  // Totales por semana de Influenza (las filas de pie de la hoja SIS-SS-IE).
+  function abrirDetalleSemanasInfluenza() {
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const corte = influenzaCorteDelMes(mes, anio);
+    const porSemana = [0, 1, 2, 3, 4].map((c) => INFLUENZA_FILAS.reduce((s, f) => s + corte.porRubro[f.id][c], 0));
+    const total = _sumaFila(porSemana);
+    const filas = [0, 1, 2, 3, 4].map((c) => {
+      const cap = corte.semanas[c];
+      const quien = cap ? (cap.sin_movimiento ? 'Sin movimiento' : (cap.capturado_por || '')) : '';
+      return `<tr>
+        <td>Sem ${c + 1}</td>
+        <td>${cap ? fechaCortaMX(cap.fecha) : '<span style="color:var(--muted);">—</span>'}</td>
+        <td class="num">${cap ? porSemana[c] : '—'}</td>
+        <td class="num" style="font-weight:600;">${cap && porSemana[c] > 0 ? frascosDe(porSemana[c]) : '—'}</td>
+        <td style="color:var(--muted); font-size:11.5px;">${_esc(quien)}</td></tr>`;
+    }).join('');
+    abrirDetalleSIS({
+      titulo: `Influenza · ${mesNombre(mes)} ${anio}`,
+      subtitulo: 'Total de dosis aplicadas y de frascos por semana reportada',
+      cuerpo: `
+        <div style="overflow-x:auto;">
+        <table class="detalle-tabla">
+          <thead><tr><th>Semana</th><th>Viernes</th><th style="text-align:right;">Dosis</th><th style="text-align:right;">Frascos</th><th>Reportó</th></tr></thead>
+          <tbody>${filas}
+            <tr style="background:#f8fafc;"><td colspan="2" style="font-weight:800;">Total del mes</td><td class="num">${total}</td><td class="num">${total > 0 ? frascosDe(total) : '—'}</td><td></td></tr>
+          </tbody>
+        </table></div>`
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ruta del mes + barra de hojas (estado en vivo).
+  //
+  // La "ruta del mes" (encabezado, solo UNIDAD) explica cómo funciona el
+  // SINBA-SIS y marca en qué paso va ESTE mes: Captura -> Concilia -> Envía ->
+  // Validación. La barra de hojas (abajo, fija) resume el mismo estado en su
+  // línea de estatus y pone una píldora viva en cada hoja. Todo se deriva de
+  // las cachés que ya existen (captura del mes, ventana de envío, conciliación
+  // con Movimiento, Influenza del mes) -- no hay estado propio que se
+  // desincronice.
+  // ---------------------------------------------------------------------------
+
+  const _MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  function fechaMesCorta(iso) {
+    if (!iso) return '';
+    const d = new Date(String(iso).slice(0, 10) + 'T12:00:00');
+    return isNaN(d.getTime()) ? '' : `${d.getDate()} ${_MES3[d.getMonth()]}`;
+  }
+
+  function estadoRuta() {
+    const captura = capturaDelMesActual();
+    const est = captura ? captura.estado : 'BORRADOR';
+    const filas = Array.isArray(_conciliacionCache) ? _conciliacionCache : null;
+    const difs = filas ? filas.filter((f) => !f.coincide) : [];
+    return { captura, est, filas, difs, v: _ventanaCache };
+  }
+
+  function renderRutaMes() {
+    const cont = document.getElementById('rutaMes');
+    if (!cont || !esUnidadSesion()) return;
+    const { captura, est, filas, difs, v } = estadoRuta();
+    const enviado = est !== 'BORRADOR';
+    const hecho1 = Boolean(captura) || enviado;
+    const hecho2 = enviado || (hecho1 && filas !== null && difs.length === 0);
+    const hecho4 = est === 'VALIDADO';
+
+    let t3;
+    if (enviado) t3 = `Enviado${captura && captura.enviado_en ? ' el ' + fechaMesCorta(captura.enviado_en) : ''}`;
+    else if (v) t3 = v.dentro_envio ? `Ya puedes enviar (hasta el ${fechaMesCorta(v.fin_envio)})` : `Se habilita del ${fechaMesCorta(v.inicio_envio)} al ${fechaMesCorta(v.fin_envio)}`;
+    else t3 = 'En la ventana de fin de mes';
+
+    const pasos = [
+      { t: 'Captura', x: hecho1 ? (_sinGuardar ? 'Tienes cambios sin guardar' : 'Guardado en SIS-06-P') : 'Paloteo, Movimiento e Influenza', hecho: hecho1 && !(est === 'BORRADOR' && _sinGuardar) },
+      { t: 'Concilia', x: hecho2 ? 'Paloteo = Movimiento' : (hecho1 && difs.length ? `${difs.length} biológico${difs.length === 1 ? '' : 's'} no coincide${difs.length === 1 ? '' : 'n'}` : 'Las dosis aplicadas deben ser iguales'), hecho: hecho2, alerta: !hecho2 && hecho1 && difs.length > 0 },
+      { t: 'Envía', x: t3, hecho: enviado },
+      { t: 'Validación', x: hecho4 ? `Validado${captura && captura.validado_en ? ' el ' + fechaMesCorta(captura.validado_en) : ''}` : (enviado ? 'Esperando al municipal' : 'El municipal revisa y valida'), hecho: hecho4 }
+    ];
+    const actual = pasos.findIndex((p) => !p.hecho);
+    cont.innerHTML = `
+      <ol class="ruta-pasos">
+        ${pasos.map((p, i) => `
+          <li class="ruta-paso ${p.hecho ? 'hecho' : (i === actual ? (p.alerta ? 'alerta' : 'actual') : '')}">
+            <span class="ruta-num">${p.hecho ? '<span class="material-symbols-rounded">check</span>' : (p.alerta ? '<span class="material-symbols-rounded">priority_high</span>' : i + 1)}</span>
+            <span class="ruta-txt"><b>${p.t}</b><small>${_esc(p.x)}</small></span>
+          </li>`).join('')}
+      </ol>
+      <button type="button" class="btn-icono ruta-ayuda" id="btnComoFunciona" title="Cómo funciona el SINBA-SIS" aria-label="Cómo funciona el SINBA-SIS"><span class="material-symbols-rounded">help</span></button>`;
+    const ayuda = document.getElementById('btnComoFunciona');
+    if (ayuda) ayuda.addEventListener('click', abrirComoFunciona);
+  }
+
+  function abrirComoFunciona() {
+    const hoja = (icono, color, nombre, texto) => `
+      <div style="display:flex; gap:11px; padding:9px 0; border-bottom:1px solid #f1f5f9;">
+        <span class="material-symbols-rounded" style="color:${color}; flex:none; margin-top:1px;">${icono}</span>
+        <div><b style="font-size:13px; color:var(--primary);">${nombre}</b><div style="font-size:12px; color:var(--muted); line-height:1.5;">${texto}</div></div>
+      </div>`;
+    const paso = (n, nombre, texto) => `
+      <div style="display:flex; gap:11px; padding:7px 0;">
+        <span style="flex:none; width:22px; height:22px; border-radius:50%; background:var(--primary); color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; font-family:'Poppins',sans-serif;">${n}</span>
+        <div style="font-size:12px; color:var(--muted); line-height:1.5;"><b style="color:var(--primary); font-size:13px;">${nombre}.</b> ${texto}</div>
+      </div>`;
+    const tit = (t) => `<div style="font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:14px 0 2px;">${t}</div>`;
+    abrirDetalleSIS({
+      titulo: 'Cómo funciona el SINBA-SIS',
+      subtitulo: 'Un solo archivo mensual con cuatro hojas: se llena, se concilia, se envía y se valida completo.',
+      cuerpo: `
+        ${tit('Las cuatro hojas')}
+        ${hoja('summarize', '#0ea5e9', 'SIS-06-P', 'Tu concentrado del mes: dosis aplicadas por variable (con afromexicanos, indígenas y migrantes como subconjunto del total).')}
+        ${hoja('inventory_2', '#d97706', 'Movimiento de Biológico', 'Existencias, recibido, aplicadas y desechadas por lote. La existencia pasa sola al mes siguiente.')}
+        ${hoja('table_view', '#16a34a', 'SIS-SS-CE-H', 'La hoja de claves: se arma sola con SIS-06-P e Influenza. Aquí no se captura nada.')}
+        ${hoja('vaccines', '#C26750', 'Influenza', 'Se lee del panel de Meta-Logro (ahí se valida contra tu meta). Aquí ves el corte del mes por semana; para cambiarlo vas a Meta-Logro.')}
+        ${tit('El mes en cuatro pasos')}
+        ${paso(1, 'Captura', 'Puedes ir prellenando desde una semana antes de cerrar el mes. Guarda con el botón de la barra de abajo.')}
+        ${paso(2, 'Concilia', 'Las dosis aplicadas del paloteo y las del Movimiento deben coincidir, biológico por biológico. Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT) usa el comodín de sustitución.')}
+        ${paso(3, 'Envía', 'Solo del último día del mes a la semana siguiente. Al enviar, todo el archivo se bloquea, incluida Influenza.')}
+        ${paso(4, 'Validación', 'El municipal revisa; si corrige algo, tú ves cada cambio y lo aceptas. Ya validado puedes exportar el Excel oficial e imprimir.')}`
+    });
+  }
+
+  // Píldoras vivas de cada hoja (barra de abajo).
+  function actualizarPildoras() {
+    const poner = (id, texto, cls, titulo) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = texto;
+      el.className = 'hoja-pildora' + (cls ? ' ' + cls : '');
+      el.title = titulo || '';
+    };
+    poner('pildoraSIS06P', _sinGuardar ? '​' : '', 'punto', 'Cambios sin guardar');
+    const filas = Array.isArray(_conciliacionCache) ? _conciliacionCache : null;
+    if (filas && filas.length) {
+      const nd = filas.filter((f) => !f.coincide).length;
+      if (nd) poner('pildoraMovimiento', `${nd} ≠`, 'aviso', `${nd} biológico(s) no coinciden con el paloteo`);
+      else poner('pildoraMovimiento', '✓', 'ok', 'Paloteo y Movimiento coinciden');
+    } else {
+      poner('pildoraMovimiento', '', '');
+    }
+    poner('pildoraCEH', '', '');
+    const selMes = document.getElementById('selMes');
+    const selAnio = document.getElementById('selAnio');
+    if (selMes && selAnio && datosUnidadActiva()) {
+      const nSem = influenzaCorteDelMes(Number(selMes.value), Number(selAnio.value)).semanas.length;
+      poner('pildoraInfluenza', nSem ? `${nSem}/5` : '', '', nSem ? `${nSem} semana(s) reportada(s) este mes` : '');
+    } else {
+      poner('pildoraInfluenza', '', '');
+    }
+  }
+
+  // Línea de estatus + botón Guardar de la barra de hojas.
+  function actualizarDock() {
+    actualizarPildoras();
+    const btnG = document.getElementById('btnGuardarSIS06P');
+    const icoG = document.getElementById('iconoGuardarSIS');
+    const etqG = document.getElementById('etiquetaGuardarSIS');
+    const captura = capturaDelMesActual();
+    if (btnG && icoG && etqG) {
+      const reposo = !_sinGuardar && Boolean(captura);
+      btnG.classList.toggle('en-reposo', reposo);
+      icoG.textContent = reposo ? 'check' : 'save';
+      etqG.textContent = reposo ? 'Guardado' : 'Guardar';
+      btnG.title = reposo ? 'Todo guardado' : 'Guardar concentrado SIS-06-P';
+    }
+
+    const caja = document.getElementById('dockEstado');
+    if (!caja) return;
+    if (!datosUnidadActiva()) { caja.style.display = 'none'; return; }
+    const { est, filas, difs, v } = estadoRuta();
+    const esU = esUnidadSesion();
+    let detalle = '';
+    if (est === 'VALIDADO') detalle = 'Ya puedes exportar el Excel oficial e imprimir';
+    else if (est === 'ENVIADO') detalle = esU ? 'Esperando al municipal' : 'Pendiente de tu validación';
+    else if (_sinGuardar) detalle = 'Cambios sin guardar';
+    else if (!captura) detalle = 'Aún sin guardar este mes';
+    else if (filas !== null && difs.length) detalle = `${difs.length} biológico${difs.length === 1 ? '' : 's'} no coincide${difs.length === 1 ? '' : 'n'} -- corrige antes de enviar`;
+    else if (v && !v.dentro_envio) detalle = `Envío del ${fechaMesCorta(v.inicio_envio)} al ${fechaMesCorta(v.fin_envio)}`;
+    else if (v) detalle = `Listo para enviar hasta el ${fechaMesCorta(v.fin_envio)}`;
+    caja.style.display = 'flex';
+    document.getElementById('dockEstadoTitulo').textContent = est === 'BORRADOR' ? 'Borrador' : est === 'ENVIADO' ? 'Enviado' : 'Validado';
+    document.getElementById('dockPunto').className = 'dock-punto ' + (est === 'ENVIADO' ? 'enviado' : est === 'VALIDADO' ? 'validado' : '');
+    document.getElementById('dockEstadoDetalle').textContent = detalle;
+  }
+
+  // Vuelve a pedir la conciliación al servidor (p. ej. tras guardar una celda
+  // de Movimiento) y repinta lo que depende de ella, sin tocar el paloteo que
+  // se esté tecleando. Con retraso para agrupar ráfagas de guardados.
+  let _refrescoConcTimer = null;
+  function refrescarConciliacion() {
+    clearTimeout(_refrescoConcTimer);
+    _refrescoConcTimer = setTimeout(async () => {
+      const activa = datosUnidadActiva();
+      if (!activa) return;
+      try { await cargarConciliacion(activa.clues); } catch (err) { console.warn('[SINBA-SIS] No se pudo refrescar la conciliación:', err); return; }
+      const captura = capturaDelMesActual();
+      if (!_sinGuardar) {
+        const soloLectura = esUnidadSesion() ? (captura ? captura.estado !== 'BORRADOR' : false) : (!captura || captura.estado === 'BORRADOR');
+        renderConciliacion(soloLectura, captura);
+      }
+      const btnEnviar = document.getElementById('btnEnviarSIS06P');
+      if (btnEnviar && esUnidadSesion() && btnEnviar.style.display !== 'none') {
+        const fueraDeVentana = !(_ventanaCache && _ventanaCache.dentro_envio);
+        const noConcilia = hayDiferenciasConciliacion();
+        btnEnviar.disabled = fueraDeVentana || noConcilia;
+        btnEnviar.title = fueraDeVentana
+          ? 'Fuera de la ventana de envío'
+          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden -- revisa la conciliación' : 'Enviar el SINBA-SIS para validación';
+      }
+      renderInfluenza();
+      renderRutaMes();
+      actualizarDock();
+    }, 350);
+  }
+
+  // Guarda lo pendiente del paloteo SIS-06-P y abre el panel de Influenza
+  // (Meta-Logro): es ahí donde se captura y se valida contra la meta, así que
+  // no hay dos lugares para editar lo mismo. index.html abre directo en esa
+  // pestaña con ?captura=INFLUENZA.
+  async function irAMetaLogroInfluenza() {
+    if (!esUnidadSesion()) return;
+    const captura = capturaDelMesActual();
+    if (captura && captura.estado !== 'BORRADOR') { toast('El SINBA-SIS de este mes ya fue enviado: Influenza quedó congelada.', 'error'); return; }
+    if (_sinGuardar) {
+      const ok = await save();
+      if (!ok) return; // no se pierde nada: se queda aquí con el aviso del error
+    }
+    window.location.href = 'index.html?captura=INFLUENZA';
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    const btnMeta = document.getElementById('btnEditarEnMetaLogro');
+    const ovDetalle = document.getElementById('detalleSISOverlay');
+    if (ovDetalle) ovDetalle.addEventListener('click', (ev) => { if (ev.target === ovDetalle) cerrarDetalleSIS(); });
+    const btnCerrarDetalle = document.getElementById('detalleSISCerrar');
+    if (btnCerrarDetalle) btnCerrarDetalle.addEventListener('click', cerrarDetalleSIS);
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') cerrarDetalleSIS(); });
+    if (btnMeta) btnMeta.addEventListener('click', irAMetaLogroInfluenza);
     const btnGuardar = document.getElementById('btnGuardarSIS06P');
     if (btnGuardar) btnGuardar.addEventListener('click', save);
     const btnEnviar = document.getElementById('btnEnviarSIS06P');
@@ -1547,5 +2422,8 @@
   // tercera vez -- ya se duplicó una vez desde influenza_module.js (Fase 3c)
   // porque biovac.html no carga ese archivo; no hace falta duplicarla otra
   // vez dentro del propio biovac.html, donde ambos módulos sí conviven.
-  window.SIS06PBiovac = { init, render, save, hayCambiosSinGuardar: () => _sinGuardar, renderCSVPreview, exportarSISOficialCompleto, INFLUENZA_SIS_MAPPING };
+  window.SIS06PBiovac = {
+    init, render, save, hayCambiosSinGuardar: () => _sinGuardar, renderCSVPreview, exportarSISOficialCompleto, INFLUENZA_SIS_MAPPING,
+    renderCEH, renderInfluenza, aplicarResponsable, guardarResponsable, marcarResponsableManual, refrescarConciliacion
+  };
 })();

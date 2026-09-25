@@ -10597,6 +10597,9 @@ document.addEventListener("visibilitychange", () => {
 
 
 
+let _deepLinkCaptura; // undefined = todavía no leído; "" = sin enlace directo
+let _deepLinkCapturaHasta = 0;
+
 function activateDefaultMainForRole() {
   const role = String((USER && USER.rol) || "").trim().toUpperCase();
   if (!role) return;
@@ -10604,7 +10607,25 @@ function activateDefaultMainForRole() {
   if (role === "UNIDAD") {
     AppState.opsTab = ""; // Reset to force activateUnidadTab to run
     activateUnidadTab("CAPTURE");
-    activateCapture(APP_STATE.captureTab || "SR");
+    // Enlace directo desde el SINBA-SIS (biovac.html, hoja Influenza, botón
+    // "Editar en Meta-Logro Influenza"): ?captura=INFLUENZA abre esa captura.
+    // OJO: para una unidad, hydrateSessionUi llama setLoggedInUI DOS veces
+    // (con y sin status fresco) y cada una resetea la pestaña a "SR" y vuelve
+    // aquí -- por eso el parámetro se lee una sola vez y se respeta durante
+    // una ventana corta de arranque, no "una sola pasada".
+    let capturaInicial = APP_STATE.captureTab || "SR";
+    if (_deepLinkCaptura === undefined) {
+      try {
+        const deep = new URLSearchParams(window.location.search).get("captura");
+        _deepLinkCaptura = String(deep || "").toUpperCase();
+      } catch (_) { _deepLinkCaptura = ""; }
+      _deepLinkCapturaHasta = Date.now() + 20000;
+      if (_deepLinkCaptura) {
+        try { window.history.replaceState(null, "", window.location.pathname + window.location.hash); } catch (_) { /* cosmético */ }
+      }
+    }
+    if (_deepLinkCaptura === "INFLUENZA" && Date.now() < _deepLinkCapturaHasta) capturaInicial = "INFLUENZA";
+    activateCapture(capturaInicial);
   } else {
     activateMain("CAP");
   }
