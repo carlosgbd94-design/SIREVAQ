@@ -1,3 +1,7 @@
+-- NOTA: sis06p_enviar_para_validacion, sis06p_marcar_validado y
+-- sis06p_resumen_seguimiento se REDEFINEN en sis06p_reconciliacion.sql
+-- (conciliación paloteo vs Movimiento, envío+cierre atómico). Ejecutar ese
+-- archivo DESPUÉS de este -- las versiones de aquí abajo quedan reemplazadas.
 -- ============================================================================
 -- SIS-06-P — Motor de flujo de estatus (envío -> validación municipal ->
 -- aceptación de cambios por la unidad).
@@ -538,8 +542,12 @@ begin
     bu.clues,
     bu.nombre,
     bu.municipio,
-    coalesce(c.estado, 'SIN_INICIAR'),
-    c.capturado_por,
+    -- Si la unidad ya abrió su Movimiento de Biológico del mes (botón "Crear
+    -- movimiento") pero todavía no guarda el paloteo, ya está trabajando en
+    -- "el SIS" (paloteo + movimiento son un solo archivo): cuenta como
+    -- BORRADOR/"Capturando", no "Sin iniciar".
+    coalesce(c.estado, case when m.id is not null then 'BORRADOR' else 'SIN_INICIAR' end),
+    coalesce(c.capturado_por, m.responsable_elaboracion),
     c.enviado_por,
     c.validado_por,
     c.enviado_en,
@@ -551,6 +559,8 @@ begin
   from biovac_unidades bu
   left join sis06p_capturas c
     on c.clues = bu.clues and c.mes = p_mes and c.anio = p_anio
+  left join biovac_movimientos m
+    on m.unidad_id = bu.id and m.mes = p_mes and m.anio = p_anio
   where bu.activo = true
     -- Las filas "pseudo" (municipios/hospitales, clues 'JS1-...') son solo
     -- para la captura de Movimiento a nivel municipal/hospital -- nunca

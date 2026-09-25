@@ -38,9 +38,10 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_export_excel.js?v=2026.2"></script>
 <script defer src="biovac_importer.js?v=2026.2"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
-<script defer src="biovac_ui.js?v=2026.34"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.19"></script>
-<script defer src="sis06p_dashboard_module.js?v=2026.6"></script>
+<script defer src="biovac_ui.js?v=2026.39"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.22"></script>
+<script defer src="sis06p_dashboard_module.js?v=2026.9"></script>
+<script defer src="sis06p_concentrado_municipal_module.js?v=2026.1"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -685,13 +686,19 @@ window.onunhandledrejection = function (event) {
     <div style="display:flex; align-items:center; gap:14px;">
       <div style="width:44px; height:44px; border-radius:14px; background:#f0f9ff; border:1px solid #bae6fd; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0;">📋</div>
       <div>
-        <h2>Concentrado Mensual SIS-06-P <span id="sis06pBadgeEstado" class="estado-badge"></span></h2>
+        <h2>Concentrado Mensual SIS-06-P <span id="sis06pBadgeEstado" class="estado-badge"></span> <span id="sis06pChipSinGuardar" class="estado-badge" style="display:none; background:var(--warning-bg); color:var(--warning);">Cambios sin guardar</span></h2>
         <p class="subtitulo">Registro de Aplicación de Biológicos -- captura el concentrado del mes, no el paloteo diario.</p>
       </div>
     </div>
   </div>
 
   <div id="sis06pBannerVentana" style="display:none; margin-bottom:14px; padding:10px 14px; border-radius:12px; font-size:12px; font-weight:700;"></div>
+
+  <!-- Conciliación paloteo (SIS-06-P) vs. aplicado (Movimiento de Biológico),
+       biológico por biológico -- misma fuente única (RPC sis06p_comparativo)
+       que usa el servidor para BLOQUEAR el envío/validación si no coincide.
+       Se llena en sis06p_biovac_module.js (renderConciliacion). -->
+  <div id="sis06pConciliacion" style="display:none; margin-bottom:14px;"></div>
 
   <div id="sis06pPanelCambiosPendientes" style="display:none; margin-bottom:16px; background:var(--warning-bg); border:1.5px solid var(--warning-border); border-radius:16px; padding:14px 18px;">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
@@ -756,6 +763,8 @@ window.onunhandledrejection = function (event) {
     </div>
   </div>
 
+  <div id="seguimientoVentana" style="display:none; margin-bottom:14px;"></div>
+
   <div id="seguimientoContadores" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom:18px;"></div>
 
   <!-- Solo MUNICIPAL: un botón por municipio a su cargo, para bajar el CSV
@@ -776,6 +785,7 @@ window.onunhandledrejection = function (event) {
           <th style="padding:9px; text-align:left; font-size:10px; text-transform:uppercase; color:var(--muted);">Unidad</th>
           <th style="padding:9px; text-align:center; font-size:10px; text-transform:uppercase; color:var(--muted);">Estatus</th>
           <th style="padding:9px; text-align:left; font-size:10px; text-transform:uppercase; color:var(--muted);">Detalle</th>
+          <th style="padding:9px; text-align:center; font-size:10px; text-transform:uppercase; color:var(--muted);">Paloteo vs. Mov.</th>
           <th style="padding:9px; text-align:center; font-size:10px; text-transform:uppercase; color:var(--muted);">Pendientes</th>
         </tr>
       </thead>
@@ -830,6 +840,10 @@ window.onunhandledrejection = function (event) {
     <div class="loading-spinner"></div>
     <span class="loading-texto" id="loadingTexto">Cargando…</span>
   </div>
+</div>
+
+<div id="avisoMovimientoDerivado" class="tarjeta" style="display:none">
+  <p><b>El Movimiento del municipio ya no se captura.</b> Desde octubre 2026 cada unidad captura su propio SIS (paloteo SIS-06-P + Movimiento de Biológico) y el municipio nunca se queda con vacuna: la requisición ya se reparte por unidad. El concentrado del municipio (seguimiento de biológico, paloteo y recibido vs. requisición) se arma solo -- lo ves en la pestaña <b>Seguimiento</b>.</p>
 </div>
 
 <div id="panelSinMovimiento" style="display:none">
@@ -910,7 +924,7 @@ window.onunhandledrejection = function (event) {
               <option value="CSV -- Exportación a RDA" data-tab="csv">Exportación / descarga del CSV</option>
             </optgroup>
             <optgroup label="Seguimiento">
-              <option value="Seguimiento -- Estatus por unidad" data-tab="seguimiento">Estatus por unidad/municipio (Sin iniciar/Capturando/Enviado/Validado)</option>
+              <option value="Seguimiento -- Estatus por unidad" data-tab="seguimiento">Estatus por unidad/municipio (Sin enviar/Por validar/Validado)</option>
               <option value="Seguimiento -- Comparativo paloteo vs. aplicado">Comparativo paloteo (SIS-06-P) vs. aplicado</option>
               <option value="Seguimiento -- Aviso de validación">Aviso de validación / enlace directo</option>
               <option value="Seguimiento -- CSV oficial del concentrado">Descarga del CSV oficial del concentrado municipal</option>

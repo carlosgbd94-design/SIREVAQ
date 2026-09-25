@@ -173,7 +173,7 @@ function ocultarCargando() {
 // texto plano vía textContent) -- úsalo solo con contenido que tú mismo
 // construyes a partir de datos ya de confianza (catálogos, no texto libre
 // de un usuario), como la lista de lotes en ofrecerCargaDesdeRequisiciones.
-function mostrarModal({ titulo, mensaje, detalleHtml = '', pedirMotivo = false, placeholderMotivo = '', textoAceptar = 'Aceptar', peligro = false }) {
+function mostrarModal({ titulo, mensaje, detalleHtml = '', pedirMotivo = false, placeholderMotivo = '', textoAceptar = 'Aceptar', peligro = false, sinCancelar = false }) {
   return new Promise((resolve) => {
     const overlay = document.getElementById('modalOverlay');
     document.getElementById('modalTitulo').textContent = titulo;
@@ -190,8 +190,12 @@ function mostrarModal({ titulo, mensaje, detalleHtml = '', pedirMotivo = false, 
     const btnCancelar = document.getElementById('modalBtnCancelar');
     btnAceptar.textContent = textoAceptar;
     btnAceptar.className = peligro ? 'btn-peligro' : 'btn-primario';
+    // sinCancelar: aviso informativo (solo "Aceptar", Escape no lo cierra) --
+    // p. ej. la precarga de la requisición en una unidad, que no se puede rechazar.
+    btnCancelar.style.display = sinCancelar ? 'none' : '';
 
     function cerrar(resultado) {
+      btnCancelar.style.display = '';
       overlay.classList.remove('abierto');
       document.removeEventListener('keydown', onTecla);
       btnAceptar.removeEventListener('click', onAceptar);
@@ -207,7 +211,7 @@ function mostrarModal({ titulo, mensaje, detalleHtml = '', pedirMotivo = false, 
         cerrar(true);
       }
     }
-    function onCancelar() { cerrar(pedirMotivo ? null : false); }
+    function onCancelar() { if (sinCancelar) return; cerrar(pedirMotivo ? null : false); }
     function onTecla(ev) { if (ev.key === 'Escape') onCancelar(); if (ev.key === 'Enter' && !pedirMotivo) onAceptar(); }
 
     btnAceptar.addEventListener('click', onAceptar);
@@ -268,6 +272,12 @@ async function cargarCatalogo() {
   if (e1 || e2 || e3) { toast('Error cargando catálogo: ' + (e1 || e2 || e3).message, 'error'); return; }
   estado.bloques = bloques;
   estado.biologicos = biologicos;
+  // Primer mes en que TODO se captura por unidad (sis_config) -- desde ahí el
+  // Movimiento del municipio/hospital pseudo ya no se captura, se concentra.
+  try {
+    const { data: cfg } = await estado.db.from('sis_config').select('valor').eq('clave', 'inicio_captura_por_unidad').maybeSingle();
+    if (cfg && cfg.valor) estado.inicioPorUnidad = cfg.valor;
+  } catch (e) { /* se queda el valor por omisión */ }
   // RLS ya filtra qué unidades puede ver este perfil (MUNICIPAL solo las
   // suyas); si no hay sesión real (uso standalone), unidades trae las 4.
   estado.unidades = unidades;
@@ -319,9 +329,16 @@ async function cargarCatalogo() {
   // (municipio/hospital), no el detalle de cada unidad.
   const selUnidadRevision = document.getElementById('selUnidadRevision');
   if (selUnidadRevision) {
-    selUnidadRevision.innerHTML = rol === 'MUNICIPAL'
-      ? unidadesClues.map((u) => `<option value="${u.id}">${u.clues} -- ${u.nombre} (${u.municipio})</option>`).join('')
-      : '';
+    // JURISDICCIONAL es el "municipal" de los hospitales (HENM, NHG): son
+    // unidades de Querétaro pero se manejan aparte, como municipios, así que
+    // la jurisdicción revisa/valida su SIS (solo esas CLUES). La opción vacía
+    // = vista jurisdiccional normal (Movimiento de municipio/hospital).
+    const opcionesRevision = (lista) => lista.map((x) => `<option value="${x.id}">${x.clues} -- ${x.nombre} (${x.municipio})</option>`).join('');
+    if (rol === 'MUNICIPAL') selUnidadRevision.innerHTML = opcionesRevision(unidadesClues);
+    else if (rol === 'JURISDICCIONAL') {
+      selUnidadRevision.innerHTML = '<option value="">— Vista jurisdiccional (sin revisar una unidad) —</option>'
+        + opcionesRevision(unidadesClues.filter((x) => MUNICIPIOS_HOSPITAL.indexOf(x.municipio) >= 0));
+    } else selUnidadRevision.innerHTML = '';
   }
 
   // #selAnio/#selMes se llenan ANTES de inicializarToggleSIS06P(): esa
@@ -369,10 +386,74 @@ async function cargarCatalogo() {
 // no hace falta duplicar esos selects.
 // ---------------------------------------------------------------------------
 
+
+// ---------------------------------------------------------------------------
+// Guarda de "cambios sin guardar" del paloteo SIS-06-P (ver marcarSinGuardar
+// en sis06p_biovac_module.js): antes de cambiar de pestaña, de mes/año o de
+// unidad a revisar, si hay captura tecleada sin guardar se pide guardarla. Si
+// el usuario cancela se queda donde está (nada se pierde); si acepta, se
+// guarda y solo entonces se continúa.
+// ---------------------------------------------------------------------------
+
+function hayPaloteoSinGuardar() {
+  return Boolean(window.SIS06PBiovac && window.SIS06PBiovac.hayCambiosSinGuardar && window.SIS06PBiovac.hayCambiosSinGuardar());
+}
+
+async function confirmarSalidaSIS06P() {
+  if (!hayPaloteoSinGuardar()) return true;
+  const guardar = await mostrarModal({
+    titulo: 'Paloteo SIS-06-P sin guardar',
+    mensaje: 'Capturaste datos en el paloteo SIS-06-P que todavía no se guardan -- si sales ahora se pierden. ¿Guardar ahora y continuar? (Cancelar = quedarte aquí.)',
+    textoAceptar: 'Guardar y continuar'
+  });
+  if (!guardar) return false;
+  return await window.SIS06PBiovac.save();
+}
+
+function instalarGuardasSIS06P() {
+  const btnSis = document.getElementById('btnSeccionSIS06P');
+  ['btnSeccionMovimiento', 'btnSeccionCSV', 'btnSeccionSeguimiento'].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    // Captura en el propio botón: corre ANTES que el manejador normal de
+    // inicializarToggleSIS06P y puede frenarlo.
+    btn.addEventListener('click', async (ev) => {
+      if (!btnSis || !btnSis.classList.contains('activo') || !hayPaloteoSinGuardar()) return;
+      ev.stopImmediatePropagation();
+      ev.preventDefault();
+      if (await confirmarSalidaSIS06P()) btn.click(); // ya guardado: la guarda ya no interviene
+    }, true);
+  });
+
+  const selectores = ['selMes', 'selAnio', 'selUnidadRevision'];
+  document.addEventListener('focusin', (ev) => {
+    if (ev.target && selectores.indexOf(ev.target.id) >= 0) ev.target.dataset.prevValue = ev.target.value;
+  });
+  selectores.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', async (ev) => {
+      if (!hayPaloteoSinGuardar() || el.dataset.prevValue === undefined) return;
+      ev.stopImmediatePropagation();
+      const nuevo = el.value;
+      el.value = el.dataset.prevValue; // el guardado debe ir al mes/unidad donde se capturó
+      if (await confirmarSalidaSIS06P()) {
+        el.value = nuevo;
+        el.dataset.prevValue = nuevo;
+        el.dispatchEvent(new Event('change'));
+      }
+    }, true);
+  });
+}
+
+// Hospitales que se manejan como municipios aparte (no dentro de Querétaro).
+const MUNICIPIOS_HOSPITAL = ['HENM', 'NHG'];
+
 let _sis06pInicializado = false;
 
 function inicializarToggleSIS06P() {
   document.getElementById('toggleSeccionUnidad').style.display = 'block';
+  instalarGuardasSIS06P();
   const btnSis = document.getElementById('btnSeccionSIS06P');
   const btnMov = document.getElementById('btnSeccionMovimiento');
   const btnCsv = document.getElementById('btnSeccionCSV');
@@ -388,9 +469,12 @@ function inicializarToggleSIS06P() {
   const wrapRevision = document.getElementById('wrapUnidadRevision');
   const selUnidadRevision = document.getElementById('selUnidadRevision');
   const esMunicipal = rolActual === 'MUNICIPAL';
-  if (wrapRevision) wrapRevision.style.display = esMunicipal ? 'flex' : 'none';
+  // JURISDICCIONAL también ve el selector de revisión, pero solo con las
+  // CLUES de los hospitales (ver cargarCatalogo) -- es su "municipal".
+  const veRevision = esMunicipal || rolActual === 'JURISDICCIONAL';
+  if (wrapRevision) wrapRevision.style.display = veRevision ? 'flex' : 'none';
   if (rolActual === 'JURISDICCIONAL' || rolActual === 'ADMIN') {
-    btnSis.style.display = 'none';
+    if (rolActual === 'ADMIN') btnSis.style.display = 'none';
     btnCsv.style.display = 'none';
   }
 
@@ -405,13 +489,15 @@ function inicializarToggleSIS06P() {
     document.getElementById('filaBotonesCabecera').style.display = 'none';
     document.getElementById('panelImportador').style.display = 'none';
     document.getElementById('btnAbrirImportador').style.display = 'none';
+    const avisoDerivado = document.getElementById('avisoMovimientoDerivado');
+    if (avisoDerivado) avisoDerivado.style.display = 'none';
   }
 
   btnSis.addEventListener('click', () => {
     ocultarTodo();
     btnSis.classList.add('activo');
     document.getElementById('panelSIS06P').style.display = 'block';
-    if (wrapRevision) wrapRevision.style.display = esMunicipal ? 'flex' : 'none';
+    if (wrapRevision) wrapRevision.style.display = veRevision ? 'flex' : 'none';
     if (!_sis06pInicializado) {
       _sis06pInicializado = true;
       window.SIS06PBiovac.init();
@@ -423,7 +509,7 @@ function inicializarToggleSIS06P() {
   btnMov.addEventListener('click', () => {
     ocultarTodo();
     btnMov.classList.add('activo');
-    if (wrapRevision) wrapRevision.style.display = esMunicipal ? 'flex' : 'none';
+    if (wrapRevision) wrapRevision.style.display = veRevision ? 'flex' : 'none';
     // "Importar histórico" espera el Excel oficial de Movimiento de
     // Biológico a nivel MUNICIPIO -- una unidad nunca tiene ese archivo
     // (su fuente es el paloteo SIS-06-P/Influenza capturado aquí mismo),
@@ -436,7 +522,7 @@ function inicializarToggleSIS06P() {
     ocultarTodo();
     btnCsv.classList.add('activo');
     document.getElementById('panelCSV').style.display = 'block';
-    if (wrapRevision) wrapRevision.style.display = esMunicipal ? 'flex' : 'none';
+    if (wrapRevision) wrapRevision.style.display = veRevision ? 'flex' : 'none';
     if (!_sis06pInicializado) { _sis06pInicializado = true; await window.SIS06PBiovac.init(); }
     window.SIS06PBiovac.renderCSVPreview();
   });
@@ -602,11 +688,38 @@ function unidadIdMovimientoActivo() {
   return document.getElementById('selUnidad').value;
 }
 
+// Desde el arranque por unidad (octubre 2026) el municipio NUNCA se queda con
+// vacuna: lo que llega se reparte por unidad en la misma requisición, así que
+// su Movimiento ya no se captura -- es la suma de sus unidades (mismo criterio
+// que biovac_cuenta_para_jurisdiccion en la base). Excepción: un municipio/
+// hospital que todavía no tiene ninguna unidad con CLUES real conserva su fila.
+// ADMIN siempre puede entrar (mantenimiento).
+function movimientoEsDerivado(unidadId, anio, mes) {
+  const rol = estado.perfil ? estado.perfil.rol : null;
+  if (rol === 'ADMIN' || rol === 'UNIDAD') return false;
+  const u = (estado.unidades || []).find((x) => x.id === unidadId);
+  if (!u || !u.clues || !u.clues.startsWith('JS1-')) return false;
+  const inicio = estado.inicioPorUnidad || '2026-10-01';
+  const primerDiaMes = `${anio}-${String(mes).padStart(2, '0')}-01`;
+  if (primerDiaMes < inicio) return false;
+  return (estado.unidadesClues || []).some((x) => x.municipio === u.municipio);
+}
+
 async function cargarMovimiento() {
   const unidadId = unidadIdMovimientoActivo();
   const anio = Number(document.getElementById('selAnio').value);
   const mes = Number(document.getElementById('selMes').value);
   if (!unidadId) return;
+
+  const avisoDerivado = document.getElementById('avisoMovimientoDerivado');
+  if (avisoDerivado) avisoDerivado.style.display = 'none';
+  if (unidadId !== UNIDAD_JURISDICCION && movimientoEsDerivado(unidadId, anio, mes)) {
+    estado.movimiento = null;
+    ['panelMovimiento', 'panelSinMovimiento', 'filaCabeceraMovimiento', 'filaBotonesCabecera', 'panelImportador']
+      .forEach((id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    if (avisoDerivado) avisoDerivado.style.display = 'block';
+    return;
+  }
 
   if (unidadId === UNIDAD_JURISDICCION) { await cargarMovimientoJurisdiccional(anio, mes); return; }
 
@@ -669,66 +782,67 @@ async function cargarMovimiento() {
 // informativo, sin bloquear el guardado de ninguno de los dos lados.
 // ---------------------------------------------------------------------------
 
-// Mapeo best-effort entre la `clave` de catálogo de BioVac y el texto
-// `biologico` de sis_variables (catálogos construidos por separado, sin
-// llave común) -- cuando no hay mapeo, sencillamente no se muestra
-// comparación para ese biológico en vez de arriesgar un cruce equivocado.
-const SIS_BIOLOGICO_POR_CLAVE_BIOVAC = {
-  BCG: ['BCG'], HEPB: ['HEPATITIS B'], HEXAVALENTE: ['HEXAVALENTE'], DPT: ['DPT'],
-  ROTAVIRUS: ['ROTAVIRUS'], NEUMO_13V: ['NEUMOCOCCICA 13', 'NEUMOCÓCICA 13'],
-  NEUMO_20V: ['NEUMOCOCCICA 20', 'NEUMOCÓCICA 20'], HEPA: ['HEPATITIS A'],
-  SRP: ['SRP'], ANTIINFLUENZA: ['INFLUENZA'], SR: ['SR'], VPH: ['VPH'],
-  TD: ['TD'], TDPA: ['TDPA'], COVID_MODERNA: ['COVID-19'], COVID_PFIZER: ['COVID-19'],
-  VARICELA: ['VARICELA'], VSR: ['VSR']
-};
-
+// El cruce entre la `clave` de catálogo de BioVac y el grupo `biologico` de
+// sis_variables vive en la tabla sis_biovac_mapa (validada contra ambos
+// catálogos al crearla, ver supabase/sis06p_reconciliacion.sql) y el
+// paloteo-vs-aplicado lo calcula el RPC sis06p_comparativo -- la MISMA fuente
+// que usa el servidor para bloquear el envío/validación. Antes este mapeo
+// estaba escrito a mano aquí con nombres que NO existían tal cual en
+// sis_variables ('HEXAVALENTE', 'ROTAVIRUS', 'SRP', 'TD'...), así que la
+// mitad de los biológicos siempre marcaban paloteo=0.
+//
+// estado.sis06pTotales[claveBiovac] = { paloteo, claves } -- `paloteo` es el
+// total del GRUPO DE CONCILIACIÓN y `claves` todas las claves BioVac que lo
+// comparten: COVID Moderna + Pfizer (un solo grupo en SIS-06-P) y, por regla
+// federal, SR + SRP y DPT + TdPa (si se aplica SRP en lugar de SR, el paloteo
+// lo reporta como SR pero Movimiento lo da de baja como SRP: solo cuadran
+// juntos). Todo
+// biológico mapeado tiene entrada aunque el paloteo sea 0: capturar dosis
+// aplicadas en Movimiento sin paloteo ES una diferencia y debe avisarse.
 async function cargarSIS06PTotalesParaComparar(anio, mes) {
   estado.sis06pTotales = {};
   // Se guarda junto a los totales (misma llamada, mismo captura) el estado
   // ENVIADO/VALIDADO del concentrado SIS-06-P de este mes -- lo usa render()
   // para no dejar exportar/imprimir el Excel oficial (SIS-06-P + Movimiento)
-  // desde ESTA pestaña hasta que el municipal lo haya validado (antes de
-  // esto, el botón de aquí exportaba un archivo aparte, solo de Movimiento,
-  // sin ninguna de las dos reglas: siempre disponible y sin las otras 3
-  // hojas del documento oficial).
+  // desde ESTA pestaña hasta que el municipal lo haya validado.
   estado.sis06pEstadoActual = 'BORRADOR';
   const clues = estado.perfil.clues;
   if (!clues) return;
   try {
-    const [{ data: captura }, { data: sisVars }, { data: capturasInf }] = await Promise.all([
-      estado.db.from('sis06p_capturas').select('valores, estado').eq('clues', clues).eq('mes', mes).eq('anio', anio).maybeSingle(),
-      estado.db.from('sis_variables').select('fila_excel, biologico').eq('activo', true),
-      estado.db.from('influenza_capturas').select('fecha, valores').eq('clues', clues)
+    const [{ data: captura }, { data: mapa, error: errMapa }, { data: comparativo, error: errComp }] = await Promise.all([
+      estado.db.from('sis06p_capturas').select('estado').eq('clues', clues).eq('mes', mes).eq('anio', anio).maybeSingle(),
+      estado.db.from('sis_biovac_mapa').select('biovac_clave, grupo_conciliacion, etiqueta'),
+      estado.db.rpc('sis06p_comparativo', { p_mes: mes, p_anio: anio, p_clues: clues })
     ]);
     estado.sis06pEstadoActual = captura ? captura.estado : 'BORRADOR';
-    const totalesPorSisBiologico = {};
-    if (captura && sisVars) {
-      const valores = captura.valores || {};
-      const biologicoPorFila = new Map(sisVars.map((v) => [String(v.fila_excel), v.biologico]));
-      Object.entries(valores).forEach(([fila, v]) => {
-        const bio = biologicoPorFila.get(String(fila));
-        if (!bio) return;
-        totalesPorSisBiologico[bio] = (totalesPorSisBiologico[bio] || 0) + Number(v?.total || 0);
-      });
-    }
-    // Verificado contra el catálogo real (sis_variables): el paloteo SIS-06-P
-    // (104 variables) NO tiene ninguna fila de Influenza -- ni "INFLUENZA"
-    // como biológico, ni las 46 claves BIE/BIO del mapeo. Influenza vive
-    // ÚNICAMENTE en influenza_capturas (panel semanal, aplicaciones reales),
-    // así que el subtotal comparativo de ANTIINFLUENZA sale por completo de
-    // ahí -- no hay "doble conteo" posible porque el lado SIS-06-P de esta
-    // suma siempre es 0 para Influenza.
-    let totalInfluenzaMes = 0;
-    (capturasInf || []).forEach((c) => {
-      if (!c.fecha) return;
-      const d = new Date(c.fecha + 'T12:00:00');
-      if ((d.getMonth() + 1) !== Number(mes) || d.getFullYear() !== Number(anio)) return;
-      Object.values(c.valores || {}).forEach((v) => { totalInfluenzaMes += Number(v || 0); });
+    if (errMapa) throw errMapa;
+    if (errComp) throw errComp;
+
+    const clavesPorGrupo = {};
+    const etiquetaPorGrupo = {};
+    (mapa || []).forEach((m) => {
+      (clavesPorGrupo[m.grupo_conciliacion] = clavesPorGrupo[m.grupo_conciliacion] || []).push(m.biovac_clave);
+      etiquetaPorGrupo[m.grupo_conciliacion] = m.etiqueta;
     });
-    Object.entries(SIS_BIOLOGICO_POR_CLAVE_BIOVAC).forEach(([claveBiovac, nombresSis]) => {
-      let suma = nombresSis.reduce((acc, n) => acc + (totalesPorSisBiologico[n] || 0), 0);
-      if (claveBiovac === 'ANTIINFLUENZA') suma += totalInfluenzaMes;
-      if (suma > 0) estado.sis06pTotales[claveBiovac] = suma;
+    const paloteoPorGrupo = {};
+    const ajusteAplicadoPorGrupo = {};
+    const ajustePaloteoPorGrupo = {};
+    (comparativo || []).forEach((f) => {
+      paloteoPorGrupo[f.grupo] = Number(f.paloteo) || 0;
+      ajusteAplicadoPorGrupo[f.grupo] = Number(f.ajuste_aplicado) || 0;
+      ajustePaloteoPorGrupo[f.grupo] = Number(f.ajuste_paloteo) || 0;
+    });
+
+    Object.entries(clavesPorGrupo).forEach(([grupo, claves]) => {
+      claves.forEach((clave) => {
+        estado.sis06pTotales[clave] = {
+          paloteo: paloteoPorGrupo[grupo] || 0, claves, etiqueta: etiquetaPorGrupo[grupo],
+          // Comodín de sustitución (SRP como SR / TdPa como DPT), ya sumado por
+          // el servidor al lado que corresponde -- aquí solo se replica al
+          // recalcular en vivo lo que se está tecleando.
+          ajusteAplicado: ajusteAplicadoPorGrupo[grupo] || 0, ajustePaloteo: ajustePaloteoPorGrupo[grupo] || 0
+        };
+      });
     });
   } catch (err) {
     console.error('[SIS-06-P] Error al cargar totales para comparar:', err);
@@ -820,8 +934,13 @@ async function cargarMovimientoJurisdiccional(anio, mes) {
 // solo se considera "ya cargado" si ese renglón YA tiene recibido > 0.
 // Compartido por ambos niveles (municipio y unidad/CLUES).
 function _lotesYaCargadosComoRecibido() {
+  // Un lote cuenta como "ya cargado" si tiene recibido > 0 O si su renglón ya
+  // nació de la requisición (observaciones "Cargado desde Requisiciones...")
+  // aunque la unidad luego haya editado el recibido a 0 -- así una edición de
+  // la unidad NUNCA se revierte con una precarga nueva.
   return new Set(
-    estado.renglones.filter((r) => r.categoria === 'NORMAL' && Number(r.recibido_frascos) > 0)
+    estado.renglones.filter((r) => r.categoria === 'NORMAL'
+      && (Number(r.recibido_frascos) > 0 || String(r.observaciones || '').indexOf('Cargado desde Requisiciones') === 0))
       .map((r) => r.biovac_lotes.biologico_id + '::' + r.biovac_lotes.numero_lote)
   );
 }
@@ -857,11 +976,15 @@ function _detalleHtmlCandidatos(candidatos) {
   `).join('');
 }
 
-async function _confirmarYCargarCandidatos(candidatos, { titulo, mensaje }) {
+async function _confirmarYCargarCandidatos(candidatos, { titulo, mensaje, informativo = false }) {
+  // informativo (rol UNIDAD): la jurisdicción ya repartió esos lotes a la
+  // unidad -- solo se AVISA que se van a precargar; no se puede rechazar. Ya
+  // cargados en el Movimiento, la unidad sí puede editar las cantidades.
   const aceptar = await mostrarModal({
-    titulo, mensaje, detalleHtml: _detalleHtmlCandidatos(candidatos), textoAceptar: 'Sí, cargar'
+    titulo, mensaje, detalleHtml: _detalleHtmlCandidatos(candidatos),
+    textoAceptar: informativo ? 'Entendido, precargar' : 'Sí, cargar', sinCancelar: informativo
   });
-  if (!aceptar) return;
+  if (!aceptar && !informativo) return;
 
   let cargados = 0;
   mostrarCargando(`Cargando ${candidatos.length} lote(s) desde Requisiciones…`);
@@ -957,11 +1080,25 @@ async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
 
   const { data: requiUnidad } = await estado.db.from('requi_unidades')
     .select('id').eq('clues', unidadClues).maybeSingle();
-  if (!requiUnidad) return;
 
-  const { data: reparto, error } = await estado.db.from('requi_distribucion_unidad')
-    .select(`cantidad, requi_catalogo_biologicos ( nombre, biovac_biologico_id ), requi_lotes ( numero_lote, caducidad )`)
-    .eq('requisicion_id', requisicion.id).eq('unidad_id', requiUnidad.id).gt('cantidad', 0);
+  const seleccion = `cantidad, requi_catalogo_biologicos ( nombre, biovac_biologico_id ), requi_lotes ( numero_lote, caducidad )`;
+  let reparto = null;
+  let error = null;
+  if (requiUnidad) {
+    ({ data: reparto, error } = await estado.db.from('requi_distribucion_unidad')
+      .select(seleccion)
+      .eq('requisicion_id', requisicion.id).eq('unidad_id', requiUnidad.id).gt('cantidad', 0));
+  } else {
+    // Hospitales (HENM, NHG): se manejan como municipios aparte y la requisición
+    // les reparte a nivel DESTINO (requi_distribucion_municipio), no por unidad
+    // -- su unidad recibe el reparto completo de su propio destino. Cualquier
+    // otra unidad sin reparto por unidad simplemente no precarga nada.
+    const unidadBiovac = (estado.unidades || []).find((u) => u.clues === unidadClues);
+    if (!unidadBiovac || MUNICIPIOS_HOSPITAL.indexOf(unidadBiovac.municipio) < 0) return;
+    ({ data: reparto, error } = await estado.db.from('requi_distribucion_municipio')
+      .select(seleccion)
+      .eq('requisicion_id', requisicion.id).eq('municipio', unidadBiovac.municipio).gt('cantidad', 0));
+  }
   if (error || !reparto || !reparto.length) return;
 
   const candidatos = _candidatosDesdeReparto(reparto, requisicion.folio_oracle);
@@ -973,20 +1110,21 @@ async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
   // el concepto en otro sistema. Roles revisores (MUNICIPAL/JURISDICCIONAL/
   // ADMIN) ya conocen el término -- mismo aviso corto que a nivel municipio.
   const mensaje = esUnidad
-    ? `Tu jurisdicción ya te asignó ${candidatos.length} lote(s) de biológico este mes -- `
-      + '¿qué es un "lote"? Imagina que en vez de vacunas fueran manzanas: un lote es como una '
+    ? `Tu jurisdicción ya te asignó ${candidatos.length} lote(s) de biológico este mes y se van a precargar ahora en tu Movimiento como "recibido" -- no se puede rechazar. `
+      + '¿Qué es un "lote"? Imagina que en vez de vacunas fueran manzanas: un lote es como una '
       + 'caja concreta de manzanas que llegó en un solo embarque, con su propio número de lote '
-      + '(la etiqueta de esa caja) y su propia fecha de caducidad. Todas las manzanas de esa caja '
-      + 'se cuentan y se controlan juntas -- si llega otra caja después, aunque sean las mismas '
-      + 'manzanas, es OTRO lote con su propio número. Así se controla también tu biológico: cada '
-      + 'lote que recibes se registra por separado en tu Movimiento de este mes (cuántos frascos '
-      + 'llegaron, cuántos aplicaste, cuántos te sobraron). ¿Deseas cargar aquí como "recibido" '
-      + 'los lotes que ya te asignó tu jurisdicción?'
+      + '(la etiqueta de esa caja) y su propia fecha de caducidad. Cada lote que recibes se registra '
+      + 'por separado en tu Movimiento de este mes (cuántos frascos llegaron, cuántos aplicaste, '
+      + 'cuántos te sobraron). Una vez precargado, si algo no coincide con lo que de verdad recibiste, '
+      + 'puedes editar la cantidad (mejor edítala en vez de borrar el renglón).'
     : `Requisiciones ya repartió ${candidatos.length} lote(s) a esta unidad para este mes`
       + (requisicion.folio_oracle ? ` (folio ${requisicion.folio_oracle})` : '') + '. '
       + '¿Deseas cargarlos aquí como recibido?';
 
-  await _confirmarYCargarCandidatos(candidatos, { titulo: 'Cargar recibido desde Requisiciones', mensaje });
+  await _confirmarYCargarCandidatos(candidatos, {
+    titulo: esUnidad ? 'Se precargará tu requisición' : 'Cargar recibido desde Requisiciones',
+    mensaje, informativo: esUnidad
+  });
 }
 
 async function cargarRenglones() {
@@ -1013,6 +1151,7 @@ async function crearMovimiento() {
   const unidadId = unidadIdMovimientoActivo();
   const anio = Number(document.getElementById('selAnio').value);
   const mes = Number(document.getElementById('selMes').value);
+  if (movimientoEsDerivado(unidadId, anio, mes)) { toast('Desde octubre el Movimiento del municipio se concentra desde sus unidades: ya no se captura.', 'error'); return; }
   const { error } = await estado.db.from('biovac_movimientos')
     .insert({ unidad_id: unidadId, anio, mes, responsable_elaboracion: usuario, fecha_corte: ultimoDiaMes(anio, mes) });
   if (error) { toast('Error: ' + error.message, 'error'); return; }
@@ -1083,7 +1222,12 @@ function render() {
     ? 'Disponible hasta que el municipal valide el concentrado SIS-06-P de este mes'
     : 'Exportar Excel oficial (SIS-06-P + Movimiento de Biológico)';
   document.getElementById('btnVerPdf').style.display = esJurisdiccional ? 'none' : 'inline-flex';
-  document.getElementById('btnAbrirImportador').style.display = esJurisdiccional ? 'none' : 'inline-flex';
+  // El importador solo entiende la hoja "MOV-DE-BIOLÓGICO" de un Excel. El
+  // archivo de una UNIDAD trae 4 hojas (SIS-06-P + Movimiento + SIS-SS-CE-H +
+  // Influenza), así que importarlo dejaría el SIS a medias (solo Movimiento):
+  // la unidad captura directo en el sistema y nunca importa (queda solo para
+  // los roles revisores).
+  document.getElementById('btnAbrirImportador').style.display = (esJurisdiccional || esUnidad) ? 'none' : 'inline-flex';
 
   renderBloques(editable);
 }
@@ -1197,12 +1341,33 @@ function loteVencido(caducidadIso) {
 // total ya reportado en el paloteo. `recalcularTotalBio()` vuelve a llamar
 // esta misma función en cada tecleo (leyendo los inputs aún sin guardar),
 // así que el semáforo coincide/no-coincide se actualiza en vivo mientras
-// se captura, sin esperar a "Guardar" -- nunca bloquea, solo avisa.
+// se captura, sin esperar a "Guardar". Aquí solo avisa; el bloqueo real
+// (no enviar/validar mientras no coincida) lo aplica el servidor en
+// sis06p_enviar_para_validacion / sis06p_marcar_validado.
 function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, normalesLotes) {
-  const totalSIS06P = estado.sis06pTotales ? estado.sis06pTotales[bio.clave] : undefined;
-  if (totalSIS06P === undefined) return '';
-  const totalAplicadas = totalAplicadasA + totalAplicadasB;
+  const info = estado.sis06pTotales ? estado.sis06pTotales[bio.clave] : undefined;
+  if (info === undefined) return '';
+  const totalSIS06P = info.paloteo;
+  // Si el grupo SIS abarca más de un biológico de BioVac (COVID Moderna +
+  // Pfizer), lo que se compara contra el paloteo es la SUMA de los
+  // biológicos del grupo: los hermanos con lo ya guardado, este con lo que
+  // se está tecleando ahora.
+  // Dosis EQUIVALENTES, igual que el servidor (sis06p_comparativo) y que la
+  // columna VALIDACIÓN del Excel municipal: en Hepatitis B y COVID Moderna
+  // (SPLIT_DOSE) la dosis pediátrica (columna A) cuenta como media dosis.
+  const equivalente = (b, a, bb) => (b.regla_especial === 'SPLIT_DOSE' ? a / 2 + bb : a + bb);
+  const aplicadasHermanos = info.claves.filter((c) => c !== bio.clave).reduce((acc, clave) => {
+    const bioHermano = estado.biologicos.find((b) => b.clave === clave);
+    if (!bioHermano) return acc;
+    return acc + estado.renglones
+      .filter((r) => r.biovac_lotes.biologico_id === bioHermano.id)
+      .reduce((a2, r) => a2 + equivalente(bioHermano, Number(r.aplicadas_a) || 0, Number(r.aplicadas_b) || 0), 0);
+  }, 0);
+  const totalAplicadas = equivalente(bio, totalAplicadasA, 0) + totalAplicadasB + aplicadasHermanos + (info.ajusteAplicado || 0);
   const coincide = totalSIS06P === totalAplicadas;
+  // Sin nada en ninguno de los dos lados no hay nada que comparar (evita un
+  // "coincide 0 = 0" en cada uno de los 18 biológicos).
+  if (totalSIS06P === 0 && totalAplicadas === 0) return `<div data-sis06p-compara="${bio.id}" style="display:none;"></div>`;
   const fuente = bio.clave === 'ANTIINFLUENZA' ? 'Influenza (panel semanal) reportó' : 'SIS-06-P reportó';
   // Al paloteo semanal de Influenza (meta/logro de campaña) le corresponde
   // un concentrado MENSUAL real aquí -- si nunca se traslada a "aplicadas"
@@ -1220,7 +1385,7 @@ function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, 
       border:1px solid ${coincide ? 'rgba(16,185,129,.3)' : 'var(--warning-border)'};
       display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
       <span><span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">${coincide ? 'check_circle' : 'compare_arrows'}</span>
-      ${fuente} ${totalSIS06P} dosis aplicadas de este biológico este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas} aplicadas -- revisa si la diferencia es correcta)`}.</span>
+      ${fuente} ${totalSIS06P}${info.ajustePaloteo ? ` (incluye ${info.ajustePaloteo} de comodín de sustitución)` : ''} dosis aplicadas de ${info.claves.length > 1 ? `${info.etiqueta.replace(' (se concilian juntas)', '')} (juntas)` : 'este biológico'} este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas}${info.ajusteAplicado ? ` (incluye ${info.ajusteAplicado} de comodín de sustitución)` : ''} aplicadas${info.claves.length > 1 ? ' entre los biológicos del grupo' : ''} -- deben ser iguales: no se puede enviar el SIS mientras no coincidan)`}.</span>
       ${puedeUsarTotal ? `<button type="button" class="btn-mini btn-secundario" data-action="usar-total-influenza" data-renglon="${normalesLotes[0].id}" data-total="${totalSIS06P}"><span class="material-symbols-rounded">sync</span> Usar este total aquí</button>` : ''}
     </div>`;
 }
@@ -2133,6 +2298,7 @@ let archivoImportadoParseado = null;
 let nombresRemapPendientes = []; // nombres no reconocidos únicos mostrados en la sección de remapeo
 
 function abrirPanelImportador() {
+  if (estado.perfil && estado.perfil.rol === 'UNIDAD') return; // ver nota en render(): la unidad nunca importa
   document.getElementById('panelImportador').style.display = 'block';
   const nombreUnidad = document.getElementById('selUnidad').selectedOptions[0]?.textContent;
   document.getElementById('importadorMunicipio').textContent = nombreUnidad || 'tu municipio';

@@ -21,8 +21,14 @@
  * solo-lectura distinto de la captura.
  */
 (function () {
+  // Este seguimiento es de QUIÉN YA ENVIÓ: prellenar/capturar es trabajo
+  // interno de la unidad (y antes de que abra la ventana de envío ni siquiera
+  // puede terminarlo), así que "sin iniciar" y "capturando" se muestran como
+  // UN solo estatus, "Sin enviar" -- el avance real (dosis del paloteo,
+  // lotes del Movimiento, diferencias) va en las columnas de Detalle y
+  // Conciliación, no como un estatus aparte que parece "en proceso de envío".
   const ESTADO_LABEL = {
-    SIN_INICIAR: 'Sin iniciar', BORRADOR: 'Capturando', ENVIADO: 'Enviado', VALIDADO: 'Validado'
+    SIN_INICIAR: 'Sin enviar', BORRADOR: 'Sin enviar', ENVIADO: 'Por validar', VALIDADO: 'Validado'
   };
   const ESTADO_COLOR = {
     SIN_INICIAR: { bg: '#f1f5f9', text: '#94a3b8' },
@@ -67,31 +73,43 @@
       }
     }
 
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:14px; text-align:center; color:var(--muted);">Cargando…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:14px; text-align:center; color:var(--muted);">Cargando…</td></tr>';
     if (vistaGrupos) vistaGrupos.innerHTML = '<div style="padding:14px; text-align:center; color:var(--muted);">Cargando…</div>';
 
     const { data, error } = await estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio });
     if (error) {
       const msg = `Error: ${error.message}`;
-      tbody.innerHTML = `<tr><td colspan="6" style="padding:14px; text-align:center; color:var(--error);">${msg}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="padding:14px; text-align:center; color:var(--error);">${msg}</td></tr>`;
       if (vistaGrupos) vistaGrupos.innerHTML = `<div style="padding:14px; text-align:center; color:var(--error);">${msg}</div>`;
       return;
     }
 
     const filas = data || [];
-    const conteos = { SIN_INICIAR: 0, BORRADOR: 0, ENVIADO: 0, VALIDADO: 0 };
-    filas.forEach((f) => { conteos[f.estado] = (conteos[f.estado] || 0) + 1; });
-
-    contadores.innerHTML = Object.keys(ESTADO_LABEL).map((key) => `
-      <div style="background:${ESTADO_COLOR[key].bg}; border-radius:14px; padding:14px 16px;">
-        <div style="font-size:24px; font-weight:900; color:${ESTADO_COLOR[key].text};">${conteos[key] || 0}</div>
-        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:${ESTADO_COLOR[key].text};">${ESTADO_LABEL[key]}</div>
+    window.__sis06pUltimasFilas = filas;
+    const conteos = { SIN_ENVIAR: 0, ENVIADO: 0, VALIDADO: 0 };
+    filas.forEach((f) => {
+      const key = (f.estado === 'ENVIADO' || f.estado === 'VALIDADO') ? f.estado : 'SIN_ENVIAR';
+      conteos[key] += 1;
+    });
+    const tarjetas = [
+      { key: 'SIN_ENVIAR', label: 'Sin enviar', color: ESTADO_COLOR.SIN_INICIAR },
+      { key: 'ENVIADO', label: 'Por validar', color: ESTADO_COLOR.ENVIADO },
+      { key: 'VALIDADO', label: 'Validado', color: ESTADO_COLOR.VALIDADO }
+    ];
+    contadores.innerHTML = tarjetas.map((t) => `
+      <div style="background:${t.color.bg}; border-radius:14px; padding:14px 16px;">
+        <div style="font-size:24px; font-weight:900; color:${t.color.text};">${conteos[t.key] || 0}</div>
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:${t.color.text};">${t.label}</div>
       </div>
     `).join('');
+    await renderBannerVentana(mes, anio);
 
     if (esJurisdiccional) {
       if (vistaTabla) vistaTabla.style.display = 'none';
       if (vistaGrupos) { vistaGrupos.style.display = 'flex'; renderGrupos(vistaGrupos, filas); }
+      // Hospitales (HENM, NHG): la jurisdicción hace de "municipal" -- mismo
+      // avance de validación, conciliación, concentrado y CSV que un municipio.
+      renderExportOficial(filas.filter((f) => ES_HOSPITAL[f.municipio]), mes, anio);
       return;
     }
 
@@ -106,12 +124,59 @@
     }
   }
 
+  // Avance real de las dos mitades del SIS de una unidad que todavía no
+  // envía: dosis capturadas en el paloteo y lotes en el Movimiento. Evita que
+  // una unidad con un Movimiento vacío (creado pero sin un solo lote) parezca
+  // "trabajando" igual que una que sí lo tiene capturado.
+  function detalleAvance(f) {
+    const dosis = Number(f.paloteo_dosis) || 0;
+    const lotes = Number(f.movimiento_lotes) || 0;
+    const paloteo = dosis > 0 ? `paloteo ${dosis} dosis` : 'paloteo sin captura';
+    const mov = f.movimiento_estado ? (lotes > 0 ? `Movimiento ${lotes} lote(s)` : 'Movimiento sin lotes') : 'Movimiento sin iniciar';
+    return `${paloteo} · ${mov}`;
+  }
+
+  function celdaConciliacion(f) {
+    const dosis = Number(f.paloteo_dosis) || 0;
+    const lotes = Number(f.movimiento_lotes) || 0;
+    if (dosis === 0 && lotes === 0) return '<span style="color:#cbd5e1;">—</span>';
+    const n = Number(f.diferencias) || 0;
+    if (n > 0) return `<span style="font-size:10px; font-weight:800; background:var(--warning-bg); color:var(--warning); padding:2px 9px; border-radius:20px; white-space:nowrap;">${n} no coincide(n)</span>`;
+    return '<span style="font-size:10px; font-weight:800; background:var(--success-bg); color:var(--success); padding:2px 9px; border-radius:20px;">Coincide</span>';
+  }
+
+  // Aviso de la ventana de envío del mes elegido: deja claro POR QUÉ nadie
+  // aparece como enviado todavía (o hasta cuándo pueden hacerlo).
+  async function renderBannerVentana(mes, anio) {
+    const banner = document.getElementById('seguimientoVentana');
+    if (!banner) return;
+    try {
+      const { data, error } = await estado.db.rpc('sis06p_ventana_envio', { p_anio: anio, p_mes: mes });
+      if (error || !data || !data[0]) { banner.style.display = 'none'; return; }
+      const v = data[0];
+      const fecha = (iso) => { const [a, m, d] = String(iso).split('-').map(Number); return new Date(a, m - 1, d).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }); };
+      banner.style.display = 'block';
+      if (v.dentro_envio) {
+        banner.style.cssText = 'display:block; margin-bottom:14px; padding:10px 14px; border-radius:12px; font-size:12px; font-weight:700; background:var(--success-bg); color:var(--success);';
+        banner.textContent = `Envío abierto: las unidades pueden enviar su SIS hasta el ${fecha(v.fin_envio)}.`;
+      } else {
+        const antes = new Date() < new Date(v.inicio_envio + 'T00:00:00');
+        banner.style.cssText = 'display:block; margin-bottom:14px; padding:10px 14px; border-radius:12px; font-size:12px; font-weight:700; background:#f1f5f9; color:#64748b;';
+        banner.textContent = antes
+          ? `El envío de este mes se habilita del ${fecha(v.inicio_envio)} al ${fecha(v.fin_envio)}. Hasta entonces las unidades solo pueden prellenar -- todas aparecen como "Sin enviar".`
+          : `La ventana de envío de este mes ya cerró (${fecha(v.inicio_envio)} al ${fecha(v.fin_envio)}).`;
+      }
+    } catch (err) {
+      banner.style.display = 'none';
+    }
+  }
+
   // Vista ADMIN/MUNICIPAL -- tabla plana, sin cambios de fondo respecto a la
   // versión original (Fase 4): una fila por CLUES, clic salta a modo
   // revisión (solo MUNICIPAL, ver irARevisarUnidad).
   function renderTabla(tbody, filas) {
     if (filas.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="padding:14px; text-align:center; color:var(--muted); font-style:italic;">No hay unidades en tu alcance.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="padding:14px; text-align:center; color:var(--muted); font-style:italic;">No hay unidades en tu alcance.</td></tr>';
       return;
     }
 
@@ -120,8 +185,7 @@
       let detalle = '';
       if (f.estado === 'VALIDADO') detalle = `Validado por ${f.validado_por || '—'}, ${f.validado_en ? new Date(f.validado_en).toLocaleDateString('es-MX') : ''}`;
       else if (f.estado === 'ENVIADO') detalle = `Enviado por ${f.enviado_por || '—'}, ${f.enviado_en ? new Date(f.enviado_en).toLocaleDateString('es-MX') : ''}`;
-      else if (f.estado === 'BORRADOR') detalle = `Capturado por ${f.capturado_por || '—'}`;
-      else detalle = '—';
+      else detalle = detalleAvance(f);
 
       return `
         <tr style="border-bottom:1px solid #f1f5f9; cursor:pointer;" data-clues="${f.clues}">
@@ -132,6 +196,7 @@
             <span style="font-size:10px; font-weight:800; background:${color.bg}; color:${color.text}; padding:2px 10px; border-radius:20px;">${ESTADO_LABEL[f.estado] || f.estado}</span>
           </td>
           <td style="padding:9px; font-size:11.5px; color:var(--muted);">${detalle}</td>
+          <td style="padding:9px; text-align:center;">${celdaConciliacion(f)}</td>
           <td style="padding:9px; text-align:center;">
             ${f.correcciones_pendientes > 0 ? `<span style="font-size:10px; font-weight:800; background:var(--warning-bg); color:var(--warning); padding:2px 8px; border-radius:20px;">${f.correcciones_pendientes}</span>` : '—'}
           </td>
@@ -203,7 +268,7 @@
             ${unidadesGrupo.map((f) => {
               const color = ESTADO_COLOR[f.estado] || ESTADO_COLOR.SIN_INICIAR;
               return `
-                <tr style="border-bottom:1px solid #f1f5f9;">
+                <tr style="border-bottom:1px solid #f1f5f9;${ES_HOSPITAL[municipio] ? ' cursor:pointer;' : ''}" ${ES_HOSPITAL[municipio] ? `data-hospital-clues="${f.clues}"` : ''}>
                   <td style="padding:8px 12px; font-family:monospace; color:#64748b; width:110px;">${f.clues}</td>
                   <td style="padding:8px 12px; color:#334155;">${f.unidad || ''}</td>
                   <td style="padding:8px 12px; text-align:right; width:120px;">
@@ -236,6 +301,10 @@
           body.classList.remove('abierto');
           body.style.maxHeight = '0px';
         }
+      });
+
+      body.querySelectorAll('tr[data-hospital-clues]').forEach((tr) => {
+        tr.addEventListener('click', () => irARevisarUnidad(tr.getAttribute('data-hospital-clues')));
       });
 
       card.appendChild(header);
@@ -313,143 +382,92 @@
 
       const comparativoCont = document.createElement('div');
       comparativoCont.style.cssText = 'padding:0 16px 14px;';
-      comparativoCont.innerHTML = '<div style="font-size:11.5px; color:var(--muted); padding:6px 0;">Cargando comparativo paloteo vs. aplicado…</div>';
+      comparativoCont.innerHTML = '<div style="font-size:11.5px; color:var(--muted); padding:6px 0;">Cargando conciliación paloteo vs. aplicado…</div>';
       tarjeta.appendChild(comparativoCont);
       cont.appendChild(tarjeta);
 
       renderComparativoAplicado(comparativoCont, municipio, mes, anio);
+
+      // Concentrado municipal (paloteo por unidad + seguimiento de biológico +
+      // recibido vs requisición): se arma solo desde lo que capturan las
+      // unidades -- ver sis06p_concentrado_municipal_module.js.
+      if (window.SIS06PConcentradoMunicipal) {
+        const concentradoCont = document.createElement('div');
+        concentradoCont.style.cssText = 'padding:0 16px 14px;';
+        tarjeta.appendChild(concentradoCont);
+        window.SIS06PConcentradoMunicipal.render(concentradoCont, municipio, mes, anio);
+      }
     });
   }
 
   // ---------------------------------------------------------------------------
-  // Comparativo Paloteo (SIS-06-P) vs. Aplicado (Movimiento de Biológico),
-  // por biológico, para TODO el municipio -- la misma validación que ya
-  // existe en biovac_ui.js (htmlComparacionSIS06P/cargarSIS06PTotalesParaComparar)
-  // pero sumando TODAS las CLUES reales del municipio en vez de una sola, y
-  // sin desglose por lote ("aquí no hay lotes", el archivo real "SIS
-  // QUERETARO AGOSTO 2026.xlsx" -- hoja SEGUIMIENTO DE BIOLOGICO -- tampoco
-  // lo tiene: un solo número de "Aplicado" por biológico y CLUES).
+  // Conciliación Paloteo (SIS-06-P) vs. Aplicado (Movimiento de Biológico),
+  // POR UNIDAD -- el mismo RPC (sis06p_comparativo) con el que el servidor
+  // bloquea el envío de la unidad y la validación del municipal. Antes se
+  // sumaba todo el municipio en una sola tabla (un faltante de una unidad
+  // podía taparse con un sobrante de otra) y el cruce de biológicos usaba un
+  // mapeo escrito a mano que no coincidía con sis_variables -- ver
+  // supabase/sis06p_reconciliacion.sql.
   //
-  // La "conversión de Hepatitis B/COVID" es literalmente sumar aplicadas_a
-  // (dosis fraccionada/pediátrica) + aplicadas_b (dosis completa/adulto) en
-  // UN solo total de dosis -- NUNCA la división entre 2 que sí usa
-  // BiovacEngine.calcExistenciaFinal (esa es para convertir a FRASCOS
-  // consumidos, un cálculo distinto; aquí ambos lados de la comparación
-  // están en dosis, no en frascos, así que no aplica esa división).
+  // Solo se listan las unidades CON diferencia: es lo único que el municipal
+  // tiene que atender antes de poder validar y exportar.
   // ---------------------------------------------------------------------------
-
-  async function cargarComparativoAplicado(municipio, mes, anio) {
-    // Solo CLUES reales (las pseudo-unidad de municipio/hospital, clues
-    // 'JS1-...', no tienen paloteo SIS-06-P propio con el que comparar).
-    const { data: unidadesReales, error: eU } = await estado.db.from('biovac_unidades')
-      .select('id, clues').eq('municipio', municipio).eq('activo', true).not('clues', 'like', 'JS1-%');
-    if (eU) throw eU;
-    const cluesList = (unidadesReales || []).map((u) => u.clues);
-    const unidadIds = (unidadesReales || []).map((u) => u.id);
-    if (unidadIds.length === 0) return [];
-
-    const { data: movimientos, error: eM } = await estado.db.from('biovac_movimientos')
-      .select('id').in('unidad_id', unidadIds).eq('anio', anio).eq('mes', mes);
-    if (eM) throw eM;
-    const movimientoIds = (movimientos || []).map((m) => m.id);
-
-    let renglones = [];
-    if (movimientoIds.length > 0) {
-      const { data, error: eR } = await estado.db.from('biovac_renglones')
-        .select('aplicadas_a, aplicadas_b, biovac_lotes(biologico_id)').in('movimiento_id', movimientoIds);
-      if (eR) throw eR;
-      renglones = data || [];
-    }
-    const aplicadoPorBiologicoId = {};
-    renglones.forEach((r) => {
-      const bioId = r.biovac_lotes && r.biovac_lotes.biologico_id;
-      if (!bioId) return;
-      aplicadoPorBiologicoId[bioId] = (aplicadoPorBiologicoId[bioId] || 0) + Number(r.aplicadas_a || 0) + Number(r.aplicadas_b || 0);
-    });
-
-    const [{ data: capturas, error: eC }, { data: sisVars, error: eV }] = await Promise.all([
-      estado.db.from('sis06p_capturas').select('valores').in('clues', cluesList).eq('mes', mes).eq('anio', anio),
-      estado.db.from('sis_variables').select('fila_excel, biologico').eq('activo', true)
-    ]);
-    if (eC) throw eC;
-    if (eV) throw eV;
-    const biologicoPorFila = new Map((sisVars || []).map((v) => [String(v.fila_excel), v.biologico]));
-    const totalesPorSisBiologico = {};
-    (capturas || []).forEach((cap) => {
-      Object.entries(cap.valores || {}).forEach(([fila, v]) => {
-        const bio = biologicoPorFila.get(String(fila));
-        if (!bio) return;
-        totalesPorSisBiologico[bio] = (totalesPorSisBiologico[bio] || 0) + Number(v?.total || 0);
-      });
-    });
-
-    // Influenza (ANTIINFLUENZA en BioVac) no vive en sis06p_capturas -- mismo
-    // criterio que cargarSIS06PTotalesParaComparar: se suma aparte desde
-    // influenza_capturas y se agrega solo a esa clave.
-    let totalInfluenzaMes = 0;
-    if (cluesList.length > 0) {
-      const { data: capturasInf } = await estado.db.from('influenza_capturas').select('fecha, valores').in('clues', cluesList);
-      (capturasInf || []).forEach((c) => {
-        if (!c.fecha) return;
-        const d = new Date(c.fecha + 'T12:00:00');
-        if ((d.getMonth() + 1) !== Number(mes) || d.getFullYear() !== Number(anio)) return;
-        Object.values(c.valores || {}).forEach((v) => { totalInfluenzaMes += Number(v || 0); });
-      });
-    }
-
-    const filas = [];
-    (estado.biologicos || []).forEach((bio) => {
-      const nombresSis = SIS_BIOLOGICO_POR_CLAVE_BIOVAC[bio.clave];
-      if (!nombresSis) return;
-      let paloteo = nombresSis.reduce((acc, n) => acc + (totalesPorSisBiologico[n] || 0), 0);
-      if (bio.clave === 'ANTIINFLUENZA') paloteo += totalInfluenzaMes;
-      const aplicado = aplicadoPorBiologicoId[bio.id] || 0;
-      if (paloteo === 0 && aplicado === 0) return;
-      filas.push({ nombre: (bio.nombre_excel || bio.clave).replace(/\n/g, ' '), paloteo, aplicado, coincide: paloteo === aplicado });
-    });
-    return filas;
-  }
 
   async function renderComparativoAplicado(cont, municipio, mes, anio) {
     try {
-      const filas = await cargarComparativoAplicado(municipio, mes, anio);
-      if (filas.length === 0) {
-        cont.innerHTML = '<div style="font-size:11.5px; color:var(--muted); font-style:italic; padding:6px 0;">Sin paloteo ni movimiento capturado todavía para comparar.</div>';
+      const { data, error } = await estado.db.rpc('sis06p_comparativo', { p_mes: mes, p_anio: anio });
+      if (error) throw error;
+      const filas = (data || []).filter((f) => f.municipio === municipio);
+      const porUnidad = new Map();
+      filas.forEach((f) => {
+        if (!porUnidad.has(f.clues)) porUnidad.set(f.clues, { unidad: f.unidad, filas: [] });
+        porUnidad.get(f.clues).filas.push(f);
+      });
+      const conDiferencia = [...porUnidad.entries()].filter(([, u]) => u.filas.some((f) => !f.coincide));
+
+      if (porUnidad.size === 0) {
+        cont.innerHTML = '<div style="font-size:11.5px; color:var(--muted); font-style:italic; padding:6px 0;">Ninguna unidad tiene paloteo ni movimiento capturado todavía para conciliar.</div>';
         return;
       }
-      const nDiff = filas.filter((f) => !f.coincide).length;
+      if (conDiferencia.length === 0) {
+        cont.innerHTML = `<div style="font-size:11.5px; font-weight:700; color:var(--success); padding:6px 0;">✅ Conciliación paloteo vs. movimiento: las ${porUnidad.size} unidad(es) con captura coinciden en todos sus biológicos.</div>`;
+        return;
+      }
       cont.innerHTML = `
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); margin:4px 0 8px;">
-          Comparativo paloteo (SIS-06-P) vs. aplicado (Movimiento de Biológico)${nDiff > 0 ? ` -- ${nDiff} con diferencia` : ' -- todo coincide'}
+          Conciliación paloteo (SIS-06-P) vs. aplicado (Movimiento de Biológico) -- ${conDiferencia.length} unidad(es) con diferencia
         </div>
-        <div style="overflow-x:auto;">
-        <table style="width:100%; border-collapse:collapse; font-size:12px;">
-          <thead><tr style="border-bottom:1px solid var(--outline-variant);">
-            <th style="text-align:left; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Biológico</th>
-            <th style="text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Paloteo</th>
-            <th style="text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Aplicado</th>
-            <th style="text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Estado</th>
-          </tr></thead>
-          <tbody>
-            ${filas.map((f) => `
-              <tr style="border-bottom:1px solid #f1f5f9;">
-                <td style="padding:6px 8px;">${f.nombre}</td>
-                <td style="padding:6px 8px; text-align:center; font-weight:700;">${f.paloteo}</td>
-                <td style="padding:6px 8px; text-align:center; font-weight:700;">${f.aplicado}</td>
-                <td style="padding:6px 8px; text-align:center;">
-                  <span style="font-size:10px; font-weight:800; padding:2px 9px; border-radius:20px; background:${f.coincide ? 'var(--success-bg)' : 'var(--warning-bg)'}; color:${f.coincide ? 'var(--success)' : 'var(--warning)'};">
-                    ${f.coincide ? 'Coincide' : 'Revisar'}
-                  </span>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        </div>
+        ${conDiferencia.map(([clues, u]) => {
+          const dif = u.filas.filter((f) => !f.coincide);
+          return `
+          <div style="margin-bottom:10px; border:1px solid var(--warning-border); border-radius:12px; overflow:hidden; background:#fff;">
+            <div style="padding:8px 12px; background:var(--warning-bg); color:var(--warning); font-size:12px; font-weight:800; display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+              <span>${u.unidad || ''} <span style="font-family:monospace; font-weight:600;">${clues}</span></span>
+              <span>${dif.length} biológico(s) no coinciden</span>
+            </div>
+            <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+              <thead><tr style="border-bottom:1px solid var(--outline-variant);">
+                <th style="text-align:left; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Biológico</th>
+                <th style="text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Paloteo</th>
+                <th style="text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Aplicado</th>
+              </tr></thead>
+              <tbody>
+                ${dif.map((f) => `
+                  <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:6px 8px;">${f.etiqueta}</td>
+                    <td style="padding:6px 8px; text-align:center; font-weight:700;">${Number(f.paloteo)}</td>
+                    <td style="padding:6px 8px; text-align:center; font-weight:700;">${Number(f.aplicado)}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+            </div>
+          </div>`;
+        }).join('')}
       `;
     } catch (err) {
-      console.error('[SIS-06-P] Error cargando comparativo paloteo vs aplicado:', err);
-      cont.innerHTML = `<div style="font-size:11.5px; color:var(--error);">Error al cargar el comparativo: ${err.message || err}</div>`;
+      console.error('[SIS-06-P] Error cargando la conciliación paloteo vs aplicado:', err);
+      cont.innerHTML = `<div style="font-size:11.5px; color:var(--error);">Error al cargar la conciliación: ${err.message || err}</div>`;
     }
   }
 
@@ -538,8 +556,14 @@
   // vista de grupos (sin clic) y, si llegaran desde la tabla plana (ADMIN),
   // siguen sin poder entrar al detalle de una unidad.
   function irARevisarUnidad(clues) {
-    if (!estado.perfil || estado.perfil.rol !== 'MUNICIPAL') {
-      toast('Solo municipal puede ver el detalle de una unidad -- aquí solo se ve el estatus general.', 'error');
+    const rol = estado.perfil ? estado.perfil.rol : null;
+    const fila = (window.__sis06pUltimasFilas || []).find((f) => f.clues === clues);
+    // JURISDICCIONAL es el "municipal" de los hospitales (HENM, NHG): solo
+    // esas CLUES bajan a detalle/validación; el resto es responsabilidad de
+    // su municipio.
+    const puede = rol === 'MUNICIPAL' || (rol === 'JURISDICCIONAL' && fila && ES_HOSPITAL[fila.municipio]);
+    if (!puede) {
+      toast('Solo el municipal (o la jurisdicción, en hospitales) puede ver el detalle de una unidad -- aquí solo se ve el estatus general.', 'error');
       return;
     }
     const selUnidadRevision = document.getElementById('selUnidadRevision');

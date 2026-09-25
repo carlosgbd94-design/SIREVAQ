@@ -24,6 +24,32 @@
   let _influenzaCapturasCache = [];
   let _ventanaCache = null;
   let _correccionesPendientesCache = [];
+  // Filas de sis06p_comparativo (RPC) de la CLUES/mes/año en pantalla: una
+  // por biológico con algo que comparar. `null` = todavía no se pudo cargar
+  // (en ese caso NO se bloquea el botón Enviar desde aquí -- el servidor
+  // igual revisa la conciliación y rechaza el envío con el detalle).
+  let _conciliacionCache = null;
+
+  // "Hay captura tecleada que todavía no se guarda". El paloteo SIS-06-P se
+  // guarda con su propio botón (a diferencia de Movimiento, que guarda por
+  // celda): en una prueba real, una unidad tecleó todo el paloteo, se pasó a
+  // la pestaña Movimiento y guardó SOLO esa -- el paloteo nunca llegó al
+  // servidor (ni una petición) y no hubo ningún aviso. Ahora se rastrea, se
+  // muestra un chip visible y biovac_ui.js pide guardar antes de cambiar de
+  // pestaña / mes / unidad; el navegador avisa antes de cerrar la página.
+  let _sinGuardar = false;
+  function marcarSinGuardar(valor) {
+    _sinGuardar = valor;
+    const chip = document.getElementById('sis06pChipSinGuardar');
+    if (chip) chip.style.display = valor ? 'inline-block' : 'none';
+  }
+  document.addEventListener('input', (ev) => {
+    const id = ev.target && ev.target.id;
+    if (id && id.indexOf('sisb_') === 0) marcarSinGuardar(true);
+  });
+  window.addEventListener('beforeunload', (ev) => {
+    if (_sinGuardar) { ev.preventDefault(); ev.returnValue = ''; }
+  });
 
   // Copia de window.INFLUENZA_SIS_MAPPING (fuente única de verdad real:
   // influenza_module.js:57-72) -- biovac.html no carga influenza_module.js
@@ -180,6 +206,7 @@
       else _ventanaCache = (ventana && ventana[0]) || null;
 
       await cargarCorreccionesPendientes(activa.clues);
+      await cargarConciliacion(activa.clues);
 
       render();
     } catch (err) {
@@ -226,7 +253,7 @@
     lista.innerHTML = _correccionesPendientesCache.map((c) => `
       <div style="background:#fff; border:1px solid var(--warning-border); border-radius:10px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
         <div style="font-size:11.5px;">
-          <strong>${labelDeFila(c.fila_excel)}</strong> -- ${SUBCONTEO_LABEL[c.subconteo] || c.subconteo}:
+          <strong>${c.fila_excel != null ? labelDeFila(c.fila_excel) : (c.detalle || 'Ajuste')}</strong>${c.subconteo ? ' -- ' + (SUBCONTEO_LABEL[c.subconteo] || c.subconteo) : ''}:
           <span style="color:var(--muted); text-decoration:line-through;">${c.valor_anterior}</span>
           <span class="material-symbols-rounded" style="font-size:12px; vertical-align:middle;">arrow_forward</span>
           <strong style="color:var(--warning);">${c.valor_nuevo}</strong>
@@ -269,6 +296,106 @@
     }
   }
 
+  async function cargarConciliacion(clues) {
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const { data, error } = await estado.db.rpc('sis06p_comparativo', { p_mes: mes, p_anio: anio, p_clues: clues });
+    if (error) {
+      console.warn('[SIS-06-P] Error cargando conciliación con Movimiento:', error);
+      _conciliacionCache = null;
+      return;
+    }
+    _conciliacionCache = data || [];
+  }
+
+  function hayDiferenciasConciliacion() {
+    return Array.isArray(_conciliacionCache) && _conciliacionCache.some((f) => !f.coincide);
+  }
+
+  // Tarjeta "Conciliación con Movimiento de Biológico": el paloteo y el
+  // Movimiento son un solo documento (el SIS) y sus dosis aplicadas tienen
+  // que ser iguales, biológico por biológico. Mismo cálculo que hace el
+  // servidor para bloquear Enviar/Validar (RPC sis06p_comparativo).
+  // Comodín de sustitución (regla federal): si se aplicó SRP en lugar de SR
+  // (o TdPa en lugar de DPT), el paloteo lo reporta como SR/DPT pero el
+  // Movimiento lo da de baja como SRP/TdPa. La unidad declara aquí cuántas
+  // dosis fueron; sin ese dato la diferencia bloquea el envío como cualquier
+  // otra. Se guarda con el botón Guardar del paloteo (columna `ajustes`).
+  const AJUSTES_DEF = [
+    { key: 'SRP_COMO_SR', etiqueta: 'Dosis de SRP aplicadas y reportadas en el paloteo como SR', claves: ['SR', 'SRP'] },
+    { key: 'TDPA_COMO_DPT', etiqueta: 'Dosis de TdPa aplicadas y reportadas en el paloteo como DPT', claves: ['DPT', 'TDPA'] }
+  ];
+
+  function htmlAjustes(soloLectura, currentReport) {
+    const ajustes = (currentReport && currentReport.ajustes) || {};
+    const hayPar = (_conciliacionCache || []).some((f) => !f.coincide && (f.claves || []).some((k) => ['SR', 'SRP', 'DPT', 'TDPA'].indexOf(k) >= 0));
+    const hayAjuste = AJUSTES_DEF.some((d) => Number(ajustes[d.key] || 0) > 0);
+    const filas = AJUSTES_DEF.map((d) => `
+      <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:11.5px; font-weight:600; padding:4px 0;">
+        <span>${d.etiqueta}</span>
+        <input type="number" min="0" step="1" id="sisb_ajuste_${d.key}" ${soloLectura ? 'disabled' : ''}
+          value="${Number(ajustes[d.key] || 0) > 0 ? Number(ajustes[d.key]) : ''}" placeholder="0"
+          style="width:88px; text-align:center; font-weight:800; font-size:13px; border:1.5px solid #cbd5e1; border-radius:9px; padding:6px 8px; ${soloLectura ? 'background:#f1f5f9;' : ''}">
+      </label>`).join('');
+    return `
+      <details ${(hayPar || hayAjuste) ? 'open' : ''} style="margin-top:10px; background:rgba(255,255,255,.65); border:1px solid rgba(0,0,0,.08); border-radius:10px;">
+        <summary style="cursor:pointer; padding:8px 12px; font-size:11.5px; font-weight:800;">Ajuste por sustitución (comodín)${hayAjuste ? ' · capturado' : ''}</summary>
+        <div style="padding:2px 12px 10px;">
+          <div style="font-size:11px; font-weight:500; opacity:.85; margin-bottom:4px;">Si se aplicó SRP en lugar de SR, o TdPa en lugar de DPT, el paloteo la reporta como la vacuna original pero el Movimiento la da de baja como la que realmente se usó. Captura aquí cuántas dosis fueron y guarda para que la conciliación cuadre. No puede ser mayor a lo capturado de cada lado.</div>
+          ${filas}
+        </div>
+      </details>`;
+  }
+
+  function renderConciliacion(soloLectura, currentReport) {
+    const cont = document.getElementById('sis06pConciliacion');
+    if (!cont) return;
+    if (_conciliacionCache === null) { cont.style.display = 'none'; return; }
+
+    const filas = _conciliacionCache;
+    const dif = filas.filter((f) => !f.coincide);
+    cont.style.display = 'block';
+
+    if (filas.length === 0) {
+      cont.style.cssText = 'display:block; margin-bottom:14px; padding:10px 14px; border-radius:12px; font-size:12px; font-weight:700; background:#f1f5f9; color:#64748b;';
+      cont.innerHTML = '<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">compare_arrows</span> Conciliación con Movimiento de Biológico: todavía no hay dosis aplicadas ni en el paloteo ni en el Movimiento de este mes.' + htmlAjustes(soloLectura, currentReport);
+      return;
+    }
+
+    const ok = dif.length === 0;
+    const fila = (f) => `
+      <tr style="border-bottom:1px solid rgba(0,0,0,.06);">
+        <td style="padding:5px 8px;">${f.etiqueta}</td>
+        <td style="padding:5px 8px; text-align:center; font-weight:800;">${Number(f.paloteo)}</td>
+        <td style="padding:5px 8px; text-align:center; font-weight:800;">${Number(f.aplicado)}</td>
+        <td style="padding:5px 8px; text-align:center; font-weight:800;">${f.coincide ? '✓' : Number(f.paloteo) - Number(f.aplicado) > 0 ? `+${Number(f.paloteo) - Number(f.aplicado)}` : Number(f.paloteo) - Number(f.aplicado)}</td>
+      </tr>`;
+    const tabla = (lista) => `
+      <div style="overflow-x:auto; margin-top:8px;">
+        <table style="width:100%; border-collapse:collapse; font-size:11.5px; font-weight:600;">
+          <thead><tr style="text-align:center; font-size:10px; text-transform:uppercase; opacity:.75;">
+            <th style="padding:4px 8px; text-align:left;">Biológico</th><th style="padding:4px 8px;">Paloteo SIS-06-P</th><th style="padding:4px 8px;">Aplicado (Movimiento)</th><th style="padding:4px 8px;">Diferencia</th>
+          </tr></thead>
+          <tbody>${lista.map(fila).join('')}</tbody>
+        </table>
+      </div>`;
+
+    if (ok) {
+      cont.style.cssText = 'display:block; margin-bottom:14px; padding:10px 14px; border-radius:12px; font-size:12px; font-weight:700; background:var(--success-bg); color:var(--success);';
+      cont.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">check_circle</span> Conciliación con Movimiento de Biológico: las dosis aplicadas coinciden en los ${filas.length} biológico(s) con captura.` + htmlAjustes(soloLectura, currentReport);
+      return;
+    }
+    const esUnidad = estado.perfil && estado.perfil.rol === 'UNIDAD';
+    cont.style.cssText = 'display:block; margin-bottom:14px; padding:12px 14px; border-radius:12px; font-size:12px; font-weight:700; background:var(--warning-bg); color:var(--warning); border:1px solid var(--warning-border);';
+    cont.innerHTML = `
+      <div><span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">compare_arrows</span>
+        ${dif.length} biológico(s) NO coinciden entre el paloteo SIS-06-P y el Movimiento de Biológico.
+        ${esUnidad ? 'No podrás enviar el SIS hasta que las dosis aplicadas sean iguales -- corrige el paloteo aquí o las "aplicadas" por lote en Movimiento de Biológico.' : 'No se puede validar hasta que coincidan -- corrige el lado que esté mal (modo revisión).'}
+      </div>
+      ${tabla(dif)}
+      ${htmlAjustes(soloLectura, currentReport)}`;
+  }
+
   function renderBannerVentana(estadoActual) {
     const banner = document.getElementById('sis06pBannerVentana');
     if (!banner) return;
@@ -299,6 +426,7 @@
       return;
     }
     container.innerHTML = '';
+    marcarSinGuardar(false); // los inputs se reconstruyen desde lo guardado
 
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
@@ -316,6 +444,7 @@
       badge.textContent = estadoActual === 'BORRADOR' ? 'Borrador' : estadoActual === 'ENVIADO' ? 'Enviado -- pendiente de validación' : 'Información validada';
     }
     renderBannerVentana(estadoActual);
+    renderConciliacion(soloLectura, currentReport);
     renderPanelCambiosPendientes();
 
     const btnGuardar = document.getElementById('btnGuardarSIS06P');
@@ -341,8 +470,12 @@
       if (btnGuardar) btnGuardar.style.display = estadoActual === 'BORRADOR' ? 'inline-flex' : 'none';
       if (btnEnviar) {
         btnEnviar.style.display = estadoActual === 'BORRADOR' ? 'inline-flex' : 'none';
-        btnEnviar.disabled = !(_ventanaCache && _ventanaCache.dentro_envio);
-        btnEnviar.title = btnEnviar.disabled ? 'Fuera de la ventana de envío' : '';
+        const fueraDeVentana = !(_ventanaCache && _ventanaCache.dentro_envio);
+        const noConcilia = hayDiferenciasConciliacion();
+        btnEnviar.disabled = fueraDeVentana || noConcilia;
+        btnEnviar.title = fueraDeVentana
+          ? 'Fuera de la ventana de envío'
+          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden -- revisa la conciliación' : '';
       }
       if (btnValidar) btnValidar.style.display = 'none';
       if (btnImprimir) btnImprimir.style.display = estadoActual === 'VALIDADO' ? 'inline-flex' : 'none';
@@ -557,7 +690,7 @@
 
   async function save() {
     const activa = datosUnidadActiva();
-    if (!activa) { toast('Selecciona una unidad (CLUES) específica.', 'error'); return; }
+    if (!activa) { toast('Selecciona una unidad (CLUES) específica.', 'error'); return false; }
 
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
@@ -567,11 +700,11 @@
     const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
     if (esUnidad && currentReport && currentReport.estado !== 'BORRADOR') {
       toast('Este concentrado ya fue enviado -- no puedes editarlo directamente.', 'error');
-      return;
+      return false;
     }
     if (!esUnidad && (!currentReport || currentReport.estado === 'BORRADOR')) {
       toast('Esta unidad todavía no envía su concentrado -- nada que corregir.', 'error');
-      return;
+      return false;
     }
 
     let hasSubconteoError = false;
@@ -594,7 +727,7 @@
 
     if (hasSubconteoError) {
       toast('No se puede guardar: hay subconteos (Afromexicano/Indígena/Migrante) que superan el Total de su misma fila.', 'error');
-      return;
+      return false;
     }
 
     mostrarCargando(esUnidad ? 'Guardando concentrado SIS-06-P...' : 'Guardando corrección...');
@@ -611,11 +744,18 @@
         valores_anteriores: currentReport ? currentReport.valores : null
       });
 
+      // Comodín de sustitución: solo se guardan los ajustes > 0.
+      const ajustes = {};
+      AJUSTES_DEF.forEach((d) => {
+        const v = parseFloat(document.getElementById(`sisb_ajuste_${d.key}`)?.value);
+        if (Number.isFinite(v) && v > 0) ajustes[d.key] = v;
+      });
+
       const record = {
         clues,
         unidad: activa.unidad,
         municipio: activa.municipio,
-        mes, anio, valores,
+        mes, anio, valores, ajustes,
         capturado_por: currentReport ? currentReport.capturado_por : nombreActor,
         historial_ediciones: hist,
         ultimo_editor_usuario: nombreActor,
@@ -627,14 +767,17 @@
 
       const { data: capturas } = await estado.db.from('sis06p_capturas').select('*').eq('clues', clues);
       _sis06pCapturasCache = capturas || [];
+      await cargarConciliacion(clues);
       render();
 
       const totalReportado = Object.values(valores).reduce((s, v) => s + Number(v.total || 0), 0);
       if (esUnidad) await autoCrearMovimientoSiFalta(clues, mes, anio, totalReportado);
       toast(`✅ ${esUnidad ? 'Concentrado' : 'Corrección'} guardado · ${totalReportado} dosis en ${Object.keys(valores).length} variables.`, 'ok');
+      return true;
     } catch (err) {
       console.error('[SIS-06-P] Error al guardar:', err);
       toast('Error al guardar: ' + err.message, 'error');
+      return false;
     } finally {
       ocultarCargando();
     }
@@ -642,12 +785,13 @@
 
   // Para rol UNIDAD, paloteo (SIS-06-P) y Movimiento de Biológico NO son dos
   // cosas separadas -- son un solo archivo, "el SIS" -- así que "Enviar" es
-  // UN solo botón que bloquea las dos. Si Movimiento de este mes sigue en
-  // BORRADOR, se cierra aquí mismo (mismo motor que el botón "Cerrar mes" de
-  // esa pestaña, biovac_cerrar_mes) ANTES de mandar SIS-06-P a validación --
-  // si el cierre falla (ej. existencia final negativa, frasco BCG/SR a
-  // medio resolver), se aborta TODO el envío sin tocar el estado de
-  // SIS-06-P, para no dejar "medio documento" enviado.
+  // UN solo botón que bloquea las dos mitades. TODA la lógica vive en el RPC
+  // sis06p_enviar_para_validacion, en UNA sola transacción del servidor:
+  // ventana de fechas, que exista el Movimiento del mes, conciliación de
+  // dosis aplicadas (paloteo = Movimiento, biológico por biológico), cierre
+  // del Movimiento y cambio de estado. Si cualquiera falla no queda nada a
+  // medias -- antes el cierre del Movimiento se hacía desde aquí ANTES del
+  // envío, y un rechazo posterior dejaba el Movimiento bloqueado.
   async function enviarParaValidacion() {
     const activa = datosUnidadActiva();
     if (!activa) return;
@@ -655,40 +799,19 @@
     const anio = Number(document.getElementById('selAnio').value);
     const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
     if (!currentReport) { toast('Guarda tu concentrado antes de enviarlo.', 'error'); return; }
+    if (_sinGuardar) { toast('Tienes cambios sin guardar en el paloteo -- guárdalos antes de enviar.', 'error'); return; }
 
     const unidadBiovac = (estado.unidades || []).find((u) => u.clues === activa.clues);
-    if (!unidadBiovac) { toast('No se encontró la unidad en el catálogo de BioVac.', 'error'); return; }
 
-    mostrarCargando('Verificando Movimiento de Biológico...');
+    mostrarCargando('Enviando el SIS para validación...');
     try {
-      const { data: movimiento } = await estado.db.from('biovac_movimientos')
-        .select('id, estado').eq('unidad_id', unidadBiovac.id).eq('anio', anio).eq('mes', mes).maybeSingle();
-
-      if (!movimiento) {
-        toast('El SIS es un solo documento: primero inicia y captura el Movimiento de Biológico de este mes, luego envíalo.', 'error');
-        return;
-      }
-      if (movimiento.estado === 'EN_CORRECCION') {
-        toast('El Movimiento de Biológico de este mes está en corrección -- guárdala (botón "Guardar corrección") antes de poder enviar el SIS.', 'error');
-        return;
-      }
-      if (movimiento.estado === 'BORRADOR') {
-        mostrarCargando('Cerrando Movimiento de Biológico...');
-        const usuario = nombreCompletoDePerfil(estado.perfil);
-        const { error: errCierre } = await estado.db.rpc('biovac_cerrar_mes', { p_movimiento_id: movimiento.id, p_usuario: usuario });
-        if (errCierre) {
-          toast('No se pudo cerrar Movimiento de Biológico, así que tampoco se envió el SIS: ' + errCierre.message, 'error');
-          return;
-        }
-      }
-
-      mostrarCargando('Enviando concentrado para validación...');
       const { error } = await estado.db.rpc('sis06p_enviar_para_validacion', {
         p_captura_id: currentReport.id, p_usuario: nombreCompletoDePerfil(estado.perfil)
       });
       if (error) throw error;
       const { data: capturas } = await estado.db.from('sis06p_capturas').select('*').eq('clues', activa.clues);
       _sis06pCapturasCache = capturas || [];
+      await cargarConciliacion(activa.clues);
       render();
       toast('✅ SIS enviado para validación (SIS-06-P + Movimiento de Biológico, ya bloqueados para edición).', 'ok');
 
@@ -698,7 +821,7 @@
       // best-effort: si esta función no existe o falla, el envío YA quedó
       // aplicado en base de datos de todas formas.
       try {
-        if (typeof cargarMovimiento === 'function' && estado.movimiento
+        if (unidadBiovac && typeof cargarMovimiento === 'function' && estado.movimiento
           && estado.movimiento.unidad_id === unidadBiovac.id
           && Number(estado.movimiento.anio) === anio && Number(estado.movimiento.mes) === mes) {
           await cargarMovimiento();
@@ -708,6 +831,9 @@
       }
     } catch (err) {
       console.error('[SIS-06-P] Error al enviar:', err);
+      // Se refresca la conciliación por si el rechazo fue por diferencias --
+      // así la tarjeta muestra exactamente qué biológicos no coinciden.
+      try { await cargarConciliacion(activa.clues); render(); } catch (_) { /* no-op */ }
       toast('No se pudo enviar: ' + err.message, 'error');
     } finally {
       ocultarCargando();
@@ -777,11 +903,13 @@
       if (error) throw error;
       const { data: capturas } = await estado.db.from('sis06p_capturas').select('*').eq('clues', activa.clues);
       _sis06pCapturasCache = capturas || [];
+      await cargarConciliacion(activa.clues);
       render();
       toast('✅ Concentrado marcado como validado.', 'ok');
       notificarUnidadValidacion(activa, mes, anio);
     } catch (err) {
       console.error('[SIS-06-P] Error al validar:', err);
+      try { await cargarConciliacion(activa.clues); render(); } catch (_) { /* no-op */ }
       toast('No se pudo validar: ' + err.message, 'error');
     } finally {
       ocultarCargando();
@@ -1419,5 +1547,5 @@
   // tercera vez -- ya se duplicó una vez desde influenza_module.js (Fase 3c)
   // porque biovac.html no carga ese archivo; no hace falta duplicarla otra
   // vez dentro del propio biovac.html, donde ambos módulos sí conviven.
-  window.SIS06PBiovac = { init, render, save, renderCSVPreview, exportarSISOficialCompleto, INFLUENZA_SIS_MAPPING };
+  window.SIS06PBiovac = { init, render, save, hayCambiosSinGuardar: () => _sinGuardar, renderCSVPreview, exportarSISOficialCompleto, INFLUENZA_SIS_MAPPING };
 })();
