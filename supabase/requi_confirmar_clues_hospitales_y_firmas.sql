@@ -1,11 +1,13 @@
--- Confirma CLUES de H.G. (Hospital General de Querétaro), verificada contra
--- public.unidades (QTSSA002901, ahí marcada inactiva por motivos ajenos a la
--- distribución de vacunas -- en la requisición real de septiembre 2026 sigue
--- siendo destinatario activo). N.H.G. queda sin CLUES: no existe registro en
--- ninguna tabla de SIREVAQ (unidades, unidades_medicas) -- es un
--- establecimiento nuevo, su CLUES oficial debe confirmarla el usuario.
-update requi_unidades set clues = 'QTSSA002901', activo = true
+-- CORREGIDO (2026-09-24, confirmado por el usuario): las CLUES de los dos hospitales generales son
+-- distintas --
+--   * H.G.  (Hospital General de Querétaro, el VIEJO, ya no existe): QTSSA001752 -- debe quedar inactivo.
+--   * N.H.G. / NHGQ (Nuevo Hospital General de Querétaro, lo reemplazó): QTSSA002901.
+-- (Una versión anterior de este archivo asignaba QTSSA002901 al H.G. viejo por una etiqueta equivocada
+-- en public.unidades y en la hoja DATOS de SINBA-VER_26_2026.xlsx; ambas ya se corrigieron.)
+update requi_unidades set clues = 'QTSSA001752', activo = false
 where municipio = 'HOSPITALES' and nombre = 'H.G.';
+update requi_unidades set clues = 'QTSSA002901', activo = true
+where municipio = 'HOSPITALES' and nombre = 'N.H.G.';
 
 -- Nota: este archivo también agregó columnas de firma (elaboro_/autorizo_)
 -- a requi_requisiciones -- se revirtió en requi_firmas_por_destino.sql: el

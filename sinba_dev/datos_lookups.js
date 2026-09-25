@@ -6,8 +6,13 @@ const DATOS_LOOKUPS = {
       "municipio": ""
     },
     {
-      "clue": "QTSSA002901",
+      "clue": "QTSSA001752",
       "name": "HOSPITAL GENERAL DE QUERÉTARO",
+      "municipio": ""
+    },
+    {
+      "clue": "QTSSA002901",
+      "name": "NUEVO HOSPITAL GENERAL DE QUERÉTARO",
       "municipio": ""
     },
     {
