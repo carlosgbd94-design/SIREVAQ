@@ -12,13 +12,13 @@
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=6">
 <link rel="stylesheet" href="ayuda.css?v=1">
-<script defer src="ayuda.js?v=1"></script>
+<script defer src="ayuda.js?v=2"></script>
 <script defer src="dock_glass.js?v=4"></script>
-<script defer src="requi_engine.js"></script>
+<script defer src="requi_engine.js?v=2"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
-<script defer src="requisiciones_ui.js"></script>
+<script defer src="requisiciones_ui.js?v=2"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -122,39 +122,7 @@
      .con-asignacion (verde = "ya tiene dato"), nunca gris genérico. */
   tr.fila-lote-capturado { background: var(--success-bg); }
   tr.fila-lote-capturado td:first-child { border-left: 3px solid var(--success); }
-  tr.fila-lote-capturado .celda-acciones { display: flex; gap: 2px; justify-content: flex-end; }
-  tr.fila-lote-capturado input[type=text], tr.fila-lote-capturado input[type=number] { width: 100%; }
 
-  /* Resumen de reparto (Paso 2 y 3): "stat cards" de verdad separadas (con
-     su propio borde/sombra, no una línea gris de fondo asomando entre
-     ellas) -- cada número clave (disponible/repartido/saldo/...) se lee de
-     un vistazo, y el saldo se tiñe por completo (no solo el número) según
-     qué tan crítico esté. */
-  .franja-estado { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-  .franja-estado .stat {
-    flex: 1; min-width: 128px; background: var(--surface); border: 1px solid var(--outline-variant);
-    border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 3px; box-shadow: var(--shadow-1);
-  }
-  .franja-estado .stat span { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
-  .franja-estado .stat b { font-size: 18px; font-weight: 800; color: var(--primary); }
-  .franja-estado .stat.saldo-ok { background: var(--success-bg); border-color: #bbf7d0; }
-  .franja-estado .stat.saldo-ok b { color: var(--success); }
-  .franja-estado .stat.saldo-bajo { background: var(--warning-bg); border-color: var(--warning-border); }
-  .franja-estado .stat.saldo-bajo b { color: var(--warning); }
-  .franja-estado .stat.saldo-agotado { background: var(--error-bg); border-color: var(--error-border); }
-  .franja-estado .stat.saldo-agotado b { color: var(--error); }
-
-  /* Mismo lenguaje que .premium-muni-card del resto de SIREVAQ: borde suave,
-     sombra apenas perceptible en reposo, se eleva un poco al hover. */
-  .grid-destinos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 10px; }
-  .destino-card {
-    border: 1px solid var(--outline-variant); border-radius: 16px; padding: 12px 14px;
-    box-shadow: 0 2px 4px rgba(0,0,0,.02); transition: all .3s cubic-bezier(.4,0,.2,1);
-  }
-  .destino-card:hover { border-color: #cbd5e1; box-shadow: 0 6px 12px rgba(0,0,0,.05); transform: translateY(-2px); }
-  .destino-card-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
-  .destino-card label { font-size: 10.5px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  .destino-card input { width: 100%; }
 
   .toast { position: fixed; bottom: 20px; right: 20px; background: var(--primary); color: #fff; padding: 12px 18px; border-radius: 12px; font-size: 12.5px; font-weight: 700; box-shadow: var(--shadow-2); z-index: 999; opacity: 0; transform: translateY(8px); transition: all .2s; pointer-events: none; }
   .toast.show { opacity: 1; transform: translateY(0); }
@@ -170,29 +138,7 @@
   td.celda-guardada, .destino-card.celda-guardada { animation: flash-guardado 900ms ease-out; }
   @keyframes flash-guardado { 0% { background: var(--success-bg); } 100% { background: transparent; } }
   .badge-comparador { font-size: 10.5px; margin-left: 6px; }
-  .fila-add-lote { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 10px; }
 
-  /* Vista previa de Biológico+Lote elegidos (Paso 2 y 3): los <select>
-     nativos no dejan ver de un vistazo qué se está por repartir -- esta
-     tarjeta repite el color del biológico (mismo criterio que BioVac) en
-     grande junto al lote y su caducidad, para que no haga falta memorizar
-     lo que decía el desplegable. */
-  .preview-seleccion {
-    align-items: center; gap: 14px; margin-top: 12px; padding: 12px 18px;
-    background: var(--surface-container); border-radius: 14px; border-left: 4px solid var(--outline-variant);
-  }
-  .preview-icono {
-    width: 44px; height: 44px; border-radius: 13px; flex: none;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .preview-icono .material-symbols-rounded { font-size: 23px; }
-  .preview-bio { font-weight: 800; font-size: 14.5px; color: var(--text); }
-  .preview-detalle { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 7px; }
-  .preview-chip {
-    display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700;
-    padding: 4px 11px 4px 9px; border-radius: 20px; background: var(--surface); border: 1px solid var(--outline-variant); color: var(--text);
-  }
-  .preview-chip .material-symbols-rounded { font-size: 15px; color: var(--muted); }
   .lista-destinos-firma { display: flex; flex-direction: column; gap: 10px; }
   .destinos-masivos { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
   .destino-masivo-fila { display: flex; align-items: center; gap: 6px; }
@@ -273,14 +219,166 @@
   #tbodyExplorador tr.activa td { background: #eff6ff; }
   #tbodyExplorador tr.activa td:first-child { border-left: 3px solid var(--secondary); }
 
-  /* Paso 3 -- diseño con más jerarquía visual. El sticky-header (position,
-     z-index, fondo) de .tbl-unidades y el resumen (.franja-estado) ya los
-     define el bloque de arriba (compartido con .tbl y con Paso 2) -- aquí
-     solo lo propio de esta tabla, para no duplicar reglas que antes
-     competían entre sí (mismo bug ya encontrado dos veces en este archivo). */
-  table.tbl-unidades tr.con-asignacion { background: var(--success-bg); }
-  table.tbl-unidades tr.con-asignacion td:first-child { border-left: 3px solid var(--success); }
-  table.tbl-unidades tr:not(.con-asignacion) td:first-child { border-left: 3px solid transparent; }
+
+  /* ===== Rediseño por pasos: estado vacío, avance, captura rápida, matrices ===== */
+
+  .vacio-requi { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; border: 2px dashed var(--outline-variant); }
+  .vacio-requi .vacio-icono { font-size: 34px; color: var(--secondary); }
+  .vacio-texto { flex: 1; min-width: 220px; }
+  .vacio-texto b { font: 800 15px 'Poppins', sans-serif; color: var(--primary); }
+  .vacio-texto p { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
+
+  /* Avance general (puntos de los 3 pasos): gris = sin empezar, ámbar = en
+     proceso, verde = completo. */
+  .stepper-tarjeta { padding: 12px 16px; }
+  .stepper { display: flex; align-items: center; }
+  .st-nodo {
+    display: flex; align-items: center; gap: 11px; background: transparent; border: none; cursor: pointer;
+    padding: 6px 10px; border-radius: 14px; font-family: inherit; text-align: left; color: var(--text); min-width: 0; flex: 0 1 auto;
+  }
+  .st-circulo {
+    width: 34px; height: 34px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font: 800 14px 'Poppins', sans-serif; background: #e2e8f0; color: #64748b; border: 2px solid transparent; transition: all .25s ease;
+  }
+  .st-circulo .material-symbols-rounded { font-size: 20px; }
+  .st-nodo.iniciado .st-circulo { background: #fef3c7; color: var(--warning); border-color: #fcd34d; }
+  .st-nodo.hecho .st-circulo { background: #16a34a; color: #fff; border-color: #16a34a; }
+  .st-nodo.activo .st-circulo { box-shadow: 0 0 0 4px rgba(14,165,233,.22); box-shadow: 0 0 0 4px color-mix(in srgb, var(--hoja, #0284c7) 26%, transparent); }
+  .st-nodo.activo:not(.hecho):not(.iniciado) .st-circulo { border-color: var(--hoja, #0284c7); color: var(--primary); }
+  .st-txt { min-width: 0; }
+  .st-txt b { display: block; font: 800 13px 'Poppins', sans-serif; color: var(--primary); white-space: nowrap; }
+  .st-txt small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st-linea { flex: 1; height: 3px; min-width: 18px; border-radius: 3px; background: #e2e8f0; margin: 0 2px; transition: background-color .3s ease; }
+  .st-linea.hecho { background: #16a34a; }
+  @media (hover: hover) and (pointer: fine) { .st-nodo:hover { background: var(--surface-container); } }
+  .st-nodo.activo { min-width: 0; }
+  @media (max-width: 760px) {
+    .st-txt small { display: none; }
+    .st-nodo:not(.activo) .st-txt { display: none; }
+    .st-nodo { padding: 4px 6px; }
+    .st-nodo.activo { flex: 1 1 auto; }
+    .st-txt { overflow: hidden; }
+    .st-txt b { overflow: hidden; text-overflow: ellipsis; }
+    .st-linea { min-width: 6px; }
+  }
+
+  /* Avance de cada paso: barra + un punto por lote (o biológico / asignación). */
+  .avance { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 20px; padding: 14px 20px; margin-bottom: 16px; box-shadow: var(--shadow-1); }
+  .avance-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .avance-cab b { font: 800 13.5px 'Poppins', sans-serif; color: var(--primary); }
+  .avance-cab small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 600; }
+  .avance-pct { font: 800 18px 'Poppins', sans-serif; color: var(--primary); }
+  .avance-barra { height: 6px; border-radius: 6px; background: #e2e8f0; margin: 10px 0 0; overflow: hidden; }
+  .avance-barra i { display: block; height: 100%; background: #16a34a; border-radius: 6px; transition: width .35s ease; }
+  .puntos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .pt { width: 13px; height: 13px; border-radius: 50%; border: none; padding: 0; background: #cbd5e1; flex: none; display: inline-block; transition: transform .15s ease; }
+  button.pt { cursor: pointer; }
+  .pt.parcial { background: #f59e0b; }
+  .pt.completo { background: #16a34a; }
+  @media (hover: hover) and (pointer: fine) { button.pt:hover { transform: scale(1.5); } }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 11px; color: var(--muted); font-weight: 600; }
+  .leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+  .leyenda .pt { width: 9px; height: 9px; }
+
+  /* Chips (biológico / filtro / municipio) */
+  .chips-bio { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0 4px; }
+  .chip-bio {
+    display: inline-flex; align-items: center; gap: 7px; border: 1.5px solid var(--outline-variant); background: #fff; color: var(--text);
+    border-radius: 999px; padding: 6px 12px 6px 10px; font: 700 12px inherit; font-family: inherit; cursor: pointer; transition: border-color .15s ease, background-color .15s ease;
+  }
+  .chip-bio > i { width: 9px; height: 9px; border-radius: 50%; background: var(--c, #64748b); flex: none; }
+  .chip-bio b { font-size: 10.5px; background: var(--surface-container); border-radius: 999px; padding: 1px 7px; color: var(--muted); }
+  .chip-bio.con-lotes b, .chip-bio.completo b { background: #dcfce7; color: #15803d; }
+  .chip-bio.parcial b { background: #fef3c7; color: var(--warning); }
+  .chip-bio.activo { border-color: var(--c, var(--secondary)); background: #f0f9ff; background: color-mix(in srgb, var(--c, #0ea5e9) 11%, #fff); }
+  @media (hover: hover) and (pointer: fine) { .chip-bio:hover { border-color: var(--c, var(--secondary)); } }
+  .chip-filtro.activo { background: #eff6ff; border-color: var(--secondary); color: var(--secondary); }
+
+  /* Captura rápida (Paso 1) */
+  .rapida {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-top: 12px; padding: 14px 16px;
+    background: var(--surface-container); border-radius: 16px; border-left: 4px solid var(--c, var(--outline-variant));
+  }
+  .rapida.sin-bio .campo, .rapida.sin-bio .btn { opacity: .5; pointer-events: none; }
+  .rapida-bio { display: flex; align-items: center; gap: 11px; flex: 1 1 210px; min-width: 190px; }
+  .rb-icono { width: 40px; height: 40px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center; }
+  .rb-nombre { font-weight: 800; font-size: 13.5px; color: var(--text); }
+  .rb-sub { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .rapida-lote input { width: 190px; }
+  .rapida-nota { min-height: 22px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .rapida-nota .pill { margin-left: 0; margin-right: 6px; }
+
+  .punto-bio { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; flex: none; }
+  table.tbl tr.fila-bio.sin-lotes td { color: #94a3b8; }
+  table.tbl tr.fila-bio.sin-lotes strong { color: #64748b; font-weight: 600; }
+  table.tbl td.lote-cel { padding-left: 36px; }
+  .chip-lote { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 12.5px; }
+  .chip-lote .material-symbols-rounded { font-size: 15px; color: var(--muted); }
+  .cad-lote { color: var(--muted); font-weight: 600; margin-left: 14px; font-size: 12.5px; }
+  .cant-wrap { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .cant-wrap input[type=number] { width: 90px; }
+  tr.fila-lote-capturado .inp-editar-caducidad { width: 90px; margin-left: 12px; }
+
+  /* Matriz de reparto (Paso 2 y 3): filas = lotes (o unidades), columnas =
+     destinos (o lotes). Encabezado y primera columna fijos al desplazar. */
+  .matriz-scroll { max-height: 66vh; }
+  table.matriz { border-collapse: separate; border-spacing: 0; font-size: 13px; min-width: 100%; }
+  table.matriz th, table.matriz td { padding: 6px 8px; border-bottom: 1px solid var(--outline-variant); background: var(--surface); text-align: center; vertical-align: middle; transition: background-color .2s ease; }
+  table.matriz thead th {
+    position: sticky; top: 0; z-index: 6; background: var(--surface-container); border-bottom: 2px solid var(--outline-variant);
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--primary); font-weight: 800; padding: 10px 8px; vertical-align: bottom;
+  }
+  table.matriz .col-fija { position: sticky; left: 0; z-index: 4; text-align: left; min-width: 170px; max-width: 250px; border-right: 1px solid var(--outline-variant); }
+  table.matriz thead th.col-fija { z-index: 8; }
+  table.matriz tbody th.col-fija { font-weight: 500; box-shadow: inset 4px 0 0 var(--c, transparent); padding-left: 14px; }
+  table.matriz .col-fija b { display: block; font-weight: 800; font-size: 12.5px; color: var(--text); text-transform: none; letter-spacing: 0; }
+  table.matriz .col-fija small { display: block; font-size: 11px; color: var(--muted); font-weight: 600; text-transform: none; letter-spacing: 0; }
+  table.matriz tbody tr.completo th, table.matriz tbody tr.completo td { background: var(--success-bg); }
+  table.matriz tbody tr.resalte th, table.matriz tbody tr.resalte td, table.matriz thead th.resalte { background: #e0f2fe; }
+  table.matriz input.celda { width: 78px; text-align: center; font-weight: 700; padding: 7px 4px; border-radius: 9px; }
+  table.matriz input.celda::placeholder { color: #cbd5e1; font-weight: 600; }
+  table.matriz input.celda.con-dato { background: var(--success-bg); border-color: #bbf7d0; }
+  table.matriz input.celda.error { border-color: var(--error); background: var(--error-bg); }
+  table.matriz td.celda-guardada { animation: flash-guardado 900ms ease-out; }
+  table.matriz .col-num { min-width: 92px; }
+  table.matriz th.col-lote-h { min-width: 104px; }
+  table.matriz th.col-lote-h .barra-color { display: block; height: 4px; border-radius: 4px; background: var(--c, #64748b); margin: 0 auto 6px; width: 100%; }
+  table.matriz th.col-lote-h b { display: block; font: 800 11px 'Poppins', sans-serif; text-transform: none; letter-spacing: 0; color: var(--text); }
+  table.matriz th.col-lote-h small { display: block; font-size: 10.5px; color: var(--muted); font-weight: 600; text-transform: none; letter-spacing: 0; }
+  .saldo-chip { display: inline-flex; align-items: center; gap: 3px; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 800; background: var(--surface-container); color: var(--muted); text-transform: none; letter-spacing: 0; margin-top: 4px; }
+  .saldo-chip.parcial { background: var(--warning-bg); color: var(--warning); }
+  .saldo-chip.completo { background: #dcfce7; color: #15803d; }
+  .saldo-chip .material-symbols-rounded { font-size: 13px; }
+  @media (max-width: 760px) {
+    .tarjeta h2 { flex-wrap: wrap; }
+    .tarjeta h2 .btn { white-space: nowrap; }
+    table.matriz .col-fija { min-width: 116px; max-width: 132px; }
+    table.matriz input.celda { width: 62px; }
+    table.matriz .col-num { min-width: 78px; }
+  }
+  td.vacio-matriz { padding: 26px 14px !important; color: var(--muted); text-align: center; font-weight: 600; }
+  table.matriz .solo-lectura { font-weight: 700; }
+
+  /* Pegar desde Excel */
+  .modal-fondo { position: fixed; inset: 0; background: rgba(15,23,42,.5); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 20px; }
+  .modal-hoja { background: var(--surface); border-radius: 22px; width: 100%; max-width: 760px; max-height: min(88vh, 760px); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 16px 48px rgba(15,23,42,.28); }
+  .modal-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 18px 20px 6px; }
+  .modal-cab h3 { margin: 0; font: 800 16px/1.3 'Poppins', sans-serif; color: var(--primary); }
+  .modal-cab p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+  .modal-cuerpo { padding: 8px 20px 12px; overflow-y: auto; flex: 1 1 auto; }
+  .modal-cuerpo textarea { width: 100%; border: 1.5px dashed var(--outline-variant); border-radius: 12px; padding: 10px 12px; font: 12.5px/1.5 ui-monospace, Consolas, monospace; resize: vertical; background: #fff; color: var(--text); }
+  .modal-cuerpo textarea:focus { outline: none; border-color: var(--secondary); box-shadow: 0 0 0 3px rgba(14,165,233,.15); }
+  .modal-pie { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--outline-variant); }
+  .modal-resumen { margin-right: auto; font-size: 12px; color: var(--muted); font-weight: 700; }
+  table.vista-pegado { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 12px; }
+  table.vista-pegado th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 6px 8px; border-bottom: 2px solid var(--outline-variant); }
+  table.vista-pegado td { padding: 6px 8px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
+  table.vista-pegado tr.fila-error td { background: var(--error-bg); }
+  table.vista-pegado select { padding: 4px 6px; font-size: 12px; max-width: 200px; }
+  @media (max-width: 640px) {
+    .modal-fondo { align-items: flex-end; padding: 0; }
+    .modal-hoja { max-width: none; border-radius: 24px 24px 0 0; max-height: 92dvh; }
+  }
 </style>
 </head>
 <body data-solo-lectura="0" id="pagina">
@@ -393,10 +491,23 @@
     </div>
   </div>
 
+  <!-- Aún no existe la requisición del mes: una sola acción clara. -->
+  <div class="tarjeta vacio-requi" id="tarjetaSinRequisicion" style="display:none;">
+    <span class="material-symbols-rounded vacio-icono">post_add</span>
+    <div class="vacio-texto"><b id="tituloSinRequisicion"></b><p id="textoSinRequisicion"></p></div>
+    <button type="button" class="btn btn-primary solo-edicion" id="btnCrearRequisicion"><span class="material-symbols-rounded" style="font-size:16px">add</span> Crear requisición</button>
+  </div>
+
   <div id="contenidoRequisicion" style="display:none;">
+    <!-- Avance general: los tres pasos con su punto de estado (gris = sin
+         empezar, ámbar = en proceso, verde = completo). Cada uno es clicable. -->
+    <div class="tarjeta stepper-tarjeta">
+      <div class="stepper" id="stepper" role="list" aria-label="Avance de la requisición"></div>
+    </div>
+
     <!-- Barra flotante de pasos (One UI, vidrio ligero): los tres pasos de la
-         requisición siempre a la mano, con cuántos biológicos/destinos/unidades
-         ya llevan reparto, y "Cerrar mes" sin tener que subir la página. -->
+         requisición siempre a la mano, con su avance, el paso siguiente y
+         "Cerrar mes" sin tener que subir la página. -->
     <nav class="dock-sis" id="dockPasos" aria-label="Pasos de la requisición">
       <div class="dock-hojas" id="dockPasosTabs" role="tablist">
         <span class="hoja-tinta" aria-hidden="true"></span>
@@ -410,19 +521,43 @@
           <span class="material-symbols-rounded">local_hospital</span><span class="hoja-nombre">3 · Unidades</span><span class="hoja-pildora" id="pildoraPaso3"></span>
         </button>
       </div>
+      <div class="dock-estado" id="dockEstado">
+        <b><span class="dock-punto" id="dockPunto"></span><span id="dockEstadoTitulo"></span></b>
+        <small id="dockEstadoTexto"></small>
+      </div>
       <div class="dock-acciones">
+        <button type="button" class="dock-btn dock-guardar" id="btnSiguiente" title="Ir al siguiente paso"><span class="dock-etiqueta">Siguiente</span><span class="material-symbols-rounded">arrow_forward</span></button>
         <button type="button" class="dock-btn dock-enviar solo-edicion" id="btnCerrarMes" style="display:none;" title="Cerrar el mes: marca la requisición como enviada"><span class="material-symbols-rounded">lock</span><span class="dock-etiqueta">Cerrar mes</span></button>
       </div>
     </nav>
 
     <!-- PASO 1 -->
     <div class="paso-panel activo" id="panelPaso1">
+      <div class="avance" id="avancePaso1"></div>
+
+      <div class="tarjeta solo-edicion">
+        <h2 style="margin:0 0 4px;"><span class="material-symbols-rounded">bolt</span> Captura rápida<button type="button" class="ayuda-btn" data-ayuda="requi1" title="Cómo funciona el paso 1" aria-label="Cómo funciona el paso 1"><span class="material-symbols-rounded">help</span></button>
+          <button type="button" class="btn btn-outline btn-sm" id="btnPegarSurtido" style="margin-left:auto;"><span class="material-symbols-rounded" style="font-size:15px">content_paste</span> Pegar desde Excel</button>
+        </h2>
+        <p class="hint" style="margin-top:8px;"><b>1.</b> Toca el biológico · <b>2.</b> escribe lote, caducidad y cantidad · <b>Enter</b> guarda y te deja listo para el siguiente lote del mismo biológico.</p>
+        <div class="chips-bio" id="chipsBio"></div>
+        <div class="rapida" id="rapida">
+          <div class="rapida-bio" id="rapidaBio"></div>
+          <div class="campo rapida-lote"><label for="rapLote">Lote</label><input type="text" id="rapLote" list="rapListaLotes" autocomplete="off" placeholder="Ej. 0374MA109"><datalist id="rapListaLotes"></datalist></div>
+          <div class="campo"><label for="rapCad">Caducidad</label><input type="text" id="rapCad" autocomplete="off" placeholder="FEB-27" style="width:100px;"></div>
+          <div class="campo"><label for="rapCant">Cantidad</label><input type="number" id="rapCant" min="0" inputmode="numeric" placeholder="0"></div>
+          <button type="button" class="btn btn-primary" id="rapAgregar"><span class="material-symbols-rounded" style="font-size:16px">add</span> Agregar</button>
+        </div>
+        <div class="rapida-nota" id="rapNota"></div>
+      </div>
+
       <div class="tarjeta">
-        <h2 style="margin:0 0 10px;"><span class="material-symbols-rounded">inventory</span> Lo que llegó del almacén estatal<button type="button" class="ayuda-btn" data-ayuda="requi1" title="Cómo funciona el paso 1" aria-label="Cómo funciona el paso 1"><span class="material-symbols-rounded">help</span></button></h2>
-        <p class="hint">Da clic en un biológico para ver/agregar sus lotes recibidos — sin límite de lotes. El comparador te avisa si el lote ya existe o parece un error de captura antes de guardarlo.</p>
+        <h2 style="margin:0 0 10px;"><span class="material-symbols-rounded">inventory</span> Lo surtido por biológico
+          <button type="button" class="chip-filtro" id="chkSoloConLotes" style="margin-left:auto;">Solo con lotes</button>
+        </h2>
         <div class="tbl-scroll">
           <table class="tbl">
-            <thead><tr><th>#</th><th>Biológico</th><th>Presentación</th><th>Lotes capturados</th><th>Total surtido</th></tr></thead>
+            <thead><tr><th>Biológico / lote</th><th>Presentación</th><th>Lotes</th><th>Total surtido</th></tr></thead>
             <tbody id="tbodyBiologicos"></tbody>
           </table>
         </div>
@@ -431,45 +566,51 @@
 
     <!-- PASO 2 -->
     <div class="paso-panel" id="panelPaso2">
+      <div class="avance" id="avancePaso2"></div>
       <div class="tarjeta">
-        <h2><span class="material-symbols-rounded">alt_route</span> Reparto a Municipios y Hospitales<button type="button" class="ayuda-btn" data-ayuda="requi2" title="Cómo funciona el paso 2" aria-label="Cómo funciona el paso 2"><span class="material-symbols-rounded">help</span></button></h2>
-        <p class="hint">Cada hospital es su propio destino, igual que un municipio — no se reparte más adentro.</p>
-        <div class="barra">
-          <div class="campo" style="min-width:220px;">
-            <label>Biológico</label>
-            <select id="selBiologicoMunicipio"></select>
-          </div>
-          <div class="campo" style="min-width:220px; flex:1;">
-            <label>Lote</label>
-            <select id="selLoteParaMunicipio"></select>
-          </div>
-        </div>
-        <div class="preview-seleccion" id="previewMunicipio" style="display:none;"></div>
-        <div id="cajaRepartoMunicipio"></div>
+        <h2><span class="material-symbols-rounded">alt_route</span> Reparto a Municipios y Hospitales<button type="button" class="ayuda-btn" data-ayuda="requi2" title="Cómo funciona el paso 2" aria-label="Cómo funciona el paso 2"><span class="material-symbols-rounded">help</span></button>
+          <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSugerir2" style="margin-left:auto;" title="Llena los lotes que aún no tienen reparto con la misma proporción del mes anterior"><span class="material-symbols-rounded" style="font-size:15px">auto_fix_high</span> Sugerir según el mes anterior</button>
+        </h2>
+        <p class="hint">Un renglón por lote, una columna por destino. <b>Tab</b> avanza al siguiente destino, <b>Enter</b> baja al siguiente lote. <b>Doble clic</b> en una celda vacía pone todo el saldo. También puedes <b>pegar un bloque</b> copiado de Excel.</p>
+        <div class="chips-bio" id="chipsFiltro2"></div>
+        <div class="tbl-scroll matriz-scroll"><table class="matriz" id="matrizMunicipio"></table></div>
       </div>
     </div>
 
     <!-- PASO 3 -->
     <div class="paso-panel" id="panelPaso3">
+      <div class="avance" id="avancePaso3"></div>
       <div class="tarjeta">
-        <h2><span class="material-symbols-rounded">local_hospital</span> Reparto a Unidades<button type="button" class="ayuda-btn" data-ayuda="requi3" title="Cómo funciona el paso 3" aria-label="Cómo funciona el paso 3"><span class="material-symbols-rounded">help</span></button></h2>
-        <p class="hint">Elige municipio y luego el lote a repartir — las unidades que ya tienen algo asignado se marcan en verde para ubicarlas rápido.</p>
-        <div class="barra">
-          <div class="campo">
-            <label>Municipio</label>
-            <select id="selMunicipioUnidad"></select>
-          </div>
-          <div class="campo" style="min-width:220px;">
-            <label>Biológico</label>
-            <select id="selBiologicoUnidad"></select>
-          </div>
-          <div class="campo" style="min-width:220px; flex:1;">
-            <label>Lote</label>
-            <select id="selLoteParaUnidad"></select>
-          </div>
+        <h2><span class="material-symbols-rounded">local_hospital</span> Reparto a Unidades<button type="button" class="ayuda-btn" data-ayuda="requi3" title="Cómo funciona el paso 3" aria-label="Cómo funciona el paso 3"><span class="material-symbols-rounded">help</span></button>
+          <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSugerir3" style="margin-left:auto;" title="Llena los lotes del municipio que aún no tienen reparto con la proporción del mes anterior"><span class="material-symbols-rounded" style="font-size:15px">auto_fix_high</span> Sugerir según el mes anterior</button>
+        </h2>
+        <p class="hint">Elige el municipio. Un renglón por unidad, una columna por lote (arriba ves cuánto le queda por repartir). <b>Tab</b> avanza al siguiente lote, <b>Enter</b> baja a la siguiente unidad. <b>Doble clic</b> en una celda vacía pone todo el saldo; también puedes <b>pegar desde Excel</b>.</p>
+        <div class="chips-bio" id="chipsMunicipio"></div>
+        <div class="tbl-scroll matriz-scroll"><table class="matriz" id="matrizUnidad"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pegar lo surtido desde Excel -->
+  <div class="modal-fondo" id="modalPegar" style="display:none;">
+    <div class="modal-hoja" role="dialog" aria-modal="true" aria-labelledby="pegarTitulo">
+      <div class="modal-cab">
+        <div><h3 id="pegarTitulo">Pegar lo surtido desde Excel<button type="button" class="ayuda-btn" data-ayuda="requi_pegar" title="Cómo pegar" aria-label="Cómo pegar"><span class="material-symbols-rounded">help</span></button></h3>
+          <p>Copia las filas (biológico, lote, caducidad y cantidad, en cualquier orden) y pégalas aquí.</p></div>
+        <button type="button" class="icon-btn-pure" id="pegarCerrar" title="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="modal-cuerpo">
+        <div class="campo" style="margin-bottom:10px;">
+          <label for="pegarBioDefecto">Biológico de las filas que no lo traigan</label>
+          <select id="pegarBioDefecto"></select>
         </div>
-        <div class="preview-seleccion" id="previewUnidad" style="display:none;"></div>
-        <div id="cajaRepartoUnidad"></div>
+        <textarea id="pegarTexto" rows="5" spellcheck="false" placeholder="Ejemplo:&#10;HEXAVALENTE&#9;0374MA109&#9;FEB-27&#9;1250&#10;SRP&#9;AB123&#9;MAR-27&#9;300"></textarea>
+        <div id="pegarVista"></div>
+      </div>
+      <div class="modal-pie">
+        <span id="pegarResumen" class="modal-resumen"></span>
+        <button type="button" class="btn btn-outline" id="pegarCancelar">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="pegarImportar" disabled>Importar</button>
       </div>
     </div>
   </div>

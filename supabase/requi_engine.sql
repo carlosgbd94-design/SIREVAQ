@@ -37,7 +37,8 @@ begin
   where requisicion_id = new.requisicion_id
     and requi_biologico_id = new.requi_biologico_id
     and lote_id = new.lote_id
-    and id <> new.id;
+    and id <> new.id
+    and municipio <> new.municipio; -- ver requi_trigger_upsert_no_cuenta_doble.sql
 
   if v_repartido_otros + new.cantidad > v_disponible then
     raise exception 'Excede lo surtido para este lote: disponible %, ya repartido a otros municipios/Hospitales %, intentas asignar % a %',
@@ -90,7 +91,8 @@ begin
     and u.municipio = v_municipio
     and du.requi_biologico_id = new.requi_biologico_id
     and du.lote_id = new.lote_id
-    and du.id <> new.id;
+    and du.id <> new.id
+    and du.unidad_id <> new.unidad_id; -- ver requi_trigger_upsert_no_cuenta_doble.sql
 
   if v_repartido_otras + new.cantidad > v_disponible then
     raise exception 'Excede lo asignado a % para este lote: disponible %, ya repartido a otras unidades %, intentas asignar %',
