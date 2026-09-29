@@ -7068,6 +7068,10 @@ async function supabaseRequest(action = "", payload, options = {}) {
           filteredData = filteredData.filter(row => isCaravanaUnit_(row));
         }
 
+        if (Array.isArray(payload.municipios) && payload.municipios.length > 0) {
+          filteredData = filteredData.filter(row => exportRowEnSeleccion_(row.clues, row.municipio, payload.municipios));
+        }
+
         return { ok: true, data: filteredData };
       }
 
@@ -7096,10 +7100,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
         console.log("[bioexportmatrix DEBUG] filteredData after role check count:", filteredData.length);
 
         const normText = (s) => String(s || "").trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const requestedMunis = (payload.municipios || []).map(m => normText(m));
-        const filtered = requestedMunis.length > 0
-          ? filteredData.filter(d => requestedMunis.includes(normText(d.municipio)))
-          : filteredData;
+        const filtered = filteredData.filter(d => exportRowEnSeleccion_(d.clues, d.municipio, payload.municipios));
 
         console.log("[bioexportmatrix DEBUG] final filtered count:", filtered.length);
 
@@ -11854,6 +11855,34 @@ function renderBioRows(rows) {
   });
 }
 
+// Los hospitales HENM y NHGQ están dados de alta bajo municipio QUERETARO, pero en las
+// exportaciones son "municipios" aparte (su propio checkbox) y NO suman en QUERETARO.
+const EXPORT_HOSPITALES = { QTSSA001740: "HENM", QTSSA002901: "NHGQ" };
+
+function exportNormText_(s) {
+  return String(s || "").trim().toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// "Municipio efectivo" de exportación: el nombre del hospital si el CLUES es uno de ellos.
+function exportMunicipioEfectivo_(clues, municipio) {
+  const h = EXPORT_HOSPITALES[String(clues || "").trim().toUpperCase()];
+  return h || exportNormText_(municipio);
+}
+
+// ¿La fila (clues + municipio) entra en la selección de checkboxes? Selección vacía = todo.
+function exportRowEnSeleccion_(clues, municipio, seleccion) {
+  if (!seleccion || seleccion.length === 0) return true;
+  return seleccion.map(exportNormText_).includes(exportMunicipioEfectivo_(clues, municipio));
+}
+
+// Municipios reales a consultar en BD para una selección (un hospital seleccionado vive bajo QUERETARO).
+function exportMunicipiosReales_(seleccion) {
+  const hosp = Object.values(EXPORT_HOSPITALES);
+  const reales = seleccion.filter(m => !hosp.includes(exportNormText_(m)));
+  if (reales.length < seleccion.length && !reales.some(m => exportNormText_(m) === "QUERETARO")) reales.push("QUERETARO");
+  return reales;
+}
+
 function getSelectedExportMunicipios() {
   return Array.from(document.querySelectorAll(".exportMunicipioChk:checked"))
     .map(chk => chk.value);
@@ -12766,6 +12795,13 @@ async function loadExportOptions() {
   if (role === "MUNICIPAL") {
     const userMuns = String(USER.municipio || "").split(",").map(m => m.trim().toUpperCase());
     municipios = municipios.filter(m => userMuns.includes(m.toUpperCase()));
+  }
+
+  // HENM y NHGQ como opciones propias, justo después de QUERETARO (si el rol ve ese municipio).
+  const qIdx = municipios.findIndex(m => exportNormText_(m) === "QUERETARO");
+  if (qIdx !== -1) {
+    const hospitales = Object.values(EXPORT_HOSPITALES).filter(h => !municipios.includes(h));
+    municipios = [...municipios.slice(0, qIdx + 1), ...hospitales, ...municipios.slice(qIdx + 1)];
   }
 
   const grid = document.createElement("div");
@@ -15826,7 +15862,7 @@ if ($("btnDoExport")) $("btnDoExport").onclick = async () => {
     if (splitCheckbox && splitCheckbox.checked && typeof JSZip !== 'undefined') {
       let targetMuns = municipios && municipios.length > 0 ? municipios : [];
       if (targetMuns.length === 0) {
-        targetMuns = Array.from(new Set(res.data.map(d => d.municipio || (d.unidades && d.unidades.municipio)).filter(Boolean)));
+        targetMuns = Array.from(new Set(res.data.map(d => EXPORT_HOSPITALES[String(d.clues || "").trim().toUpperCase()] || d.municipio || (d.unidades && d.unidades.municipio)).filter(Boolean)));
       }
       if (targetMuns.length === 0 && USER && USER.municipio) {
         targetMuns = String(USER.municipio).split(",").map(m => m.trim());
@@ -15842,10 +15878,7 @@ if ($("btnDoExport")) $("btnDoExport").onclick = async () => {
 
         for (const mun of targetMuns) {
           const normMun = normText(mun);
-          const mData = res.data.filter(d => {
-            const rowMun = normText(d.municipio || (d.unidades && d.unidades.municipio));
-            return rowMun === normMun;
-          });
+          const mData = res.data.filter(d => exportRowEnSeleccion_(d.clues, d.municipio || (d.unidades && d.unidades.municipio), [mun]));
 
           console.log(`[btnDoExport DEBUG] Mun: "${mun}" (normalized: "${normMun}"), mData count:`, mData.length);
 
@@ -16072,7 +16105,7 @@ async function generarPDFResguardoSR(municipios, fIni, fFin, isUnitExport = fals
         .lte('fecha', fFin);
 
       if (municipios && municipios.length > 0) {
-        query = query.in('municipio', municipios);
+        query = query.in('municipio', exportMunicipiosReales_(municipios));
       }
 
       if (USER && USER.rol === "UNIDAD") {
@@ -16082,8 +16115,9 @@ async function generarPDFResguardoSR(municipios, fIni, fFin, isUnitExport = fals
         query = query.in('municipio', userMuns);
       }
 
-      const { data: records, error } = await query.order('fecha').order('unidad').order('biologico');
+      const { data: recordsAll, error } = await query.order('fecha').order('unidad').order('biologico');
       if (error) throw error;
+      const records = (recordsAll || []).filter(r => exportRowEnSeleccion_(r.clues, r.municipio, municipios));
 
       if (!records || records.length === 0) {
         showToast("No se encontraron registros de existencias detalladas para generar el PDF.", false, "info");
@@ -16401,11 +16435,12 @@ async function generateProfessionalXLSX(tipo, data, fIni, fFin, selectedMunicipi
 
     if (targetMuns.length > 0) {
       try {
-        const { data: dbUnits, error: dbUnitsErr } = await window.supabase
+        const { data: dbUnitsAll, error: dbUnitsErr } = await window.supabase
           .from('unidades')
-          .select('clues, unidad')
-          .in('municipio', targetMuns)
+          .select('clues, unidad, municipio')
+          .in('municipio', exportMunicipiosReales_(targetMuns))
           .order('clues');
+        const dbUnits = (dbUnitsAll || []).filter(u => exportRowEnSeleccion_(u.clues, u.municipio, targetMuns));
 
         if (!dbUnitsErr && dbUnits && dbUnits.length > 0) {
           dbUnits.forEach(u => {
@@ -16582,7 +16617,11 @@ async function generateProfessionalXLSX(tipo, data, fIni, fFin, selectedMunicipi
       cIdx++;
     });
 
-    ws.getCell(rowCursor, cIdx).value = Number(rowTotal);
+    // TOTAL como fórmula viva (con el resultado ya calculado), para que siga cuadrando si se edita una celda.
+    const primeraCol = ws.getColumn(2).letter, ultimaCol = ws.getColumn(cIdx - 1).letter;
+    ws.getCell(rowCursor, cIdx).value = arrClues.length > 0
+      ? { formula: `SUM(${primeraCol}${rowCursor}:${ultimaCol}${rowCursor})`, result: Number(rowTotal) }
+      : Number(rowTotal);
     ws.getCell(rowCursor, cIdx).border = borderAll;
     ws.getCell(rowCursor, cIdx).alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getCell(rowCursor, cIdx).font = { name: 'Arial Nova', size: 11, bold: true };
