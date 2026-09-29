@@ -313,7 +313,7 @@
       bloques: [
         T('Cómo se llena la tabla'),
         P(1, 'Elige el municipio', 'Cada botón muestra cuántos de sus lotes ya quedaron completos. Solo salen los lotes que ese municipio tiene asignados en el paso 2.'),
-        P(2, 'Escribe por unidad', 'Un renglón por unidad y una columna por lote; arriba de cada columna ves el saldo. Tab avanza al siguiente lote y Enter baja a la siguiente unidad.'),
+        P(2, 'Escribe por unidad', 'Un renglón por unidad (ordenadas por número de CLUES) y una columna por lote, en el orden del formato de requisición; arriba de cada columna ves el saldo. Tab avanza al siguiente lote y Enter baja a la siguiente unidad.'),
         T('Atajos'),
         I('ads_click', '#16a34a', 'Doble clic en una celda vacía', 'Pone todo el saldo que queda de ese lote en esa unidad.'),
         I('content_paste', '#7c3aed', 'Pegar un bloque', 'Copia un rango de Excel (unidades × lotes) y pégalo en cualquier celda.'),

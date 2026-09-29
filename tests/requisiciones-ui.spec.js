@@ -148,6 +148,12 @@ test('Requisiciones: flujo completo por pasos (captura rápida, pegado, matrices
   await page.click('.paso-tab[data-paso="3"]');
   await page.click('#chipsMunicipio .chip-bio[data-muni="CORREGIDORA"]');
   await expect(page.locator('#matrizUnidad thead th[data-col]')).toHaveCount(3);
+  // Primero por municipio, luego por CLUES
+  expect(await page.evaluate(() => estado.unidades.map((u) => u.id))).toEqual(['un-c1', 'un-c2', 'un-c3', 'un-q1', 'un-q2']);
+  // Unidades por número de CLUES (no por nombre: alfabético saldría Dos, Tres, Uno)
+  expect(await page.locator('#matrizUnidad tbody tr').evaluateAll((trs) => trs.map((t) => t.dataset.unidadFila))).toEqual(['un-c1', 'un-c2', 'un-c3']);
+  // Biológicos en el orden del formato de requisición (columna `orden` del catálogo), no alfabético
+  expect(await page.locator('#matrizUnidad thead th[data-col] b').allTextContents()).toEqual(['SRP', 'SRP', 'HEXAVALENTE']);
 
   await page.fill(celda3(l123, 'un-c1'), '400');
   await page.press(celda3(l123, 'un-c1'), 'Enter');
@@ -160,7 +166,7 @@ test('Requisiciones: flujo completo por pasos (captura rápida, pegado, matrices
   await expect(page.locator(celda3(l123, 'un-c2'))).toHaveValue('200');
   await expect(page.locator(`#matrizUnidad thead th[data-col$="::${l123}"] .saldo-chip`)).toHaveClass(/completo/);
 
-  await pegar(page, celda3(l124, 'un-c2'), '100\n100\n50');          // desde la primera unidad (orden alfabético) hacia abajo
+  await pegar(page, celda3(l124, 'un-c1'), '100\n100\n50');          // desde la primera unidad (por CLUES) hacia abajo
   await expect.poll(() => db(page, `db.requi_distribucion_unidad.filter((d) => d.lote_id === '${l124}').map((d) => d.cantidad).sort((a, b) => a - b)`)).toEqual([50, 100, 100]);
 
   await page.click('#btnSugerir3');                                   // HX001: 30/10/0 del mes anterior -> 150/50/0

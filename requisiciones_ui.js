@@ -299,10 +299,19 @@ function poblarSelectoresCabecera() {
 async function cargarCatalogoYUnidades() {
   const [{ data: catalogo }, { data: unidades }] = await Promise.all([
     estado.db.from('requi_catalogo_biologicos').select('*').eq('activo', true).order('orden'),
-    estado.db.from('requi_unidades').select('*').eq('activo', true).order('municipio').order('nombre')
+    estado.db.from('requi_unidades').select('*').eq('activo', true).order('municipio').order('clues')
   ]);
-  estado.catalogo = catalogo || [];
-  estado.unidades = unidades || [];
+  // Biológicos en el mismo orden que los renglones del formato de requisición
+  // (columna `orden` del catálogo = fila de la plantilla oficial).
+  estado.catalogo = (catalogo || []).slice().sort((a, b) => Number(a.orden) - Number(b.orden));
+  // Unidades: primero por municipio (en el orden de MUNICIPIOS_REALES) y dentro
+  // de cada uno por número de CLUES; las que no tengan CLUES van al final, por nombre.
+  const idxMuni = (m) => { const i = MUNICIPIOS_REALES.findIndex((x) => x.v === m); return i < 0 ? 99 : i; };
+  const cmp = (a, b) => String(a).localeCompare(String(b), 'es', { numeric: true });
+  estado.unidades = (unidades || []).slice().sort((a, b) =>
+    idxMuni(a.municipio) - idxMuni(b.municipio)
+    || (a.clues && b.clues ? cmp(a.clues, b.clues) : (a.clues ? -1 : b.clues ? 1 : 0))
+    || cmp(a.nombre, b.nombre));
   estado.unidadPorId = Object.fromEntries(estado.unidades.map((u) => [u.id, u]));
 }
 
@@ -1551,7 +1560,7 @@ function renderPaso3() {
       return `<th class="col-lote-h" data-col="${claveLote(c.bio, c.lote)}" style="--c:${colorDeBio(bioDe(c.bio))}"><span class="barra-color"></span><b>${esc(nombreCorto(bioDe(c.bio)))}</b><small>Lote ${esc(numeroLoteDe(c.bio, c.lote))}</small><small>Cad. ${esc(caducidadDe(c.bio, c.lote))}</small><span class="saldo-td">${chipSaldo(c.asignado - rep, rep, c.asignado, 'Saldo ')}</span></th>`;
     }).join('')}<th class="col-num">Excel</th></tr></thead>
     <tbody>${unidades.map((u) => `<tr data-unidad-fila="${u.id}">
-      <th scope="row" class="col-fija"><b>${esc(u.nombre)}</b></th>
+      <th scope="row" class="col-fija"><b>${esc(u.nombre)}</b>${u.clues ? `<small>${esc(u.clues)}</small>` : ''}</th>
       ${cols.map((c) => `<td>${celdaHtml(`data-unidad="${u.id}" data-bio="${c.bio}" data-lote="${c.lote}"`, cantidadGuardada({ tipo: 'U', destino: u.id, bio: c.bio, lote: c.lote }))}</td>`).join('')}
       <td><button type="button" class="icon-btn-pure" data-export-unidad="${u.id}" title="Exportar Excel de esta unidad"><span class="material-symbols-rounded">download</span></button></td>
     </tr>`).join('')}</tbody>`;
