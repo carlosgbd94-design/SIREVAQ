@@ -597,6 +597,10 @@ function inicializarToggleSIS06P() {
     if (avisoDerivado) avisoDerivado.style.display = 'none';
   }
 
+  // El cierre guiado del municipal (municipal_guiado.js) necesita ocultar las
+  // hojas viejas al pasar a sus propios paneles.
+  window.__sisOcultarTodo = ocultarTodo;
+
   btnSis.addEventListener('click', () => {
     ocultarTodo();
     btnSis.classList.add('activo');
@@ -708,6 +712,9 @@ function inicializarToggleSIS06P() {
   // los roles revisores entran directo a Seguimiento (para qué vinieron).
   if (rolActual === 'UNIDAD') {
     btnSis.click();
+  } else if ((rolActual === 'MUNICIPAL' || rolActual === 'JURISDICCIONAL') && window.MunicipalGuiado) {
+    // El municipal (y la jurisdicción, con sus hospitales) entra al cierre guiado en 4 pasos (ver municipal_guiado.js).
+    window.MunicipalGuiado.init();
   } else if (btnSeg) {
     btnSeg.click();
   }

@@ -10,10 +10,14 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1">
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="dock_glass.css?v=6">
+<link rel="stylesheet" href="ayuda.css?v=1">
+<script defer src="ayuda.js?v=4"></script>
+<script defer src="dock_glass.js?v=4"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.1"></script>
-<script defer src="biovac_jurisdiccion_ui.js?v=2026.2"></script>
+<script defer src="biovac_jurisdiccion_ui.js?v=2026.3"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -264,6 +268,140 @@
   .modal-caja p { margin: 0 0 6px; font-size: 13px; color: var(--muted); line-height: 1.5; }
   .modal-caja .campo { margin-top: 14px; }
   .modal-acciones { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+/* ===========================================================================
+   Concentrado Jurisdiccional guiado (biovac_jurisdiccion_ui.js): ruta del mes,
+   puntos de avance, tarjetas por municipio, validaciones agrupadas y
+   lista de verificación del informe. La barra flotante es dock_glass.css.
+   =========================================================================== */
+
+/* Ruta del mes (mismo lenguaje que el SINBA-SIS de la unidad) */
+.ruta-mes { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; }
+.ruta-pasos { flex: 1; display: flex; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.ruta-paso { position: relative; flex: 1 1 0; min-width: 0; padding-right: 10px; display: flex; gap: 0; align-items: flex-start; cursor: pointer; }
+.ruta-paso::before { content: ''; position: absolute; top: 13px; left: 30px; right: 0; height: 2px; background: var(--outline-variant); }
+.ruta-paso:last-child::before { display: none; }
+.ruta-paso.hecho::before { background: var(--success); }
+.ruta-num {
+  position: relative; z-index: 1; flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--surface);
+  border: 2px solid var(--outline-variant); color: var(--muted); display: flex; align-items: center; justify-content: center; font: 800 11.5px 'Poppins', sans-serif;
+}
+.ruta-num .material-symbols-rounded { font-size: 15px; }
+.ruta-paso.hecho .ruta-num { background: var(--success); border-color: var(--success); color: #fff; }
+.ruta-paso.actual .ruta-num { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: 0 0 0 4px rgba(15,23,42,.1); }
+.ruta-paso.alerta .ruta-num { background: var(--warning); border-color: var(--warning); color: #fff; box-shadow: 0 0 0 4px rgba(180,83,9,.15); }
+.ruta-txt { min-width: 0; padding: 1px 8px 0 9px; background: var(--surface); position: relative; z-index: 1; }
+.ruta-txt b { display: block; font-size: 12px; color: var(--primary); font-family: 'Poppins', sans-serif; }
+.ruta-txt small { display: block; font-size: 11px; color: var(--muted); line-height: 1.35; margin-top: 1px; }
+.ruta-paso.actual .ruta-txt small { color: var(--text); font-weight: 600; }
+.ruta-paso.alerta .ruta-txt small { color: var(--warning); font-weight: 700; }
+.ruta-ayuda { flex: none; color: var(--muted); }
+@media (max-width: 760px) {
+  .ruta-pasos { flex-wrap: wrap; row-gap: 10px; }
+  .ruta-paso { flex: 1 1 46%; }
+  .ruta-paso::before { display: none; }
+}
+
+/* Puntos de avance */
+.pt { width: 13px; height: 13px; border-radius: 50%; border: none; padding: 0; background: #cbd5e1; flex: none; display: inline-block; }
+.pt.parcial { background: #f59e0b; }
+.pt.completo { background: #16a34a; }
+.puntos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+.jur-avance { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 20px; padding: 16px 20px; margin-bottom: 14px; box-shadow: var(--shadow-1); }
+.jur-avance-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.jur-avance-cab b { font: 800 14px 'Poppins', sans-serif; color: var(--primary); }
+.jur-avance-cab small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 600; }
+.jur-pct { font: 800 15px 'Poppins', sans-serif; color: var(--primary); white-space: nowrap; }
+.jur-barra { height: 6px; border-radius: 6px; background: #e2e8f0; margin: 12px 0 0; overflow: hidden; }
+.jur-barra i { display: block; height: 100%; background: #16a34a; border-radius: 6px; transition: width .35s ease; }
+.jur-leyenda { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 11px; color: var(--muted); font-weight: 600; }
+.jur-leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+.jur-leyenda .pt { width: 9px; height: 9px; }
+.jur-acciones { margin-bottom: 14px; }
+.jur-espera { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.jur-vacio { padding: 26px 14px; text-align: center; color: var(--muted); font-weight: 600; }
+
+/* Paso 1: una tarjeta por municipio/hospital */
+.jur-munis { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.jur-muni { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 18px; padding: 14px 16px; box-shadow: var(--shadow-1); }
+.jur-muni.completo { background: var(--success-bg); border-color: #bbf7d0; }
+.jur-muni-cab { display: flex; align-items: center; gap: 12px; }
+.jur-muni-icono { width: 38px; height: 38px; border-radius: 12px; background: var(--surface-container); display: flex; align-items: center; justify-content: center; flex: none; }
+.jur-muni-icono .material-symbols-rounded { color: #64748b; }
+.jur-muni.completo .jur-muni-icono { background: #dcfce7; }
+.jur-muni.completo .jur-muni-icono .material-symbols-rounded { color: var(--success); }
+.jur-muni-tit { flex: 1; min-width: 0; }
+.jur-muni-tit b { display: block; font-size: 13.5px; color: var(--primary); }
+.jur-muni-tit small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; font-weight: 600; }
+.jur-ok { color: var(--success); font-size: 24px; }
+.jur-detalle { margin-top: 10px; }
+.jur-detalle summary { cursor: pointer; font-size: 11.5px; font-weight: 800; color: var(--muted); list-style: none; }
+.jur-detalle summary::-webkit-details-marker { display: none; }
+.jur-detalle summary::before { content: '▸ '; }
+.jur-detalle[open] summary::before { content: '▾ '; }
+.jur-detalle table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.jur-detalle td { padding: 5px 4px; border-bottom: 1px solid var(--outline-variant); }
+.jur-detalle .corregido { color: var(--warning); font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; gap: 3px; }
+.jur-detalle .corregido .material-symbols-rounded { font-size: 13px; }
+
+/* Cabeceras de paso */
+.jur-cab { display: flex; align-items: center; gap: 14px; }
+.jur-cab-icono { width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--outline-variant); display: flex; align-items: center; justify-content: center; flex: none; }
+
+/* Paso 2: validaciones agrupadas */
+.jur-val-resumen { margin: 0 0 12px; font-size: 13px; }
+.jur-val-resumen .err { color: var(--error); }
+.jur-val-resumen .adv { color: var(--warning); }
+.validacion-grupo { border: 1px solid var(--warning-border); background: var(--warning-bg); border-radius: 16px; padding: 12px 14px; margin-bottom: 10px; }
+.validacion-grupo.ERROR { border-color: var(--error-border); background: var(--error-bg); }
+.validacion-cab { display: flex; align-items: flex-start; gap: 12px; }
+.validacion-cab > .material-symbols-rounded { color: var(--warning); font-size: 24px; flex: none; }
+.validacion-grupo.ERROR .validacion-cab > .material-symbols-rounded { color: var(--error); }
+.validacion-cab > div { flex: 1; min-width: 0; }
+.validacion-cab b { display: block; font-size: 13.5px; color: var(--primary); }
+.validacion-cab small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; font-weight: 600; }
+.validacion-n { font: 800 13px 'Poppins', sans-serif; background: #fff; border-radius: 999px; padding: 2px 11px; color: var(--primary); }
+.jur-val-lista { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.jur-val-lista li { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: #fff; border-radius: 12px; padding: 8px 12px; font-size: 12.5px; }
+.jur-val-lista small { display: block; color: var(--muted); font-size: 11px; font-weight: 600; }
+.jur-chips-unidades { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.jur-chip-u { background: #fff; border-radius: 999px; padding: 3px 11px; font-size: 11.5px; font-weight: 700; color: var(--text); }
+
+/* Paso 3: filtros */
+.jur-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.jur-chip {
+  display: inline-flex; align-items: center; gap: 7px; border: 1.5px solid var(--outline-variant); background: #fff; color: var(--text);
+  border-radius: 999px; padding: 6px 12px; font: 700 12px inherit; font-family: inherit; box-shadow: none;
+}
+.jur-chip > i { width: 9px; height: 9px; border-radius: 50%; background: var(--c, #64748b); flex: none; }
+.jur-chip.activo { border-color: var(--c, var(--secondary)); background: #f0f9ff; }
+.jur-chip-alertas { margin-left: auto; color: var(--warning); }
+.jur-chip-alertas.activo { border-color: var(--warning); background: var(--warning-bg); }
+.jur-chip .material-symbols-rounded { font-size: 15px; }
+@media (hover: hover) and (pointer: fine) { .jur-chip:hover { border-color: var(--c, var(--secondary)); } }
+
+/* Paso 4: lista de verificación y entregables */
+.jur-check { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.jur-check li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface-container); }
+.jur-check li > .material-symbols-rounded { font-size: 24px; color: #94a3b8; flex: none; }
+.jur-check li b { display: block; font-size: 13px; color: var(--primary); }
+.jur-check li small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; font-weight: 600; }
+.jur-check li.ok { background: var(--success-bg); }
+.jur-check li.ok > .material-symbols-rounded { color: var(--success); }
+.jur-check li.pend, .jur-check li.aviso { background: var(--warning-bg); }
+.jur-check li.pend > .material-symbols-rounded, .jur-check li.aviso > .material-symbols-rounded { color: var(--warning); }
+.jur-entregables { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.jur-entregable { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px 16px; border-radius: 16px; background: #f8fafc; border: 1px solid var(--outline-variant); }
+.jur-entregable b { font-size: 13.5px; color: var(--primary); }
+.jur-entregable small { font-size: 11.5px; color: var(--muted); line-height: 1.45; font-weight: 600; }
+.jur-entregable > span { font-size: 11.5px; color: var(--muted); }
+
+@media (max-width: 760px) {
+  .jur-munis { grid-template-columns: 1fr; }
+  body.con-dock .hoja-tab { padding: 10px 8px; }
+  body.con-dock .hoja-tab.activo .hoja-pildora { display: none; }
+  .jur-chip-alertas { margin-left: 0; }
+}
 </style>
 </head>
 <body>
@@ -276,9 +414,11 @@
     <div class="divisor"></div>
     <div>
       <h1>Concentrado Jurisdiccional<span id="avisoUsuario"></span></h1>
-      <p class="subtitulo">Suma en vivo de los 4 municipios ya cerrados. Corregir aquí edita directamente el renglón del municipio de origen, y se propaga a sus meses siguientes.</p>
+      <p class="subtitulo">Se arma solo con los movimientos que cierran las unidades. Tú vigilas el cierre, atiendes lo que no cuadra y emites el informe.</p>
     </div>
   </div>
+
+  <div id="rutaJuris" class="ruta-mes" style="margin-top:14px;"></div>
 
   <div class="barra separador">
     <div class="campo">
@@ -298,37 +438,82 @@
       <select id="selMes"></select>
     </div>
     <div class="campo">
-      <button class="btn-primario" id="btnCargar"><span class="material-symbols-rounded">folder_open</span> Cargar concentrado</button>
+      <button class="btn-secundario btn-mini" id="btnCargar" title="Volver a leer el concentrado"><span class="material-symbols-rounded">refresh</span> Actualizar</button>
     </div>
   </div>
 </div>
 
 <div id="panelResultados" style="display:none">
 
-  <div class="tarjeta">
-    <div class="seccion-titulo"><h2>Estado por municipio</h2></div>
-    <div id="estadoUnidades" class="fila-chips"></div>
+  <!-- PASO 1 -->
+  <div class="paso-panel" id="panelPaso1">
+    <div id="cierreResumen"></div>
+    <div id="estadoUnidades" class="jur-munis"></div>
   </div>
 
-  <div class="tarjeta">
-    <div class="seccion-titulo"><h2>Validaciones</h2></div>
-    <div id="listaValidaciones"></div>
-  </div>
-
-  <div class="tarjeta">
-    <div class="seccion-titulo">
-      <h2>Informes generados</h2>
-      <div style="display:flex; gap:8px; flex-wrap:wrap">
-        <button class="btn-secundario btn-mini" id="btnExportarExcelJurisdiccional"><span class="material-symbols-rounded">download</span> Excel</button>
-        <button class="btn-secundario btn-mini" id="btnVerPdfJurisdiccional"><span class="material-symbols-rounded">picture_as_pdf</span> PDF</button>
-        <button class="btn-secundario btn-mini" id="btnGenerarInforme"><span class="material-symbols-rounded">summarize</span> Generar informe de este mes</button>
+  <!-- PASO 2 -->
+  <div class="paso-panel" id="panelPaso2" style="display:none">
+    <div class="tarjeta">
+      <div class="seccion-titulo">
+        <div class="jur-cab"><span class="jur-cab-icono" style="background:#fffbeb; border-color:#fde68a;"><span class="material-symbols-rounded" style="color:#d97706;">rule</span></span>
+          <div><h2>Validaciones del concentrado<button type="button" class="ayuda-btn" data-ayuda="jur_validaciones" title="Cómo leer las validaciones" aria-label="Cómo leer las validaciones"><span class="material-symbols-rounded">help</span></button></h2>
+            <p class="subtitulo">Lo que el propio concentrado detecta que no cuadra. Cada aviso te lleva al lote para atenderlo.</p></div></div>
       </div>
+      <div id="listaValidaciones"></div>
     </div>
-    <div id="listaInformes"></div>
   </div>
 
-  <div id="contenedorConcentrado"></div>
+  <!-- PASO 3 -->
+  <div class="paso-panel" id="panelPaso3" style="display:none">
+    <div class="tarjeta">
+      <div class="seccion-titulo">
+        <div class="jur-cab"><span class="jur-cab-icono" style="background:#f0fdf4; border-color:#bbf7d0;"><span class="material-symbols-rounded" style="color:#16a34a;">table_chart</span></span>
+          <div><h2>Concentrado por biológico y lote<button type="button" class="ayuda-btn" data-ayuda="jur_concentrado" title="Cómo leer el concentrado" aria-label="Cómo leer el concentrado"><span class="material-symbols-rounded">help</span></button></h2>
+            <p class="subtitulo">Suma en vivo de las unidades. "Ver" abre el detalle por unidad; ahí puedes corregir en el origen, con motivo, y se propaga a los meses siguientes.</p></div></div>
+      </div>
+      <div id="chipsBio" class="jur-chips"></div>
+    </div>
+    <div id="contenedorConcentrado"></div>
+  </div>
+
+  <!-- PASO 4 -->
+  <div class="paso-panel" id="panelPaso4" style="display:none">
+    <div class="tarjeta">
+      <div class="seccion-titulo">
+        <div class="jur-cab"><span class="jur-cab-icono" style="background:#f5f3ff; border-color:#ddd6fe;"><span class="material-symbols-rounded" style="color:#7c3aed;">summarize</span></span>
+          <div><h2><span id="tituloInforme">Informe del mes</span><button type="button" class="ayuda-btn" data-ayuda="jur_informe" title="Cómo funciona el informe" aria-label="Cómo funciona el informe"><span class="material-symbols-rounded">help</span></button></h2>
+            <p class="subtitulo">Antes de generarlo, esta lista te dice si algo quedó pendiente.</p></div></div>
+      </div>
+      <ul class="jur-check" id="checkInforme"></ul>
+      <div class="jur-entregables">
+        <div class="jur-entregable"><b>Informe del mes</b><small>Una foto del concentrado con los movimientos cerrados hoy. Queda registrada con quién y cuándo la generó.</small><span>Se genera con el botón <b>Generar informe</b> de la barra de abajo.</span></div>
+        <div class="jur-entregable"><b>Excel oficial</b><small>El formato de Movimiento de Biológico con la suma de la jurisdicción.</small><button class="btn-secundario btn-mini" id="btnExportarExcelJurisdiccional"><span class="material-symbols-rounded">download</span> Descargar Excel</button></div>
+        <div class="jur-entregable"><b>PDF</b><small>Para imprimir o archivar el concentrado del mes.</small><button class="btn-secundario btn-mini" id="btnVerPdfJurisdiccional"><span class="material-symbols-rounded">picture_as_pdf</span> Ver PDF</button></div>
+      </div>
+      <div class="seccion-titulo" style="margin-top:18px;"><h2 style="font-size:13.5px;">Informes generados</h2></div>
+      <div id="listaInformes"></div>
+    </div>
+  </div>
 </div>
+
+<!-- Barra flotante de pasos (misma de Requisiciones y del SINBA-SIS) -->
+<nav class="dock-sis" id="dockJuris" style="display:none;" aria-label="Pasos del concentrado jurisdiccional">
+  <div class="dock-hojas" id="dockJTabs" role="tablist">
+    <span class="hoja-tinta" aria-hidden="true"></span>
+    <button type="button" class="hoja-tab activo" data-jpaso="1" role="tab" style="--hoja:#0284c7;" title="1. Cierre de municipios y hospitales"><span class="material-symbols-rounded">lock_clock</span><span class="hoja-nombre">1 · Cierre</span><span class="hoja-pildora" id="pildoraJ1"></span></button>
+    <button type="button" class="hoja-tab" data-jpaso="2" role="tab" style="--hoja:#d97706;" title="2. Validaciones"><span class="material-symbols-rounded">rule</span><span class="hoja-nombre">2 · Validaciones</span><span class="hoja-pildora" id="pildoraJ2"></span></button>
+    <button type="button" class="hoja-tab" data-jpaso="3" role="tab" style="--hoja:#16a34a;" title="3. Concentrado"><span class="material-symbols-rounded">table_chart</span><span class="hoja-nombre">3 · Concentrado</span><span class="hoja-pildora" id="pildoraJ3"></span></button>
+    <button type="button" class="hoja-tab" data-jpaso="4" role="tab" style="--hoja:#7c3aed;" title="4. Informe"><span class="material-symbols-rounded">summarize</span><span class="hoja-nombre">4 · Informe</span><span class="hoja-pildora" id="pildoraJ4"></span></button>
+  </div>
+  <div class="dock-estado" id="dockJEstado">
+    <b><span class="dock-punto" id="dockJPunto"></span><span id="dockJTitulo"></span></b>
+    <small id="dockJDetalle"></small>
+  </div>
+  <div class="dock-acciones">
+    <button type="button" class="dock-btn dock-guardar" id="btnSiguiente" title="Ir al siguiente paso"><span class="dock-etiqueta">Siguiente</span><span class="material-symbols-rounded">arrow_forward</span></button>
+    <button type="button" class="dock-btn dock-enviar" id="btnGenerarInforme" style="display:none;" title="Generar el informe de este mes"><span class="material-symbols-rounded">summarize</span><span class="dock-etiqueta">Generar informe</span></button>
+  </div>
+</nav>
 
 <div id="toast" class="toast"></div>
 

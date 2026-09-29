@@ -86,6 +86,13 @@
 
     const filas = data || [];
     window.__sis06pUltimasFilas = filas;
+    // MUNICIPAL con el cierre guiado: el seguimiento se pinta como el paso 1
+    // (municipal_guiado.js); el resto de este archivo lo sigue usando ADMIN/JURISDICCIONAL.
+    if ((rolActual === 'MUNICIPAL' || rolActual === 'JURISDICCIONAL') && window.MunicipalGuiado && window.MunicipalGuiado.activo()) {
+      await renderBannerVentana(mes, anio);
+      window.MunicipalGuiado.pintarEnvios(filas);
+      return;
+    }
     const conteos = { SIN_ENVIAR: 0, ENVIADO: 0, VALIDADO: 0 };
     filas.forEach((f) => {
       const key = (f.estado === 'ENVIADO' || f.estado === 'VALIDADO') ? f.estado : 'SIN_ENVIAR';
@@ -557,6 +564,7 @@
   // siguen sin poder entrar al detalle de una unidad.
   function irARevisarUnidad(clues) {
     const rol = estado.perfil ? estado.perfil.rol : null;
+    if ((rol === 'MUNICIPAL' || rol === 'JURISDICCIONAL') && window.MunicipalGuiado && window.MunicipalGuiado.activo()) { window.MunicipalGuiado.revisar(clues); return; }
     const fila = (window.__sis06pUltimasFilas || []).find((f) => f.clues === clues);
     // JURISDICCIONAL es el "municipal" de los hospitales (HENM, NHG): solo
     // esas CLUES bajan a detalle/validación; el resto es responsabilidad de
@@ -577,5 +585,14 @@
     selUnidadRevision.dispatchEvent(new Event('change'));
   }
 
-  window.SIS06PDashboard = { render };
+  // Solo trae las filas del seguimiento (sin pintar nada): las usa el cierre guiado
+  // del municipal para su ruta, sus puntos de avance y la navegación entre unidades.
+  async function cargarFilas(mes, anio) {
+    const { data, error } = await estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio });
+    if (error) { toast('No se pudo cargar el seguimiento: ' + error.message, 'error'); return null; }
+    window.__sis06pUltimasFilas = data || [];
+    return data || [];
+  }
+
+  window.SIS06PDashboard = { render, cargarFilas, renderBannerVentana, renderComparativoAplicado, exportarCSVOficialMunicipio, MUNICIPIO_LABEL };
 })();

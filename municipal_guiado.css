@@ -1,0 +1,130 @@
+/* ===========================================================================
+   Cierre mensual del municipio, guiado en 4 pasos (municipal_guiado.js).
+   Usa las variables y los botones de biovac.html (.tarjeta, .btn-primario,
+   .btn-secundario, .btn-mini) y la barra flotante de dock_glass.css.
+   =========================================================================== */
+
+/* El selector viejo de "Unidad a revisar" lo reemplaza la barra del paso 2. */
+body.mun-guiado #wrapUnidadRevision { display: none !important; }
+
+/* Puntos de avance: uno por unidad. Gris = sin enviar, ámbar = por validar, verde = validada. */
+.pt { width: 13px; height: 13px; border-radius: 50%; border: none; padding: 0; background: #cbd5e1; flex: none; display: inline-block; transition: transform .15s ease, box-shadow .15s ease; }
+button.pt { cursor: pointer; }
+.pt.parcial { background: #f59e0b; }
+.pt.completo { background: #16a34a; }
+.pt.actual { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary); }
+@media (hover: hover) and (pointer: fine) { button.pt:hover { transform: scale(1.5); } }
+.puntos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+.mun-vacio { padding: 26px 14px; text-align: center; color: var(--muted); font-weight: 600; }
+
+/* --- Paso 1: envíos --- */
+.mun-avance { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 20px; padding: 16px 20px; margin-bottom: 14px; box-shadow: var(--shadow-1); }
+.mun-avance-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.mun-avance-cab b { font: 800 14px 'Poppins', sans-serif; color: var(--primary); }
+.mun-avance-cab small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 600; }
+.mun-pct { font: 800 15px 'Poppins', sans-serif; color: var(--primary); white-space: nowrap; }
+.mun-barra { height: 6px; border-radius: 6px; background: #e2e8f0; margin: 12px 0 0; overflow: hidden; }
+.mun-barra i { display: block; height: 100%; background: #16a34a; border-radius: 6px; transition: width .35s ease; }
+.mun-leyenda { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 11px; color: var(--muted); font-weight: 600; }
+.mun-leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+.mun-leyenda .pt { width: 9px; height: 9px; }
+
+.mun-acciones { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.mun-espera { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.mun-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.mun-chip {
+  display: inline-flex; align-items: center; gap: 7px; border: 1.5px solid var(--outline-variant); background: #fff; color: var(--text);
+  border-radius: 999px; padding: 6px 12px; font: 700 12px inherit; font-family: inherit; cursor: pointer; box-shadow: none;
+}
+.mun-chip b { font-size: 10.5px; background: var(--surface-container); border-radius: 999px; padding: 1px 7px; color: var(--muted); }
+.mun-chip.activo { border-color: var(--secondary); background: #f0f9ff; color: var(--primary); }
+@media (hover: hover) and (pointer: fine) { .mun-chip:hover { border-color: var(--secondary); } }
+
+.mun-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.mun-unidad {
+  display: flex; align-items: center; gap: 12px; text-align: left; background: #fff; border: 1px solid var(--outline-variant);
+  border-radius: 16px; padding: 12px 14px; cursor: pointer; font-family: inherit; box-shadow: none; color: var(--text);
+  transition: border-color .15s ease, transform .15s ease;
+}
+@media (hover: hover) and (pointer: fine) { .mun-unidad:hover { border-color: var(--secondary); transform: translateY(-2px); } }
+.mun-dot { width: 11px; height: 11px; border-radius: 50%; background: #cbd5e1; flex: none; }
+.mun-unidad.parcial .mun-dot { background: #f59e0b; }
+.mun-unidad.completo .mun-dot { background: #16a34a; }
+.mun-unidad.parcial { background: #fffdf5; }
+.mun-u-txt { flex: 1; min-width: 0; }
+.mun-u-txt b { display: block; font-size: 13px; color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mun-u-txt small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mun-u-pills { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.mun-pill { font-size: 10px; font-weight: 800; padding: 2px 9px; border-radius: 20px; white-space: nowrap; background: #f1f5f9; color: #94a3b8; }
+.mun-pill.parcial, .mun-pill.aviso { background: var(--warning-bg); color: var(--warning); }
+.mun-pill.completo, .mun-pill.ok { background: var(--success-bg); color: var(--success); }
+
+/* --- Paso 2: barra de revisión --- */
+.mun-revision { padding: 14px 18px; }
+.mun-rev-fila { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mun-nav {
+  width: 38px; height: 38px; border-radius: 50%; border: 1.5px solid var(--outline-variant); background: #fff; color: var(--primary);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; box-shadow: none; flex: none;
+}
+@media (hover: hover) and (pointer: fine) { .mun-nav:hover { border-color: var(--secondary); color: var(--secondary); } }
+.mun-rev-unidad { flex: 1 1 200px; min-width: 0; }
+.mun-rev-unidad b { display: block; font: 800 14px 'Poppins', sans-serif; color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mun-rev-unidad small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; font-weight: 600; }
+.mun-select { max-width: 230px; }
+.mun-rev-puntos { margin-top: 12px; }
+.mun-hojas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--outline-variant); }
+.mun-hoja {
+  display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid transparent; background: var(--surface-container); color: #4b5b70;
+  border-radius: 999px; padding: 8px 14px; font: 700 12.5px 'Poppins', sans-serif; cursor: pointer; box-shadow: none;
+}
+.mun-hoja .material-symbols-rounded { font-size: 18px; }
+.mun-hoja.activo { color: var(--primary); background: #fff; border-color: var(--hoja); }
+.mun-hoja.activo .material-symbols-rounded { color: var(--hoja); font-variation-settings: 'FILL' 1; }
+.mun-hoja-pildora { font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 999px; background: rgba(15,23,42,.08); color: #475569; }
+.mun-hoja-pildora:empty { display: none; }
+.mun-hoja-pildora.ok { background: #dcfce7; color: #15803d; }
+.mun-hoja-pildora.aviso { background: #fef3c7; color: #b45309; }
+.mun-hoja-pildora.punto { width: 8px; height: 8px; padding: 0; background: #f59e0b; display: inline-block; }
+
+/* --- Pasos 3 y 4 --- */
+.mun-cab { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.mun-cab-icono { width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--outline-variant); display: flex; align-items: center; justify-content: center; flex: none; }
+.mun-mov-barra { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); font-weight: 600; padding: 12px 18px; }
+
+.mun-check { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mun-check li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface-container); border: 1px solid transparent; }
+.mun-check li > .material-symbols-rounded { font-size: 24px; color: #94a3b8; flex: none; }
+.mun-check li > div { flex: 1; min-width: 0; }
+.mun-check li b { display: block; font-size: 13px; color: var(--primary); }
+.mun-check li small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; font-weight: 600; }
+.mun-check li.ok { background: var(--success-bg); border-color: #bbf7d0; }
+.mun-check li.ok > .material-symbols-rounded { color: var(--success); }
+.mun-check li.pend, .mun-check li.aviso { background: var(--warning-bg); border-color: var(--warning-border); }
+.mun-check li.pend > .material-symbols-rounded, .mun-check li.aviso > .material-symbols-rounded { color: var(--warning); }
+.mun-entregar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 14px 16px; border-radius: 16px; background: #f5f3ff; border: 1px solid #ddd6fe; }
+.mun-entregar b { display: block; font-size: 13.5px; color: var(--primary); }
+.mun-entregar small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; max-width: 460px; line-height: 1.4; }
+.mun-nota-csv { margin: 14px 0 0; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+
+@media (max-width: 760px) {
+  /* Cuatro pasos + hasta tres acciones caben en el celular: la píldora del paso activo y el relleno sobran. */
+  body.mun-guiado #dockPasosMun .hoja-tab { padding: 10px 8px; }
+  body.mun-guiado #dockPasosMun .hoja-tab.activo .hoja-pildora { display: none; }
+  body.mun-guiado .dock-btn { padding: 10px 10px; }
+  .mun-grid { grid-template-columns: 1fr; }
+  .mun-select { max-width: none; flex: 1 1 100%; order: 5; }
+  .mun-rev-fila .btn-mini { flex: 1 1 100%; justify-content: center; }
+  .mun-acciones { flex-direction: column; align-items: stretch; }
+  .mun-acciones .btn-primario { justify-content: center; }
+}
+
+/* Jurisdicción: avance informativo de los municipios sobre el de los hospitales */
+.mun-otros { margin-bottom: 4px; }
+.mun-otros-tit { font: 800 12px 'Poppins', sans-serif; color: var(--primary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .04em; }
+.mun-otros-tit small { font-weight: 600; color: var(--muted); text-transform: none; letter-spacing: 0; }
+.mun-otros-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.mun-otro { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 16px; padding: 12px 14px; }
+.mun-otro.completo { background: var(--success-bg); border-color: #bbf7d0; }
+.mun-otro b { display: block; font-size: 13px; color: var(--primary); }
+.mun-otro small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; font-weight: 600; }

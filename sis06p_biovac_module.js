@@ -933,6 +933,7 @@
       render();
       toast('✅ Concentrado marcado como validado.', 'ok');
       notificarUnidadValidacion(activa, mes, anio);
+      document.dispatchEvent(new CustomEvent('sis06p:validado', { detail: { clues: activa.clues, mes, anio } }));
     } catch (err) {
       console.error('[SIS-06-P] Error al validar:', err);
       try { await cargarConciliacion(activa.clues); render(); } catch (_) { /* no-op */ }

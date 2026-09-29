@@ -130,6 +130,125 @@
       ]
     },
 
+    // ------------------------------------------------- Concentrado jurisdiccional
+    jur: {
+      titulo: 'Concentrado jurisdiccional',
+      subtitulo: 'Se arma solo con lo que cierran las unidades. Tú vigilas, atiendes lo que no cuadra y emites el informe.',
+      bloques: [
+        T('Los cuatro pasos'),
+        P(1, 'Cierre', 'Ves cuántos municipios, hospitales y unidades ya cerraron su Movimiento del mes. El concentrado suma cada uno en cuanto cierra.'),
+        P(2, 'Validaciones', 'El propio concentrado te avisa lo que no cuadra: existencias negativas, caducidades distintas, lotes en A.R.F. sin resolver y unidades sin cerrar.'),
+        P(3, 'Concentrado', 'La suma por biológico y lote. Abres el detalle por unidad y, si algo está mal, lo corriges en su origen con un motivo.'),
+        P(4, 'Informe', 'Una lista te dice si falta algo; generas el informe del mes y descargas el Excel o el PDF.'),
+        T('Los puntos de avance'),
+        I('radio_button_unchecked', '#94a3b8', 'Gris · sin movimiento', 'La unidad todavía no abre su Movimiento de este mes.'),
+        I('timelapse', '#f59e0b', 'Ámbar · en captura o corrección', 'Tiene el Movimiento abierto: lo que lleva se ve como provisional.'),
+        I('check_circle', '#16a34a', 'Verde · cerrado', 'Ya cerró: su número es definitivo en el concentrado.'),
+        N('Desde octubre de 2026 el concentrado suma cada unidad (CLUES); antes sumaba el Movimiento de cada municipio y hospital. Tú no tienes que elegirlo: el sistema toma el criterio correcto según el mes.')
+      ]
+    },
+    jur_validaciones: {
+      titulo: 'Paso 2 · Validaciones',
+      subtitulo: 'Lo que el concentrado detecta por sí mismo.',
+      bloques: [
+        T('Qué significa cada aviso'),
+        I('remove_circle', '#ba1a1a', 'Existencia negativa (error)', 'Una unidad dio de baja más de lo que tenía. Hay que corregir ese renglón.'),
+        I('event_busy', '#d97706', 'Caducidades distintas', 'El mismo lote tiene fechas diferentes en unidades distintas: una está mal.'),
+        I('hourglass_bottom', '#d97706', 'A.R.F. o canje sin resolver', 'Lleva 3 meses o más con existencia sin resolver.'),
+        I('lock_open', '#64748b', 'Unidades sin cerrar', 'No es un error: el concentrado es provisional y se completa solo cuando cierren.'),
+        T('Qué hacer'),
+        P(1, 'Ver en el concentrado', 'El botón de cada aviso te lleva al lote con su detalle por unidad ya abierto.'),
+        P(2, 'Corregir en el origen', 'Con "Corregir aquí" editas el renglón de la unidad; escribes el motivo y queda auditado.'),
+        N('Las correcciones se propagan a los meses siguientes de esa unidad y ella recibe el aviso para revisarlas.')
+      ]
+    },
+    jur_concentrado: {
+      titulo: 'Paso 3 · Concentrado',
+      subtitulo: 'La suma en vivo de las unidades, por biológico y lote.',
+      bloques: [
+        T('Cómo leerlo'),
+        I('palette', '#0284c7', 'Un biológico a la vez', 'Los botones de color filtran; "Solo con alertas" deja únicamente los lotes con algo que revisar.'),
+        I('sell', '#f59e0b', 'Provisional', 'Al menos una unidad de ese lote todavía no cierra: el número puede cambiar.'),
+        I('groups', '#64748b', 'Unidades', 'Cuántas unidades ya cerraron de las que reportan ese lote.'),
+        T('Corregir'),
+        P(1, 'Ver', 'Abre el detalle del lote por unidad.'),
+        P(2, 'Corregir aquí', 'Solo en unidades ya cerradas: reabre su renglón. Escribes el motivo, editas y guardas.'),
+        N('Quien solo consulta (visualizador) ve todo el concentrado pero no puede corregir.')
+      ]
+    },
+    jur_informe: {
+      titulo: 'Paso 4 · Informe',
+      subtitulo: 'Lo último del mes.',
+      bloques: [
+        T('La lista'),
+        I('lock', '#16a34a', 'Movimientos cerrados', 'El informe suma solo lo que ya cerró. Si faltan, te pregunta antes de generarlo.'),
+        I('rule', '#d97706', 'Errores y advertencias', 'Lo ideal es generar el informe sin errores pendientes.'),
+        T('Los entregables'),
+        I('summarize', '#7c3aed', 'Informe del mes', 'Una foto del concentrado, con quién la generó y cuándo. Puedes generar otro si algo cambia después.'),
+        I('download', '#0284c7', 'Excel y PDF', 'El Excel usa el formato oficial de Movimiento de Biológico; el PDF sirve para archivar o imprimir.')
+      ]
+    },
+
+    // ------------------------------------------------------ Cierre del municipio
+    municipal: {
+      titulo: 'Cierre mensual del municipio',
+      subtitulo: 'Cuatro pasos, en el orden en que se hace: ver quién envió, revisar, comprobar el concentrado y entregar.',
+      bloques: [
+        T('Los cuatro pasos'),
+        P(1, 'Envíos', 'Ves qué unidades ya enviaron su SINBA-SIS y cuáles faltan. Tocas una unidad para revisarla.'),
+        P(2, 'Revisión', 'Unidad por unidad: sus cuatro hojas, con anterior/siguiente. Cuando todo cuadra la validas y pasas a la siguiente.'),
+        P(3, 'Concentrado', 'Lo que se arma solo con tus unidades: conciliación, paloteo del municipio, seguimiento de biológico y recibido contra requisición.'),
+        P(4, 'Entrega', 'Una lista te dice si algo quedó pendiente y, con todo validado, descargas el CSV oficial para estadística.'),
+        T('Los puntos de avance'),
+        I('radio_button_unchecked', '#94a3b8', 'Gris · sin enviar', 'La unidad todavía no envía su SINBA-SIS. Puedes ver lo que lleva capturado.'),
+        I('timelapse', '#f59e0b', 'Ámbar · por validar', 'Ya envió y espera tu revisión.'),
+        I('check_circle', '#16a34a', 'Verde · validada', 'Ya la validaste. Un punto es una unidad: tócalo para abrirla.'),
+        T('Para ir más rápido'),
+        I('skip_next', '#0284c7', 'Siguiente por validar', 'Te lleva a la próxima unidad que espera tu revisión, sin volver a la lista.'),
+        I('auto_awesome', '#d97706', 'Al validar, pasa sola', 'Cuando validas una unidad, se abre la siguiente por validar.'),
+        N('Los tres círculos de arriba también son botones. Las hojas de cada unidad funcionan igual que siempre: lo que cambia es el orden en que llegas a ellas.')
+      ]
+    },
+    mun_revision: {
+      titulo: 'Paso 2 · Revisión de la unidad',
+      subtitulo: 'Revisas lo que la unidad envió y, si todo cuadra, la validas.',
+      bloques: [
+        T('Qué revisar'),
+        I('summarize', '#0284c7', 'SIS-06-P', 'El paloteo del mes. Si hay algo que corregir puedes editarlo: cada corrección queda auditada y la unidad la ve para aceptarla.'),
+        I('inventory_2', '#d97706', 'Movimiento', 'Lotes recibidos, aplicados y desechados. Lo aplicado debe ser igual al paloteo; la píldora te avisa cuántos biológicos no coinciden.'),
+        I('table_view', '#16a34a', 'SIS-SS-CE-H e Influenza', 'Se arman solas (solo lectura). Sirven para comprobar que las claves salieron bien.'),
+        T('Validar'),
+        P(1, 'Concilia', 'No se puede validar mientras el paloteo y el Movimiento no coincidan.'),
+        P(2, 'Valida', 'Con el botón Validar de la barra de abajo. Se abre sola la siguiente unidad por validar.'),
+        N('Puedes moverte entre unidades con las flechas, con la lista o tocando su punto. Si hay cambios sin guardar te pregunto antes de salir.')
+      ]
+    },
+    mun_concentrado: {
+      titulo: 'Paso 3 · Concentrado del municipio',
+      subtitulo: 'Se arma solo con lo que capturan las unidades: aquí no se captura nada.',
+      bloques: [
+        T('Qué encuentras'),
+        I('compare_arrows', '#d97706', 'Conciliación', 'Solo aparecen las unidades donde el paloteo y el Movimiento no coinciden, con los biológicos que difieren.'),
+        I('local_shipping', '#0284c7', 'Recibido: requisición vs. unidades', 'Lo que la Jurisdicción repartió al municipio debe ser igual a lo que las unidades capturaron como recibido. Es informativo: no bloquea.'),
+        I('table_chart', '#16a34a', 'Paloteo y seguimiento de biológico', 'Una columna por unidad y el total del municipio. Puedes descargar todo en un Excel.'),
+        I('inventory_2', '#7c3aed', 'Movimiento del municipio', 'El botón de arriba abre el Movimiento del propio municipio; desde octubre ya no se captura, es la suma de las unidades.'),
+        N('El municipio nunca se queda con vacuna: si algo no coincide con la requisición, revisa el recibido de la unidad.')
+      ]
+    },
+    mun_entrega: {
+      titulo: 'Paso 4 · Entrega',
+      subtitulo: 'Lo último del mes: comprobar que no falta nada y descargar el archivo para estadística.',
+      bloques: [
+        T('La lista'),
+        I('check_circle', '#16a34a', 'Todas validadas', 'El CSV oficial solo se habilita cuando todas las unidades del municipio están validadas.'),
+        I('compare_arrows', '#d97706', 'Paloteo y Movimiento', 'Ninguna unidad debe tener diferencias.'),
+        I('info', '#0284c7', 'Recibido vs. requisición', 'Es informativo: te avisa, pero no bloquea la descarga.'),
+        T('Los archivos'),
+        I('outbox', '#7c3aed', 'CSV oficial', 'El que se sube al departamento de estadística: CLUES, variable, valor, mes, año y municipio.'),
+        I('description', '#64748b', 'CSV del panel RDA', 'Abajo queda la vista previa del CSV para el panel RDA de SIREVAQ. Es otro formato: no lo mandes a estadística.')
+      ]
+    },
+
     // ------------------------------------------------------------- Requisiciones
     requi: {
       titulo: 'Requisiciones de biológicos',

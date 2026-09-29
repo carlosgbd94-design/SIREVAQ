@@ -81,7 +81,16 @@ const estado = {
   bloques: [],
   concentrado: [],
   drilldownAbierto: null, // {loteId, categoria}
-  correccionesAbiertas: {} // renglonId -> batchId
+  correccionesAbiertas: {}, // renglonId -> batchId
+  paso: 1,
+  unidadesCuentan: [],   // unidades que suman en el concentrado del mes elegido
+  movPorUnidad: new Map(),
+  validaciones: [],
+  informes: [],
+  sisFilas: [],
+  inicioPorUnidad: '2026-10-01',
+  filtroBio: '',
+  soloAlertas: false
 };
 
 function initDb() { estado.db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
@@ -189,82 +198,351 @@ function seleccion() {
 }
 
 // ---------------------------------------------------------------------------
-// Carga principal
+// Flujo guiado en 4 pasos. El concentrado jurisdiccional se arma solo: es la
+// suma en vivo de los movimientos que van cerrando las unidades (desde el
+// arranque por unidad, cada CLUES; antes, el movimiento de cada municipio y
+// hospital). Lo que hace la jurisdicción cada mes es vigilar ese cierre,
+// atender lo que el sistema detecta, corregir en el origen si hace falta y
+// emitir el informe.
+//
+//   1. Cierre       -- ¿ya cerró cada municipio/hospital? (puntos por unidad)
+//   2. Validaciones -- lo que el propio concentrado detecta que no cuadra.
+//   3. Concentrado  -- la suma por biológico y lote, con corrección en el origen.
+//   4. Informe      -- lista de verificación, informe (foto del mes), Excel y PDF.
 // ---------------------------------------------------------------------------
 
-async function cargarConcentrado() {
+const PASOS_JUR = [
+  { n: 1, t: 'Cierre', icono: 'lock_clock', color: '#0284c7', titulo: '1. Cierre de municipios y hospitales' },
+  { n: 2, t: 'Validaciones', icono: 'rule', color: '#d97706', titulo: '2. Validaciones del concentrado' },
+  { n: 3, t: 'Concentrado', icono: 'table_chart', color: '#16a34a', titulo: '3. Concentrado por biológico y lote' },
+  { n: 4, t: 'Informe', icono: 'summarize', color: '#7c3aed', titulo: '4. Informe del mes' }
+];
+const ORDEN_MUNICIPIOS_JUR = ['QUERETARO', 'CORREGIDORA', 'MARQUES', 'HUIMILPAN', 'NHG', 'HENM'];
+const ETIQUETA_MUNI_JUR = {
+  QUERETARO: 'Querétaro', CORREGIDORA: 'Corregidora', MARQUES: 'El Marqués', HUIMILPAN: 'Huimilpan',
+  NHG: 'Nuevo Hospital General', HENM: 'Hospital del Niño y la Mujer'
+};
+const ES_HOSPITAL_JUR = { NHG: true, HENM: true };
+// Cómo se ve cada estado del movimiento en los puntos: gris = sin movimiento, ámbar = en captura o en corrección, verde = cerrado.
+const CLASE_MOV = { CERRADO: 'completo', EN_CORRECCION: 'parcial', BORRADOR: 'parcial', SIN_MOVIMIENTO: 'vacio' };
+const TEXTO_MOV = { CERRADO: 'Cerrado', EN_CORRECCION: 'En corrección', BORRADOR: 'En captura', SIN_MOVIMIENTO: 'Sin movimiento' };
+
+// Cada validación que devuelve el servidor, explicada para quien la lee.
+const INFO_VALIDACION = {
+  EXISTENCIA_NEGATIVA: { titulo: 'Existencia negativa', icono: 'remove_circle', texto: 'Una unidad dio de baja más de lo que tenía. Corrige ese renglón en el concentrado: la corrección queda auditada y se propaga a los meses siguientes.', accion: true },
+  CADUCIDAD_INCONSISTENTE: { titulo: 'Caducidades distintas para un mismo lote', icono: 'event_busy', texto: 'El mismo lote aparece con fechas de caducidad diferentes entre unidades. Revísalo y corrige la que esté mal.', accion: true },
+  ARF_SIN_RESOLVER: { titulo: 'A.R.F. o canje sin resolver', icono: 'hourglass_bottom', texto: 'Un lote lleva 3 meses o más en A.R.F. o canje con existencia sin resolver.', accion: true },
+  MOVIMIENTO_NO_CERRADO: { titulo: 'Unidades que todavía no cierran', icono: 'lock_open', texto: 'Mientras no cierren, el concentrado es provisional: se completa solo en cuanto cada unidad cierre su mes.', accion: false }
+};
+
+function puedeEditar() {
+  const rol = estado.perfil ? estado.perfil.rol : null;
+  return !estado.perfil || rol === 'ADMIN' || rol === 'JURISDICCIONAL';
+}
+function plural(n, uno, varios) { return `${n} ${n === 1 ? uno : varios}`; }
+function escJ(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function nombreMesJ(m) { const x = MESES.find((k) => k.v === m); return x ? x.l : String(m); }
+
+// Misma regla que biovac_cuenta_para_jurisdiccion en la base: qué filas de
+// biovac_unidades se suman en el concentrado de ese mes.
+function cuentaParaJurisdiccion(u, anio, mes, todas) {
+  const primerDia = `${anio}-${String(mes).padStart(2, '0')}-01`;
+  const esPseudo = (x) => Boolean(x.clues && x.clues.startsWith('JS1-'));
+  if (primerDia < (estado.inicioPorUnidad || '2026-10-01')) return esPseudo(u);
+  return !esPseudo(u) || !todas.some((r) => r.municipio === u.municipio && !esPseudo(r) && r.activo);
+}
+
+async function cargarConcentrado(opciones) {
   const { jurisdiccionId, anio, mes } = seleccion();
   if (!jurisdiccionId) return;
   estado.drilldownAbierto = null;
+  estado.cargando = true;
 
   const [{ data: unidades, error: eU }, { data: validaciones, error: eV },
-    { data: concentrado, error: eC }, { data: informes, error: eI }] = await Promise.all([
+    { data: concentrado, error: eC }, { data: informes, error: eI }, { data: cfg }] = await Promise.all([
     estado.db.from('biovac_unidades').select('*').eq('jurisdiccion_id', jurisdiccionId).eq('activo', true).order('nombre'),
     estado.db.rpc('biovac_validar_concentrado', { p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes }),
     estado.db.rpc('biovac_concentrado_jurisdiccion', { p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes, p_incluir_borrador: true }),
-    estado.db.from('biovac_informes_jurisdiccionales').select('*').eq('jurisdiccion_id', jurisdiccionId).eq('anio', anio).eq('mes', mes).order('generado_en', { ascending: false })
+    estado.db.from('biovac_informes_jurisdiccionales').select('*').eq('jurisdiccion_id', jurisdiccionId).eq('anio', anio).eq('mes', mes).order('generado_en', { ascending: false }),
+    estado.db.from('sis_config').select('valor').eq('clave', 'inicio_captura_por_unidad').maybeSingle()
   ]);
+  estado.cargando = false;
   if (eU || eV || eC || eI) { toast('Error: ' + (eU || eV || eC || eI).message, 'error'); return; }
+  if (cfg && cfg.valor) estado.inicioPorUnidad = cfg.valor;
+
+  const cuentan = (unidades || []).filter((u) => cuentaParaJurisdiccion(u, anio, mes, unidades));
+  const { data: movimientos } = await estado.db.from('biovac_movimientos')
+    .select('unidad_id, estado, fue_corregido').in('unidad_id', cuentan.map((u) => u.id)).eq('anio', anio).eq('mes', mes);
+  estado.unidadesCuentan = cuentan;
+  estado.movPorUnidad = new Map((movimientos || []).map((m) => [m.unidad_id, m]));
+  estado.validaciones = validaciones || [];
+  estado.informes = informes || [];
+  estado.concentrado = concentrado || [];
+  estado.sisFilas = [];
+  // Avance del SINBA-SIS de las unidades (solo informativo: el concentrado sale del Movimiento).
+  try {
+    const { data: sis } = await estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio });
+    estado.sisFilas = sis || [];
+  } catch (e) { /* sin permiso o sin datos: no estorba */ }
 
   document.getElementById('panelResultados').style.display = 'block';
-
-  await renderEstadoUnidades(unidades, anio, mes);
-  renderValidaciones(validaciones);
-  renderInformes(informes);
-  estado.concentrado = concentrado;
-  renderConcentrado(concentrado);
+  document.getElementById('dockJuris').style.display = 'flex';
+  document.body.classList.add('con-dock');
+  renderTodoJur();
+  if (!(opciones && opciones.mantenerPaso)) activarPasoJur(estado.paso || 1, true);
 }
 
-async function renderEstadoUnidades(unidades, anio, mes) {
-  const { data: movimientos } = await estado.db.from('biovac_movimientos')
-    .select('unidad_id, estado, fue_corregido')
-    .in('unidad_id', unidades.map((u) => u.id)).eq('anio', anio).eq('mes', mes);
-  const mapa = new Map((movimientos || []).map((m) => [m.unidad_id, m]));
+function resumenJur() {
+  const u = estado.unidadesCuentan || [];
+  const est = (x) => (estado.movPorUnidad.get(x.id) || {}).estado || 'SIN_MOVIMIENTO';
+  const cerradas = u.filter((x) => est(x) === 'CERRADO').length;
+  const errores = estado.validaciones.filter((v) => v.severidad === 'ERROR').length;
+  const advertencias = estado.validaciones.filter((v) => v.severidad !== 'ERROR' && v.codigo !== 'MOVIMIENTO_NO_CERRADO').length;
+  const lotes = new Set(estado.concentrado.map((f) => f.lote_id + '|' + f.categoria)).size;
+  return { total: u.length, cerradas, errores, advertencias, lotes, informes: estado.informes.length, est };
+}
 
-  document.getElementById('estadoUnidades').innerHTML = unidades.map((u) => {
-    const m = mapa.get(u.id);
-    const est = m ? m.estado : 'SIN_MOVIMIENTO';
-    return `<div class="chip-municipio">
-      <b>${u.nombre}</b>
-      <span class="estado-badge estado-${est}">${est.replace('_', ' ')}</span>
-      ${m && m.fue_corregido ? '<span class="corregido"><span class="material-symbols-rounded">warning</span> corregido</span>' : ''}
+function estadoPasosJur() {
+  const r = resumenJur();
+  const cierreHecho = r.total > 0 && r.cerradas === r.total;
+  const valHecho = cierreHecho && r.errores === 0 && r.advertencias === 0;
+  return [
+    { hecho: cierreHecho, texto: r.total ? `${r.cerradas} de ${r.total} movimientos cerrados` : 'Sin unidades', pill: r.total ? `${r.cerradas}/${r.total}` : '', pillCls: cierreHecho ? 'ok' : '' },
+    { hecho: valHecho, alerta: r.errores > 0, texto: r.errores ? plural(r.errores, 'error por atender', 'errores por atender') : (r.advertencias ? plural(r.advertencias, 'advertencia', 'advertencias') : (cierreHecho ? 'Sin inconsistencias' : 'Provisional hasta que todos cierren')), pill: r.errores ? `${r.errores} ≠` : (r.advertencias ? `${r.advertencias}` : (valHecho ? '✓' : '')), pillCls: r.errores ? 'aviso' : (r.advertencias ? 'aviso' : (valHecho ? 'ok' : '')) },
+    { hecho: valHecho, texto: r.lotes ? `${plural(r.lotes, 'lote', 'lotes')} sumados` : 'Sin movimientos este mes', pill: r.lotes ? String(r.lotes) : '', pillCls: '' },
+    { hecho: r.informes > 0, texto: r.informes ? `${plural(r.informes, 'informe generado', 'informes generados')}` : 'Aún sin generar', pill: r.informes ? '✓' : '', pillCls: r.informes ? 'ok' : '' }
+  ];
+}
+
+function pintarRutaJur() {
+  const cont = document.getElementById('rutaJuris');
+  if (!cont) return;
+  const ps = estadoPasosJur();
+  cont.innerHTML = `
+    <ol class="ruta-pasos">
+      ${PASOS_JUR.map((p, i) => {
+        const e = ps[i];
+        const cls = e.hecho ? 'hecho' : (e.alerta ? 'alerta' : (estado.paso === p.n ? 'actual' : ''));
+        return `<li class="ruta-paso ${cls}" data-jpaso="${p.n}" title="Ir al paso ${p.n}">
+          <span class="ruta-num">${e.hecho ? '<span class="material-symbols-rounded">check</span>' : (e.alerta ? '<span class="material-symbols-rounded">priority_high</span>' : p.n)}</span>
+          <span class="ruta-txt"><b>${p.t}</b><small>${escJ(e.texto)}</small></span>
+        </li>`;
+      }).join('')}
+    </ol>
+    <button type="button" class="ayuda-btn ruta-ayuda" data-ayuda="jur" title="Cómo funciona el concentrado jurisdiccional" aria-label="Cómo funciona el concentrado jurisdiccional"><span class="material-symbols-rounded">help</span></button>`;
+  PASOS_JUR.forEach((p, i) => {
+    const el = document.getElementById('pildoraJ' + p.n);
+    if (!el) return;
+    el.textContent = ps[i].pill;
+    el.className = 'hoja-pildora' + (ps[i].pillCls ? ' ' + ps[i].pillCls : '');
+  });
+  const actual = ps[estado.paso - 1];
+  document.getElementById('dockJTitulo').textContent = `Paso ${estado.paso} de 4 · ${PASOS_JUR[estado.paso - 1].t}`;
+  document.getElementById('dockJDetalle').textContent = actual.texto;
+  const r = resumenJur();
+  document.getElementById('dockJPunto').className = 'dock-punto' + (actual.hecho ? ' validado' : (r.cerradas ? ' enviado' : ''));
+  document.getElementById('btnSiguiente').style.display = estado.paso < 4 ? 'inline-flex' : 'none';
+  document.getElementById('btnGenerarInforme').style.display = (estado.paso === 4 && puedeEditar()) ? 'inline-flex' : 'none';
+}
+
+function activarPasoJur(n, sinScroll) {
+  estado.paso = n;
+  document.querySelectorAll('#dockJTabs .hoja-tab').forEach((t) => t.classList.toggle('activo', Number(t.dataset.jpaso) === n));
+  document.querySelectorAll('.paso-panel').forEach((p) => { p.style.display = p.id === 'panelPaso' + n ? 'block' : 'none'; });
+  pintarRutaJur();
+  if (!sinScroll) window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderTodoJur() {
+  renderCierre();
+  renderValidaciones(estado.validaciones);
+  renderChipsBioJur();
+  pintarConcentrado();
+  renderInforme();
+  pintarRutaJur();
+}
+
+// ------------------------------------------------------------------ paso 1
+function renderCierre() {
+  const { anio, mes } = seleccion();
+  const r = resumenJur();
+  const porMuni = new Map();
+  (estado.unidadesCuentan || []).forEach((u) => { if (!porMuni.has(u.municipio)) porMuni.set(u.municipio, []); porMuni.get(u.municipio).push(u); });
+  const munis = ORDEN_MUNICIPIOS_JUR.filter((m) => porMuni.has(m)).concat([...porMuni.keys()].filter((m) => !ORDEN_MUNICIPIOS_JUR.includes(m)));
+  const desdeUnidades = `${anio}-${String(mes).padStart(2, '0')}-01` >= (estado.inicioPorUnidad || '2026-10-01');
+  const sisPorClues = new Map((estado.sisFilas || []).map((f) => [f.clues, f]));
+
+  const cta = r.total > 0 && r.cerradas === r.total
+    ? '<button type="button" class="btn-primario" data-jir="2"><span class="material-symbols-rounded">rule</span> Todo cerrado: ver validaciones</button>'
+    : `<span class="jur-espera"><span class="material-symbols-rounded">hourglass_top</span> Faltan ${plural(r.total - r.cerradas, 'movimiento por cerrar', 'movimientos por cerrar')}: el concentrado los suma solo al cerrar</span>`;
+  const pct = r.total ? Math.round((r.cerradas / r.total) * 100) : 0;
+  document.getElementById('cierreResumen').innerHTML = `
+    <div class="jur-avance">
+      <div class="jur-avance-cab"><div><b>${nombreMesJ(mes)} ${anio}</b><small>${desdeUnidades ? 'Cada unidad cierra su Movimiento al enviar su SINBA-SIS.' : 'Antes del arranque por unidad, cada municipio y hospital cierra su propio Movimiento.'}</small></div><span class="jur-pct">${r.cerradas}/${r.total} cerrados</span></div>
+      <div class="jur-barra"><i style="width:${pct}%"></i></div>
+      <div class="jur-leyenda"><span><i class="pt vacio"></i>sin movimiento</span><span><i class="pt parcial"></i>en captura o corrección</span><span><i class="pt completo"></i>cerrado</span></div>
+    </div>
+    <div class="jur-acciones">${cta}</div>`;
+
+  document.getElementById('estadoUnidades').innerHTML = munis.map((m) => {
+    const us = porMuni.get(m);
+    const cerr = us.filter((u) => r.est(u) === 'CERRADO').length;
+    const completo = cerr === us.length;
+    let sisTxt = '';
+    if (desdeUnidades) {
+      const filas = us.map((u) => sisPorClues.get(u.clues)).filter(Boolean);
+      if (filas.length) sisTxt = `SINBA-SIS: ${filas.filter((f) => f.estado === 'VALIDADO').length} validados · ${filas.filter((f) => f.estado === 'ENVIADO').length} por validar`;
+    }
+    return `<div class="jur-muni ${completo ? 'completo' : ''}">
+      <div class="jur-muni-cab">
+        <span class="jur-muni-icono"><span class="material-symbols-rounded">${ES_HOSPITAL_JUR[m] ? 'local_hospital' : 'location_city'}</span></span>
+        <div class="jur-muni-tit"><b>${escJ(ETIQUETA_MUNI_JUR[m] || m)}</b><small>${cerr} de ${us.length} ${us.length === 1 ? 'cerrado' : 'cerrados'}${sisTxt ? ' · ' + escJ(sisTxt) : ''}</small></div>
+        ${completo ? '<span class="material-symbols-rounded jur-ok">check_circle</span>' : ''}
+      </div>
+      <div class="puntos">${us.map((u) => {
+        const mov = estado.movPorUnidad.get(u.id);
+        const e = mov ? mov.estado : 'SIN_MOVIMIENTO';
+        return `<span class="pt ${CLASE_MOV[e]}" title="${escJ(u.nombre + ' — ' + TEXTO_MOV[e] + (mov && mov.fue_corregido ? ' (corregido)' : ''))}"></span>`;
+      }).join('')}</div>
+      <details class="jur-detalle">
+        <summary>Ver unidades</summary>
+        <table><tbody>${us.map((u) => {
+          const mov = estado.movPorUnidad.get(u.id);
+          const e = mov ? mov.estado : 'SIN_MOVIMIENTO';
+          return `<tr><td>${escJ(u.nombre)}</td><td><span class="estado-badge estado-${e}">${TEXTO_MOV[e]}</span>${mov && mov.fue_corregido ? ' <span class="corregido"><span class="material-symbols-rounded">warning</span> corregido</span>' : ''}</td>
+            <td>${mov ? `<button type="button" class="btn-icono" data-action="ver-pdf-unidad" data-unidad="${u.id}" data-anio="${anio}" data-mes="${mes}" title="Ver PDF de ${escJ(u.nombre)}"><span class="material-symbols-rounded">picture_as_pdf</span></button>` : ''}</td></tr>`;
+        }).join('')}</tbody></table>
+      </details>
+    </div>`;
+  }).join('') || '<div class="jur-vacio">No hay unidades que cuenten para el concentrado de este mes.</div>';
+}
+
+// ------------------------------------------------------------------ paso 2
+function renderValidaciones(validaciones) {
+  const cont = document.getElementById('listaValidaciones');
+  const lista = validaciones || [];
+  const errores = lista.filter((v) => v.severidad === 'ERROR').length;
+  const otras = lista.length - errores;
+  const cabecera = !lista.length
+    ? '<p class="sin-validaciones"><span class="material-symbols-rounded">check_circle</span> Sin inconsistencias detectadas: el concentrado cuadra.</p>'
+    : `<p class="jur-val-resumen">${errores ? `<b class="err">${plural(errores, 'error', 'errores')}</b>` : ''}${errores && otras ? ' · ' : ''}${otras ? `<b class="adv">${plural(otras, 'advertencia', 'advertencias')}</b>` : ''}</p>`;
+  const codigos = [...new Set(lista.map((v) => v.codigo))].sort((a, b) => (a === 'MOVIMIENTO_NO_CERRADO') - (b === 'MOVIMIENTO_NO_CERRADO'));
+  cont.innerHTML = cabecera + codigos.map((codigo) => {
+    const items = lista.filter((v) => v.codigo === codigo);
+    const info = INFO_VALIDACION[codigo] || { titulo: codigo, icono: 'info', texto: '', accion: false };
+    const sev = items[0].severidad;
+    const cuerpo = codigo === 'MOVIMIENTO_NO_CERRADO'
+      ? `<div class="jur-chips-unidades">${items.map((v) => `<span class="jur-chip-u">${escJ(v.unidad)}</span>`).join('')}</div>`
+      : `<ul class="jur-val-lista">${items.map((v) => `<li>
+          <span><b>${escJ(v.biologico || '')}</b> · lote ${escJ(v.lote || '')}<small>${escJ(v.unidad || '')}</small></span>
+          ${info.accion ? `<button type="button" class="btn-secundario btn-mini" data-action="ir-lote" data-biologico="${escJ(v.biologico)}" data-lote="${escJ(v.lote)}"><span class="material-symbols-rounded">manage_search</span> Ver en el concentrado</button>` : ''}
+        </li>`).join('')}</ul>`;
+    return `<div class="validacion-grupo ${sev}">
+      <div class="validacion-cab"><span class="material-symbols-rounded">${info.icono}</span><div><b>${escJ(info.titulo)}</b><small>${escJ(info.texto)}</small></div><span class="validacion-n">${items.length}</span></div>
+      ${cuerpo}
     </div>`;
   }).join('');
 }
 
-function renderValidaciones(validaciones) {
-  const cont = document.getElementById('listaValidaciones');
-  if (!validaciones || validaciones.length === 0) {
-    cont.innerHTML = '<p class="sin-validaciones"><span class="material-symbols-rounded">check_circle</span> Sin inconsistencias detectadas.</p>';
-    return;
-  }
-  cont.innerHTML = validaciones.map((v) => `
-    <div class="validacion ${v.severidad}">
-      <span class="codigo">${v.severidad}</span>
-      <span>${v.mensaje}${v.unidad ? ' — <b>' + v.unidad + '</b>' : ''}${v.biologico ? ' · ' + v.biologico : ''}${v.lote ? ' · lote ' + v.lote : ''}</span>
-    </div>`).join('');
+// ------------------------------------------------------------------ paso 3
+function alertasDeLotes() {
+  const claves = new Set();
+  estado.validaciones.filter((v) => v.codigo !== 'MOVIMIENTO_NO_CERRADO').forEach((v) => claves.add(`${String(v.biologico || '').replace(/\n/g, ' ')}|${v.lote}`));
+  return claves;
 }
 
-function renderInformes(informes) {
+function filasVisibles() {
+  const alertas = alertasDeLotes();
+  return estado.concentrado.filter((f) => {
+    if (estado.filtroBio && f.biologico_id !== estado.filtroBio) return false;
+    if (estado.soloAlertas) {
+      const negativa = Number(f.existencia_final_frascos) < 0;
+      const marcada = alertas.has(`${String(f.nombre_excel || '').replace(/\n/g, ' ')}|${f.numero_lote}`);
+      if (!(negativa || marcada || f.es_provisional)) return false;
+    }
+    return true;
+  });
+}
+
+function renderChipsBioJur() {
+  const bios = [];
+  estado.concentrado.forEach((f) => { if (!bios.some((b) => b.id === f.biologico_id)) bios.push({ id: f.biologico_id, nombre: String(f.nombre_excel || '').replace(/\n/g, ' '), clave: f.clave }); });
+  const cont = document.getElementById('chipsBio');
+  if (estado.filtroBio && !bios.some((b) => b.id === estado.filtroBio)) estado.filtroBio = '';
+  const cortos = (n) => n.replace(/^VACUNA\s+/i, '');
+  cont.innerHTML = bios.length ? `<button type="button" class="jur-chip ${estado.filtroBio ? '' : 'activo'}" data-filtro-bio="" style="--c:#0f172a">Todos</button>`
+    + bios.map((b) => `<button type="button" class="jur-chip ${estado.filtroBio === b.id ? 'activo' : ''}" data-filtro-bio="${b.id}" style="--c:${colorDeBiologico(b.clave)}" title="${escJ(b.nombre)}"><i></i>${escJ(cortos(b.nombre))}</button>`).join('')
+    + `<button type="button" class="jur-chip jur-chip-alertas ${estado.soloAlertas ? 'activo' : ''}" data-solo-alertas="1"><span class="material-symbols-rounded">warning</span>Solo con alertas</button>` : '';
+}
+
+function pintarConcentrado() {
+  renderConcentrado(filasVisibles());
+  const cont = document.getElementById('contenedorConcentrado');
+  if (!filasVisibles().length && estado.concentrado.length) cont.innerHTML = '<p class="jur-vacio">Ningún lote con alertas en este filtro.</p>';
+}
+
+async function irALote(biologico, lote) {
+  const nombre = String(biologico || '').replace(/\n/g, ' ');
+  const fila = estado.concentrado.find((f) => String(f.nombre_excel || '').replace(/\n/g, ' ') === nombre && String(f.numero_lote) === String(lote));
+  estado.soloAlertas = false;
+  estado.filtroBio = fila ? fila.biologico_id : '';
+  activarPasoJur(3, true);
+  renderChipsBioJur();
+  if (fila) {
+    estado.drilldownAbierto = { loteId: fila.lote_id, categoria: fila.categoria };
+    pintarConcentrado();
+    await refrescarDrilldown();
+    const el = document.getElementById('drilldownContenido');
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  } else {
+    pintarConcentrado();
+  }
+}
+
+// ------------------------------------------------------------------ paso 4
+function renderInformes(informes) { renderInforme(informes); }
+
+function renderInforme() {
+  const r = resumenJur();
+  const { anio, mes } = seleccion();
+  const cerrado = r.total > 0 && r.cerradas === r.total;
+  const fila = (ok, aviso, titulo, detalle) => `<li class="${ok ? 'ok' : (aviso ? 'aviso' : 'pend')}"><span class="material-symbols-rounded">${ok ? 'check_circle' : (aviso ? 'warning' : 'error')}</span><div><b>${titulo}</b><small>${detalle}</small></div></li>`;
+  document.getElementById('checkInforme').innerHTML =
+    fila(cerrado, false, 'Todos los movimientos cerrados', `${r.cerradas} de ${r.total}${cerrado ? '' : ' — el informe solo suma los movimientos cerrados'}`)
+    + fila(r.errores === 0, false, 'Sin errores en las validaciones', r.errores ? plural(r.errores, 'error por atender', 'errores por atender') : 'Nada que corregir')
+    + fila(r.advertencias === 0, r.advertencias > 0, 'Sin advertencias', r.advertencias ? `${plural(r.advertencias, 'advertencia', 'advertencias')} (no bloquean)` : 'Nada por revisar');
+  document.getElementById('tituloInforme').textContent = `Informe de ${nombreMesJ(mes)} ${anio}`;
+
   const cont = document.getElementById('listaInformes');
-  if (!informes || informes.length === 0) { cont.innerHTML = '<p style="color:var(--muted); font-size:12.5px; margin:0">Aún no se ha generado un informe de este mes.</p>'; return; }
-  cont.innerHTML = informes.map((i) => `
+  const informes = estado.informes || [];
+  cont.innerHTML = informes.length ? informes.map((i) => `
     <div class="informe-fila">
-      <span class="estado-badge estado-${i.estado}">${i.estado.replace(/_/g, ' ')}</span>
-      generado por <b>${i.generado_por || '—'}</b> el ${new Date(i.generado_en).toLocaleString('es-MX')}
-    </div>`).join('');
+      <span class="estado-badge estado-${i.estado}">${String(i.estado).replace(/_/g, ' ')}</span>
+      generado por <b>${escJ(i.generado_por || '—')}</b> el ${new Date(i.generado_en).toLocaleString('es-MX')}
+    </div>`).join('') : '<p style="color:var(--muted); font-size:12.5px; margin:0">Aún no se ha generado un informe de este mes.</p>';
 }
 
 async function generarInforme() {
+  if (!puedeEditar()) return;
   const usuario = usuarioActual();
   if (!usuario) return;
   const { jurisdiccionId, anio, mes } = seleccion();
+  const r = resumenJur();
+  if (r.total > 0 && r.cerradas < r.total) {
+    const seguir = await mostrarModal({
+      titulo: 'Hay movimientos sin cerrar',
+      mensaje: `Faltan ${plural(r.total - r.cerradas, 'movimiento por cerrar', 'movimientos por cerrar')}. El informe es una foto del mes y solo suma los movimientos cerrados: lo que cierre después no entrará en él. ¿Generarlo de todos modos?`,
+      textoAceptar: 'Generar de todos modos'
+    });
+    if (!seguir) return;
+  }
   const { error } = await estado.db.rpc('biovac_generar_informe_jurisdiccional', {
     p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes, p_usuario: usuario
   });
   if (error) { toast('No se pudo generar: ' + error.message, 'error'); return; }
   toast('Informe generado.', 'ok');
-  await cargarConcentrado();
+  await cargarConcentrado({ mantenerPaso: true });
+  pintarRutaJur();
 }
 
 // ---------------------------------------------------------------------------
@@ -380,11 +658,11 @@ function renderFilaConcentrado(f) {
 async function toggleDrilldown(loteId, categoria) {
   if (estado.drilldownAbierto && estado.drilldownAbierto.loteId === loteId && estado.drilldownAbierto.categoria === categoria) {
     estado.drilldownAbierto = null;
-    renderConcentrado(estado.concentrado);
+    pintarConcentrado();
     return;
   }
   estado.drilldownAbierto = { loteId, categoria };
-  renderConcentrado(estado.concentrado);
+  pintarConcentrado();
   await refrescarDrilldown();
 }
 
@@ -435,7 +713,7 @@ function renderFilaDrilldown(d, anio, mes) {
     <td>${enCorreccion ? `<input type="text" data-corr-renglon="${d.renglon_id}" data-corr-campo="observaciones" data-corr-movimiento="${d.movimiento_id}" value="${(d.observaciones || '').replace(/"/g, '&quot;')}">` : (d.observaciones || '')}</td>
     <td>
       ${botonVerPdfUnidad(d, anio, mes)}
-      ${cerrado ? `<button class="btn-mini btn-secundario" data-action="abrir-correccion-mov" data-movimiento="${d.movimiento_id}"><span class="material-symbols-rounded">edit</span> Corregir aquí</button>` : ''}
+      ${cerrado && puedeEditar() ? `<button class="btn-mini btn-secundario" data-action="abrir-correccion-mov" data-movimiento="${d.movimiento_id}"><span class="material-symbols-rounded">edit</span> Corregir aquí</button>` : ''}
       ${enCorreccion ? `<button class="btn-mini btn-primario" data-action="aplicar-correccion-mov" data-movimiento="${d.movimiento_id}"><span class="material-symbols-rounded">check_circle</span> Guardar</button>` : ''}
     </td>
   </tr>`;
@@ -478,7 +756,7 @@ async function aplicarCorreccionMovimiento(movimientoId) {
   await cargarConcentrado();
   if (drilldownPrevio) {
     estado.drilldownAbierto = drilldownPrevio;
-    renderConcentrado(estado.concentrado);
+    pintarConcentrado();
     await refrescarDrilldown();
   }
 }
@@ -575,12 +853,35 @@ function verPdfJurisdiccional() {
 document.addEventListener('DOMContentLoaded', async () => {
   initDb();
   await cargarSesionReal();
-  cargarInicial();
+  await cargarInicial();
+  // Sin jurisdicciones que elegir ni usuario que teclear, esos campos solo estorban.
+  const ocultarCampo = (id) => { const c = document.getElementById(id).closest('.campo'); if (c) c.style.display = 'none'; };
+  if (estado.jurisdicciones.length <= 1) ocultarCampo('selJurisdiccion');
+  if (estado.perfil) ocultarCampo('selUsuario');
+  if (!puedeEditar()) document.getElementById('btnGenerarInforme').style.display = 'none';
 
-  document.getElementById('btnCargar').addEventListener('click', cargarConcentrado);
+  const recargar = () => cargarConcentrado({ mantenerPaso: true });
+  document.getElementById('btnCargar').addEventListener('click', recargar);
+  ['selJurisdiccion', 'selAnio', 'selMes'].forEach((id) => document.getElementById(id).addEventListener('change', recargar));
   document.getElementById('btnGenerarInforme').addEventListener('click', generarInforme);
   document.getElementById('btnExportarExcelJurisdiccional').addEventListener('click', exportarExcelJurisdiccional);
   document.getElementById('btnVerPdfJurisdiccional').addEventListener('click', verPdfJurisdiccional);
+  document.getElementById('btnSiguiente').addEventListener('click', () => activarPasoJur(Math.min(4, estado.paso + 1)));
+  if (window.DockGlass) window.DockGlass.instalar(document.getElementById('dockJTabs'));
+
+  document.addEventListener('click', (ev) => {
+    const paso = ev.target.closest('[data-jpaso]');
+    if (paso) { activarPasoJur(Number(paso.dataset.jpaso)); return; }
+    const ir = ev.target.closest('[data-jir]');
+    if (ir) { activarPasoJur(Number(ir.dataset.jir)); return; }
+    const filtro = ev.target.closest('[data-filtro-bio]');
+    if (filtro) { estado.filtroBio = filtro.dataset.filtroBio; estado.drilldownAbierto = null; renderChipsBioJur(); pintarConcentrado(); return; }
+    if (ev.target.closest('[data-solo-alertas]')) { estado.soloAlertas = !estado.soloAlertas; estado.drilldownAbierto = null; renderChipsBioJur(); pintarConcentrado(); return; }
+    const lote = ev.target.closest('[data-action="ir-lote"]');
+    if (lote) { irALote(lote.dataset.biologico, lote.dataset.lote); return; }
+    const pdf = ev.target.closest('[data-action="ver-pdf-unidad"]');
+    if (pdf) window.open(`biovac_print.html?unidad=${pdf.dataset.unidad}&anio=${pdf.dataset.anio}&mes=${pdf.dataset.mes}`, '_blank');
+  });
 
   const cont = document.getElementById('contenedorConcentrado');
   cont.addEventListener('click', (ev) => {
@@ -594,4 +895,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   cont.addEventListener('change', (ev) => {
     if (ev.target.matches('[data-corr-renglon][data-corr-campo]')) guardarCampoDrilldown(ev.target);
   });
+
+  await cargarConcentrado();
 });
