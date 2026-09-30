@@ -1530,6 +1530,44 @@ function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, 
   // se escribe solo -- mismo criterio que ofrecerCargaDesdeRequisiciones);
   // con 2+ lotes se deja en manual porque no hay forma de saber cómo
   // repartir el total entre ellos.
+  // SR/SRP y DPT/TdPa: si no coincide, explicar con las cifras de las DOS
+  // vacunas del par (una sustitución mueve dosis de una a otra) si se trata
+  // de un comodín, o de un error de captura -- mismo diagnóstico que el panel
+  // del paloteo (window.SIS06PComodin, sis06p_biovac_module.js).
+  let avisoPar = '';
+  const cmd = window.SIS06PComodin;
+  const par = cmd && cmd.PARES.find((d) => d.claves.indexOf(bio.clave) >= 0);
+  if (par && !coincide) {
+    const claveOtra = par.claves.find((c) => c !== bio.clave);
+    const infoOtra = estado.sis06pTotales[claveOtra];
+    const bioOtra = estado.biologicos.find((b) => b.clave === claveOtra);
+    if (infoOtra && bioOtra) {
+      const aplicadaOtra = estado.renglones
+        .filter((r) => r.biovac_lotes.biologico_id === bioOtra.id)
+        .reduce((a2, r) => a2 + equivalente(bioOtra, Number(r.aplicadas_a) || 0, Number(r.aplicadas_b) || 0), 0);
+      const esA = bio.clave === par.claves[0];
+      const mia = { p: totalSIS06P - (info.ajustePaloteo || 0), a: totalAplicadas - (info.ajusteAplicado || 0) };
+      const otra = { p: infoOtra.paloteo - (infoOtra.ajustePaloteo || 0), a: aplicadaOtra };
+      const A = esA ? mia : otra;
+      const B = esA ? otra : mia;
+      const n2 = cmd.num2;
+      const x = {
+        pA: n2(A.p), aA: n2(A.a), pB: n2(B.p), aB: n2(B.a),
+        exceso: n2(A.p - A.a), faltante: n2(B.a - B.p),
+        difTotal: n2((A.p + B.p) - (A.a + B.a)),
+        limiteFwd: Math.max(0, Math.min(n2(A.p), n2(B.a))), limiteRev: Math.max(0, Math.min(n2(B.p), n2(A.a)))
+      };
+      // Comodín ya aplicado por el servidor: en el biológico A el sentido "B
+      // reportada como A" sube su aplicado y "A como B" su paloteo; en B al revés.
+      const aj = esA
+        ? { fwd: n2(info.ajusteAplicado), rev: n2(info.ajustePaloteo) }
+        : { fwd: n2(info.ajustePaloteo), rev: n2(info.ajusteAplicado) };
+      const dg = cmd.diagnosticoPar(par, x, aj);
+      const accion = dg.sug
+        ? ` Captura ${dg.sug.n} en el comodín de la pestaña SIS-06-P y guarda.` : '';
+      avisoPar = `<div style="flex-basis:100%; font-weight:600; font-size:11px; opacity:.95;">${par.a} = paloteo ${x.pA} / aplicadas ${x.aA} · ${par.b} = paloteo ${x.pB} / aplicadas ${x.aB}. ${dg.texto}${accion}</div>`;
+    }
+  }
   const puedeUsarTotal = editable && estado.perfil && estado.perfil.rol === 'UNIDAD' && bio.clave === 'ANTIINFLUENZA'
     && !coincide && totalSIS06P > 0 && normalesLotes.length === 1 && Number(normalesLotes[0].aplicadas_a || 0) === 0;
   return `<div data-sis06p-compara="${bio.id}" style="margin-top:8px; padding:8px 12px; border-radius:10px; font-size:11.5px; font-weight:700;
@@ -1539,6 +1577,7 @@ function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, 
       display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
       <span><span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">${coincide ? 'check_circle' : 'compare_arrows'}</span>
       ${fuente} ${totalSIS06P}${info.ajustePaloteo ? ` (incluye ${info.ajustePaloteo} de comodín de sustitución)` : ''} dosis aplicadas de ${info.claves.length > 1 ? `${info.etiqueta.replace(' (se concilian juntas)', '')} (juntas)` : 'este biológico'} este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas}${info.ajusteAplicado ? ` (incluye ${info.ajusteAplicado} de comodín de sustitución)` : ''} aplicadas${info.claves.length > 1 ? ' entre los biológicos del grupo' : ''} -- deben ser iguales: no se puede enviar el SIS mientras no coincidan)`}.</span>
+      ${avisoPar}
       ${puedeUsarTotal ? `<button type="button" class="btn-mini btn-secundario" data-action="usar-total-influenza" data-renglon="${normalesLotes[0].id}" data-total="${totalSIS06P}"><span class="material-symbols-rounded">sync</span> Usar este total aquí</button>` : ''}
     </div>`;
 }

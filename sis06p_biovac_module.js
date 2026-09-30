@@ -337,32 +337,199 @@
   // dosis fueron; sin ese dato la diferencia bloquea el envío como cualquier
   // otra. Se guarda con el botón Guardar del paloteo (columna `ajustes`).
   const AJUSTES_DEF = [
-    { key: 'SRP_COMO_SR', etiqueta: 'Dosis de SRP aplicadas y reportadas en el paloteo como SR', claves: ['SR', 'SRP'] },
-    { key: 'TDPA_COMO_DPT', etiqueta: 'Dosis de TdPa aplicadas y reportadas en el paloteo como DPT', claves: ['DPT', 'TDPA'] }
+    { idx: 0, a: 'SR', b: 'SRP', claves: ['SR', 'SRP'], sisA: 'SR DOBLE VIRAL', sisB: 'S R P  TRIPLE VIRAL', keyFwd: 'SRP_COMO_SR', keyRev: 'SR_COMO_SRP' },
+    { idx: 1, a: 'DPT', b: 'TdPa', claves: ['DPT', 'TDPA'], sisA: 'DPT', sisB: 'Tdpa', keyFwd: 'TDPA_COMO_DPT', keyRev: 'DPT_COMO_TDPA' }
   ];
+  const AJUSTE_KEYS = AJUSTES_DEF.reduce((acc, d) => acc.concat([d.keyFwd, d.keyRev]), []);
+
+  const _num2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
+  // Paloteo de un biológico SIS tal como está EN PANTALLA (lo que se está
+  // tecleando, sin guardar): suma de los totales de sus variables, con la
+  // media dosis contando ½ igual que el servidor. null si esas celdas no
+  // están pintadas (se usa entonces lo guardado).
+  function paloteoVivo(sisBio) {
+    const vars = _sisVariablesCache.filter((v) => v.biologico === sisBio);
+    let total = 0; let hay = false;
+    vars.forEach((v) => {
+      const el = document.getElementById(`sisb_${v.fila_excel}_total`);
+      if (!el) return;
+      hay = true;
+      total += (parseFloat(el.value) || 0) * (v.media_dosis ? 0.5 : 1);
+    });
+    return hay ? _num2(total) : null;
+  }
+
+  function ajusteVivo(key, currentReport) {
+    const el = document.getElementById(`sisb_ajuste_${key}`);
+    if (el) return _num2(parseFloat(el.value));
+    return _num2(((currentReport && currentReport.ajustes) || {})[key]);
+  }
+
+  // Radiografía de un par (A = SR/DPT, B = SRP/TdPa) SIN comodín: el servidor
+  // devuelve las filas con el comodín ya sumado, aquí se le resta para ver
+  // las cifras crudas. El paloteo es el de la pantalla (en vivo); el aplicado
+  // es el último guardado en Movimiento. Una sustitución solo MUEVE dosis de
+  // un lado a otro y nunca cambia el total del par.
+  function analisisPar(d) {
+    const filas = _conciliacionCache || [];
+    const buscar = (clave) => filas.find((f) => (f.claves || []).length === 1 && f.claves[0] === clave);
+    const fa = buscar(d.claves[0]);
+    const fb = buscar(d.claves[1]);
+    const vivoA = paloteoVivo(d.sisA);
+    const vivoB = paloteoVivo(d.sisB);
+    const pA = vivoA !== null ? vivoA : _num2(fa ? Number(fa.paloteo) - Number(fa.ajuste_paloteo || 0) : 0);
+    const pB = vivoB !== null ? vivoB : _num2(fb ? Number(fb.paloteo) - Number(fb.ajuste_paloteo || 0) : 0);
+    const aA = _num2(fa ? Number(fa.aplicado) - Number(fa.ajuste_aplicado || 0) : 0);
+    const aB = _num2(fb ? Number(fb.aplicado) - Number(fb.ajuste_aplicado || 0) : 0);
+    return {
+      pA, aA, pB, aB,
+      exceso: _num2(pA - aA),     // paloteo de A de más (negativo: de menos)
+      faltante: _num2(aB - pB),   // paloteo de B de menos (negativo: de más)
+      difTotal: _num2((pA + pB) - (aA + aB)),
+      limiteFwd: Math.max(0, Math.min(pA, aB)),  // B aplicada y reportada como A
+      limiteRev: Math.max(0, Math.min(pB, aA))   // A aplicada y reportada como B
+    };
+  }
+
+  // Diagnóstico en palabras de un par, a partir de las cifras crudas y del
+  // comodín tecleado/guardado aj = { fwd, rev }. Lo usan el panel del paloteo
+  // y el aviso por biológico en Movimiento (mismo texto en los dos). Las
+  // dosis DESECHADAS no cuentan como aplicadas, así que un caso híbrido --
+  // 8 SR reales + 10 SRP reportadas como SR: paloteo SR 18 / SRP 10;
+  // Movimiento SR 8 (+2 desechadas) / SRP 20 -- da exceso 10 = faltante 10 y
+  // el comodín correcto es 10 (SRP reportadas como SR). Sentido contrario
+  // (SR aplicada y reportada como SRP): exceso y faltante salen NEGATIVOS e
+  // iguales.
+  // Devuelve { texto, color, sug: {dir:'fwd'|'rev', n, parcial} | null, cuadra }.
+  function diagnosticoPar(d, x, aj) {
+    const fwd = _num2(aj && aj.fwd); const rev = _num2(aj && aj.rev);
+    const par = `${d.a} + ${d.b}`;
+    const nombre = (dir) => (dir === 'fwd' ? `${d.b} aplicadas y reportadas como ${d.a}` : `${d.a} aplicadas y reportadas como ${d.b}`);
+    const resA = _num2((x.pA + rev) - (x.aA + fwd));
+    const resB = _num2((x.pB + fwd) - (x.aB + rev));
+    const hayTeclado = fwd > 0 || rev > 0;
+
+    let sug = null;
+    if (x.exceso !== 0 && x.exceso === x.faltante) sug = { dir: x.exceso > 0 ? 'fwd' : 'rev', n: Math.abs(x.exceso), parcial: false };
+    else if (x.exceso > 0 && x.faltante > 0) sug = { dir: 'fwd', n: Math.min(x.exceso, x.faltante), parcial: true };
+    else if (x.exceso < 0 && x.faltante < 0) sug = { dir: 'rev', n: Math.min(-x.exceso, -x.faltante), parcial: true };
+
+    const nota = ' (las desechadas no cuentan como aplicadas)';
+    const noEsSustitucion = `${par} sumados difieren en ${Math.abs(x.difTotal)} dosis (paloteo ${_num2(x.pA + x.pB)} vs Movimiento ${_num2(x.aA + x.aB)}). Una sustitución solo pasa dosis de una vacuna a la otra y no cambia el total: eso es un error de captura, corrige el paloteo o las "aplicadas" del Movimiento${nota}.`;
+    let texto = ''; let color = 'var(--warning)'; let cuadra = false;
+    if (fwd > x.limiteFwd) {
+      color = 'var(--error, #b3261e)';
+      texto = `El comodín de ${nombre('fwd')} (${fwd}) NO se aplicaría: es mayor a lo capturado (máximo ${x.limiteFwd}).`;
+    } else if (rev > x.limiteRev) {
+      color = 'var(--error, #b3261e)';
+      texto = `El comodín de ${nombre('rev')} (${rev}) NO se aplicaría: es mayor a lo capturado (máximo ${x.limiteRev}).`;
+    } else if (fwd > 0 && rev > 0) {
+      texto = 'Capturaste comodín en los dos sentidos. Normalmente solo aplica uno: revisa cuál de las dos sustituciones fue la real.';
+    } else if (hayTeclado && resA === 0 && resB === 0) {
+      color = 'var(--success)'; cuadra = true;
+      texto = `Cuadra: ${fwd > 0 ? `${fwd} dosis de ${nombre('fwd')}` : `${rev} dosis de ${nombre('rev')}`}.`;
+    } else if (hayTeclado) {
+      texto = `Con ese comodín todavía quedan diferencias (${d.a}: ${resA > 0 ? '+' : ''}${resA}, ${d.b}: ${resB > 0 ? '+' : ''}${resB}). ${x.difTotal !== 0 ? noEsSustitucion : (sug ? `La cantidad que sí lo explica es ${sug.n}.` : '')}`;
+    } else if (sug && !sug.parcial) {
+      texto = `La diferencia se explica por sustitución: ${sug.n} dosis de ${nombre(sug.dir)}.`;
+    } else if (sug) {
+      texto = `Solo una parte es sustitución (hasta ${sug.n} dosis de ${nombre(sug.dir)}). ${noEsSustitucion}`;
+    } else if (x.difTotal !== 0) {
+      texto = noEsSustitucion;
+    }
+    return { texto, color, sug, cuadra };
+  }
+
+  let _comodinSoloLectura = false;
+  let _comodinReport = null;
 
   function htmlAjustes(soloLectura, currentReport) {
+    _comodinSoloLectura = soloLectura;
+    _comodinReport = currentReport || null;
     const ajustes = (currentReport && currentReport.ajustes) || {};
-    const hayPar = (_conciliacionCache || []).some((f) => !f.coincide && (f.claves || []).some((k) => ['SR', 'SRP', 'DPT', 'TDPA'].indexOf(k) >= 0));
-    const hayAjuste = AJUSTES_DEF.some((d) => Number(ajustes[d.key] || 0) > 0);
-    const filas = AJUSTES_DEF.map((d) => `
-      <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:11.5px; font-weight:600; padding:4px 0;">
-        <span>${d.etiqueta}</span>
-        <input type="number" min="0" step="1" id="sisb_ajuste_${d.key}" ${soloLectura ? 'disabled' : ''}
-          value="${Number(ajustes[d.key] || 0) > 0 ? Number(ajustes[d.key]) : ''}" placeholder="0"
+    const campo = (key, etiqueta) => `
+      <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:11.5px; font-weight:600; padding:3px 0;">
+        <span>${etiqueta}</span>
+        <input type="number" min="0" step="1" id="sisb_ajuste_${key}" ${soloLectura ? 'disabled' : ''}
+          value="${_num2(ajustes[key]) > 0 ? _num2(ajustes[key]) : ''}" placeholder="0"
           style="width:88px; text-align:center; font-weight:800; font-size:13px; border:1.5px solid #cbd5e1; border-radius:9px; padding:6px 8px; ${soloLectura ? 'background:#f1f5f9;' : ''}">
-      </label>`).join('');
+      </label>`;
+    const bloques = AJUSTES_DEF.map((d) => `
+      <div data-comodin-par="${d.idx}" style="padding:8px 0; border-top:1px solid rgba(0,0,0,.06);">
+        <div style="font-size:11.5px; font-weight:800;">${d.a} / ${d.b}</div>
+        <div data-comodin-diag="${d.idx}" style="margin:2px 0 6px;"></div>
+        ${campo(d.keyFwd, `Dosis de ${d.b} aplicadas y reportadas en el paloteo como ${d.a}`)}
+        ${campo(d.keyRev, `Dosis de ${d.a} aplicadas y reportadas en el paloteo como ${d.b}`)}
+      </div>`).join('');
     return `
-      <details ${(hayPar || hayAjuste) ? 'open' : ''} style="margin-top:10px; background:rgba(255,255,255,.65); border:1px solid rgba(0,0,0,.08); border-radius:10px;">
-        <summary style="cursor:pointer; padding:8px 12px; font-size:11.5px; font-weight:800;">Ajuste por sustitución (comodín)${hayAjuste ? ' · capturado' : ''}</summary>
-        <div style="padding:2px 12px 10px;">
-          <div style="font-size:11px; font-weight:500; opacity:.85; margin-bottom:4px;">Si se aplicó SRP en lugar de SR, o TdPa en lugar de DPT, el paloteo la reporta como la vacuna original pero el Movimiento la da de baja como la que realmente se usó. Captura aquí cuántas dosis fueron y guarda para que la conciliación cuadre. No puede ser mayor a lo capturado de cada lado.</div>
-          ${filas}
+      <details id="sisbComodin" open style="margin-top:10px; background:rgba(255,255,255,.65); border:1px solid rgba(0,0,0,.08); border-radius:10px;">
+        <summary style="cursor:pointer; padding:8px 12px; font-size:11.5px; font-weight:800;">Ajuste por sustitución (comodín)</summary>
+        <div style="padding:2px 12px 8px;">
+          <div style="font-size:11px; font-weight:500; opacity:.85; margin-bottom:4px;">Si se aplicó una vacuna y en el paloteo se reportó como otra (SRP por SR, TdPa por DPT o al revés), el Movimiento la da de baja como la que realmente se usó. El aviso se actualiza en vivo con lo que tecleas en el paloteo; el comodín solo se guarda con el botón Guardar.</div>
+          ${bloques}
         </div>
       </details>`;
   }
 
+  // Repinta los avisos del comodín con el estado VIVO (paloteo tecleado +
+  // comodín tecleado + aplicado guardado). No toca los inputs, así no se
+  // pierde el foco mientras se escribe.
+  function actualizarComodin() {
+    const cont = document.getElementById('sisbComodin');
+    if (!cont) return;
+    let algunoVisible = false;
+    AJUSTES_DEF.forEach((d) => {
+      const bloque = cont.querySelector(`[data-comodin-par="${d.idx}"]`);
+      const diag = cont.querySelector(`[data-comodin-diag="${d.idx}"]`);
+      if (!bloque || !diag) return;
+      const x = analisisPar(d);
+      const aj = { fwd: ajusteVivo(d.keyFwd, _comodinReport), rev: ajusteVivo(d.keyRev, _comodinReport) };
+      const hayDif = x.exceso !== 0 || x.faltante !== 0;
+      const visible = hayDif || aj.fwd > 0 || aj.rev > 0;
+      bloque.style.display = visible ? '' : 'none';
+      if (!visible) { diag.innerHTML = ''; return; }
+      algunoVisible = true;
+      const dg = diagnosticoPar(d, x, aj);
+      const tecleado = dg.sug && (dg.sug.dir === 'fwd' ? aj.fwd : aj.rev) === dg.sug.n;
+      const btn = (!_comodinSoloLectura && dg.sug && !tecleado)
+        ? ` <button type="button" class="btn-mini btn-secundario" data-comodin-usar="${dg.sug.dir === 'fwd' ? d.keyFwd : d.keyRev}" data-opuesto="${dg.sug.dir === 'fwd' ? d.keyRev : d.keyFwd}" data-valor="${dg.sug.n}"><span class="material-symbols-rounded">auto_fix_high</span> Usar ${dg.sug.n}</button>` : '';
+      diag.innerHTML = `
+        <div style="font-size:10.5px; font-weight:500; opacity:.8;">${d.a}: paloteo ${x.pA} / Movimiento ${x.aA} · ${d.b}: paloteo ${x.pB} / Movimiento ${x.aB}</div>
+        <div style="font-size:11px; font-weight:700; color:${dg.color}; margin-top:2px;">${dg.texto}${btn}</div>`;
+    });
+    cont.style.display = algunoVisible ? '' : 'none';
+  }
+
+  let _comodinRaf = 0;
+  function programarComodin() {
+    if (_comodinRaf) return;
+    _comodinRaf = requestAnimationFrame(() => { _comodinRaf = 0; actualizarComodin(); });
+  }
+
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('[data-comodin-usar]') : null;
+    if (!btn) return;
+    const input = document.getElementById(`sisb_ajuste_${btn.getAttribute('data-comodin-usar')}`);
+    if (!input) return;
+    const opuesto = document.getElementById(`sisb_ajuste_${btn.getAttribute('data-opuesto')}`);
+    if (opuesto) opuesto.value = '';
+    input.value = btn.getAttribute('data-valor');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    toast('Comodín capturado: presiona Guardar para aplicarlo.', 'ok');
+  });
+  // Cualquier cambio del paloteo o del comodín repinta el aviso en vivo.
+  document.addEventListener('input', (ev) => {
+    const id = ev.target && ev.target.id;
+    if (id && id.indexOf('sisb_') === 0) programarComodin();
+  });
+
   function renderConciliacion(soloLectura, currentReport) {
+    renderConciliacionBase(soloLectura, currentReport);
+    actualizarComodin();
+  }
+
+  function renderConciliacionBase(soloLectura, currentReport) {
     const cont = document.getElementById('sis06pConciliacion');
     if (!cont) return;
     if (_conciliacionCache === null) { cont.style.display = 'none'; return; }
@@ -768,9 +935,9 @@
 
       // Comodín de sustitución: solo se guardan los ajustes > 0.
       const ajustes = {};
-      AJUSTES_DEF.forEach((d) => {
-        const v = parseFloat(document.getElementById(`sisb_ajuste_${d.key}`)?.value);
-        if (Number.isFinite(v) && v > 0) ajustes[d.key] = v;
+      AJUSTE_KEYS.forEach((k) => {
+        const v = parseFloat(document.getElementById(`sisb_ajuste_${k}`)?.value);
+        if (Number.isFinite(v) && v > 0) ajustes[k] = v;
       });
 
       const record = {
@@ -2403,6 +2570,7 @@
   // tercera vez -- ya se duplicó una vez desde influenza_module.js (Fase 3c)
   // porque biovac.html no carga ese archivo; no hace falta duplicarla otra
   // vez dentro del propio biovac.html, donde ambos módulos sí conviven.
+  window.SIS06PComodin = { PARES: AJUSTES_DEF, num2: _num2, diagnosticoPar };
   window.SIS06PBiovac = {
     init, render, save, hayCambiosSinGuardar: () => _sinGuardar, renderCSVPreview, exportarSISOficialCompleto, INFLUENZA_SIS_MAPPING,
     renderCEH, renderInfluenza, aplicarResponsable, guardarResponsable, marcarResponsableManual, refrescarConciliacion, actualizarDock
