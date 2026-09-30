@@ -147,7 +147,9 @@
       for (let c = 7; c <= 10; c++) { // G..J: autorizado, surtido, lote, caducidad
         const cel = ws.getRow(r).getCell(c);
         const b = cel.border || {};
-        if (b.bottom) cel.border = { ...b, bottom: { ...b.bottom, style: 'thin' } };
+        // Reasignar el estilo completo: ExcelJS comparte el objeto de estilo entre celdas
+        // con el mismo formato, y tocar solo `border` cambiaba todas las del grupo.
+        if (b.bottom) cel.style = { ...JSON.parse(JSON.stringify(cel.style || {})), border: { ...b, bottom: { ...b.bottom, style: 'thin' } } };
       }
     }
     merges.filter((m) => m.top >= primera).forEach((m) => {

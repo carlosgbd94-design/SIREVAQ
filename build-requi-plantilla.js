@@ -43,6 +43,10 @@ const ORDEN = [
 const COLS = 17; // A..Q
 
 function clonar(o) { return o ? JSON.parse(JSON.stringify(o)) : o; }
+// ExcelJS comparte el objeto de estilo entre celdas con el mismo formato: tocar
+// `cel.border = ...` cambiaba TODAS las celdas de ese grupo. Se reasigna el estilo
+// completo (copia) para que el cambio sea solo de esa celda.
+function estilo(cel, cambios) { cel.style = { ...clonar(cel.style || {}), ...cambios }; }
 
 (async () => {
   const wb = new ExcelJS.Workbook();
@@ -93,13 +97,13 @@ function clonar(o) { return o ? JSON.parse(JSON.stringify(o)) : o; }
   const bordeAbajo = ws.getCell(`G${ultimaFila + 1}`).border.bottom;
   ['A', 'B', 'C', 'D', 'E', 'F', 'K'].forEach((col) => {
     const c = ws.getCell(`${col}${ultimaFila}`);
-    c.border = { ...(c.border || {}), bottom: bordeAbajo };
+    estilo(c, { border: { ...(c.border || {}), bottom: bordeAbajo } });
   });
 
   // La caducidad se muestra mmm-aa en todos los renglones (el patrón de la primera
   // pareja de filas venía sin ese formato en la segunda fila).
   const fmtFecha = ws.getCell('J16').numFmt;
-  for (let r = PRIMERA; r < PRIMERA + 2 * ORDEN.length; r++) ws.getCell(`J${r}`).numFmt = fmtFecha;
+  for (let r = PRIMERA; r < PRIMERA + 2 * ORDEN.length; r++) estilo(ws.getCell(`J${r}`), { numFmt: fmtFecha });
 
   // 4) Pie: mismo contenido, merges y alturas, 2 filas más abajo.
   pie.forEach((f) => {
@@ -127,22 +131,24 @@ function clonar(o) { return o ? JSON.parse(JSON.stringify(o)) : o; }
         // ExcelJS guarda UN estilo por región combinada (el de la celda maestra),
         // así que cada celda lleva los cuatro lados: si no, faltaban el izquierdo
         // y el superior.
-        ws.getRow(rr).getCell(cc).border = { top: punteado, left: punteado, bottom: punteado, right: punteado };
+        estilo(ws.getRow(rr).getCell(cc), { border: { top: punteado, left: punteado, bottom: punteado, right: punteado } });
       }
     }
     // Borde superior también como inferior de la fila de arriba: Excel dibuja el de
     // la celda de arriba si trae uno propio, y si no, a veces no muestra el de abajo.
     for (let cc = c1; cc <= c2; cc++) {
       const arriba = ws.getRow(SELLO_DESDE - 1).getCell(cc);
-      arriba.border = { ...(arriba.border || {}), bottom: punteado };
+      estilo(arriba, { border: { ...(arriba.border || {}), bottom: punteado } });
     }
   };
   recuadro(1, 3);
   recuadro(8, 11);
   const marca = ws.getCell(`H${SELLO_DESDE}`);
   marca.value = 'SELLO' + String.fromCharCode(10) + 'UNIDAD';
-  marca.font = { name: 'Arial', size: 138, color: { argb: 'FFF9F9F9' } };
-  marca.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  estilo(marca, {
+    font: { name: 'Arial', size: 138, color: { argb: 'FFF9F9F9' } },
+    alignment: { horizontal: 'center', vertical: 'middle', wrapText: true }
+  });
 
   // 5) Cuadro de jeringas (M:Q) fuera, y la hoja lista para Carta.
   for (let r = 1; r <= FIN_VIEJO + DESPLAZA + 3; r++) {
