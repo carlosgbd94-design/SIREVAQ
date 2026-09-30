@@ -715,12 +715,37 @@ async function loadInfluenzaUnitData() {
   }
 }
 
+// Regla de calendario (2ª dosis no en el 1er mes, 1ª dosis no en el último) para un rubro y una semana,
+// con las fechas de la campaña seleccionada. null = se puede capturar.
+function reglaDosisRubro(rb, fecha) {
+  return window.InfluenzaReglas
+    ? window.InfluenzaReglas.reglaDosis(rb.grupo, fecha, _campaignConfig.fecha_inicio, _campaignConfig.fecha_fin)
+    : null;
+}
+
+// Aviso con las reglas que aplican a la semana elegida (o "" si ninguna).
+function avisoReglasSemana(fecha) {
+  const ejemplos = {};
+  INFLUENZA_RUBROS.forEach(rb => {
+    const r = reglaDosisRubro(rb, fecha);
+    if (r) ejemplos[r.tipo] = r;
+  });
+  return Object.values(ejemplos).map(r => `<div class="inf-aviso"><b>${r.tipo === "segunda" ? "2ª dosis" : "1ª dosis"} no disponible esta semana.</b> ${r.texto}</div>`).join("");
+}
+
 function renderCaptureGrid() {
   const container = document.getElementById("influenzaCaptureGroupsContainer");
   if (!container) return;
   container.innerHTML = "";
 
   const selectedFecha = document.getElementById("influenza_semana").value;
+  const avisoHtml = avisoReglasSemana(selectedFecha);
+  if (avisoHtml) {
+    const aviso = document.createElement("div");
+    aviso.className = "flex flex-col gap-2";
+    aviso.innerHTML = avisoHtml;
+    container.appendChild(aviso);
+  }
   const currentReport = _influenzaCapturasCache.find(r => r.fecha === selectedFecha);
   const currentValores = currentReport ? currentReport.valores : {};
 
@@ -781,7 +806,8 @@ function renderCaptureGrid() {
       const meta = Number(_influenzaMetasCache[rb.id] || 0);
       const acum = acumuladosPrevios[rb.id];
       const val = isSinMovActive ? 0 : (currentValores[rb.id] !== undefined ? currentValores[rb.id] : "");
-      const isLocked = meta === 0 || isSinMovActive;
+      const reglaCal = reglaDosisRubro(rb, selectedFecha);
+      const isLocked = meta === 0 || isSinMovActive || !!reglaCal;
 
       const row = document.createElement("tr");
 
@@ -813,7 +839,7 @@ function renderCaptureGrid() {
       row.innerHTML = `
         <td class="p-3">
           <span class="text-xs font-semibold ${isLocked ? 'text-slate-400 italic' : 'text-slate-700'}">${rb.edad}</span>
-          ${isLocked ? '<span style="display:inline-block;margin-left:6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;background:#e2e8f0;color:#94a3b8;padding:1px 6px;border-radius:20px;">Sin meta</span>' : ''}
+          ${reglaCal ? `<span class="inf-pill-regla">${reglaCal.etiqueta}</span>` : (isLocked && meta === 0 ? '<span style="display:inline-block;margin-left:6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;background:#e2e8f0;color:#94a3b8;padding:1px 6px;border-radius:20px;">Sin meta</span>' : '')}
         </td>
         <td class="p-3 text-center font-bold text-slate-600 text-xs">${meta || '—'}</td>
         <td class="p-3 text-center font-bold text-xs" style="color:#6d28d9;">${acum}</td>
@@ -1137,11 +1163,22 @@ async function saveInfluenzaReport() {
   const isSinMov = document.getElementById("chkSinMovimientoINF")?.checked || false;
   let hasOverMetaError = false;
   const valores = {};
-  
+  let reglaError = null;
+  const reporteActual = _influenzaCapturasCache.find(r => r.fecha === selectedFecha);
+
   for (const rb of INFLUENZA_RUBROS) {
     const input = document.getElementById(`input_inf_${rb.id}`);
     const val = isSinMov ? 0 : (input ? parseInt(input.value) || 0 : 0);
     valores[rb.id] = val;
+
+    // Reglas de captura: sin meta no se aplica, y el calendario del esquema (2ª / 1ª dosis).
+    // Solo cuenta lo NUEVO: un valor ya guardado antes de la regla no bloquea el reporte.
+    const previo = Number(reporteActual?.valores?.[rb.id] || 0);
+    if (!isSinMov && val > previo) {
+      if (!Number(_influenzaMetasCache[rb.id] || 0)) reglaError = reglaError || `${rb.grupo} ${rb.edad}: la unidad no tiene meta asignada en este rubro.`;
+      const cal = reglaDosisRubro(rb, selectedFecha);
+      if (cal) reglaError = reglaError || `${rb.grupo} ${rb.edad}: ${cal.texto}`;
+    }
 
     if (!isSinMov) {
       // Calcular acumulado
@@ -1157,6 +1194,11 @@ async function saveInfluenzaReport() {
         hasOverMetaError = true;
       }
     }
+  }
+
+  if (reglaError) {
+    showToast(reglaError, false, "bad");
+    return;
   }
 
   if (hasOverMetaError) {
@@ -2613,6 +2655,13 @@ function renderValidacionEdicionGrid(clues, fecha) {
   }
 
   cardsContainer.innerHTML = "";
+  const avisoValHtml = avisoReglasSemana(fecha);
+  if (avisoValHtml) {
+    const aviso = document.createElement("div");
+    aviso.className = "flex flex-col gap-2";
+    aviso.innerHTML = avisoValHtml;
+    cardsContainer.appendChild(aviso);
+  }
 
   const groups = {};
   INFLUENZA_RUBROS.forEach(rb => {
@@ -2631,7 +2680,8 @@ function renderValidacionEdicionGrid(clues, fecha) {
       const meta = Number(metas[rb.id] || 0);
       const acum = acumuladosPrevios[rb.id];
       const val = report && report.valores[rb.id] !== undefined ? report.valores[rb.id] : "";
-      const isLocked = meta === 0;
+      const reglaCal = reglaDosisRubro(rb, fecha);
+      const isLocked = meta === 0 || !!reglaCal;
 
       // Extract original captured value from first edit in history, or fallback to current val
       let originalVal = "—";
@@ -2663,7 +2713,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
         <tr class="border-b border-slate-100 last:border-0" style="${isLocked ? 'opacity: 0.45; background-color:#f8fafc;' : ''}">
           <td class="p-3 text-xs font-semibold text-slate-700">
             ${rb.edad}
-            ${isLocked ? '<span class="ml-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-slate-200 text-slate-400">Sin Meta</span>' : ''}
+            ${reglaCal ? `<span class="inf-pill-regla">${reglaCal.etiqueta}</span>` : (isLocked ? '<span class="ml-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-slate-200 text-slate-400">Sin Meta</span>' : '')}
           </td>
           <td class="p-3 text-center text-xs font-bold text-slate-500">${meta || '—'}</td>
           <td class="p-3 text-center text-xs font-bold text-slate-400">${originalVal}</td>
@@ -2775,6 +2825,7 @@ async function saveValidationReport(clues, fecha) {
 
   const valores = {};
   let hasOverMetaError = false;
+  let reglaError = null;
 
   for (const rb of INFLUENZA_RUBROS) {
     const input = document.getElementById(`val_input_inf_${rb.id}`);
@@ -2782,10 +2833,21 @@ async function saveValidationReport(clues, fecha) {
     valores[rb.id] = val;
 
     const meta = Number(metas[rb.id] || 0);
+    const previo = Number(_currentValidationReport?.valores?.[rb.id] || 0);
+    if (val > previo) {
+      if (!meta) reglaError = reglaError || `${rb.grupo} ${rb.edad}: la unidad no tiene meta asignada en este rubro.`;
+      const cal = reglaDosisRubro(rb, fecha);
+      if (cal) reglaError = reglaError || `${rb.grupo} ${rb.edad}: ${cal.texto}`;
+    }
     const acum = acumuladosPrevios[rb.id];
     if (meta > 0 && (acum + val) > meta) {
       hasOverMetaError = true;
     }
+  }
+
+  if (reglaError) {
+    showToast(reglaError, false, "bad");
+    return;
   }
 
   if (hasOverMetaError) {
@@ -5295,6 +5357,21 @@ window.activateInfluenzaCampaign = async (id) => {
   });
 };
 
+function actualizarVentanasInfluenza() {
+  const box = document.getElementById("influenzaVentanasInfo");
+  const ini = document.getElementById("configFechaInicio")?.value;
+  const fin = document.getElementById("configFechaFin")?.value;
+  if (!box || !window.InfluenzaReglas) return;
+  if (!ini || !fin || ini >= fin) { box.style.display = "none"; return; }
+  const v = window.InfluenzaReglas.ventanas(ini, fin);
+  const L = window.InfluenzaReglas.fechaLarga;
+  box.style.display = "block";
+  box.innerHTML = `<b>Reglas de dosis calculadas con estas fechas:</b><br>
+    • <b>2ª dosis:</b> se captura a partir del <b>${L(v.segundasDesde)}</b> (no hay 2ª dosis en el 1er mes).<br>
+    • <b>1ª dosis:</b> se captura hasta el <b>${L(v.primerasHasta)}</b> (no hay 1ª dosis en el último mes).<br>
+    Si amplías la clausura, la fecha límite de 1ª dosis se recorre sola.`;
+}
+
 function renderCampaignConfigScreen() {
   const startInput = document.getElementById("configFechaInicio");
   const endInput = document.getElementById("configFechaFin");
@@ -5311,6 +5388,16 @@ function renderCampaignConfigScreen() {
 
   // Renderizar la tabla de campañas
   renderInfluenzaCampanasTable();
+
+  // Ventanas de dosis derivadas de las fechas (se actualizan al teclearlas)
+  [startInput, endInput].forEach(inp => {
+    if (!inp.dataset.ventanas) {
+      inp.dataset.ventanas = "1";
+      inp.addEventListener("input", actualizarVentanasInfluenza);
+      inp.addEventListener("change", actualizarVentanasInfluenza);
+    }
+  });
+  actualizarVentanasInfluenza();
 
   // Enlazar botón cancelar
   if (cancelBtn) {

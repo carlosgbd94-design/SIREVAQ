@@ -14102,3 +14102,17 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaMetas .meta-grupo-cat { font-weight: 600; color: #64748b; }
 #secInfluenzaMetas .meta-grupo-row td.meta-grupo-cmp { background: #f1f5f9; background: color-mix(in srgb, var(--g) 13%, #ffffff); box-shadow: -10px 0 12px -10px rgba(15, 23, 42, .28); }
 #secInfluenzaMetas .meta-rubro-row > td:first-child { box-shadow: inset 4px 0 0 var(--g); }
+
+/* Avisos de reglas de calendario de Influenza (captura de la unidad y Fechas Campaña) */
+.inf-aviso { padding: 12px 14px; border-radius: 14px; border: 1px solid #fde68a; background: #fffbeb; color: #78350f; font-size: 12px; font-weight: 600; line-height: 1.45; }
+.inf-aviso b { font-weight: 800; }
+.inf-aviso--info { border-color: #e2e8f0; background: #f8fafc; color: #334155; }
+.inf-pill-regla { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; background: #fef3c7; color: #92400e; padding: 1px 7px; border-radius: 20px; }
+#secInfluenzaConfig .frs-box { padding: 12px 14px; border-radius: 12px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 12px; font-weight: 600; color: #334155; line-height: 1.5; }
+
+/* Avisos de reglas de calendario de Influenza (captura de la unidad y Fechas Campaña) */
+.inf-aviso { padding: 12px 14px; border-radius: 14px; border: 1px solid #fde68a; background: #fffbeb; color: #78350f; font-size: 12px; font-weight: 600; line-height: 1.45; }
+.inf-aviso b { font-weight: 800; }
+.inf-aviso--info { border-color: #e2e8f0; background: #f8fafc; color: #334155; }
+.inf-pill-regla { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; background: #fef3c7; color: #92400e; padding: 1px 7px; border-radius: 20px; }
+#secInfluenzaConfig .frs-box { padding: 12px 14px; border-radius: 12px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 12px; font-weight: 600; color: #334155; line-height: 1.5; }

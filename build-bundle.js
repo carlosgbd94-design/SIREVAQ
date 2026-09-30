@@ -29,6 +29,7 @@ const GROUP_HEAD = [
   'desabasto_center.js', // antes que main.js: main.js usa window.DesabastoCenter al cargar
   'main.js',
   'dock_glass.js',
+  'influenza_reglas.js',
   'influenza_reparto.js',
   'influenza_module.js',
   'sis_export_module.js',
