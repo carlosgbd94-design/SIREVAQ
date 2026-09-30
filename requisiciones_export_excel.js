@@ -141,6 +141,15 @@
       copiarFila(ws, ultima, r);
       for (let c = 1; c <= ULTIMA_COL; c++) ws.getRow(r).getCell(c).value = null;
     }
+    // El borde grueso de abajo solo va en el ÚLTIMO renglón del bloque: los de en medio
+    // (incluido el que era el segundo) llevan la línea delgada que separa lote de lote.
+    for (let r = ultima; r < ultima + n; r++) {
+      for (let c = 7; c <= 10; c++) { // G..J: autorizado, surtido, lote, caducidad
+        const cel = ws.getRow(r).getCell(c);
+        const b = cel.border || {};
+        if (b.bottom) cel.border = { ...b, bottom: { ...b.bottom, style: 'thin' } };
+      }
+    }
     merges.filter((m) => m.top >= primera).forEach((m) => {
       if (m.top >= primera && m.top <= ultima) ws.mergeCells(m.top, m.left, m.bottom + n, m.right);
       else ws.mergeCells(m.top + n, m.left, m.bottom + n, m.right);
