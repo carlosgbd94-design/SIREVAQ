@@ -12,12 +12,12 @@
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=6">
 <link rel="stylesheet" href="ayuda.css?v=1">
-<script defer src="ayuda.js?v=4"></script>
+<script defer src="ayuda.js?v=5"></script>
 <script defer src="dock_glass.js?v=4"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.1"></script>
-<script defer src="biovac_jurisdiccion_ui.js?v=2026.3"></script>
+<script defer src="biovac_jurisdiccion_ui.js?v=2026.4"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -402,6 +402,44 @@
   body.con-dock .hoja-tab.activo .hoja-pildora { display: none; }
   .jur-chip-alertas { margin-left: 0; }
 }
+
+  /* Rediseño por municipio */
+  table.concentrado .btn-mini { white-space: nowrap; }
+  table.concentrado col.col-accion { width: 15%; }
+  .jur-estado { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; color: var(--muted); background: var(--surface-container); border-radius: 999px; padding: 4px 11px; white-space: nowrap; }
+  .jur-estado.ok { color: var(--success); background: #dcfce7; }
+  .jur-estado .material-symbols-rounded { font-size: 15px; }
+  .jur-barra-fina { height: 5px; margin: 12px 0 0; }
+  .jur-sis { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .jur-muni-accion { margin-top: 10px; }
+  .jur-val-detalle { margin: 10px 0 0; display: flex; flex-direction: column; gap: 6px; }
+  .jur-val-detalle > div { display: grid; grid-template-columns: 130px 1fr; gap: 10px; background: #fff; border-radius: 12px; padding: 8px 12px; }
+  .jur-val-detalle dt { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding-top: 2px; }
+  .jur-val-detalle dd { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text); }
+  .jur-pendientes { border: 1px solid var(--outline-variant); background: var(--surface-container); border-radius: 16px; padding: 10px 14px; margin-top: 12px; }
+  .jur-pendientes summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--primary); list-style: none; flex-wrap: wrap; }
+  .jur-pendientes summary::-webkit-details-marker { display: none; }
+  .jur-pendientes summary .material-symbols-rounded { color: var(--muted); font-size: 20px; }
+  .jur-pendientes summary small { color: var(--muted); font-weight: 600; }
+  .jur-pendientes p { margin: 8px 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .jur-pend-muni { display: flex; gap: 10px; font-size: 12px; padding: 4px 0; flex-wrap: wrap; }
+  .jur-pend-muni b { min-width: 120px; color: var(--primary); }
+  .jur-pend-muni span { color: var(--muted); }
+  .jur-callout { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .jur-callout-item { display: flex; gap: 12px; padding: 10px 14px; border-radius: 14px; background: var(--warning-bg); border: 1px solid var(--warning-border); }
+  .jur-callout-item.ERROR { background: var(--error-bg); border-color: var(--error-border); }
+  .jur-callout-item > .material-symbols-rounded { color: var(--warning); font-size: 22px; flex: none; }
+  .jur-callout-item.ERROR > .material-symbols-rounded { color: var(--error); }
+  .jur-callout-item b { font-size: 13px; color: var(--primary); }
+  .jur-callout-item p { margin: 3px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text); }
+  .jur-callout-item p.hacer { color: var(--muted); }
+  .jur-drill-nota { margin: 8px 2px; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .drilldown table.jur-drill th { padding: 6px 8px; }
+  .drilldown td small.muni-sub { display: block; font-size: 10.5px; color: var(--muted); font-weight: 600; }
+  .drilldown tr.muni-resumen td { background: #fff; font-weight: 700; border-top: 1px solid var(--outline-variant); }
+  .drilldown tr.sub-fila td { background: var(--surface-container); font-size: 12px; }
+  .drilldown .unidad-sub { padding-left: 14px; color: var(--muted); }
+  @media (max-width: 760px) { .jur-val-detalle > div { grid-template-columns: 1fr; gap: 2px; } }
 </style>
 </head>
 <body>
@@ -414,7 +452,7 @@
     <div class="divisor"></div>
     <div>
       <h1>Concentrado Jurisdiccional<span id="avisoUsuario"></span></h1>
-      <p class="subtitulo">Se arma solo con los movimientos que cierran las unidades. Tú vigilas el cierre, atiendes lo que no cuadra y emites el informe.</p>
+      <p class="subtitulo">Movimiento de biológico de la jurisdicción: la suma de los municipios y hospitales (cada municipio suma sus unidades). Tú vigilas el cierre, revisas los avisos y emites el informe.</p>
     </div>
   </div>
 
@@ -456,8 +494,8 @@
     <div class="tarjeta">
       <div class="seccion-titulo">
         <div class="jur-cab"><span class="jur-cab-icono" style="background:#fffbeb; border-color:#fde68a;"><span class="material-symbols-rounded" style="color:#d97706;">rule</span></span>
-          <div><h2>Validaciones del concentrado<button type="button" class="ayuda-btn" data-ayuda="jur_validaciones" title="Cómo leer las validaciones" aria-label="Cómo leer las validaciones"><span class="material-symbols-rounded">help</span></button></h2>
-            <p class="subtitulo">Lo que el propio concentrado detecta que no cuadra. Cada aviso te lleva al lote para atenderlo.</p></div></div>
+          <div><h2>Por revisar<button type="button" class="ayuda-btn" data-ayuda="jur_validaciones" title="Cómo leer los avisos" aria-label="Cómo leer los avisos"><span class="material-symbols-rounded">help</span></button></h2>
+            <p class="subtitulo">Lo que el concentrado detecta al sumar. Cada aviso dice qué pasa, quién lo resuelve y qué hacer.</p></div></div>
       </div>
       <div id="listaValidaciones"></div>
     </div>
@@ -469,7 +507,7 @@
       <div class="seccion-titulo">
         <div class="jur-cab"><span class="jur-cab-icono" style="background:#f0fdf4; border-color:#bbf7d0;"><span class="material-symbols-rounded" style="color:#16a34a;">table_chart</span></span>
           <div><h2>Concentrado por biológico y lote<button type="button" class="ayuda-btn" data-ayuda="jur_concentrado" title="Cómo leer el concentrado" aria-label="Cómo leer el concentrado"><span class="material-symbols-rounded">help</span></button></h2>
-            <p class="subtitulo">Suma en vivo de las unidades. "Ver" abre el detalle por unidad; ahí puedes corregir en el origen, con motivo, y se propaga a los meses siguientes.</p></div></div>
+            <p class="subtitulo">La suma de todos los municipios y hospitales. "Ver por municipio" abre el detalle de ese lote: qué aportó cada municipio (y, si hace falta, cada unidad).</p></div></div>
       </div>
       <div id="chipsBio" class="jur-chips"></div>
     </div>
@@ -500,8 +538,8 @@
 <nav class="dock-sis" id="dockJuris" style="display:none;" aria-label="Pasos del concentrado jurisdiccional">
   <div class="dock-hojas" id="dockJTabs" role="tablist">
     <span class="hoja-tinta" aria-hidden="true"></span>
-    <button type="button" class="hoja-tab activo" data-jpaso="1" role="tab" style="--hoja:#0284c7;" title="1. Cierre de municipios y hospitales"><span class="material-symbols-rounded">lock_clock</span><span class="hoja-nombre">1 · Cierre</span><span class="hoja-pildora" id="pildoraJ1"></span></button>
-    <button type="button" class="hoja-tab" data-jpaso="2" role="tab" style="--hoja:#d97706;" title="2. Validaciones"><span class="material-symbols-rounded">rule</span><span class="hoja-nombre">2 · Validaciones</span><span class="hoja-pildora" id="pildoraJ2"></span></button>
+    <button type="button" class="hoja-tab activo" data-jpaso="1" role="tab" style="--hoja:#0284c7;" title="1. ¿Ya cerró cada municipio y hospital?"><span class="material-symbols-rounded">location_city</span><span class="hoja-nombre">1 · Municipios</span><span class="hoja-pildora" id="pildoraJ1"></span></button>
+    <button type="button" class="hoja-tab" data-jpaso="2" role="tab" style="--hoja:#d97706;" title="2. Lo que el concentrado detecta"><span class="material-symbols-rounded">rule</span><span class="hoja-nombre">2 · Por revisar</span><span class="hoja-pildora" id="pildoraJ2"></span></button>
     <button type="button" class="hoja-tab" data-jpaso="3" role="tab" style="--hoja:#16a34a;" title="3. Concentrado"><span class="material-symbols-rounded">table_chart</span><span class="hoja-nombre">3 · Concentrado</span><span class="hoja-pildora" id="pildoraJ3"></span></button>
     <button type="button" class="hoja-tab" data-jpaso="4" role="tab" style="--hoja:#7c3aed;" title="4. Informe"><span class="material-symbols-rounded">summarize</span><span class="hoja-nombre">4 · Informe</span><span class="hoja-pildora" id="pildoraJ4"></span></button>
   </div>

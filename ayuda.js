@@ -133,47 +133,47 @@
     // ------------------------------------------------- Concentrado jurisdiccional
     jur: {
       titulo: 'Concentrado jurisdiccional',
-      subtitulo: 'Se arma solo con lo que cierran las unidades. Tú vigilas, atiendes lo que no cuadra y emites el informe.',
+      subtitulo: 'La suma de los municipios y hospitales. Tú vigilas el cierre, revisas los avisos y emites el informe.',
       bloques: [
+        T('Cómo se arma'),
+        I('account_tree', '#0284c7', 'Unidades → municipio → jurisdicción', 'Cada unidad cierra su Movimiento al enviar su SINBA-SIS. Cada municipio es la suma de sus unidades, y la jurisdicción es la suma de los municipios y hospitales. Nadie captura aquí: todo se suma solo.'),
+        I('visibility', '#64748b', 'Las unidades son solo consulta', 'El trabajo de validar el SINBA-SIS de cada unidad es del municipio. Tú ves municipios; las unidades solo aparecen cuando necesitas el detalle.'),
         T('Los cuatro pasos'),
-        P(1, 'Cierre', 'Ves cuántos municipios, hospitales y unidades ya cerraron su Movimiento del mes. El concentrado suma cada uno en cuanto cierra.'),
-        P(2, 'Validaciones', 'El propio concentrado te avisa lo que no cuadra: existencias negativas, caducidades distintas, lotes en A.R.F. sin resolver y unidades sin cerrar.'),
-        P(3, 'Concentrado', 'La suma por biológico y lote. Abres el detalle por unidad y, si algo está mal, lo corriges en su origen con un motivo.'),
+        P(1, 'Municipios', 'Ves si cada municipio y hospital ya cerró. Uno cierra cuando cierran todas sus unidades.'),
+        P(2, 'Por revisar', 'Lo que el concentrado detecta al sumar. Cada aviso dice qué pasa, quién lo resuelve y qué hacer.'),
+        P(3, 'Concentrado', 'La suma por biológico y lote. "Ver por municipio" abre qué aportó cada municipio.'),
         P(4, 'Informe', 'Una lista te dice si falta algo; generas el informe del mes y descargas el Excel o el PDF.'),
-        T('Los puntos de avance'),
-        I('radio_button_unchecked', '#94a3b8', 'Gris · sin movimiento', 'La unidad todavía no abre su Movimiento de este mes.'),
-        I('timelapse', '#f59e0b', 'Ámbar · en captura o corrección', 'Tiene el Movimiento abierto: lo que lleva se ve como provisional.'),
-        I('check_circle', '#16a34a', 'Verde · cerrado', 'Ya cerró: su número es definitivo en el concentrado.'),
-        N('Desde octubre de 2026 el concentrado suma cada unidad (CLUES); antes sumaba el Movimiento de cada municipio y hospital. Tú no tienes que elegirlo: el sistema toma el criterio correcto según el mes.')
+        N('Desde octubre de 2026 el concentrado suma cada unidad (CLUES) agrupada por municipio; antes sumaba el Movimiento de cada municipio y hospital. El sistema toma el criterio correcto según el mes. Los hospitales (NHG y HENM) los valida la jurisdicción: su tarjeta tiene un botón para revisarlos.')
       ]
     },
     jur_validaciones: {
-      titulo: 'Paso 2 · Validaciones',
-      subtitulo: 'Lo que el concentrado detecta por sí mismo.',
+      titulo: 'Paso 2 · Por revisar',
+      subtitulo: 'Lo que el concentrado detecta al sumar.',
       bloques: [
-        T('Qué significa cada aviso'),
-        I('remove_circle', '#ba1a1a', 'Existencia negativa (error)', 'Una unidad dio de baja más de lo que tenía. Hay que corregir ese renglón.'),
-        I('event_busy', '#d97706', 'Caducidades distintas', 'El mismo lote tiene fechas diferentes en unidades distintas: una está mal.'),
-        I('hourglass_bottom', '#d97706', 'A.R.F. o canje sin resolver', 'Lleva 3 meses o más con existencia sin resolver.'),
-        I('lock_open', '#64748b', 'Unidades sin cerrar', 'No es un error: el concentrado es provisional y se completa solo cuando cierren.'),
-        T('Qué hacer'),
-        P(1, 'Ver en el concentrado', 'El botón de cada aviso te lleva al lote con su detalle por unidad ya abierto.'),
-        P(2, 'Corregir en el origen', 'Con "Corregir aquí" editas el renglón de la unidad; escribes el motivo y queda auditado.'),
-        N('Las correcciones se propagan a los meses siguientes de esa unidad y ella recibe el aviso para revisarlas.')
+        T('Cómo leer un aviso'),
+        I('help', '#0284c7', 'Qué pasa', 'La situación concreta: qué lote, en qué municipio y con qué cifra.'),
+        I('person', '#d97706', 'Quién lo resuelve', 'Casi siempre es el municipio o la unidad; la jurisdicción no tiene que corregir nada.'),
+        I('checklist', '#16a34a', 'Qué hacer', 'El paso siguiente, dicho en una frase.'),
+        T('Los tipos de aviso'),
+        I('remove_circle', '#ba1a1a', 'Existencia negativa (error)', 'Se dieron de baja más frascos de los que había.'),
+        I('event_busy', '#d97706', 'Caducidades distintas', 'El mismo lote tiene fechas diferentes.'),
+        I('hourglass_bottom', '#d97706', 'Lote en dictamen sin resolver', 'Lleva 3 meses o más en A.R.F. o canje con existencia.'),
+        I('lock_open', '#64748b', 'Unidades sin cerrar', 'No es un aviso: solo indica que el concentrado es provisional. Queda plegado al final, como consulta.'),
+        N('"Ver el lote" te lleva al detalle de ese lote por municipio, con la explicación a la vista.')
       ]
     },
     jur_concentrado: {
       titulo: 'Paso 3 · Concentrado',
-      subtitulo: 'La suma en vivo de las unidades, por biológico y lote.',
+      subtitulo: 'La suma de todos los municipios y hospitales, por biológico y lote.',
       bloques: [
         T('Cómo leerlo'),
-        I('palette', '#0284c7', 'Un biológico a la vez', 'Los botones de color filtran; "Solo con alertas" deja únicamente los lotes con algo que revisar.'),
+        I('palette', '#0284c7', 'Un biológico a la vez', 'Los botones de color filtran; "Solo con avisos" deja únicamente los lotes que tienen algo por revisar.'),
         I('sell', '#f59e0b', 'Provisional', 'Al menos una unidad de ese lote todavía no cierra: el número puede cambiar.'),
-        I('groups', '#64748b', 'Unidades', 'Cuántas unidades ya cerraron de las que reportan ese lote.'),
-        T('Corregir'),
-        P(1, 'Ver', 'Abre el detalle del lote por unidad.'),
-        P(2, 'Corregir aquí', 'Solo en unidades ya cerradas: reabre su renglón. Escribes el motivo, editas y guardas.'),
-        N('Quien solo consulta (visualizador) ve todo el concentrado pero no puede corregir.')
+        I('groups', '#64748b', 'Cierre', 'Cuántas de las unidades que reportan ese lote ya cerraron.'),
+        T('El detalle de un lote'),
+        P(1, 'Ver por municipio', 'Cada renglón es un municipio u hospital, con lo que aportó a ese lote. Solo aparecen los que lo reportaron.'),
+        P(2, 'Ver unidades', 'Si un municipio tiene varias unidades, puedes abrirlas como consulta.'),
+        N('"Corregir" es de uso excepcional: reabre un renglón con motivo obligatorio y queda auditado. Lo normal es que lo corrija el municipio. Quien solo consulta (visualizador) no lo ve.')
       ]
     },
     jur_informe: {
@@ -181,8 +181,8 @@
       subtitulo: 'Lo último del mes.',
       bloques: [
         T('La lista'),
-        I('lock', '#16a34a', 'Movimientos cerrados', 'El informe suma solo lo que ya cerró. Si faltan, te pregunta antes de generarlo.'),
-        I('rule', '#d97706', 'Errores y advertencias', 'Lo ideal es generar el informe sin errores pendientes.'),
+        I('lock', '#16a34a', 'Municipios cerrados', 'El informe suma solo lo que ya cerró. Si falta alguno, te pregunta antes de generarlo.'),
+        I('rule', '#d97706', 'Errores y avisos', 'Lo ideal es generarlo sin errores pendientes.'),
         T('Los entregables'),
         I('summarize', '#7c3aed', 'Informe del mes', 'Una foto del concentrado, con quién la generó y cuándo. Puedes generar otro si algo cambia después.'),
         I('download', '#0284c7', 'Excel y PDF', 'El Excel usa el formato oficial de Movimiento de Biológico; el PDF sirve para archivar o imprimir.')

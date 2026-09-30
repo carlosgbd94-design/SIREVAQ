@@ -280,17 +280,11 @@
         : `<button type="button" class="btn-primario" id="munCtaConcentrado"><span class="material-symbols-rounded">table_chart</span> Todo validado: ir al concentrado</button>`;
     const chip = (k, txt) => `<button type="button" class="mun-chip ${st.filtro === k ? 'activo' : ''}" data-filtro="${k}">${txt}<b>${conteos[k]}</b></button>`;
 
-    // Jurisdicción: avance de validación de los municipios (informativo; cada municipio valida a sus unidades).
+    // Jurisdicción: aquí solo se revisan los hospitales; los municipios se consultan en el concentrado.
     const otros = st.modo !== 'juris' ? '' : `
-      <div class="mun-otros"><div class="mun-otros-tit">Municipios <small>· cada uno valida a sus propias unidades</small></div>
-        <div class="mun-otros-grid">${[...new Set(st.todas.filter((f) => !ES_HOSPITAL[f.municipio]).map((f) => f.municipio))].map((m) => {
-          const us = st.todas.filter((f) => f.municipio === m);
-          const ro = resumen(us);
-          return `<div class="mun-otro ${ro.validado === ro.total ? 'completo' : ''}"><b>${esc(etiquetaMuni(m))}</b><small>${ro.validado} de ${ro.total} validadas · ${ro.enviado} por validar</small>
-            <div class="puntos">${us.map((f) => `<span class="pt ${CLASE_EST[estadoDe(f)]}" title="${esc((f.unidad || f.clues) + ' — ' + ETIQUETA[estadoDe(f)])}"></span>`).join('')}</div></div>`;
-        }).join('')}</div>
-        <div class="mun-otros-tit" style="margin-top:14px;">Hospitales <small>· los validas tú</small></div>
-      </div>`;
+      <div class="mun-aviso"><span class="material-symbols-rounded">info</span>
+        <span>Aquí revisas y validas el SINBA-SIS de los <b>hospitales</b>. El Movimiento de los municipios y el de la jurisdicción están en el
+        <a href="biovac_jurisdiccion.html">Concentrado jurisdiccional</a>.</span></div>`;
 
     cont.innerHTML = `${otros}
       <div class="mun-avance">

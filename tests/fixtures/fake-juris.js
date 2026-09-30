@@ -39,7 +39,12 @@
     biovac_validar_concentrado: () => validaciones,
     biovac_concentrado_jurisdiccion: () => concentrado,
     sis06p_resumen_seguimiento: () => sis,
-    biovac_detalle_lote_jurisdiccion: () => [{ unidad_id: 'q-a', unidad_nombre: 'C.S. Alfa', movimiento_id: 'm-a', movimiento_estado: 'CERRADO', renglon_id: 'r-a', existencia_anterior_frascos: 0, recibido_frascos: 10, aplicadas_a: 12, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, existencia_final_frascos: -2, observaciones: '' }],
+    biovac_detalle_lote_jurisdiccion: () => [
+      { unidad_id: 'q-a', unidad_nombre: 'C.S. Alfa', movimiento_id: 'm-a', movimiento_estado: 'CERRADO', renglon_id: 'r-a', existencia_anterior_frascos: 0, recibido_frascos: 10, aplicadas_a: 12, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, existencia_final_frascos: -2, observaciones: '' },
+      { unidad_id: 'q-b', unidad_nombre: 'C.S. Beta', movimiento_id: 'm-b', movimiento_estado: 'BORRADOR', renglon_id: 'r-b', existencia_anterior_frascos: 0, recibido_frascos: 5, aplicadas_a: 2, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, existencia_final_frascos: 3, observaciones: '' },
+      { unidad_id: 'c-1', unidad_nombre: 'C.S. Uno', movimiento_id: 'm-c1', movimiento_estado: 'CERRADO', renglon_id: 'r-c1', existencia_anterior_frascos: 1, recibido_frascos: 6, aplicadas_a: 2, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, existencia_final_frascos: 5, observaciones: '' },
+      { unidad_id: 'c-2', unidad_nombre: 'C.S. Dos', movimiento_id: 'm-c2', movimiento_estado: 'EN_CORRECCION', renglon_id: null, existencia_anterior_frascos: null, recibido_frascos: null, aplicadas_a: null, aplicadas_b: null, desechadas_a: null, desechadas_b: null, existencia_final_frascos: null, observaciones: null }
+    ],
     biovac_generar_informe_jurisdiccional: (a) => {
       tables.biovac_informes_jurisdiccionales.push({ id: 'inf-' + tables.biovac_informes_jurisdiccionales.length, jurisdiccion_id: a.p_jurisdiccion_id, anio: a.p_anio, mes: a.p_mes, generado_por: a.p_usuario, generado_en: new Date().toISOString(), estado: 'GENERADO' });
       return 'ok';

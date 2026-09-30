@@ -128,3 +128,7 @@ button.pt { cursor: pointer; }
 .mun-otro.completo { background: var(--success-bg); border-color: #bbf7d0; }
 .mun-otro b { display: block; font-size: 13px; color: var(--primary); }
 .mun-otro small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; font-weight: 600; }
+
+.mun-aviso { display: flex; align-items: flex-start; gap: 10px; background: #f0f9ff; border: 1px solid #bae6fd; color: #075985; border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; font-size: 12.5px; line-height: 1.5; }
+.mun-aviso a { color: #075985; font-weight: 800; }
+.mun-aviso .material-symbols-rounded { font-size: 20px; flex: none; }

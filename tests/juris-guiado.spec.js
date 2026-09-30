@@ -21,52 +21,73 @@ async function abrir(page, rol) {
   // Octubre 2026: ya se suma por unidad (CLUES).
   await page.selectOption('#selAnio', '2026');
   await page.selectOption('#selMes', '10');
-  await expect(page.locator('#pildoraJ1')).toHaveText('4/7');
+  await expect(page.locator('#pildoraJ1')).toHaveText('2/4');
   return errores;
 }
 
 test.use({ viewport: { width: 1400, height: 1000 } });
 
-test('Jurisdicción: concentrado guiado en 4 pasos', async ({ page }) => {
+test('Jurisdicción: concentrado guiado por municipio en 4 pasos', async ({ page }) => {
   const errores = await abrir(page);
 
-  // --- Paso 1: cierre (solo cuentan las unidades que suman ese mes) ----------
+  // --- Paso 1: municipios (las unidades solo se consultan) --------------------
   await expect(page.locator('#rutaJuris .ruta-paso')).toHaveCount(4);
   await expect(page.locator('#estadoUnidades .jur-muni')).toHaveCount(4);             // Querétaro, Corregidora, NHG, HENM
-  await expect(page.locator('#estadoUnidades .jur-muni').first().locator('.pt')).toHaveCount(3);   // 3 unidades reales de Querétaro, sin la fila pseudo
-  await expect(page.locator('#estadoUnidades .pt.completo')).toHaveCount(4);
-  await expect(page.locator('#estadoUnidades .pt.parcial')).toHaveCount(2);           // en captura + en corrección
-  await expect(page.locator('#estadoUnidades .pt.vacio')).toHaveCount(1);             // Gamma sin movimiento
-  await expect(page.locator('#cierreResumen')).toContainText('4/7 cerrados');
-  await expect(page.locator('#estadoUnidades .jur-muni').first()).toContainText('SINBA-SIS: 1 validados · 1 por validar');
+  await expect(page.locator('#estadoUnidades .pt')).toHaveCount(0);                   // sin puntos por unidad
+  await expect(page.locator('#estadoUnidades details[open]')).toHaveCount(0);         // la lista de unidades viene plegada
+  await expect(page.locator('#pildoraJ1')).toHaveText('2/4');                          // NHG y HENM ya cerraron completos
+  await expect(page.locator('#cierreResumen')).toContainText('2 de 4 cerrados');
+  const qro = page.locator('#estadoUnidades .jur-muni').first();
+  await expect(qro).toContainText('Querétaro');
+  await expect(qro).toContainText('1 de 3 unidades cerraron su Movimiento');
+  await expect(qro).toContainText('SINBA-SIS (consulta): 1 validados · 1 por validar · 1 sin enviar');
+  await expect(page.locator('#estadoUnidades .jur-estado.ok')).toHaveCount(2);
   await expect(page.locator('#dockJTitulo')).toContainText('Paso 1 de 4');
+  // Los hospitales tienen su SINBA-SIS en biovac.html; los municipios no llevan ese botón
+  await expect(page.locator('#estadoUnidades a[href="biovac.html"]')).toHaveCount(0);
 
   // Antes del arranque por unidad, cuentan las filas de cada municipio y hospital (aquí 4 pseudo)
   await page.selectOption('#selMes', '9');
   await expect(page.locator('#pildoraJ1')).toHaveText('0/4');
   await page.selectOption('#selMes', '10');
-  await expect(page.locator('#pildoraJ1')).toHaveText('4/7');
+  await expect(page.locator('#pildoraJ1')).toHaveText('2/4');
 
-  // --- Paso 2: validaciones agrupadas ------------------------------------------
+  // --- Paso 2: por revisar (qué pasa, quién lo resuelve, qué hacer) -------------
   await page.click('#btnSiguiente');
   await expect(page.locator('#panelPaso2')).toBeVisible();
-  await expect(page.locator('.validacion-grupo')).toHaveCount(2);
-  await expect(page.locator('.validacion-grupo.ERROR')).toContainText('Existencia negativa');
-  await expect(page.locator('.jur-chip-u')).toHaveCount(3);
-  await expect(page.locator('#pildoraJ2')).toHaveText('1 ≠');
+  await expect(page.locator('.validacion-grupo')).toHaveCount(1);                       // solo el error; "sin cerrar" no es un aviso
+  await expect(page.locator('.validacion-grupo.ERROR')).toContainText('VACUNA SRP · lote AB123');
+  await expect(page.locator('.validacion-grupo.ERROR')).toContainText('Qué pasa');
+  await expect(page.locator('.validacion-grupo.ERROR')).toContainText('existencia final del lote queda en -5');
+  await expect(page.locator('.validacion-grupo.ERROR')).toContainText('Quién lo resuelve');
+  await expect(page.locator('.validacion-grupo.ERROR')).toContainText('Querétaro');
+  await expect(page.locator('.jur-pendientes')).toContainText('3 unidades sin cerrar');   // plegado, solo consulta
+  await expect(page.locator('.jur-pendientes[open]')).toHaveCount(0);
+  await expect(page.locator('#pildoraJ2')).toHaveText('1');
 
-  // "Ver en el concentrado" abre el lote con su detalle por unidad
+  // "Ver el lote": detalle por MUNICIPIO con la explicación a la vista
   await page.click('[data-action="ir-lote"]');
   await expect(page.locator('#panelPaso3')).toBeVisible();
-  await expect(page.locator('#drilldownContenido')).toContainText('C.S. Alfa');
+  await expect(page.locator('#drilldownContenido .jur-callout')).toContainText('Se dieron de baja más frascos');
+  const filasMuni = page.locator('#drilldownContenido table.jur-drill tbody tr');
+  await expect(page.locator('#drilldownContenido tr.muni-resumen')).toHaveCount(1);       // Querétaro = suma de sus 2 unidades
+  await expect(page.locator('#drilldownContenido tr.muni-resumen')).toContainText('Querétaro');
+  await expect(page.locator('#drilldownContenido tr.muni-resumen .existencia-final')).toHaveText('1');   // -2 + 3
+  await expect(page.locator('#drilldownContenido tr.sub-fila')).toHaveCount(2);
+  await expect(page.locator('#drilldownContenido tr.sub-fila').first()).toBeHidden();      // las unidades vienen plegadas
+  await expect(page.locator('#drilldownContenido')).not.toContainText('C.S. Dos');         // quien no reportó el lote no estorba
+  await expect(page.locator('#drilldownContenido')).toContainText('1 unidad no reportó este lote');
+  await page.click('#drilldownContenido [data-action="toggle-unidades"]');
+  await expect(page.locator('#drilldownContenido tr.sub-fila').first()).toBeVisible();
+  await expect(page.locator('#drilldownContenido tr.sub-fila').first()).toContainText('C.S. Alfa');
+  expect(await filasMuni.count()).toBe(4);                                                  // resumen + 2 unidades + Corregidora
   await expect(page.locator('#chipsBio .jur-chip.activo')).toContainText('SRP');
-  await expect(page.locator('table.concentrado tbody tr').filter({ hasText: 'AB124' })).toHaveCount(1);
   await expect(page.locator('table.concentrado tbody tr').filter({ hasText: 'HX001' })).toHaveCount(0);   // filtrado por biológico
 
   // Filtros del concentrado
   await page.click('#chipsBio [data-filtro-bio=""]');
   await page.click('#chipsBio [data-solo-alertas]');
-  await expect(page.locator('table.concentrado tbody tr').filter({ hasText: 'AB124' })).toHaveCount(0);   // sin alerta
+  await expect(page.locator('table.concentrado tbody tr').filter({ hasText: 'AB124' })).toHaveCount(0);   // sin aviso
   await expect(page.locator('table.concentrado tbody tr').filter({ hasText: 'AB123' })).toHaveCount(1);   // existencia negativa
   await expect(page.locator('table.concentrado tbody tr').filter({ hasText: 'HX001' })).toHaveCount(1);   // provisional
   await page.click('#chipsBio [data-solo-alertas]');
@@ -74,11 +95,12 @@ test('Jurisdicción: concentrado guiado en 4 pasos', async ({ page }) => {
   // --- Paso 4: informe ----------------------------------------------------------
   await page.click('#dockJTabs .hoja-tab[data-jpaso="4"]');
   await expect(page.locator('#checkInforme li')).toHaveCount(3);
-  await expect(page.locator('#checkInforme li.ok')).toHaveCount(1);   // solo "sin advertencias": faltan cierres y hay un error
+  await expect(page.locator('#checkInforme li.ok')).toHaveCount(1);                          // solo "sin otros avisos"
+  await expect(page.locator('#checkInforme li').first()).toContainText('2 de 4');
   await expect(page.locator('#btnGenerarInforme')).toBeVisible();
   await expect(page.locator('#btnSiguiente')).toBeHidden();
   await page.click('#btnGenerarInforme');
-  await expect(page.locator('#modalTitulo')).toHaveText('Hay movimientos sin cerrar');   // pregunta antes de generar sin todo cerrado
+  await expect(page.locator('#modalTitulo')).toHaveText('Hay municipios sin cerrar');       // pregunta antes de generar sin todo cerrado
   await page.click('#modalBtnAceptar');
   await expect(page.locator('#listaInformes .informe-fila')).toHaveCount(1);
   await expect(page.locator('#pildoraJ4')).toHaveText('✓');
@@ -98,7 +120,7 @@ test('Jurisdicción: el visualizador consulta pero no genera ni corrige', async 
   await expect(page.locator('#btnGenerarInforme')).toBeHidden();
   await page.click('#dockJTabs .hoja-tab[data-jpaso="3"]');
   await page.locator('table.concentrado [data-action="drilldown"]').first().click();
-  await expect(page.locator('#drilldownContenido')).toContainText('C.S. Alfa');
+  await expect(page.locator('#drilldownContenido')).toContainText('Querétaro');
   await expect(page.locator('[data-action="abrir-correccion-mov"]')).toHaveCount(0);
   expect(errores).toEqual([]);
 });
