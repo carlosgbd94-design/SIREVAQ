@@ -1336,6 +1336,10 @@ async function loadInfluenzaAdminData() {
     // 4. Cargar entregas de frascos
     const resFrascos = await AppService.call("getinfluenza_distribucion", {});
     _adminFrascosArray = resFrascos.data || [];
+
+    // 5. Entregas (remesas) repartidas por Jurisdicción
+    const resRemesas = await AppService.call("getinfluenza_remesas", { anio_campana: campana });
+    _adminRemesasArray = resRemesas.data || [];
   } catch (err) {
     console.error("Error al cargar datos administrativos de Influenza:", err);
   }
@@ -3908,6 +3912,68 @@ function writeUnitDataColumns(ws, startCol, headerName, clues, cluesArray, isTot
 
 // 2. CONFIGURACIÓN DE METAS (ADMIN / MUNICIPAL)
 
+// Captura numérica de metas: sin el "0" inicial pegado al teclear (se selecciona todo al entrar y se
+// quitan ceros a la izquierda) y sin aceptar letras.
+function metaEnlazarInputs(raiz, alCambiar) {
+  raiz.querySelectorAll("input.meta-num").forEach(inp => {
+    inp.addEventListener("focus", () => inp.select());
+    inp.addEventListener("input", () => {
+      const limpio = inp.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+      if (inp.value !== limpio) inp.value = limpio;
+      if (alCambiar) alCambiar();
+    });
+    inp.addEventListener("blur", () => { if (inp.value === "") { inp.value = "0"; if (alCambiar) alCambiar(); } });
+    // Tab avanza a la derecha (Shift+Tab a la izquierda) y al terminar la fila salta a la siguiente;
+    // Enter / flecha abajo bajan por la misma columna (Shift+Enter / flecha arriba suben) y al terminar
+    // la columna pasan a la siguiente. Siempre con scroll automático hasta el campo.
+    inp.addEventListener("keydown", (e) => {
+      const k = e.key;
+      if (!(k === "Tab" || k === "Enter" || k === "ArrowDown" || k === "ArrowUp")) return;
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      const filas = [...raiz.querySelectorAll("tr[data-rb]")];
+      const fila = inp.closest("tr");
+      const r = filas.indexOf(fila);
+      if (r < 0) return;
+      const campos = [...fila.querySelectorAll("input.meta-num")];
+      const c = campos.indexOf(inp);
+      const atras = k === "ArrowUp" || e.shiftKey;
+      let nr = r, nc = c;
+      if (k === "Tab") {
+        nc = c + (atras ? -1 : 1);
+        if (nc >= campos.length) { nr = r + 1; nc = 0; }
+        else if (nc < 0) { nr = r - 1; nc = campos.length - 1; }
+      } else {
+        nr = r + (atras ? -1 : 1);
+        if (nr >= filas.length) { nr = 0; nc = c + 1; }
+        else if (nr < 0) { nr = filas.length - 1; nc = c - 1; }
+      }
+      const destino = filas[nr]?.querySelectorAll("input.meta-num")[nc];
+      if (!destino) return;   // fuera de la tabla: el Tab normal sigue su camino
+      e.preventDefault();
+      destino.focus();
+      destino.scrollIntoView({ block: "center", inline: "center" });
+    });
+  });
+}
+
+// Bloques de la tabla de metas (Primera dosis, Segunda dosis, Revacunación, Grupos de riesgo...): una franja
+// de color con el nombre del bloque cada vez que cambia, y el mismo color como filete en sus renglones.
+const META_COLORES_GRUPO = ["#7c3aed", "#0284c7", "#d97706", "#16a34a", "#db2777", "#0d9488", "#64748b"];
+function metaGrupoKey(rb) { return `${rb.categoria}|${rb.grupo}`; }
+function metaColorGrupo(rb) {
+  const claves = [...new Set(INFLUENZA_RUBROS.map(metaGrupoKey))];
+  return META_COLORES_GRUPO[claves.indexOf(metaGrupoKey(rb)) % META_COLORES_GRUPO.length];
+}
+// colspan = columnas antes de «Comparación» (que va aparte para seguir pegada a la derecha).
+function metaAgregarFranja(tbody, previo, rb, colspan) {
+  if (previo && metaGrupoKey(previo) === metaGrupoKey(rb)) return;
+  const tr = document.createElement("tr");
+  tr.className = "meta-grupo-row";
+  tr.style.setProperty("--g", metaColorGrupo(rb));
+  tr.innerHTML = `<td colspan="${colspan}"><span class="meta-grupo-cat">${rb.categoria}</span> <b>${rb.grupo}</b></td><td class="meta-cmp-cell meta-grupo-cmp"></td>`;
+  tbody.appendChild(tr);
+}
+
 function renderMetasConfigurationGrid() {
   const isMuni = USER.rol === "MUNICIPAL";
   const selectMuni = document.getElementById("adminInfluenzaMuni").value;
@@ -3922,123 +3988,170 @@ function renderMetasConfigurationGrid() {
     syncTabGroupIndicator('#influenzaAdminTabsContainer');
   }
 
+  const celdaGrupo = (rb) => `
+        <td class="p-3 align-middle"><div style="width: 220px; min-width: 220px; max-width: 220px; word-break: break-word; white-space: normal; line-height: 1.25; font-size: 12px; font-weight: 600; color: #334155;">${rb.categoria} - ${rb.grupo}</div></td>
+        <td class="p-3 align-middle"><div style="width: 130px; min-width: 130px; max-width: 130px; word-break: break-word; white-space: normal; line-height: 1.25; font-size: 12px; color: #475569;">${rb.edad}</div></td>`;
+  const inputMeta = (extra, valor, clase) => `<input type="text" inputmode="numeric" autocomplete="off" class="meta-num ${clase} w-20 text-center font-bold bg-slate-50 border border-slate-300 rounded-xl px-2 py-1 focus:border-violet-500 outline-none" ${extra} value="${valor}">`;
+  const leer = (el) => (el ? (parseInt(el.value, 10) || 0) : 0);
+
   if (!isMuni) {
-    // Modo ADMIN: Configura metas de los 4 municipios
-    hints.textContent = "Modo Administrador: Configura las metas anuales para los 4 municipios. El total jurisdiccional se calcula automáticamente.";
-    
+    // Modo Jurisdiccional: metas de los 4 municipios y los 2 hospitales, contra el total jurisdiccional capturado
+    hints.textContent = "Modo Jurisdiccional: Configura las metas anuales de los 4 municipios y de los hospitales HENM y NHGQ. En «Comparación» captura la meta total de la Jurisdicción: se pinta en verde si la suma de los 6 destinos coincide y en rojo si no.";
+
+    const th = (t, w) => `<th class="p-3 text-center text-xs font-black text-slate-500 uppercase" style="width: ${w}; min-width: 96px;">${t}</th>`;
     thead.innerHTML = `
       <tr class="bg-slate-50 border-b border-slate-200">
-        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 280px; min-width: 280px; max-width: 280px;">Grupo</th>
-        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 150px; min-width: 150px; max-width: 150px;">Subgrupo / Edad</th>
-        <th class="p-3 text-center text-xs font-black text-slate-500 uppercase" style="width: 11%;">Querétaro</th>
-        <th class="p-3 text-center text-xs font-black text-slate-500 uppercase" style="width: 11%;">Corregidora</th>
-        <th class="p-3 text-center text-xs font-black text-slate-500 uppercase" style="width: 11%;">El Marqués</th>
-        <th class="p-3 text-center text-xs font-black text-slate-500 uppercase" style="width: 11%;">Huimilpan</th>
-        <th class="p-3 text-center text-xs font-black text-slate-500 uppercase font-bold" style="width: 11%;">Total Jurisd.</th>
+        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 220px; min-width: 220px; max-width: 220px;">Grupo</th>
+        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 130px; min-width: 130px; max-width: 130px;">Subgrupo / Edad</th>
+        ${th("Querétaro", "9%")}${th("Corregidora", "9%")}${th("El Marqués", "9%")}${th("Huimilpan", "9%")}${th("HENM", "9%")}${th("NHGQ", "9%")}
+        <th class="p-3 text-center text-xs font-black text-slate-500 uppercase font-bold" style="width: 9%; min-width: 120px;">Total Jurisd.</th>
+        <th class="meta-cmp-cell meta-cmp-th p-3 text-center text-xs font-black text-slate-500 uppercase">Comparación</th>
       </tr>
     `;
 
-    INFLUENZA_RUBROS.forEach(rb => {
-      const metas = {
-        "QUERETARO": 0,
-        "CORREGIDORA": 0,
-        "MARQUES": 0,
-        "HUIMILPAN": 0
-      };
+    const jurisRec = _adminMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === "JURISDICCION");
+    const ids = FRASCO_DESTINOS.map(d => d.id);
 
+    INFLUENZA_RUBROS.forEach(rb => {
+      const metas = {};
+      ids.forEach(id => { metas[id] = 0; });
       _adminMetasArray.forEach(m => {
         if (!m.clues) {
-          const name = m.municipio.toUpperCase();
-          if (metas[name] !== undefined) {
-            metas[name] = m.metas[rb.id] || 0;
-          }
+          const name = String(m.municipio).toUpperCase();
+          if (metas[name] !== undefined) metas[name] = m.metas[rb.id] || 0;
         }
       });
+      const jurisTotal = jurisRec ? Number(jurisRec.metas[rb.id] || 0) : 0;
+      const totalJ = ids.reduce((x, id) => x + Number(metas[id] || 0), 0);
 
-      const totalJ = Number(metas["QUERETARO"] || 0) + Number(metas["CORREGIDORA"] || 0) + Number(metas["MARQUES"] || 0) + Number(metas["HUIMILPAN"] || 0);
-
+      metaAgregarFranja(tbody, INFLUENZA_RUBROS[INFLUENZA_RUBROS.indexOf(rb) - 1], rb, 2 + ids.length + 1);
       const row = document.createElement("tr");
-      row.className = "border-b border-slate-100 hover:bg-slate-50";
-      row.innerHTML = `
-        <td class="p-3 align-middle"><div style="width: 280px; min-width: 280px; max-width: 280px; word-break: break-word; white-space: normal; line-height: 1.25; font-size: 12px; font-weight: 600; color: #334155;">${rb.categoria} - ${rb.grupo}</div></td>
-        <td class="p-3 align-middle"><div style="width: 150px; min-width: 150px; max-width: 150px; word-break: break-word; white-space: normal; line-height: 1.25; font-size: 12px; color: #475569;">${rb.edad}</div></td>
-        <td class="p-3 text-center"><input type="number" min="0" class="meta-input w-20 text-center font-bold bg-slate-50 border border-slate-300 rounded-xl px-2 py-1 focus:border-violet-500 outline-none" data-rb="${rb.id}" data-muni="QUERETARO" value="${metas["QUERETARO"]}"></td>
-        <td class="p-3 text-center"><input type="number" min="0" class="meta-input w-20 text-center font-bold bg-slate-50 border border-slate-300 rounded-xl px-2 py-1 focus:border-violet-500 outline-none" data-rb="${rb.id}" data-muni="CORREGIDORA" value="${metas["CORREGIDORA"]}"></td>
-        <td class="p-3 text-center"><input type="number" min="0" class="meta-input w-20 text-center font-bold bg-slate-50 border border-slate-300 rounded-xl px-2 py-1 focus:border-violet-500 outline-none" data-rb="${rb.id}" data-muni="MARQUES" value="${metas["MARQUES"]}"></td>
-        <td class="p-3 text-center"><input type="number" min="0" class="meta-input w-20 text-center font-bold bg-slate-50 border border-slate-300 rounded-xl px-2 py-1 focus:border-violet-500 outline-none" data-rb="${rb.id}" data-muni="HUIMILPAN" value="${metas["HUIMILPAN"]}"></td>
-        <td class="p-3 text-center font-bold text-slate-800 text-xs align-middle" id="total_j_${rb.id}">${totalJ}</td>
-      `;
+      row.className = "border-b border-slate-100 hover:bg-slate-50 meta-rubro-row";
+      row.style.setProperty("--g", metaColorGrupo(rb));
+      row.dataset.rb = rb.id;
+      row.innerHTML = celdaGrupo(rb)
+        + ids.map(id => `<td class="p-3 text-center">${inputMeta(`data-rb="${rb.id}" data-muni="${id}"`, metas[id], "meta-input")}</td>`).join("")
+        + `<td class="p-3 text-center font-bold text-slate-800 text-xs align-middle" id="total_j_${rb.id}">${totalJ}</td>
+        <td class="meta-cmp-cell p-3 text-center align-middle" id="cmp_${rb.id}">
+          ${inputMeta(`data-rb="${rb.id}" data-juris="1" title="Meta total de la Jurisdicción para este rubro"`, jurisTotal, "meta-juris-input")}
+          <div class="meta-cmp-msg"></div>
+        </td>`;
       tbody.appendChild(row);
-
-      row.querySelectorAll("input").forEach(inp => {
-        inp.addEventListener("input", () => {
-          let sum = 0;
-          row.querySelectorAll("input").forEach(i => sum += parseInt(i.value) || 0);
-          document.getElementById(`total_j_${rb.id}`).textContent = sum;
-        });
-      });
     });
 
+    const pie = document.createElement("tr");
+    pie.className = "meta-total-row";
+    pie.innerHTML = `<td class="p-3 text-xs font-black" colspan="2">TOTAL</td>`
+      + ids.map(id => `<td class="p-3 text-center text-xs font-black" id="tot_${id}">0</td>`).join("")
+      + `<td class="p-3 text-center text-xs font-black" id="tot_J">0</td>
+         <td class="meta-cmp-cell p-3 text-center" id="cmp_TOTAL"><b id="tot_juris">0</b><div class="meta-cmp-msg"></div></td>`;
+    tbody.appendChild(pie);
+
+    const pintar = (celda, ref, suma) => {
+      const msg = celda.querySelector(".meta-cmp-msg");
+      if (!ref && !suma) { celda.dataset.estado = "vacio"; msg.textContent = ""; return; }
+      if (ref === suma) { celda.dataset.estado = "ok"; msg.textContent = "✓ Coincide"; return; }
+      celda.dataset.estado = "mal";
+      msg.textContent = suma > ref ? `Sobran ${suma - ref}` : `Faltan ${ref - suma}`;
+    };
+    const recalcular = () => {
+      let granJ = 0, granRef = 0;
+      const porDestino = {};
+      ids.forEach(id => { porDestino[id] = 0; });
+      tbody.querySelectorAll("tr[data-rb]").forEach(tr => {
+        let suma = 0;
+        ids.forEach(id => {
+          const v = leer(tr.querySelector(`input[data-muni="${id}"]`));
+          suma += v;
+          porDestino[id] += v;
+        });
+        const ref = leer(tr.querySelector("input[data-juris]"));
+        document.getElementById(`total_j_${tr.dataset.rb}`).textContent = suma;
+        pintar(document.getElementById(`cmp_${tr.dataset.rb}`), ref, suma);
+        granJ += suma;
+        granRef += ref;
+      });
+      ids.forEach(id => { document.getElementById(`tot_${id}`).textContent = porDestino[id]; });
+      document.getElementById("tot_J").textContent = granJ;
+      document.getElementById("tot_juris").textContent = granRef;
+      pintar(document.getElementById("cmp_TOTAL"), granRef, granJ);
+    };
+    metaEnlazarInputs(tbody, recalcular);
+    recalcular();
+
   } else {
-    // Modo MUNICIPAL: Desglosa metas municipales a nivel CLUES
-    hints.textContent = `Modo Municipal (${selectMuni}): Desglosa tu meta municipal asignada entre las unidades (CLUES).`;
-    
-    // Obtener unidades del municipio
-    const muniUnits = _allUnidades.filter(u => u.municipio.toUpperCase() === selectMuni.toUpperCase());
-    
+    // Modo MUNICIPAL: Desglosa metas municipales a nivel CLUES (el total viene de Jurisdicción)
+    hints.textContent = `Modo Municipal (${selectMuni}): Desglosa tu meta municipal asignada entre las unidades (CLUES). La columna «Comparación» se pinta en verde cuando lo distribuido coincide con tu meta y en rojo si falta o sobra.`;
+
+    const muniUnits = frascoUnidadesMunicipio(selectMuni);
+    const muniMetaRec = _adminMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === selectMuni.toUpperCase());
+
     thead.innerHTML = `
       <tr class="bg-slate-50 border-b border-slate-200">
-        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 280px; min-width: 280px; max-width: 280px;">Grupo</th>
-        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 150px; min-width: 150px; max-width: 150px;">Subgrupo / Edad</th>
+        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 220px; min-width: 220px; max-width: 220px;">Grupo</th>
+        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 130px; min-width: 130px; max-width: 130px;">Subgrupo / Edad</th>
         <th class="p-3 text-center text-xs font-black text-slate-500 uppercase font-bold" style="width: 10%;">Meta Muni</th>
         ${muniUnits.map(u => `<th class="p-3 text-center text-[10px] font-black text-slate-500 uppercase truncate" style="max-width: 90px; min-width: 80px;" title="${u.unidad}">${u.unidad.substring(0, 12)}...</th>`).join("")}
-        <th class="p-3 text-center text-xs font-black text-slate-500 uppercase font-bold" style="width: 10%;">Por Asignar</th>
+        <th class="meta-cmp-cell meta-cmp-th p-3 text-center text-xs font-black text-slate-500 uppercase">Comparación</th>
       </tr>
     `;
 
     INFLUENZA_RUBROS.forEach(rb => {
-      // Meta asignada al municipio
-      const muniMetaRec = _adminMetasArray.find(m => !m.clues && m.municipio.toUpperCase() === selectMuni.toUpperCase());
-      const muniMeta = muniMetaRec ? (muniMetaRec.metas[rb.id] || 0) : 0;
-
-      // Metas ya asignadas a las CLUES
-      const cluesMetas = {};
-      muniUnits.forEach(u => {
-        const rec = _adminMetasArray.find(m => m.clues === u.clues);
-        cluesMetas[u.clues] = rec ? (rec.metas[rb.id] || 0) : 0;
-      });
-
-      const totalAsignado = Object.values(cluesMetas).reduce((a, b) => a + b, 0);
-      const restante = muniMeta - totalAsignado;
-
+      const muniMeta = muniMetaRec ? Number(muniMetaRec.metas[rb.id] || 0) : 0;
+      metaAgregarFranja(tbody, INFLUENZA_RUBROS[INFLUENZA_RUBROS.indexOf(rb) - 1], rb, 3 + muniUnits.length);
       const row = document.createElement("tr");
-      row.className = "border-b border-slate-100 hover:bg-slate-50";
-      
-      let inputsHtml = "";
-      muniUnits.forEach(u => {
-        inputsHtml += `<td class="p-2 text-center"><input type="number" min="0" class="clues-meta-input w-16 text-center font-bold bg-slate-50 border border-slate-300 rounded-xl px-1 py-1 focus:border-violet-500 outline-none" data-rb="${rb.id}" data-clues="${u.clues}" value="${cluesMetas[u.clues]}"></td>`;
-      });
-
-      row.innerHTML = `
-        <td class="p-3 align-middle"><div style="width: 280px; min-width: 280px; max-width: 280px; word-break: break-word; white-space: normal; line-height: 1.25; font-size: 12px; font-weight: 600; color: #334155;">${rb.categoria} - ${rb.grupo}</div></td>
-        <td class="p-3 align-middle"><div style="width: 150px; min-width: 150px; max-width: 150px; word-break: break-word; white-space: normal; line-height: 1.25; font-size: 12px; color: #475569;">${rb.edad}</div></td>
-        <td class="p-3 text-center font-bold text-violet-900 text-xs align-middle" id="muni_meta_${rb.id}">${muniMeta}</td>
-        ${inputsHtml}
-        <td class="p-3 text-center font-bold text-xs align-middle" id="restante_${rb.id}" style="color: ${restante < 0 ? '#ef4444' : '#64748b'}">${restante}</td>
-      `;
+      row.className = "border-b border-slate-100 hover:bg-slate-50 meta-rubro-row";
+      row.style.setProperty("--g", metaColorGrupo(rb));
+      row.dataset.rb = rb.id;
+      row.dataset.meta = muniMeta;
+      row.innerHTML = celdaGrupo(rb)
+        + `<td class="p-3 text-center font-bold text-violet-900 text-xs align-middle">${muniMeta}</td>`
+        + muniUnits.map(u => {
+          const rec = _adminMetasArray.find(m => m.clues === u.clues);
+          const v = rec ? Number(rec.metas[rb.id] || 0) : 0;
+          return `<td class="p-2 text-center">${inputMeta(`data-rb="${rb.id}" data-clues="${u.clues}"`, v, "clues-meta-input")}</td>`;
+        }).join("")
+        + `<td class="meta-cmp-cell p-3 text-center align-middle" id="cmp_${rb.id}"><b class="meta-cmp-num"></b><div class="meta-cmp-msg"></div></td>`;
       tbody.appendChild(row);
-
-      row.querySelectorAll(".clues-meta-input").forEach(inp => {
-        inp.addEventListener("input", () => {
-          let sum = 0;
-          row.querySelectorAll(".clues-meta-input").forEach(i => sum += parseInt(i.value) || 0);
-          const rest = muniMeta - sum;
-          const cell = document.getElementById(`restante_${rb.id}`);
-          cell.textContent = rest;
-          cell.style.color = rest < 0 ? "#ef4444" : "#64748b";
-        });
-      });
     });
+
+    const pie = document.createElement("tr");
+    pie.className = "meta-total-row";
+    pie.innerHTML = `<td class="p-3 text-xs font-black" colspan="2">TOTAL</td><td class="p-3 text-center text-xs font-black" id="tot_meta">0</td>`
+      + muniUnits.map(u => `<td class="p-3 text-center text-xs font-black" id="tot_${u.clues}">0</td>`).join("")
+      + `<td class="meta-cmp-cell p-3 text-center" id="cmp_TOTAL"><b class="meta-cmp-num"></b><div class="meta-cmp-msg"></div></td>`;
+    tbody.appendChild(pie);
+
+    const pintar = (celda, ref, suma) => {
+      celda.querySelector(".meta-cmp-num").textContent = `${suma} de ${ref}`;
+      const msg = celda.querySelector(".meta-cmp-msg");
+      if (!ref && !suma) { celda.dataset.estado = "vacio"; msg.textContent = ""; return; }
+      if (ref === suma) { celda.dataset.estado = "ok"; msg.textContent = "✓ Completo"; return; }
+      celda.dataset.estado = "mal";
+      msg.textContent = suma > ref ? `Sobran ${suma - ref}` : `Faltan ${ref - suma}`;
+    };
+    const recalcular = () => {
+      let granRef = 0, granSuma = 0;
+      const porUnidad = {};
+      muniUnits.forEach(u => { porUnidad[u.clues] = 0; });
+      tbody.querySelectorAll("tr[data-rb]").forEach(tr => {
+        let suma = 0;
+        muniUnits.forEach(u => {
+          const v = leer(tr.querySelector(`input[data-clues="${u.clues}"]`));
+          suma += v;
+          porUnidad[u.clues] += v;
+        });
+        const ref = Number(tr.dataset.meta) || 0;
+        pintar(document.getElementById(`cmp_${tr.dataset.rb}`), ref, suma);
+        granRef += ref;
+        granSuma += suma;
+      });
+      muniUnits.forEach(u => { document.getElementById(`tot_${u.clues}`).textContent = porUnidad[u.clues]; });
+      document.getElementById("tot_meta").textContent = granRef;
+      pintar(document.getElementById("cmp_TOTAL"), granRef, granSuma);
+    };
+    metaEnlazarInputs(tbody, recalcular);
+    recalcular();
   }
 
   // Enlazar guardado
@@ -4055,8 +4168,15 @@ async function saveInfluenzaMetasConfig() {
   const rows = [];
 
   if (!isMuni) {
-    // Guardar para los 4 municipios
-    const munis = ["QUERETARO", "CORREGIDORA", "MARQUES", "HUIMILPAN"];
+    // Guardar para los 4 municipios y los 2 hospitales
+    const munis = FRASCO_DESTINOS.map(d => d.id);
+    // Meta total de la Jurisdicción (columna «Comparación»): solo sirve de referencia para cuadrar.
+    const jurisMetas = {};
+    INFLUENZA_RUBROS.forEach(rb => {
+      const input = document.querySelector(`input[data-rb="${rb.id}"][data-juris]`);
+      jurisMetas[rb.id] = input ? (parseInt(input.value, 10) || 0) : 0;
+    });
+    rows.push({ anio_campana: campana, municipio: "JURISDICCION", clues: null, metas: jurisMetas, modificado_por: USER.usuario });
     munis.forEach(m => {
       const metasObj = {};
       INFLUENZA_RUBROS.forEach(rb => {
@@ -4071,10 +4191,21 @@ async function saveInfluenzaMetasConfig() {
         metas: metasObj,
         modificado_por: USER.usuario
       });
+      // El hospital es un solo destino y una sola unidad: su CLUES lleva la misma meta.
+      const hosp = FRASCO_DESTINOS.find(d => d.id === m && d.hospital);
+      if (hosp) {
+        rows.push({
+          anio_campana: campana,
+          municipio: m,
+          clues: hosp.clues,
+          metas: metasObj,
+          modificado_por: USER.usuario
+        });
+      }
     });
   } else {
-    // Guardar desglose de las CLUES del municipio
-    const muniUnits = _allUnidades.filter(u => u.municipio.toUpperCase() === selectMuni.toUpperCase());
+    // Guardar desglose de las CLUES del municipio (sin hospitales: su meta viene de Jurisdicción)
+    const muniUnits = frascoUnidadesMunicipio(selectMuni);
     
     // Validación previa: Que ningún rubro tenga restante negativo
     let hasValidationError = false;
@@ -4145,27 +4276,33 @@ function updateFlaskCalculationMuni() {
   const selectMuni = document.getElementById("adminInfluenzaMuni")?.value;
   if (!selectMuni) return;
 
-  // 1. Dosis aplicadas en todo el municipio (acumuladas + reporte actual de todas las unidades)
+  // ADMIN/JURISDICCIONAL ven la jurisdicción completa (4 municipios + 2 hospitales);
+  // MUNICIPAL ve su municipio (los hospitales cuentan aparte, aunque sean unidades de QUERETARO).
+  const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";
+
+  // 1. Dosis aplicadas (acumuladas de todas las capturas del ámbito)
   let totalDosis = 0;
-  
-  // Sumamos todos los reportes capturados para este municipio
-  _adminCapturasArray.forEach(r => {
-    if (r.municipio.toUpperCase() === selectMuni.toUpperCase()) {
-      INFLUENZA_RUBROS.forEach(rb => {
-        totalDosis += Number(r.valores[rb.id] || 0);
-      });
-    }
-  });
+  if (esJuris) {
+    FRASCO_DESTINOS.forEach(d => { totalDosis += frascoDosisAplicadas(d.id); });
+  } else {
+    totalDosis = frascoDosisAplicadas(selectMuni.toUpperCase());
+  }
 
-  const frascosAplicados = totalDosis / 10;
+  const frascosAplicados = totalDosis / DOSIS_POR_FRASCO;
 
-  // 2. Frascos entregados en el municipio
+  // 2. Frascos entregados
   let totalFrascosEntregados = 0;
-  _adminFrascosArray.forEach(d => {
-    if (d.municipio.toUpperCase() === selectMuni.toUpperCase()) {
-      totalFrascosEntregados += Number(d.cantidad_frascos || 0);
-    }
-  });
+  if (esJuris) {
+    _adminRemesasArray.forEach(r => {
+      totalFrascosEntregados += FRASCO_DESTINOS.reduce((x, d) => x + Number((r.asignacion || {})[d.id] || 0), 0);
+    });
+  } else {
+    _adminFrascosArray.forEach(d => {
+      if (d.municipio.toUpperCase() === selectMuni.toUpperCase()) {
+        totalFrascosEntregados += Number(d.cantidad_frascos || 0);
+      }
+    });
+  }
 
   const dif = totalFrascosEntregados - frascosAplicados;
 
@@ -4197,226 +4334,669 @@ function updateFlaskCalculationMuni() {
   }
 }
 
-function renderFrascosDistribution() {
-  const selectMuni = document.getElementById("adminInfluenzaMuni").value;
-  const tbody = document.getElementById("frascosBatchTbody");
-  const historyTbody = document.getElementById("frascosEntregaTbody");
+// Un frasco de influenza rinde 10 dosis.
+const DOSIS_POR_FRASCO = 10;
 
+// Destinos del reparto jurisdiccional. Querétaro va primero: a igualdad de
+// residuo es quien se queda con el frasco sobrante (ver influenza_reparto.js).
+// Los hospitales son unidades de QUERETARO en el catálogo, pero aquí son
+// destinos aparte con su propia meta y su propio renglón.
+const FRASCO_DESTINOS = [
+  { id: "QUERETARO", label: "Querétaro" },
+  { id: "CORREGIDORA", label: "Corregidora" },
+  { id: "MARQUES", label: "El Marqués" },
+  { id: "HUIMILPAN", label: "Huimilpan" },
+  { id: "HENM", label: "HENM", clues: "QTSSA001740", hospital: true },
+  { id: "NHG", label: "NHGQ", clues: "QTSSA002901", hospital: true }
+];
+const FRASCO_CLUES_HOSPITAL = new Set(FRASCO_DESTINOS.filter(d => d.hospital).map(d => d.clues));
+
+let _adminRemesasArray = [];
+// fijos: frascos que NO se recalculan (editados a mano, o cargados de una entrega guardada).
+// editados: los que el usuario tocó de verdad (se guardan como "manual").
+let _remesaState = { numero: null, fijos: {}, editados: new Set() };
+let _muniRepartoState = { numero: null, fijos: {}, editados: new Set() };
+
+function frascoSumaMetas(metas) {
+  return Object.values(metas || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+}
+
+function frascoMetaDestino(id) {
+  const rec = _adminMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === id);
+  return rec ? frascoSumaMetas(rec.metas) : 0;
+}
+
+function frascoMetaUnidad(clues) {
+  const rec = _adminMetasArray.find(m => m.clues === clues);
+  return rec ? frascoSumaMetas(rec.metas) : 0;
+}
+
+// Unidades que reparten frascos dentro de un municipio (sin los hospitales, que son destino propio).
+function frascoUnidadesMunicipio(muni) {
+  return _allUnidades.filter(u =>
+    String(u.municipio).toUpperCase() === String(muni).toUpperCase() && !FRASCO_CLUES_HOSPITAL.has(u.clues));
+}
+
+function frascoEntero(v) {
+  return parseInt(String(v == null ? "" : v).replace(/[^\d]/g, ""), 10) || 0;
+}
+
+function frascoOrdinal(n) {
+  return `${n}ª entrega`;
+}
+
+function frascoFmt(n) {
+  return Number(n || 0).toLocaleString("es-MX");
+}
+
+function frascoPintarResumen(el, tono, html) {
+  if (!el) return;
+  el.className = `frs-box frs-box--${tono}`;
+  el.innerHTML = html;
+}
+
+function frascoResumenReparto(el, total, res, tieneMeta) {
+  if (!total) {
+    frascoPintarResumen(el, "info", "Captura el total de frascos recibidos para calcular el reparto.");
+  } else if (res.porAsignar < 0) {
+    frascoPintarResumen(el, "bad", `⚠️ Te pasaste por <b>${frascoFmt(-res.porAsignar)}</b> frascos: asignado ${frascoFmt(res.asignado)} de ${frascoFmt(total)}. Baja alguna cantidad.`);
+  } else if (res.porAsignar > 0) {
+    frascoPintarResumen(el, "warn", `Asignado ${frascoFmt(res.asignado)} de ${frascoFmt(total)} frascos. Faltan <b>${frascoFmt(res.porAsignar)}</b> por asignar${tieneMeta ? "" : " (ningún destino tiene meta capturada)"}.`);
+  } else {
+    frascoPintarResumen(el, "good", `✅ Reparto completo: ${frascoFmt(res.asignado)} de ${frascoFmt(total)} frascos (${frascoFmt(res.asignado * DOSIS_POR_FRASCO)} dosis).`);
+  }
+}
+
+// Sobre una entrega ya guardada todo está "fijo"; en cuanto el usuario cambia algo
+// se sueltan los que no editó él para que el reparto se vuelva a calcular.
+function frascoSoltarCargados(state) {
+  const nuevos = {};
+  state.editados.forEach(id => { if (id in state.fijos) nuevos[id] = state.fijos[id]; });
+  state.fijos = nuevos;
+}
+
+// ─── Reparto jurisdiccional (ADMIN / JURISDICCIONAL) ───────────────────────
+
+function renderRemesaPanel() {
+  const sel = document.getElementById("remesaNumeroSelect");
+  if (!sel) return;
+  const nums = _adminRemesasArray.map(r => r.numero_entrega);
+  const siguiente = (nums.length ? Math.max(...nums) : 0) + 1;
+  if (_remesaState.numero == null || (!nums.includes(_remesaState.numero) && _remesaState.numero !== siguiente)) {
+    _remesaState.numero = siguiente;
+  }
+  sel.innerHTML = nums.map(n => `<option value="${n}">${frascoOrdinal(n)} (guardada)</option>`).join("")
+    + `<option value="${siguiente}">${frascoOrdinal(siguiente)} (nueva)</option>`;
+  sel.value = String(_remesaState.numero);
+
+  if (!sel.dataset.bound) {
+    sel.dataset.bound = "1";
+    sel.addEventListener("change", () => { _remesaState.numero = parseInt(sel.value, 10); cargarRemesaSeleccionada(); });
+    document.getElementById("remesaTotalInput").addEventListener("input", () => {
+      frascoSoltarCargados(_remesaState);
+      refreshRemesa();
+    });
+    document.getElementById("btnRemesaReset").addEventListener("click", () => {
+      _remesaState.fijos = {};
+      _remesaState.editados = new Set();
+      refreshRemesa();
+    });
+    document.getElementById("btnSaveRemesa").addEventListener("click", saveRemesa);
+  }
+  cargarRemesaSeleccionada();
+}
+
+function cargarRemesaSeleccionada() {
+  const r = _adminRemesasArray.find(x => x.numero_entrega === _remesaState.numero);
+  document.getElementById("remesaTotalInput").value = r ? String(r.total_frascos) : "";
+  document.getElementById("remesaFechaInput").value = r ? r.fecha : new Date().toISOString().split("T")[0];
+  _remesaState.fijos = r ? { ...r.asignacion } : {};
+  _remesaState.editados = new Set(r ? (r.manual || []) : []);
+
+  const tbody = document.getElementById("remesaTbody");
+  tbody.innerHTML = "";
+  FRASCO_DESTINOS.forEach(d => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><b>${d.label}</b>${d.hospital ? ' <span class="frs-sub">hospital</span>' : ""}</td>
+      <td class="c" id="rem_meta_${d.id}"></td>
+      <td class="c frs-muted" id="rem_pct_${d.id}"></td>
+      <td class="c">
+        <input type="text" inputmode="numeric" autocomplete="off" id="rem_inp_${d.id}" class="frs-num">
+        <div class="frs-mark" id="rem_mark_${d.id}"></div>
+      </td>
+      <td class="c frs-muted" id="rem_dos_${d.id}"></td>`;
+    tbody.appendChild(tr);
+    tr.querySelector("input").addEventListener("input", (e) => {
+      frascoSoltarCargados(_remesaState);
+      if (e.target.value.trim() === "") {
+        delete _remesaState.fijos[d.id];
+        _remesaState.editados.delete(d.id);
+      } else {
+        _remesaState.fijos[d.id] = frascoEntero(e.target.value);
+        _remesaState.editados.add(d.id);
+      }
+      refreshRemesa(e.target);
+    });
+  });
+  const tf = document.createElement("tr");
+  tf.className = "frs-total";
+  tf.innerHTML = `<td>TOTAL</td><td class="c" id="rem_meta_T"></td>
+    <td class="c" id="rem_pct_T"></td><td class="c" id="rem_inp_T"></td>
+    <td class="c" id="rem_dos_T"></td>`;
+  tbody.appendChild(tf);
+  refreshRemesa();
+}
+
+function calcularRemesa() {
+  const total = frascoEntero(document.getElementById("remesaTotalInput").value);
+  const items = FRASCO_DESTINOS.map(d => ({ id: d.id, meta: frascoMetaDestino(d.id) }));
+  const res = InfluenzaReparto.repartirFrascos(total, items, _remesaState.fijos);
+  return { total, items, res, sumaMeta: items.reduce((s, i) => s + i.meta, 0) };
+}
+
+function refreshRemesa(enfocado) {
+  const { total, items, res, sumaMeta } = calcularRemesa();
+  items.forEach(it => {
+    const v = res.frascos[it.id] || 0;
+    document.getElementById(`rem_meta_${it.id}`).textContent = frascoFmt(it.meta);
+    document.getElementById(`rem_pct_${it.id}`).textContent = sumaMeta ? `${(it.meta * 100 / sumaMeta).toFixed(2)}%` : "—";
+    const inp = document.getElementById(`rem_inp_${it.id}`);
+    if (inp !== enfocado) inp.value = total || v ? String(v) : "";
+    document.getElementById(`rem_mark_${it.id}`).textContent = _remesaState.editados.has(it.id) ? "editado" : "";
+    document.getElementById(`rem_dos_${it.id}`).textContent = frascoFmt(v * DOSIS_POR_FRASCO);
+  });
+  document.getElementById("rem_meta_T").textContent = frascoFmt(sumaMeta);
+  document.getElementById("rem_pct_T").textContent = sumaMeta ? "100%" : "—";
+  document.getElementById("rem_inp_T").textContent = frascoFmt(res.asignado);
+  document.getElementById("rem_dos_T").textContent = frascoFmt(res.asignado * DOSIS_POR_FRASCO);
+  frascoResumenReparto(document.getElementById("remesaResumen"), total, res, sumaMeta > 0);
+}
+
+async function saveRemesa() {
+  const fecha = document.getElementById("remesaFechaInput").value;
+  const { total, res } = calcularRemesa();
+  const numero = _remesaState.numero;
+  if (!total || !fecha) {
+    showToast("Captura la fecha y el total de frascos recibidos.", false, "bad");
+    return;
+  }
+  if (res.porAsignar < 0) {
+    showToast("El reparto rebasa el total de frascos recibidos.", false, "bad");
+    return;
+  }
+  const campana = document.getElementById("metaCampaignSelect").value;
+  await AppService.runCapture({
+    btnId: "btnSaveRemesa",
+    title: "Guardando reparto",
+    msg: `Guardando el reparto de la ${frascoOrdinal(numero)}...`,
+    successMsg: res.porAsignar > 0
+      ? `Reparto guardado; quedan ${res.porAsignar} frascos sin asignar`
+      : "Reparto de la entrega guardado correctamente",
+    eventTitle: "Influenza",
+    eventMsg: `Reparto de la ${frascoOrdinal(numero)} de frascos`,
+    action: async () => {
+      await AppService.call("saveinfluenza_remesa", {
+        anio_campana: campana,
+        numero_entrega: numero,
+        fecha,
+        total_frascos: total,
+        asignacion: res.frascos,
+        manual: [..._remesaState.editados]
+      });
+      // Los hospitales son su propio destino (una sola unidad): su entrega queda registrada de una vez.
+      for (const d of FRASCO_DESTINOS.filter(x => x.hospital)) {
+        await AppService.call("guardarinfluenza_reparto", {
+          municipio: d.id,
+          numero_entrega: numero,
+          fecha,
+          rows: [{ clues: d.clues, cantidad_frascos: res.frascos[d.id] || 0 }]
+        });
+      }
+      await loadInfluenzaAdminData();
+      renderFrascosDistribution();
+    }
+  });
+}
+
+// ─── Reparto municipal entre unidades ──────────────────────────────────────
+
+function frascosRecibidosMunicipio(muni, numero) {
+  const r = _adminRemesasArray.find(x => x.numero_entrega === numero);
+  return r ? Number((r.asignacion || {})[muni] || 0) : 0;
+}
+
+function renderFrascosMunicipal(muni) {
+  const sel = document.getElementById("frascoEntregaInput");
+  const tbody = document.getElementById("frascosBatchTbody");
+  const resumen = document.getElementById("frascosMuniResumen");
+  const remesas = _adminRemesasArray.filter(r => Number((r.asignacion || {})[muni] || 0) > 0);
+
+  if (!remesas.length) {
+    sel.innerHTML = "";
+    tbody.innerHTML = "";
+    frascoPintarResumen(resumen, "info", "La Jurisdicción todavía no asigna frascos a este municipio. Cuando reparta una entrega aparecerá aquí.");
+    return;
+  }
+
+  const nums = remesas.map(r => r.numero_entrega);
+  if (!nums.includes(_muniRepartoState.numero)) _muniRepartoState.numero = nums[nums.length - 1];
+  sel.innerHTML = remesas.map(r =>
+    `<option value="${r.numero_entrega}">${frascoOrdinal(r.numero_entrega)} — ${frascoFmt(r.asignacion[muni])} frascos</option>`).join("");
+  sel.value = String(_muniRepartoState.numero);
+
+  if (!sel.dataset.bound) {
+    sel.dataset.bound = "1";
+    sel.addEventListener("change", () => {
+      _muniRepartoState.numero = parseInt(sel.value, 10);
+      renderFrascosMunicipal(document.getElementById("adminInfluenzaMuni").value);
+    });
+  }
+
+  const numero = _muniRepartoState.numero;
+  const units = frascoUnidadesMunicipio(muni);
+  const previas = _adminFrascosArray.filter(d => d.municipio.toUpperCase() === muni.toUpperCase() && d.numero_entrega === numero);
+
+  // Cada vez que se abre una entrega se parte de lo ya guardado (todo fijo) o de cero.
+  _muniRepartoState.fijos = {};
+  _muniRepartoState.editados = new Set();
+  if (previas.length) {
+    units.forEach(u => {
+      _muniRepartoState.fijos[u.clues] = previas.filter(p => p.clues === u.clues).reduce((s, p) => s + Number(p.cantidad_frascos || 0), 0);
+    });
+  }
+  document.getElementById("frascoFechaInput").value = previas[0]?.fecha_entrega
+    || remesas.find(r => r.numero_entrega === numero)?.fecha || new Date().toISOString().split("T")[0];
+  document.getElementById("frascoLoteInput").value = previas.find(p => p.lote)?.lote || "";
+  document.getElementById("frascoCaducidadInput").value = previas.find(p => p.fecha_caducidad)?.fecha_caducidad || "";
+
+  tbody.innerHTML = "";
+  units.forEach(u => {
+    const otras = _adminFrascosArray
+      .filter(d => d.clues === u.clues && d.numero_entrega !== numero)
+      .reduce((s, d) => s + Number(d.cantidad_frascos || 0), 0);
+    const tr = document.createElement("tr");
+    tr.className = "frs-row";
+    tr.innerHTML = `
+      <td><b>${u.unidad}</b><br><span class="frs-sub">${u.clues}</span></td>
+      <td class="c" id="mr_meta_${u.clues}"></td>
+      <td class="c frs-muted" id="mr_pct_${u.clues}"></td>
+      <td class="c frs-muted">${frascoFmt(otras)}</td>
+      <td class="c">
+        <input type="text" inputmode="numeric" autocomplete="off" id="batch_frascos_${u.clues}" class="frs-num">
+        <div class="frs-mark" id="mr_mark_${u.clues}"></div>
+      </td>`;
+    tbody.appendChild(tr);
+    tr.querySelector("input").addEventListener("input", (e) => {
+      frascoSoltarCargados(_muniRepartoState);
+      if (e.target.value.trim() === "") {
+        delete _muniRepartoState.fijos[u.clues];
+        _muniRepartoState.editados.delete(u.clues);
+      } else {
+        _muniRepartoState.fijos[u.clues] = frascoEntero(e.target.value);
+        _muniRepartoState.editados.add(u.clues);
+      }
+      refreshRepartoMunicipal(muni, e.target);
+    });
+  });
+  refreshRepartoMunicipal(muni);
+}
+
+function refreshRepartoMunicipal(muni, enfocado) {
+  const numero = _muniRepartoState.numero;
+  const total = frascosRecibidosMunicipio(muni, numero);
+  const units = frascoUnidadesMunicipio(muni);
+  const items = units.map(u => ({ id: u.clues, meta: frascoMetaUnidad(u.clues) }));
+  const sumaMeta = items.reduce((s, i) => s + i.meta, 0);
+  const res = InfluenzaReparto.repartirFrascos(total, items, _muniRepartoState.fijos);
+  items.forEach(it => {
+    document.getElementById(`mr_meta_${it.id}`).textContent = frascoFmt(it.meta);
+    document.getElementById(`mr_pct_${it.id}`).textContent = sumaMeta ? `${(it.meta * 100 / sumaMeta).toFixed(2)}%` : "—";
+    const inp = document.getElementById(`batch_frascos_${it.id}`);
+    if (inp !== enfocado) inp.value = String(res.frascos[it.id] || 0);
+    document.getElementById(`mr_mark_${it.id}`).textContent = _muniRepartoState.editados.has(it.id) ? "editado" : "";
+  });
+  frascoResumenReparto(document.getElementById("frascosMuniResumen"), total, res, sumaMeta > 0);
+  const cab = document.getElementById("frascosMuniResumen");
+  if (cab) cab.innerHTML = `Jurisdicción asignó <b>${frascoFmt(total)}</b> frascos a ${muni === "MARQUES" ? "El Marqués" : muni} en la ${frascoOrdinal(numero)}. ` + cab.innerHTML;
+}
+
+async function saveFrascosDelivery() {
+  const muni = document.getElementById("adminInfluenzaMuni").value;
+  const numero = _muniRepartoState.numero;
+  const fecha = document.getElementById("frascoFechaInput").value;
+  const lote = document.getElementById("frascoLoteInput").value.trim().toUpperCase();
+  const caducidad = document.getElementById("frascoCaducidadInput").value;
+  if (!numero || !fecha) {
+    showToast("Elige la entrega y la fecha.", false, "bad");
+    return;
+  }
+  const total = frascosRecibidosMunicipio(muni, numero);
+  const units = frascoUnidadesMunicipio(muni);
+  const res = InfluenzaReparto.repartirFrascos(
+    total, units.map(u => ({ id: u.clues, meta: frascoMetaUnidad(u.clues) })), _muniRepartoState.fijos);
+  if (res.porAsignar < 0) {
+    showToast("El reparto rebasa los frascos que asignó la Jurisdicción.", false, "bad");
+    return;
+  }
+  const rows = units.map(u => ({ clues: u.clues, cantidad_frascos: res.frascos[u.clues] || 0 }));
+
+  await AppService.runCapture({
+    btnId: "btnSaveFrascoEntrega",
+    title: "Guardando reparto",
+    msg: `Guardando el reparto de la ${frascoOrdinal(numero)} entre las unidades...`,
+    successMsg: res.porAsignar > 0
+      ? `Reparto guardado; quedan ${res.porAsignar} frascos sin asignar`
+      : "Reparto guardado correctamente",
+    eventTitle: "Influenza",
+    eventMsg: `Reparto municipal de la ${frascoOrdinal(numero)} de frascos`,
+    action: async () => {
+      await AppService.call("guardarinfluenza_reparto", { municipio: muni, numero_entrega: numero, fecha, lote, caducidad, rows });
+      await loadInfluenzaAdminData();
+      renderFrascosDistribution();
+    }
+  });
+}
+
+// ─── Concentrado estilo plantilla (entregas x destinos o unidades) ─────────
+
+// ambito: "JURIS" (6 destinos) o un municipio (sus unidades).
+function frascoMatrizDatos(ambito) {
+  let columnas, valor, meta, numeros;
+  if (ambito === "JURIS") {
+    columnas = FRASCO_DESTINOS.map(d => ({ key: d.id, label: d.label }));
+    valor = (n, k) => {
+      const r = _adminRemesasArray.find(x => x.numero_entrega === n);
+      return r ? Number((r.asignacion || {})[k] || 0) : 0;
+    };
+    meta = k => frascoMetaDestino(k);
+    numeros = _adminRemesasArray.map(r => r.numero_entrega);
+  } else {
+    const units = frascoUnidadesMunicipio(ambito);
+    columnas = units.map(u => ({ key: u.clues, label: u.unidad }));
+    const filas = _adminFrascosArray.filter(d => d.municipio.toUpperCase() === ambito.toUpperCase());
+    valor = (n, k) => filas.filter(d => d.clues === k && d.numero_entrega === n)
+      .reduce((s, d) => s + Number(d.cantidad_frascos || 0), 0);
+    meta = k => frascoMetaUnidad(k);
+    numeros = filas.map(d => d.numero_entrega);
+  }
+  const max = Math.max(4, ...numeros);
+  return { columnas, valor, meta, numeros: Array.from({ length: max }, (_, i) => i + 1) };
+}
+
+function renderFrascosMatrix(ambito) {
+  const table = document.getElementById("frascosMatrixTable");
+  if (!table) return;
+  const titulo = document.getElementById("frascosMatrixTitle");
+  if (titulo) titulo.textContent = ambito === "JURIS" ? "Entregas por municipio y hospital (frascos)" : "Entregas por unidad (frascos)";
+  const { columnas, valor, meta, numeros } = frascoMatrizDatos(ambito);
+  const cab = columnas.map(c => `<th class="c">${c.label}</th>`).join("");
+  const fila = (etq, fn, bold) => `<tr class="${bold ? "frs-bold" : ""}"><th class="frs-rowlbl">${etq}</th>`
+    + columnas.map(c => `<td class="c">${fn(c.key)}</td>`).join("")
+    + `<td class="c frs-bold">${fn(null)}</td></tr>`;
+  const suma = (fn) => columnas.reduce((s, c) => s + fn(c.key), 0);
+  const cuerpo = numeros.map(n => fila(frascoOrdinal(n), k => {
+    const v = k === null ? suma(kk => valor(n, kk)) : valor(n, k);
+    return v ? frascoFmt(v) : "";
+  })).join("");
+  const entregado = k => numeros.reduce((s, n) => s + (k === null ? suma(kk => valor(n, kk)) : valor(n, k)), 0);
+  table.innerHTML = `<thead><tr><th></th>${cab}<th class="c">TOTAL</th></tr></thead>
+    <tbody>${cuerpo}
+    ${fila("META (dosis)", k => frascoFmt(k === null ? suma(meta) : meta(k)), true)}
+    ${fila("TOTAL ENTREGADO", k => { const v = entregado(k); return v ? frascoFmt(v) : "-"; }, true)}
+    ${fila("DOSIS EQUIV. / META", k => {
+      const m = k === null ? suma(meta) : meta(k);
+      return m ? `${Math.round(entregado(k) * DOSIS_POR_FRASCO * 100 / m)}%` : "—";
+    }, false)}</tbody>`;
+}
+
+async function exportFrascosExcel() {
+  try {
+    const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";
+    const ambitos = esJuris
+      ? [["JURIS", "Jurisdicción"], ...FRASCO_DESTINOS.filter(d => !d.hospital).map(d => [d.id, d.label])]
+      : (() => { const m = document.getElementById("adminInfluenzaMuni").value; return [[m, m]]; })();
+    const wb = new ExcelJS.Workbook();
+    const campana = document.getElementById("metaCampaignSelect").value;
+    const fuente = { name: "Arial Nova", size: 12 };
+    const borde = { style: "thin", color: { argb: "FF888888" } };
+    const bordes = { top: borde, left: borde, bottom: borde, right: borde };
+
+    ambitos.forEach(([ambito, nombre]) => {
+      const { columnas, valor, meta, numeros } = frascoMatrizDatos(ambito);
+      if (!columnas.length) return;
+      const ws = wb.addWorksheet(nombre.substring(0, 31));
+      const nCol = columnas.length + 2;
+      const letra = (i) => ws.getColumn(i).letter;
+      ws.getCell(1, 1).value = `Distribución de frascos de influenza ${campana} — ${ambito === "JURIS" ? "Jurisdicción Sanitaria 1" : nombre}`;
+      ws.getCell(1, 1).font = { ...fuente, bold: true, size: 14 };
+      ws.getColumn(1).width = 26;
+
+      const hRow = 3;
+      columnas.forEach((c, i) => { ws.getCell(hRow, i + 2).value = c.label; });
+      ws.getCell(hRow, nCol).value = "TOTAL";
+      for (let c = 2; c <= nCol; c++) {
+        const cell = ws.getCell(hRow, c);
+        cell.font = { ...fuente, bold: true, color: { argb: "FFFFFFFF" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF633E55" } };
+        cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+        cell.border = bordes;
+        ws.getColumn(c).width = c === nCol ? 12 : 14;
+      }
+      ws.getRow(hRow).height = 48;
+
+      const etiqueta = (r, txt) => {
+        const cell = ws.getCell(r, 1);
+        cell.value = txt;
+        cell.font = { ...fuente, bold: true };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3C3C3" } };
+        cell.border = bordes;
+      };
+      const primera = hRow + 1;
+      numeros.forEach((n, idx) => {
+        const r = primera + idx;
+        etiqueta(r, frascoOrdinal(n));
+        columnas.forEach((c, i) => {
+          const cell = ws.getCell(r, i + 2);
+          const v = valor(n, c.key);
+          cell.value = v || null;
+          cell.font = fuente;
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFB88EA8" } };
+          cell.border = bordes;
+          cell.alignment = { horizontal: "center" };
+        });
+        const tot = ws.getCell(r, nCol);
+        tot.value = { formula: `SUM(B${r}:${letra(nCol - 1)}${r})` };
+        tot.font = { ...fuente, bold: true };
+        tot.border = bordes;
+        tot.alignment = { horizontal: "center" };
+      });
+      const ultima = primera + numeros.length - 1;
+      const rMeta = ultima + 1;
+      const rTot = ultima + 2;
+      etiqueta(rMeta, "META (dosis)");
+      etiqueta(rTot, "TOTAL ENTREGADO");
+      columnas.forEach((c, i) => {
+        const col = letra(i + 2);
+        const m = ws.getCell(rMeta, i + 2);
+        m.value = meta(c.key) || null;
+        const t = ws.getCell(rTot, i + 2);
+        t.value = { formula: `IF(SUM(${col}${primera}:${col}${ultima})=0,"-",SUM(${col}${primera}:${col}${ultima}))` };
+      });
+      const cl = letra(nCol);
+      ws.getCell(rMeta, nCol).value = { formula: `SUM(B${rMeta}:${letra(nCol - 1)}${rMeta})` };
+      ws.getCell(rTot, nCol).value = { formula: `SUM(${cl}${primera}:${cl}${ultima})` };
+      [rMeta, rTot].forEach(r => {
+        for (let c = 2; c <= nCol; c++) {
+          const cell = ws.getCell(r, c);
+          cell.font = { ...fuente, bold: true };
+          cell.border = bordes;
+          cell.alignment = { horizontal: "center" };
+        }
+      });
+      ws.views = [{ state: "frozen", xSplit: 1, ySplit: hRow }];
+    });
+
+    if (!wb.worksheets.length) {
+      showToast("No hay unidades para exportar.", false, "bad");
+      return;
+    }
+    const buffer = await wb.xlsx.writeBuffer();
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    link.download = `Distribucion_Frascos_Influenza_${campana}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Excel de distribución descargado.", true, "good");
+  } catch (err) {
+    console.error("Error al exportar la distribución de frascos:", err);
+    showToast("Error al generar el Excel de distribución.", false, "bad");
+  }
+}
+
+// ─── Dosis aplicadas por destino (el hospital cuenta aparte de QUERETARO) ──
+
+function frascoDosisAplicadas(destId) {
+  const dest = FRASCO_DESTINOS.find(d => d.id === destId);
+  let total = 0;
+  _adminCapturasArray.forEach(c => {
+    const esDelDestino = dest && dest.hospital
+      ? c.clues === dest.clues
+      : String(c.municipio).toUpperCase() === destId && !FRASCO_CLUES_HOSPITAL.has(c.clues);
+    if (esDelDestino) Object.values(c.valores || {}).forEach(v => { total += Number(v || 0); });
+  });
+  return total;
+}
+
+function renderFrascosDistribution() {
+  const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";
+  const muni = document.getElementById("adminInfluenzaMuni")?.value;
+  const jurisPanel = document.getElementById("frascosJurisPanel");
   const deliveryForm = document.getElementById("influenzaFrascosDeliveryForm");
   const historyContainer = document.getElementById("influenzaFrascosHistoryContainer");
   const adminMuniTableContainer = document.getElementById("adminFrascosMunicipalTableContainer");
+  const historyTbody = document.getElementById("frascosEntregaTbody");
 
-  if (USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL") {
-    // Nivel ADMIN y JURISDICCIONAL: Mostrar resumen municipal consolidado
+  if (esJuris) {
+    if (jurisPanel) jurisPanel.style.setProperty("display", "flex", "important");
     if (deliveryForm) deliveryForm.style.setProperty("display", "none", "important");
     if (historyContainer) historyContainer.style.setProperty("display", "none", "important");
     if (adminMuniTableContainer) adminMuniTableContainer.style.setProperty("display", "flex", "important");
 
-    const munis = ["QUERETARO", "CORREGIDORA", "MARQUES", "HUIMILPAN"];
+    renderRemesaPanel();
+    renderFrascosMatrix("JURIS");
+
     const tbodyMuni = document.getElementById("adminFrascosMunicipalTbody");
     tbodyMuni.innerHTML = "";
-
     const csvData = [
-      ["Municipio", "Frascos Entregados (Total)", "Equivalente en Dosis", "Dosis Aplicadas", "Estimado en Resguardo (Frascos)", "Aprovechamiento %"]
+      ["Destino", "Frascos recibidos de la entrega (Total)", "Equivalente en Dosis", "Dosis Aplicadas", "Estimado en Resguardo (Frascos)", "Aprovechamiento %"]
     ];
-
-    munis.forEach(m => {
-      // Sumar frascos entregados a este municipio
-      let totalFrascos = 0;
-      _adminFrascosArray.forEach(d => {
-        if (d.municipio.toUpperCase() === m) {
-          totalFrascos += Number(d.cantidad_frascos || 0);
-        }
-      });
-      const equivDosis = totalFrascos * 10;
-
-      // Sumar dosis aplicadas en este municipio (en todas las capturas)
-      let totalAplicadas = 0;
-      _adminCapturasArray.forEach(c => {
-        if (c.municipio.toUpperCase() === m) {
-          Object.values(c.valores).forEach(v => {
-            totalAplicadas += Number(v || 0);
-          });
-        }
-      });
-
-      const resguardo = totalFrascos - (totalAplicadas / 10);
+    FRASCO_DESTINOS.forEach(d => {
+      const totalFrascos = _adminRemesasArray.reduce((s, r) => s + Number((r.asignacion || {})[d.id] || 0), 0);
+      const equivDosis = totalFrascos * DOSIS_POR_FRASCO;
+      const totalAplicadas = frascoDosisAplicadas(d.id);
+      const resguardo = totalFrascos - (totalAplicadas / DOSIS_POR_FRASCO);
       const pct = equivDosis > 0 ? ((totalAplicadas / equivDosis) * 100).toFixed(1) : "0.0";
 
       const row = document.createElement("tr");
       row.className = "border-b border-slate-100 hover:bg-slate-50";
       row.innerHTML = `
-        <td class="p-3 text-xs font-bold text-slate-700">${m}</td>
-        <td class="p-3 text-center text-xs font-bold text-slate-600">${totalFrascos.toLocaleString('es-MX')}</td>
-        <td class="p-3 text-center text-xs font-bold text-slate-500">${equivDosis.toLocaleString('es-MX')}</td>
-        <td class="p-3 text-center text-xs font-bold text-violet-950">${totalAplicadas.toLocaleString('es-MX')}</td>
+        <td class="p-3 text-xs font-bold text-slate-700">${d.label}</td>
+        <td class="p-3 text-center text-xs font-bold text-slate-600">${frascoFmt(totalFrascos)}</td>
+        <td class="p-3 text-center text-xs font-bold text-slate-500">${frascoFmt(equivDosis)}</td>
+        <td class="p-3 text-center text-xs font-bold text-violet-950">${frascoFmt(totalAplicadas)}</td>
         <td class="p-3 text-center text-xs font-bold text-amber-600">${resguardo.toFixed(1)}</td>
         <td class="p-3 text-center text-xs font-bold text-emerald-600">${pct}%</td>
       `;
       tbodyMuni.appendChild(row);
-
-      csvData.push([m, totalFrascos, equivDosis, totalAplicadas, resguardo.toFixed(1), `${pct}%`]);
+      csvData.push([d.label, totalFrascos, equivDosis, totalAplicadas, resguardo.toFixed(1), `${pct}%`]);
     });
 
     const exportBtn = document.getElementById("btnExportFrascosMuni");
     if (exportBtn) {
       exportBtn.onclick = () => {
-        const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+        const csvContent = "data:text/csv;charset=utf-8,﻿"
           + csvData.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(",")).join("\n");
-        const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `Concentrado_Municipal_Frascos_Influenza.csv`);
+        link.setAttribute("href", encodeURI(csvContent));
+        link.setAttribute("download", `Concentrado_Frascos_Influenza.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         showToast("Archivo CSV exportado exitosamente.", true, "good");
       };
     }
-
   } else {
-    // Nivel MUNICIPAL: Mostrar formulario de entrega masiva e historial por unidad
+    if (jurisPanel) jurisPanel.style.setProperty("display", "none", "important");
     if (deliveryForm) deliveryForm.style.setProperty("display", "flex", "important");
     if (historyContainer) historyContainer.style.setProperty("display", "flex", "important");
     if (adminMuniTableContainer) adminMuniTableContainer.style.setProperty("display", "none", "important");
+    if (!historyTbody || !muni) return;
 
-    if (!tbody || !historyTbody) return;
+    renderFrascosMunicipal(muni);
+    renderFrascosMatrix(muni);
 
-    // Poner fecha de hoy por defecto en el input
-    document.getElementById("frascoFechaInput").value = new Date().toISOString().split("T")[0];
-    if (!document.getElementById("frascoEntregaInput").value) {
-      document.getElementById("frascoEntregaInput").value = "1";
-    }
-
-    // Obtener unidades del municipio
-    const units = _allUnidades.filter(u => u.municipio.toUpperCase() === selectMuni.toUpperCase());
-    
-    // Renderizar tabla de captura masiva
-    tbody.innerHTML = "";
-    units.forEach(u => {
-      // Calcular acumulado previo
-      let totalFrascosEntregadosUnit = 0;
-      _adminFrascosArray.forEach(d => {
-        if (d.clues === u.clues) {
-          totalFrascosEntregadosUnit += Number(d.cantidad_frascos || 0);
-        }
-      });
-
-      const row = document.createElement("tr");
-      row.className = "border-b border-slate-100 hover:bg-slate-50";
-      row.innerHTML = `
-        <td class="p-3 text-xs font-semibold text-slate-700">${u.unidad} <br><span class="text-[10px] text-slate-400 font-normal">${u.clues}</span></td>
-        <td class="p-3 text-center text-xs font-bold text-slate-500">${totalFrascosEntregadosUnit} frascos (${totalFrascosEntregadosUnit * 10} dosis)</td>
-        <td class="p-3 text-center">
-          <input type="number" min="0" step="1" 
-            id="batch_frascos_${u.clues}"
-            class="w-20 text-center font-bold text-xs bg-slate-50 border border-slate-300 rounded-xl px-2 py-1 focus:border-violet-500 outline-none mx-auto"
-            placeholder="0"
-          >
-        </td>
-      `;
-      tbody.appendChild(row);
-    });
-
-    // Renderizar tabla de historial de entregas del municipio
     historyTbody.innerHTML = "";
-    const deliveries = _adminFrascosArray.filter(d => d.municipio.toUpperCase() === selectMuni.toUpperCase());
-
+    const deliveries = _adminFrascosArray.filter(d => d.municipio.toUpperCase() === muni.toUpperCase());
     if (!deliveries.length) {
       historyTbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-slate-400 font-bold">No hay entregas registradas para este municipio.</td></tr>`;
     } else {
       deliveries.forEach(d => {
         const unit = _allUnidades.find(u => u.clues === d.clues);
-        const unitName = unit ? unit.unidad : d.clues;
-
         const row = document.createElement("tr");
         row.className = "border-b border-slate-100 hover:bg-slate-50";
         row.innerHTML = `
-          <td class="p-3 text-xs font-semibold text-slate-700">${unitName} <br><span class="text-[10px] text-slate-400 font-normal">${d.clues}</span></td>
+          <td class="p-3 text-xs font-semibold text-slate-700">${unit ? unit.unidad : d.clues} <br><span class="text-[10px] text-slate-400 font-normal">${d.clues}</span></td>
           <td class="p-3 text-center text-xs">${d.numero_entrega}</td>
           <td class="p-3 text-center text-xs font-mono text-slate-600">${d.lote || '<span class="text-slate-300">-</span>'}</td>
           <td class="p-3 text-center text-xs">${d.fecha_caducidad || '<span class="text-slate-300">-</span>'}</td>
           <td class="p-3 text-center text-xs font-bold text-violet-900">${d.cantidad_frascos}</td>
-          <td class="p-3 text-center text-xs font-bold text-slate-600">${d.cantidad_frascos * 10} dosis</td>
+          <td class="p-3 text-center text-xs font-bold text-slate-600">${d.cantidad_frascos * DOSIS_POR_FRASCO} dosis</td>
           <td class="p-3 text-center text-xs">${d.fecha_entrega}</td>
           <td class="p-3 text-xs text-slate-500">${d.entregado_por}</td>
         `;
         historyTbody.appendChild(row);
       });
     }
-
-    // Enlazar guardado
-    document.getElementById("btnSaveFrascoEntrega").onclick = async () => {
-      await saveFrascosDelivery();
-    };
+    document.getElementById("btnSaveFrascoEntrega").onclick = saveFrascosDelivery;
   }
 
-  // Actualizar cálculo de frascos municipal
+  const exp = document.getElementById("btnExportFrascosExcel");
+  if (exp) exp.onclick = exportFrascosExcel;
   updateFlaskCalculationMuni();
+  iniciarDockFrascos(esJuris);
 }
 
-async function saveFrascosDelivery() {
-  const selectMuni = document.getElementById("adminInfluenzaMuni").value;
-  const num = parseInt(document.getElementById("frascoEntregaInput").value) || 0;
-  const fecha = document.getElementById("frascoFechaInput").value;
-  const lote = document.getElementById("frascoLoteInput").value.trim().toUpperCase();
-  const caducidad = document.getElementById("frascoCaducidadInput").value;
-
-  if (num <= 0 || !fecha) {
-    showToast("Por favor ingresa un número de entrega y fecha válidos.", false, "bad");
-    return;
-  }
-
-  // Buscar todos los inputs que tengan valor mayor que 0
-  const units = _allUnidades.filter(u => u.municipio.toUpperCase() === selectMuni.toUpperCase());
-  const deliveriesToSave = [];
-
-  units.forEach(u => {
-    const input = document.getElementById(`batch_frascos_${u.clues}`);
-    const cantidad = parseInt(input?.value || 0);
-    if (cantidad > 0) {
-      deliveriesToSave.push({
-        clues: u.clues,
-        municipio: selectMuni,
-        cantidad_frascos: cantidad,
-        fecha_entrega: fecha,
-        numero_entrega: num,
-        lote: lote || null,
-        fecha_caducidad: caducidad || null,
-        entregado_por: USER.usuario
-      });
-    }
+// Barra flotante: un solo subpanel a la vez (Repartir / Entregas / Resumen / Historial).
+function frascoIrA(sub) {
+  const sec = document.getElementById("secInfluenzaFrascos");
+  if (!sec) return;
+  sec.dataset.frsSub = sub;
+  document.querySelectorAll("#dockFrascosTabs .hoja-tab").forEach(b => {
+    const activo = b.dataset.frs === sub;
+    b.classList.toggle("activo", activo);
+    b.setAttribute("aria-selected", activo ? "true" : "false");
   });
+}
 
-  if (deliveriesToSave.length === 0) {
-    showToast("Ingresa al menos una cantidad mayor a cero para alguna de las unidades.", false, "bad");
-    return;
+function iniciarDockFrascos(esJuris) {
+  const tabs = document.getElementById("dockFrascosTabs");
+  if (!tabs) return;
+  // El historial por unidad es solo del municipal; Jurisdicción ve sus entregas en "Entregas".
+  const hist = document.getElementById("dockFrascosHist");
+  if (hist) hist.style.display = esJuris ? "none" : "";
+  if (!tabs.dataset.bound) {
+    tabs.dataset.bound = "1";
+    tabs.addEventListener("click", (e) => {
+      const b = e.target.closest(".hoja-tab");
+      if (b) frascoIrA(b.dataset.frs);
+    });
+    if (window.DockGlass) window.DockGlass.instalar(tabs);
   }
-
-  await AppService.runCapture({
-    btnId: "btnSaveFrascoEntrega",
-    title: "Registrando entregas",
-    msg: `Registrando ${deliveriesToSave.length} entregas de frascos en lote...`,
-    successMsg: "Entregas en lote guardadas correctamente",
-    eventTitle: "Influenza",
-    eventMsg: "Distribución de frascos registrada en lote",
-    action: async () => {
-      // Guardar todos los registros en un solo insert (atómico: o se guardan todos, o ninguno)
-      const res = await AppService.call("saveinfluenza_distribucion", { rows: deliveriesToSave });
-
-      // Limpiar inputs
-      units.forEach(u => {
-        const input = document.getElementById(`batch_frascos_${u.clues}`);
-        if (input) input.value = "";
-      });
-      document.getElementById("frascoLoteInput").value = "";
-      document.getElementById("frascoCaducidadInput").value = "";
-
-      await loadInfluenzaAdminData();
-      renderFrascosDistribution();
-      return res;
-    }
-  });
+  const sec = document.getElementById("secInfluenzaFrascos");
+  if (esJuris && sec?.dataset.frsSub === "historial") frascoIrA("repartir");
+  else frascoIrA(sec?.dataset.frsSub || "repartir");
 }
 
 

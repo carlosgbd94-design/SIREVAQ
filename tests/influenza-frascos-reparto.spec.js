@@ -1,0 +1,252 @@
+// Control de Frascos de Influenza: reparto de una entrega por meta.
+// No levanta toda la app: monta la sección #secInfluenzaFrascos de index.html y el bloque de
+// frascos de influenza_module.js con datos simulados (metas, unidades, AppService).
+const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const path = require('path');
+
+const raiz = path.join(__dirname, '..');
+const html = fs.readFileSync(path.join(raiz, 'index.html'), 'utf8');
+const modulo = fs.readFileSync(path.join(raiz, 'influenza_module.js'), 'utf8');
+const seccion = html.slice(
+  html.indexOf('<div id="secInfluenzaFrascos"'),
+  html.indexOf('<!-- SECCIÓN 4: CONFIGURACIÓN DE CAMPAÑA -->'));
+const bloque = modulo.slice(
+  modulo.indexOf('const DOSIS_POR_FRASCO'),
+  modulo.indexOf('// --- ═══════════ INDICADORES'));
+
+const meta = (clues, municipio, n) => ({ clues, municipio, metas: { r1: n } });
+const DATOS = `
+  var USER = { rol: window.__ROL__, usuario: 'PRUEBA', municipio: 'QUERETARO' };
+  var showToast = function (m) { window.__toasts.push(m); };
+  var updateFlaskCalculationMuni = function () {};
+  var _adminCapturasArray = [];
+  var _adminFrascosArray = [];
+  var _allUnidades = [
+    { clues: 'Q1', unidad: 'UMQ UNO', municipio: 'QUERETARO' },
+    { clues: 'Q2', unidad: 'UMQ DOS', municipio: 'QUERETARO' },
+    { clues: 'Q3', unidad: 'UMQ TRES', municipio: 'QUERETARO' },
+    { clues: 'QTSSA001740', unidad: 'HENM', municipio: 'QUERETARO' },
+    { clues: 'QTSSA002901', unidad: 'NHGQ', municipio: 'QUERETARO' }
+  ];
+  var _adminMetasArray = ${JSON.stringify([
+    meta(null, 'QUERETARO', 6000), meta(null, 'CORREGIDORA', 900), meta(null, 'MARQUES', 700),
+    meta(null, 'HUIMILPAN', 300), meta(null, 'HENM', 500), meta(null, 'NHG', 400),
+    meta('Q1', 'QUERETARO', 3000), meta('Q2', 'QUERETARO', 2000), meta('Q3', 'QUERETARO', 1000)
+  ])};
+  var _llamadas = [];
+  var AppService = {
+    call: async function (a, p) { window.__llamadas.push([a, p]); return { ok: true, data: [] }; },
+    runCapture: async function (o) { return o.action(); }
+  };
+  var loadInfluenzaAdminData = async function () {};
+`;
+
+async function montar(page, rol) {
+  await page.goto('/reference.html');
+  await page.evaluate(() => { document.body.innerHTML = ''; });
+  await page.addStyleTag({ path: path.join(raiz, 'dock_glass.css') });
+  await page.addStyleTag({ path: path.join(raiz, 'style.css') });
+  await page.evaluate(([h, r]) => {
+    window.__ROL__ = r; window.__toasts = []; window.__llamadas = [];
+    document.body.innerHTML = `${h}<select id="adminInfluenzaMuni"><option value="QUERETARO">Q</option></select>
+      <select id="metaCampaignSelect"><option value="2025-2026">x</option></select>`;
+    document.getElementById('secInfluenzaFrascos').classList.remove('hidden');
+  }, [seccion, rol]);
+  await page.addScriptTag({ path: path.join(raiz, 'influenza_reparto.js') });
+  await page.addScriptTag({ content: DATOS });
+  await page.addScriptTag({ content: bloque });
+}
+
+const valores = (page, ids) => page.evaluate(
+  (l) => l.map((id) => document.getElementById(`rem_inp_${id}`).value), ids);
+const DEST = ['QUERETARO', 'CORREGIDORA', 'MARQUES', 'HUIMILPAN', 'HENM', 'NHG'];
+
+test('Jurisdicción: reparte 458 frascos por meta sin rebasar el total y permite editar', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate(() => { _adminRemesasArray = []; renderFrascosDistribution(); });
+
+  await page.fill('#remesaTotalInput', '458');
+  expect(await valores(page, DEST)).toEqual(['312', '47', '36', '16', '26', '21']);
+  await expect(page.locator('#remesaResumen')).toContainText('Reparto completo: 458 de 458');
+  await expect(page.locator('#rem_pct_QUERETARO')).toHaveText('68.18%');
+
+  // Editar solo frascos: Querétaro a 400, el resto se reparte con lo que queda
+  await page.fill('#rem_inp_QUERETARO', '400');
+  expect(await valores(page, DEST)).toEqual(['400', '19', '15', '6', '10', '8']);
+  await expect(page.locator('#rem_mark_QUERETARO')).toHaveText('editado');
+
+  // Pasarse del total avisa y no deja guardar
+  await page.fill('#rem_inp_QUERETARO', '500');
+  await expect(page.locator('#remesaResumen')).toContainText('Te pasaste por 42');
+  await page.click('#btnSaveRemesa');
+  expect(await page.evaluate(() => window.__llamadas.length)).toBe(0);
+
+  // Restablecer vuelve al reparto proporcional
+  await page.click('#btnRemesaReset');
+  expect(await valores(page, DEST)).toEqual(['312', '47', '36', '16', '26', '21']);
+
+  await page.click('#btnSaveRemesa');
+  const llamadas = await page.evaluate(() => window.__llamadas);
+  const remesa = llamadas.find((l) => l[0] === 'saveinfluenza_remesa')[1];
+  expect(remesa.total_frascos).toBe(458);
+  expect(remesa.numero_entrega).toBe(1);
+  expect(Object.values(remesa.asignacion).reduce((a, b) => a + b, 0)).toBe(458);
+  // Los hospitales quedan registrados como su propio destino, con su CLUES
+  const hosp = llamadas.filter((l) => l[0] === 'guardarinfluenza_reparto').map((l) => [l[1].municipio, l[1].rows[0].clues, l[1].rows[0].cantidad_frascos]);
+  expect(hosp).toEqual([['HENM', 'QTSSA001740', 26], ['NHG', 'QTSSA002901', 21]]);
+});
+
+test('Municipal: reparte lo que asignó Jurisdicción entre sus unidades (sin hospitales)', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 458, asignacion: { QUERETARO: 312 }, manual: [] }];
+    renderFrascosDistribution();
+  });
+  await expect(page.locator('#frascosBatchTbody tr')).toHaveCount(3);   // los hospitales no aparecen
+  await expect(page.locator('#frascosMuniResumen')).toContainText('312');
+  const v = async () => page.evaluate(() => ['Q1', 'Q2', 'Q3'].map((c) => document.getElementById(`batch_frascos_${c}`).value));
+  expect(await v()).toEqual(['156', '104', '52']);
+
+  await page.fill('#batch_frascos_Q3', '100');
+  expect(await v()).toEqual(['127', '85', '100']);       // 212 restantes por meta 3:2 (el decimal mayor se lleva el sobrante)
+  await page.click('#btnSaveFrascoEntrega');
+  const g = (await page.evaluate(() => window.__llamadas)).find((l) => l[0] === 'guardarinfluenza_reparto')[1];
+  expect(g.municipio).toBe('QUERETARO');
+  expect(g.rows.map((r) => r.cantidad_frascos)).toEqual([127, 85, 100]);
+});
+
+test('Concentrado por entregas: columnas por destino y total entregado', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 458, asignacion: { QUERETARO: 312, CORREGIDORA: 47, MARQUES: 36, HUIMILPAN: 16, HENM: 26, NHG: 21 }, manual: [] }];
+    renderFrascosDistribution();
+  });
+  await page.click('#dockFrascosTabs [data-frs="entregas"]');
+  const filas = await page.locator('#frascosMatrixTable tbody tr').allInnerTexts();
+  expect(filas[0]).toContain('1ª entrega');
+  expect(filas.find((f) => f.includes('TOTAL ENTREGADO'))).toContain('458');
+  expect(filas.find((f) => f.includes('META'))).toContain('8,800');
+});
+
+test('Excel de distribución: hoja jurisdiccional con entregas, META y TOTAL ENTREGADO', async ({ page }, info) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.addScriptTag({ path: path.join(raiz, 'node_modules/exceljs/dist/exceljs.min.js') });
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 458, asignacion: { QUERETARO: 312, CORREGIDORA: 47, MARQUES: 36, HUIMILPAN: 16, HENM: 26, NHG: 21 }, manual: [] }];
+    _remesaState.numero = 2;
+    renderFrascosDistribution();
+  });
+  await page.fill('#remesaTotalInput', '458');
+  if (process.env.FRASCOS_SHOT) await page.screenshot({ path: process.env.FRASCOS_SHOT, fullPage: true });
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportFrascosExcel())]);
+  const destino = info.outputPath('frascos.xlsx');
+  await dl.saveAs(destino);
+  const ExcelJS = require('exceljs');
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(destino);
+  expect(wb.worksheets.map((w) => w.name)).toEqual(['Jurisdicción', 'Querétaro']);   // los municipios sin unidades no generan hoja
+  const ws = wb.getWorksheet('Jurisdicción');
+  expect(ws.getRow(3).values.slice(2)).toEqual(['Querétaro', 'Corregidora', 'El Marqués', 'Huimilpan', 'HENM', 'NHGQ', 'TOTAL']);
+  expect(ws.getRow(4).getCell(1).value).toBe('1ª entrega');
+  expect(ws.getRow(4).getCell(2).value).toBe(312);
+  expect(ws.getRow(9).getCell(1).value).toBe('TOTAL ENTREGADO');
+});
+
+test('Barra flotante: un solo subpanel visible a la vez y el historial solo es municipal', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate(() => { _adminRemesasArray = []; renderFrascosDistribution(); });
+  const visible = (n) => page.locator(`[data-frs-panel="${n}"]`).isVisible();
+  expect([await visible('repartir'), await visible('entregas'), await visible('resumen'), await visible('historial')]).toEqual([true, false, false, false]);
+  await expect(page.locator('#dockFrascosHist')).toBeHidden();
+
+  await page.click('#dockFrascosTabs [data-frs="resumen"]');
+  expect([await visible('repartir'), await visible('resumen')]).toEqual([false, true]);
+  await expect(page.locator('#dockFrascosTabs [data-frs="resumen"]')).toHaveClass(/activo/);
+  await expect(page.locator('#adminFrascosMunicipalTbody tr')).toHaveCount(6);
+
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => { _adminRemesasArray = []; renderFrascosDistribution(); });
+  await expect(page.locator('#dockFrascosHist')).toBeVisible();
+  await page.click('#dockFrascosTabs [data-frs="historial"]');
+  await expect(page.locator('#influenzaFrascosHistoryContainer')).toBeVisible();
+});
+
+// ─── Distribución de Metas: sin "0" pegado y columna Comparación ───────────
+const seccionMetas = html.slice(html.indexOf('<div id="secInfluenzaMetas"'), html.indexOf('<!-- SECCIÓN 3: CONTROL DE FRASCOS -->'));
+const rubros = modulo.slice(modulo.indexOf('const INFLUENZA_RUBROS'), modulo.indexOf('];', modulo.indexOf('const INFLUENZA_RUBROS')) + 2);
+const gridFn = modulo.slice(modulo.indexOf('function metaEnlazarInputs'), modulo.indexOf('async function saveInfluenzaMetasConfig'));
+
+async function montarMetas(page, rol, metas) {
+  await page.goto('/reference.html');
+  await page.evaluate(() => { document.body.innerHTML = ''; });
+  await page.addStyleTag({ path: path.join(raiz, 'style.css') });
+  await page.evaluate(([h, r]) => {
+    window.__ROL__ = r;
+    document.body.innerHTML = `<div style="width:900px">${h}</div><select id="adminInfluenzaMuni"><option value="QUERETARO">Q</option></select>`;
+    document.getElementById('secInfluenzaMetas').classList.remove('hidden');
+  }, [seccionMetas, rol]);
+  await page.addScriptTag({ content: DATOS.replace(/var _adminMetasArray = [\s\S]*?\];/, `var _adminMetasArray = ${JSON.stringify(metas)};`) });
+  await page.addScriptTag({ content: bloque });
+  await page.addScriptTag({ content: rubros + gridFn + 'window.__render = renderMetasConfigurationGrid;' });
+  await page.evaluate(() => { window.syncTabGroupIndicator = () => {}; window.__render(); });
+}
+
+test('Metas jurisdiccionales: sin cero inicial y Comparación verde/roja contra el total capturado', async ({ page }) => {
+  await montarMetas(page, 'JURISDICCIONAL', []);
+  const q = page.locator('input[data-rb="r1"][data-muni="QUERETARO"]');
+  await q.click();
+  await page.keyboard.type('5476');
+  await expect(q).toHaveValue('5476');                     // antes quedaba "05476"
+  await expect(page.locator('#total_j_r1')).toHaveText('5476');
+
+  const cmp = page.locator('#cmp_r1');
+  await page.locator('input[data-rb="r1"][data-juris]').fill('6000');
+  await expect(cmp).toHaveAttribute('data-estado', 'mal');
+  await expect(cmp).toContainText('Faltan 524');
+  await page.locator('input[data-rb="r1"][data-muni="HENM"]').fill('524');
+  await expect(cmp).toHaveAttribute('data-estado', 'ok');
+  await expect(cmp).toContainText('Coincide');
+  await expect(page.locator('#cmp_TOTAL')).toHaveAttribute('data-estado', 'ok');
+  await expect(page.locator('#tot_J')).toHaveText('6000');
+  // La comparación queda pegada a la derecha aunque se haga scroll horizontal
+  expect(await cmp.evaluate((e) => getComputedStyle(e).position)).toBe('sticky');
+});
+
+test('Metas municipales: Comparación contra lo distribuido entre las unidades', async ({ page }) => {
+  await montarMetas(page, 'MUNICIPAL', [meta(null, 'QUERETARO', 100)]);
+  const cmp = page.locator('#cmp_r1');
+  await expect(cmp).toContainText('0 de 100');
+  await expect(cmp).toHaveAttribute('data-estado', 'mal');
+  await page.locator('input[data-rb="r1"][data-clues="Q1"]').fill('60');
+  await page.locator('input[data-rb="r1"][data-clues="Q2"]').fill('40');
+  await expect(cmp).toHaveAttribute('data-estado', 'ok');
+  await page.locator('input[data-rb="r1"][data-clues="Q3"]').fill('5');
+  await expect(cmp).toContainText('Sobran 5');
+  await expect(cmp).toHaveAttribute('data-estado', 'mal');
+});
+
+test('Metas: Tab va a la derecha, Enter baja; al terminar fila/columna salta a la siguiente', async ({ page }) => {
+  await montarMetas(page, 'JURISDICCIONAL', []);
+  const inp = (rb, m) => page.locator(`input[data-rb="${rb}"][data-muni="${m}"]`);
+  await inp('r1', 'QUERETARO').click();
+  await page.keyboard.type('10');
+  await page.keyboard.press('Tab');
+  await expect(inp('r1', 'CORREGIDORA')).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(inp('r1', 'QUERETARO')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(inp('r2', 'QUERETARO')).toBeFocused();
+  await page.keyboard.press('Shift+Enter');
+  await expect(inp('r1', 'QUERETARO')).toBeFocused();
+  // Al final de la fila (después de la meta jurisdiccional) se pasa a la primera celda de la fila siguiente
+  await page.locator('input[data-rb="r1"][data-juris]').focus();
+  await page.keyboard.press('Tab');
+  await expect(inp('r2', 'QUERETARO')).toBeFocused();
+  // Del último rubro, Enter pasa a la primera fila de la columna siguiente
+  const ultimo = await page.evaluate(() => INFLUENZA_RUBROS[INFLUENZA_RUBROS.length - 1].id);
+  await inp(ultimo, 'QUERETARO').focus();
+  await page.keyboard.press('Enter');
+  await expect(inp('r1', 'CORREGIDORA')).toBeFocused();
+  await expect(inp('r1', 'QUERETARO')).toHaveValue('10');
+});

@@ -28,6 +28,8 @@ const GROUP_HEAD = [
   'perfil_cuenta.js',
   'desabasto_center.js', // antes que main.js: main.js usa window.DesabastoCenter al cargar
   'main.js',
+  'dock_glass.js',
+  'influenza_reparto.js',
   'influenza_module.js',
   'sis_export_module.js',
 ];

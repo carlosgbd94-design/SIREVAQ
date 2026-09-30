@@ -8228,6 +8228,50 @@ async function supabaseRequest(action = "", payload, options = {}) {
         return { ok: true, count: records.length };
       }
 
+      case "getinfluenza_remesas": {
+        const { anio_campana } = payload;
+        const { data, error } = await supabase
+          .from('influenza_remesas')
+          .select('*')
+          .eq('anio_campana', anio_campana || "2025-2026")
+          .order('numero_entrega', { ascending: true });
+        if (error) throw error;
+        return { ok: true, data: data || [] };
+      }
+
+      case "saveinfluenza_remesa": {
+        const { anio_campana, numero_entrega, fecha, total_frascos, asignacion, manual } = payload;
+        const { error } = await supabase
+          .from('influenza_remesas')
+          .upsert({
+            anio_campana,
+            numero_entrega: Number(numero_entrega),
+            fecha,
+            total_frascos: Number(total_frascos),
+            asignacion: asignacion || {},
+            manual: manual || [],
+            creado_por: String(USER?.usuario || "").toUpperCase(),
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'anio_campana,numero_entrega' });
+        if (error) throw error;
+        return { ok: true };
+      }
+
+      case "guardarinfluenza_reparto": {
+        const { municipio, numero_entrega, fecha, lote, caducidad, rows } = payload;
+        const { data, error } = await supabase.rpc('influenza_guardar_reparto', {
+          p_municipio: municipio,
+          p_numero: Number(numero_entrega),
+          p_fecha: fecha,
+          p_lote: lote || null,
+          p_caducidad: caducidad || null,
+          p_entregado_por: String(USER?.usuario || ""),
+          p_rows: rows || []
+        });
+        if (error) throw error;
+        return { ok: true, count: data };
+      }
+
       case "getinfluenza_config": {
         const { data, error } = await supabase
           .from('campanas')

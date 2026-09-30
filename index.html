@@ -76,7 +76,8 @@
 
   <!-- Estilos -->
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="style.css?v=2026.87" type="text/css">
+  <link rel="stylesheet" href="dock_glass.css?v=6">
+  <link rel="stylesheet" href="style.css?v=2026.94" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -329,7 +330,7 @@
        (ensurePdfAssetsLoaded) solo al exportar el PDF de Resguardo.
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
-  <script src="dist/bundle-head.js?v=2026.55" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.64" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -2852,7 +2853,7 @@
               <span class="material-symbols-rounded">query_stats</span>
               <span>Distribución de Metas</span>
             </button>
-            <button id="subtabInfluenzaFrascos" class="nav-tab" data-role-gate="ADMIN,MUNICIPAL">
+            <button id="subtabInfluenzaFrascos" class="nav-tab" data-role-gate="ADMIN,MUNICIPAL,JURISDICCIONAL">
               <span class="material-symbols-rounded">inventory_2</span>
               <span>Control de Frascos</span>
             </button>
@@ -3349,16 +3350,11 @@
               Configuración y desglose de metas anuales de la campaña de Influenza.
             </div>
 
-            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex gap-4 items-end"
-              style="background-color: #ffffff;">
-              <div class="w-48">
-                <label for="metaCampaignSelect"
-                  class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Campaña</label>
-                <select id="metaCampaignSelect"
-                  class="w-full bg-surface border border-slate-300 rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 outline-none">
-                  <option value="2025-2026">Campaña 2025-2026</option>
-                </select>
-              </div>
+            <div class="meta-camp-bar">
+              <label for="metaCampaignSelect" class="meta-camp-lbl">Campaña</label>
+              <select id="metaCampaignSelect" class="meta-camp-select">
+                <option value="2025-2026">Campaña 2025-2026</option>
+              </select>
             </div>
 
             <div
@@ -3387,12 +3383,159 @@
         </div>
 
         <!-- SECCIÓN 3: CONTROL DE FRASCOS -->
-        <div id="secInfluenzaFrascos" class="hidden flex flex-col gap-6">
-          <div class="hint">
-            Registra y gestiona las entregas de frascos de vacunas de influenza asignadas a las unidades de salud del
-            municipio seleccionado.
+        <div id="secInfluenzaFrascos" class="hidden flex flex-col gap-6" data-frs-sub="repartir">
+          <!-- Barra de subpaneles, arriba y en flujo normal (estilo de dock_glass.css) -->
+          <nav class="dock-sis" id="dockFrascos" aria-label="Subpaneles de Control de Frascos">
+            <div class="dock-hojas" id="dockFrascosTabs" role="tablist">
+              <span class="hoja-tinta" aria-hidden="true"></span>
+              <button type="button" class="hoja-tab activo" data-frs="repartir" role="tab" style="--hoja:#7c3aed;">
+                <span class="material-symbols-rounded">alt_route</span><span class="hoja-nombre">Repartir entrega</span>
+              </button>
+              <button type="button" class="hoja-tab" data-frs="entregas" role="tab" style="--hoja:#d97706;">
+                <span class="material-symbols-rounded">table_chart</span><span class="hoja-nombre">Entregas</span>
+              </button>
+              <button type="button" class="hoja-tab" data-frs="resumen" role="tab" style="--hoja:#16a34a;">
+                <span class="material-symbols-rounded">inventory_2</span><span class="hoja-nombre">Resumen</span>
+              </button>
+              <button type="button" class="hoja-tab" data-frs="historial" role="tab" id="dockFrascosHist" style="--hoja:#0284c7;">
+                <span class="material-symbols-rounded">history</span><span class="hoja-nombre">Historial</span>
+              </button>
+            </div>
+          </nav>
+          <div class="hint" id="frascosHint">
+            Reparte los frascos de cada entrega en proporción a la meta. Los frascos no se entregan abiertos: el
+            redondeo nunca rebasa el total recibido.
           </div>
 
+          <div class="frs-panel" data-frs-panel="repartir">
+          <!-- Reparto jurisdiccional por entrega (ADMIN / JURISDICCIONAL) -->
+          <div id="frascosJurisPanel" class="frs-card" style="display:none">
+            <h4 class="frs-title">Reparto de una entrega entre municipios y hospitales</h4>
+            <div class="frs-grid">
+              <div>
+                <label for="remesaNumeroSelect" class="frs-lbl">Entrega</label>
+                <select id="remesaNumeroSelect" class="frs-field"></select>
+              </div>
+              <div>
+                <label for="remesaFechaInput" class="frs-lbl">Fecha de recepción</label>
+                <input id="remesaFechaInput" type="date" class="frs-field">
+              </div>
+              <div>
+                <label for="remesaTotalInput" class="frs-lbl">Total de frascos recibidos</label>
+                <input id="remesaTotalInput" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 458" class="frs-field">
+              </div>
+              <div style="display:flex;align-items:flex-end">
+                <button type="button" id="btnRemesaReset" class="frs-btn"
+                  title="Descartar ediciones y repartir todo proporcional a la meta">Restablecer proporcional</button>
+              </div>
+            </div>
+            <div class="frs-scroll">
+              <table class="frs-table">
+                <thead>
+                  <tr>
+                    <th>Destino</th>
+                    <th class="c">Meta (dosis)</th>
+                    <th class="c">% de la meta</th>
+                    <th class="c">Frascos</th>
+                    <th class="c">Dosis equiv.</th>
+                  </tr>
+                </thead>
+                <tbody id="remesaTbody"></tbody>
+              </table>
+            </div>
+            <div id="remesaResumen" class="frs-box"></div>
+            <div style="display:flex;justify-content:flex-end">
+              <button type="button" id="btnSaveRemesa" class="frs-btn frs-btn--primary">Guardar reparto de la entrega</button>
+            </div>
+          </div>
+
+          <!-- Formulario de Entrega Masiva (Flex Row Layout with Sticky Right Column) -->
+          <div class="flex flex-row gap-8 items-start relative w-full overflow-visible"
+            id="influenzaFrascosDeliveryForm">
+            <!-- Columna Formulario (Izquierda) -->
+            <div class="flex-1 flex flex-col gap-6 w-full">
+              <div class="bg-surface border border-slate-200 rounded-[28px] p-6 flex flex-col gap-4"
+                style="background-color: #ffffff;">
+                <h4 class="text-sm font-black text-violet-950 uppercase tracking-wider m-0">Repartir entrega entre las
+                  unidades</h4>
+                <div id="frascosMuniResumen" class="frs-box"></div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label for="frascoFechaInput" class="block text-xs font-bold text-slate-500 mb-1">Fecha de
+                      Entrega</label>
+                    <input id="frascoFechaInput" type="date"
+                      class="w-full bg-surface border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none">
+                  </div>
+                  <div>
+                    <label for="frascoEntregaInput" class="block text-xs font-bold text-slate-500 mb-1">Número de
+                      Entrega / Remesa</label>
+                    <select id="frascoEntregaInput" class="frs-field"></select>
+                  </div>
+                  <div>
+                    <label for="frascoLoteInput" class="block text-xs font-bold text-slate-500 mb-1">Lote</label>
+                    <input id="frascoLoteInput" type="text"
+                      class="w-full bg-surface border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+                      placeholder="Ej: LF12345A">
+                  </div>
+                  <div>
+                    <label for="frascoCaducidadInput" class="block text-xs font-bold text-slate-500 mb-1">Fecha de
+                      Caducidad</label>
+                    <input id="frascoCaducidadInput" type="date"
+                      class="w-full bg-surface border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none">
+                  </div>
+                </div>
+
+                <!-- Tabla de captura por unidad -->
+                <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200 shadow-sm mt-2">
+                  <table class="w-full border-collapse text-left text-xs font-semibold text-slate-700"
+                    style="background-color: #ffffff;">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-200">
+                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider" style="width: 34%;">
+                          Unidad / CLUES</th>
+                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Meta (dosis)</th>
+                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">% del municipio</th>
+                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Otras entregas</th>
+                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Frascos de esta entrega</th>
+                      </tr>
+                    </thead>
+                    <tbody id="frascosBatchTbody">
+                      <!-- JS poblará la lista de unidades del municipio -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Floating Command Hub (Derecha - Desktop - Sticky) -->
+            <div class="hidden lg:block w-[80px] shrink-0" style="position: sticky; top: 180px; z-index: 999;">
+              <div class="local-command-hub">
+                <button class="save-chip-premium hub-action-btn-primary" id="btnSaveFrascoEntrega"
+                  title="Guardar Entregas de Frascos">
+                  <span class="material-symbols-rounded">save</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          </div>
+          <div class="frs-panel" data-frs-panel="entregas">
+          <!-- Concentrado de entregas estilo plantilla (entregas x destinos/unidades) -->
+          <div id="frascosMatrixContainer" class="frs-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <h4 class="frs-title" id="frascosMatrixTitle">Entregas por destino</h4>
+              <button type="button" id="btnExportFrascosExcel" class="frs-btn frs-btn--primary">
+                <span class="material-symbols-rounded" style="font-size:16px">download</span> Exportar Excel
+              </button>
+            </div>
+            <div class="frs-scroll">
+              <table class="frs-table frs-matrix" id="frascosMatrixTable"></table>
+            </div>
+          </div>
+
+          </div>
+          <div class="frs-panel" data-frs-panel="resumen">
           <!-- Resumen de Control de Frascos (Municipal KPIs) -->
           <div class="dashboardKpis mb-2">
             <div class="kpiCard info">
@@ -3459,77 +3602,8 @@
             </div>
           </div>
 
-          <!-- Formulario de Entrega Masiva (Flex Row Layout with Sticky Right Column) -->
-          <div class="flex flex-row gap-8 items-start relative w-full overflow-visible"
-            id="influenzaFrascosDeliveryForm">
-            <!-- Columna Formulario (Izquierda) -->
-            <div class="flex-1 flex flex-col gap-6 w-full">
-              <div class="bg-surface border border-slate-200 rounded-[28px] p-6 flex flex-col gap-4"
-                style="background-color: #ffffff;">
-                <h4 class="text-sm font-black text-violet-950 uppercase tracking-wider m-0">Registrar Entrega de Frascos
-                  (Lote)</h4>
-
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <label for="frascoFechaInput" class="block text-xs font-bold text-slate-500 mb-1">Fecha de
-                      Entrega</label>
-                    <input id="frascoFechaInput" type="date"
-                      class="w-full bg-surface border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none">
-                  </div>
-                  <div>
-                    <label for="frascoEntregaInput" class="block text-xs font-bold text-slate-500 mb-1">Número de
-                      Entrega / Remesa</label>
-                    <input id="frascoEntregaInput" type="number" min="1" step="1"
-                      class="w-full bg-surface border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
-                      placeholder="Ej: 1">
-                  </div>
-                  <div>
-                    <label for="frascoLoteInput" class="block text-xs font-bold text-slate-500 mb-1">Lote</label>
-                    <input id="frascoLoteInput" type="text"
-                      class="w-full bg-surface border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
-                      placeholder="Ej: LF12345A">
-                  </div>
-                  <div>
-                    <label for="frascoCaducidadInput" class="block text-xs font-bold text-slate-500 mb-1">Fecha de
-                      Caducidad</label>
-                    <input id="frascoCaducidadInput" type="date"
-                      class="w-full bg-surface border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none">
-                  </div>
-                </div>
-
-                <!-- Tabla de captura por unidad -->
-                <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200 shadow-sm mt-2">
-                  <table class="w-full border-collapse text-left text-xs font-semibold text-slate-700"
-                    style="background-color: #ffffff;">
-                    <thead>
-                      <tr class="bg-slate-50 border-b border-slate-200">
-                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider" style="width: 45%;">
-                          Unidad / CLUES</th>
-                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center"
-                          style="width: 30%;">Frascos Entregados Previamente</th>
-                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center"
-                          style="width: 25%;">Nuevos Frascos a Entregar</th>
-                      </tr>
-                    </thead>
-                    <tbody id="frascosBatchTbody">
-                      <!-- JS poblará la lista de unidades del municipio -->
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <!-- Floating Command Hub (Derecha - Desktop - Sticky) -->
-            <div class="hidden lg:block w-[80px] shrink-0" style="position: sticky; top: 180px; z-index: 999;">
-              <div class="local-command-hub">
-                <button class="save-chip-premium hub-action-btn-primary" id="btnSaveFrascoEntrega"
-                  title="Guardar Entregas de Frascos">
-                  <span class="material-symbols-rounded">save</span>
-                </button>
-              </div>
-            </div>
           </div>
-
+          <div class="frs-panel" data-frs-panel="historial">
           <!-- Historial de Entregas -->
           <div id="influenzaFrascosHistoryContainer" class="flex flex-col gap-4 mt-6">
             <h4 class="text-sm font-black text-violet-950 uppercase tracking-wider m-0">Historial de Entregas a Unidades
@@ -3558,6 +3632,8 @@
               </table>
             </div>
           </div>
+          </div>
+
         </div>
 
         <!-- SECCIÓN 4: CONFIGURACIÓN DE CAMPAÑA -->
