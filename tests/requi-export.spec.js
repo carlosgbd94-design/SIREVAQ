@@ -53,7 +53,7 @@ test('exporta cantidades, lotes y firmas en las filas nuevas, sin cuadro de jeri
   expect(ws.getCell('B10').value).toBe('Privada Lirios S/N');
   for (let r = 14; r <= 20; r++) expect(ws.getCell(`M${r}`).value ?? null).toBeNull();
   expect(ws.getColumn(13).hidden).toBe(true);
-  expect(ws.pageSetup.printArea).toBe('A1:K77');
+  expect(ws.pageSetup.printArea).toBe('A1:K89');
 });
 
 test('un biológico fuera del formato no se escribe sobre el pie y se avisa', async () => {

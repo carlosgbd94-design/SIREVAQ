@@ -60,7 +60,7 @@
       });
     }
     for (let c = 13; c <= 17; c++) ws.getColumn(c).hidden = true;
-    ws.pageSetup.printArea = 'A1:K77';
+    ws.pageSetup.printArea = 'A1:K89';
     // Ajustar a UNA página Carta (la plantilla ya viene así; se fuerza por si
     // ExcelJS no conserva el ajuste al re-guardar).
     ws.pageSetup.fitToPage = true;

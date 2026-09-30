@@ -13,6 +13,8 @@ const DESTINO = 'requisiciones_plantilla.xlsx';
 const PRIMERA = 14;          // primera fila de biológicos
 const DESPLAZA = 2;          // filas que baja el pie (21 biológicos en lugar de 20)
 const FIN_VIEJO = 87;        // última fila del formato anterior
+const SELLO_DESDE = 77;      // recuadros de sellos: filas 77-89
+const SELLO_HASTA = 89;
 
 // [clave de artículo, código, nombre, presentación, forma] en el orden del formato nuevo.
 const ORDEN = [
@@ -101,14 +103,46 @@ function clonar(o) { return o ? JSON.parse(JSON.stringify(o)) : o; }
       if (x.value != null && !(typeof x.value === 'object' && x.value.formula)) cel.value = x.value;
     });
   });
-  mergesPie.forEach((m) => ws.mergeCells(m.top + DESPLAZA, m.left, m.bottom + DESPLAZA, m.right));
+  // (las combinaciones de las filas de sellos se descartan: ahí van los recuadros)
+  mergesPie.filter((m) => m.top + DESPLAZA < SELLO_DESDE)
+    .forEach((m) => ws.mergeCells(m.top + DESPLAZA, m.left, m.bottom + DESPLAZA, m.right));
+
+  // Recuadros de sellos. En el Excel original eran cuadros de texto flotantes (los
+  // que ExcelJS no conserva), así que se dibujan como celdas combinadas con borde
+  // punteado: izquierdo vacío y derecho con la marca de agua "SELLO UNIDAD".
+  const punteado = { style: 'dotted', color: { argb: 'FF000000' } };
+  const recuadro = (c1, c2) => {
+    ws.mergeCells(SELLO_DESDE, c1, SELLO_HASTA, c2);
+    for (let rr = SELLO_DESDE; rr <= SELLO_HASTA; rr++) {
+      for (let cc = c1; cc <= c2; cc++) {
+        const b = {};
+        if (rr === SELLO_DESDE) b.top = punteado;
+        if (rr === SELLO_HASTA) b.bottom = punteado;
+        if (cc === c1) b.left = punteado;
+        if (cc === c2) b.right = punteado;
+        ws.getRow(rr).getCell(cc).border = b;
+      }
+    }
+    // Borde superior también como inferior de la fila de arriba: Excel dibuja el de
+    // la celda de arriba si trae uno propio, y si no, a veces no muestra el de abajo.
+    for (let cc = c1; cc <= c2; cc++) {
+      const arriba = ws.getRow(SELLO_DESDE - 1).getCell(cc);
+      arriba.border = { ...(arriba.border || {}), bottom: punteado };
+    }
+  };
+  recuadro(1, 3);
+  recuadro(8, 11);
+  const marca = ws.getCell(`H${SELLO_DESDE}`);
+  marca.value = 'SELLO' + String.fromCharCode(10) + 'UNIDAD';
+  marca.font = { name: 'Arial', size: 138, color: { argb: 'FFF9F9F9' } };
+  marca.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 
   // 5) Cuadro de jeringas (M:Q) fuera, y la hoja lista para Carta.
   for (let r = 1; r <= FIN_VIEJO + DESPLAZA + 3; r++) {
     for (let c = 13; c <= COLS; c++) { const cel = ws.getRow(r).getCell(c); cel.value = null; cel.style = {}; }
   }
   for (let c = 13; c <= COLS; c++) ws.getColumn(c).hidden = true;
-  ws.pageSetup.printArea = 'A1:K77';
+  ws.pageSetup.printArea = 'A1:K89';
   ws.pageSetup.paperSize = 1;
   ws.pageSetup.orientation = 'portrait';
   ws.pageSetup.fitToPage = true;
