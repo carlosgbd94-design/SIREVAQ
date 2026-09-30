@@ -60,7 +60,6 @@
       });
     }
     for (let c = 13; c <= 17; c++) ws.getColumn(c).hidden = true;
-    ws.pageSetup.printArea = 'A1:K89';
     // Ajustar a UNA página Carta (la plantilla ya viene así; se fuerza por si
     // ExcelJS no conserva el ajuste al re-guardar).
     ws.pageSetup.fitToPage = true;
@@ -104,22 +103,56 @@
   // Entrega/Recibe (fila 74) se deja SIN nombre para el nivel UNIDAD -- la
   // unidad firma a mano y anota su propio nombre en el papel (fila 75, ya
   // impresa en la plantilla, no se toca).
-  function escribirFirmas(ws, firmas) {
-    escribir(ws, 'A67', firmas.elaboro_nombre || '');
-    escribir(ws, 'A68', firmas.elaboro_cargo || '');
-    escribir(ws, 'H67', firmas.autorizo_nombre || '');
-    escribir(ws, 'H68', firmas.autorizo_cargo || '');
-    escribir(ws, 'A74', firmas.entrega_nombre || '');
-    escribir(ws, 'H74', firmas.recibe_nombre || '');
+  function escribirFirmas(ws, firmas, d) {
+    escribir(ws, `A${67 + d}`, firmas.elaboro_nombre || '');
+    escribir(ws, `A${68 + d}`, firmas.elaboro_cargo || '');
+    escribir(ws, `H${67 + d}`, firmas.autorizo_nombre || '');
+    escribir(ws, `H${68 + d}`, firmas.autorizo_cargo || '');
+    escribir(ws, `A${74 + d}`, firmas.entrega_nombre || '');
+    escribir(ws, `H${74 + d}`, firmas.recibe_nombre || '');
+  }
+
+  // --- Más de 2 lotes en un biológico -------------------------------------------
+  // Cada biológico trae 2 renglones (un lote por renglón). Si llegan más lotes se
+  // agregan renglones a ESE biológico y todo lo de abajo (pie, firmas y recuadros de
+  // sellos) baja lo necesario; la hoja sigue ajustada a una página Carta.
+  const ULTIMA_COL = 11; // A..K
+  const FILA_FINAL_PLANTILLA = 89; // última fila usada (recuadros de sellos)
+
+  function copiarFila(ws, desde, hasta) {
+    const o = ws.getRow(desde);
+    const d = ws.getRow(hasta);
+    d.height = o.height;
+    for (let c = 1; c <= ULTIMA_COL; c++) {
+      const co = o.getCell(c);
+      const cd = d.getCell(c);
+      cd.value = co.isMerged && co.master !== co ? null : co.value;
+      cd.style = JSON.parse(JSON.stringify(co.style || {}));
+    }
+  }
+
+  // Abre `n` filas debajo de `ultima` (última fila del bloque del biológico), copiando
+  // el formato de esa fila, y extiende las celdas combinadas del bloque (A-F y K).
+  function abrirFilas(ws, primera, ultima, n, filaFinal) {
+    const merges = Object.values(ws._merges).map((m) => ({ ...m.model }));
+    merges.filter((m) => m.top >= primera).forEach((m) => ws.unMergeCells(m.top, m.left, m.bottom, m.right));
+    for (let r = filaFinal; r > ultima; r--) copiarFila(ws, r, r + n);
+    for (let r = ultima + 1; r <= ultima + n; r++) {
+      copiarFila(ws, ultima, r);
+      for (let c = 1; c <= ULTIMA_COL; c++) ws.getRow(r).getCell(c).value = null;
+    }
+    merges.filter((m) => m.top >= primera).forEach((m) => {
+      if (m.top >= primera && m.top <= ultima) ws.mergeCells(m.top, m.left, m.bottom + n, m.right);
+      else ws.mergeCells(m.top + n, m.left, m.bottom + n, m.right);
+    });
   }
 
   // filasPorBiologico: { [requi_biologico_id]: [{ cantidad, numeroLote, caducidad }, ...] }
-  // Se usan como máximo 2 registros por biológico (límite físico de la
-  // plantilla); si sobran más, se reportan en `sobrantes` para avisar al
-  // usuario en vez de perderlos en silencio.
+  // Un renglón por lote: 2 por biológico en la plantilla y los que hagan falta si
+  // llegan más (ver abrirFilas). Devuelve cuántas filas se agregaron en total.
   function escribirBiologicos(ws, catalogo, filasPorBiologico) {
-    const sobrantes = [];
     const sinRenglon = [];
+    const validos = [];
     catalogo.forEach((bio) => {
       const registros = filasPorBiologico[bio.id] || [];
       // Biológicos agregados después del formato oficial (orden > 21)
@@ -129,43 +162,51 @@
         if (registros.some((r) => Number(r.cantidad) > 0)) sinRenglon.push(bio.nombre);
         return;
       }
-      if (registros.length > 2) sobrantes.push(bio.nombre);
-      const usados = registros.slice(0, 2);
+      validos.push({ bio, registros, extra: Math.max(0, registros.length - 2) });
+    });
 
-      // A (CLAVE DE ARTÍCULO) y B (CÓDIGO) venían fijas en la plantilla --
-      // texto plano de la captura de septiembre, sin relación con el
-      // catálogo real. Ahora se escriben desde requi_catalogo_biologicos
-      // (editable en la UI) para que una clave corregida sí se refleje en
-      // el Excel exportado, no solo en pantalla. Igual que F, A/B están
-      // fusionadas entre las 2 filas del biológico -- se escriben una vez.
-      escribir(ws, `A${filaBase(bio.orden)}`, bio.clave_articulo);
-      escribir(ws, `B${filaBase(bio.orden)}`, bio.codigo_articulo || '');
+    // 1) Abrir renglones de abajo hacia arriba (así las filas de arriba no se mueven).
+    let filaFinal = FILA_FINAL_PLANTILLA;
+    validos.slice().sort((x, y) => y.bio.orden - x.bio.orden).forEach((v) => {
+      if (!v.extra) return;
+      const primera = filaBase(v.bio.orden);
+      abrirFilas(ws, primera, primera + 1, v.extra, filaFinal);
+      filaFinal += v.extra;
+    });
+    const agregadas = filaFinal - FILA_FINAL_PLANTILLA;
 
-      // F (SOLICITADO) está fusionada entre las 2 filas del biológico -- es
-      // UN solo total, no un valor por lote. Escribirlo dos veces pisaría el
-      // mismo valor (la fusión apunta a una sola celda real). Se escribe una
-      // vez con la suma de los lotes usados; G/H sí son por fila (por lote).
-      const total = usados.reduce((acc, r) => acc + (Number(r.cantidad) || 0), 0);
-      if (total > 0) escribir(ws, `F${filaBase(bio.orden)}`, total);
+    // 2) Escribir: la fila de cada biológico se recorre por los renglones agregados arriba de él.
+    validos.forEach((v) => {
+      const { bio, registros } = v;
+      const desplazo = validos.filter((o) => o.bio.orden < bio.orden).reduce((acc, o) => acc + o.extra, 0);
+      const base = filaBase(bio.orden) + desplazo;
 
-      usados.forEach((r, i) => {
-        const fila = filaBase(bio.orden) + i;
+      // A (CLAVE DE ARTÍCULO) y B (CÓDIGO) se escriben desde requi_catalogo_biologicos
+      // (editable en la UI) para que una clave corregida sí se refleje en el Excel
+      // exportado. A/B/F están fusionadas entre los renglones del biológico -- se escriben una vez.
+      escribir(ws, `A${base}`, bio.clave_articulo);
+      escribir(ws, `B${base}`, bio.codigo_articulo || '');
+
+      // F (SOLICITADO) es UN solo total por biológico (suma de todos sus lotes);
+      // G/H/I/J sí son por renglón (por lote).
+      const total = registros.reduce((acc, r) => acc + (Number(r.cantidad) || 0), 0);
+      if (total > 0) escribir(ws, `F${base}`, total);
+
+      registros.forEach((r, i) => {
+        const fila = base + i;
         if (r.cantidad !== undefined && r.cantidad !== null) {
           // El formato real no distingue autorizado/surtido en la práctica
-          // -- se repite el mismo número en ambas columnas, igual que en
-          // los archivos reales de septiembre.
+          // -- se repite el mismo número en ambas columnas.
           escribir(ws, `G${fila}`, r.cantidad);
           escribir(ws, `H${fila}`, r.cantidad);
         }
         if (r.numeroLote) escribir(ws, `I${fila}`, r.numeroLote);
         // 'Z' -- ExcelJS serializa Date a número de serie con sus componentes
-        // UTC; una medianoche LOCAL (America/Mexico_City, UTC-6) sin 'Z' se
-        // serializa con ".25" de fracción de día en vez de un entero limpio
-        // (ej. OCT-27 aparecía como "46691.25" en el Excel exportado).
+        // UTC; una medianoche LOCAL sin 'Z' se serializa con ".25" de fracción de día.
         if (r.caducidad) escribir(ws, `J${fila}`, new Date(r.caducidad + 'T00:00:00Z'));
       });
     });
-    return { sobrantes, sinRenglon };
+    return { sinRenglon, agregadas };
   }
 
   async function generar({ plantillaBuffer, encabezado, firmas, catalogo, filasPorBiologico }) {
@@ -181,12 +222,14 @@
     limpiarDatosPrevios(ws);
     limpiarTablaJeringas(ws);
     escribirEncabezado(ws, encabezado || {});
-    escribirFirmas(ws, firmas || {});
-    const { sobrantes, sinRenglon } = escribirBiologicos(ws, catalogo || [], filasPorBiologico || {});
+    const { sinRenglon, agregadas } = escribirBiologicos(ws, catalogo || [], filasPorBiologico || {});
+    escribirFirmas(ws, firmas || {}, agregadas);
+    ws.pageSetup.printArea = `A1:K${FILA_FINAL_PLANTILLA + agregadas}`;
     ocultarOtrasHojas(wb, HOJA);
 
     const buffer = await wb.xlsx.writeBuffer();
-    return { buffer, sobrantes, sinRenglon };
+    // `sobrantes` se conserva vacío por compatibilidad: ya no hay límite de 2 lotes.
+    return { buffer, sobrantes: [], sinRenglon };
   }
 
   return { generar };

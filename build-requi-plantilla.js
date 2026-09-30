@@ -87,6 +87,15 @@ function clonar(o) { return o ? JSON.parse(JSON.stringify(o)) : o; }
     ['A', 'B', 'C', 'D', 'E', 'F', 'K'].forEach((col) => ws.mergeCells(`${col}${r}:${col}${r + 1}`));
   });
 
+  // Borde inferior de la tabla en el último biológico: en las celdas combinadas
+  // (A-F y K) faltaba, porque antes lo dibujaba el borde superior de la fila de abajo.
+  const ultimaFila = PRIMERA + 2 * (ORDEN.length - 1);
+  const bordeAbajo = ws.getCell(`G${ultimaFila + 1}`).border.bottom;
+  ['A', 'B', 'C', 'D', 'E', 'F', 'K'].forEach((col) => {
+    const c = ws.getCell(`${col}${ultimaFila}`);
+    c.border = { ...(c.border || {}), bottom: bordeAbajo };
+  });
+
   // La caducidad se muestra mmm-aa en todos los renglones (el patrón de la primera
   // pareja de filas venía sin ese formato en la segunda fila).
   const fmtFecha = ws.getCell('J16').numFmt;
@@ -115,12 +124,10 @@ function clonar(o) { return o ? JSON.parse(JSON.stringify(o)) : o; }
     ws.mergeCells(SELLO_DESDE, c1, SELLO_HASTA, c2);
     for (let rr = SELLO_DESDE; rr <= SELLO_HASTA; rr++) {
       for (let cc = c1; cc <= c2; cc++) {
-        const b = {};
-        if (rr === SELLO_DESDE) b.top = punteado;
-        if (rr === SELLO_HASTA) b.bottom = punteado;
-        if (cc === c1) b.left = punteado;
-        if (cc === c2) b.right = punteado;
-        ws.getRow(rr).getCell(cc).border = b;
+        // ExcelJS guarda UN estilo por región combinada (el de la celda maestra),
+        // así que cada celda lleva los cuatro lados: si no, faltaban el izquierdo
+        // y el superior.
+        ws.getRow(rr).getCell(cc).border = { top: punteado, left: punteado, bottom: punteado, right: punteado };
       }
     }
     // Borde superior también como inferior de la fila de arriba: Excel dibuja el de

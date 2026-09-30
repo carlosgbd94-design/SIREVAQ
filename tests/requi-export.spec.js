@@ -63,3 +63,36 @@ test('un biológico fuera del formato no se escribe sobre el pie y se avisa', as
   const ws = (await abrir(buffer)).getWorksheet('GENERAL');
   expect(String(ws.getCell('B56').value.richText ? 'cond' : ws.getCell('B56').value)).toBe('cond');
 });
+
+test('un biológico con 3 lotes crece un renglón y baja lo de abajo (pie, firmas y sellos)', async () => {
+  const filas = {
+    b6135: [
+      { cantidad: 60, numeroLote: 'A', caducidad: '2027-12-31' },
+      { cantidad: 30, numeroLote: 'B', caducidad: '2028-01-31' },
+      { cantidad: 10, numeroLote: 'C', caducidad: '2028-03-31' }
+    ],
+    b6509: [
+      { cantidad: 3, numeroLote: 'V1', caducidad: '2027-08-31' },
+      { cantidad: 1, numeroLote: 'V2', caducidad: '2027-09-30' },
+      { cantidad: 1, numeroLote: 'V3', caducidad: '2027-10-31' }
+    ]
+  };
+  const { buffer, sobrantes, sinRenglon } = await generar({ ...base, filasPorBiologico: filas });
+  expect(sobrantes).toEqual([]);
+  expect(sinRenglon).toEqual([]);
+  const ws = (await abrir(buffer)).getWorksheet('GENERAL');
+  // Hexavalente (orden 4, fila 20): 3 renglones, total 100 en la celda combinada
+  expect(ws.getCell('F20').value).toBe(100);
+  ['A', 'B', 'C'].forEach((l, i) => expect(ws.getCell(`I${20 + i}`).value).toBe(l));
+  // El siguiente biológico (HepB, orden 5) baja 1 fila: de la 22 a la 23
+  expect(String(ws.getCell('B23').value)).toBe('2526');
+  // VRS (orden 21) baja 1 por Hexavalente: de la 54 a la 55, con sus 3 lotes
+  expect(String(ws.getCell('B55').value)).toBe('6509');
+  ['V1', 'V2', 'V3'].forEach((l, i) => expect(ws.getCell(`I${55 + i}`).value).toBe(l));
+  // Pie y firmas bajan 2 (una fila por cada biológico con 3 lotes); área de impresión igual
+  expect(ws.getCell('A69').value).toBe('ELA');
+  expect(ws.getCell('A76').value).toBe('ENT');
+  expect(ws.pageSetup.printArea).toBe('A1:K91');
+  expect(ws.getCell('A55').master.address).toBe('A55');
+  expect(ws.getCell('A57').master.address).toBe('A55');
+});
