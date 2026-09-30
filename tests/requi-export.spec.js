@@ -1,0 +1,65 @@
+// Exportador de requisiciones (requisiciones_export_excel.js) contra la plantilla real:
+// 21 renglones del formato nuevo, pie recorrido 2 filas, una sola hoja, sin cuadro de jeringas.
+const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const path = require('path');
+const ExcelJS = require('exceljs');
+
+global.ExcelJS = ExcelJS;
+const { generar } = require('../requisiciones_export_excel.js');
+
+const CODIGOS = ['6508', '148', '150', '6135', '2526', '6187', '3800', '3801', '3805', '3808', '3810',
+  '6056', '3820', '3821', '6317', '3832', '6501', '2', '6502', '6506', '6509'];
+const catalogo = CODIGOS.map((c, i) => ({ id: 'b' + c, orden: i + 1, nombre: 'V' + c, clave_articulo: 'CL-' + c, codigo_articulo: c }));
+const plantillaBuffer = fs.readFileSync(path.join(__dirname, '..', 'requisiciones_plantilla.xlsx'));
+const base = {
+  plantillaBuffer, catalogo,
+  encabezado: { destinoNombre: 'C.S JURICA', destinoDireccion: 'Privada Lirios S/N', mesLabel: 'OCTUBRE 2026' },
+  firmas: { elaboro_nombre: 'ELA', autorizo_nombre: 'AUT', entrega_nombre: 'ENT', recibe_nombre: 'REC' }
+};
+
+async function abrir(buffer) {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  return wb;
+}
+
+test('la plantilla trae los 21 renglones del formato nuevo en una sola hoja', async () => {
+  const wb = await abrir(plantillaBuffer);
+  expect(wb.worksheets.map((w) => w.name)).toEqual(['GENERAL']);
+  const ws = wb.getWorksheet('GENERAL');
+  catalogo.forEach((b) => expect(String(ws.getCell(`B${12 + 2 * b.orden}`).value)).toBe(b.codigo_articulo));
+  expect(ws.getCell('C14').value).toMatch(/NEUMOCOCCICA 20/);
+});
+
+test('exporta cantidades, lotes y firmas en las filas nuevas, sin cuadro de jeringas', async () => {
+  const filas = {
+    b6506: [{ cantidad: 40, numeroLote: 'PF1', caducidad: '2027-03-31' }],
+    b6509: [{ cantidad: 5, numeroLote: 'MK3145', caducidad: '2027-08-31' }, { cantidad: 2, numeroLote: 'MK9', caducidad: '2027-09-30' }]
+  };
+  const { buffer, sobrantes, sinRenglon } = await generar({ ...base, filasPorBiologico: filas });
+  expect(sobrantes).toEqual([]);
+  expect(sinRenglon).toEqual([]);
+  const ws = (await abrir(buffer)).getWorksheet('GENERAL');
+  expect(ws.getCell('F52').value).toBe(40);      // Pfizer: orden 20 -> fila 52
+  expect(ws.getCell('I52').value).toBe('PF1');
+  expect(ws.getCell('F54').value).toBe(7);       // VRS: orden 21 -> fila 54, F = suma de sus 2 lotes
+  expect(ws.getCell('I55').value).toBe('MK9');
+  expect(ws.getCell('A67').value).toBe('ELA');
+  expect(ws.getCell('H67').value).toBe('AUT');
+  expect(ws.getCell('A74').value).toBe('ENT');
+  expect(ws.getCell('H74').value).toBe('REC');
+  expect(ws.getCell('B9').value).toBe('C.S JURICA');
+  expect(ws.getCell('B10').value).toBe('Privada Lirios S/N');
+  for (let r = 14; r <= 20; r++) expect(ws.getCell(`M${r}`).value ?? null).toBeNull();
+  expect(ws.getColumn(13).hidden).toBe(true);
+  expect(ws.pageSetup.printArea).toBe('A1:K77');
+});
+
+test('un biológico fuera del formato no se escribe sobre el pie y se avisa', async () => {
+  const cat = [...catalogo, { id: 'bX', orden: 22, nombre: 'VACUNA NUEVA', clave_articulo: 'X', codigo_articulo: '9' }];
+  const { buffer, sinRenglon } = await generar({ ...base, catalogo: cat, filasPorBiologico: { bX: [{ cantidad: 3, numeroLote: 'L', caducidad: null }] } });
+  expect(sinRenglon).toEqual(['VACUNA NUEVA']);
+  const ws = (await abrir(buffer)).getWorksheet('GENERAL');
+  expect(String(ws.getCell('B56').value.richText ? 'cond' : ws.getCell('B56').value)).toBe('cond');
+});

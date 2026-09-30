@@ -24,13 +24,13 @@
   // límite físico de la plantilla, igual que en el Excel real).
   function filaBase(orden) { return 12 + 2 * orden; }
 
-  // La plantilla tiene 20 renglones físicos (filas 14-53) sin importar
+  // La plantilla tiene 21 renglones físicos (filas 14-55) sin importar
   // cuántos biológicos estén activos hoy en el catálogo -- se limpian TODOS
   // antes de escribir, porque requisiciones_plantilla.xlsx es una copia real
   // de "Municipio Corregidora.xlsx" y trae datos reales de septiembre ya
   // capturados en esas celdas (cantidades, lotes) que de otro modo se
   // quedarían pegados en cualquier renglón que esta exportación no llene.
-  const TOTAL_RENGLONES_PLANTILLA = 20;
+  const TOTAL_RENGLONES_PLANTILLA = 21;
 
   function limpiarDatosPrevios(ws) {
     for (let orden = 1; orden <= TOTAL_RENGLONES_PLANTILLA; orden++) {
@@ -49,10 +49,23 @@
   // no detectada, y se recorta el área de impresión a A1:K87 (la cuadrícula
   // real de la requisición) para que no quede ese espacio en blanco.
   function limpiarTablaJeringas(ws) {
+    // Además de los valores se quita el formato (bordes, tamaño de letra): el
+    // cuadro seguía viéndose como una tabla vacía con líneas. Las columnas M:Q
+    // se ocultan para que no ocupen espacio en pantalla ni en la impresión.
     for (let r = 1; r <= 90; r++) {
-      ['M', 'N', 'O', 'P', 'Q'].forEach((col) => { ws.getCell(`${col}${r}`).value = null; });
+      ['M', 'N', 'O', 'P', 'Q'].forEach((col) => {
+        const celda = ws.getCell(`${col}${r}`);
+        celda.value = null;
+        celda.style = {};
+      });
     }
-    ws.pageSetup.printArea = 'A1:K87';
+    for (let c = 13; c <= 17; c++) ws.getColumn(c).hidden = true;
+    ws.pageSetup.printArea = 'A1:K77';
+    // Ajustar a UNA página Carta (la plantilla ya viene así; se fuerza por si
+    // ExcelJS no conserva el ajuste al re-guardar).
+    ws.pageSetup.fitToPage = true;
+    ws.pageSetup.fitToWidth = 1;
+    ws.pageSetup.fitToHeight = 1;
   }
 
   // La plantilla real trae, además de "GENERAL", las hojas ocultas/visibles
@@ -87,17 +100,17 @@
     Object.entries(CELDAS_ENCABEZADO).forEach(([campo, addr]) => escribir(ws, addr, datos[campo]));
   }
 
-  // Elaboró/Autorizó (filas 65-66) se imprimen igual en las 3 copias.
-  // Entrega/Recibe (fila 72) se deja SIN nombre para el nivel UNIDAD -- la
-  // unidad firma a mano y anota su propio nombre en el papel (fila 73, ya
+  // Elaboró/Autorizó (filas 67-68) se imprimen igual en las 3 copias.
+  // Entrega/Recibe (fila 74) se deja SIN nombre para el nivel UNIDAD -- la
+  // unidad firma a mano y anota su propio nombre en el papel (fila 75, ya
   // impresa en la plantilla, no se toca).
   function escribirFirmas(ws, firmas) {
-    escribir(ws, 'A65', firmas.elaboro_nombre || '');
-    escribir(ws, 'A66', firmas.elaboro_cargo || '');
-    escribir(ws, 'H65', firmas.autorizo_nombre || '');
-    escribir(ws, 'H66', firmas.autorizo_cargo || '');
-    escribir(ws, 'A72', firmas.entrega_nombre || '');
-    escribir(ws, 'H72', firmas.recibe_nombre || '');
+    escribir(ws, 'A67', firmas.elaboro_nombre || '');
+    escribir(ws, 'A68', firmas.elaboro_cargo || '');
+    escribir(ws, 'H67', firmas.autorizo_nombre || '');
+    escribir(ws, 'H68', firmas.autorizo_cargo || '');
+    escribir(ws, 'A74', firmas.entrega_nombre || '');
+    escribir(ws, 'H74', firmas.recibe_nombre || '');
   }
 
   // filasPorBiologico: { [requi_biologico_id]: [{ cantidad, numeroLote, caducidad }, ...] }
@@ -106,8 +119,16 @@
   // usuario en vez de perderlos en silencio.
   function escribirBiologicos(ws, catalogo, filasPorBiologico) {
     const sobrantes = [];
+    const sinRenglon = [];
     catalogo.forEach((bio) => {
       const registros = filasPorBiologico[bio.id] || [];
+      // Biológicos agregados después del formato oficial (orden > 21)
+      // no tienen renglón en la plantilla: escribirlos pisaría el pie de la
+      // hoja, así que se omiten y se avisa en vez de perderlos en silencio.
+      if (bio.orden > TOTAL_RENGLONES_PLANTILLA) {
+        if (registros.some((r) => Number(r.cantidad) > 0)) sinRenglon.push(bio.nombre);
+        return;
+      }
       if (registros.length > 2) sobrantes.push(bio.nombre);
       const usados = registros.slice(0, 2);
 
@@ -144,7 +165,7 @@
         if (r.caducidad) escribir(ws, `J${fila}`, new Date(r.caducidad + 'T00:00:00Z'));
       });
     });
-    return sobrantes;
+    return { sobrantes, sinRenglon };
   }
 
   async function generar({ plantillaBuffer, encabezado, firmas, catalogo, filasPorBiologico }) {
@@ -161,11 +182,11 @@
     limpiarTablaJeringas(ws);
     escribirEncabezado(ws, encabezado || {});
     escribirFirmas(ws, firmas || {});
-    const sobrantes = escribirBiologicos(ws, catalogo || [], filasPorBiologico || {});
+    const { sobrantes, sinRenglon } = escribirBiologicos(ws, catalogo || [], filasPorBiologico || {});
     ocultarOtrasHojas(wb, HOJA);
 
     const buffer = await wb.xlsx.writeBuffer();
-    return { buffer, sobrantes };
+    return { buffer, sobrantes, sinRenglon };
   }
 
   return { generar };

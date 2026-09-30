@@ -375,6 +375,24 @@
   table.vista-pegado td { padding: 6px 8px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
   table.vista-pegado tr.fila-error td { background: var(--error-bg); }
   table.vista-pegado select { padding: 4px 6px; font-size: 12px; max-width: 200px; }
+  /* Lotes por definir / asignar lotes / transferencias */
+  .chip-lote.pendiente { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+  .aviso-pendientes { display: none; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; margin-bottom: 14px; border-radius: 16px; background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning); }
+  .aviso-pendientes > .material-symbols-rounded { font-size: 24px; }
+  .aviso-txt { flex: 1 1 220px; }
+  .aviso-txt b { display: block; font: 800 13.5px 'Poppins', sans-serif; }
+  .aviso-txt small { font-size: 12px; opacity: .85; }
+  .aviso-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .aviso-btns .btn { border-left: 4px solid var(--c, #0f172a); }
+  .asig-fila { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .asig-fila .campo:first-child { flex: 1 1 180px; }
+  .modal-resumen.ok { color: #15803d; }
+  .modal-resumen.aviso { color: var(--warning); }
+  .trans-subir { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; padding: 12px; background: var(--surface-container); border-radius: 14px; margin-bottom: 14px; }
+  .trans-nombre { font: 800 12.5px 'Poppins', sans-serif; color: var(--primary); flex: 1 1 100%; }
+  .trans-ver { display: inline-flex; align-items: center; gap: 6px; color: var(--secondary); font-weight: 700; text-decoration: none; }
+  .trans-ver:hover { text-decoration: underline; }
+  .trans-archivo { font-size: 12px; color: var(--muted); align-self: center; }
   @media (max-width: 640px) {
     .modal-fondo { align-items: flex-end; padding: 0; }
     .modal-hoja { max-width: none; border-radius: 24px 24px 0 0; max-height: 92dvh; }
@@ -425,6 +443,7 @@
             </div>
           </div>
         </div>
+        <button class="btn btn-outline btn-sm solo-edicion" id="btnAbrirTransferencias" title="Repositorio de transferencias (PDF)"><span class="material-symbols-rounded" style="font-size:16px">folder_copy</span> Transferencias</button>
         <button class="icon-btn-pure" id="btnAbrirExplorador" title="Historial de requisiciones"><span class="material-symbols-rounded">history</span></button>
         <span class="badge-role" id="badgeRol">Cargando sesión…</span>
       </div>
@@ -539,17 +558,19 @@
         <h2 style="margin:0 0 4px;"><span class="material-symbols-rounded">bolt</span> Captura rápida<button type="button" class="ayuda-btn" data-ayuda="requi1" title="Cómo funciona el paso 1" aria-label="Cómo funciona el paso 1"><span class="material-symbols-rounded">help</span></button>
           <button type="button" class="btn btn-outline btn-sm" id="btnPegarSurtido" style="margin-left:auto;"><span class="material-symbols-rounded" style="font-size:15px">content_paste</span> Pegar desde Excel</button>
         </h2>
-        <p class="hint" style="margin-top:8px;"><b>1.</b> Toca el biológico · <b>2.</b> escribe lote, caducidad y cantidad · <b>Enter</b> guarda y te deja listo para el siguiente lote del mismo biológico.</p>
+        <p class="hint" style="margin-top:8px;"><b>1.</b> Toca el biológico · <b>2.</b> escribe lote, caducidad y cantidad · <b>Enter</b> guarda y te deja listo para el siguiente lote del mismo biológico. <b>¿Aún no hay lotes?</b> Deja el lote vacío y captura solo la cantidad: después lo asignas con "Asignar lotes".</p>
         <div class="chips-bio" id="chipsBio"></div>
         <div class="rapida" id="rapida">
           <div class="rapida-bio" id="rapidaBio"></div>
-          <div class="campo rapida-lote"><label for="rapLote">Lote</label><input type="text" id="rapLote" list="rapListaLotes" autocomplete="off" placeholder="Ej. 0374MA109"><datalist id="rapListaLotes"></datalist></div>
+          <div class="campo rapida-lote"><label for="rapLote">Lote</label><input type="text" id="rapLote" list="rapListaLotes" autocomplete="off" placeholder="Vacío = por definir"><datalist id="rapListaLotes"></datalist></div>
           <div class="campo"><label for="rapCad">Caducidad</label><input type="text" id="rapCad" autocomplete="off" placeholder="FEB-27" style="width:100px;"></div>
           <div class="campo"><label for="rapCant">Cantidad</label><input type="number" id="rapCant" min="0" inputmode="numeric" placeholder="0"></div>
           <button type="button" class="btn btn-primary" id="rapAgregar"><span class="material-symbols-rounded" style="font-size:16px">add</span> Agregar</button>
         </div>
         <div class="rapida-nota" id="rapNota"></div>
       </div>
+
+      <div class="aviso-pendientes solo-edicion" id="avisoPendientes"></div>
 
       <div class="tarjeta">
         <h2 style="margin:0 0 10px;"><span class="material-symbols-rounded">inventory</span> Lo surtido por biológico
@@ -612,6 +633,55 @@
         <button type="button" class="btn btn-outline" id="pegarCancelar">Cancelar</button>
         <button type="button" class="btn btn-primary" id="pegarImportar" disabled>Importar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Asignar lotes a cantidades capturadas "por definir" -->
+  <div class="modal-fondo" id="modalAsignar" style="display:none;">
+    <div class="modal-hoja" role="dialog" aria-modal="true" aria-labelledby="asigTitulo" style="max-width:640px;">
+      <div class="modal-cab">
+        <div><h3 id="asigTitulo">Asignar lotes</h3><p id="asigSub"></p></div>
+        <button type="button" class="icon-btn-pure" id="asigCerrar" title="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="modal-cuerpo">
+        <p class="hint" style="margin-bottom:12px;">Si llegó un solo lote, déjalo con toda la cantidad. Si llegaron varios, baja la cantidad del primero y toca <b>Agregar otro lote</b>: el nuevo renglón se llena con lo que falta.</p>
+        <div id="asigFilas"></div>
+        <datalist id="asigListaLotes"></datalist>
+        <button type="button" class="btn btn-outline btn-sm" id="asigAgregar"><span class="material-symbols-rounded" style="font-size:15px">add</span> Agregar otro lote</button>
+      </div>
+      <div class="modal-pie">
+        <span id="asigResumen" class="modal-resumen"></span>
+        <button type="button" class="btn btn-outline" id="asigCancelar">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="asigGuardar">Asignar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transferencias: repositorio de PDF (solo ADMIN y JURISDICCIONAL) -->
+  <div class="modal-fondo" id="modalTransferencias" style="display:none;">
+    <div class="modal-hoja" role="dialog" aria-modal="true" aria-labelledby="transTitulo">
+      <div class="modal-cab">
+        <div><h3 id="transTitulo">Transferencias</h3><p>PDF de las transferencias de cada mes. Solo lo ven los perfiles Jurisdiccional y Admin.</p></div>
+        <button type="button" class="icon-btn-pure" id="transCerrar" title="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="modal-cuerpo">
+        <div class="trans-subir">
+          <div class="campo"><label for="transMes">Mes</label><select id="transMes"></select></div>
+          <div class="campo"><label for="transAnio">Año</label><select id="transAnio"></select></div>
+          <label class="btn btn-outline btn-sm" style="cursor:pointer;"><span class="material-symbols-rounded" style="font-size:15px">upload_file</span> Elegir PDF
+            <input type="file" id="transArchivo" accept="application/pdf,.pdf" style="display:none;"></label>
+          <span class="trans-archivo" id="transArchivoNombre">Ningún PDF elegido</span>
+          <button type="button" class="btn btn-primary btn-sm" id="transSubir" disabled style="margin-left:auto;">Subir</button>
+          <div class="trans-nombre">Se guardará como: <span id="transNombre"></span></div>
+        </div>
+        <div class="tbl-scroll" style="max-height:320px;">
+          <table class="tbl">
+            <thead><tr><th>Mes</th><th>Archivo</th><th>Tamaño</th><th>Subió</th></tr></thead>
+            <tbody id="transLista"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-pie"><button type="button" class="btn btn-outline" id="transCerrar2">Cerrar</button></div>
     </div>
   </div>
 

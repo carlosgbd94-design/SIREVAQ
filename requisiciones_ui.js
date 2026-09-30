@@ -55,7 +55,7 @@ const COPIAS_SUGERIDAS = { JURISDICCIONAL: 2, MUNICIPAL: 2, UNIDAD: 3 };
 const MUNICIPIO_A_LOTES = { CORREGIDORA: 'CORREGIDORA', HUIMILPAN: 'HUIMILPAN', MARQUES: 'EL MARQUÉS', QUERETARO: 'QUERÉTARO' };
 const CODIGO_A_LOTES_BIOLOGICO = {
   '148': 'NEUMOCÓCICA 13', '150': 'ROTAVIRUS', '6135': 'HEXAVALENTE', '2526': 'HEPATITIS B',
-  '3825': 'HEPATITIS A', '3800': 'SR', '3801': 'BCG', '3805': 'DPT', '3808': 'TDPA',
+  '3825': 'HEPATITIS A', '6187': 'HEPATITIS A', '3800': 'SR', '3801': 'BCG', '3805': 'DPT', '3808': 'TDPA',
   '3810': 'TD', '6056': 'VARICELA', '3820': 'SRP', '6317': 'INFLUENZA', '6501': 'VPH', '6509': 'VSR'
 };
 
@@ -69,8 +69,15 @@ const COLOR_POR_CODIGO_ARTICULO = {
   '146': '#3D405B', '148': '#3D405B', '150': '#264653', '6135': '#9ACD32', '2526': '#C43D3D',
   '3825': '#4b5563', '3800': '#7B5EA7', '3801': '#3A86B7', '3802': '#0f172a', '3805': '#E9C46A',
   '3808': '#E76F51', '3810': '#5C5C5C', '6056': '#059669', '3820': '#B23A48', '3821': '#B23A48',
-  '6317': '#C26750', '3832': '#0f172a', '6501': '#2A9D8F', '2': '#0f172a', '6509': '#A66B50'
+  '6317': '#C26750', '3832': '#0f172a', '6501': '#2A9D8F', '2': '#0f172a', '6509': '#A66B50',
+  '6502': '#6D28D9', '6506': '#1D4ED8', '6508': '#3D405B', '6187': '#4b5563'
 };
+
+// Lote marcador para capturar cantidades antes de que lleguen los lotes reales
+// (ver requi_covid_lotes_pendientes_transferencias.sql: requi_asignar_lotes lo
+// reemplaza por 1 o más lotes y reacomoda el reparto ya hecho).
+const LOTE_PENDIENTE = 'POR DEFINIR';
+function esPendiente(item) { return !!item && item.requi_lotes && item.requi_lotes.numero_lote === LOTE_PENDIENTE; }
 function colorDeBio(bio) { return COLOR_POR_CODIGO_ARTICULO[bio?.codigo_articulo] || '#0f172a'; }
 
 const estado = {
@@ -95,6 +102,8 @@ const estado = {
   previa: null,        // reparto del mes anterior (para "Sugerir")
   pegado: [],
   pegadoToken: 0,
+  asig: null,          // modal "Asignar lotes"
+  transferencias: [],
   guardandoRapido: false,
   cola: Promise.resolve()
 };
@@ -379,9 +388,13 @@ async function cerrarMes() {
   if (!estado.puedeEditar || !estado.requisicion || estado.requisicion.estado === 'CERRADA') return;
   const av = estado.avance || calcularAvance();
   const pendientes = av.p2.filter((x) => x.est !== 'completo').length + av.p3.filter((x) => x.est !== 'completo').length;
-  const aviso = pendientes ? `
+  const sinLote = estado.items.filter((i) => esPendiente(i) && Number(i.cantidad_surtida) > 0).length;
+  const avisoLote = sinLote ? `
 
-Ojo: ${plural(pendientes, 'reparto todavía tiene', 'repartos todavía tienen')} saldo sin repartir (puntos ámbar o grises).` : '';
+Ojo: ${plural(sinLote, 'renglón todavía tiene', 'renglones todavía tienen')} el lote "por definir".` : '';
+  const aviso = avisoLote + (pendientes ? `
+
+Ojo: ${plural(pendientes, 'reparto todavía tiene', 'repartos todavía tienen')} saldo sin repartir (puntos ámbar o grises).` : '');
   const ok = confirm('¿Cerrar esta requisición? Se marca como enviada. Si después necesitas corregir algo, puedes seguir editándola aquí mismo -- quedará marcada como "corregida posteriormente" para que municipios y unidades lo sepan.' + aviso);
   if (!ok) return;
   const { data, error } = await estado.db.from('requi_requisiciones')
@@ -784,10 +797,9 @@ async function agregarRapido() {
   if (estado.guardandoRapido || !estado.requisicion) return;
   const bioId = estado.bioRapido;
   if (!bioId) { toast('Elige primero el biológico.', true); return; }
-  const numeroLote = $('rapLote').value.trim();
-  const caducidadTexto = $('rapCad').value.trim();
+  const numeroLote = $('rapLote').value.trim() || LOTE_PENDIENTE; // sin lote = "por definir"
+  const caducidadTexto = numeroLote === LOTE_PENDIENTE ? '' : $('rapCad').value.trim();
   const cantidad = Number($('rapCant').value);
-  if (!numeroLote) { toast('Escribe el número de lote.', true); $('rapLote').focus(); return; }
   if (!cantidad || cantidad <= 0) { toast('La cantidad debe ser mayor a 0.', true); $('rapCant').focus(); return; }
   let caducidad = null;
   if (caducidadTexto) {
@@ -799,7 +811,7 @@ async function agregarRapido() {
   try {
     if (!(await guardarLoteSurtido(bioId, numeroLote, caducidad, cantidad))) return;
     const bio = estado.catalogo.find((b) => b.id === bioId);
-    toast(`Lote ${numeroLote} de ${nombreCorto(bio)} guardado.`);
+    toast(numeroLote === LOTE_PENDIENTE ? `${nombreCorto(bio)}: ${cantidad} con lote por definir.` : `Lote ${numeroLote} de ${nombreCorto(bio)} guardado.`);
     limpiarRapida();
     renderPaso1();
     renderAvance();
@@ -830,8 +842,11 @@ function filasBiologicoHtml(bio) {
     </tr>`;
   const filasLotes = items.map((it) => `
     <tr class="fila-lote-capturado" data-item="${it.id}" data-bio="${bio.id}">
-      <td class="lote-cel" colspan="3"><span class="chip-lote"><span class="material-symbols-rounded">qr_code_2</span>Lote ${esc(it.requi_lotes.numero_lote)}</span><span class="cad-lote">Cad. ${esc(formatMmmAa(it.requi_lotes.caducidad)) || '—'}</span></td>
+      <td class="lote-cel" colspan="3">${esPendiente(it)
+        ? '<span class="chip-lote pendiente"><span class="material-symbols-rounded">hourglass_top</span>Lote por definir</span>'
+        : `<span class="chip-lote"><span class="material-symbols-rounded">qr_code_2</span>Lote ${esc(it.requi_lotes.numero_lote)}</span><span class="cad-lote">Cad. ${esc(formatMmmAa(it.requi_lotes.caducidad)) || '—'}</span>`}</td>
       <td><div class="cant-wrap"><strong>${it.cantidad_surtida}</strong><span class="solo-edicion">
+        ${esPendiente(it) ? `<button type="button" class="btn btn-outline btn-sm btn-asignar-lotes" data-item="${it.id}" title="Ya llegaron los lotes: asígnalos"><span class="material-symbols-rounded" style="font-size:15px">edit_note</span> Asignar lotes</button>` : ''}
         <button type="button" class="icon-btn-pure btn-editar-item" data-item="${it.id}" title="Editar"><span class="material-symbols-rounded" style="font-size:16px">edit</span></button>
         <button type="button" class="icon-btn-pure btn-quitar-item" data-item="${it.id}" data-bio="${bio.id}" title="Quitar"><span class="material-symbols-rounded" style="font-size:16px">delete</span></button>
       </span></div></td>
@@ -839,7 +854,22 @@ function filasBiologicoHtml(bio) {
   return filaBio + filasLotes;
 }
 
+function renderAvisoPendientes() {
+  const pend = estado.items.filter((i) => esPendiente(i) && Number(i.cantidad_surtida) > 0)
+    .sort((a, b) => ordenCatalogo(a.requi_biologico_id) - ordenCatalogo(b.requi_biologico_id));
+  const el = $('avisoPendientes');
+  el.style.display = pend.length ? 'flex' : 'none';
+  el.innerHTML = pend.length ? `
+    <span class="material-symbols-rounded">hourglass_top</span>
+    <div class="aviso-txt"><b>${plural(pend.length, 'biológico con lote por definir', 'biológicos con lote por definir')}</b><small>Cuando lleguen los lotes, asígnalos aquí: el reparto que ya hiciste se acomoda solo.</small></div>
+    <div class="aviso-btns">${pend.map((i) => {
+      const bio = estado.catalogo.find((b) => b.id === i.requi_biologico_id) || {};
+      return `<button type="button" class="btn btn-outline btn-sm solo-edicion btn-asignar-lotes" data-item="${i.id}" style="--c:${colorDeBio(bio)}">${esc(nombreCorto(bio))} · ${i.cantidad_surtida}</button>`;
+    }).join('')}</div>` : '';
+}
+
 function renderPaso1() {
+  renderAvisoPendientes();
   renderChipsBio();
   renderRapidaBio();
   $('chkSoloConLotes').classList.toggle('activo', estado.soloConLotes);
@@ -856,8 +886,10 @@ function activarEdicionItem(itemId) {
   const tr = document.querySelector(`tr.fila-lote-capturado[data-item="${itemId}"]`);
   if (!item || !tr) return;
   tr.innerHTML = `
-    <td class="lote-cel" colspan="3"><span class="chip-lote"><span class="material-symbols-rounded">qr_code_2</span>Lote ${esc(item.requi_lotes.numero_lote)}</span>
-      <input type="text" class="inp-editar-caducidad" value="${esc(formatMmmAa(item.requi_lotes.caducidad))}" placeholder="FEB-27"></td>
+    <td class="lote-cel" colspan="3">${esPendiente(item)
+      ? '<span class="chip-lote pendiente"><span class="material-symbols-rounded">hourglass_top</span>Lote por definir</span>'
+      : `<span class="chip-lote"><span class="material-symbols-rounded">qr_code_2</span>Lote ${esc(item.requi_lotes.numero_lote)}</span>
+      <input type="text" class="inp-editar-caducidad" value="${esc(formatMmmAa(item.requi_lotes.caducidad))}" placeholder="FEB-27">`}</td>
     <td><div class="cant-wrap"><input type="number" min="0" class="inp-editar-cantidad" value="${item.cantidad_surtida}"><span>
       <button type="button" class="icon-btn-pure btn-guardar-edicion" data-item="${itemId}" title="Guardar"><span class="material-symbols-rounded" style="font-size:16px">check</span></button>
       <button type="button" class="icon-btn-pure btn-cancelar-edicion" title="Cancelar"><span class="material-symbols-rounded" style="font-size:16px">close</span></button>
@@ -869,7 +901,8 @@ async function guardarEdicionItem(itemId) {
   const item = estado.items.find((i) => i.id === itemId);
   const tr = document.querySelector(`tr.fila-lote-capturado[data-item="${itemId}"]`);
   if (!item || !tr) return;
-  const caducidadTexto = tr.querySelector('.inp-editar-caducidad').value.trim();
+  const inpCad = tr.querySelector('.inp-editar-caducidad');
+  const caducidadTexto = inpCad ? inpCad.value.trim() : '';
   const cantidad = Number(tr.querySelector('.inp-editar-cantidad').value);
   if (!cantidad || cantidad <= 0) { toast('La cantidad debe ser mayor a 0.', true); return; }
 
@@ -958,6 +991,144 @@ async function guardarClaveArticulo(bioId) {
   renderPaso1();
 }
 
+// ---------------------------------------------------------------------------
+// Asignar lotes a lo capturado "por definir". Un renglón (ej. 65 dosis de
+// Hexavalente) puede convertirse en 1 o varios lotes reales: se teclea cada
+// lote con su cantidad (el renglón nuevo se llena solo con lo que falta) y
+// la base reacomoda el reparto ya hecho (requi_asignar_lotes).
+// ---------------------------------------------------------------------------
+
+function abrirAsignarLotes(itemId) {
+  const item = estado.items.find((i) => i.id === itemId);
+  if (!item || !estado.puedeEditar) return;
+  const bio = estado.catalogo.find((b) => b.id === item.requi_biologico_id) || {};
+  const total = Number(item.cantidad_surtida);
+  estado.asig = { item, bio, total, filas: [{ lote: '', cad: '', cant: total }] };
+  const repartido = sumaMunicipio(item.requi_biologico_id, item.lote_id);
+  $('asigTitulo').textContent = `Asignar lotes · ${nombreCorto(bio)}`;
+  $('asigSub').textContent = `${plural(total, 'dosis sin lote', 'dosis sin lote')}${repartido ? ` (${repartido} ya repartidas: el reparto pasa al lote nuevo en orden y lo puedes ajustar en los pasos 2 y 3)` : ''}.`;
+  $('modalAsignar').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  lotesExistentesDe(item.requi_biologico_id).then((ls) => {
+    $('asigListaLotes').innerHTML = ls.filter((l) => l.numero_lote !== LOTE_PENDIENTE)
+      .map((l) => `<option value="${esc(l.numero_lote)}">${esc(formatMmmAa(l.caducidad))}</option>`).join('');
+  });
+  renderAsignarFilas();
+  const primero = $('asigFilas').querySelector('input[data-campo="lote"]');
+  if (primero) primero.focus();
+}
+
+function cerrarAsignarLotes() {
+  $('modalAsignar').style.display = 'none';
+  document.body.style.overflow = '';
+  estado.asig = null;
+}
+
+function renderAsignarFilas() {
+  const a = estado.asig;
+  if (!a) return;
+  $('asigFilas').innerHTML = a.filas.map((f, i) => `
+    <div class="asig-fila" data-i="${i}">
+      <div class="campo"><label>Lote</label><input type="text" data-campo="lote" list="asigListaLotes" autocomplete="off" placeholder="Ej. 0374MA109" value="${esc(f.lote)}"></div>
+      <div class="campo"><label>Caducidad</label><input type="text" data-campo="cad" autocomplete="off" placeholder="FEB-27" value="${esc(f.cad)}" style="width:96px;"></div>
+      <div class="campo"><label>Cantidad</label><input type="number" data-campo="cant" min="0" inputmode="numeric" placeholder="0" value="${f.cant || ''}" style="width:96px;"></div>
+      ${a.filas.length > 1 ? `<button type="button" class="icon-btn-pure asig-quitar" data-i="${i}" title="Quitar este lote"><span class="material-symbols-rounded">delete</span></button>` : '<span style="width:34px"></span>'}
+    </div>`).join('');
+  actualizarResumenAsignar();
+}
+
+function actualizarResumenAsignar() {
+  const a = estado.asig;
+  if (!a) return;
+  const suma = a.filas.reduce((acc, f) => acc + (Number(f.cant) || 0), 0);
+  const dif = a.total - suma;
+  const el = $('asigResumen');
+  el.className = 'modal-resumen ' + (dif === 0 ? 'ok' : 'aviso');
+  el.textContent = dif === 0 ? `Suman ${suma} de ${a.total} ✓`
+    : dif > 0 ? `Suman ${suma} de ${a.total}: quedan ${dif} por definir`
+    : `Suman ${suma}: ${-dif} más de lo capturado`;
+}
+
+function alCambiarFilaAsignar(ev) {
+  const inp = ev.target.closest('input[data-campo]');
+  const a = estado.asig;
+  if (!inp || !a) return;
+  const f = a.filas[Number(inp.closest('.asig-fila').dataset.i)];
+  const campo = inp.dataset.campo;
+  f[campo] = inp.value;
+  if (campo === 'lote' && ev.type === 'change') {
+    const res = RequiEngine.compararLote(inp.value.trim(), estado.lotesPorBiologico[a.item.requi_biologico_id] || []);
+    const cad = inp.closest('.asig-fila').querySelector('[data-campo="cad"]');
+    if (res.estado === 'EXISTE' && res.lote.caducidad && !cad.value) { cad.value = formatMmmAa(res.lote.caducidad); f.cad = cad.value; }
+  }
+  if (campo === 'cad' && ev.type === 'change') {
+    const p = parsearCaducidadInteligente(inp.value);
+    if (p) { inp.value = formatMmmAa(p); f.cad = inp.value; }
+  }
+  actualizarResumenAsignar();
+}
+
+function agregarFilaAsignar() {
+  const a = estado.asig;
+  if (!a) return;
+  const suma = a.filas.reduce((acc, f) => acc + (Number(f.cant) || 0), 0);
+  a.filas.push({ lote: '', cad: '', cant: Math.max(0, a.total - suma) });
+  renderAsignarFilas();
+  const filas = $('asigFilas').querySelectorAll('.asig-fila');
+  filas[filas.length - 1].querySelector('input[data-campo="lote"]').focus();
+}
+
+async function confirmarAsignarLotes() {
+  const a = estado.asig;
+  if (!a) return;
+  const bioId = a.item.requi_biologico_id;
+  const existentes = await lotesExistentesDe(bioId);
+  const vistos = new Set();
+  const lotes = [];
+  for (const f of a.filas) {
+    const numero = String(f.lote || '').trim();
+    const cant = Number(f.cant);
+    if (!numero || numero.toUpperCase() === LOTE_PENDIENTE) { toast('Falta el número de lote en uno de los renglones.', true); return; }
+    if (!Number.isInteger(cant) || cant <= 0) { toast(`La cantidad del lote ${numero} debe ser un entero mayor a 0.`, true); return; }
+    if (vistos.has(numero.toUpperCase())) { toast(`El lote ${numero} está repetido.`, true); return; }
+    vistos.add(numero.toUpperCase());
+    let caducidad = null;
+    if (String(f.cad || '').trim()) {
+      caducidad = parsearCaducidadInteligente(f.cad);
+      if (!caducidad) { toast(`No entendí la caducidad del lote ${numero}. Usa por ejemplo FEB-27.`, true); return; }
+    }
+    const res = RequiEngine.compararLote(numero, existentes);
+    if (res.estado === 'EXISTE' && itemDe(bioId, res.lote.id)) { toast(`El lote ${numero} ya está capturado este mes: edita ese renglón en vez de asignarlo aquí.`, true); return; }
+    if (res.estado === 'SIMILAR' && !confirm(`El lote "${numero}" se parece a "${res.sugerencias[0].numero_lote}", ya registrado. ¿Seguro que es un lote NUEVO y distinto?`)) return;
+    lotes.push({ numero_lote: numero, caducidad, cantidad: cant });
+  }
+  const suma = lotes.reduce((acc, l) => acc + l.cantidad, 0);
+  if (suma < a.total && !confirm(`Suman ${suma} de ${a.total}: las ${a.total - suma} restantes se quedan con lote "por definir". ¿Continuar?`)) return;
+
+  $('asigGuardar').disabled = true;
+  try {
+    const { data, error } = await estado.db.rpc('requi_asignar_lotes', { p_item_id: a.item.id, p_lotes: lotes });
+    if (error) { toast(error.message.replace(/^.*?ERROR:\s*/, ''), true); return; }
+    delete estado.lotesPorBiologico[bioId];
+    const nombres = new Set(lotes.map((l) => l.numero_lote.toUpperCase()));
+    cerrarAsignarLotes();
+    await cargarDatosRequisicion();
+    const quedan = data && Number(data.quedan_pendientes);
+    toast(quedan ? `Lotes asignados. Quedan ${quedan} por definir.` : 'Lotes asignados.');
+    // Espejo hacia la tabla "lotes" (lo que antes se omitió por estar "por definir").
+    const paraLotes = estado.distMunicipio.filter((d) => d.requi_biologico_id === bioId && Number(d.cantidad) > 0 && nombres.has(String(numeroLoteDe(bioId, d.lote_id)).toUpperCase()));
+    if (paraLotes.length) (async () => { for (const d of paraLotes) await sincronizarLotePublico(d.municipio, bioId, d.lote_id, Number(d.cantidad)); })();
+  } finally {
+    $('asigGuardar').disabled = false;
+  }
+}
+
+// Lo que sigue "por definir" sale así en el Excel: se avisa antes de exportar.
+function confirmarExportarConPendientes() {
+  const n = estado.items.filter((i) => esPendiente(i) && Number(i.cantidad_surtida) > 0).length;
+  return !n || confirm(`${plural(n, 'renglón sigue', 'renglones siguen')} con el lote "por definir" y así saldrá en el Excel. ¿Exportar de todos modos?`);
+}
+
 // Un solo manejador para toda la tabla del Paso 1 (se re-dibuja completa).
 function clicTablaPaso1(ev) {
   const btn = ev.target.closest('button');
@@ -968,6 +1139,7 @@ function clicTablaPaso1(ev) {
     else if (btn.classList.contains('btn-editar-item')) activarEdicionItem(btn.dataset.item);
     else if (btn.classList.contains('btn-guardar-edicion')) guardarEdicionItem(btn.dataset.item);
     else if (btn.classList.contains('btn-quitar-item')) quitarItemSurtido(btn.dataset.item);
+    else if (btn.classList.contains('btn-asignar-lotes')) abrirAsignarLotes(btn.dataset.item);
     return;
   }
   if (ev.target.closest('input')) return;
@@ -1579,7 +1751,7 @@ async function sincronizarLotePublico(municipio, biologicoId, loteId, cantidad) 
   const lote = estado.items.find((i) => i.requi_biologico_id === biologicoId && i.lote_id === loteId);
   const nombreLotesTabla = bio ? CODIGO_A_LOTES_BIOLOGICO[bio.codigo_articulo] : null;
   const municipioLotesTabla = MUNICIPIO_A_LOTES[municipio];
-  if (!nombreLotesTabla || !municipioLotesTabla || !lote) return;
+  if (!nombreLotesTabla || !municipioLotesTabla || !lote || esPendiente(lote)) return;
 
   const numeroLote = lote.requi_lotes.numero_lote;
   await estado.db.from('lotes').delete()
@@ -1634,8 +1806,10 @@ async function construirDatosDestino(nivel, destino) {
   } else {
     unidadDestino = estado.unidades.find((u) => u.id === destino);
     const muniLabel = unidadDestino ? MUNICIPIOS_REALES.find((m) => m.v === unidadDestino.municipio) : null;
-    destinoNombre = unidadDestino ? `C.S. ${unidadDestino.nombre}` : '';
-    destinoDireccion = muniLabel ? muniLabel.l : '';
+    // Nombre impreso y domicilio reales de la unidad (requi_unidades, tomados de
+    // las hojas por unidad de los Excel oficiales); sin domicilio, va el municipio.
+    destinoNombre = unidadDestino ? (unidadDestino.nombre_impresion || `C.S. ${unidadDestino.nombre}`) : '';
+    destinoDireccion = (unidadDestino && unidadDestino.direccion) || (muniLabel ? muniLabel.l : '');
     const { data } = await estado.db.from('requi_distribucion_unidad')
       .select('*, requi_lotes(numero_lote, caducidad)').eq('requisicion_id', estado.requisicion.id).eq('unidad_id', destino).gt('cantidad', 0);
     (data || []).forEach((it) => (filasPorBiologico[it.requi_biologico_id] ||= []).push({
@@ -1702,17 +1876,19 @@ async function registrarExportacion(nivel, destino, copias) {
 
 async function exportarUno(nivel, destino) {
   if (!estado.requisicion) { toast('Guarda primero la cabecera de la requisición.', true); return; }
+  if (!confirmarExportarConPendientes()) return;
   toast('Generando Excel…');
   try {
     const datos = await construirDatosDestino(nivel, destino);
     const plantillaBuffer = await obtenerPlantillaBuffer();
-    const { buffer, sobrantes } = await RequiExportExcel.generar({ plantillaBuffer, ...datos });
+    const { buffer, sobrantes, sinRenglon } = await RequiExportExcel.generar({ plantillaBuffer, ...datos });
     descargarBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), datos.nombreArchivo);
 
     const copias = COPIAS_SUGERIDAS[nivel] || 1;
-    toast(sobrantes.length
-      ? `Excel generado. Ojo: ${sobrantes.join(', ')} tiene más de 2 lotes -- el formato solo admite 2, repórtalo aparte.`
-      : `Excel generado.`, !!sobrantes.length);
+    const avisos = [];
+    if (sobrantes.length) avisos.push(`${sobrantes.join(', ')} tiene más de 2 lotes -- el formato solo admite 2, repórtalo aparte.`);
+    if (sinRenglon.length) avisos.push(`${sinRenglon.join(', ')} no tiene renglón en el formato oficial y NO salió en el Excel.`);
+    toast(avisos.length ? `Excel generado. Ojo: ${avisos.join(' ')}` : `Excel generado.`, !!avisos.length);
     await registrarExportacion(nivel, destino, copias);
   } catch (e) {
     toast('No se pudo generar el Excel: ' + e.message, true);
@@ -1757,6 +1933,7 @@ async function exportarMasivo() {
   const seleccionados = [...document.querySelectorAll('.chk-destino-masivo:checked')].map((c) => c.value);
   if (!seleccionados.length) { toast('Selecciona al menos un destino.', true); return; }
   const incluirUnidades = $('chkIncluirUnidades').checked;
+  if (!confirmarExportarConPendientes()) return;
 
   toast('Generando paquete…');
   try {
@@ -1764,13 +1941,15 @@ async function exportarMasivo() {
     const zip = new JSZip();
     const plantillaBuffer = await obtenerPlantillaBuffer();
     const sobrantesTotal = new Set();
+    const sinRenglonTotal = new Set();
     let total = 0;
 
     for (const destino of seleccionados) {
       const datos = await construirDatosDestino('MUNICIPAL', destino);
-      const { buffer, sobrantes } = await RequiExportExcel.generar({ plantillaBuffer, ...datos });
+      const { buffer, sobrantes, sinRenglon } = await RequiExportExcel.generar({ plantillaBuffer, ...datos });
       zip.file(datos.nombreArchivo, buffer);
       sobrantes.forEach((s) => sobrantesTotal.add(s));
+      sinRenglon.forEach((s) => sinRenglonTotal.add(s));
       total++;
       await registrarExportacion('MUNICIPAL', destino, COPIAS_SUGERIDAS.MUNICIPAL);
 
@@ -1780,9 +1959,10 @@ async function exportarMasivo() {
           const tieneAsignado = estado.distUnidad.some((d) => d.unidad_id === u.id && Number(d.cantidad) > 0);
           if (!tieneAsignado) continue;
           const datosU = await construirDatosDestino('UNIDAD', u.id);
-          const { buffer: bufU, sobrantes: sobU } = await RequiExportExcel.generar({ plantillaBuffer, ...datosU });
+          const { buffer: bufU, sobrantes: sobU, sinRenglon: sinU } = await RequiExportExcel.generar({ plantillaBuffer, ...datosU });
           zip.file(datosU.nombreArchivo, bufU);
           sobU.forEach((s) => sobrantesTotal.add(s));
+          sinU.forEach((s) => sinRenglonTotal.add(s));
           total++;
           await registrarExportacion('UNIDAD', u.id, COPIAS_SUGERIDAS.UNIDAD);
         }
@@ -1791,9 +1971,123 @@ async function exportarMasivo() {
 
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     descargarBlob(zipBlob, `Requisiciones_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}.zip`);
-    toast(`Listo: ${total} archivo(s) en el paquete.` + (sobrantesTotal.size ? ` Ojo con lotes de sobra en: ${[...sobrantesTotal].join(', ')}.` : ''), !!sobrantesTotal.size);
+    toast(`Listo: ${total} archivo(s) en el paquete.` + (sobrantesTotal.size ? ` Ojo con lotes de sobra en: ${[...sobrantesTotal].join(', ')}.` : '')
+      + (sinRenglonTotal.size ? ` Sin renglón en el formato oficial (no salió): ${[...sinRenglonTotal].join(', ')}.` : ''), !!(sobrantesTotal.size || sinRenglonTotal.size));
   } catch (e) {
     toast('No se pudo generar el paquete: ' + e.message, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Transferencias -- repositorio de PDF mensuales (solo ADMIN y JURISDICCIONAL:
+// lo garantiza la RLS de requi_transferencias; el botón solo se muestra a quien
+// puede editar). Los archivos van al mismo Cloudflare R2 de las evidencias, vía
+// la función r2-signer. La ruta lleva un token aleatorio para que la URL
+// pública no se pueda adivinar; el nombre del archivo es siempre
+// Transferencias_Mes_Año.pdf y volver a subir el mismo mes lo reemplaza.
+// ---------------------------------------------------------------------------
+
+const R2_PUBLIC_URL = 'https://pub-149cbeba11c04e8c9ba986d1addcdcc0.r2.dev';
+const R2_BUCKET = 'sirevaq-evidencias';
+const MAX_PDF_BYTES = 40 * 1024 * 1024;
+
+function nombreTransferencia(anio, mes) {
+  const m = MESES.find((x) => x.v === Number(mes));
+  return `Transferencias_${m ? m.l : mes}_${anio}.pdf`;
+}
+
+function actualizarNombreTransferencia() {
+  $('transNombre').textContent = nombreTransferencia($('transAnio').value, $('transMes').value);
+}
+
+async function abrirTransferencias() {
+  if (!estado.puedeEditar) return;
+  const hoy = new Date();
+  $('transMes').innerHTML = MESES.map((m) => `<option value="${m.v}">${m.l}</option>`).join('');
+  $('transMes').value = hoy.getMonth() + 1;
+  const anioActual = hoy.getFullYear();
+  $('transAnio').innerHTML = [anioActual - 2, anioActual - 1, anioActual, anioActual + 1]
+    .map((a) => `<option value="${a}">${a}</option>`).join('');
+  $('transAnio').value = anioActual;
+  $('transArchivo').value = '';
+  $('transArchivoNombre').textContent = 'Ningún PDF elegido';
+  $('transSubir').disabled = true;
+  actualizarNombreTransferencia();
+  $('modalTransferencias').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  await cargarTransferencias();
+}
+
+function cerrarTransferencias() {
+  $('modalTransferencias').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function cargarTransferencias() {
+  const { data, error } = await estado.db.from('requi_transferencias').select('*')
+    .order('anio', { ascending: false }).order('mes', { ascending: false });
+  if (error) { toast('No se pudieron cargar las transferencias: ' + error.message, true); return; }
+  estado.transferencias = data || [];
+  const kb = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
+  $('transLista').innerHTML = estado.transferencias.map((t) => {
+    const m = MESES.find((x) => x.v === t.mes);
+    return `<tr>
+      <td><strong>${esc(m ? m.l : t.mes)} ${t.anio}</strong></td>
+      <td><a class="trans-ver" href="${esc(t.public_url)}" target="_blank" rel="noopener"><span class="material-symbols-rounded" style="font-size:16px">picture_as_pdf</span>${esc(t.nombre_archivo)}</a></td>
+      <td>${t.tamano_bytes ? kb(t.tamano_bytes) : '—'}</td>
+      <td>${esc(t.subido_por || '—')}<br><small style="color:var(--muted)">${esc(new Date(t.subido_en).toLocaleDateString('es-MX'))}</small></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="4" style="color:var(--muted)">Todavía no hay transferencias cargadas.</td></tr>';
+}
+
+async function subirTransferencia() {
+  const file = $('transArchivo').files[0];
+  if (!file || !estado.puedeEditar) return;
+  if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') { toast('El archivo debe ser un PDF.', true); return; }
+  if (file.size > MAX_PDF_BYTES) { toast('El PDF pesa más de 40 MB.', true); return; }
+  const anio = Number($('transAnio').value);
+  const mes = Number($('transMes').value);
+  const nombre = nombreTransferencia(anio, mes);
+  const previa = estado.transferencias.find((t) => t.anio === anio && t.mes === mes);
+  if (previa && !confirm(`Ya hay una transferencia de ${etiquetaMes({ anio, mes })}. ¿Reemplazarla con este archivo?`)) return;
+  // Mismo mes = misma ruta (se sobrescribe); mes nuevo = token nuevo.
+  const ruta = previa ? previa.ruta : `Requisiciones/Transferencias/${crypto.randomUUID()}/${nombre}`;
+
+  $('transSubir').disabled = true;
+  $('transSubir').textContent = 'Subiendo…';
+  try {
+    const { data: { session } } = await estado.db.auth.getSession();
+    const fd = new FormData();
+    fd.append('file', file, nombre);
+    fd.append('folderPath', ruta);
+    fd.append('contentType', 'application/pdf');
+    const headers = { apikey: SUPABASE_KEY };
+    if (session) headers.Authorization = 'Bearer ' + session.access_token;
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/r2-signer`, { method: 'POST', headers, body: fd });
+    const resultado = await resp.json().catch(() => ({}));
+    if (!resp.ok || !resultado.ok) throw new Error(resultado.error || `Error de carga (${resp.status})`);
+
+    const publicUrl = `${R2_PUBLIC_URL}/${ruta}`;
+    const { error } = await estado.db.from('requi_transferencias').upsert({
+      anio, mes, nombre_archivo: nombre, ruta, public_url: publicUrl, tamano_bytes: file.size,
+      subido_por: estado.perfil.usuario, subido_en: new Date().toISOString()
+    }, { onConflict: 'anio,mes' });
+    if (error) throw error;
+    // Registro en r2_objects para que cuente en el límite de almacenamiento.
+    await estado.db.from('r2_objects').upsert({
+      name: ruta, bucket_id: R2_BUCKET, owner: session ? session.user.id : null, public_url: publicUrl,
+      updated_at: new Date().toISOString(), metadata: { size: file.size, mimetype: 'application/pdf', cacheControl: '3600' }
+    }, { onConflict: 'name' });
+
+    toast(`${nombre} cargado.`);
+    $('transArchivo').value = '';
+    $('transArchivoNombre').textContent = 'Ningún PDF elegido';
+    await cargarTransferencias();
+  } catch (e) {
+    toast('No se pudo subir: ' + (e.message || e), true);
+    $('transSubir').disabled = false;
+  } finally {
+    $('transSubir').textContent = 'Subir';
   }
 }
 
@@ -1887,6 +2181,35 @@ function instalarEventos() {
   $('tbodyBiologicos').addEventListener('click', clicTablaPaso1);
   $('tbodyBiologicos').addEventListener('keydown', teclaTablaPaso1);
 
+  // Asignar lotes (modal) y avisos de lotes por definir
+  $('avisoPendientes').addEventListener('click', (ev) => { const b = ev.target.closest('.btn-asignar-lotes'); if (b) abrirAsignarLotes(b.dataset.item); });
+  $('asigFilas').addEventListener('input', alCambiarFilaAsignar);
+  $('asigFilas').addEventListener('change', alCambiarFilaAsignar);
+  $('asigFilas').addEventListener('click', (ev) => {
+    const q = ev.target.closest('.asig-quitar');
+    if (q && estado.asig) { estado.asig.filas.splice(Number(q.dataset.i), 1); renderAsignarFilas(); }
+  });
+  $('asigFilas').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.matches('input')) { ev.preventDefault(); confirmarAsignarLotes(); } });
+  $('asigAgregar').addEventListener('click', agregarFilaAsignar);
+  $('asigCerrar').addEventListener('click', cerrarAsignarLotes);
+  $('asigCancelar').addEventListener('click', cerrarAsignarLotes);
+  $('asigGuardar').addEventListener('click', confirmarAsignarLotes);
+  $('modalAsignar').addEventListener('click', (ev) => { if (ev.target === $('modalAsignar')) cerrarAsignarLotes(); });
+
+  // Transferencias (modal)
+  $('btnAbrirTransferencias').addEventListener('click', abrirTransferencias);
+  $('transCerrar').addEventListener('click', cerrarTransferencias);
+  $('transCerrar2').addEventListener('click', cerrarTransferencias);
+  $('modalTransferencias').addEventListener('click', (ev) => { if (ev.target === $('modalTransferencias')) cerrarTransferencias(); });
+  $('transMes').addEventListener('change', actualizarNombreTransferencia);
+  $('transAnio').addEventListener('change', actualizarNombreTransferencia);
+  $('transArchivo').addEventListener('change', () => {
+    const f = $('transArchivo').files[0];
+    $('transArchivoNombre').textContent = f ? f.name : 'Ningún PDF elegido';
+    $('transSubir').disabled = !f;
+  });
+  $('transSubir').addEventListener('click', subirTransferencia);
+
   // Pegar desde Excel (modal)
   let debounce;
   $('pegarTexto').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(analizarPegado, 150); });
@@ -1906,7 +2229,12 @@ function instalarEventos() {
       lotesExistentesDe(sel.value).then(() => { clasificarPegado(); renderVistaPegado(); });
     }
   });
-  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && $('modalPegar').style.display !== 'none') cerrarPegar(); });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    if ($('modalPegar').style.display !== 'none') cerrarPegar();
+    else if ($('modalAsignar').style.display !== 'none') cerrarAsignarLotes();
+    else if ($('modalTransferencias').style.display !== 'none') cerrarTransferencias();
+  });
 
   // Paso 2 y 3: matrices
   instalarMatriz($('matrizMunicipio'));
