@@ -220,12 +220,8 @@
     return { sinRenglon, agregadas };
   }
 
-  async function generar({ plantillaBuffer, encabezado, firmas, catalogo, filasPorBiologico }) {
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(plantillaBuffer);
-    const ws = wb.getWorksheet(HOJA);
-    if (!ws) throw new Error(`La plantilla no tiene la hoja "${HOJA}".`);
-
+  // Llena UNA hoja de la plantilla (encabezado, biológicos, pie y firmas).
+  function llenarHoja(ws, { encabezado, firmas, catalogo, filasPorBiologico }) {
     // La plantilla no traía tamaño de papel explícito -- se fuerza Carta
     // siempre, sin depender de lo que el archivo original haya heredado.
     ws.pageSetup.paperSize = 1; // 1 = Letter/Carta (OOXML)
@@ -236,6 +232,15 @@
     const { sinRenglon, agregadas } = escribirBiologicos(ws, catalogo || [], filasPorBiologico || {});
     escribirFirmas(ws, firmas || {}, agregadas);
     ws.pageSetup.printArea = `A1:K${FILA_FINAL_PLANTILLA + agregadas}`;
+    return { sinRenglon };
+  }
+
+  async function generar({ plantillaBuffer, encabezado, firmas, catalogo, filasPorBiologico }) {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(plantillaBuffer);
+    const ws = wb.getWorksheet(HOJA);
+    if (!ws) throw new Error(`La plantilla no tiene la hoja "${HOJA}".`);
+    const { sinRenglon } = llenarHoja(ws, { encabezado, firmas, catalogo, filasPorBiologico });
     ocultarOtrasHojas(wb, HOJA);
 
     const buffer = await wb.xlsx.writeBuffer();
@@ -243,5 +248,50 @@
     return { buffer, sobrantes: [], sinRenglon };
   }
 
-  return { generar };
+  // Nombre de pestaña válido en Excel: máximo 31 caracteres, sin \ / ? * [ ] : y único en el libro.
+  function nombreHojaUnico(nombre, usados) {
+    const base = String(nombre || 'HOJA').replace(/[\\/?*[\]:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 31) || 'HOJA';
+    let candidato = base;
+    for (let n = 2; usados.has(candidato.toUpperCase()); n++) {
+      const sufijo = ` (${n})`;
+      candidato = base.slice(0, 31 - sufijo.length) + sufijo;
+    }
+    usados.add(candidato.toUpperCase());
+    return candidato;
+  }
+
+  // Un solo libro con una pestaña por cada elemento de `hojas` (en ese orden; la municipal va al final):
+  // hojas = [{ nombreHoja, encabezado, firmas, catalogo, filasPorBiologico }, ...]
+  async function generarLibro({ plantillaBuffer, hojas }) {
+    if (!hojas || !hojas.length) throw new Error('No hay hojas que exportar.');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(plantillaBuffer);
+    const base = wb.getWorksheet(HOJA);
+    if (!base) throw new Error(`La plantilla no tiene la hoja "${HOJA}".`);
+    // Copias de la plantilla (aún sin datos) dentro del mismo libro: así comparten estilos y logos.
+    const hs = [base];
+    for (let i = 1; i < hojas.length; i++) {
+      const copia = wb.addWorksheet('copia' + i);
+      copia.model = Object.assign({}, base.model, { mergeCells: base.model.merges, name: 'copia' + i });
+      // El modelo trae por referencia la configuración de página y las vistas: sin copiarlas, cambiar el
+      // área de impresión de una hoja (cuando crece por tener más lotes) la cambiaría en todas.
+      // Las celdas combinadas llegan sin el estilo de sus celdas "esclavas" (bordes, subrayados): se vuelven
+      // a combinar con estilo para que tomen el de la celda maestra, igual que en la hoja original.
+      base.model.merges.forEach((rango) => { copia.unMergeCells(rango); copia.mergeCells(rango); });
+      copia.pageSetup = JSON.parse(JSON.stringify(base.pageSetup));
+      copia.views = JSON.parse(JSON.stringify(base.views || []));
+      hs.push(copia);
+    }
+    const sinRenglon = new Set();
+    const usados = new Set();
+    hojas.forEach((datos, i) => {
+      llenarHoja(hs[i], datos).sinRenglon.forEach((x) => sinRenglon.add(x));
+    });
+    hojas.forEach((datos, i) => { hs[i].name = nombreHojaUnico(datos.nombreHoja, usados); });
+    wb.views = [{ activeTab: 0, firstSheet: 0, visibility: 'visible', x: 0, y: 0, width: 20000, height: 10000, tabRatio: 800 }];
+    const buffer = await wb.xlsx.writeBuffer();
+    return { buffer, sobrantes: [], sinRenglon: [...sinRenglon] };
+  }
+
+  return { generar, generarLibro };
 });

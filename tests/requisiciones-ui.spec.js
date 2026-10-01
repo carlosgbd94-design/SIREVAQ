@@ -18,6 +18,10 @@ async function preparar(page, opciones = {}) {
   page.on('dialog', (d) => d.accept());
   await page.route(/unpkg\.com\/@supabase\/supabase-js/, (r) => r.fulfill({ contentType: 'application/javascript', body: FAKE }));
   await page.route(/fonts\.(googleapis|gstatic)\.com|cdnjs\.cloudflare\.com/, (r) => r.abort());
+  if (opciones.libs) {   // ExcelJS y JSZip reales (de node_modules) en lugar del CDN, para probar exportaciones
+    await page.route(/exceljs\.min\.js/, (r) => r.fulfill({ contentType: 'application/javascript', path: path.join(__dirname, '..', 'node_modules', 'exceljs', 'dist', 'exceljs.min.js') }));
+    await page.route(/jszip\.min\.js/, (r) => r.fulfill({ contentType: 'application/javascript', path: path.join(__dirname, '..', 'node_modules', 'jszip', 'dist', 'jszip.min.js') }));
+  }
   await page.addInitScript((o) => { window.__FAKE_ROL__ = o.rol; window.__FAKE_CON_REQ__ = !!o.conReq; }, { rol: opciones.rol || 'ADMIN', conReq: opciones.conReq });
   await page.goto('/requisiciones.html', { waitUntil: 'load' });
   return errores;
@@ -59,11 +63,10 @@ test('Requisiciones: flujo completo por pasos (captura rápida, pegado, matrices
   await page.keyboard.type('AB123');
   await page.keyboard.press('Enter');
   await expect(page.locator('#rapCad')).toBeFocused();
-  await page.keyboard.type('150227');                               // se captura DD-MM-AA
+  await page.keyboard.type('150227');                               // se captura DD-MM-AA (la máscara pone los guiones)
+  await expect(page.locator('#rapCad')).toHaveValue('15-02-27');
   await expect(page.locator('#rapCad ~ .cad-vista')).toHaveText('= FEB-27');   // y se muestra MMM-AA
-  await page.keyboard.press('Enter');
-  await expect(page.locator('#rapCant')).toBeFocused();
-  await expect(page.locator('#rapCad')).toHaveValue('150227');     // el texto tecleado no se pierde
+  await expect(page.locator('#rapCant')).toBeFocused();            // con la fecha completa pasa sola a la cantidad
   await page.keyboard.type('1000');
   await page.keyboard.press('Enter');
   await expect(page.locator('#tbodyBiologicos')).toContainText('AB123');
@@ -260,7 +263,14 @@ test('Requisiciones: varias entregas en el mismo mes, cada una con su propio pas
 
   // Llega otra entrega: se crea aparte y empieza vacía
   await page.click('#btnNuevaEntrega');
+  await expect(page.locator('#modalTexto')).toBeVisible();              // diálogo propio, no el del navegador
+  await expect(page.locator('#textoTitulo')).toHaveText('Nueva entrega 2');
+  await page.click('#textoSugerencias [data-sug="Influenza"]');
+  await expect(page.locator('#textoValor')).toHaveValue('Influenza');
+  await page.click('#textoAceptar');
+  await expect(page.locator('#modalTexto')).toBeHidden();
   await expect(page.locator('#barraEntregas [data-entrega]')).toHaveCount(2);
+  await expect(page.locator('#barraEntregas [data-entrega="2"]')).toContainText('Influenza');
   await expect(page.locator('#barraEntregas [data-entrega="2"]')).toHaveClass(/activo/);
   expect(await db(page, 'db.requi_requisiciones.filter((r) => r.anio !== 2000).map((r) => r.entrega)')).toEqual([1, 2]);
   await expect(page.locator('#tbodyBiologicos')).not.toContainText('ESQ1');
@@ -393,5 +403,98 @@ test('Requisiciones: el biológico elegido se quita con Escape o con un clic fue
   await expect(activo).toHaveCount(1);
   await page.click('h1');                                    // fuera: se quita
   await expect(activo).toHaveCount(0);
+  expect(errores).toEqual([]);
+});
+
+
+test('Requisiciones: la caducidad se teclea con máscara DD-MM-AA y no admite más dígitos', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
+  const cad = page.locator('#rapCad');
+  await cad.focus();
+  await page.keyboard.type('31');
+  await expect(cad).toHaveValue('31-');                      // salta solo al mes
+  await page.keyboard.type('06');
+  await expect(cad).toHaveValue('31-06-');
+  await page.keyboard.type('29');
+  await expect(cad).toHaveValue('31-06-29');
+  await expect(page.locator('#rapCant')).toBeFocused();      // fecha completa: pasa a la cantidad
+  await cad.fill('');
+  await cad.focus();
+  await page.keyboard.type('311445555');                     // los dígitos de más no entran
+  await expect(cad).toHaveValue('31-14-45');
+  await cad.fill('');
+  await cad.focus();
+  await page.keyboard.type('4');
+  await expect(cad).toHaveValue('04-');                      // un 4-9 de primer dígito se completa con 0
+  await cad.fill('');
+  await cad.focus();
+  await page.keyboard.type('7-6-29');                        // separadores a mano también
+  await expect(cad).toHaveValue('07-06-29');
+  await cad.fill('');
+  await cad.focus();
+  await page.keyboard.type('jul-29');                        // MMM-AA con letras se respeta
+  await expect(cad).toHaveValue('jul-29');
+  await expect(page.locator('#rapCad ~ .cad-vista')).toHaveText('= JUL-29');
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: renombrar la entrega usa un diálogo propio y se puede cancelar', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#barraEntregas')).toBeVisible();
+  await page.click('#btnRenombrarEntrega');
+  await expect(page.locator('#modalTexto')).toBeVisible();
+  await page.fill('#textoValor', 'Esquema básico');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#modalTexto')).toBeHidden();
+  await expect(page.locator('#barraEntregas [data-entrega="1"]')).toContainText('Esquema básico');
+  expect(await db(page, 'db.requi_requisiciones.find((r) => r.id === "req-hoy").etiqueta')).toBe('Esquema básico');
+  await page.click('#btnRenombrarEntrega');
+  await page.fill('#textoValor', 'Otro');
+  await page.keyboard.press('Escape');                       // cancelar: no cambia nada
+  await expect(page.locator('#modalTexto')).toBeHidden();
+  expect(await db(page, 'db.requi_requisiciones.find((r) => r.id === "req-hoy").etiqueta')).toBe('Esquema básico');
+  expect(errores).toEqual([]);
+});
+
+
+test('Requisiciones: exportar un municipio da UN archivo con una pestaña por unidad y la municipal al final', async ({ page }, testInfo) => {
+  const ExcelJS = require('exceljs');
+  const JSZip = require('jszip');
+  const errores = await preparar(page, { conReq: true, libs: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  // Datos: SRP con un lote, repartido a Corregidora y de ahí a 2 de sus 3 unidades
+  await page.evaluate(() => {
+    const db = window.__FAKE_DB__;
+    db.requi_lotes.push({ id: 'l1', requi_biologico_id: 'bio-srp', numero_lote: 'L1', caducidad: '2027-08-31' });
+    const base = { requisicion_id: 'req-hoy', requi_biologico_id: 'bio-srp', lote_id: 'l1' };
+    db.requi_items_jurisdiccion.push({ id: 'i1', ...base, cantidad_surtida: 50 });
+    db.requi_distribucion_municipio.push({ id: 'm1', ...base, municipio: 'CORREGIDORA', cantidad: 50 });
+    db.requi_distribucion_unidad.push({ id: 'u1', ...base, unidad_id: 'un-c1', cantidad: 30 }, { id: 'u2', ...base, unidad_id: 'un-c2', cantidad: 20 });
+  });
+  await page.click('#btnCargar');
+  await expect(page.locator('#pildoraPaso1')).toHaveText('1');
+  await page.click('#btnAbrirExportar');
+  await expect(page.locator('#chkIncluirUnidades')).toBeChecked();
+  const descarga = page.waitForEvent('download');
+  await page.click('#btnExportarMasivo');
+  const archivo = await descarga;
+  expect(archivo.suggestedFilename()).toMatch(/^Requisiciones_\d{4}-\d{2}\.zip$/);
+  const ruta = testInfo.outputPath('paquete.zip');
+  await archivo.saveAs(ruta);
+  const zip = await JSZip.loadAsync(require('fs').readFileSync(ruta));
+  const nombres = Object.keys(zip.files);
+  expect(nombres).toHaveLength(1);                               // un archivo por municipio, no uno por unidad
+  expect(nombres[0]).toMatch(/^Requisicion_MUNICIPAL_MUNICIPIO_CORREGIDORA_/);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await zip.files[nombres[0]].async('nodebuffer'));
+  expect(wb.worksheets.map((w) => w.name)).toEqual(['C.S. Uno', 'C.S. Dos', 'MUNICIPAL']);
+  const [uno, dos, mun] = wb.worksheets;
+  expect(uno.getCell('B9').value).toBe('C.S. C.S. Uno');
+  expect(uno.getCell('G14').value).toBe(30);
+  expect(dos.getCell('G14').value).toBe(20);
+  expect(mun.getCell('G14').value).toBe(50);
+  expect(mun.getCell('B9').value).toBe('MUNICIPIO CORREGIDORA');
   expect(errores).toEqual([]);
 });

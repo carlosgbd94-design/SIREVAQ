@@ -96,3 +96,37 @@ test('un biológico con 3 lotes crece un renglón y baja lo de abajo (pie, firma
   expect(ws.getCell('A55').master.address).toBe('A55');
   expect(ws.getCell('A57').master.address).toBe('A55');
 });
+
+test('un municipio sale en UN libro: una pestaña por unidad y la municipal al final', async () => {
+  const { generarLibro } = require('../requisiciones_export_excel.js');
+  const hoja = (nombreHoja, destino, filas) => ({
+    nombreHoja, catalogo, filasPorBiologico: filas,
+    encabezado: { destinoNombre: destino, destinoDireccion: 'dir ' + destino, mesLabel: 'OCTUBRE 2026' },
+    firmas: { elaboro_nombre: 'ELA' }
+  });
+  const { buffer, sinRenglon } = await generarLibro({
+    plantillaBuffer,
+    hojas: [
+      hoja('JURICA', 'C.S JURICA', { b6509: [{ cantidad: 5, numeroLote: 'U1', caducidad: '2027-08-31' }] }),
+      hoja('MENCHACA / NORTE: [x]', 'C.S MENCHACA', { b6509: [{ cantidad: 3, numeroLote: 'U2', caducidad: null }, { cantidad: 2, numeroLote: 'U3', caducidad: null }, { cantidad: 1, numeroLote: 'U4', caducidad: null }] }),
+      hoja('MENCHACA / NORTE: [x]', 'C.S REPETIDA', {}),
+      hoja('MUNICIPAL', 'MUNICIPIO QUERÉTARO', { b6509: [{ cantidad: 11, numeroLote: 'M1', caducidad: '2027-08-31' }] })
+    ]
+  });
+  expect(sinRenglon).toEqual([]);
+  const wb = await abrir(buffer);
+  expect(wb.worksheets.map((w) => w.name)).toEqual(['JURICA', 'MENCHACA NORTE x', 'MENCHACA NORTE x (2)', 'MUNICIPAL']);   // únicos y válidos; la municipal, al final
+  expect(wb.worksheets.every((w) => w.state === 'visible')).toBe(true);
+  const [u1, u2, u3, mun] = wb.worksheets;
+  expect(u1.getCell('B9').value).toBe('C.S JURICA');
+  expect(u1.getCell('I54').value).toBe('U1');
+  expect(u2.getCell('B9').value).toBe('C.S MENCHACA');
+  expect(u2.getCell('I56').value).toBe('U4');                 // 3 lotes: la hoja crece sin afectar a las demás
+  expect(u2.pageSetup.printArea).toBe('A1:K90');
+  expect(u1.pageSetup.printArea).toBe('A1:K89');
+  expect(u3.getCell('B9').value).toBe('C.S REPETIDA');
+  expect(u3.getCell('I54').value ?? null).toBeNull();         // cada hoja arranca limpia
+  expect(mun.getCell('B9').value).toBe('MUNICIPIO QUERÉTARO');
+  expect(mun.getCell('I54').value).toBe('M1');
+  wb.worksheets.forEach((w) => expect(w.getImages().length).toBe(2));   // los dos logos en cada pestaña
+});

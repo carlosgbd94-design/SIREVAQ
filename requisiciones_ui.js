@@ -184,6 +184,62 @@ function vistaCaducidad(texto) {
   return iso ? `= ${formatMmmAa(iso)}` : 'No la entiendo';
 }
 
+// Máscara al teclear: 31 -> "31-" (salta solo al mes), 06 -> "31-06-", 29 -> "31-06-29" y ahí se detiene
+// (nunca acepta más dígitos). Un 4-9 como primer dígito del día (o 2-9 del mes) se completa con un 0.
+// Si se teclea un separador (- / . o espacio) se completa el bloque con ceros: "7-" -> "07-".
+// JUL-29 (con letras) se respeta tal cual.
+function mascaraDigitosFecha(d) {
+  let i = 0;
+  const grupos = [];
+  const toma = (primeroMax) => {
+    if (i >= d.length) return null;
+    const a = d[i++];
+    if (Number(a) > primeroMax) return '0' + a;
+    if (i < d.length) return a + d[i++];
+    return a;
+  };
+  const dia = toma(3);
+  if (dia === null) return '';
+  grupos.push(dia);
+  if (dia.length === 2) {
+    const mes = toma(1);
+    if (mes !== null) {
+      grupos.push(mes);
+      if (mes.length === 2) {
+        let anio = '';
+        while (anio.length < 2 && i < d.length) anio += d[i++];
+        if (anio) grupos.push(anio);
+      }
+    }
+  }
+  const ultimo = grupos[grupos.length - 1];
+  return grupos.join('-') + (grupos.length < 3 && ultimo.length === 2 ? '-' : '');
+}
+
+function formatearFechaTecleada(raw, ev) {
+  const tipo = (ev && ev.inputType) || '';
+  if (tipo.startsWith('delete') || /[a-zñ]/i.test(raw)) return raw;     // al borrar no se reacomoda
+  const hayOtro = /[^0-9]/.test(raw);
+  const pegado = tipo === 'insertFromPaste' || tipo === 'insertFromDrop';
+  const terminaEnSep = /[^0-9]$/.test(raw);
+  if (hayOtro && (pegado || terminaEnSep)) {
+    const t = raw.split(/[^0-9]+/).filter(Boolean).slice(0, 3).map((x, i) => (i === 2 ? x.slice(-2) : x.padStart(2, '0')));
+    if (!t.length) return '';
+    return t.join('-') + (t.length < 3 && terminaEnSep && !pegado ? '-' : '');
+  }
+  const digitos = raw.replace(/\D/g, '');
+  if (pegado && digitos.length === 8) return `${digitos.slice(0, 2)}-${digitos.slice(2, 4)}-${digitos.slice(6, 8)}`;   // 15072029
+  return mascaraDigitosFecha(digitos.slice(0, 8));
+}
+
+// Aplica la máscara al campo; devuelve true si acaba de quedar una fecha completa y válida.
+function aplicarMascaraFecha(ev) {
+  const inp = ev.target;
+  const nuevo = formatearFechaTecleada(inp.value, ev);
+  if (nuevo !== inp.value) inp.value = nuevo;
+  return String(ev.inputType || '').startsWith('insert') && /^\d\d-\d\d-\d\d$/.test(nuevo) && !!parsearCaducidadInteligente(nuevo);
+}
+
 function actualizarVistaCad(inp) {
   const span = inp.parentElement && inp.parentElement.querySelector('.cad-vista');
   if (!span) return;
@@ -423,11 +479,41 @@ async function cargarRequisicion(entregaPreferida) {
   await cargarDatosRequisicion();
 }
 
+// Diálogo propio (en lugar del prompt del navegador). Devuelve el texto, o null si se cancela.
+function pedirTexto({ titulo, descripcion, etiqueta, valor, placeholder, aceptar, sugerencias }) {
+  return new Promise((resolve) => {
+    estado.dialogoTexto = { resolve };
+    $('textoTitulo').textContent = titulo;
+    $('textoDescripcion').textContent = descripcion || '';
+    $('textoEtiqueta').textContent = etiqueta || '';
+    $('textoValor').value = valor || '';
+    $('textoValor').placeholder = placeholder || '';
+    $('textoAceptar').textContent = aceptar || 'Guardar';
+    $('textoSugerencias').innerHTML = (sugerencias || []).map((x) => `<button type="button" class="chip-filtro" data-sug="${esc(x)}">${esc(x)}</button>`).join('');
+    $('modalTexto').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    $('textoValor').focus();
+    $('textoValor').select();
+  });
+}
+
+function cerrarTexto(valor) {
+  $('modalTexto').style.display = 'none';
+  document.body.style.overflow = '';
+  const d = estado.dialogoTexto;
+  estado.dialogoTexto = null;
+  if (d) d.resolve(valor);
+}
+
 async function nuevaEntrega() {
   if (!estado.puedeEditar || !estado.requisicion) return;
   const { anio, mes } = estado.requisicion;
   const siguiente = Math.max(...estado.entregasMes.map((e) => e.entrega), 0) + 1;
-  const etiqueta = prompt(`Nueva entrega ${siguiente} de ${etiquetaMes({ anio, mes })}.\n\n¿Qué llegó en esta entrega? (opcional, ej. Influenza)`, '');
+  const etiqueta = await pedirTexto({
+    titulo: `Nueva entrega ${siguiente}`, descripcion: `${etiquetaMes({ anio, mes })}: se captura, se reparte y se exporta por separado.`,
+    etiqueta: '¿Qué llegó en esta entrega? (opcional)', placeholder: 'Ej. Influenza', aceptar: 'Crear entrega',
+    sugerencias: ['Esquema básico', 'Influenza', 'COVID-19']
+  });
   if (etiqueta === null) return;
   const { data, error } = await estado.db.from('requi_requisiciones')
     .insert({ anio, mes, entrega: siguiente, etiqueta: etiqueta.trim() || null, creado_por: estado.perfil.usuario })
@@ -440,7 +526,11 @@ async function nuevaEntrega() {
 async function renombrarEntrega() {
   const r = estado.requisicion;
   if (!estado.puedeEditar || !r) return;
-  const etiqueta = prompt(`Nombre de la entrega ${r.entrega} (ej. Esquema básico, Influenza). Déjalo vacío para quitarlo.`, r.etiqueta || '');
+  const etiqueta = await pedirTexto({
+    titulo: `Nombre de la entrega ${r.entrega}`, descripcion: `${etiquetaMes(r)}. Déjalo vacío para quitar el nombre.`,
+    etiqueta: 'Nombre', valor: r.etiqueta || '', placeholder: 'Ej. Esquema básico', aceptar: 'Guardar',
+    sugerencias: ['Esquema básico', 'Influenza', 'COVID-19']
+  });
   if (etiqueta === null) return;
   const { data, error } = await estado.db.from('requi_requisiciones')
     .update({ etiqueta: etiqueta.trim() || null }).eq('id', r.id).select().single();
@@ -1177,6 +1267,8 @@ function alCambiarFilaAsignar(ev) {
   if (!inp || !a) return;
   const f = a.filas[Number(inp.closest('.asig-fila').dataset.i)];
   const campo = inp.dataset.campo;
+  let fechaCompleta = false;
+  if (campo === 'cad' && ev.type === 'input') fechaCompleta = aplicarMascaraFecha(ev);
   f[campo] = inp.value;
   if (campo === 'lote' && ev.type === 'change') {
     const res = RequiEngine.compararLote(inp.value.trim(), estado.lotesPorBiologico[a.item.requi_biologico_id] || []);
@@ -1184,6 +1276,7 @@ function alCambiarFilaAsignar(ev) {
     if (res.estado === 'EXISTE' && res.lote.caducidad && !cad.value) { cad.value = formatDdMmAa(res.lote.caducidad); f.cad = cad.value; actualizarVistaCad(cad); }
   }
   if (campo === 'cad') actualizarVistaCad(inp);
+  if (fechaCompleta) inp.closest('.asig-fila').querySelector('[data-campo="cant"]').focus();
   actualizarResumenAsignar();
 }
 
@@ -2093,22 +2186,51 @@ async function registrarExportacion(nivel, destino, copias) {
   });
 }
 
+// Aviso común de lo que no cupo en el formato oficial.
+function avisosExportacion(sinRenglon) {
+  return sinRenglon.length ? [`${sinRenglon.join(', ')} no tiene renglón en el formato oficial y NO salió en el Excel.`] : [];
+}
+
+// Un municipio = UN solo archivo: una pestaña por cada unidad con reparto (si se pide) y, al final, la
+// pestaña municipal. Los hospitales no tienen unidades: llevan solo su hoja.
+async function generarLibroMunicipio(destino, incluirUnidades) {
+  const hojas = [];
+  const unidades = (incluirUnidades && !esHospital(destino))
+    ? estado.unidades.filter((u) => u.municipio === destino && estado.distUnidad.some((d) => d.unidad_id === u.id && Number(d.cantidad) > 0))
+    : [];
+  for (const u of unidades) hojas.push({ ...(await construirDatosDestino('UNIDAD', u.id)), nombreHoja: u.nombre });
+  const municipal = await construirDatosDestino('MUNICIPAL', destino);
+  hojas.push({ ...municipal, nombreHoja: unidades.length ? 'MUNICIPAL' : 'GENERAL' });
+  const plantillaBuffer = await obtenerPlantillaBuffer();
+  const { buffer, sinRenglon } = await RequiExportExcel.generarLibro({ plantillaBuffer, hojas });
+  for (const u of unidades) await registrarExportacion('UNIDAD', u.id, COPIAS_SUGERIDAS.UNIDAD);
+  await registrarExportacion('MUNICIPAL', destino, COPIAS_SUGERIDAS.MUNICIPAL);
+  return { buffer, sinRenglon, nombreArchivo: municipal.nombreArchivo, unidades: unidades.length };
+}
+
 async function exportarUno(nivel, destino) {
   if (!estado.requisicion) { toast('Guarda primero la cabecera de la requisición.', true); return; }
   if (!confirmarExportarConPendientes()) return;
   toast('Generando Excel…');
   try {
-    const datos = await construirDatosDestino(nivel, destino);
-    const plantillaBuffer = await obtenerPlantillaBuffer();
-    const { buffer, sobrantes, sinRenglon } = await RequiExportExcel.generar({ plantillaBuffer, ...datos });
-    descargarBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), datos.nombreArchivo);
-
-    const copias = COPIAS_SUGERIDAS[nivel] || 1;
-    const avisos = [];
-    if (sobrantes.length) avisos.push(`${sobrantes.join(', ')} tiene más de 2 lotes -- el formato solo admite 2, repórtalo aparte.`);
-    if (sinRenglon.length) avisos.push(`${sinRenglon.join(', ')} no tiene renglón en el formato oficial y NO salió en el Excel.`);
-    toast(avisos.length ? `Excel generado. Ojo: ${avisos.join(' ')}` : `Excel generado.`, !!avisos.length);
-    await registrarExportacion(nivel, destino, copias);
+    const tipoXlsx = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    let sinRenglon, resumen;
+    if (nivel === 'MUNICIPAL') {
+      const libro = await generarLibroMunicipio(destino, $('chkIncluirUnidades').checked);
+      descargarBlob(new Blob([libro.buffer], { type: tipoXlsx }), libro.nombreArchivo);
+      sinRenglon = libro.sinRenglon;
+      resumen = libro.unidades ? `Excel generado: ${plural(libro.unidades, 'pestaña de unidad', 'pestañas de unidades')} y la municipal al final.` : 'Excel generado.';
+    } else {
+      const datos = await construirDatosDestino(nivel, destino);
+      const plantillaBuffer = await obtenerPlantillaBuffer();
+      const resultado = await RequiExportExcel.generar({ plantillaBuffer, ...datos });
+      descargarBlob(new Blob([resultado.buffer], { type: tipoXlsx }), datos.nombreArchivo);
+      sinRenglon = resultado.sinRenglon;
+      resumen = 'Excel generado.';
+      await registrarExportacion(nivel, destino, COPIAS_SUGERIDAS[nivel] || 1);
+    }
+    const avisos = avisosExportacion(sinRenglon);
+    toast(avisos.length ? `${resumen} Ojo: ${avisos.join(' ')}` : resumen, !!avisos.length);
   } catch (e) {
     toast('No se pudo generar el Excel: ' + e.message, true);
   }
@@ -2158,40 +2280,21 @@ async function exportarMasivo() {
   try {
     if (window.ensureLibsLoaded) await window.ensureLibsLoaded('jszip');
     const zip = new JSZip();
-    const plantillaBuffer = await obtenerPlantillaBuffer();
-    const sobrantesTotal = new Set();
     const sinRenglonTotal = new Set();
-    let total = 0;
+    let pestanas = 0;
 
+    // Un archivo por municipio/hospital; las unidades de cada municipio van dentro, una por pestaña.
     for (const destino of seleccionados) {
-      const datos = await construirDatosDestino('MUNICIPAL', destino);
-      const { buffer, sobrantes, sinRenglon } = await RequiExportExcel.generar({ plantillaBuffer, ...datos });
-      zip.file(datos.nombreArchivo, buffer);
-      sobrantes.forEach((s) => sobrantesTotal.add(s));
-      sinRenglon.forEach((s) => sinRenglonTotal.add(s));
-      total++;
-      await registrarExportacion('MUNICIPAL', destino, COPIAS_SUGERIDAS.MUNICIPAL);
-
-      if (incluirUnidades && !esHospital(destino)) {
-        const unidadesDeEste = estado.unidades.filter((u) => u.municipio === destino);
-        for (const u of unidadesDeEste) {
-          const tieneAsignado = estado.distUnidad.some((d) => d.unidad_id === u.id && Number(d.cantidad) > 0);
-          if (!tieneAsignado) continue;
-          const datosU = await construirDatosDestino('UNIDAD', u.id);
-          const { buffer: bufU, sobrantes: sobU, sinRenglon: sinU } = await RequiExportExcel.generar({ plantillaBuffer, ...datosU });
-          zip.file(datosU.nombreArchivo, bufU);
-          sobU.forEach((s) => sobrantesTotal.add(s));
-          sinU.forEach((s) => sinRenglonTotal.add(s));
-          total++;
-          await registrarExportacion('UNIDAD', u.id, COPIAS_SUGERIDAS.UNIDAD);
-        }
-      }
+      const libro = await generarLibroMunicipio(destino, incluirUnidades);
+      zip.file(libro.nombreArchivo, libro.buffer);
+      libro.sinRenglon.forEach((x) => sinRenglonTotal.add(x));
+      pestanas += libro.unidades + 1;
     }
 
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     descargarBlob(zipBlob, `Requisiciones_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}${sufijoEntregaArchivo()}.zip`);
-    toast(`Listo: ${total} archivo(s) en el paquete.` + (sobrantesTotal.size ? ` Ojo con lotes de sobra en: ${[...sobrantesTotal].join(', ')}.` : '')
-      + (sinRenglonTotal.size ? ` Sin renglón en el formato oficial (no salió): ${[...sinRenglonTotal].join(', ')}.` : ''), !!(sobrantesTotal.size || sinRenglonTotal.size));
+    toast(`Listo: ${plural(seleccionados.length, 'archivo', 'archivos')} (${plural(pestanas, 'pestaña', 'pestañas')}) en el paquete.`
+      + (sinRenglonTotal.size ? ` Sin renglón en el formato oficial (no salió): ${[...sinRenglonTotal].join(', ')}.` : ''), !!sinRenglonTotal.size);
   } catch (e) {
     toast('No se pudo generar el paquete: ' + e.message, true);
   }
@@ -2381,7 +2484,12 @@ function instalarEventos() {
   $('chipsBio').addEventListener('click', (ev) => { const b = ev.target.closest('.chip-bio'); if (b) seleccionarBioRapido(b.dataset.bio, true); });
   $('rapLote').addEventListener('input', evaluarLoteRapido);
   $('rapLote').addEventListener('change', evaluarLoteRapido);
-  $('rapCad').addEventListener('input', () => { $('rapCad').dataset.auto = ''; actualizarVistaCad($('rapCad')); });
+  $('rapCad').addEventListener('input', (ev) => {
+    $('rapCad').dataset.auto = '';
+    const completa = aplicarMascaraFecha(ev);
+    actualizarVistaCad($('rapCad'));
+    if (completa) $('rapCant').focus();     // fecha completa: pasa sola a la cantidad
+  });
   $('rapLote').addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter') return;
     ev.preventDefault();
@@ -2401,7 +2509,23 @@ function instalarEventos() {
   $('chkSoloConLotes').addEventListener('click', () => { estado.soloConLotes = !estado.soloConLotes; renderPaso1(); });
   $('tbodyBiologicos').addEventListener('click', clicTablaPaso1);
   $('tbodyBiologicos').addEventListener('keydown', teclaTablaPaso1);
-  $('tbodyBiologicos').addEventListener('input', (ev) => { if (ev.target.classList && ev.target.classList.contains('inp-editar-caducidad')) actualizarVistaCad(ev.target); });
+  $('tbodyBiologicos').addEventListener('input', (ev) => {
+    if (!(ev.target.classList && ev.target.classList.contains('inp-editar-caducidad'))) return;
+    const completa = aplicarMascaraFecha(ev);
+    actualizarVistaCad(ev.target);
+    if (completa) { const c = ev.target.closest('tr').querySelector('.inp-editar-cantidad'); if (c) c.focus(); }
+  });
+
+  // Diálogo de texto (nombre de la entrega)
+  $('textoAceptar').addEventListener('click', () => cerrarTexto($('textoValor').value));
+  $('textoCancelar').addEventListener('click', () => cerrarTexto(null));
+  $('textoCerrar').addEventListener('click', () => cerrarTexto(null));
+  $('modalTexto').addEventListener('click', (ev) => { if (ev.target === $('modalTexto')) cerrarTexto(null); });
+  $('textoValor').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); cerrarTexto($('textoValor').value); } });
+  $('textoSugerencias').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-sug]');
+    if (b) { $('textoValor').value = b.dataset.sug; $('textoValor').focus(); }
+  });
 
   // Prellenar cantidades (modal)
   $('btnPrellenar').addEventListener('click', abrirCantidades);
@@ -2486,7 +2610,8 @@ function instalarEventos() {
   });
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
-    if ($('modalPegar').style.display !== 'none') cerrarPegar();
+    if ($('modalTexto').style.display !== 'none') cerrarTexto(null);
+    else if ($('modalPegar').style.display !== 'none') cerrarPegar();
     else if ($('modalAsignar').style.display !== 'none') cerrarAsignarLotes();
     else if ($('modalCantidades').style.display !== 'none') cerrarCantidades();
     else if ($('modalTransferencias').style.display !== 'none') cerrarTransferencias();

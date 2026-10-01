@@ -95,9 +95,13 @@ function estilo(cel, cambios) { cel.style = { ...clonar(cel.style || {}), ...cam
   // (A-F y K) faltaba, porque antes lo dibujaba el borde superior de la fila de abajo.
   const ultimaFila = PRIMERA + 2 * (ORDEN.length - 1);
   const bordeAbajo = ws.getCell(`G${ultimaFila + 1}`).border.bottom;
-  ['A', 'B', 'C', 'D', 'E', 'F', 'K'].forEach((col) => {
-    const c = ws.getCell(`${col}${ultimaFila}`);
-    estilo(c, { border: { ...(c.border || {}), bottom: bordeAbajo } });
+  // En las dos filas del bloque (la combinada guarda el estilo de su celda maestra, pero Excel dibuja el
+  // borde de abajo con la celda de la fila de abajo).
+  [ultimaFila, ultimaFila + 1].forEach((fila) => {
+    ['A', 'B', 'C', 'D', 'E', 'F', 'K'].forEach((col) => {
+      const c = ws.getCell(`${col}${fila}`);
+      estilo(c, { border: { ...(c.border || {}), bottom: bordeAbajo } });
+    });
   });
 
   // La caducidad se muestra mmm-aa en todos los renglones (el patrón de la primera

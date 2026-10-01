@@ -379,6 +379,7 @@
   /* Entregas del mes, vista previa de caducidad, prellenado de cantidades */
   .barra-entregas { display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: 4px; padding-left: 12px; border-left: 1px solid var(--outline-variant); }
   .barra-entregas .entregas-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .sugerencias-texto { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .cad-tip { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
   /* La vista previa de la caducidad (= JUL-29) flota debajo del campo: no le suma altura, así
      lote, caducidad y cantidad siguen alineados. */
@@ -691,6 +692,24 @@
         <span id="pegarResumen" class="modal-resumen"></span>
         <button type="button" class="btn btn-outline" id="pegarCancelar">Cancelar</button>
         <button type="button" class="btn btn-primary" id="pegarImportar" disabled>Importar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pedir un texto corto (nombre de la entrega) -->
+  <div class="modal-fondo" id="modalTexto" style="display:none;">
+    <div class="modal-hoja" role="dialog" aria-modal="true" aria-labelledby="textoTitulo" style="max-width:440px;">
+      <div class="modal-cab">
+        <div><h3 id="textoTitulo"></h3><p id="textoDescripcion"></p></div>
+        <button type="button" class="icon-btn-pure" id="textoCerrar" title="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="modal-cuerpo">
+        <div class="campo"><label for="textoValor" id="textoEtiqueta"></label><input type="text" id="textoValor" maxlength="40" autocomplete="off" style="width:100%;"></div>
+        <div class="sugerencias-texto" id="textoSugerencias"></div>
+      </div>
+      <div class="modal-pie">
+        <button type="button" class="btn btn-outline" id="textoCancelar">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="textoAceptar">Guardar</button>
       </div>
     </div>
   </div>
