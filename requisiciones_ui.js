@@ -938,7 +938,7 @@ function filasBiologicoHtml(bio) {
       <td><strong>${total}</strong></td>
     </tr>`;
   const filasLotes = items.map((it) => `
-    <tr class="fila-lote-capturado" data-item="${it.id}" data-bio="${bio.id}">
+    <tr class="fila-lote-capturado" data-item="${it.id}" data-bio="${bio.id}" style="--c:${color}">
       <td class="lote-cel" colspan="3">${esPendiente(it)
         ? '<span class="chip-lote pendiente"><span class="material-symbols-rounded">hourglass_top</span>Lote por definir</span>'
         : `<span class="chip-lote"><span class="material-symbols-rounded">qr_code_2</span>Lote ${esc(it.requi_lotes.numero_lote)}</span><span class="cad-lote">Cad. ${cadHtml(it.requi_lotes.caducidad)}</span>`}</td>
@@ -1112,6 +1112,7 @@ function abrirAsignarLotes(itemId) {
   $('asigAyuda').innerHTML = pend
     ? 'Si llegó un solo lote, déjalo con toda la cantidad. Si llegaron varios, baja la cantidad del primero y toca <b>Agregar otro lote</b>: el nuevo renglón se llena con lo que falta.'
     : 'Para <b>cambiar el número de lote</b>, deja una fila con toda la cantidad. Para <b>dividirlo</b>, captura solo la parte que pasa a otro lote: el resto se queda en el lote actual.';
+  $('modalAsignar').querySelector('.modal-hoja').style.setProperty('--c', colorDeBio(bio));
   $('modalAsignar').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   lotesExistentesDe(item.requi_biologico_id).then((ls) => {
@@ -1240,7 +1241,7 @@ function abrirCantidades() {
     return `<tr data-bio="${bio.id}">
       <td><span class="punto-bio" style="background:${colorDeBio(bio)}"></span><b>${esc(nombreCorto(bio))}</b></td>
       <td class="cant-actual">${conLote.length ? `${sumaConLote} con lote` : ''}</td>
-      <td><input type="number" class="inp-cant" min="0" inputmode="numeric" placeholder="0" value="${pend ? pend.cantidad_surtida : ''}"></td>
+      <td><input type="number" class="inp-cant" min="0" inputmode="numeric" placeholder="0" value="${pend ? pend.cantidad_surtida : ''}" style="border-color:color-mix(in srgb, ${colorDeBio(bio)} 50%, #e2e8f0); background:color-mix(in srgb, ${colorDeBio(bio)} 6%, #fff)"></td>
     </tr>`;
   }).join('');
   $('modalCantidades').style.display = 'flex';
