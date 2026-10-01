@@ -167,6 +167,17 @@ function formatDdMmAa(fechaIso) {
   return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getFullYear()).slice(2)}`;
 }
 
+// "15 de julio de 2029": al pasar el mouse sobre una caducidad (JUL-29) se ve completa, con el día.
+function fechaLarga(fechaIso) {
+  const d = new Date(fechaIso + 'T00:00:00');
+  if (isNaN(d.getTime())) return fechaIso;
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+function cadHtml(fechaIso) {
+  if (!fechaIso) return '—';
+  return `<span class="cad-tip" title="${esc(fechaLarga(fechaIso))}">${esc(formatMmmAa(fechaIso))}</span>`;
+}
+
 function vistaCaducidad(texto) {
   if (!String(texto || '').trim()) return '';
   const iso = parsearCaducidadInteligente(texto);
@@ -235,7 +246,7 @@ async function cargarSesionReal() {
 }
 
 function pillComparador(resultado) {
-  if (resultado.estado === 'EXISTE') return `<span class="pill pill-ok badge-comparador"><span class="material-symbols-rounded" style="font-size:12px">check_circle</span> Lote conocido (${esc(formatMmmAa(resultado.lote.caducidad)) || 'sin caducidad'})</span>`;
+  if (resultado.estado === 'EXISTE') return `<span class="pill pill-ok badge-comparador"><span class="material-symbols-rounded" style="font-size:12px">check_circle</span> Lote conocido (${resultado.lote.caducidad ? cadHtml(resultado.lote.caducidad) : 'sin caducidad'})</span>`;
   if (resultado.estado === 'SIMILAR') return `<span class="pill pill-warn badge-comparador"><span class="material-symbols-rounded" style="font-size:12px">warning</span> ¿"${esc(resultado.sugerencias[0].numero_lote)}"?</span>`;
   if (resultado.estado === 'NUEVO') return `<span class="pill pill-new badge-comparador"><span class="material-symbols-rounded" style="font-size:12px">fiber_new</span> Nuevo</span>`;
   return '';
@@ -581,7 +592,7 @@ function itemDe(bioId, loteId) { return estado.items.find((i) => i.requi_biologi
 function itemsDe(biologicoId) { return estado.items.filter((i) => i.requi_biologico_id === biologicoId); }
 function ordenCatalogo(bioId) { const i = estado.catalogo.findIndex((b) => b.id === bioId); return i < 0 ? 999 : i; }
 function numeroLoteDe(bioId, loteId) { const it = itemDe(bioId, loteId); return it ? it.requi_lotes.numero_lote : '?'; }
-function caducidadDe(bioId, loteId) { const it = itemDe(bioId, loteId); return it ? formatMmmAa(it.requi_lotes.caducidad) : '—'; }
+function caducidadDe(bioId, loteId) { const it = itemDe(bioId, loteId); return it ? cadHtml(it.requi_lotes.caducidad) : '—'; }
 
 // Lotes con algo surtido, en el orden del catálogo (y por número de lote dentro de cada biológico).
 function itemsSurtidos() {
@@ -930,7 +941,7 @@ function filasBiologicoHtml(bio) {
     <tr class="fila-lote-capturado" data-item="${it.id}" data-bio="${bio.id}">
       <td class="lote-cel" colspan="3">${esPendiente(it)
         ? '<span class="chip-lote pendiente"><span class="material-symbols-rounded">hourglass_top</span>Lote por definir</span>'
-        : `<span class="chip-lote"><span class="material-symbols-rounded">qr_code_2</span>Lote ${esc(it.requi_lotes.numero_lote)}</span><span class="cad-lote">Cad. ${esc(formatMmmAa(it.requi_lotes.caducidad)) || '—'}</span>`}</td>
+        : `<span class="chip-lote"><span class="material-symbols-rounded">qr_code_2</span>Lote ${esc(it.requi_lotes.numero_lote)}</span><span class="cad-lote">Cad. ${cadHtml(it.requi_lotes.caducidad)}</span>`}</td>
       <td><div class="cant-wrap"><strong>${it.cantidad_surtida}</strong><span class="solo-edicion">
         ${esPendiente(it) ? `<button type="button" class="btn btn-outline btn-sm btn-asignar-lotes" data-item="${it.id}" title="Ya llegaron los lotes: asígnalos"><span class="material-symbols-rounded" style="font-size:15px">edit_note</span> Asignar lotes</button>` : ''}
         ${esPendiente(it) ? '' : `<button type="button" class="icon-btn-pure btn-asignar-lotes" data-item="${it.id}" title="Cambiar el número de lote o dividirlo en varios"><span class="material-symbols-rounded" style="font-size:16px">call_split</span></button>`}
@@ -1418,7 +1429,7 @@ function renderVistaPegado() {
           <td><input type="checkbox" data-pegar-inc="${i}" ${f.incluir ? 'checked' : ''} ${f.error ? 'disabled' : ''}></td>
           <td>${f.bio ? esc(nombreCorto(f.bio)) : `<select data-pegar-bio="${i}"><option value="">Elegir…</option>${opciones}</select>`}</td>
           <td>${esc(f.lote) || '—'}</td>
-          <td>${f.caducidad ? esc(formatMmmAa(f.caducidad)) : '—'}</td>
+          <td>${f.caducidad ? cadHtml(f.caducidad) : '—'}</td>
           <td>${f.cantidad != null ? f.cantidad : '—'}</td>
           <td>${pillFilaPegado(f)}</td>
         </tr>`).join('')}</tbody>
@@ -1873,7 +1884,7 @@ function renderMatrizMunicipio() {
       const disp = Number(it.cantidad_surtida);
       const rep = sumaMunicipio(bio, lote);
       return `<tr data-key="${claveLote(bio, lote)}" class="${estadoPorSaldo(disp, rep) === 'completo' ? 'completo' : ''}">
-        <th scope="row" class="col-fija" style="--c:${colorDeBio(bioDe(bio))}"><b>${esc(nombreCorto(bioDe(bio)))}</b><small>Lote ${esc(it.requi_lotes.numero_lote)} · Cad. ${esc(formatMmmAa(it.requi_lotes.caducidad)) || '—'}</small></th>
+        <th scope="row" class="col-fija" style="--c:${colorDeBio(bioDe(bio))}"><b>${esc(nombreCorto(bioDe(bio)))}</b><small>Lote ${esc(it.requi_lotes.numero_lote)} · Cad. ${cadHtml(it.requi_lotes.caducidad)}</small></th>
         <td class="col-num"><b>${disp}</b></td>
         ${DESTINOS.map((d) => `<td>${celdaHtml(`data-municipio="${d.v}" data-bio="${bio}" data-lote="${lote}"`, asignadoMunicipio(d.v, bio, lote))}</td>`).join('')}
         <td class="col-num saldo-td">${chipSaldo(disp - rep, rep, disp)}</td>
@@ -1920,7 +1931,7 @@ function renderPaso3() {
   tabla.innerHTML = `
     <thead><tr><th class="col-fija">Unidad</th>${cols.map((c) => {
       const rep = sumaUnidadesMunicipio(muni, c.bio, c.lote);
-      return `<th class="col-lote-h" data-col="${claveLote(c.bio, c.lote)}" style="--c:${colorDeBio(bioDe(c.bio))}"><span class="barra-color"></span><b>${esc(nombreCorto(bioDe(c.bio)))}</b><small>Lote ${esc(numeroLoteDe(c.bio, c.lote))}</small><small>Cad. ${esc(caducidadDe(c.bio, c.lote))}</small><span class="saldo-td">${chipSaldo(c.asignado - rep, rep, c.asignado, 'Saldo ')}</span></th>`;
+      return `<th class="col-lote-h" data-col="${claveLote(c.bio, c.lote)}" style="--c:${colorDeBio(bioDe(c.bio))}"><span class="barra-color"></span><b>${esc(nombreCorto(bioDe(c.bio)))}</b><small>Lote ${esc(numeroLoteDe(c.bio, c.lote))}</small><small>Cad. ${caducidadDe(c.bio, c.lote)}</small><span class="saldo-td">${chipSaldo(c.asignado - rep, rep, c.asignado, 'Saldo ')}</span></th>`;
     }).join('')}<th class="col-num">Excel</th></tr></thead>
     <tbody>${unidades.map((u) => `<tr data-unidad-fila="${u.id}">
       <th scope="row" class="col-fija"><b>${esc(u.nombre)}</b>${u.clues ? `<small>${esc(u.clues)}</small>` : ''}</th>

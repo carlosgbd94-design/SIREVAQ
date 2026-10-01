@@ -170,11 +170,61 @@
     return api;
   }
 
+  // Versión simplificada de requi_asignar_lotes (supabase/requi_covid_lotes_pendientes_transferencias.sql):
+  // reemplaza un renglón por 1 o más lotes y pasa el reparto llenando en orden (municipios en el orden
+  // de la app y unidades por id); lo que no se reasigna se queda en el lote actual.
+  function rpcAsignarLotes({ p_item_id, p_lotes }) {
+    const item = db.requi_items_jurisdiccion.find((i) => i.id === p_item_id);
+    if (!item) return { data: null, error: { message: 'ERROR: No existe ese renglón de lo surtido.' } };
+    const nuevos = [];
+    for (const f of p_lotes) {
+      const numero = String(f.numero_lote || '').trim();
+      let lote = db.requi_lotes.find((l) => l.requi_biologico_id === item.requi_biologico_id && l.numero_lote.toUpperCase() === numero.toUpperCase());
+      if (lote && db.requi_items_jurisdiccion.some((i) => i.requisicion_id === item.requisicion_id && i.lote_id === lote.id)) {
+        return { data: null, error: { message: `ERROR: El lote ${numero} ya está capturado en esta requisición` } };
+      }
+      if (!lote) { lote = { id: uid(), requi_biologico_id: item.requi_biologico_id, numero_lote: numero, caducidad: f.caducidad || null }; db.requi_lotes.push(lote); }
+      else if (f.caducidad && !lote.caducidad) lote.caducidad = f.caducidad;
+      nuevos.push({ lote_id: lote.id, resto: Number(f.cantidad) });
+      db.requi_items_jurisdiccion.push({ id: uid(), requisicion_id: item.requisicion_id, requi_biologico_id: item.requi_biologico_id, lote_id: lote.id, cantidad_surtida: Number(f.cantidad) });
+    }
+    const total = nuevos.reduce((a, x) => a + x.resto, 0);
+    const mismo = (d) => d.requisicion_id === item.requisicion_id && d.requi_biologico_id === item.requi_biologico_id && d.lote_id === item.lote_id;
+    const orden = ['CORREGIDORA', 'HUIMILPAN', 'MARQUES', 'QUERETARO', 'NHG', 'HENM'];
+    db.requi_distribucion_municipio.filter(mismo).sort((a, b) => orden.indexOf(a.municipio) - orden.indexOf(b.municipio)).forEach((dm) => {
+      let need = Number(dm.cantidad);
+      const tomado = nuevos.map(() => 0);
+      nuevos.forEach((c, i) => {
+        const t = Math.min(need, c.resto);
+        if (t > 0) {
+          db.requi_distribucion_municipio.push({ id: uid(), requisicion_id: dm.requisicion_id, municipio: dm.municipio, requi_biologico_id: dm.requi_biologico_id, lote_id: c.lote_id, cantidad: t });
+          c.resto -= t; tomado[i] = t; need -= t;
+        }
+      });
+      db.requi_distribucion_unidad.filter((d) => mismo(d) && (db.requi_unidades.find((u) => u.id === d.unidad_id) || {}).municipio === dm.municipio).forEach((du) => {
+        let n2 = Number(du.cantidad);
+        tomado.forEach((cap, i) => {
+          const t = Math.min(n2, cap);
+          if (t > 0) {
+            db.requi_distribucion_unidad.push({ id: uid(), requisicion_id: du.requisicion_id, unidad_id: du.unidad_id, requi_biologico_id: du.requi_biologico_id, lote_id: nuevos[i].lote_id, cantidad: t });
+            tomado[i] -= t; n2 -= t;
+          }
+        });
+        if (n2 > 0) du.cantidad = n2; else db.requi_distribucion_unidad.splice(db.requi_distribucion_unidad.indexOf(du), 1);
+      });
+      if (need > 0) dm.cantidad = need; else db.requi_distribucion_municipio.splice(db.requi_distribucion_municipio.indexOf(dm), 1);
+    });
+    const quedan = Number(item.cantidad_surtida) - total;
+    if (quedan > 0) item.cantidad_surtida = quedan; else db.requi_items_jurisdiccion.splice(db.requi_items_jurisdiccion.indexOf(item), 1);
+    return { data: { quedan_pendientes: Math.max(quedan, 0) }, error: null };
+  }
+
   window.supabase = {
     createClient() {
       return {
         auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 't@test.mx' } } } }) },
-        from: constructor
+        from: constructor,
+        rpc: async (nombre, args) => (nombre === 'requi_asignar_lotes' ? rpcAsignarLotes(args) : { data: null, error: { message: 'rpc no simulada: ' + nombre } })
       };
     }
   };

@@ -277,3 +277,101 @@ test('Requisiciones: varias entregas en el mismo mes, cada una con su propio pas
   await expect(page.locator('#tbodyBiologicos')).not.toContainText('INF1');
   expect(errores).toEqual([]);
 });
+
+
+test('Requisiciones: asignar lotes (uno o varios) a cantidades prellenadas y el reparto se acomoda', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#btnPrellenar');
+  await page.locator('#cantFilas input').nth(0).fill('65');         // SRP: 65 dosis sin lote
+  await page.click('#cantGuardar');
+  await expect(page.locator('#avisoPendientes')).toBeVisible();
+
+  // Reparto previo: 40 a Corregidora, 25 a Querétaro (y 40 de Corregidora a una unidad)
+  await page.click('.paso-tab[data-paso="2"]');
+  const pend = await db(page, "db.requi_lotes.find((l) => l.numero_lote === 'POR DEFINIR').id");
+  await page.fill(celda2(pend, 'CORREGIDORA'), '40');
+  await page.press(celda2(pend, 'CORREGIDORA'), 'Enter');
+  await page.fill(celda2(pend, 'QUERETARO'), '25');
+  await page.press(celda2(pend, 'QUERETARO'), 'Enter');
+  await expect.poll(() => db(page, 'db.requi_distribucion_municipio.filter((d) => d.requisicion_id === "req-hoy").length')).toBe(2);
+  await page.click('.paso-tab[data-paso="1"]');
+
+  // Ventana de asignar: 2 lotes que suman 65 (el segundo renglón se llena con lo que falta)
+  await page.click('#avisoPendientes .btn-asignar-lotes');
+  await expect(page.locator('#modalAsignar')).toBeVisible();
+  await expect(page.locator('#asigTitulo')).toContainText('Asignar lotes');
+  await page.locator('#asigFilas input[data-campo="lote"]').first().fill('LOTE-A');
+  await page.locator('#asigFilas input[data-campo="cad"]').first().fill('150729');
+  await expect(page.locator('#asigFilas .cad-vista').first()).toHaveText('= JUL-29');
+  await page.locator('#asigFilas input[data-campo="cant"]').first().fill('50');
+  await expect(page.locator('#asigResumen')).toContainText('quedan 15 por definir');
+  await page.click('#asigAgregar');
+  await expect(page.locator('#asigFilas input[data-campo="cant"]').nth(1)).toHaveValue('15');
+  await page.locator('#asigFilas input[data-campo="lote"]').nth(1).fill('LOTE-B');
+  await expect(page.locator('#asigResumen')).toContainText('Suman 65 de 65');
+  await page.click('#asigGuardar');
+  await expect(page.locator('#modalAsignar')).toBeHidden();
+
+  await expect(page.locator('#avisoPendientes')).toBeHidden();
+  await expect(page.locator('#tbodyBiologicos')).toContainText('LOTE-A');
+  await expect(page.locator('#tbodyBiologicos')).toContainText('LOTE-B');
+  await expect(page.locator('#tbodyBiologicos')).not.toContainText('Lote por definir');
+  await expect(page.locator('#tbodyBiologicos .cad-tip').first()).toHaveAttribute('title', /15 de julio de 2029/);
+  const loteA = await loteId(page, 'LOTE-A');
+  const loteB = await loteId(page, 'LOTE-B');
+  // Corregidora (40) y 10 de Querétaro llenan el lote A (50); lo demás de Querétaro (15) va al B
+  const rep = await db(page, `Object.fromEntries(db.requi_distribucion_municipio.filter((d) => d.requisicion_id === 'req-hoy').map((d) => [d.municipio + ':' + (d.lote_id === '${loteA}' ? 'A' : 'B'), d.cantidad]))`);
+  expect(rep).toEqual({ 'CORREGIDORA:A': 40, 'QUERETARO:A': 10, 'QUERETARO:B': 15 });
+  expect(await db(page, `db.requi_lotes.find((l) => l.id === '${loteA}').caducidad`)).toBe('2029-07-15');
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: cambiar el número de lote de un renglón con lote real y dividirlo', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
+  await page.fill('#rapLote', 'MAL-1');
+  await page.fill('#rapCant', '100');
+  await page.press('#rapCant', 'Enter');
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.length')).toBe(1);
+  await page.click('.paso-tab[data-paso="2"]');
+  const viejo = await loteId(page, 'MAL-1');
+  await page.fill(celda2(viejo, 'CORREGIDORA'), '100');
+  await page.press(celda2(viejo, 'CORREGIDORA'), 'Enter');
+  await expect.poll(() => db(page, 'db.requi_distribucion_municipio.filter((d) => d.requisicion_id === "req-hoy").length')).toBe(1);
+  await page.click('.paso-tab[data-paso="1"]');
+
+  // 1) Cambiar el número de lote: una fila con toda la cantidad
+  await page.click('.fila-lote-capturado .btn-asignar-lotes');
+  await expect(page.locator('#asigTitulo')).toContainText('Cambiar o dividir lote');
+  await expect(page.locator('#asigSub')).toContainText('MAL-1');
+  await page.locator('#asigFilas input[data-campo="lote"]').first().fill('BIEN-1');
+  await page.locator('#asigFilas input[data-campo="cad"]').first().fill('01-03-28');
+  await page.click('#asigGuardar');
+  await expect(page.locator('#modalAsignar')).toBeHidden();
+  await expect(page.locator('#tbodyBiologicos')).toContainText('BIEN-1');
+  await expect(page.locator('#tbodyBiologicos')).not.toContainText('MAL-1');
+  const bien = await loteId(page, 'BIEN-1');
+  expect(await db(page, 'db.requi_items_jurisdiccion.map((i) => i.lote_id + ":" + i.cantidad_surtida)')).toEqual([`${bien}:100`]);
+  expect(await db(page, 'db.requi_distribucion_municipio.filter((d) => d.requisicion_id === "req-hoy").map((d) => d.lote_id + ":" + d.municipio + ":" + d.cantidad)')).toEqual([`${bien}:CORREGIDORA:100`]);
+
+  // 2) Dividirlo: 30 pasan a otro lote y 70 se quedan en el actual
+  await page.click('.fila-lote-capturado .btn-asignar-lotes');
+  await page.locator('#asigFilas input[data-campo="lote"]').first().fill('BIEN-2');
+  await page.locator('#asigFilas input[data-campo="cant"]').first().fill('30');
+  await expect(page.locator('#asigResumen')).toContainText('70 se quedan en BIEN-1');
+  await page.click('#asigGuardar');
+  await expect(page.locator('#modalAsignar')).toBeHidden();
+  await expect(page.locator('#tbodyBiologicos')).toContainText('BIEN-2');
+  expect(await db(page, 'db.requi_items_jurisdiccion.map((i) => i.cantidad_surtida).sort((a, b) => a - b)')).toEqual([30, 70]);
+  expect(await db(page, 'db.requi_distribucion_municipio.filter((d) => d.requisicion_id === "req-hoy").map((d) => d.cantidad).sort((a, b) => a - b)')).toEqual([30, 70]);
+
+  // 3) Un lote que ya está capturado este mes no se puede usar como destino
+  await page.click('.fila-lote-capturado .btn-asignar-lotes >> nth=0');
+  await page.locator('#asigFilas input[data-campo="lote"]').first().fill('BIEN-2');
+  await page.locator('#asigFilas input[data-campo="cant"]').first().fill('5');
+  await page.click('#asigGuardar');
+  await expect(page.locator('#toast')).toContainText('ya está capturado');
+  expect(errores).toEqual([]);
+});

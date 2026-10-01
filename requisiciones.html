@@ -377,8 +377,9 @@
   table.vista-pegado select { padding: 4px 6px; font-size: 12px; max-width: 200px; }
   /* Lotes por definir / asignar lotes / transferencias */
   /* Entregas del mes, vista previa de caducidad, prellenado de cantidades */
-  .barra-entregas { display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .barra-entregas { display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: 4px; padding-left: 12px; border-left: 1px solid var(--outline-variant); }
   .barra-entregas .entregas-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .cad-tip { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
   .cad-vista { display: block; min-height: 14px; font-size: 11px; font-weight: 800; color: #15803d; margin-top: 2px; }
   .cad-vista.mal { color: var(--error, #b91c1c); }
   .campo-cad { display: inline-block; vertical-align: middle; margin-left: 12px; }
@@ -474,12 +475,12 @@
         <button class="btn-icono solo-edicion" id="btnGuardarCabecera" title="Guardar (crea la requisición del mes si no existe)"><span class="material-symbols-rounded">save</span></button>
       </div>
       <span id="badgesEstadoRequisicion" style="display:none; gap:6px; align-items:center;"></span>
-    </div>
-    <div class="barra-entregas" id="barraEntregas">
-      <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;">Entregas del mes</span>
-      <div class="entregas-chips"></div>
-      <button type="button" class="icon-btn-pure solo-edicion" id="btnRenombrarEntrega" title="Ponerle nombre a esta entrega (ej. Influenza)"><span class="material-symbols-rounded" style="font-size:17px">edit</span></button>
-      <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnNuevaEntrega" title="Llegó otra entrega este mes: se captura y reparte por separado"><span class="material-symbols-rounded" style="font-size:15px">add</span> Nueva entrega</button>
+      <div class="barra-entregas" id="barraEntregas">
+        <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;">Entregas del mes</span>
+        <div class="entregas-chips"></div>
+        <button type="button" class="icon-btn-pure solo-edicion" id="btnRenombrarEntrega" title="Ponerle nombre a esta entrega (ej. Influenza)"><span class="material-symbols-rounded" style="font-size:17px">edit</span></button>
+        <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnNuevaEntrega" title="Llegó otra entrega este mes: se captura y reparte por separado"><span class="material-symbols-rounded" style="font-size:15px">add</span> Nueva entrega</button>
+      </div>
     </div>
     <div class="hint" id="hintCabecera" style="margin-top:12px; display:none;"></div>
 
