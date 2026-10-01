@@ -1184,14 +1184,16 @@ async function ofrecerCargaDesdeRequisiciones() {
   const unidad = estado.unidades.find((u) => u.id === estado.movimiento.unidad_id);
   if (!unidad) return;
 
-  const { data: requisicion } = await estado.db.from('requi_requisiciones')
+  // Un mes puede tener varias entregas (cada una es su propia requisición): se juntan todas.
+  const { data: reqsMes } = await estado.db.from('requi_requisiciones')
     .select('id, folio_oracle')
-    .eq('anio', estado.movimiento.anio).eq('mes', estado.movimiento.mes).maybeSingle();
-  if (!requisicion) return;
+    .eq('anio', estado.movimiento.anio).eq('mes', estado.movimiento.mes).order('entrega');
+  if (!reqsMes || !reqsMes.length) return;
+  const requisicion = { ids: reqsMes.map((r) => r.id), folio_oracle: reqsMes.map((r) => r.folio_oracle).filter(Boolean).join(', ') || null };
 
   const { data: reparto, error } = await estado.db.from('requi_distribucion_municipio')
     .select(`cantidad, requi_catalogo_biologicos ( nombre, biovac_biologico_id ), requi_lotes ( numero_lote, caducidad )`)
-    .eq('requisicion_id', requisicion.id).eq('municipio', unidad.municipio).gt('cantidad', 0);
+    .in('requisicion_id', requisicion.ids).eq('municipio', unidad.municipio).gt('cantidad', 0);
   if (error || !reparto || !reparto.length) return;
 
   const candidatos = _candidatosDesdeReparto(reparto, requisicion.folio_oracle);
@@ -1221,10 +1223,12 @@ async function ofrecerCargaDesdeRequisiciones() {
 async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
   if (!unidadClues) return;
 
-  const { data: requisicion } = await estado.db.from('requi_requisiciones')
+  // Un mes puede tener varias entregas (cada una es su propia requisición): se juntan todas.
+  const { data: reqsMes } = await estado.db.from('requi_requisiciones')
     .select('id, folio_oracle')
-    .eq('anio', estado.movimiento.anio).eq('mes', estado.movimiento.mes).maybeSingle();
-  if (!requisicion) return;
+    .eq('anio', estado.movimiento.anio).eq('mes', estado.movimiento.mes).order('entrega');
+  if (!reqsMes || !reqsMes.length) return;
+  const requisicion = { ids: reqsMes.map((r) => r.id), folio_oracle: reqsMes.map((r) => r.folio_oracle).filter(Boolean).join(', ') || null };
 
   const { data: requiUnidad } = await estado.db.from('requi_unidades')
     .select('id').eq('clues', unidadClues).maybeSingle();
@@ -1235,7 +1239,7 @@ async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
   if (requiUnidad) {
     ({ data: reparto, error } = await estado.db.from('requi_distribucion_unidad')
       .select(seleccion)
-      .eq('requisicion_id', requisicion.id).eq('unidad_id', requiUnidad.id).gt('cantidad', 0));
+      .in('requisicion_id', requisicion.ids).eq('unidad_id', requiUnidad.id).gt('cantidad', 0));
   } else {
     // Hospitales (HENM, NHG): se manejan como municipios aparte y la requisición
     // les reparte a nivel DESTINO (requi_distribucion_municipio), no por unidad
@@ -1245,7 +1249,7 @@ async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
     if (!unidadBiovac || MUNICIPIOS_HOSPITAL.indexOf(unidadBiovac.municipio) < 0) return;
     ({ data: reparto, error } = await estado.db.from('requi_distribucion_municipio')
       .select(seleccion)
-      .eq('requisicion_id', requisicion.id).eq('municipio', unidadBiovac.municipio).gt('cantidad', 0));
+      .in('requisicion_id', requisicion.ids).eq('municipio', unidadBiovac.municipio).gt('cantidad', 0));
   }
   if (error || !reparto || !reparto.length) return;
 

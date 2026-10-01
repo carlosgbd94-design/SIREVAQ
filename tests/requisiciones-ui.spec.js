@@ -59,10 +59,11 @@ test('Requisiciones: flujo completo por pasos (captura rápida, pegado, matrices
   await page.keyboard.type('AB123');
   await page.keyboard.press('Enter');
   await expect(page.locator('#rapCad')).toBeFocused();
-  await page.keyboard.type('0227');
+  await page.keyboard.type('150227');                               // se captura DD-MM-AA
+  await expect(page.locator('#rapCad ~ .cad-vista')).toHaveText('= FEB-27');   // y se muestra MMM-AA
   await page.keyboard.press('Enter');
   await expect(page.locator('#rapCant')).toBeFocused();
-  await expect(page.locator('#rapCad')).toHaveValue('FEB-27');     // 0227 -> FEB-27
+  await expect(page.locator('#rapCad')).toHaveValue('150227');     // el texto tecleado no se pierde
   await page.keyboard.type('1000');
   await page.keyboard.press('Enter');
   await expect(page.locator('#tbodyBiologicos')).toContainText('AB123');
@@ -75,10 +76,12 @@ test('Requisiciones: flujo completo por pasos (captura rápida, pegado, matrices
   await page.keyboard.type('500');
   await page.keyboard.press('Enter');
   await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.length')).toBe(2);
+  expect(await db(page, "db.requi_lotes.find((l) => l.numero_lote === 'AB123').caducidad")).toBe('2027-02-15');
+  await expect(page.locator('#tbodyBiologicos')).toContainText('FEB-27');   // en la tabla se ve MMM-AA
 
   // Lote ya conocido: trae su caducidad y salta directo a la cantidad
   await page.fill('#rapLote', 'AB123');
-  await expect(page.locator('#rapCad')).toHaveValue('FEB-27');
+  await expect(page.locator('#rapCad')).toHaveValue('15-02-27');   // trae el día exacto que se capturó
   await expect(page.locator('#rapNota')).toContainText('Ya capturado');
   await page.press('#rapLote', 'Enter');
   await expect(page.locator('#rapCant')).toBeFocused();
@@ -203,5 +206,74 @@ test('Requisiciones: un rol de solo lectura ve los pasos pero sin captura', asyn
   await expect(page.locator('#rapida')).toBeHidden();
   await expect(page.locator('#btnSugerir2')).toBeHidden();
   await expect(page.locator('#btnCerrarMes')).toBeHidden();
+  expect(errores).toEqual([]);
+});
+
+
+test('Requisiciones: prellenar cantidades sin lote y repartirlas', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#btnPrellenar');
+  await expect(page.locator('#modalCantidades')).toBeVisible();
+  await expect(page.locator('#cantFilas tr')).toHaveCount(3);
+  await expect(page.locator('#cantGuardar')).toBeDisabled();
+  await page.locator('#cantFilas input').nth(0).fill('120');
+  await page.locator('#cantFilas input').nth(1).fill('65');
+  await expect(page.locator('#cantResumen')).toContainText('2 biológicos · 185 dosis');
+  await page.click('#cantGuardar');
+  await expect(page.locator('#modalCantidades')).toBeHidden();
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.filter((i) => i.requisicion_id === "req-hoy").length')).toBe(2);
+  expect(await db(page, "db.requi_lotes.filter((l) => l.numero_lote === 'POR DEFINIR').length")).toBe(2);
+  await expect(page.locator('#avisoPendientes')).toBeVisible();
+  await expect(page.locator('#tbodyBiologicos')).toContainText('Lote por definir');
+
+  // Ya se puede repartir sin tener lotes
+  await page.click('.paso-tab[data-paso="2"]');
+  await expect(page.locator('#matrizMunicipio tbody tr')).toHaveCount(2);
+  const lote = await db(page, "db.requi_lotes.find((l) => l.numero_lote === 'POR DEFINIR' && l.requi_biologico_id === 'bio-srp').id");
+  await page.fill(celda2(lote, 'CORREGIDORA'), '100');
+  await page.press(celda2(lote, 'CORREGIDORA'), 'Enter');
+  await expect.poll(() => db(page, `db.requi_distribucion_municipio.filter((d) => d.lote_id === '${lote}').map((d) => d.cantidad)`)).toEqual([100]);
+
+  // Volver a prellenar reemplaza la cantidad (no duplica renglones)
+  await page.click('.paso-tab[data-paso="1"]');
+  await page.click('#btnPrellenar');
+  await expect(page.locator('#cantFilas input').nth(0)).toHaveValue('120');
+  await page.locator('#cantFilas input').nth(0).fill('130');
+  await page.click('#cantGuardar');
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.find((i) => i.requi_biologico_id === "bio-srp").cantidad_surtida')).toBe(130);
+  expect(await db(page, 'db.requi_items_jurisdiccion.filter((i) => i.requisicion_id === "req-hoy").length')).toBe(2);
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: varias entregas en el mismo mes, cada una con su propio paso 1', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#barraEntregas')).toBeVisible();
+  await expect(page.locator('#barraEntregas [data-entrega]')).toHaveCount(1);
+
+  // Captura en la entrega 1
+  await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
+  await page.fill('#rapLote', 'ESQ1');
+  await page.fill('#rapCant', '200');
+  await page.press('#rapCant', 'Enter');
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.length')).toBe(1);
+
+  // Llega otra entrega: se crea aparte y empieza vacía
+  await page.click('#btnNuevaEntrega');
+  await expect(page.locator('#barraEntregas [data-entrega]')).toHaveCount(2);
+  await expect(page.locator('#barraEntregas [data-entrega="2"]')).toHaveClass(/activo/);
+  expect(await db(page, 'db.requi_requisiciones.filter((r) => r.anio !== 2000).map((r) => r.entrega)')).toEqual([1, 2]);
+  await expect(page.locator('#tbodyBiologicos')).not.toContainText('ESQ1');
+  await page.click('#chipsBio .chip-bio[data-bio="bio-hexa"]');
+  await page.fill('#rapLote', 'INF1');
+  await page.fill('#rapCant', '50');
+  await page.press('#rapCant', 'Enter');
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.length')).toBe(2);
+  expect(await db(page, 'db.requi_items_jurisdiccion.filter((i) => i.requisicion_id === "req-hoy").length')).toBe(1);
+
+  // Cambiar de entrega recarga los datos de esa entrega
+  await page.click('#barraEntregas [data-entrega="1"]');
+  await expect(page.locator('#tbodyBiologicos')).toContainText('ESQ1');
+  await expect(page.locator('#tbodyBiologicos')).not.toContainText('INF1');
   expect(errores).toEqual([]);
 });

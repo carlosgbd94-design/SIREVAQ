@@ -270,7 +270,9 @@
         I('ads_click', '#16a34a', 'Doble clic en una celda vacía', 'Pone todo el saldo que queda de ese lote.'),
         T('El mes'),
         I('save', '#0284c7', 'Crear requisición', 'Si el mes todavía no existe, aparece un botón para crearla; hasta entonces no hay pasos.'),
-        I('lock', '#0f172a', 'Cerrar mes', 'La marca como enviada. Puedes seguir editando después; quedará "corregida posteriormente" para que municipios y unidades lo sepan.'),
+        I('layers', '#0284c7', 'Entregas del mes', 'Si llega otra entrega en el mes (ej. la influenza después del esquema básico), toca "Nueva entrega": cada una se captura, se reparte y se exporta por separado (los archivos llevan _E1, _E2…) y puedes ponerle nombre con el lápiz.'),
+        I('format_list_numbered', '#0284c7', 'Cantidades primero, lotes después', 'Con "Prellenar cantidades" capturas cuánto llegó de cada biológico sin lote y ya puedes repartir. Cuando lleguen los lotes, "Asignar lotes" los pone y el reparto se acomoda solo. Con el ícono de dividir cambias o partes el lote de un renglón que ya lo tenía.'),
+        I('lock', '#0f172a', 'Cerrar entrega', 'La marca como enviada. Puedes seguir editando después; quedará "corregida posteriormente" para que municipios y unidades lo sepan.'),
         I('history', '#64748b', 'Historial y exportar', 'El reloj abre las requisiciones de otros meses; Exportar genera los archivos oficiales por destino.'),
         N('Cada unidad recibe lo que le repartas como precarga en su Movimiento de Biológico.')
       ]
@@ -283,7 +285,7 @@
         P(1, 'Elige el biológico', 'Toca su botón de color (o su renglón en la tabla). El recuadro gris confirma qué estás capturando.'),
         P(2, 'Lote, caducidad, cantidad', 'Escribe el lote y presiona Enter. Si el lote ya lo conocía el sistema, la caducidad aparece sola y Enter te manda directo a la cantidad.'),
         P(3, 'Enter guarda y sigue', 'Se guarda y regresas al campo Lote, listo para el siguiente lote del mismo biológico. Para cambiar de biológico toca otro botón.'),
-        I('event', '#0284c7', 'Caducidad', 'Teclea solo números: 0227 se convierte en FEB-27. También entiende 02/27 o 28/02/2027.'),
+        I('event', '#0284c7', 'Caducidad', 'Se teclea DD-MM-AA (150729, 15-07-29 o 15/07/29) y a un lado ves cómo se mostrará: JUL-29. También entiende 07-29 o JUL-29 (toma el último día del mes).'),
         T('Muchos lotes de golpe'),
         I('content_paste', '#7c3aed', 'Pegar desde Excel', 'Copia las filas (biológico, lote, caducidad y cantidad) y pégalas en el campo Lote, o usa el botón de arriba. Antes de importar ves cómo se entendió cada fila.'),
         T('Revisar y corregir'),

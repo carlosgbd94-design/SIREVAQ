@@ -102,6 +102,7 @@ const estado = {
   previa: null,        // reparto del mes anterior (para "Sugerir")
   pegado: [],
   pegadoToken: 0,
+  entregasMes: [],     // requisiciones (entregas) del año/mes elegido
   asig: null,          // modal "Asignar lotes"
   transferencias: [],
   guardandoRapido: false,
@@ -154,6 +155,30 @@ function formatMmmAa(fechaIso) {
   const d = new Date(fechaIso + 'T00:00:00');
   if (isNaN(d.getTime())) return fechaIso;
   return `${MESES_ABREV3[d.getMonth()]}-${String(d.getFullYear()).slice(2)}`;
+}
+
+// Captura: DD-MM-AA (también 150729, 15/07/29, 07-29 o JUL-29). Lo que se MUESTRA en
+// tablas y exportaciones sigue siendo MMM-AA (JUL-29); al teclear se enseña esa vista
+// a un lado para confirmar que se entendió bien.
+function formatDdMmAa(fechaIso) {
+  if (!fechaIso) return '';
+  const d = new Date(fechaIso + 'T00:00:00');
+  if (isNaN(d.getTime())) return fechaIso;
+  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getFullYear()).slice(2)}`;
+}
+
+function vistaCaducidad(texto) {
+  if (!String(texto || '').trim()) return '';
+  const iso = parsearCaducidadInteligente(texto);
+  return iso ? `= ${formatMmmAa(iso)}` : 'No la entiendo';
+}
+
+function actualizarVistaCad(inp) {
+  const span = inp.parentElement && inp.parentElement.querySelector('.cad-vista');
+  if (!span) return;
+  const v = vistaCaducidad(inp.value);
+  span.textContent = v;
+  span.classList.toggle('mal', v === 'No la entiendo');
 }
 
 function parsearCaducidadInteligente(texto) {
@@ -328,24 +353,48 @@ async function guardarCabecera() {
   if (!estado.puedeEditar) return;
   const anio = Number($('selAnio').value);
   const mes = Number($('selMes').value);
+  const entrega = (estado.requisicion && estado.requisicion.anio === anio && estado.requisicion.mes === mes)
+    ? estado.requisicion.entrega : 1;
   const { data, error } = await estado.db.from('requi_requisiciones')
-    .upsert({ anio, mes, creado_por: estado.perfil.usuario }, { onConflict: 'anio,mes' })
+    .upsert({ anio, mes, entrega, creado_por: estado.perfil.usuario }, { onConflict: 'anio,mes,entrega' })
     .select().single();
   if (error) { toast('No se pudo guardar la cabecera: ' + error.message, true); return; }
-  estado.requisicion = data;
   toast('Requisición guardada.');
-  renderEstadoRequisicion();
-  await cargarDatosRequisicion();
+  await cargarRequisicion(data.entrega);
 }
 
-async function cargarRequisicion() {
+// Cada entrega del mes es su propia requisición (mismos pasos, su propio reparto, su
+// propio Excel): esquema básico, influenza, etc. Las pestañas de "Entrega N" cambian de una a otra.
+async function cargarEntregasMes(anio, mes) {
+  const { data, error } = await estado.db.from('requi_requisiciones').select('*')
+    .eq('anio', anio).eq('mes', mes).order('entrega');
+  if (error) { toast('Error al cargar: ' + error.message, true); return false; }
+  estado.entregasMes = data || [];
+  return true;
+}
+
+function renderEntregas() {
+  const barra = $('barraEntregas');
+  const lista = estado.entregasMes;
+  if (!lista.length) { barra.style.display = 'none'; return; }
+  barra.style.display = 'flex';
+  barra.querySelector('.entregas-chips').innerHTML = lista.map((e) => `
+    <button type="button" class="chip-bio ${estado.requisicion && estado.requisicion.id === e.id ? 'activo' : ''}" data-entrega="${e.entrega}" style="--c:#0284c7">
+      <i></i>Entrega ${e.entrega}${e.etiqueta ? `<b>${esc(e.etiqueta)}</b>` : ''}
+    </button>`).join('');
+}
+
+async function cargarRequisicion(entregaPreferida) {
   const anio = Number($('selAnio').value);
   const mes = Number($('selMes').value);
-  const { data, error } = await estado.db.from('requi_requisiciones')
-    .select('*').eq('anio', anio).eq('mes', mes).maybeSingle();
-  if (error) { toast('Error al cargar: ' + error.message, true); return; }
+  if (!(await cargarEntregasMes(anio, mes))) return;
+  const lista = estado.entregasMes;
+  const actual = estado.requisicion && estado.requisicion.anio === anio && estado.requisicion.mes === mes ? estado.requisicion.entrega : null;
+  const buscada = typeof entregaPreferida === 'number' ? entregaPreferida : actual;
+  const data = lista.find((e) => e.entrega === buscada) || lista[lista.length - 1] || null;
   estado.requisicion = data;
   renderEstadoRequisicion();
+  renderEntregas();
   if (!data) {
     $('contenidoRequisicion').style.display = 'none';
     document.body.classList.remove('con-dock');
@@ -353,7 +402,7 @@ async function cargarRequisicion() {
     const mesInfo = MESES.find((m) => m.v === mes);
     $('tituloSinRequisicion').textContent = `Todavía no hay requisición de ${mesInfo ? mesInfo.l : mes} ${anio}`;
     $('textoSinRequisicion').textContent = estado.puedeEditar
-      ? 'Créala para empezar: primero capturas lo que llegó del almacén y luego lo repartes a municipios, hospitales y unidades.'
+      ? 'Créala para empezar: primero capturas lo que llegó del almacén y luego lo repartes a municipios, hospitales y unidades. Si en el mes llegan más entregas, las agregas después.'
       : 'Aún no se ha capturado la requisición de este mes.';
     $('tarjetaSinRequisicion').style.display = 'flex';
     return;
@@ -361,6 +410,35 @@ async function cargarRequisicion() {
   $('tarjetaSinRequisicion').style.display = 'none';
   $('hintCabecera').style.display = 'none';
   await cargarDatosRequisicion();
+}
+
+async function nuevaEntrega() {
+  if (!estado.puedeEditar || !estado.requisicion) return;
+  const { anio, mes } = estado.requisicion;
+  const siguiente = Math.max(...estado.entregasMes.map((e) => e.entrega), 0) + 1;
+  const etiqueta = prompt(`Nueva entrega ${siguiente} de ${etiquetaMes({ anio, mes })}.\n\n¿Qué llegó en esta entrega? (opcional, ej. Influenza)`, '');
+  if (etiqueta === null) return;
+  const { data, error } = await estado.db.from('requi_requisiciones')
+    .insert({ anio, mes, entrega: siguiente, etiqueta: etiqueta.trim() || null, creado_por: estado.perfil.usuario })
+    .select().single();
+  if (error) { toast('No se pudo crear la entrega: ' + error.message, true); return; }
+  toast(`Entrega ${siguiente} creada.`);
+  await cargarRequisicion(data.entrega);
+}
+
+async function renombrarEntrega() {
+  const r = estado.requisicion;
+  if (!estado.puedeEditar || !r) return;
+  const etiqueta = prompt(`Nombre de la entrega ${r.entrega} (ej. Esquema básico, Influenza). Déjalo vacío para quitarlo.`, r.etiqueta || '');
+  if (etiqueta === null) return;
+  const { data, error } = await estado.db.from('requi_requisiciones')
+    .update({ etiqueta: etiqueta.trim() || null }).eq('id', r.id).select().single();
+  if (error) { toast('No se pudo guardar el nombre: ' + error.message, true); return; }
+  estado.requisicion = data;
+  const i = estado.entregasMes.findIndex((e) => e.id === data.id);
+  if (i >= 0) estado.entregasMes[i] = data;
+  renderEntregas();
+  renderEstadoRequisicion();
 }
 
 // ---------------------------------------------------------------------------
@@ -395,14 +473,14 @@ Ojo: ${plural(sinLote, 'renglón todavía tiene', 'renglones todavía tienen')} 
   const aviso = avisoLote + (pendientes ? `
 
 Ojo: ${plural(pendientes, 'reparto todavía tiene', 'repartos todavía tienen')} saldo sin repartir (puntos ámbar o grises).` : '');
-  const ok = confirm('¿Cerrar esta requisición? Se marca como enviada. Si después necesitas corregir algo, puedes seguir editándola aquí mismo -- quedará marcada como "corregida posteriormente" para que municipios y unidades lo sepan.' + aviso);
+  const ok = confirm('¿Cerrar esta entrega? Se marca como enviada. Si después necesitas corregir algo, puedes seguir editándola aquí mismo -- quedará marcada como "corregida posteriormente" para que municipios y unidades lo sepan.' + aviso);
   if (!ok) return;
   const { data, error } = await estado.db.from('requi_requisiciones')
     .update({ estado: 'CERRADA', cerrado_en: new Date().toISOString(), fecha_envio: estado.requisicion.fecha_envio || ultimoDiaMes(estado.requisicion.anio, estado.requisicion.mes) })
     .eq('id', estado.requisicion.id).select().single();
   if (error) { toast('No se pudo cerrar: ' + error.message, true); return; }
   estado.requisicion = data;
-  toast('Requisición cerrada.');
+  toast('Entrega cerrada.');
   renderEstadoRequisicion();
 }
 
@@ -419,7 +497,7 @@ async function toggleExplorador() {
   if (!abrir) return;
 
   const { data, error } = await estado.db.from('requi_requisiciones')
-    .select('*').order('anio', { ascending: false }).order('mes', { ascending: false });
+    .select('*').order('anio', { ascending: false }).order('mes', { ascending: false }).order('entrega', { ascending: false });
   if (error) { toast('No se pudo cargar el historial: ' + error.message, true); return; }
   renderExplorador(data || []);
 }
@@ -430,7 +508,7 @@ function renderExplorador(filas) {
     const esCerrada = r.estado === 'CERRADA';
     return `
       <tr class="${estado.requisicion && estado.requisicion.id === r.id ? 'activa' : ''}">
-        <td><strong>${mesInfo ? mesInfo.l : r.mes} ${r.anio}</strong></td>
+        <td><strong>${mesInfo ? mesInfo.l : r.mes} ${r.anio}</strong> <small style="color:var(--muted)">${esc(etiquetaEntrega(r))}</small></td>
         <td><span class="pill ${esCerrada ? 'pill-ok' : 'pill-warn'}">${esCerrada ? 'Cerrada' : 'Borrador'}</span></td>
         <td>${r.fue_corregido ? '<span class="pill pill-err">Corregido</span>' : ''}</td>
         <td>${r.fecha_envio ? formatMmmAa(r.fecha_envio) : '—'}</td>
@@ -450,8 +528,10 @@ async function abrirDesdeHistorial(id, filas) {
   if (!r) return;
   if ([...$('selAnio').options].some((o) => o.value === String(r.anio))) $('selAnio').value = r.anio;
   if ([...$('selMes').options].some((o) => o.value === String(r.mes))) $('selMes').value = r.mes;
-  estado.requisicion = r;
+  await cargarEntregasMes(r.anio, r.mes);
+  estado.requisicion = estado.entregasMes.find((e) => e.id === r.id) || r;
   renderEstadoRequisicion();
+  renderEntregas();
   $('hintCabecera').style.display = 'none';
   $('tarjetaSinRequisicion').style.display = 'none';
   $('panelExplorador').style.display = 'none';
@@ -490,6 +570,11 @@ function nombreCorto(bio) { return RequiEngine.nombreCortoBio(bio); }
 function esMunicipioReal(v) { return MUNICIPIOS_REALES.some((m) => m.v === v); }
 function etiquetaMunicipio(v) { const d = DESTINOS.find((x) => x.v === v); return d ? d.l : v; }
 function etiquetaMes(req) { const m = MESES.find((x) => x.v === req.mes); return `${m ? m.l : req.mes} ${req.anio}`; }
+// "Entrega 2 · Influenza"
+function etiquetaEntrega(req) { return `Entrega ${req.entrega || 1}${req.etiqueta ? ' · ' + req.etiqueta : ''}`; }
+function variasEntregas() { return estado.entregasMes.length > 1 || (estado.requisicion && estado.requisicion.entrega > 1); }
+// Texto de "MES A SURTIR" y sufijo de archivo: la 1ª entrega de un mes sin más entregas queda como siempre.
+function sufijoEntregaArchivo() { return variasEntregas() ? `_E${estado.requisicion.entrega}` : ''; }
 function claveLote(bioId, loteId) { return bioId + '::' + loteId; }
 
 function itemDe(bioId, loteId) { return estado.items.find((i) => i.requi_biologico_id === bioId && i.lote_id === loteId); }
@@ -733,6 +818,7 @@ function limpiarRapida() {
   $('rapLote').value = '';
   $('rapCad').value = '';
   $('rapCad').dataset.auto = '';
+  actualizarVistaCad($('rapCad'));
   $('rapCant').value = '';
   $('rapNota').innerHTML = '';
 }
@@ -745,12 +831,12 @@ function evaluarLoteRapido() {
   const cad = $('rapCad');
   if (!bioId) { nota.innerHTML = ''; return; }
   const texto = $('rapLote').value.trim();
-  const limpiarAuto = () => { if (cad.dataset.auto === '1') { cad.value = ''; cad.dataset.auto = ''; } };
+  const limpiarAuto = () => { if (cad.dataset.auto === '1') { cad.value = ''; cad.dataset.auto = ''; actualizarVistaCad(cad); } };
   if (!texto) { limpiarAuto(); nota.innerHTML = ''; return; }
   const res = RequiEngine.compararLote(texto, estado.lotesPorBiologico[bioId] || []);
   let extra = '';
   if (res.estado === 'EXISTE') {
-    if (!cad.value || cad.dataset.auto === '1') { cad.value = formatMmmAa(res.lote.caducidad); cad.dataset.auto = '1'; }
+    if (!cad.value || cad.dataset.auto === '1') { cad.value = formatDdMmAa(res.lote.caducidad); cad.dataset.auto = '1'; actualizarVistaCad(cad); }
     const it = itemDe(bioId, res.lote.id);
     if (it) extra = `<span class="pill pill-warn">Ya capturado (${it.cantidad_surtida}): se reemplazará la cantidad</span>`;
   } else {
@@ -804,7 +890,7 @@ async function agregarRapido() {
   let caducidad = null;
   if (caducidadTexto) {
     caducidad = parsearCaducidadInteligente(caducidadTexto);
-    if (!caducidad) { toast('No entendí la caducidad. Usa por ejemplo FEB-27.', true); $('rapCad').focus(); return; }
+    if (!caducidad) { toast('No entendí la caducidad. Usa por ejemplo 15-07-29.', true); $('rapCad').focus(); return; }
   }
 
   estado.guardandoRapido = true;
@@ -847,6 +933,7 @@ function filasBiologicoHtml(bio) {
         : `<span class="chip-lote"><span class="material-symbols-rounded">qr_code_2</span>Lote ${esc(it.requi_lotes.numero_lote)}</span><span class="cad-lote">Cad. ${esc(formatMmmAa(it.requi_lotes.caducidad)) || '—'}</span>`}</td>
       <td><div class="cant-wrap"><strong>${it.cantidad_surtida}</strong><span class="solo-edicion">
         ${esPendiente(it) ? `<button type="button" class="btn btn-outline btn-sm btn-asignar-lotes" data-item="${it.id}" title="Ya llegaron los lotes: asígnalos"><span class="material-symbols-rounded" style="font-size:15px">edit_note</span> Asignar lotes</button>` : ''}
+        ${esPendiente(it) ? '' : `<button type="button" class="icon-btn-pure btn-asignar-lotes" data-item="${it.id}" title="Cambiar el número de lote o dividirlo en varios"><span class="material-symbols-rounded" style="font-size:16px">call_split</span></button>`}
         <button type="button" class="icon-btn-pure btn-editar-item" data-item="${it.id}" title="Editar"><span class="material-symbols-rounded" style="font-size:16px">edit</span></button>
         <button type="button" class="icon-btn-pure btn-quitar-item" data-item="${it.id}" data-bio="${bio.id}" title="Quitar"><span class="material-symbols-rounded" style="font-size:16px">delete</span></button>
       </span></div></td>
@@ -889,7 +976,7 @@ function activarEdicionItem(itemId) {
     <td class="lote-cel" colspan="3">${esPendiente(item)
       ? '<span class="chip-lote pendiente"><span class="material-symbols-rounded">hourglass_top</span>Lote por definir</span>'
       : `<span class="chip-lote"><span class="material-symbols-rounded">qr_code_2</span>Lote ${esc(item.requi_lotes.numero_lote)}</span>
-      <input type="text" class="inp-editar-caducidad" value="${esc(formatMmmAa(item.requi_lotes.caducidad))}" placeholder="FEB-27">`}</td>
+      <span class="campo-cad"><input type="text" class="inp-editar-caducidad" value="${esc(formatDdMmAa(item.requi_lotes.caducidad))}" placeholder="DD-MM-AA"><span class="cad-vista">${esc(vistaCaducidad(formatDdMmAa(item.requi_lotes.caducidad)))}</span></span>`}</td>
     <td><div class="cant-wrap"><input type="number" min="0" class="inp-editar-cantidad" value="${item.cantidad_surtida}"><span>
       <button type="button" class="icon-btn-pure btn-guardar-edicion" data-item="${itemId}" title="Guardar"><span class="material-symbols-rounded" style="font-size:16px">check</span></button>
       <button type="button" class="icon-btn-pure btn-cancelar-edicion" title="Cancelar"><span class="material-symbols-rounded" style="font-size:16px">close</span></button>
@@ -909,7 +996,7 @@ async function guardarEdicionItem(itemId) {
   let caducidad = item.requi_lotes.caducidad;
   if (caducidadTexto) {
     const parseada = parsearCaducidadInteligente(caducidadTexto);
-    if (!parseada) { toast('No entendí la caducidad. Usa por ejemplo FEB-27.', true); return; }
+    if (!parseada) { toast('No entendí la caducidad. Usa por ejemplo 15-07-29.', true); return; }
     caducidad = parseada;
   }
 
@@ -1003,10 +1090,17 @@ function abrirAsignarLotes(itemId) {
   if (!item || !estado.puedeEditar) return;
   const bio = estado.catalogo.find((b) => b.id === item.requi_biologico_id) || {};
   const total = Number(item.cantidad_surtida);
-  estado.asig = { item, bio, total, filas: [{ lote: '', cad: '', cant: total }] };
+  const pend = esPendiente(item);
+  estado.asig = { item, bio, total, pend, filas: [{ lote: '', cad: '', cant: total }] };
   const repartido = sumaMunicipio(item.requi_biologico_id, item.lote_id);
-  $('asigTitulo').textContent = `Asignar lotes · ${nombreCorto(bio)}`;
-  $('asigSub').textContent = `${plural(total, 'dosis sin lote', 'dosis sin lote')}${repartido ? ` (${repartido} ya repartidas: el reparto pasa al lote nuevo en orden y lo puedes ajustar en los pasos 2 y 3)` : ''}.`;
+  const nota = repartido ? ` (${repartido} ya repartidas: el reparto pasa al lote nuevo en orden y lo puedes ajustar en los pasos 2 y 3)` : '';
+  $('asigTitulo').textContent = `${pend ? 'Asignar lotes' : 'Cambiar o dividir lote'} · ${nombreCorto(bio)}`;
+  $('asigSub').textContent = pend
+    ? `${plural(total, 'dosis sin lote', 'dosis sin lote')}${nota}.`
+    : `Lote actual ${item.requi_lotes.numero_lote}: ${plural(total, 'dosis', 'dosis')}${nota}.`;
+  $('asigAyuda').innerHTML = pend
+    ? 'Si llegó un solo lote, déjalo con toda la cantidad. Si llegaron varios, baja la cantidad del primero y toca <b>Agregar otro lote</b>: el nuevo renglón se llena con lo que falta.'
+    : 'Para <b>cambiar el número de lote</b>, deja una fila con toda la cantidad. Para <b>dividirlo</b>, captura solo la parte que pasa a otro lote: el resto se queda en el lote actual.';
   $('modalAsignar').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   lotesExistentesDe(item.requi_biologico_id).then((ls) => {
@@ -1030,7 +1124,7 @@ function renderAsignarFilas() {
   $('asigFilas').innerHTML = a.filas.map((f, i) => `
     <div class="asig-fila" data-i="${i}">
       <div class="campo"><label>Lote</label><input type="text" data-campo="lote" list="asigListaLotes" autocomplete="off" placeholder="Ej. 0374MA109" value="${esc(f.lote)}"></div>
-      <div class="campo"><label>Caducidad</label><input type="text" data-campo="cad" autocomplete="off" placeholder="FEB-27" value="${esc(f.cad)}" style="width:96px;"></div>
+      <div class="campo"><label>Caducidad</label><input type="text" data-campo="cad" autocomplete="off" placeholder="DD-MM-AA" value="${esc(f.cad)}" style="width:96px;"><span class="cad-vista">${esc(vistaCaducidad(f.cad))}</span></div>
       <div class="campo"><label>Cantidad</label><input type="number" data-campo="cant" min="0" inputmode="numeric" placeholder="0" value="${f.cant || ''}" style="width:96px;"></div>
       ${a.filas.length > 1 ? `<button type="button" class="icon-btn-pure asig-quitar" data-i="${i}" title="Quitar este lote"><span class="material-symbols-rounded">delete</span></button>` : '<span style="width:34px"></span>'}
     </div>`).join('');
@@ -1045,7 +1139,7 @@ function actualizarResumenAsignar() {
   const el = $('asigResumen');
   el.className = 'modal-resumen ' + (dif === 0 ? 'ok' : 'aviso');
   el.textContent = dif === 0 ? `Suman ${suma} de ${a.total} ✓`
-    : dif > 0 ? `Suman ${suma} de ${a.total}: quedan ${dif} por definir`
+    : dif > 0 ? `Suman ${suma} de ${a.total}: ${a.pend ? `quedan ${dif} por definir` : `${dif} se quedan en ${a.item.requi_lotes.numero_lote}`}`
     : `Suman ${suma}: ${-dif} más de lo capturado`;
 }
 
@@ -1059,12 +1153,9 @@ function alCambiarFilaAsignar(ev) {
   if (campo === 'lote' && ev.type === 'change') {
     const res = RequiEngine.compararLote(inp.value.trim(), estado.lotesPorBiologico[a.item.requi_biologico_id] || []);
     const cad = inp.closest('.asig-fila').querySelector('[data-campo="cad"]');
-    if (res.estado === 'EXISTE' && res.lote.caducidad && !cad.value) { cad.value = formatMmmAa(res.lote.caducidad); f.cad = cad.value; }
+    if (res.estado === 'EXISTE' && res.lote.caducidad && !cad.value) { cad.value = formatDdMmAa(res.lote.caducidad); f.cad = cad.value; actualizarVistaCad(cad); }
   }
-  if (campo === 'cad' && ev.type === 'change') {
-    const p = parsearCaducidadInteligente(inp.value);
-    if (p) { inp.value = formatMmmAa(p); f.cad = inp.value; }
-  }
+  if (campo === 'cad') actualizarVistaCad(inp);
   actualizarResumenAsignar();
 }
 
@@ -1095,7 +1186,7 @@ async function confirmarAsignarLotes() {
     let caducidad = null;
     if (String(f.cad || '').trim()) {
       caducidad = parsearCaducidadInteligente(f.cad);
-      if (!caducidad) { toast(`No entendí la caducidad del lote ${numero}. Usa por ejemplo FEB-27.`, true); return; }
+      if (!caducidad) { toast(`No entendí la caducidad del lote ${numero}. Usa por ejemplo 15-07-29.`, true); return; }
     }
     const res = RequiEngine.compararLote(numero, existentes);
     if (res.estado === 'EXISTE' && itemDe(bioId, res.lote.id)) { toast(`El lote ${numero} ya está capturado este mes: edita ese renglón en vez de asignarlo aquí.`, true); return; }
@@ -1103,7 +1194,7 @@ async function confirmarAsignarLotes() {
     lotes.push({ numero_lote: numero, caducidad, cantidad: cant });
   }
   const suma = lotes.reduce((acc, l) => acc + l.cantidad, 0);
-  if (suma < a.total && !confirm(`Suman ${suma} de ${a.total}: las ${a.total - suma} restantes se quedan con lote "por definir". ¿Continuar?`)) return;
+  if (suma < a.total && !confirm(`Suman ${suma} de ${a.total}: las ${a.total - suma} restantes se quedan ${a.pend ? 'con lote "por definir"' : `en el lote ${a.item.requi_lotes.numero_lote}`}. ¿Continuar?`)) return;
 
   $('asigGuardar').disabled = true;
   try {
@@ -1114,12 +1205,95 @@ async function confirmarAsignarLotes() {
     cerrarAsignarLotes();
     await cargarDatosRequisicion();
     const quedan = data && Number(data.quedan_pendientes);
-    toast(quedan ? `Lotes asignados. Quedan ${quedan} por definir.` : 'Lotes asignados.');
+    toast(quedan ? `Lotes asignados. Quedan ${quedan} ${a.pend ? 'por definir' : `en ${a.item.requi_lotes.numero_lote}`}.` : 'Lotes asignados.');
     // Espejo hacia la tabla "lotes" (lo que antes se omitió por estar "por definir").
     const paraLotes = estado.distMunicipio.filter((d) => d.requi_biologico_id === bioId && Number(d.cantidad) > 0 && nombres.has(String(numeroLoteDe(bioId, d.lote_id)).toUpperCase()));
     if (paraLotes.length) (async () => { for (const d of paraLotes) await sincronizarLotePublico(d.municipio, bioId, d.lote_id, Number(d.cantidad)); })();
   } finally {
     $('asigGuardar').disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Prellenar cantidades: a veces llega primero lo surtido y los lotes después. Aquí se
+// captura de golpe cuánto llegó de cada biológico (queda con lote "por definir") y ya se
+// puede repartir; cuando lleguen los lotes se asignan con el botón "Asignar lotes".
+// ---------------------------------------------------------------------------
+
+function abrirCantidades() {
+  if (!estado.puedeEditar || !estado.requisicion) return;
+  $('cantFilas').innerHTML = estado.catalogo.map((bio) => {
+    const pend = estado.items.find((i) => i.requi_biologico_id === bio.id && esPendiente(i));
+    const conLote = itemsDe(bio.id).filter((i) => !esPendiente(i));
+    const sumaConLote = conLote.reduce((acc, i) => acc + Number(i.cantidad_surtida || 0), 0);
+    return `<tr data-bio="${bio.id}">
+      <td><span class="punto-bio" style="background:${colorDeBio(bio)}"></span><b>${esc(nombreCorto(bio))}</b></td>
+      <td class="cant-actual">${conLote.length ? `${sumaConLote} con lote` : ''}</td>
+      <td><input type="number" class="inp-cant" min="0" inputmode="numeric" placeholder="0" value="${pend ? pend.cantidad_surtida : ''}"></td>
+    </tr>`;
+  }).join('');
+  $('modalCantidades').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  actualizarResumenCantidades();
+  const primero = $('cantFilas').querySelector('input');
+  if (primero) primero.focus();
+}
+
+function cerrarCantidades() {
+  $('modalCantidades').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function valoresCantidades() {
+  return [...$('cantFilas').querySelectorAll('tr')].map((tr) => ({
+    bio: tr.dataset.bio, cantidad: Math.floor(Number(tr.querySelector('input').value) || 0)
+  })).filter((x) => x.cantidad > 0);
+}
+
+function actualizarResumenCantidades() {
+  const v = valoresCantidades();
+  const total = v.reduce((acc, x) => acc + x.cantidad, 0);
+  $('cantResumen').textContent = v.length ? `${plural(v.length, 'biológico', 'biológicos')} · ${total} dosis` : '';
+  $('cantGuardar').disabled = !v.length;
+}
+
+async function guardarCantidades() {
+  const valores = valoresCantidades();
+  if (!valores.length || !estado.requisicion) return;
+  $('cantGuardar').disabled = true;
+  try {
+    // 1) El lote "por definir" de cada biológico (se crea una sola vez y se reutiliza).
+    const faltantes = [];
+    for (const v of valores) {
+      const lotes = await lotesExistentesDe(v.bio);
+      if (!lotes.some((l) => l.numero_lote === LOTE_PENDIENTE)) faltantes.push({ requi_biologico_id: v.bio, numero_lote: LOTE_PENDIENTE });
+    }
+    if (faltantes.length) {
+      const { data, error } = await estado.db.from('requi_lotes').insert(faltantes).select();
+      if (error) throw error;
+      (data || []).forEach((l) => (estado.lotesPorBiologico[l.requi_biologico_id] ||= []).push(l));
+    }
+    // 2) Un renglón "por definir" por biológico (si ya había, se reemplaza su cantidad).
+    const filas = valores.map((v) => ({
+      requisicion_id: estado.requisicion.id, requi_biologico_id: v.bio,
+      lote_id: estado.lotesPorBiologico[v.bio].find((l) => l.numero_lote === LOTE_PENDIENTE).id,
+      cantidad_surtida: v.cantidad
+    }));
+    const { data: guardados, error: errItems } = await estado.db.from('requi_items_jurisdiccion')
+      .upsert(filas, { onConflict: 'requisicion_id,requi_biologico_id,lote_id' })
+      .select('*, requi_lotes(numero_lote, caducidad)');
+    if (errItems) throw errItems;
+    (guardados || []).forEach((g) => {
+      const idx = estado.items.findIndex((i) => i.id === g.id);
+      if (idx === -1) estado.items.push(g); else estado.items[idx] = g;
+    });
+    toast(`Se prellenaron ${plural(valores.length, 'biológico', 'biológicos')} con lote por definir.`);
+    cerrarCantidades();
+    renderPaso1();
+    renderAvance();
+  } catch (e) {
+    toast('No se pudo guardar: ' + String(e.message || e).replace(/^.*?ERROR:\s*/, ''), true);
+    $('cantGuardar').disabled = false;
   }
 }
 
@@ -1591,13 +1765,30 @@ function instalarMatriz(tabla) {
 async function cargarPrevia() {
   const req = estado.requisicion;
   if (estado.previa && estado.previa.para === req.id) return estado.previa;
-  const { data } = await estado.db.from('requi_requisiciones').select('id, anio, mes')
-    .or(`anio.lt.${req.anio},and(anio.eq.${req.anio},mes.lt.${req.mes})`)
-    .order('anio', { ascending: false }).order('mes', { ascending: false }).limit(1);
-  const previa = { para: req.id, req: (data && data[0]) || null, dm: [], du: [] };
-  if (previa.req) {
-    previa.dm = await traerTodo(() => estado.db.from('requi_distribucion_municipio').select('id, requi_biologico_id, municipio, cantidad').eq('requisicion_id', previa.req.id));
-    previa.du = await traerTodo(() => estado.db.from('requi_distribucion_unidad').select('id, requi_biologico_id, unidad_id, cantidad').eq('requisicion_id', previa.req.id));
+  // Las requisiciones anteriores (mes anterior o entregas previas del mismo mes), de la más reciente
+  // hacia atrás. Cada biológico toma su proporción de la última donde SÍ se repartió: si hoy llega la
+  // influenza, se parece a la última influenza aunque la entrega de antes fuera de esquema básico.
+  const { data } = await estado.db.from('requi_requisiciones').select('id, anio, mes, entrega, etiqueta')
+    .or(`anio.lt.${req.anio},and(anio.eq.${req.anio},mes.lt.${req.mes}),and(anio.eq.${req.anio},mes.eq.${req.mes},entrega.lt.${req.entrega || 1})`)
+    .order('anio', { ascending: false }).order('mes', { ascending: false }).order('entrega', { ascending: false }).limit(8);
+  const previas = data || [];
+  const previa = { para: req.id, req: previas[0] || null, texto: '', dm: [], du: [] };
+  if (previas.length) {
+    const ids = previas.map((p) => p.id);
+    const dmTodas = await traerTodo(() => estado.db.from('requi_distribucion_municipio').select('id, requisicion_id, requi_biologico_id, municipio, cantidad').in('requisicion_id', ids));
+    const duTodas = await traerTodo(() => estado.db.from('requi_distribucion_unidad').select('id, requisicion_id, requi_biologico_id, unidad_id, cantidad').in('requisicion_id', ids));
+    const orden = new Map(ids.map((id, i) => [id, i]));
+    const mejorPorBio = {};
+    [...dmTodas, ...duTodas].forEach((d) => {
+      if (!(Number(d.cantidad) > 0)) return;
+      const o = orden.get(d.requisicion_id);
+      if (!(d.requi_biologico_id in mejorPorBio) || o < mejorPorBio[d.requi_biologico_id]) mejorPorBio[d.requi_biologico_id] = o;
+    });
+    const vale = (d) => orden.get(d.requisicion_id) === mejorPorBio[d.requi_biologico_id];
+    previa.dm = dmTodas.filter(vale);
+    previa.du = duTodas.filter(vale);
+    const usadas = [...new Set(Object.values(mejorPorBio))].sort((x, y) => x - y).map((i) => previas[i]);
+    previa.texto = usadas.map((p) => `${etiquetaMes(p)}${p.entrega > 1 || p.etiqueta ? ' (' + etiquetaEntrega(p) + ')' : ''}`).join(' y ');
   }
   estado.previa = previa;
   return previa;
@@ -1606,7 +1797,7 @@ async function cargarPrevia() {
 async function sugerirPaso2() {
   if (!estado.puedeEditar) return;
   const previa = await cargarPrevia();
-  if (!previa.req || !previa.dm.some((d) => Number(d.cantidad) > 0)) { toast('No hay un reparto de un mes anterior que sirva de base.', true); return; }
+  if (!previa.req || !previa.dm.some((d) => Number(d.cantidad) > 0)) { toast('No hay un reparto anterior que sirva de base.', true); return; }
   const pesosPorBio = {};
   previa.dm.forEach((d) => {
     const i = DESTINOS.findIndex((x) => x.v === d.municipio);
@@ -1622,8 +1813,8 @@ async function sugerirPaso2() {
     lotes++;
     rep.forEach((cant, i) => { if (cant > 0) cambios.push({ tipo: 'M', destino: DESTINOS[i].v, bio: it.requi_biologico_id, lote: it.lote_id, cantidad: cant }); });
   });
-  if (!cambios.length) { toast(sinBase ? 'Los lotes sin reparto no tienen antecedente en el mes anterior.' : 'No hay lotes vacíos: todos ya tienen reparto.'); return; }
-  if (!confirm(`Se llenarán ${plural(lotes, 'lote', 'lotes')} sin reparto con la proporción de ${etiquetaMes(previa.req)}${sinBase ? ` (${plural(sinBase, 'lote sin antecedente se queda', 'lotes sin antecedente se quedan')} vacío)` : ''}. Los que ya tienen algo no se tocan y después puedes ajustar cada cantidad. ¿Continuar?`)) return;
+  if (!cambios.length) { toast(sinBase ? 'Los lotes sin reparto no tienen antecedente en entregas anteriores.' : 'No hay lotes vacíos: todos ya tienen reparto.'); return; }
+  if (!confirm(`Se llenarán ${plural(lotes, 'lote', 'lotes')} sin reparto con la proporción de ${previa.texto}${sinBase ? ` (${plural(sinBase, 'lote sin antecedente se queda', 'lotes sin antecedente se quedan')} vacío)` : ''}. Los que ya tienen algo no se tocan y después puedes ajustar cada cantidad. ¿Continuar?`)) return;
   await guardarReparto(cambios);
 }
 
@@ -1631,7 +1822,7 @@ async function sugerirPaso3() {
   if (!estado.puedeEditar) return;
   const muni = estado.municipioPaso3;
   const previa = await cargarPrevia();
-  if (!previa.req || !previa.du.some((d) => Number(d.cantidad) > 0)) { toast('No hay un reparto a unidades de un mes anterior que sirva de base.', true); return; }
+  if (!previa.req || !previa.du.some((d) => Number(d.cantidad) > 0)) { toast('No hay un reparto a unidades anterior que sirva de base.', true); return; }
   const unidades = estado.unidades.filter((u) => u.municipio === muni);
   const pesosPorBio = {};
   previa.du.forEach((d) => {
@@ -1648,8 +1839,8 @@ async function sugerirPaso3() {
     lotes++;
     rep.forEach((cant, i) => { if (cant > 0) cambios.push({ tipo: 'U', destino: unidades[i].id, bio: col.bio, lote: col.lote, cantidad: cant }); });
   });
-  if (!cambios.length) { toast(sinBase ? 'Los lotes sin reparto no tienen antecedente en el mes anterior.' : 'No hay lotes vacíos: todos ya tienen reparto.'); return; }
-  if (!confirm(`Se llenarán ${plural(lotes, 'lote', 'lotes')} de ${etiquetaMunicipio(muni)} sin reparto con la proporción de ${etiquetaMes(previa.req)}${sinBase ? ` (${plural(sinBase, 'lote sin antecedente se queda', 'lotes sin antecedente se quedan')} vacío)` : ''}. Los que ya tienen algo no se tocan y después puedes ajustar cada cantidad. ¿Continuar?`)) return;
+  if (!cambios.length) { toast(sinBase ? 'Los lotes sin reparto no tienen antecedente en entregas anteriores.' : 'No hay lotes vacíos: todos ya tienen reparto.'); return; }
+  if (!confirm(`Se llenarán ${plural(lotes, 'lote', 'lotes')} de ${etiquetaMunicipio(muni)} sin reparto con la proporción de ${previa.texto}${sinBase ? ` (${plural(sinBase, 'lote sin antecedente se queda', 'lotes sin antecedente se quedan')} vacío)` : ''}. Los que ya tienen algo no se tocan y después puedes ajustar cada cantidad. ¿Continuar?`)) return;
   await guardarReparto(cambios);
 }
 
@@ -1847,10 +2038,10 @@ async function construirDatosDestino(nivel, destino) {
     origenNombre: 'JURISDICCIÓN SANITARIA N.1', area: 'VACUNAS', origenDireccion: DIRECCION_JURISDICCION,
     fechaEnvio: fechaExcelUtc(estado.requisicion.fecha_envio),
     destinoNombre, folio: estado.requisicion.folio_oracle || '', destinoDireccion,
-    mesLabel: mesInfo ? `${mesInfo.l.toUpperCase()} ${estado.requisicion.anio}` : ''
+    mesLabel: mesInfo ? `${mesInfo.l.toUpperCase()} ${estado.requisicion.anio}${variasEntregas() ? ` · ENTREGA ${estado.requisicion.entrega}${estado.requisicion.etiqueta ? ' (' + estado.requisicion.etiqueta.toUpperCase() + ')' : ''}` : ''}` : ''
   };
 
-  const nombreArchivo = `Requisicion_${nivel}_${(destinoNombre || destino).replace(/[^\wÁÉÍÓÚÑáéíóúñ ]/g, '').trim().replace(/\s+/g, '_')}_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}.xlsx`;
+  const nombreArchivo = `Requisicion_${nivel}_${(destinoNombre || destino).replace(/[^\wÁÉÍÓÚÑáéíóúñ ]/g, '').trim().replace(/\s+/g, '_')}_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}${sufijoEntregaArchivo()}.xlsx`;
 
   return { encabezado, firmas, catalogo: estado.catalogo, filasPorBiologico, nombreArchivo };
 }
@@ -1970,7 +2161,7 @@ async function exportarMasivo() {
     }
 
     const zipBlob = await zip.generateAsync({ type: 'blob' });
-    descargarBlob(zipBlob, `Requisiciones_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}.zip`);
+    descargarBlob(zipBlob, `Requisiciones_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}${sufijoEntregaArchivo()}.zip`);
     toast(`Listo: ${total} archivo(s) en el paquete.` + (sobrantesTotal.size ? ` Ojo con lotes de sobra en: ${[...sobrantesTotal].join(', ')}.` : '')
       + (sinRenglonTotal.size ? ` Sin renglón en el formato oficial (no salió): ${[...sinRenglonTotal].join(', ')}.` : ''), !!(sobrantesTotal.size || sinRenglonTotal.size));
   } catch (e) {
@@ -2134,9 +2325,15 @@ function instalarEventos() {
   });
 
   // Cabecera
-  $('btnCargar').addEventListener('click', cargarRequisicion);
-  $('selAnio').addEventListener('change', cargarRequisicion);
-  $('selMes').addEventListener('change', cargarRequisicion);
+  $('btnCargar').addEventListener('click', () => cargarRequisicion());
+  $('selAnio').addEventListener('change', () => cargarRequisicion());
+  $('selMes').addEventListener('change', () => cargarRequisicion());
+  $('barraEntregas').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-entrega]');
+    if (b) cargarRequisicion(Number(b.dataset.entrega));
+  });
+  $('btnNuevaEntrega').addEventListener('click', nuevaEntrega);
+  $('btnRenombrarEntrega').addEventListener('click', renombrarEntrega);
   $('btnGuardarCabecera').addEventListener('click', guardarCabecera);
   $('btnCrearRequisicion').addEventListener('click', guardarCabecera);
   $('btnPdfJurisdiccional').addEventListener('click', () => exportarUno('JURISDICCIONAL', ''));
@@ -2156,11 +2353,7 @@ function instalarEventos() {
   $('chipsBio').addEventListener('click', (ev) => { const b = ev.target.closest('.chip-bio'); if (b) seleccionarBioRapido(b.dataset.bio, true); });
   $('rapLote').addEventListener('input', evaluarLoteRapido);
   $('rapLote').addEventListener('change', evaluarLoteRapido);
-  $('rapCad').addEventListener('input', () => { $('rapCad').dataset.auto = ''; });
-  $('rapCad').addEventListener('blur', () => {
-    const p = parsearCaducidadInteligente($('rapCad').value);
-    if (p) $('rapCad').value = formatMmmAa(p);
-  });
+  $('rapCad').addEventListener('input', () => { $('rapCad').dataset.auto = ''; actualizarVistaCad($('rapCad')); });
   $('rapLote').addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter') return;
     ev.preventDefault();
@@ -2180,6 +2373,40 @@ function instalarEventos() {
   $('chkSoloConLotes').addEventListener('click', () => { estado.soloConLotes = !estado.soloConLotes; renderPaso1(); });
   $('tbodyBiologicos').addEventListener('click', clicTablaPaso1);
   $('tbodyBiologicos').addEventListener('keydown', teclaTablaPaso1);
+  $('tbodyBiologicos').addEventListener('input', (ev) => { if (ev.target.classList && ev.target.classList.contains('inp-editar-caducidad')) actualizarVistaCad(ev.target); });
+
+  // Prellenar cantidades (modal)
+  $('btnPrellenar').addEventListener('click', abrirCantidades);
+  $('cantCerrar').addEventListener('click', cerrarCantidades);
+  $('cantCancelar').addEventListener('click', cerrarCantidades);
+  $('cantGuardar').addEventListener('click', guardarCantidades);
+  $('modalCantidades').addEventListener('click', (ev) => { if (ev.target === $('modalCantidades')) cerrarCantidades(); });
+  $('cantFilas').addEventListener('input', actualizarResumenCantidades);
+  $('cantFilas').addEventListener('focusin', (ev) => { if (ev.target.matches('input')) ev.target.select(); });
+  $('cantFilas').addEventListener('keydown', (ev) => {
+    const inp = ev.target.closest('input');
+    if (!inp || !['Enter', 'ArrowDown', 'ArrowUp'].includes(ev.key)) return;
+    ev.preventDefault();
+    const filas = [...$('cantFilas').querySelectorAll('input')];
+    const i = filas.indexOf(inp) + ((ev.key === 'ArrowUp' || (ev.key === 'Enter' && ev.shiftKey)) ? -1 : 1);
+    if (filas[i]) filas[i].focus(); else if (ev.key === 'Enter') guardarCantidades();
+  });
+  // Pegar una columna de Excel: se reparte hacia abajo desde la celda donde se pegó.
+  $('cantFilas').addEventListener('paste', (ev) => {
+    const inp = ev.target.closest('input');
+    if (!inp) return;
+    const texto = (ev.clipboardData || window.clipboardData).getData('text');
+    const celdas = RequiEngine.parsearPegado(texto).map((f) => f[f.length - 1]);
+    if (celdas.length <= 1) return;
+    ev.preventDefault();
+    const filas = [...$('cantFilas').querySelectorAll('input')];
+    celdas.forEach((c, k) => {
+      const n = RequiEngine.parsearEntero(c);
+      const dest = filas[filas.indexOf(inp) + k];
+      if (dest && n !== null) dest.value = n;
+    });
+    actualizarResumenCantidades();
+  });
 
   // Asignar lotes (modal) y avisos de lotes por definir
   $('avisoPendientes').addEventListener('click', (ev) => { const b = ev.target.closest('.btn-asignar-lotes'); if (b) abrirAsignarLotes(b.dataset.item); });

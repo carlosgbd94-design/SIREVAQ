@@ -23,7 +23,7 @@
       unidad('un-q1', 'C.S. Cuatro', 'QUERETARO'), unidad('un-q2', 'C.S. Cinco', 'QUERETARO')
     ],
     requi_firmas: [],
-    requi_requisiciones: [{ id: 'req-prev', anio: 2000, mes: 1, estado: 'CERRADA', fue_corregido: false, creado_por: 'x', fecha_envio: null }],
+    requi_requisiciones: [{ id: 'req-prev', anio: 2000, mes: 1, entrega: 1, etiqueta: null, estado: 'CERRADA', fue_corregido: false, creado_por: 'x', fecha_envio: null }],
     requi_items_jurisdiccion: [],
     requi_lotes: [],
     requi_distribucion_municipio: [],
@@ -33,7 +33,7 @@
   };
   if (window.__FAKE_CON_REQ__) {
     const hoy = new Date();
-    db.requi_requisiciones.push({ id: 'req-hoy', anio: hoy.getFullYear(), mes: hoy.getMonth() + 1, estado: 'BORRADOR', fue_corregido: false, creado_por: 'x', fecha_envio: null });
+    db.requi_requisiciones.push({ id: 'req-hoy', anio: hoy.getFullYear(), mes: hoy.getMonth() + 1, entrega: 1, etiqueta: null, estado: 'BORRADOR', fue_corregido: false, creado_por: 'x', fecha_envio: null });
   }
   // Mes anterior (base de "Sugerir"): SRP 60/20/10/30 y HEXA 50/50 entre municipios;
   // en Corregidora, SRP y HEXA se repartían 30/30/0 entre sus unidades.
@@ -45,7 +45,7 @@
   duPrev('un-c1', 'bio-hexa', 30); duPrev('un-c2', 'bio-hexa', 10);
 
   const CLAVE_NAT = {
-    requi_requisiciones: ['anio', 'mes'],
+    requi_requisiciones: ['anio', 'mes', 'entrega'],
     requi_items_jurisdiccion: ['requisicion_id', 'requi_biologico_id', 'lote_id'],
     requi_distribucion_municipio: ['requisicion_id', 'municipio', 'requi_biologico_id', 'lote_id'],
     requi_distribucion_unidad: ['requisicion_id', 'unidad_id', 'requi_biologico_id', 'lote_id'],
@@ -90,7 +90,7 @@
       for (const original of q.payload) {
         const nueva = { ...original };
         if (!nueva.id) nueva.id = uid();          // el default se aplica antes del trigger
-        if (q.tabla === 'requi_requisiciones') { nueva.estado = nueva.estado || 'BORRADOR'; nueva.fue_corregido = nueva.fue_corregido || false; }
+        if (q.tabla === 'requi_requisiciones') { nueva.entrega = nueva.entrega || 1; nueva.etiqueta = nueva.etiqueta || null; nueva.estado = nueva.estado || 'BORRADOR'; nueva.fue_corregido = nueva.fue_corregido || false; }
         trigger(q.tabla, nueva, trabajo);
         const previo = porId ? filas.find((r) => r.id === nueva.id) : filas.find((r) => nat.length && nat.every((c) => r[c] === nueva[c]));
         if (previo) {
@@ -150,10 +150,12 @@
       eq(c, v) { q.filtros.push((r) => r[c] === v); return api; },
       gt(c, v) { q.filtros.push((r) => r[c] > v); return api; },
       or(expr) {
-        const m = expr.match(/^anio\.lt\.(\d+),and\(anio\.eq\.(\d+),mes\.lt\.(\d+)\)$/);
-        if (m) q.filtros.push((r) => r.anio < Number(m[1]) || (r.anio === Number(m[2]) && r.mes < Number(m[3])));
+        const m = expr.match(/^anio\.lt\.(\d+),and\(anio\.eq\.(\d+),mes\.lt\.(\d+)\),and\(anio\.eq\.(\d+),mes\.eq\.(\d+),entrega\.lt\.(\d+)\)$/);
+        if (m) q.filtros.push((r) => r.anio < Number(m[1]) || (r.anio === Number(m[2]) && r.mes < Number(m[3]))
+          || (r.anio === Number(m[4]) && r.mes === Number(m[5]) && (r.entrega || 1) < Number(m[6])));
         return api;
       },
+      in(c, valores) { q.filtros.push((r) => valores.includes(r[c])); return api; },
       order(c, o) { q.orden.push([c, !(o && o.ascending === false)]); return api; },
       range(a, b) { q.rango = [a, b]; return api; },
       limit(k) { q.limite = k; return api; },
