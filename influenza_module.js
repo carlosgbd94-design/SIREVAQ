@@ -4036,8 +4036,28 @@ function metaAgregarFranja(tbody, previo, rb, colspan) {
   tbody.appendChild(tr);
 }
 
+// Selector de municipio propio de la pestaña de metas (el de «Avances» queda oculto aquí). Solo aparece
+// cuando el rol municipal atiende más de un municipio; comparte valor con el selector general.
+function metaSincronizarSelectorMuni() {
+  const general = document.getElementById("adminInfluenzaMuni");
+  const sel = document.getElementById("metaMuniSelect");
+  const lbl = document.getElementById("metaMuniLbl");
+  if (!general || !sel || !lbl) return;
+  const mostrar = USER.rol === "MUNICIPAL" && general.options.length > 1;
+  sel.style.display = lbl.style.display = mostrar ? "" : "none";
+  if (!mostrar) return;
+  sel.innerHTML = general.innerHTML;
+  sel.value = general.value;
+  sel.onchange = () => {
+    general.value = sel.value;
+    general.dispatchEvent(new Event("change"));
+    renderMetasConfigurationGrid();
+  };
+}
+
 function renderMetasConfigurationGrid() {
   const isMuni = USER.rol === "MUNICIPAL";
+  metaSincronizarSelectorMuni();
   const selectMuni = document.getElementById("adminInfluenzaMuni").value;
   const hints = document.getElementById("secInfluenzaMetasHint");
   const thead = document.getElementById("influenzaMetasThead");
