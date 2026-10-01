@@ -167,6 +167,35 @@ function mostrarModal({ titulo, mensaje, pedirMotivo = false, placeholderMotivo 
   });
 }
 
+// Mes que corresponde reportar hoy: el anterior al actual (el que acaba de cerrar).
+function periodoQueSeReporta(hoy) {
+  const d = hoy || new Date();
+  const m = d.getMonth();          // 0-11: ya es el mes anterior en base 1
+  return m === 0 ? { anio: d.getFullYear() - 1, mes: 12 } : { anio: d.getFullYear(), mes: m };
+}
+
+// Etiqueta junto al selector: mes que se reporta, mes en curso o histórico.
+function actualizarChipPeriodo() {
+  const chip = document.getElementById('chipPeriodo');
+  const mes = Number(document.getElementById('selMes').value);
+  const anio = Number(document.getElementById('selAnio').value);
+  if (!chip || !mes || !anio) return;
+  const rep = periodoQueSeReporta();
+  const hoy = new Date();
+  const idx = anio * 12 + mes;
+  const idxRep = rep.anio * 12 + rep.mes;
+  const idxHoy = hoy.getFullYear() * 12 + hoy.getMonth() + 1;
+  const etiqueta = `${MESES_ABREV3[mes - 1]}-${String(anio).slice(2)}`;
+  let clase = '';
+  let texto;
+  if (idx === idxRep) { clase = 'reporta'; texto = `${etiqueta} · mes que se reporta`; }
+  else if (idx === idxHoy) { clase = 'curso'; texto = `${etiqueta} · mes en curso (aún no se reporta)`; }
+  else if (idx > idxHoy) { clase = 'futuro'; texto = `${etiqueta} · mes futuro`; }
+  else texto = `${etiqueta} · mes anterior (consulta)`;
+  chip.className = `periodo-chip ${clase}`.trim();
+  chip.textContent = texto;
+}
+
 async function cargarInicial() {
   const [{ data: jurisdicciones, error: e1 }, { data: bloques, error: e2 }] = await Promise.all([
     estado.db.from('biovac_jurisdicciones').select('*').order('nombre'),
@@ -178,12 +207,15 @@ async function cargarInicial() {
 
   document.getElementById('selJurisdiccion').innerHTML = jurisdicciones.map((j) => `<option value="${j.id}">${j.nombre}</option>`).join('');
 
+  // El concentrado es del mes que acaba de cerrar: en octubre se abre Septiembre (en enero, Diciembre del año anterior).
+  const { anio: anioReporte, mes: mesReporte } = periodoQueSeReporta();
   const anioActual = new Date().getFullYear();
   const anios = [anioActual - 1, anioActual, anioActual + 1];
-  document.getElementById('selAnio').innerHTML = anios.map((a) => `<option value="${a}" ${a === anioActual ? 'selected' : ''}>${a}</option>`).join('');
+  document.getElementById('selAnio').innerHTML = anios.map((a) => `<option value="${a}" ${a === anioReporte ? 'selected' : ''}>${a}</option>`).join('');
 
-  const mesActual = new Date().getMonth() + 1;
-  document.getElementById('selMes').innerHTML = MESES.map((m) => `<option value="${m.v}" ${m.v === mesActual ? 'selected' : ''}>${m.l}</option>`).join('');
+  document.getElementById('selMes').innerHTML = MESES.map((m) => `<option value="${m.v}" ${m.v === mesReporte ? 'selected' : ''}>${m.l}</option>`).join('');
+  actualizarChipPeriodo();
+  ['selAnio', 'selMes'].forEach((id) => document.getElementById(id).addEventListener('change', actualizarChipPeriodo));
 
   if (!estado.perfil) {
     const usuarioGuardado = localStorage.getItem('biovac_usuario_jurisdiccion');
@@ -333,6 +365,13 @@ async function cargarConcentrado(opciones) {
   estado.validaciones = validaciones || [];
   estado.informes = informes || [];
   estado.concentrado = concentrado || [];
+  estado.correccionesPend = [];
+  try {
+    const { data: pend } = await estado.db.rpc('biovac_correcciones_municipio_estado', {
+      p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes, p_municipio: null
+    });
+    estado.correccionesPend = (pend || []).filter((c) => !c.coincide);
+  } catch (e) { /* sin la función en la base: no estorba */ }
   estado.sisFilas = [];
   // Avance del SINBA-SIS de las unidades: solo consulta (el concentrado sale del Movimiento).
   try {
@@ -583,8 +622,22 @@ function renderChipsBioJur() {
     + `<button type="button" class="jur-chip jur-chip-alertas ${estado.soloAlertas ? 'activo' : ''}" data-solo-alertas="1"><span class="material-symbols-rounded">warning</span>Solo con avisos</button>` : '';
 }
 
+// Marca en cada lote del concentrado si Jurisdicción ya pidió una corrección a algún municipio (pendiente).
+function pintarChipsCorreccion() {
+  const porLote = new Map();
+  (estado.correccionesPend || []).forEach((c) => {
+    const k = `${c.lote_id}|${c.categoria}`;
+    porLote.set(k, (porLote.get(k) || 0) + 1);
+  });
+  document.querySelectorAll('[data-corr-chip]').forEach((el) => {
+    const n = porLote.get(el.dataset.corrChip) || 0;
+    el.innerHTML = n ? `<span class="tag-corr-pedida" title="Pediste una corrección en ${n === 1 ? '1 municipio' : n + ' municipios'}: falta que ajusten sus unidades">Corrección pedida${n > 1 ? ' (' + n + ')' : ''}</span>` : '';
+  });
+}
+
 function pintarConcentrado() {
   renderConcentrado(filasVisibles());
+  pintarChipsCorreccion();
   const cont = document.getElementById('contenedorConcentrado');
   if (!filasVisibles().length && estado.concentrado.length) cont.innerHTML = '<p class="jur-vacio">Ningún lote con avisos en este filtro.</p>';
 }
@@ -618,7 +671,10 @@ function renderInforme() {
   document.getElementById('checkInforme').innerHTML =
     fila(cerrado, false, 'Todos los municipios y hospitales cerrados', `${r.munisCerrados} de ${r.munis}${cerrado ? '' : ' — el informe solo suma lo que ya cerró'}`)
     + fila(r.errores === 0, false, 'Sin errores por atender', r.errores ? plural(r.errores, 'error por atender', 'errores por atender') : 'Nada que corregir')
-    + fila(r.advertencias === 0, r.advertencias > 0, 'Sin otros avisos', r.advertencias ? `${plural(r.advertencias, 'aviso', 'avisos')} (no bloquean)` : 'Nada por revisar');
+    + fila(r.advertencias === 0, r.advertencias > 0, 'Sin otros avisos', r.advertencias ? `${plural(r.advertencias, 'aviso', 'avisos')} (no bloquean)` : 'Nada por revisar')
+    + ((estado.correccionesPend || []).length
+      ? fila(false, true, 'Correcciones pedidas a municipios', `${plural(estado.correccionesPend.length, 'pendiente', 'pendientes')}: los municipios aún no ajustan sus unidades (la cifra del informe sigue siendo la de hoy)`)
+      : '');
   document.getElementById('tituloInforme').textContent = `Informe de ${nombreMesJ(mes)} ${anio}`;
 
   const cont = document.getElementById('listaInformes');
@@ -694,8 +750,12 @@ function renderConcentrado(filas) {
       <table class="concentrado">
         <colgroup><col class="col-lote"><col class="col-caducidad"><col class="col-dato"><col class="col-dato"><col class="col-dato"><col class="col-dato"><col class="col-final"><col class="col-unidades"><col class="col-accion"></colgroup>
         <thead><tr>
-          <th>Lote</th><th>Caducidad</th><th>Ant.</th><th>Recibido</th><th>Aplicadas</th><th>Desechadas</th>
-          <th>Final</th><th>Cierre</th><th></th>
+          <th>Lote</th><th>Caducidad</th>
+          <th class="c-ant"><span class="th-con-icono"><span class="material-symbols-rounded">inventory_2</span>Existencia anterior</span></th>
+          <th class="c-rec"><span class="th-con-icono"><span class="material-symbols-rounded">move_to_inbox</span>Recibido</span></th>
+          <th class="c-apl"><span class="th-con-icono"><span class="material-symbols-rounded">vaccines</span>Aplicadas</span></th>
+          <th class="c-des"><span class="th-con-icono"><span class="material-symbols-rounded">delete_sweep</span>Desechadas</span></th>
+          <th class="c-fin"><span class="th-con-icono"><span class="material-symbols-rounded">calculate</span>Final</span></th><th>Cierre</th><th></th>
         </tr></thead><tbody>`;
       biologicoActualId = f.biologico_id;
       filasBiologicoActual = [];
@@ -744,16 +804,16 @@ function renderFilaConcentrado(f) {
   const semaforo = semaforoCaducidad(f.caducidad);
   let html = `<tr class="${f.categoria === 'ARF' ? 'categoria-arf' : f.categoria === 'CANJE' ? 'categoria-canje' : ''}">
     <td>
-      <div class="lote-texto">${f.numero_lote}</div>
+      <div class="lote-texto">${f.numero_lote}<span data-corr-chip="${f.lote_id}|${f.categoria}"></span></div>
       ${f.categoria !== 'NORMAL' ? `<span class="tag-${f.categoria.toLowerCase()}">${f.categoria}</span>` : ''}
       ${f.es_provisional ? `<span class="tag-provisional" title="Al menos un municipio todavía no cierra este mes -- el número puede cambiar">Provisional</span>` : ''}
     </td>
     <td><div class="caducidad-chip ${semaforo}"><span class="semaforo"></span>${formatMmmAa(f.caducidad)}</div></td>
-    <td>${redondearFrascos(f.existencia_anterior_frascos)}</td>
-    <td>${f.recibido_frascos}</td>
-    <td>${aplicadas}</td>
-    <td>${desechadas}</td>
-    <td><span class="valor-final ${negativa ? 'existencia-negativa' : ''}">${redondearFrascos(f.existencia_final_frascos)}</span></td>
+    <td class="c-ant">${redondearFrascos(f.existencia_anterior_frascos)}</td>
+    <td class="c-rec">${f.recibido_frascos}</td>
+    <td class="c-apl">${aplicadas}</td>
+    <td class="c-des">${desechadas}</td>
+    <td class="c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}">${redondearFrascos(f.existencia_final_frascos)}</span></td>
     <td class="unidades-reportando ${incompleto ? 'incompleto' : ''}">${f.unidades_cerradas} de ${f.unidades_reportando} cerraron</td>
     <td><button class="btn-mini btn-secundario" data-action="drilldown" data-lote="${f.lote_id}" data-categoria="${f.categoria}"><span class="material-symbols-rounded">manage_search</span> Ver por municipio</button></td>
   </tr>`;
@@ -792,8 +852,11 @@ async function refrescarDrilldown() {
     const { data: pend } = await estado.db.rpc('biovac_correcciones_municipio_estado', {
       p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes, p_municipio: null
     });
-    (pend || []).filter((c) => !c.coincide).forEach((c) => estado.correccionesMuni.set(`${c.municipio}|${c.lote_id}|${c.categoria}`, c));
+    estado.correccionesPend = (pend || []).filter((c) => !c.coincide);
+    estado.correccionesPend.forEach((c) => estado.correccionesMuni.set(`${c.municipio}|${c.lote_id}|${c.categoria}`, c));
   } catch (e) { /* sin la función en la base: se ve el concentrado de siempre */ }
+  pintarChipsCorreccion();
+  renderInforme();   // la lista de verificación del informe también avisa de las correcciones pendientes
   estado.ultimoDetalle = { data: data || [], fila, anio, mes };
   cont.innerHTML = renderDetalleLote(data || [], fila, anio, mes);
 }
@@ -942,7 +1005,7 @@ function renderDetalleLote(data, filaLote, anio, mes) {
   return `${callout}
     <p class="jur-drill-nota">Cada renglón es un municipio u hospital: la suma de las unidades que reportaron este lote.</p>
     <table class="jur-drill"><thead><tr>
-      <th>Municipio</th><th>Estado</th><th>Ant.</th><th>Recibido</th><th>${split ? 'Aplicadas (A / B)' : 'Aplicadas'}</th><th>${split ? 'Desechadas (A / B)' : 'Desechadas'}</th><th>Final</th><th>Observaciones</th><th></th>
+      <th>Municipio</th><th>Estado</th><th class="c-ant">Ant.</th><th class="c-rec">Recibido</th><th class="c-apl">${split ? 'Aplicadas (A / B)' : 'Aplicadas'}</th><th class="c-des">${split ? 'Desechadas (A / B)' : 'Desechadas'}</th><th class="c-fin">Final</th><th>Observaciones</th><th></th>
     </tr></thead><tbody>${filas || '<tr><td colspan="9" style="color:var(--muted)">Ninguna unidad reportó este lote este mes.</td></tr>'}</tbody></table>
     ${sinLote ? `<p class="jur-drill-nota">${plural(sinLote, 'unidad no reportó', 'unidades no reportaron')} este lote (es normal si nunca lo recibieron).</p>` : ''}`;
 }

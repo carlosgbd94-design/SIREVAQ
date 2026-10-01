@@ -17,7 +17,7 @@
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.1"></script>
-<script defer src="biovac_jurisdiccion_ui.js?v=2026.5"></script>
+<script defer src="biovac_jurisdiccion_ui.js?v=2026.6"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -439,6 +439,37 @@
   .drilldown tr.muni-resumen td { background: #fff; font-weight: 700; border-top: 1px solid var(--outline-variant); }
   .drilldown tr.sub-fila td { background: var(--surface-container); font-size: 12px; }
   .drilldown .unidad-sub { padding-left: 14px; color: var(--muted); }
+
+  /* Periodo (mes y año): grande y con etiqueta de estado, igual que en el SIS de las unidades */
+  .campo-periodo {
+    display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; padding: 8px 14px 10px;
+    border: 2px solid var(--secondary); border-radius: 18px; background: #f0f9ff;
+  }
+  .campo-periodo-icono { font-size: 26px; color: var(--secondary); align-self: center; }
+  .campo-periodo .campo label { font-size: 11px; }
+  .campo-periodo select {
+    height: 42px; padding: 0 14px; font-size: 15px; font-weight: 800; color: var(--primary);
+    border: 1.5px solid var(--outline-variant); border-radius: 12px; cursor: pointer;
+  }
+  .campo-periodo #selMes { min-width: 160px; }
+  .campo-periodo #selAnio { min-width: 96px; }
+  .periodo-chip { align-self: center; padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; background: #e2e8f0; color: #334155; white-space: nowrap; }
+  .periodo-chip.reporta { background: #dcfce7; color: #166534; }
+  .periodo-chip.curso, .periodo-chip.futuro { background: #fef3c7; color: #92400e; }
+
+  /* Columnas con color e icono, como en Movimiento de Biológico */
+  table.concentrado thead th .th-con-icono, table.jur-drill thead th .th-con-icono { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.15; }
+  table.concentrado thead th .th-con-icono .material-symbols-rounded, table.jur-drill thead th .th-con-icono .material-symbols-rounded { font-size: 18px; }
+  table.concentrado thead th.c-ant, table.jur-drill thead th.c-ant { background: rgba(14,165,233,.14); color: #0369a1; border-top: 3px solid #0ea5e9; }
+  table.concentrado thead th.c-rec, table.jur-drill thead th.c-rec { background: rgba(16,185,129,.15); color: #047857; border-top: 3px solid #10b981; }
+  table.concentrado thead th.c-apl, table.jur-drill thead th.c-apl { background: rgba(245,158,11,.15); color: #b45309; border-top: 3px solid #f59e0b; }
+  table.concentrado thead th.c-des, table.jur-drill thead th.c-des { background: rgba(239,68,68,.12); color: #b91c1c; border-top: 3px solid #ef4444; }
+  table.concentrado thead th.c-fin, table.jur-drill thead th.c-fin { background: rgba(15,23,42,.08); color: var(--primary); border-top: 3px solid var(--primary); }
+  table.concentrado tbody td.c-ant { background-color: rgba(14,165,233,.05); }
+  table.concentrado tbody td.c-rec { background-color: rgba(16,185,129,.06); }
+  table.concentrado tbody td.c-apl { background-color: rgba(245,158,11,.05); }
+  table.concentrado tbody td.c-des { background-color: rgba(239,68,68,.04); }
+  .tag-corr-pedida { font-size: 9px; font-weight: 800; color: #92400e; background: #fef3c7; border: 1px solid var(--warning-border); padding: 1px 8px; border-radius: 20px; margin-left: 6px; }
   /* Corrección pedida por Jurisdicción al movimiento de un municipio: fila de hoy en gris y, debajo, la corrección */
   .drilldown tr.muni-resumen.fila-gris td { background: #e5e7eb; color: #6b7280; }
   .drilldown tr.muni-resumen.fila-gris td b, .drilldown tr.muni-resumen.fila-gris td:nth-child(n+3):nth-child(-n+7) { text-decoration: line-through; }
@@ -476,13 +507,17 @@
       <label for="selJurisdiccion">Jurisdicción</label>
       <select id="selJurisdiccion"></select>
     </div>
-    <div class="campo">
-      <label for="selAnio">Año</label>
-      <select id="selAnio"></select>
-    </div>
-    <div class="campo">
-      <label for="selMes">Mes</label>
-      <select id="selMes"></select>
+    <div class="campo-periodo" id="campoPeriodo">
+      <span class="material-symbols-rounded campo-periodo-icono">calendar_month</span>
+      <div class="campo">
+        <label for="selMes">Mes que reportas</label>
+        <select id="selMes"></select>
+      </div>
+      <div class="campo">
+        <label for="selAnio">Año</label>
+        <select id="selAnio"></select>
+      </div>
+      <div class="periodo-chip" id="chipPeriodo" role="status"></div>
     </div>
     <div class="campo">
       <button class="btn-secundario btn-mini" id="btnCargar" title="Volver a leer el concentrado"><span class="material-symbols-rounded">refresh</span> Actualizar</button>
