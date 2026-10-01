@@ -375,3 +375,23 @@ test('Requisiciones: cambiar el número de lote de un renglón con lote real y d
   await expect(page.locator('#toast')).toContainText('ya está capturado');
   expect(errores).toEqual([]);
 });
+
+test('Requisiciones: el biológico elegido se quita con Escape o con un clic fuera de la captura', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  const activo = page.locator('#chipsBio .chip-bio.activo');
+
+  await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
+  await expect(activo).toHaveCount(1);
+  await page.keyboard.press('Escape');                       // con el cursor en el campo Lote
+  await expect(activo).toHaveCount(0);
+  await expect(page.locator('#rapLote')).toBeDisabled();
+
+  await page.click('#chipsBio .chip-bio[data-bio="bio-hexa"]');
+  await expect(activo).toHaveCount(1);
+  await page.click('#rapLote');                              // dentro de la captura: se mantiene
+  await expect(activo).toHaveCount(1);
+  await page.click('h1');                                    // fuera: se quita
+  await expect(activo).toHaveCount(0);
+  expect(errores).toEqual([]);
+});

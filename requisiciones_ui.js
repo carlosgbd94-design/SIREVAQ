@@ -953,17 +953,33 @@ function filasBiologicoHtml(bio) {
 }
 
 function renderAvisoPendientes() {
-  const pend = estado.items.filter((i) => esPendiente(i) && Number(i.cantidad_surtida) > 0)
+  const todos = estado.items.filter((i) => Number(i.cantidad_surtida) > 0)
     .sort((a, b) => ordenCatalogo(a.requi_biologico_id) - ordenCatalogo(b.requi_biologico_id));
+  const pend = todos.filter(esPendiente);
   const el = $('avisoPendientes');
-  el.style.display = pend.length ? 'flex' : 'none';
-  el.innerHTML = pend.length ? `
-    <span class="material-symbols-rounded">hourglass_top</span>
-    <div class="aviso-txt"><b>${plural(pend.length, 'biológico con lote por definir', 'biológicos con lote por definir')}</b><small>Cuando lleguen los lotes, asígnalos aquí: el reparto que ya hiciste se acomoda solo.</small></div>
-    <div class="aviso-btns">${pend.map((i) => {
-      const bio = estado.catalogo.find((b) => b.id === i.requi_biologico_id) || {};
-      return `<button type="button" class="btn btn-outline btn-sm solo-edicion btn-asignar-lotes" data-item="${i.id}" style="--c:${colorDeBio(bio)}">${esc(nombreCorto(bio))} · ${i.cantidad_surtida}</button>`;
-    }).join('')}</div>` : '';
+  el.style.display = pend.length ? 'block' : 'none';
+  if (!pend.length) { el.innerHTML = ''; return; }
+  const bioDe = (id) => estado.catalogo.find((b) => b.id === id) || {};
+  const segmentos = todos.map((i) => {
+    const bio = bioDe(i.requi_biologico_id);
+    return `<i class="seg ${esPendiente(i) ? 'pend' : ''}" style="--c:${colorDeBio(bio)}" title="${esc(nombreCorto(bio))}: ${esPendiente(i) ? 'lote por definir' : 'lote ' + esc(i.requi_lotes.numero_lote)}"></i>`;
+  }).join('');
+  const fichas = pend.map((i) => {
+    const bio = bioDe(i.requi_biologico_id);
+    return `<button type="button" class="ficha-pend solo-edicion btn-asignar-lotes" data-item="${i.id}" style="--c:${colorDeBio(bio)}" title="Asignar lote a ${esc(bio.nombre || '')}">
+      <span class="fp-ico"><span class="material-symbols-rounded">medication_liquid</span></span>
+      <span class="fp-txt"><b>${esc(nombreCorto(bio))}</b><small><strong>${Number(i.cantidad_surtida).toLocaleString('es-MX')}</strong> dosis sin lote</small></span>
+      <span class="fp-ir material-symbols-rounded">arrow_forward</span>
+    </button>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="ap-cab">
+      <span class="ap-ico"><span class="material-symbols-rounded">hourglass_top</span></span>
+      <div class="ap-txt"><b>${plural(pend.length, 'biológico con lote por definir', 'biológicos con lote por definir')}</b><small>Cuando lleguen los lotes, asígnalos aquí: el reparto que ya hiciste se acomoda solo.</small></div>
+      <div class="ap-cuenta"><b>${todos.length - pend.length}/${todos.length}</b>con lote</div>
+    </div>
+    <div class="ap-barra" aria-hidden="true">${segmentos}</div>
+    <div class="ap-fichas">${fichas}</div>`;
 }
 
 function renderPaso1() {
@@ -2472,7 +2488,15 @@ function instalarEventos() {
     if (ev.key !== 'Escape') return;
     if ($('modalPegar').style.display !== 'none') cerrarPegar();
     else if ($('modalAsignar').style.display !== 'none') cerrarAsignarLotes();
+    else if ($('modalCantidades').style.display !== 'none') cerrarCantidades();
     else if ($('modalTransferencias').style.display !== 'none') cerrarTransferencias();
+    else if (estado.bioRapido) { seleccionarBioRapido(null); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
+  });
+  // Clic fuera de la captura (botones de biológico, recuadro y tabla) quita la selección del biológico.
+  document.addEventListener('click', (ev) => {
+    if (!estado.bioRapido || !ev.target.isConnected) return;
+    if (ev.target.closest('#chipsBio, #rapida, #tbodyBiologicos, .modal-fondo, .dock-sis, #toast, .ayuda-btn')) return;
+    seleccionarBioRapido(null);
   });
 
   // Paso 2 y 3: matrices
