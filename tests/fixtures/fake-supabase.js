@@ -20,7 +20,8 @@
     ],
     requi_unidades: [
       unidad('un-c1', 'C.S. Uno', 'CORREGIDORA'), unidad('un-c2', 'C.S. Dos', 'CORREGIDORA'), unidad('un-c3', 'C.S. Tres', 'CORREGIDORA'),
-      unidad('un-q1', 'C.S. Cuatro', 'QUERETARO'), unidad('un-q2', 'C.S. Cinco', 'QUERETARO')
+      unidad('un-q1', 'C.S. Cuatro', 'QUERETARO'), unidad('un-q2', 'C.S. Cinco', 'QUERETARO'),
+      unidad('un-nhg', 'NHGQ', 'NHG'), unidad('un-henm', 'HENM', 'HENM')
     ],
     requi_firmas: [],
     requi_requisiciones: [{ id: 'req-prev', anio: 2000, mes: 1, entrega: 1, etiqueta: null, estado: 'CERRADA', fue_corregido: false, creado_por: 'x', fecha_envio: null }],

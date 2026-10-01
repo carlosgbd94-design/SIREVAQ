@@ -16,6 +16,15 @@ async function preparar(page, opciones = {}) {
   page.on('pageerror', (e) => errores.push('PAGEERROR: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !RUIDO.test(m.text())) errores.push('CONSOLE: ' + m.text().slice(0, 200)); });
   page.on('dialog', (d) => d.accept());
+  // Los diálogos de confirmación son propios de SIREVAQ (no del navegador): por omisión se aceptan solos;
+  // las pruebas que los revisan ponen window.__AUTO_CONFIRMAR__ = false.
+  await page.addInitScript(() => {
+    window.__AUTO_CONFIRMAR__ = true;
+    setInterval(() => {
+      const m = document.getElementById('modalConfirmar');
+      if (window.__AUTO_CONFIRMAR__ && m && m.style.display === 'flex') document.getElementById('confirmarAceptar').click();
+    }, 25);
+  });
   await page.route(/unpkg\.com\/@supabase\/supabase-js/, (r) => r.fulfill({ contentType: 'application/javascript', body: FAKE }));
   await page.route(/fonts\.(googleapis|gstatic)\.com|cdnjs\.cloudflare\.com/, (r) => r.abort());
   if (opciones.libs) {   // ExcelJS y JSZip reales (de node_modules) en lugar del CDN, para probar exportaciones
@@ -155,7 +164,7 @@ test('Requisiciones: flujo completo por pasos (captura rápida, pegado, matrices
   await page.click('#chipsMunicipio .chip-bio[data-muni="CORREGIDORA"]');
   await expect(page.locator('#matrizUnidad thead th[data-col]')).toHaveCount(3);
   // Primero por municipio, luego por CLUES
-  expect(await page.evaluate(() => estado.unidades.map((u) => u.id))).toEqual(['un-c1', 'un-c2', 'un-c3', 'un-q1', 'un-q2']);
+  expect(await page.evaluate(() => estado.unidades.map((u) => u.id))).toEqual(['un-c1', 'un-c2', 'un-c3', 'un-q1', 'un-q2', 'un-nhg', 'un-henm']);   // los hospitales, al final
   // Unidades por número de CLUES (no por nombre: alfabético saldría Dos, Tres, Uno)
   expect(await page.locator('#matrizUnidad tbody tr').evaluateAll((trs) => trs.map((t) => t.dataset.unidadFila))).toEqual(['un-c1', 'un-c2', 'un-c3']);
   // Biológicos en el orden del formato de requisición (columna `orden` del catálogo), no alfabético
@@ -186,7 +195,7 @@ test('Requisiciones: flujo completo por pasos (captura rápida, pegado, matrices
   await expect(page.locator(celda2(l123, 'CORREGIDORA'))).toHaveValue('600');
 
   // --- Avance general y ayuda -------------------------------------------------
-  await expect(page.locator('#pildoraPaso3')).toHaveText('2/7');
+  await expect(page.locator('#pildoraPaso3')).toHaveText('2/4');   // solo cuentan destinos con unidades registradas (en el simulado: Corregidora y Querétaro)
   await expect(page.locator('#stepper .st-nodo.hecho')).toHaveCount(1);       // solo el paso 1 está completo
   await expect(page.locator('#dockEstadoTitulo')).toContainText('Paso 2 de 3');
   await page.click('#panelPaso2 [data-ayuda="requi2"]');
@@ -496,5 +505,94 @@ test('Requisiciones: exportar un municipio da UN archivo con una pestaña por un
   expect(dos.getCell('G14').value).toBe(20);
   expect(mun.getCell('G14').value).toBe(50);
   expect(mun.getCell('B9').value).toBe('MUNICIPIO CORREGIDORA');
+  expect(errores).toEqual([]);
+});
+
+
+test('Requisiciones: las confirmaciones son diálogos de SIREVAQ (se cancelan con Cancelar o Escape)', async ({ page }) => {
+  const dialogosNativos = [];
+  const errores = await preparar(page, { conReq: true });
+  page.on('dialog', (d) => { dialogosNativos.push(d.message()); d.dismiss(); });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.evaluate(() => { window.__AUTO_CONFIRMAR__ = false; });
+  await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
+  await page.fill('#rapLote', 'DEL1');
+  await page.fill('#rapCant', '10');
+  await page.press('#rapCant', 'Enter');
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.length')).toBe(1);
+
+  // Quitar un lote: diálogo rojo; Cancelar no quita nada
+  await page.click('.fila-lote-capturado .btn-quitar-item');
+  await expect(page.locator('#modalConfirmar')).toBeVisible();
+  await expect(page.locator('#confirmarTitulo')).toHaveText('¿Quitar este lote?');
+  await expect(page.locator('#modalConfirmar .modal-hoja')).toHaveAttribute('data-tono', 'peligro');
+  await page.click('#confirmarCancelar');
+  await expect(page.locator('#modalConfirmar')).toBeHidden();
+  expect(await db(page, 'db.requi_items_jurisdiccion.length')).toBe(1);
+
+  // Escape también cancela
+  await page.click('.fila-lote-capturado .btn-quitar-item');
+  await expect(page.locator('#modalConfirmar')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#modalConfirmar')).toBeHidden();
+  expect(await db(page, 'db.requi_items_jurisdiccion.length')).toBe(1);
+
+  // Aceptar sí lo quita
+  await page.click('.fila-lote-capturado .btn-quitar-item');
+  await page.click('#confirmarAceptar');
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.length')).toBe(0);
+
+  // Exportar con lotes por definir pregunta antes (y cancelar no genera nada)
+  await page.click('#btnPrellenar');
+  await page.locator('#cantFilas input').nth(0).fill('20');
+  await page.click('#cantGuardar');
+  await page.click('#btnAbrirExportar');
+  await page.click('#btnPdfJurisdiccional');
+  await expect(page.locator('#confirmarTitulo')).toHaveText('Hay lotes por definir');
+  await page.click('#confirmarCancelar');
+  await expect(page.locator('#modalConfirmar')).toBeHidden();
+  await expect(page.locator('#toast')).not.toContainText('Generando');
+  expect(dialogosNativos).toEqual([]);                       // ningún cuadro del navegador
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: NHGQ y HENM aparecen como unidades en el paso 3 y reciben solos lo del paso 2', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
+  await page.fill('#rapLote', 'HOSP1');
+  await page.fill('#rapCant', '100');
+  await page.press('#rapCant', 'Enter');
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.length')).toBe(1);
+
+  // Paso 2: cantidad general a los dos hospitales
+  await page.click('.paso-tab[data-paso="2"]');
+  const lote = await loteId(page, 'HOSP1');
+  await page.fill(celda2(lote, 'NHG'), '40');
+  await page.press(celda2(lote, 'NHG'), 'Enter');
+  await page.fill(celda2(lote, 'HENM'), '25');
+  await page.press(celda2(lote, 'HENM'), 'Enter');
+  await expect.poll(() => db(page, 'db.requi_distribucion_unidad.filter((d) => d.requisicion_id === "req-hoy").length')).toBe(2);
+
+  // Paso 3: ambos hospitales están como destinos, con su unidad y su cantidad ya puesta
+  await page.click('.paso-tab[data-paso="3"]');
+  await expect(page.locator('#chipsMunicipio .chip-bio[data-muni="NHG"]')).toBeVisible();
+  await expect(page.locator('#chipsMunicipio .chip-bio[data-muni="HENM"]')).toBeVisible();
+  await page.click('#chipsMunicipio .chip-bio[data-muni="NHG"]');
+  await expect(page.locator('#matrizUnidad tbody tr')).toHaveCount(1);
+  await expect(page.locator('#matrizUnidad tbody tr').first()).toContainText('NHGQ');
+  await expect(page.locator(celda3(lote, 'un-nhg'))).toHaveValue('40');
+  await page.click('#chipsMunicipio .chip-bio[data-muni="HENM"]');
+  await expect(page.locator(celda3(lote, 'un-henm'))).toHaveValue('25');
+  await expect(page.locator('#matrizUnidad th[data-col] .saldo-td')).toContainText('0');   // sin saldo: ya está completo
+
+  // Si cambia el paso 2, la unidad del hospital lo sigue (también al bajar)
+  await page.click('.paso-tab[data-paso="2"]');
+  await page.fill(celda2(lote, 'NHG'), '30');
+  await page.press(celda2(lote, 'NHG'), 'Enter');
+  await expect.poll(() => db(page, 'db.requi_distribucion_unidad.find((d) => d.unidad_id === "un-nhg" && d.requisicion_id === "req-hoy").cantidad')).toBe(30);
+  await page.fill(celda2(lote, 'NHG'), '60');
+  await page.press(celda2(lote, 'NHG'), 'Enter');
+  await expect.poll(() => db(page, 'db.requi_distribucion_unidad.find((d) => d.unidad_id === "un-nhg" && d.requisicion_id === "req-hoy").cantidad')).toBe(60);
   expect(errores).toEqual([]);
 });

@@ -379,7 +379,15 @@
   /* Entregas del mes, vista previa de caducidad, prellenado de cantidades */
   .barra-entregas { display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: 4px; padding-left: 12px; border-left: 1px solid var(--outline-variant); }
   .barra-entregas .entregas-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-    .sugerencias-texto { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+    .confirmar-cuerpo { display: flex; gap: 14px; align-items: flex-start; padding: 22px 22px 14px; }
+  .confirmar-cuerpo h3 { margin: 0; font: 800 16px/1.3 'Poppins', sans-serif; color: var(--primary); }
+  .confirmar-cuerpo p { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); white-space: pre-line; }
+  .confirmar-icono { width: 42px; height: 42px; border-radius: 14px; flex: none; display: flex; align-items: center; justify-content: center; background: #fef3c7; color: #b45309; }
+  .confirmar-hoja[data-tono="peligro"] .confirmar-icono { background: #fee2e2; color: #b91c1c; }
+  .confirmar-hoja[data-tono="info"] .confirmar-icono { background: #e0f2fe; color: #0369a1; }
+  .confirmar-hoja[data-tono="peligro"] .btn-primary { background: #b91c1c; }
+  .confirmar-hoja .modal-pie { border-top: none; }
+  .sugerencias-texto { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .cad-tip { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
   /* La vista previa de la caducidad (= JUL-29) flota debajo del campo: no le suma altura, así
      lote, caducidad y cantidad siguen alineados. */
@@ -665,7 +673,7 @@
         <h2><span class="material-symbols-rounded">local_hospital</span> Reparto a Unidades<button type="button" class="ayuda-btn" data-ayuda="requi3" title="Cómo funciona el paso 3" aria-label="Cómo funciona el paso 3"><span class="material-symbols-rounded">help</span></button>
           <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSugerir3" style="margin-left:auto;" title="Llena los lotes del municipio que aún no tienen reparto con la proporción del mes anterior"><span class="material-symbols-rounded" style="font-size:15px">auto_fix_high</span> Sugerir según el mes anterior</button>
         </h2>
-        <p class="hint">Elige el municipio. Un renglón por unidad, una columna por lote (arriba ves cuánto le queda por repartir). <b>Tab</b> avanza al siguiente lote, <b>Enter</b> baja a la siguiente unidad. <b>Doble clic</b> en una celda vacía pone todo el saldo; también puedes <b>pegar desde Excel</b>.</p>
+        <p class="hint">Elige el municipio u hospital (cada hospital es su propia unidad: lo que le asignas en el paso 2 se le pasa solo). Un renglón por unidad, una columna por lote (arriba ves cuánto le queda por repartir). <b>Tab</b> avanza al siguiente lote, <b>Enter</b> baja a la siguiente unidad. <b>Doble clic</b> en una celda vacía pone todo el saldo; también puedes <b>pegar desde Excel</b>.</p>
         <div class="chips-bio" id="chipsMunicipio"></div>
         <div class="tbl-scroll matriz-scroll"><table class="matriz" id="matrizUnidad"></table></div>
       </div>
@@ -692,6 +700,20 @@
         <span id="pegarResumen" class="modal-resumen"></span>
         <button type="button" class="btn btn-outline" id="pegarCancelar">Cancelar</button>
         <button type="button" class="btn btn-primary" id="pegarImportar" disabled>Importar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmación propia (reemplaza al confirm del navegador) -->
+  <div class="modal-fondo" id="modalConfirmar" style="display:none;">
+    <div class="modal-hoja confirmar-hoja" role="alertdialog" aria-modal="true" aria-labelledby="confirmarTitulo" aria-describedby="confirmarMensaje" data-tono="aviso" style="max-width:440px;">
+      <div class="confirmar-cuerpo">
+        <span class="confirmar-icono"><span class="material-symbols-rounded" id="confirmarIcono">warning</span></span>
+        <div><h3 id="confirmarTitulo"></h3><p id="confirmarMensaje"></p></div>
+      </div>
+      <div class="modal-pie">
+        <button type="button" class="btn btn-outline" id="confirmarCancelar">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="confirmarAceptar">Continuar</button>
       </div>
     </div>
   </div>

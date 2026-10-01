@@ -407,7 +407,7 @@ async function cargarCatalogoYUnidades() {
   estado.catalogo = (catalogo || []).slice().sort((a, b) => Number(a.orden) - Number(b.orden));
   // Unidades: primero por municipio (en el orden de MUNICIPIOS_REALES) y dentro
   // de cada uno por número de CLUES; las que no tengan CLUES van al final, por nombre.
-  const idxMuni = (m) => { const i = MUNICIPIOS_REALES.findIndex((x) => x.v === m); return i < 0 ? 99 : i; };
+  const idxMuni = (m) => { const i = DESTINOS.findIndex((x) => x.v === m); return i < 0 ? 99 : i; };
   const cmp = (a, b) => String(a).localeCompare(String(b), 'es', { numeric: true });
   estado.unidades = (unidades || []).slice().sort((a, b) =>
     idxMuni(a.municipio) - idxMuni(b.municipio)
@@ -477,6 +477,35 @@ async function cargarRequisicion(entregaPreferida) {
   $('tarjetaSinRequisicion').style.display = 'none';
   $('hintCabecera').style.display = 'none';
   await cargarDatosRequisicion();
+}
+
+// Confirmación propia de SIREVAQ (en lugar del confirm del navegador). Devuelve true/false.
+// tono: 'aviso' (ámbar), 'peligro' (rojo) o 'info' (azul).
+function confirmar({ titulo, mensaje, aceptar, cancelar, tono }) {
+  return new Promise((resolve) => {
+    if (estado.dialogoConfirmar) estado.dialogoConfirmar.resolve(false);   // nunca dos a la vez
+    estado.dialogoConfirmar = { resolve };
+    const t = tono || 'aviso';
+    const iconos = { aviso: 'warning', peligro: 'delete', info: 'help' };
+    const caja = $('modalConfirmar').querySelector('.modal-hoja');
+    caja.dataset.tono = t;
+    $('confirmarIcono').textContent = iconos[t] || 'help';
+    $('confirmarTitulo').textContent = titulo || '¿Continuar?';
+    $('confirmarMensaje').textContent = mensaje || '';
+    $('confirmarAceptar').textContent = aceptar || 'Continuar';
+    $('confirmarCancelar').textContent = cancelar || 'Cancelar';
+    $('modalConfirmar').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    $('confirmarAceptar').focus();
+  });
+}
+
+function cerrarConfirmar(valor) {
+  $('modalConfirmar').style.display = 'none';
+  document.body.style.overflow = '';
+  const d = estado.dialogoConfirmar;
+  estado.dialogoConfirmar = null;
+  if (d) d.resolve(valor);
 }
 
 // Diálogo propio (en lugar del prompt del navegador). Devuelve el texto, o null si se cancela.
@@ -574,7 +603,10 @@ Ojo: ${plural(sinLote, 'renglón todavía tiene', 'renglones todavía tienen')} 
   const aviso = avisoLote + (pendientes ? `
 
 Ojo: ${plural(pendientes, 'reparto todavía tiene', 'repartos todavía tienen')} saldo sin repartir (puntos ámbar o grises).` : '');
-  const ok = confirm('¿Cerrar esta entrega? Se marca como enviada. Si después necesitas corregir algo, puedes seguir editándola aquí mismo -- quedará marcada como "corregida posteriormente" para que municipios y unidades lo sepan.' + aviso);
+  const ok = await confirmar({
+    titulo: '¿Cerrar esta entrega?', tono: 'info', aceptar: 'Cerrar entrega',
+    mensaje: 'Se marca como enviada. Si después necesitas corregir algo, puedes seguir editándola aquí mismo: quedará marcada como "corregida posteriormente" para que municipios y unidades lo sepan.' + aviso
+  });
   if (!ok) return;
   const { data, error } = await estado.db.from('requi_requisiciones')
     .update({ estado: 'CERRADA', cerrado_en: new Date().toISOString(), fecha_envio: estado.requisicion.fecha_envio || ultimoDiaMes(estado.requisicion.anio, estado.requisicion.mes) })
@@ -669,6 +701,10 @@ function esc(t) {
 
 function nombreCorto(bio) { return RequiEngine.nombreCortoBio(bio); }
 function esMunicipioReal(v) { return MUNICIPIOS_REALES.some((m) => m.v === v); }
+// Un destino tiene Paso 3 si hay unidades registradas para él: los 4 municipios y, cada hospital, él mismo
+// como su única unidad (lo que se le asigna en el paso 2 se le pasa solo; ver unidadDeHospital).
+function tieneUnidades(v) { return estado.unidades.some((u) => u.municipio === v); }
+function unidadDeHospital(destino) { return esHospital(destino) ? estado.unidades.find((u) => u.municipio === destino) || null : null; }
 function etiquetaMunicipio(v) { const d = DESTINOS.find((x) => x.v === v); return d ? d.l : v; }
 function etiquetaMes(req) { const m = MESES.find((x) => x.v === req.mes); return `${m ? m.l : req.mes} ${req.anio}`; }
 // "Entrega 2 · Influenza"
@@ -755,13 +791,13 @@ function calcularAvance() {
     const k = u.municipio + '|' + claveLote(d.requi_biologico_id, d.lote_id);
     sumaU.set(k, (sumaU.get(k) || 0) + Number(d.cantidad || 0));
   });
-  const p3 = estado.distMunicipio.filter((d) => Number(d.cantidad) > 0 && esMunicipioReal(d.municipio))
+  const p3 = estado.distMunicipio.filter((d) => Number(d.cantidad) > 0 && tieneUnidades(d.municipio))
     .map((d) => {
       const asignado = Number(d.cantidad);
       const rep = sumaU.get(d.municipio + '|' + claveLote(d.requi_biologico_id, d.lote_id)) || 0;
       return { muni: d.municipio, bio: d.requi_biologico_id, lote: d.lote_id, disp: asignado, rep, est: estadoPorSaldo(asignado, rep) };
     })
-    .sort((a, b) => MUNICIPIOS_REALES.findIndex((m) => m.v === a.muni) - MUNICIPIOS_REALES.findIndex((m) => m.v === b.muni)
+    .sort((a, b) => DESTINOS.findIndex((m) => m.v === a.muni) - DESTINOS.findIndex((m) => m.v === b.muni)
       || ordenCatalogo(a.bio) - ordenCatalogo(b.bio));
   return { surtidos, p2, p3 };
 }
@@ -951,7 +987,10 @@ async function guardarLoteSurtido(biologicoId, numeroLote, caducidad, cantidad) 
   const existentes = await lotesExistentesDe(biologicoId);
   const resultado = RequiEngine.compararLote(numeroLote, existentes);
   if (resultado.estado === 'SIMILAR') {
-    const continuar = confirm(`El lote "${numeroLote}" se parece a "${resultado.sugerencias[0].numero_lote}", ya registrado. ¿Seguro que es un lote NUEVO y distinto? Cancelar para corregir la captura.`);
+    const continuar = await confirmar({
+      titulo: 'Este lote se parece a otro', tono: 'aviso', aceptar: 'Sí, es un lote nuevo', cancelar: 'Corregir captura',
+      mensaje: `El lote "${numeroLote}" se parece a "${resultado.sugerencias[0].numero_lote}", que ya está registrado. ¿Seguro que es un lote NUEVO y distinto?`
+    });
     if (!continuar) return false;
   }
 
@@ -1140,7 +1179,7 @@ async function guardarEdicionItem(itemId) {
 }
 
 async function quitarItemSurtido(itemId) {
-  if (!confirm('¿Quitar este lote de lo surtido? Esto falla si ya tiene reparto asignado.')) return;
+  if (!(await confirmar({ titulo: '¿Quitar este lote?', tono: 'peligro', aceptar: 'Quitar lote', mensaje: 'Se quita de lo surtido. Si ya tiene reparto asignado, no se podrá quitar hasta liberar ese reparto.' }))) return;
   const { error } = await estado.db.from('requi_items_jurisdiccion').delete().eq('id', itemId);
   if (error) { toast('No se pudo quitar: ' + error.message, true); return; }
   estado.items = estado.items.filter((i) => i.id !== itemId);
@@ -1311,11 +1350,17 @@ async function confirmarAsignarLotes() {
     }
     const res = RequiEngine.compararLote(numero, existentes);
     if (res.estado === 'EXISTE' && itemDe(bioId, res.lote.id)) { toast(`El lote ${numero} ya está capturado este mes: edita ese renglón en vez de asignarlo aquí.`, true); return; }
-    if (res.estado === 'SIMILAR' && !confirm(`El lote "${numero}" se parece a "${res.sugerencias[0].numero_lote}", ya registrado. ¿Seguro que es un lote NUEVO y distinto?`)) return;
+    if (res.estado === 'SIMILAR' && !(await confirmar({
+      titulo: 'Este lote se parece a otro', tono: 'aviso', aceptar: 'Sí, es un lote nuevo', cancelar: 'Corregir',
+      mensaje: `El lote "${numero}" se parece a "${res.sugerencias[0].numero_lote}", que ya está registrado. ¿Seguro que es un lote NUEVO y distinto?`
+    }))) return;
     lotes.push({ numero_lote: numero, caducidad, cantidad: cant });
   }
   const suma = lotes.reduce((acc, l) => acc + l.cantidad, 0);
-  if (suma < a.total && !confirm(`Suman ${suma} de ${a.total}: las ${a.total - suma} restantes se quedan ${a.pend ? 'con lote "por definir"' : `en el lote ${a.item.requi_lotes.numero_lote}`}. ¿Continuar?`)) return;
+  if (suma < a.total && !(await confirmar({
+    titulo: 'Los lotes no suman todo', tono: 'aviso', aceptar: 'Continuar',
+    mensaje: `Suman ${suma} de ${a.total}: las ${a.total - suma} restantes se quedan ${a.pend ? 'con lote "por definir"' : `en el lote ${a.item.requi_lotes.numero_lote}`}.`
+  }))) return;
 
   $('asigGuardar').disabled = true;
   try {
@@ -1419,9 +1464,12 @@ async function guardarCantidades() {
 }
 
 // Lo que sigue "por definir" sale así en el Excel: se avisa antes de exportar.
-function confirmarExportarConPendientes() {
+async function confirmarExportarConPendientes() {
   const n = estado.items.filter((i) => esPendiente(i) && Number(i.cantidad_surtida) > 0).length;
-  return !n || confirm(`${plural(n, 'renglón sigue', 'renglones siguen')} con el lote "por definir" y así saldrá en el Excel. ¿Exportar de todos modos?`);
+  return !n || confirmar({
+    titulo: 'Hay lotes por definir', tono: 'aviso', aceptar: 'Exportar de todos modos',
+    mensaje: `${plural(n, 'renglón sigue', 'renglones siguen')} con el lote "por definir" y así saldrá en el Excel.`
+  });
 }
 
 // Un solo manejador para toda la tabla del Paso 1 (se re-dibuja completa).
@@ -1666,7 +1714,7 @@ function validarGrupoReparto(lista) {
     DESTINOS.forEach((d) => { proyectado += nuevos.has(d.v) ? nuevos.get(d.v) : cantidadGuardada({ tipo: 'M', destino: d.v, bio: c0.bio, lote: c0.lote }); });
     if (proyectado > disp) return `Excede lo surtido del lote ${numeroLoteDe(c0.bio, c0.lote)}: disponible ${disp}, intentas repartir ${proyectado}.`;
     for (const c of lista) {
-      if (!esMunicipioReal(c.destino)) continue;
+      if (!tieneUnidades(c.destino) || esHospital(c.destino)) continue;   // el hospital es su propia unidad: se le pasa solo
       const enUnidades = sumaUnidadesMunicipio(c.destino, c.bio, c.lote);
       if (c.cantidad < enUnidades) return `${etiquetaMunicipio(c.destino)} ya repartió ${enUnidades} de este lote entre sus unidades (paso 3): reduce primero ese reparto.`;
     }
@@ -1731,6 +1779,10 @@ function actualizarSaldosPaso3() {
 function guardarReparto(cambiosBrutos) {
   return encolar(async () => {
     if (!estado.puedeEditar || !estado.requisicion) return;
+    // Un hospital es su propia (única) unidad: lo que se le asigna en el paso 2 se le pasa igual en el paso 3.
+    cambiosBrutos = cambiosBrutos.concat(cambiosBrutos
+      .filter((c) => c.tipo === 'M' && unidadDeHospital(c.destino))
+      .map((c) => ({ tipo: 'U', destino: unidadDeHospital(c.destino).id, bio: c.bio, lote: c.lote, cantidad: c.cantidad, auto: true })));
     const cambios = cambiosBrutos.filter((c) => c.cantidad !== cantidadGuardada(c));
     const tablas = new Set(cambiosBrutos.map((c) => (c.tipo === 'M' ? 'matrizMunicipio' : 'matrizUnidad')));
     const repintar = (forzar) => tablas.forEach((id) => pintarValoresMatriz($(id), forzar));
@@ -1745,6 +1797,7 @@ function guardarReparto(cambiosBrutos) {
     const aceptados = [];
     const rechazos = [];
     grupos.forEach((lista) => {
+      if (lista.every((c) => c.auto)) { aceptados.push(...lista); return; }   // derivado del paso 2, ya validado allá
       const msg = validarGrupoReparto(lista);
       if (msg) rechazos.push({ lista, msg }); else aceptados.push(...lista);
     });
@@ -1935,7 +1988,10 @@ async function sugerirPaso2() {
     rep.forEach((cant, i) => { if (cant > 0) cambios.push({ tipo: 'M', destino: DESTINOS[i].v, bio: it.requi_biologico_id, lote: it.lote_id, cantidad: cant }); });
   });
   if (!cambios.length) { toast(sinBase ? 'Los lotes sin reparto no tienen antecedente en entregas anteriores.' : 'No hay lotes vacíos: todos ya tienen reparto.'); return; }
-  if (!confirm(`Se llenarán ${plural(lotes, 'lote', 'lotes')} sin reparto con la proporción de ${previa.texto}${sinBase ? ` (${plural(sinBase, 'lote sin antecedente se queda', 'lotes sin antecedente se quedan')} vacío)` : ''}. Los que ya tienen algo no se tocan y después puedes ajustar cada cantidad. ¿Continuar?`)) return;
+  if (!(await confirmar({
+    titulo: 'Sugerir reparto', tono: 'info', aceptar: 'Llenar',
+    mensaje: `Se llenarán ${plural(lotes, 'lote', 'lotes')} sin reparto con la proporción de ${previa.texto}${sinBase ? ` (${plural(sinBase, 'lote sin antecedente se queda', 'lotes sin antecedente se quedan')} vacío)` : ''}. Los que ya tienen algo no se tocan y después puedes ajustar cada cantidad.`
+  }))) return;
   await guardarReparto(cambios);
 }
 
@@ -1961,7 +2017,10 @@ async function sugerirPaso3() {
     rep.forEach((cant, i) => { if (cant > 0) cambios.push({ tipo: 'U', destino: unidades[i].id, bio: col.bio, lote: col.lote, cantidad: cant }); });
   });
   if (!cambios.length) { toast(sinBase ? 'Los lotes sin reparto no tienen antecedente en entregas anteriores.' : 'No hay lotes vacíos: todos ya tienen reparto.'); return; }
-  if (!confirm(`Se llenarán ${plural(lotes, 'lote', 'lotes')} de ${etiquetaMunicipio(muni)} sin reparto con la proporción de ${previa.texto}${sinBase ? ` (${plural(sinBase, 'lote sin antecedente se queda', 'lotes sin antecedente se quedan')} vacío)` : ''}. Los que ya tienen algo no se tocan y después puedes ajustar cada cantidad. ¿Continuar?`)) return;
+  if (!(await confirmar({
+    titulo: `Sugerir reparto · ${etiquetaMunicipio(muni)}`, tono: 'info', aceptar: 'Llenar',
+    mensaje: `Se llenarán ${plural(lotes, 'lote', 'lotes')} de ${etiquetaMunicipio(muni)} sin reparto con la proporción de ${previa.texto}${sinBase ? ` (${plural(sinBase, 'lote sin antecedente se queda', 'lotes sin antecedente se quedan')} vacío)` : ''}. Los que ya tienen algo no se tocan y después puedes ajustar cada cantidad.`
+  }))) return;
   await guardarReparto(cambios);
 }
 
@@ -2015,7 +2074,7 @@ function columnasPaso3(muni) {
 
 function renderChipsMunicipio() {
   const p3 = (estado.avance && estado.avance.p3) || [];
-  $('chipsMunicipio').innerHTML = MUNICIPIOS_REALES.map((m) => {
+  $('chipsMunicipio').innerHTML = DESTINOS.filter((m) => tieneUnidades(m.v)).map((m) => {
     const propios = p3.filter((x) => x.muni === m.v);
     const hechos = propios.filter((x) => x.est === 'completo').length;
     const est = !propios.length ? '' : hechos === propios.length ? 'completo' : 'parcial';
@@ -2210,7 +2269,7 @@ async function generarLibroMunicipio(destino, incluirUnidades) {
 
 async function exportarUno(nivel, destino) {
   if (!estado.requisicion) { toast('Guarda primero la cabecera de la requisición.', true); return; }
-  if (!confirmarExportarConPendientes()) return;
+  if (!(await confirmarExportarConPendientes())) return;
   toast('Generando Excel…');
   try {
     const tipoXlsx = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -2274,7 +2333,7 @@ async function exportarMasivo() {
   const seleccionados = [...document.querySelectorAll('.chk-destino-masivo:checked')].map((c) => c.value);
   if (!seleccionados.length) { toast('Selecciona al menos un destino.', true); return; }
   const incluirUnidades = $('chkIncluirUnidades').checked;
-  if (!confirmarExportarConPendientes()) return;
+  if (!(await confirmarExportarConPendientes())) return;
 
   toast('Generando paquete…');
   try {
@@ -2371,7 +2430,10 @@ async function subirTransferencia() {
   const mes = Number($('transMes').value);
   const nombre = nombreTransferencia(anio, mes);
   const previa = estado.transferencias.find((t) => t.anio === anio && t.mes === mes);
-  if (previa && !confirm(`Ya hay una transferencia de ${etiquetaMes({ anio, mes })}. ¿Reemplazarla con este archivo?`)) return;
+  if (previa && !(await confirmar({
+    titulo: 'Ya hay una transferencia de ese mes', tono: 'aviso', aceptar: 'Reemplazar',
+    mensaje: `Ya hay una transferencia de ${etiquetaMes({ anio, mes })}. ¿Reemplazarla con este archivo?`
+  }))) return;
   // Mismo mes = misma ruta (se sobrescribe); mes nuevo = token nuevo.
   const ruta = previa ? previa.ruta : `Requisiciones/Transferencias/${crypto.randomUUID()}/${nombre}`;
 
@@ -2516,6 +2578,11 @@ function instalarEventos() {
     if (completa) { const c = ev.target.closest('tr').querySelector('.inp-editar-cantidad'); if (c) c.focus(); }
   });
 
+  // Confirmación propia
+  $('confirmarAceptar').addEventListener('click', () => cerrarConfirmar(true));
+  $('confirmarCancelar').addEventListener('click', () => cerrarConfirmar(false));
+  $('modalConfirmar').addEventListener('click', (ev) => { if (ev.target === $('modalConfirmar')) cerrarConfirmar(false); });
+
   // Diálogo de texto (nombre de la entrega)
   $('textoAceptar').addEventListener('click', () => cerrarTexto($('textoValor').value));
   $('textoCancelar').addEventListener('click', () => cerrarTexto(null));
@@ -2610,7 +2677,8 @@ function instalarEventos() {
   });
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
-    if ($('modalTexto').style.display !== 'none') cerrarTexto(null);
+    if ($('modalConfirmar').style.display !== 'none') cerrarConfirmar(false);
+    else if ($('modalTexto').style.display !== 'none') cerrarTexto(null);
     else if ($('modalPegar').style.display !== 'none') cerrarPegar();
     else if ($('modalAsignar').style.display !== 'none') cerrarAsignarLotes();
     else if ($('modalCantidades').style.display !== 'none') cerrarCantidades();
