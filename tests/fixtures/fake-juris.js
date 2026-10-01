@@ -37,6 +37,7 @@
   ];
   const rpc = {
     biovac_validar_concentrado: () => validaciones,
+    biovac_correcciones_municipio_estado: () => (window.__CORR || []),
     biovac_concentrado_jurisdiccion: () => concentrado,
     sis06p_resumen_seguimiento: () => sis,
     biovac_detalle_lote_jurisdiccion: () => [
@@ -63,7 +64,26 @@
       limit(n) { q.limite = n; return api; },
       single() { q.modo = 'single'; return api; },
       maybeSingle() { q.modo = 'maybe'; return api; },
-      insert() { return api; }, update() { return api; }, upsert() { return api; }, delete() { return api; },
+      // Correcciones de Jurisdicción al movimiento de un municipio (biovac_correcciones_municipio)
+      insert(row) {
+        if (tabla === 'biovac_correcciones_municipio') {
+          const unidades = tables.biovac_unidades.filter((u) => u.municipio === row.municipio).map((u) => u.id);
+          const filas = rpc.biovac_detalle_lote_jurisdiccion().filter((d) => unidades.includes(d.unidad_id) && d.renglon_id);
+          const sum = (c) => filas.reduce((a, d) => a + (Number(d[c]) || 0), 0);
+          (window.__CORR = window.__CORR || []).push({
+            id: 'cm1', municipio: row.municipio, lote_id: row.lote_id, categoria: row.categoria, motivo: row.motivo, creado_por: row.creado_por,
+            creado_en: new Date().toISOString(), numero_lote: 'AB123', nombre_excel: 'VACUNA SRP',
+            obj_recibido: row.recibido_frascos ?? null, obj_aplicadas_a: row.aplicadas_a ?? null, obj_aplicadas_b: row.aplicadas_b ?? null,
+            obj_desechadas_a: row.desechadas_a ?? null, obj_desechadas_b: row.desechadas_b ?? null,
+            act_recibido: sum('recibido_frascos'), act_aplicadas_a: sum('aplicadas_a'), act_aplicadas_b: sum('aplicadas_b'),
+            act_desechadas_a: sum('desechadas_a'), act_desechadas_b: sum('desechadas_b'), coincide: false
+          });
+          (window.__INSERTS = window.__INSERTS || []).push(row);
+        }
+        return api;
+      },
+      update(p) { if (tabla === 'biovac_correcciones_municipio' && p && p.estado === 'CANCELADA') window.__CORR = []; return api; },
+      upsert() { return api; }, delete() { return api; },
       neq() { return api; }, gt() { return api; }, gte() { return api; }, lt() { return api; }, lte() { return api; }, is() { return api; }, ilike() { return api; }, or() { return api; }, range() { return api; },
       then(ok, ko) {
         return new Promise((r) => setTimeout(r, 0)).then(() => {

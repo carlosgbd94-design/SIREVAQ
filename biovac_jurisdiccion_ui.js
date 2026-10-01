@@ -785,7 +785,97 @@ async function refrescarDrilldown() {
   if (!cont) return;
   if (error) { cont.textContent = 'Error: ' + error.message; return; }
   const fila = estado.concentrado.find((f) => f.lote_id === loteId && f.categoria === categoria);
+  // Solicitudes de corrección de Jurisdicción pendientes sobre el movimiento de un municipio (la consulta
+  // también marca como resueltas las que ya coinciden con la suma de las unidades).
+  estado.correccionesMuni = new Map();
+  try {
+    const { data: pend } = await estado.db.rpc('biovac_correcciones_municipio_estado', {
+      p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes, p_municipio: null
+    });
+    (pend || []).filter((c) => !c.coincide).forEach((c) => estado.correccionesMuni.set(`${c.municipio}|${c.lote_id}|${c.categoria}`, c));
+  } catch (e) { /* sin la función en la base: se ve el concentrado de siempre */ }
+  estado.ultimoDetalle = { data: data || [], fila, anio, mes };
   cont.innerHTML = renderDetalleLote(data || [], fila, anio, mes);
+}
+
+function repintarDrilldown() {
+  const cont = document.getElementById('drilldownContenido');
+  const u = estado.ultimoDetalle;
+  if (cont && u) cont.innerHTML = renderDetalleLote(u.data, u.fila, u.anio, u.mes);
+}
+
+const CAMPOS_CORR_MUNI = ['recibido_frascos', 'aplicadas_a', 'aplicadas_b', 'desechadas_a', 'desechadas_b'];
+
+function claveCorrMuni(m, fila) { return `${m}|${fila.lote_id}|${fila.categoria}`; }
+
+// Fila "Corrección de Jurisdicción" (pendiente o en edición) que va debajo de la fila gris del municipio.
+function renderFilaCorreccionMuni(m, fila, sumas, split, pend, editando) {
+  const num = (v) => Number(v) || 0;
+  if (editando) {
+    const inp = (c) => `<input type="number" step="any" data-cm-campo="${c}" data-cm-actual="${num(sumas[c])}" value="${num(sumas[c])}">`;
+    const ab = (a, b) => (split ? `${inp(a)} / ${inp(b)}` : inp(a));
+    return `<tr class="fila-correccion" data-cm-fila="${escJ(m)}">
+      <td><b>Corrección de Jurisdicción</b><small class="muni-sub">Escribe cómo debe quedar</small></td><td></td><td>—</td>
+      <td>${inp('recibido_frascos')}</td><td>${ab('aplicadas_a', 'aplicadas_b')}</td><td>${ab('desechadas_a', 'desechadas_b')}</td><td>—</td><td></td>
+      <td><button type="button" class="btn-mini btn-primario" data-action="enviar-correccion-muni" data-muni="${escJ(m)}"><span class="material-symbols-rounded">send</span> Pedir corrección</button>
+          <button type="button" class="btn-mini btn-secundario" data-action="cancelar-edicion-muni"><span class="material-symbols-rounded">close</span></button></td>
+    </tr>`;
+  }
+  const celda = (obj, act) => {
+    if (obj == null) return '<span style="color:#9ca3af">—</span>';
+    const d = num(obj) - num(act);
+    return `<b>${num(obj)}</b><small class="dif ${d === 0 ? 'ok' : 'mal'}">${d === 0 ? '✓ listo' : d > 0 ? 'faltan ' + d : 'sobran ' + (-d)}</small>`;
+  };
+  const ab = (a, b) => (split ? `${celda(pend[`obj_${a}`], sumas[a])} / ${celda(pend[`obj_${b}`], sumas[b])}` : celda(pend[`obj_${a}`], sumas[a]));
+  return `<tr class="fila-correccion">
+    <td><b>Corrección de Jurisdicción</b><small class="muni-sub">Pendiente: el municipio ajusta sus unidades</small></td>
+    <td><span class="estado-badge estado-EN_CORRECCION">Pendiente</span></td><td>—</td>
+    <td>${celda(pend.obj_recibido, sumas.recibido_frascos)}</td><td>${ab('aplicadas_a', 'aplicadas_b')}</td><td>${ab('desechadas_a', 'desechadas_b')}</td><td>—</td>
+    <td class="motivo">${escJ(pend.motivo)}<br><small>${escJ(pend.creado_por)}</small></td>
+    <td>${puedeEditar() ? `<button type="button" class="btn-mini btn-secundario" data-action="cancelar-correccion-muni" data-id="${pend.id}"><span class="material-symbols-rounded">undo</span> Cancelar</button>` : ''}</td>
+  </tr>`;
+}
+
+async function pedirCorreccionMunicipio(m, btn) {
+  const usuario = usuarioActual();
+  if (!usuario) return;
+  const fila = estado.ultimoDetalle && estado.ultimoDetalle.fila;
+  if (!fila) return;
+  const tr = btn.closest('tr');
+  const cambios = {};
+  tr.querySelectorAll('[data-cm-campo]').forEach((i) => {
+    const nuevo = Number(i.value) || 0;
+    if (nuevo !== Number(i.dataset.cmActual)) cambios[i.dataset.cmCampo] = nuevo;
+  });
+  if (!Object.keys(cambios).length) { toast('Cambia al menos una cifra para pedir la corrección.', 'error'); return; }
+  const motivo = await mostrarModal({
+    titulo: 'Corrección al movimiento del municipio',
+    mensaje: 'El municipio verá la corrección y ajustará los movimientos de sus unidades hasta que la suma coincida. Escribe el motivo.',
+    pedirMotivo: true, placeholderMotivo: 'Ej. Lo aplicado no coincide con el paloteo validado', textoAceptar: 'Pedir corrección'
+  });
+  if (!motivo) return;
+  const { jurisdiccionId, anio, mes } = seleccion();
+  const { error } = await estado.db.from('biovac_correcciones_municipio').insert({
+    jurisdiccion_id: jurisdiccionId, municipio: m, anio, mes, lote_id: fila.lote_id, categoria: fila.categoria,
+    ...cambios, motivo, creado_por: usuario
+  });
+  if (error) {
+    toast(error.code === '23505' ? 'Ya hay una corrección pendiente para este lote y municipio.' : 'No se pudo guardar: ' + error.message, 'error');
+    return;
+  }
+  estado.corrigiendoMuni = null;
+  toast('Corrección pedida. El municipio verá el aviso y ajustará sus unidades.', 'ok');
+  await refrescarDrilldown();
+}
+
+async function cancelarCorreccionMunicipio(id) {
+  const ok = await mostrarModal({ titulo: 'Cancelar la corrección', mensaje: 'La solicitud se retira y el municipio deja de verla. ¿Continuar?', textoAceptar: 'Cancelar solicitud' });
+  if (!ok) return;
+  const { error } = await estado.db.from('biovac_correcciones_municipio')
+    .update({ estado: 'CANCELADA', resuelto_en: new Date().toISOString() }).eq('id', id);
+  if (error) { toast('No se pudo cancelar: ' + error.message, 'error'); return; }
+  toast('Corrección cancelada.', 'ok');
+  await refrescarDrilldown();
 }
 
 function botonVerPdfUnidad(d, anio, mes) {
@@ -826,7 +916,15 @@ function renderDetalleLote(data, filaLote, anio, mes) {
     const s = (c) => ds.reduce((a, d) => a + num(d, c), 0);
     const todasCerradas = ds.every((d) => d.movimiento_estado === 'CERRADO');
     const abierta = estado.munisAbiertas && estado.munisAbiertas.has(m);
-    return `<tr class="muni-resumen">
+    const claveCm = filaLote ? claveCorrMuni(m, filaLote) : null;
+    const pendCm = claveCm && estado.correccionesMuni ? estado.correccionesMuni.get(claveCm) : null;
+    const editandoCm = claveCm && estado.corrigiendoMuni === claveCm;
+    const sumasCm = {};
+    CAMPOS_CORR_MUNI.forEach((c) => { sumasCm[c] = s(c); });
+    const filaCorr = (pendCm || editandoCm) ? renderFilaCorreccionMuni(m, filaLote, sumasCm, split, pendCm, editandoCm) : '';
+    const botonCorregirMuni = (filaLote && puedeEditar() && !pendCm && !editandoCm)
+      ? `<button type="button" class="btn-mini btn-secundario" data-action="corregir-muni" data-muni="${escJ(m)}" title="Pide al municipio que ajuste sus unidades para que la suma quede como tú indiques"><span class="material-symbols-rounded">edit_note</span> Corregir municipio</button>` : '';
+    return `<tr class="muni-resumen${(pendCm || editandoCm) ? ' fila-gris' : ''}">
         <td><b>${escJ(etiquetaMuniJ(m))}</b><small class="muni-sub">${plural(ds.length, 'unidad', 'unidades')}</small></td>
         <td><span class="estado-badge estado-${todasCerradas ? 'CERRADO' : 'BORRADOR'}">${todasCerradas ? 'Cerrado' : 'En captura'}</span></td>
         <td>${redondearFrascos(s('existencia_anterior_frascos'))}</td>
@@ -835,8 +933,9 @@ function renderDetalleLote(data, filaLote, anio, mes) {
         <td>${celdaAB(s('desechadas_a'), s('desechadas_b'))}</td>
         <td class="existencia-final"><b>${redondearFrascos(s('existencia_final_frascos'))}</b></td>
         <td></td>
-        <td><button type="button" class="btn-mini btn-secundario" data-action="toggle-unidades" data-muni="${escJ(m)}"><span class="material-symbols-rounded">${abierta ? 'expand_less' : 'expand_more'}</span> ${abierta ? 'Ocultar' : 'Ver'} unidades</button></td>
+        <td><button type="button" class="btn-mini btn-secundario" data-action="toggle-unidades" data-muni="${escJ(m)}"><span class="material-symbols-rounded">${abierta ? 'expand_less' : 'expand_more'}</span> ${abierta ? 'Ocultar' : 'Ver'} unidades</button> ${botonCorregirMuni}</td>
       </tr>
+      ${filaCorr}
       ${ds.map((d) => renderFilaDrilldown(d, anio, mes, split, null, m, abierta)).join('')}`;
   }).join('');
 
@@ -1051,6 +1150,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       cont.querySelectorAll(`tr[data-sub="${CSS.escape(m)}"]`).forEach((tr) => { tr.style.display = abrir ? 'table-row' : 'none'; });
       btn.innerHTML = `<span class="material-symbols-rounded">${abrir ? 'expand_less' : 'expand_more'}</span> ${abrir ? 'Ocultar' : 'Ver'} unidades`;
     }
+    if (btn.dataset.action === 'corregir-muni') {
+      const f = estado.ultimoDetalle && estado.ultimoDetalle.fila;
+      if (f) { estado.corrigiendoMuni = claveCorrMuni(btn.dataset.muni, f); repintarDrilldown(); }
+    }
+    if (btn.dataset.action === 'cancelar-edicion-muni') { estado.corrigiendoMuni = null; repintarDrilldown(); }
+    if (btn.dataset.action === 'enviar-correccion-muni') pedirCorreccionMunicipio(btn.dataset.muni, btn);
+    if (btn.dataset.action === 'cancelar-correccion-muni') cancelarCorreccionMunicipio(btn.dataset.id);
     if (btn.dataset.action === 'abrir-correccion-mov') abrirCorreccionMovimiento(btn.dataset.movimiento);
     if (btn.dataset.action === 'aplicar-correccion-mov') aplicarCorreccionMovimiento(btn.dataset.movimiento);
     if (btn.dataset.action === 'ver-pdf-unidad') window.open(`biovac_print.html?unidad=${btn.dataset.unidad}&anio=${btn.dataset.anio}&mes=${btn.dataset.mes}`, '_blank');

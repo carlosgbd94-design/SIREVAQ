@@ -14,7 +14,8 @@
     sis_variables: []
   };
   const hoy = new Date();
-  const mes = hoy.getMonth() + 1, anio = hoy.getFullYear();
+  // El SIS se abre en el mes que se reporta: el anterior al actual (enero -> diciembre del año pasado).
+  const mes = hoy.getMonth() === 0 ? 12 : hoy.getMonth(), anio = hoy.getMonth() === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear();
   // Seguimiento (lo que devuelve sis06p_resumen_seguimiento)
   const seg = [
     { clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', estado: 'ENVIADO', enviado_por: 'Ana', enviado_en: '2026-09-30T10:00:00Z', paloteo_dosis: 120, movimiento_lotes: 4, movimiento_estado: 'CERRADO', diferencias: 0, correcciones_pendientes: 0 },

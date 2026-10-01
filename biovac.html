@@ -43,7 +43,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_export_excel.js?v=2026.2"></script>
 <script defer src="biovac_importer.js?v=2026.2"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
-<script defer src="biovac_ui.js?v=2026.47"></script>
+<script defer src="biovac_ui.js?v=2026.50"></script>
 <script defer src="sis06p_biovac_module.js?v=2026.37"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.10"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.1"></script>
@@ -117,6 +117,25 @@ window.onunhandledrejection = function (event) {
   .correccion-pendiente-item .info .meta { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; font-style: italic; }
 
   .barra { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
+  /* Periodo (mes y año): grande y con etiqueta de estado, para que no se confunda el mes que se reporta. */
+  .campo-periodo {
+    display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; padding: 10px 16px 12px;
+    border: 2px solid var(--secondary); border-radius: 18px; background: #f0f9ff;
+  }
+  .campo-periodo-icono { font-size: 28px; color: var(--secondary); align-self: center; }
+  .campo-periodo .campo label { font-size: 11px; }
+  .campo-periodo select {
+    height: 46px; padding: 0 14px; font-size: 16px; font-weight: 800; color: var(--primary);
+    border: 1.5px solid var(--outline-variant); border-radius: 12px; cursor: pointer;
+  }
+  .campo-periodo #selMes { min-width: 170px; }
+  .campo-periodo #selAnio { min-width: 104px; }
+  .periodo-chip {
+    align-self: center; padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 800;
+    background: #e2e8f0; color: #334155; white-space: nowrap;
+  }
+  .periodo-chip.reporta { background: #dcfce7; color: #166534; }
+  .periodo-chip.curso, .periodo-chip.futuro { background: #fef3c7; color: #92400e; }
   .campo { display: flex; flex-direction: column; gap: 5px; }
   .campo label {
     font-size: 10px; color: var(--primary); font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
@@ -405,14 +424,14 @@ window.onunhandledrejection = function (event) {
 
   .tabla-wrap { overflow-x: auto; border-radius: 14px; border: 1px solid var(--outline-variant); }
   table.renglones { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; min-width: 720px; }
-  table.renglones col.col-lote { width: 18%; }
-  table.renglones col.col-caducidad { width: 12%; }
-  table.renglones col.col-ant { width: 6%; }
-  table.renglones col.col-dato { width: 9%; }
-  table.renglones col.col-dato-mitad { width: 4.5%; }
+  table.renglones col.col-lote { width: 16%; }
+  table.renglones col.col-caducidad { width: 11%; }
+  table.renglones col.col-ant { width: 9%; }
+  table.renglones col.col-dato { width: 10%; }
+  table.renglones col.col-dato-mitad { width: 5%; }
   table.renglones col.col-final { width: 9%; }
-  table.renglones col.col-obs { width: 24%; }
-  table.renglones col.col-accion { width: 4%; }
+  table.renglones col.col-obs { width: 16%; }
+  table.renglones col.col-accion { width: 8%; }
   table.renglones tfoot td {
     padding: 11px 6px; border-top: 2px solid var(--primary); background: var(--surface-container);
     font-weight: 800; text-align: center;
@@ -506,6 +525,91 @@ window.onunhandledrejection = function (event) {
     background: rgba(15,23,42,.06); border-radius: 8px; padding: 5px 8px;
   }
   .existencia-negativa { color: var(--error); background: var(--error-bg); }
+
+  /* ── Correcciones que pidió Jurisdicción sobre el movimiento del municipio ───────────── */
+  .corr-jur { margin-bottom: 14px; padding: 14px 16px; border-radius: 18px; background: #fffbeb; border: 1.5px solid var(--warning-border); }
+  .corr-jur-titulo { display: flex; gap: 10px; align-items: flex-start; color: #78350f; }
+  .corr-jur-titulo .material-symbols-rounded { font-size: 26px; color: var(--warning); flex: none; }
+  .corr-jur-titulo b { display: block; font-size: 13.5px; font-family: 'Poppins', sans-serif; }
+  .corr-jur-titulo small { font-size: 12px; line-height: 1.4; }
+  .corr-item { margin-top: 12px; padding: 10px 12px; background: #fff; border-radius: 14px; border: 1px solid var(--warning-border); }
+  .corr-item h4 { margin: 0 0 2px; font-size: 13px; color: var(--primary); }
+  .corr-item .corr-motivo { font-size: 11.5px; color: var(--muted); margin-bottom: 8px; }
+  table.corr-tabla { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.corr-tabla th { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 4px 8px; text-align: center; }
+  table.corr-tabla th:first-child, table.corr-tabla td:first-child { text-align: left; }
+  table.corr-tabla td { padding: 6px 8px; text-align: center; border-top: 1px solid #f1f5f9; }
+  table.corr-tabla tr.hoy td { background: #e5e7eb; color: #6b7280; }
+  table.corr-tabla tr.hoy td:first-child { text-decoration: line-through; }
+  table.corr-tabla tr.objetivo td { background: #fef3c7; font-weight: 800; color: #78350f; }
+  table.corr-tabla tr.falta td { font-size: 11.5px; font-weight: 800; }
+  table.corr-tabla .ok { color: var(--success); } table.corr-tabla .mal { color: var(--warning); }
+  .corr-unidades { margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+  .corr-unidades b { color: var(--primary); }
+  .tag-correccion-jur { font-size: 9px; font-weight: 800; color: #92400e; background: #fef3c7; border: 1px solid var(--warning-border); padding: 1px 8px; border-radius: 20px; }
+
+  /* ── Secciones de la tabla con presencia propia: cada columna tiene su color e icono ───────────── */
+  table.renglones thead th .th-con-icono { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.15; }
+  table.renglones thead th .th-con-icono .material-symbols-rounded { font-size: 19px; }
+  table.renglones thead th.c-ant { background: rgba(14,165,233,.14); color: #0369a1; border-top: 3px solid #0ea5e9; }
+  table.renglones thead th.c-rec { background: rgba(16,185,129,.15); color: #047857; border-top: 3px solid #10b981; }
+  table.renglones thead th.c-apl { background: rgba(245,158,11,.15); color: #b45309; border-top: 3px solid #f59e0b; }
+  table.renglones thead th.c-des { background: rgba(239,68,68,.12); color: #b91c1c; border-top: 3px solid #ef4444; }
+  table.renglones thead th.c-fin { background: rgba(15,23,42,.08); color: var(--primary); border-top: 3px solid var(--primary); }
+  table.renglones tbody td.c-ant { background-color: rgba(14,165,233,.06); }
+  table.renglones tbody td.c-rec { background-color: rgba(16,185,129,.07); }
+  table.renglones tbody td.c-apl:not(.col-dosis-05):not(.col-dosis-1) { background-color: rgba(245,158,11,.06); }
+  table.renglones tbody td.c-des:not(.col-dosis-05):not(.col-dosis-1) { background-color: rgba(239,68,68,.05); }
+  table.renglones td.c-rec input { border-color: rgba(16,185,129,.5); background: rgba(16,185,129,.09); }
+  table.renglones td.c-apl:not(.col-dosis-05):not(.col-dosis-1) input { border-color: rgba(245,158,11,.5); background: rgba(245,158,11,.08); }
+  table.renglones td.c-des:not(.col-dosis-05):not(.col-dosis-1) input { border-color: rgba(239,68,68,.45); background: rgba(239,68,68,.06); }
+  table.renglones td.c-ant .ant-valor { font-weight: 800; font-size: 14px; color: #0369a1; }
+  table.renglones td.c-ant input.ant-input { border-color: #0ea5e9; background: #e0f2fe; display: none; }
+  table.renglones tr.fila-editando td.c-ant .ant-valor { display: none; }
+  table.renglones tr.fila-editando td.c-ant input.ant-input { display: block; }
+  table.renglones tr.fila-editando td { box-shadow: inset 0 0 0 9999px rgba(14,165,233,.04); }
+  /* Recibido destacado cuando se manda a la unidad a capturar ahí un lote repetido */
+  table.renglones td.c-rec.pulso input { animation: pulsoRecibido 1s ease-in-out 4; border-color: #10b981; background: #d1fae5; }
+  @keyframes pulsoRecibido { 0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } 50% { box-shadow: 0 0 0 7px rgba(16,185,129,.5); } }
+  .acciones-fila { display: inline-flex; gap: 2px; align-items: center; justify-content: center; }
+  table.renglones .btn-fantasma[data-action="editar-ant"]:hover, table.renglones .btn-fantasma[data-action="editar-ant"].activo { background: rgba(14,165,233,.14); color: #0369a1; }
+
+  /* ── Avisos del movimiento (cerrado / corrección) y guía de captura ───────────── */
+  .banner-mov { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 16px; border-radius: 16px; margin-bottom: 14px; border: 1.5px solid; }
+  .banner-mov .material-symbols-rounded { font-size: 26px; flex: none; }
+  .banner-mov .texto { flex: 1; min-width: 220px; font-size: 12.5px; line-height: 1.4; }
+  .banner-mov .texto b { display: block; font-size: 13.5px; font-family: 'Poppins', sans-serif; }
+  .banner-mov.cerrado { background: #f1f5f9; border-color: #cbd5e1; color: #334155; }
+  .banner-mov.correccion { background: var(--warning-bg); border-color: var(--warning-border); color: #78350f; }
+  .guia-captura { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .guia-captura .paso { flex: 1; min-width: 190px; padding: 9px 12px; border-radius: 12px; font-size: 11.5px; line-height: 1.35; border-left: 5px solid; background: #fff; box-shadow: var(--shadow-1); }
+  .guia-captura .paso b { display: block; font-size: 12.5px; margin-bottom: 1px; }
+  .guia-captura .paso.ant { border-color: #0ea5e9; } .guia-captura .paso.ant b { color: #0369a1; }
+  .guia-captura .paso.rec { border-color: #10b981; } .guia-captura .paso.rec b { color: #047857; }
+  .guia-captura .paso.sal { border-color: #f59e0b; } .guia-captura .paso.sal b { color: #b45309; }
+  .guia-captura .paso.fin { border-color: var(--primary); } .guia-captura .paso.fin b { color: var(--primary); }
+
+  /* ── Agregar lote: tipo de cantidad y aviso de lote repetido ───────────── */
+  .tipo-cantidad { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tipo-cantidad label { display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border: 2px solid var(--outline-variant); border-radius: 12px; cursor: pointer; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--muted); background: #fff; }
+  .tipo-cantidad label b { font-size: 12.5px; }
+  .tipo-cantidad input { display: none; }
+  .tipo-cantidad label.t-ant b { color: #0369a1; } .tipo-cantidad label.t-rec b { color: #047857; }
+  .tipo-cantidad label.t-ant:has(input:checked) { border-color: #0ea5e9; background: #e0f2fe; }
+  .tipo-cantidad label.t-rec:has(input:checked) { border-color: #10b981; background: #d1fae5; }
+  .alerta-lote-repetido { grid-column: 1 / -1; display: none; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 14px; border-radius: 14px; background: var(--warning-bg); border: 1.5px solid var(--warning-border); color: #78350f; font-size: 12.5px; line-height: 1.4; }
+  .alerta-lote-repetido.visible { display: flex; }
+  .alerta-lote-repetido .material-symbols-rounded { font-size: 26px; color: var(--warning); flex: none; }
+  .alerta-lote-repetido .texto { flex: 1; min-width: 220px; }
+
+  /* Periodo compacto (Admin / Jurisdiccional): mismo alto que los demás campos del encabezado */
+  .campo-periodo.compacto { padding: 4px 10px 6px; border-width: 1.5px; border-radius: 14px; gap: 8px; }
+  .campo-periodo.compacto .campo-periodo-icono { font-size: 20px; }
+  .campo-periodo.compacto .campo label { font-size: 10px; }
+  .campo-periodo.compacto select { height: 36px; font-size: 13.5px; padding: 0 10px; }
+  .campo-periodo.compacto #selMes { min-width: 140px; }
+  .campo-periodo.compacto #selAnio { min-width: 84px; }
+  .campo-periodo.compacto .periodo-chip { padding: 5px 10px; font-size: 11px; }
 
   .badge-vencido {
     display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700;
@@ -787,13 +891,17 @@ window.onunhandledrejection = function (event) {
       <label for="selUnidad" id="labelSelUnidad">Municipio</label>
       <select id="selUnidad"></select>
     </div>
-    <div class="campo">
-      <label for="selAnio">Año</label>
-      <select id="selAnio"></select>
-    </div>
-    <div class="campo">
-      <label for="selMes">Mes</label>
-      <select id="selMes"></select>
+    <div class="campo-periodo" id="campoPeriodo">
+      <span class="material-symbols-rounded campo-periodo-icono">calendar_month</span>
+      <div class="campo">
+        <label for="selMes">Mes que reportas</label>
+        <select id="selMes"></select>
+      </div>
+      <div class="campo">
+        <label for="selAnio">Año</label>
+        <select id="selAnio"></select>
+      </div>
+      <div class="periodo-chip" id="chipPeriodo" role="status"></div>
     </div>
     <div class="campo" id="wrapUnidadRevision" style="display:none;">
       <label for="selUnidadRevision">Unidad a revisar (CLUES)</label>
@@ -1095,6 +1203,9 @@ window.onunhandledrejection = function (event) {
 
 <div id="panelMovimiento">
   <div class="ayuda-franja"><span>Recibido, aplicadas y desechadas por lote. Lo aplicado debe cuadrar con tu paloteo de SIS-06-P.</span><button type="button" class="ayuda-btn" data-ayuda="movimiento" title="Cómo funciona Movimiento de Biológico" aria-label="Cómo funciona Movimiento de Biológico"><span class="material-symbols-rounded">help</span></button></div>
+  <div id="bannerMovimiento"></div>
+  <div id="panelCorreccionesJur"></div>
+  <div id="guiaCaptura" class="guia-captura" style="display:none"></div>
   <div id="contenedorBloques"></div>
 </div>
 

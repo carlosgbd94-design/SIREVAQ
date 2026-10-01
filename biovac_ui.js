@@ -20,6 +20,39 @@ const MESES = [
 ];
 const MESES_ABREV3 = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
+// Mes que corresponde reportar hoy: el mes anterior al actual (el que acaba de cerrar).
+function periodoQueSeReporta(hoy) {
+  const d = hoy || new Date();
+  const m = d.getMonth();          // 0-11: ya es el mes anterior en base 1
+  return m === 0 ? { anio: d.getFullYear() - 1, mes: 12 } : { anio: d.getFullYear(), mes: m };
+}
+
+// Etiqueta junto al selector: deja claro si lo elegido es el mes que se reporta, el mes en curso o uno histórico.
+function actualizarChipPeriodo() {
+  const chip = document.getElementById('chipPeriodo');
+  const selMes = document.getElementById('selMes');
+  const selAnio = document.getElementById('selAnio');
+  if (!chip || !selMes || !selAnio) return;
+  const mes = Number(selMes.value);
+  const anio = Number(selAnio.value);
+  if (!mes || !anio) { chip.textContent = ''; return; }
+  const rep = periodoQueSeReporta();
+  const hoy = new Date();
+  const idx = anio * 12 + mes;
+  const idxRep = rep.anio * 12 + rep.mes;
+  const idxHoy = hoy.getFullYear() * 12 + hoy.getMonth() + 1;
+  const etiqueta = `${MESES_ABREV3[mes - 1]}-${String(anio).slice(2)}`;
+  let clase = '';
+  let texto;
+  if (idx === idxRep) { clase = 'reporta'; texto = `${etiqueta} · mes que se reporta`; }
+  else if (idx === idxHoy) { clase = 'curso'; texto = `${etiqueta} · mes en curso (aún no se reporta)`; }
+  else if (idx > idxHoy) { clase = 'futuro'; texto = `${etiqueta} · mes futuro`; }
+  else texto = `${etiqueta} · mes anterior (consulta / corrección)`;
+  chip.className = `periodo-chip ${clase}`.trim();
+  chip.textContent = texto;
+}
+
+
 // Mismos colores oficiales por biológico que ya usa el resto de SIREVAQ
 // (window.BIOLOGICO_COLORS / getBiologicoColor en main.js) -- aquí mapeados
 // por `clave` del catálogo de BioVac, que es la llave estable (nombre_excel
@@ -381,15 +414,20 @@ async function cargarCatalogo() {
   // con "mes=eq.0&anio=eq.0" (sis06p_capturas nunca tiene esos valores, así
   // que la primera pintada de Seguimiento/comparativo salía vacía hasta que
   // el usuario tocaba a mano el selector de mes o año).
+  // El SIS se reporta del mes que acaba de cerrar: en octubre se abre Septiembre (en enero, Diciembre del año anterior).
+  const { anio: anioReporte, mes: mesReporte } = periodoQueSeReporta();
   const selAnio = document.getElementById('selAnio');
   const anioActual = new Date().getFullYear();
   const anios = [];
   for (let a = anioActual - 1; a <= anioActual + 1; a++) anios.push(a);
-  selAnio.innerHTML = anios.map((a) => `<option value="${a}" ${a === anioActual ? 'selected' : ''}>${a}</option>`).join('');
+  selAnio.innerHTML = anios.map((a) => `<option value="${a}" ${a === anioReporte ? 'selected' : ''}>${a}</option>`).join('');
 
   const selMes = document.getElementById('selMes');
-  const mesActual = new Date().getMonth() + 1;
-  selMes.innerHTML = MESES.map((m) => `<option value="${m.v}" ${m.v === mesActual ? 'selected' : ''}>${m.l}</option>`).join('');
+  selMes.innerHTML = MESES.map((m) => `<option value="${m.v}" ${m.v === mesReporte ? 'selected' : ''}>${m.l}</option>`).join('');
+  actualizarChipPeriodo();
+  // Admin y Jurisdicción tienen más campos en el encabezado: el periodo va compacto para no desentonar.
+  const campoPeriodo = document.getElementById('campoPeriodo');
+  if (campoPeriodo) campoPeriodo.classList.toggle('compacto', rol === 'ADMIN' || rol === 'JURISDICCIONAL');
 
   // MUNICIPAL/JURISDICCIONAL/ADMIN también entran al toggle SIS-06-P/CSV/
   // Seguimiento (Fase 4: modo revisión + dashboard) -- a diferencia de
@@ -702,6 +740,7 @@ function inicializarToggleSIS06P() {
   // (ver recargarMovimientoPorFiltro, registrado una sola vez al arrancar).
   // Aquí solo se refrescan las hojas del SINBA-SIS y el Seguimiento.
   function alCambiarMesOAnio() {
+    actualizarChipPeriodo();
     refrescarHojasSIS();
     if (btnSeg.classList.contains('activo') && window.SIS06PDashboard) window.SIS06PDashboard.render();
   }
@@ -904,11 +943,13 @@ async function cargarMovimiento() {
     estado.correccionEsJurisdiccional = Boolean(marcador?.cascade_batch_id);
   }
   await cargarRenglones();
+  estado.anteriorEditable = await calcularAnteriorEditable(unidadId, anio, mes);
   if (estado.perfil && estado.perfil.rol === 'UNIDAD') {
     await cargarSIS06PTotalesParaComparar(anio, mes);
     if (window.SIS06PBiovac) window.SIS06PBiovac.aplicarResponsable();
   }
   render();
+  cargarCorreccionesJurisdiccion(false);
   if (movimiento.estado === 'BORRADOR') {
     // Pseudo-unidad (municipio/hospital, clues 'JS1-...') -> reparto a nivel
     // municipio (requi_distribucion_municipio); CLUES real -> reparto a
@@ -1385,7 +1426,10 @@ function render() {
   // los roles revisores).
   document.getElementById('btnAbrirImportador').style.display = (esJurisdiccional || esUnidad) ? 'none' : 'inline-flex';
 
+  renderBannerMovimiento(m, esJurisdiccional);
+  renderGuiaCaptura(m, editable);
   renderBloques(editable);
+  aplicarEtiquetasCorreccion();
   sincronizarDockMovimiento();
 }
 
@@ -1453,11 +1497,11 @@ function encabezadoColumnas(split, clave) {
     <tr>
       <th style="text-align:left"${rs}>Lote</th>
       <th${rs}>Caducidad</th>
-      <th${rs}>Ant.</th>
-      <th${rs}>Recibido</th>
-      <th colspan="${split ? 2 : 1}">Dosis aplicadas</th>
-      <th colspan="${split ? 2 : 1}">Dosis desechadas</th>
-      <th${rs}>Final</th>
+      <th class="c-ant"${rs} title="Lo que quedó del mes anterior (un renglón por lote)"><span class="th-con-icono"><span class="material-symbols-rounded">inventory_2</span>Existencia anterior</span></th>
+      <th class="c-rec"${rs} title="Entradas de este mes. Si recibiste un lote que ya tienes, captúralo aquí en su renglón"><span class="th-con-icono"><span class="material-symbols-rounded">move_to_inbox</span>Recibido</span></th>
+      <th class="c-apl" colspan="${split ? 2 : 1}"><span class="th-con-icono"><span class="material-symbols-rounded">vaccines</span>Dosis aplicadas</span></th>
+      <th class="c-des" colspan="${split ? 2 : 1}"><span class="th-con-icono"><span class="material-symbols-rounded">delete_sweep</span>Dosis desechadas</span></th>
+      <th class="c-fin"${rs}><span class="th-con-icono"><span class="material-symbols-rounded">calculate</span>Final</span></th>
       <th${rs}>Observaciones</th>
       <th${rs}></th>
     </tr>
@@ -1684,6 +1728,10 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   const bloqueadoNormal = !subcategoria && caducado;
   const semaforo = semaforoCaducidad(lote.caducidad);
 
+  // La corrección jurisdiccional (ADMIN/JURISDICCIONAL) solo admite los campos de movimiento; la existencia
+  // anterior la corrige la propia unidad o el municipal.
+  const puedeEditarAnt = editable && estado.anteriorEditable !== false
+    && !(estado.correccionEsJurisdiccional && estado.movimiento.estado === 'EN_CORRECCION');
   const campo = (campo, valor, clase) => editable
     ? `<input type="number" step="any" inputmode="decimal" class="${clase || ''}" data-renglon="${r.id}" data-campo="${campo}" value="${valor ? valor : ''}" placeholder="0">`
     : `<span>${valor || 0}</span>`;
@@ -1711,22 +1759,22 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
 
   return `<tr class="${subcategoria ? 'categoria-' + subcategoria : ''}">
     <td>
-      <div class="lote-texto">${lote.numero_lote}${tagEditado}${botonResolver}</div>
+      <div class="lote-texto">${lote.numero_lote}${tagEditado}<span data-etiqueta-corr="${lote.id}|${r.categoria}"></span>${botonResolver}</div>
     </td>
     <td>
       <div class="caducidad-chip ${semaforo}"><span class="semaforo"></span>${formatMmmAa(lote.caducidad)}</div>
       ${vencidoArf ? '<div class="badge-vencido"><span class="material-symbols-rounded">warning</span> Caducado</div>' : ''}
       ${bloqueadoNormal ? '<div class="badge-vencido"><span class="material-symbols-rounded">warning</span> Debe desecharse</div>' : ''}
     </td>
-    <td class="col-anterior">${redondearFrascos(r.existencia_anterior_frascos) || 0}</td>
-    <td class="col-mov">${campo('recibido_frascos', r.recibido_frascos)}</td>
-    <td class="col-mov${split ? ' col-dosis-05' : ''}">${campo('aplicadas_a', r.aplicadas_a)}</td>
-    ${split ? `<td class="col-mov col-dosis-1">${campo('aplicadas_b', r.aplicadas_b)}</td>` : ''}
-    <td class="col-mov${split ? ' col-dosis-05' : ''}">${campo('desechadas_a', r.desechadas_a)}</td>
-    ${split ? `<td class="col-mov col-dosis-1">${campo('desechadas_b', r.desechadas_b)}</td>` : ''}
-    <td class="col-final"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}" data-existencia-final="${r.id}">${dosis}</span></td>
+    <td class="col-anterior c-ant"><span class="ant-valor" data-ant-valor="${r.id}">${redondearFrascos(r.existencia_anterior_frascos) || 0}</span>${puedeEditarAnt ? `<input type="number" step="any" inputmode="decimal" class="ant-input" data-renglon="${r.id}" data-campo="existencia_anterior_frascos" value="${r.existencia_anterior_frascos ? r.existencia_anterior_frascos : ''}" placeholder="0">` : ''}</td>
+    <td class="col-mov c-rec">${campo('recibido_frascos', r.recibido_frascos)}</td>
+    <td class="col-mov c-apl${split ? ' col-dosis-05' : ''}">${campo('aplicadas_a', r.aplicadas_a)}</td>
+    ${split ? `<td class="col-mov c-apl col-dosis-1">${campo('aplicadas_b', r.aplicadas_b)}</td>` : ''}
+    <td class="col-mov c-des${split ? ' col-dosis-05' : ''}">${campo('desechadas_a', r.desechadas_a)}</td>
+    ${split ? `<td class="col-mov c-des col-dosis-1">${campo('desechadas_b', r.desechadas_b)}</td>` : ''}
+    <td class="col-final c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}" data-existencia-final="${r.id}">${dosis}</span></td>
     <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}</td>
-    <td>${editable ? `<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar renglón"><span class="material-symbols-rounded">delete</span></button>` : ''}</td>
+    <td>${editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
   </tr>${filaResolver}`;
 }
 
@@ -1793,6 +1841,7 @@ function panelPasarArfHtml(renglonId, existenciaActual) {
 
 function renderPanelAgregar(bio) {
   const bioId = bio.id;
+  const antOk = estado.anteriorEditable !== false;
   return `
   <button class="btn-mini btn-secundario" style="margin-top:14px" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add</span> Agregar lote</button>
   <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
@@ -1815,16 +1864,23 @@ function renderPanelAgregar(bio) {
         <label>Caducidad</label>
         <input type="text" data-nuevo-caducidad placeholder="Se completa al elegir el lote" readonly>
       </div>
-      <div class="campo">
-        <label>Esta cantidad es...</label>
-        <select data-nuevo-tipo-cantidad>
-          <option value="ANTERIOR">Existencia que ya tenía</option>
-          <option value="RECIBIDO">Entrada nueva (recibido este mes)</option>
-        </select>
+      <div class="campo" style="grid-column: span 2">
+        <label>3. ¿Qué cantidad es?</label>
+        <div class="tipo-cantidad">
+          <label class="t-ant"${antOk ? '' : ' style="opacity:.45; cursor:not-allowed" title="La existencia anterior solo se captura el primer mes: después viene sola del cierre del mes pasado."'}><input type="radio" name="tipo-cant-${bioId}" value="ANTERIOR" data-nuevo-tipo-cantidad ${antOk ? 'checked' : 'disabled'}><b>Existencia anterior</b>${antOk ? 'Lo que ya tenía del mes pasado' : 'Solo el primer mes: ahora viene sola del cierre anterior'}</label>
+          <label class="t-rec"><input type="radio" name="tipo-cant-${bioId}" value="RECIBIDO" data-nuevo-tipo-cantidad ${antOk ? '' : 'checked'}><b>Recibido este mes</b>Una entrada nueva de un lote que NO tenía</label>
+        </div>
       </div>
       <div class="campo">
-        <label>Cantidad (frascos)</label>
+        <label>4. Cantidad (frascos)</label>
         <input type="number" step="any" data-nuevo-cantidad placeholder="0">
+      </div>
+      <div class="alerta-lote-repetido" data-alerta-repetido>
+        <span class="material-symbols-rounded">warning</span>
+        <div class="texto" data-alerta-repetido-texto></div>
+        <button type="button" class="btn-primario btn-mini" data-action="ir-a-recibido" data-renglon="">
+          <span class="material-symbols-rounded">south</span> Ir a la casilla RECIBIDO de ese lote
+        </button>
       </div>
     </div>
     <div class="acciones">
@@ -1847,7 +1903,7 @@ function recalcularFilaEnVivo(renglonId) {
   inputs.forEach((inp) => { if (inp.dataset.campo !== 'observaciones') valores[inp.dataset.campo] = Number(inp.value) || 0; });
   const dosis = redondearFrascos(BiovacEngine.calcExistenciaFinal({
     presentacion: bio.presentacion, dosisPorFrasco: bio.dosis_por_frasco, dosisPorFrascoOverride: r.biovac_lotes.dosis_por_frasco_override,
-    reglaEspecial: bio.regla_especial, existenciaAnterior: r.existencia_anterior_frascos,
+    reglaEspecial: bio.regla_especial, existenciaAnterior: valores.existencia_anterior_frascos ?? r.existencia_anterior_frascos,
     recibido: valores.recibido_frascos ?? r.recibido_frascos, aplicadasA: valores.aplicadas_a ?? r.aplicadas_a,
     aplicadasB: valores.aplicadas_b ?? r.aplicadas_b, desechadasA: valores.desechadas_a ?? r.desechadas_a, desechadasB: valores.desechadas_b ?? r.desechadas_b
   }));
@@ -1870,6 +1926,7 @@ function recalcularTotalBio(bioId) {
     const inputs = document.querySelectorAll(`[data-renglon="${r.id}"]`);
     const valores = {};
     inputs.forEach((inp) => { if (inp.dataset.campo && inp.dataset.campo !== 'observaciones') valores[inp.dataset.campo] = Number(inp.value) || 0; });
+    const anterior = valores.existencia_anterior_frascos ?? r.existencia_anterior_frascos;
     const recibido = valores.recibido_frascos ?? r.recibido_frascos;
     const aplicadasA = valores.aplicadas_a ?? r.aplicadas_a;
     const aplicadasB = valores.aplicadas_b ?? r.aplicadas_b;
@@ -1877,10 +1934,10 @@ function recalcularTotalBio(bioId) {
     const desechadasB = valores.desechadas_b ?? r.desechadas_b;
     const dosis = BiovacEngine.calcExistenciaFinal({
       presentacion: bio.presentacion, dosisPorFrasco: bio.dosis_por_frasco, dosisPorFrascoOverride: r.biovac_lotes.dosis_por_frasco_override,
-      reglaEspecial: bio.regla_especial, existenciaAnterior: r.existencia_anterior_frascos,
+      reglaEspecial: bio.regla_especial, existenciaAnterior: anterior,
       recibido, aplicadasA, aplicadasB, desechadasA, desechadasB
     });
-    totales.ant += Number(r.existencia_anterior_frascos) || 0;
+    totales.ant += Number(anterior) || 0;
     totales.recibido += Number(recibido) || 0;
     totales.aplicadasA += Number(aplicadasA) || 0;
     totales.aplicadasB += Number(aplicadasB) || 0;
@@ -1970,7 +2027,7 @@ async function guardarCampoRenglon(input) {
     const bio = estado.biologicos.find((b) => b.id === r.biovac_lotes.biologico_id);
     const dosisProspectiva = BiovacEngine.calcExistenciaFinal({
       presentacion: bio.presentacion, dosisPorFrasco: bio.dosis_por_frasco, dosisPorFrascoOverride: r.biovac_lotes.dosis_por_frasco_override,
-      reglaEspecial: bio.regla_especial, existenciaAnterior: r.existencia_anterior_frascos,
+      reglaEspecial: bio.regla_especial, existenciaAnterior: campo === 'existencia_anterior_frascos' ? valor : r.existencia_anterior_frascos,
       recibido: campo === 'recibido_frascos' ? valor : r.recibido_frascos,
       aplicadasA: campo === 'aplicadas_a' ? valor : r.aplicadas_a, aplicadasB: campo === 'aplicadas_b' ? valor : r.aplicadas_b,
       desechadasA: campo === 'desechadas_a' ? valor : r.desechadas_a, desechadasB: campo === 'desechadas_b' ? valor : r.desechadas_b
@@ -2011,12 +2068,17 @@ async function guardarCampoRenglon(input) {
   if (r) {
     r[campo] = valor;
     r.existencia_final_frascos = final;
+    if (campo === 'existencia_anterior_frascos') {
+      const vista = document.querySelector(`[data-ant-valor="${renglonId}"]`);
+      if (vista) vista.textContent = redondearFrascos(valor) || 0;
+    }
     const celda = document.querySelector(`[data-existencia-final="${renglonId}"]`);
     if (celda) { celda.textContent = redondearFrascos(final); celda.classList.toggle('existencia-negativa', Number(final) < 0); }
   }
   // La píldora de Movimiento y la ruta del mes (barra de hojas) leen la
   // conciliación con el paloteo: se vuelve a pedir al servidor tras guardar.
   if (window.SIS06PBiovac && window.SIS06PBiovac.refrescarConciliacion) window.SIS06PBiovac.refrescarConciliacion();
+  refrescarCorreccionesJurisdiccion();
 }
 
 // Traslada el concentrado mensual de Influenza (paloteo semanal ya sumado
@@ -2054,6 +2116,201 @@ async function usarTotalInfluenzaEnRenglon(renglonId, total) {
   if (window.SIS06PBiovac && window.SIS06PBiovac.refrescarConciliacion) window.SIS06PBiovac.refrescarConciliacion();
 }
 
+// ---------------------------------------------------------------------------
+// Lote repetido: la unidad ya tiene el lote como existencia anterior y quiere "darlo de alta" otra vez
+// para registrar lo recibido. No se duplica: se le avisa y se le lleva a la casilla RECIBIDO de su fila.
+// ---------------------------------------------------------------------------
+
+function renglonRepetido(bioId, categoria, numeroLote) {
+  const clave = String(numeroLote || '').trim().toUpperCase();
+  return estado.renglones.find((r) => r.categoria === categoria && r.biovac_lotes.biologico_id === bioId
+    && String(r.biovac_lotes.numero_lote || '').trim().toUpperCase() === clave) || null;
+}
+
+function avisarLoteRepetido(panel) {
+  const aviso = panel.querySelector('[data-alerta-repetido]');
+  if (!aviso) return;
+  const numero = (panel.querySelector('[data-nuevo-lote]') || {}).value || '';
+  const categoria = (panel.querySelector('[data-nuevo-categoria]') || {}).value || '';
+  const r = numero ? renglonRepetido(panel.dataset.bio, categoria, numero) : null;
+  const btnConfirmar = panel.querySelector('[data-action="confirmar-agregar"]');
+  if (!r) {
+    aviso.classList.remove('visible');
+    if (btnConfirmar) btnConfirmar.disabled = false;
+    return;
+  }
+  aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>El lote ${r.biovac_lotes.numero_lote} ya está dado de alta en este movimiento</b> `
+    + `(existencia anterior: ${redondearFrascos(r.existencia_anterior_frascos) || 0}, recibido: ${r.recibido_frascos || 0}).<br>`
+    + 'No lo agregues otra vez: si <b>recibiste ese mismo lote</b>, captura la cantidad en la casilla <b>RECIBIDO</b> de su renglón (la resaltamos por ti).';
+  aviso.querySelector('[data-action="ir-a-recibido"]').dataset.renglon = r.id;
+  aviso.classList.add('visible');
+  if (btnConfirmar) btnConfirmar.disabled = true;
+}
+
+function irACasillaRecibido(renglonId) {
+  document.querySelectorAll('[data-panel-agregar].abierto').forEach((p) => p.classList.remove('abierto'));
+  const input = document.querySelector(`input[data-renglon="${renglonId}"][data-campo="recibido_frascos"]`);
+  if (!input) return;
+  const celda = input.closest('td');
+  input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (celda) { celda.classList.add('pulso'); setTimeout(() => celda.classList.remove('pulso'), 4500); }
+  setTimeout(() => { input.focus(); input.select(); }, 350);
+}
+
+// ---------------------------------------------------------------------------
+// Existencia anterior: solo se captura el primer mes de la unidad (después viene sola del cierre del mes
+// pasado). Los meses previos al arranque por unidad son de prueba y se dejan editar.
+// ---------------------------------------------------------------------------
+async function calcularAnteriorEditable(unidadId, anio, mes) {
+  try {
+    const inicio = estado.inicioPorUnidad || '2026-10-01';
+    const idxInicio = Number(inicio.slice(0, 4)) * 12 + Number(inicio.slice(5, 7));
+    const idx = anio * 12 + mes;
+    if (idx < idxInicio) return true;
+    const { data } = await estado.db.from('biovac_movimientos').select('anio, mes').eq('unidad_id', unidadId).lte('anio', anio);
+    const previos = (data || []).filter((x) => { const i = x.anio * 12 + x.mes; return i < idx && i >= idxInicio; });
+    return previos.length === 0;
+  } catch (e) {
+    return true;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Correcciones que pidió Jurisdicción sobre el movimiento del MUNICIPIO (suma de sus unidades): se muestran
+// la fila de hoy en gris, debajo la corrección y lo que falta; el municipal ajusta sus unidades y, cuando la
+// suma coincide, el servidor marca la solicitud como resuelta y desaparece sola.
+// ---------------------------------------------------------------------------
+let _timerCorrJur = null;
+function refrescarCorreccionesJurisdiccion() {
+  clearTimeout(_timerCorrJur);
+  _timerCorrJur = setTimeout(() => cargarCorreccionesJurisdiccion(true), 500);
+}
+
+function aplicarEtiquetasCorreccion() {
+  const pend = new Set((estado.correccionesJur || []).map((c) => `${c.lote_id}|${c.categoria}`));
+  document.querySelectorAll('[data-etiqueta-corr]').forEach((el) => {
+    el.innerHTML = pend.has(el.dataset.etiquetaCorr)
+      ? '<span class="tag-correccion-jur" title="Jurisdicción pidió ajustar este lote: revisa el aviso de arriba">Jurisdicción pidió ajustar</span>' : '';
+  });
+}
+
+async function cargarCorreccionesJurisdiccion(avisarCumplidas) {
+  const panel = document.getElementById('panelCorreccionesJur');
+  if (!panel) return;
+  const rol = estado.perfil ? estado.perfil.rol : null;
+  const m = estado.movimiento;
+  const u = m && m.id ? (estado.unidades || []).find((x) => x.id === m.unidad_id) : null;
+  if (!u || !u.jurisdiccion_id || (rol !== 'MUNICIPAL' && rol !== 'ADMIN')) {
+    panel.innerHTML = ''; estado.correccionesJur = []; aplicarEtiquetasCorreccion(); return;
+  }
+  const { data, error } = await estado.db.rpc('biovac_correcciones_municipio_estado', {
+    p_jurisdiccion_id: u.jurisdiccion_id, p_anio: m.anio, p_mes: m.mes, p_municipio: u.municipio
+  });
+  if (error || !Array.isArray(data)) return;
+  const cumplidas = data.filter((c) => c.coincide);
+  const pend = data.filter((c) => !c.coincide);
+  if (avisarCumplidas && cumplidas.length) {
+    toast(`✅ Corrección de Jurisdicción cumplida: ${cumplidas.map((c) => 'lote ' + c.numero_lote).join(', ')}. Ya coincide con la suma de tus unidades.`, 'ok');
+  }
+  estado.correccionesJur = pend;
+  if (!pend.length) { panel.innerHTML = ''; aplicarEtiquetasCorreccion(); return; }
+
+  // Detalle por unidad de cada lote pendiente (para saber dónde ajustar)
+  const detalles = await Promise.all(pend.map(async (c) => {
+    const { data: d } = await estado.db.rpc('biovac_detalle_lote_jurisdiccion', {
+      p_jurisdiccion_id: u.jurisdiccion_id, p_anio: m.anio, p_mes: m.mes, p_lote_id: c.lote_id, p_categoria: c.categoria
+    });
+    return (d || []).filter((x) => x.renglon_id && (estado.unidades || []).some((uu) => uu.id === x.unidad_id && uu.municipio === u.municipio));
+  }));
+
+  const n = (v) => Number(v) || 0;
+  const celda = (obj, act) => (obj == null ? '<span style="color:#9ca3af">—</span>' : String(n(obj)));
+  const falta = (obj, act) => {
+    if (obj == null) return '<span style="color:#9ca3af">—</span>';
+    const d = n(obj) - n(act);
+    return d === 0 ? '<span class="ok">✓ listo</span>' : `<span class="mal">${d > 0 ? 'faltan ' + d : 'sobran ' + (-d)}</span>`;
+  };
+  const par = (a, b, split) => (split ? `${a} / ${b}` : a);
+  const html = pend.map((c, i) => {
+    const bio = (estado.biologicos || []).find((b) => b.id === c.biologico_id);
+    const split = Boolean(bio && bio.regla_especial === 'SPLIT_DOSE');
+    const aplObj = split ? `${c.obj_aplicadas_a == null ? '—' : n(c.obj_aplicadas_a)} / ${c.obj_aplicadas_b == null ? '—' : n(c.obj_aplicadas_b)}` : celda(c.obj_aplicadas_a);
+    const desObj = split ? `${c.obj_desechadas_a == null ? '—' : n(c.obj_desechadas_a)} / ${c.obj_desechadas_b == null ? '—' : n(c.obj_desechadas_b)}` : celda(c.obj_desechadas_a);
+    const aplFalta = split ? `${falta(c.obj_aplicadas_a, c.act_aplicadas_a)} / ${falta(c.obj_aplicadas_b, c.act_aplicadas_b)}` : falta(c.obj_aplicadas_a, c.act_aplicadas_a);
+    const desFalta = split ? `${falta(c.obj_desechadas_a, c.act_desechadas_a)} / ${falta(c.obj_desechadas_b, c.act_desechadas_b)}` : falta(c.obj_desechadas_a, c.act_desechadas_a);
+    const unidades = (detalles[i] || []).map((d) => {
+      const uu = (estado.unidades || []).find((x) => x.id === d.unidad_id);
+      return `<b>${(uu && uu.nombre) || d.unidad_nombre}</b>: recibido ${n(d.recibido_frascos)}, aplicadas ${par(n(d.aplicadas_a), n(d.aplicadas_b), split)}, desechadas ${par(n(d.desechadas_a), n(d.desechadas_b), split)}`;
+    }).join(' · ');
+    return `<div class="corr-item">
+      <h4>${String(c.nombre_excel || '').replace(/\n/g, ' ')} · lote ${c.numero_lote} <small>(${c.categoria})</small></h4>
+      <div class="corr-motivo">Motivo: ${c.motivo} — ${c.creado_por}, ${new Date(c.creado_en).toLocaleDateString('es-MX')}</div>
+      <table class="corr-tabla"><thead><tr><th></th><th>Recibido</th><th>${split ? 'Aplicadas (A / B)' : 'Aplicadas'}</th><th>${split ? 'Desechadas (A / B)' : 'Desechadas'}</th></tr></thead><tbody>
+        <tr class="hoy"><td>Hoy: suma de tus unidades</td><td>${n(c.act_recibido)}</td><td>${par(n(c.act_aplicadas_a), n(c.act_aplicadas_b), split)}</td><td>${par(n(c.act_desechadas_a), n(c.act_desechadas_b), split)}</td></tr>
+        <tr class="objetivo"><td>Corrección de Jurisdicción</td><td>${celda(c.obj_recibido)}</td><td>${aplObj}</td><td>${desObj}</td></tr>
+        <tr class="falta"><td>Falta ajustar</td><td>${falta(c.obj_recibido, c.act_recibido)}</td><td>${aplFalta}</td><td>${desFalta}</td></tr>
+      </tbody></table>
+      ${unidades ? `<div class="corr-unidades">Unidades con este lote: ${unidades}</div>` : ''}
+    </div>`;
+  }).join('');
+  panel.innerHTML = `<div class="corr-jur"><div class="corr-jur-titulo"><span class="material-symbols-rounded">gavel</span>
+    <div><b>Jurisdicción pidió corregir el movimiento de ${u.municipio === 'MARQUES' ? 'El Marqués' : u.municipio.charAt(0) + u.municipio.slice(1).toLowerCase()}</b>
+    <small>El movimiento del municipio es la suma de sus unidades: ajusta los movimientos de las unidades hasta que coincidan. Cuando cuadre, este aviso desaparece solo.</small></div></div>${html}</div>`;
+  aplicarEtiquetasCorreccion();
+}
+
+// Lápiz: la existencia anterior se vuelve editable en su renglón (sin borrar toda la fila).
+function alternarEdicionAnterior(renglonId) {
+  const fila = document.querySelector(`input[data-renglon="${renglonId}"][data-campo="existencia_anterior_frascos"]`)?.closest('tr');
+  if (!fila) return;
+  const activando = !fila.classList.contains('fila-editando');
+  fila.classList.toggle('fila-editando', activando);
+  const btn = fila.querySelector('[data-action="editar-ant"]');
+  if (btn) {
+    btn.classList.toggle('activo', activando);
+    btn.title = activando ? 'Listo' : 'Corregir la existencia anterior de este lote';
+    btn.querySelector('.material-symbols-rounded').textContent = activando ? 'check' : 'edit';
+  }
+  if (activando) {
+    const inp = fila.querySelector('input.ant-input');
+    inp.focus(); inp.select();
+  }
+}
+
+// Aviso de arriba de la tabla: cerrado (el municipal puede corregir) / modo corrección.
+function renderBannerMovimiento(m, esJurisdiccional) {
+  const cont = document.getElementById('bannerMovimiento');
+  if (!cont) return;
+  const rol = estado.perfil ? estado.perfil.rol : null;
+  if (esJurisdiccional || !rol) { cont.innerHTML = ''; return; }
+  if (m.estado === 'CERRADO' && rol !== 'UNIDAD') {
+    cont.innerHTML = `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock</span>
+      <div class="texto"><b>Movimiento cerrado por la unidad</b>Para corregir lotes, cantidades o eliminar renglones, ábrelo en modo corrección: queda registrado y el cambio se propaga a los meses siguientes.</div>
+      <button type="button" class="btn-primario" data-banner="corregir"><span class="material-symbols-rounded">edit_note</span> Corregir movimiento</button></div>`;
+  } else if (m.estado === 'EN_CORRECCION') {
+    cont.innerHTML = `<div class="banner-mov correccion"><span class="material-symbols-rounded">edit_note</span>
+      <div class="texto"><b>Modo corrección</b>Puedes editar cantidades, corregir la existencia anterior (lápiz), eliminar renglones (bote) o agregar lotes. Al terminar guarda la corrección.</div>
+      <button type="button" class="btn-primario" data-banner="guardar"><span class="material-symbols-rounded">check_circle</span> Guardar corrección</button></div>`;
+  } else {
+    cont.innerHTML = '';
+  }
+}
+
+function renderGuiaCaptura(m, editable) {
+  const cont = document.getElementById('guiaCaptura');
+  if (!cont) return;
+  const esUnidad = estado.perfil && estado.perfil.rol === 'UNIDAD';
+  if (!editable || !esUnidad || m.id === null) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+  cont.style.display = 'flex';
+  cont.innerHTML = `
+    <div class="paso ant"><b>① Existencia anterior</b>${estado.anteriorEditable === false
+      ? 'Viene <u>sola</u> del cierre del mes pasado: no se captura ni se edita.'
+      : 'Lo que te quedó del mes pasado: <u>un renglón por lote</u>. Solo se captura este primer mes.'}</div>
+    <div class="paso rec"><b>② Recibido</b>Entradas de este mes. ¿Es un lote que ya tienes? Captúralo en <u>su misma fila</u>, no lo agregues otra vez.</div>
+    <div class="paso sal"><b>③ Aplicadas y desechadas</b>Lo que salió durante el mes.</div>
+    <div class="paso fin"><b>④ Final</b>Se calcula sola.${estado.anteriorEditable === false ? ' Con el bote quitas un lote que no corresponde.' : ' Con el lápiz corriges una cifra; con el bote quitas el lote.'}</div>`;
+}
+
 async function eliminarRenglon(renglonId) {
   const ok = await mostrarModal({ titulo: 'Eliminar renglón', mensaje: '¿Eliminar este renglón (lote)? Esta acción no se puede deshacer.', textoAceptar: 'Eliminar', peligro: true });
   if (!ok) return;
@@ -2068,6 +2325,7 @@ async function eliminarRenglon(renglonId) {
   }
   await cargarRenglones();
   render();
+  refrescarCorreccionesJurisdiccion();
 }
 
 // ---------------------------------------------------------------------------
@@ -2169,7 +2427,7 @@ async function poblarSelectLote(bio, categoria, selectEl) {
   const opciones = lista
     .map((l) => {
       const usado = yaUsados.has(String(l.lote).trim().toUpperCase());
-      return `<option value="${l.lote}" data-cad="${l.caducidad || ''}" ${usado ? 'disabled' : ''}>${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}${usado ? ' (ya agregado en este movimiento)' : ''}</option>`;
+      return `<option value="${l.lote}" data-cad="${l.caducidad || ''}">${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}${usado ? ' (ya está en tu tabla)' : ''}</option>`;
     })
     .join('');
   const vacio = !lista.length ? '<option value="" disabled>Sin lotes con este Estatus dados de alta para este municipio -- regístralo en Carga de lotes por municipio</option>' : '';
@@ -2225,8 +2483,17 @@ async function agregarLote(bioId, panel) {
   const numeroLote = loteSelect.value.trim();
   const caducidad = loteSelect.selectedOptions[0]?.dataset.cad || null;
   const categoria = panel.querySelector('[data-nuevo-categoria]').value;
-  const tipoCantidad = panel.querySelector('[data-nuevo-tipo-cantidad]').value;
+  if (renglonRepetido(bioId, categoria, numeroLote)) {
+    avisarLoteRepetido(panel);
+    toast('Ese lote ya está en la tabla: si lo recibiste de nuevo, captúralo en su casilla RECIBIDO.', 'error');
+    return;
+  }
+  const tipoCantidad = (panel.querySelector('[data-nuevo-tipo-cantidad]:checked') || {}).value || 'ANTERIOR';
   const cantidad = Number(panel.querySelector('[data-nuevo-cantidad]').value) || 0;
+  if (tipoCantidad === 'ANTERIOR' && estado.anteriorEditable === false) {
+    toast('La existencia anterior solo se captura el primer mes; ahora viene sola del cierre anterior. Usa "Recibido".', 'error');
+    return;
+  }
 
   let { data: lote, error: errSel } = await estado.db.from('biovac_lotes')
     .select('id, caducidad').eq('biologico_id', bioId).eq('numero_lote', numeroLote).maybeSingle();
@@ -2275,6 +2542,7 @@ async function agregarLote(bioId, panel) {
   toast('Lote agregado.', 'ok');
   await cargarRenglones();
   render();
+  refrescarCorreccionesJurisdiccion();
 }
 
 // ---------------------------------------------------------------------------
@@ -2746,6 +3014,7 @@ async function aplicarEnlaceDirectoNotificacion() {
   const anio = params.get('anio');
   if (mes) document.getElementById('selMes').value = mes;
   if (anio) document.getElementById('selAnio').value = anio;
+  actualizarChipPeriodo();
 
   const rol = estado.perfil ? estado.perfil.rol : null;
   if (rol === 'UNIDAD') {
@@ -2834,11 +3103,31 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   cont.addEventListener('change', (ev) => {
     if (ev.target.matches('[data-renglon][data-campo]')) { guardarCampoRenglon(ev.target); return; }
-    if (ev.target.matches('[data-nuevo-lote], [data-nuevo-lote-canje]')) { onCambioSelectLote(ev.target); return; }
+    if (ev.target.matches('[data-nuevo-lote], [data-nuevo-lote-canje]')) {
+      onCambioSelectLote(ev.target);
+      const panelAg = ev.target.closest('[data-panel-agregar]');
+      if (panelAg) avisarLoteRepetido(panelAg);
+      return;
+    }
     if (ev.target.matches('[data-nuevo-categoria]')) {
       const panel = ev.target.closest('[data-panel-agregar]');
-      if (panel) poblarSelectLoteAgregar(panel);
+      if (panel) { poblarSelectLoteAgregar(panel); avisarLoteRepetido(panel); }
     }
+  });
+  // Enter en la existencia anterior: confirma y cierra el modo edición del renglón
+  cont.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && ev.target.matches('input.ant-input')) {
+      ev.preventDefault();
+      ev.target.blur();
+      alternarEdicionAnterior(ev.target.dataset.renglon);
+    }
+  });
+  const bannerMov = document.getElementById('bannerMovimiento');
+  if (bannerMov) bannerMov.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-banner]');
+    if (!b) return;
+    if (b.dataset.banner === 'corregir') abrirCorreccion();
+    if (b.dataset.banner === 'guardar') aplicarCorreccion();
   });
   // seleccionar todo el contenido al enfocar un número, para que escribir
   // reemplace el "0" en vez de concatenarse ("05")
@@ -2851,6 +3140,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const accion = btn.dataset.action;
 
     if (accion === 'eliminar-renglon') { eliminarRenglon(btn.dataset.renglon); return; }
+    if (accion === 'editar-ant') { alternarEdicionAnterior(btn.dataset.renglon); return; }
+    if (accion === 'ir-a-recibido') { irACasillaRecibido(btn.dataset.renglon); return; }
     if (accion === 'usar-total-influenza') { usarTotalInfluenzaEnRenglon(btn.dataset.renglon, Number(btn.dataset.total)); return; }
 
     if (accion === 'toggle-agregar' || accion === 'cancelar-agregar' || accion === 'confirmar-agregar') {

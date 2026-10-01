@@ -134,3 +134,19 @@ test('Jurisdicción en Movimiento: el cierre guiado trabaja con los hospitales',
   await expect(page.locator('#munDescargarCSV')).toBeDisabled();
   expect(errores).toEqual([]);
 });
+
+test('El SIS abre en el mes que se reporta (el anterior) y el selector lo explica', async ({ page }) => {
+  await abrir(page);
+  const esperado = await page.evaluate(() => {
+    const d = new Date();
+    return d.getMonth() === 0 ? { mes: 12, anio: d.getFullYear() - 1 } : { mes: d.getMonth(), anio: d.getFullYear() };
+  });
+  await expect(page.locator('#selMes')).toHaveValue(String(esperado.mes));
+  await expect(page.locator('#selAnio')).toHaveValue(String(esperado.anio));
+  await expect(page.locator('#chipPeriodo')).toContainText('mes que se reporta');
+  await expect(page.locator('#chipPeriodo')).toHaveClass(/reporta/);
+  // El mes en curso se distingue como "aún no se reporta"
+  const actual = await page.evaluate(() => new Date().getMonth() + 1);
+  await page.selectOption('#selMes', String(actual));
+  if (actual !== esperado.mes) await expect(page.locator('#chipPeriodo')).toContainText('mes en curso');
+});
