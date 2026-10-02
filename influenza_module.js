@@ -4326,7 +4326,7 @@ function renderMetasConfigurationGrid() {
         <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 220px; min-width: 220px; max-width: 220px;">Grupo</th>
         <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 130px; min-width: 130px; max-width: 130px;">Subgrupo / Edad</th>
         <th class="p-3 text-center text-xs font-black text-slate-500 uppercase font-bold" style="width: 10%;">Meta Muni</th>
-        ${muniUnits.map(u => `<th class="p-3 text-center text-[10px] font-black text-slate-500 uppercase truncate" style="max-width: 90px; min-width: 80px;" title="${u.unidad}">${u.unidad.substring(0, 12)}...</th>`).join("")}
+        ${muniUnits.map(u => `<th class="meta-th-unidad p-3 text-center text-[10px] font-black text-slate-500 uppercase" title="${u.unidad}">${u.unidad}</th>`).join("")}
         <th class="meta-cmp-cell meta-cmp-th p-3 text-center text-xs font-black text-slate-500 uppercase">Comparación</th>
       </tr>
     `;

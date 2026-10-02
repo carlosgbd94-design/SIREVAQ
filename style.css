@@ -14064,7 +14064,6 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 /* Distribución de Metas: columna «Comparación» siempre visible (pegada a la derecha) al hacer scroll horizontal. */
 #secInfluenzaMetas .meta-cmp-cell {
   position: sticky; right: 0; z-index: 3; min-width: 150px; background: #ffffff;
-  border-left: 1px solid #e2e8f0; box-shadow: -10px 0 12px -10px rgba(15, 23, 42, .28);
 }
 /* El th global es sticky (top) con z-index 10 y se oscurece al hacer scroll (.is-scrolled): el de Comparación
    va por encima de los demás (z 12) y cambia igual, para que no se vea vacío ni tapado. */
@@ -14100,7 +14099,7 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 }
 #secInfluenzaMetas .meta-grupo-row b { text-transform: uppercase; color: var(--g); font-weight: 900; }
 #secInfluenzaMetas .meta-grupo-cat { font-weight: 600; color: #64748b; }
-#secInfluenzaMetas .meta-grupo-row td.meta-grupo-cmp { background: #f1f5f9; background: color-mix(in srgb, var(--g) 13%, #ffffff); box-shadow: -10px 0 12px -10px rgba(15, 23, 42, .28); }
+#secInfluenzaMetas .meta-grupo-row td.meta-grupo-cmp { background: #f1f5f9; background: color-mix(in srgb, var(--g) 13%, #ffffff); }
 #secInfluenzaMetas .meta-rubro-row > td:first-child { box-shadow: inset 4px 0 0 var(--g); }
 
 /* Avisos de reglas de calendario de Influenza (captura de la unidad y Fechas Campaña) */
@@ -14122,15 +14121,15 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaMetas .tableWrap { max-height: max(420px, calc(100vh - 250px)); }
 #secInfluenzaMetas .meta-fx1, #secInfluenzaMetas .meta-fx2 { position: sticky; z-index: 4; background: #ffffff; }
 #secInfluenzaMetas .meta-fx1 { left: 0; }
-#secInfluenzaMetas .meta-fx2 { left: var(--meta-c1w, 244px); box-shadow: 8px 0 10px -8px rgba(15, 23, 42, .22); }
+#secInfluenzaMetas .meta-fx2 { left: var(--meta-c1w, 244px); }
 #secInfluenzaMetas th.meta-fx1, #secInfluenzaMetas th.meta-fx2 { z-index: 14; background: #f8fafc !important; color: #334155 !important; }
 #secInfluenzaMetas .tableWrap.is-scrolled th.meta-fx1, #secInfluenzaMetas .tableWrap.is-scrolled th.meta-fx2 { background: var(--md-sys-color-primary) !important; color: #ffffff !important; }
 #secInfluenzaMetas .meta-rubro-row:focus-within > td:not(.meta-cmp-cell) { background: #f5f3ff; }
 #secInfluenzaMetas .meta-grupo-row td { position: sticky; top: var(--meta-th-h, 46px); z-index: 6; }
 #secInfluenzaMetas .meta-grupo-row td .meta-grupo-txt { position: sticky; left: 12px; display: inline-block; }
 #secInfluenzaMetas .meta-grupo-row td.meta-grupo-cmp { z-index: 8; }
-#secInfluenzaMetas .meta-total-row td { position: sticky; bottom: 52px; z-index: 7; height: 40px; box-shadow: 0 -8px 10px -8px rgba(15, 23, 42, .25); }
-#secInfluenzaMetas .meta-frascos-row td { position: sticky; bottom: 0; z-index: 7; height: 52px; padding-top: 4px !important; padding-bottom: 4px !important; line-height: 1.2; box-shadow: none; border-top: 1px solid #e2e8f0; }
+#secInfluenzaMetas .meta-total-row td { position: sticky; bottom: 60px; z-index: 7; height: 40px; border-top: 0; }
+#secInfluenzaMetas .meta-frascos-row td { position: sticky; bottom: 0; z-index: 7; height: 60px; padding: 6px 8px !important; line-height: 1.2; vertical-align: middle; }
 #secInfluenzaMetas .meta-total-row td.meta-cmp-cell, #secInfluenzaMetas .meta-frascos-row td.meta-cmp-cell { z-index: 9; }
 #secInfluenzaMetas .meta-total-row td.meta-fx-total { left: 0; z-index: 10; }
 #secInfluenzaMetas .meta-frascos-row td[data-estado="mal"] { background: #fee2e2; }
@@ -14147,3 +14146,25 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 }
 #secInfluenzaMetas .meta-exp-btn:disabled { opacity: .6; cursor: progress; }
 #secInfluenzaMetas thead th { background-color: #f8fafc; }
+
+/* Encabezados de unidad: nombre completo en varias líneas (no se recorta con «...»). */
+#secInfluenzaMetas th.meta-th-unidad {
+  min-width: 96px; max-width: 120px; white-space: normal !important; overflow: visible !important;
+  text-overflow: clip !important; overflow-wrap: anywhere; line-height: 1.25; vertical-align: middle; letter-spacing: .02em;
+}
+
+/* Difuminado en lugar de borde duro donde el contenido se corta al desplazar: bajo la franja del bloque,
+   sobre los renglones TOTAL/FRASCOS, a la derecha de Grupo/Edad y a la izquierda de Comparación. */
+#secInfluenzaMetas .meta-grupo-row td::after,
+#secInfluenzaMetas .meta-total-row:not(.meta-frascos-row) td::before,
+#secInfluenzaMetas .meta-fx2:not(th)::after,
+#secInfluenzaMetas .meta-fx-total::after,
+#secInfluenzaMetas .meta-cmp-cell:not(th)::before {
+  content: ""; position: absolute; pointer-events: none; z-index: 1;
+}
+#secInfluenzaMetas .meta-grupo-row td::after { left: 0; right: 0; top: 100%; height: 14px; background: linear-gradient(to bottom, rgba(15, 23, 42, .13), rgba(15, 23, 42, 0)); }
+#secInfluenzaMetas .meta-total-row:not(.meta-frascos-row) td::before { left: 0; right: 0; bottom: 100%; height: 16px; background: linear-gradient(to top, rgba(15, 23, 42, .13), rgba(15, 23, 42, 0)); }
+#secInfluenzaMetas .meta-fx2:not(th)::after { top: 0; bottom: 0; left: 100%; width: 14px; background: linear-gradient(to right, rgba(15, 23, 42, .13), rgba(15, 23, 42, 0)); }
+#secInfluenzaMetas .meta-fx-total::after { top: 0; bottom: 0; left: 100%; width: 14px; background: linear-gradient(to right, rgba(15, 23, 42, .13), rgba(15, 23, 42, 0)); }
+#secInfluenzaMetas .meta-cmp-cell:not(th)::before { top: 0; bottom: 0; right: 100%; width: 14px; background: linear-gradient(to left, rgba(15, 23, 42, .13), rgba(15, 23, 42, 0)); }
+#secInfluenzaMetas .meta-total-row td.meta-fx-total { overflow: visible; }
