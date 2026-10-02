@@ -9704,6 +9704,23 @@ function tipoLoteBadgeHtml(tipo) {
   return `<div class="status-pill ok" title="Normal — visible en captura de existencia"><span class="material-symbols-rounded" style="font-size:16px">check_circle</span>NORMAL</div>`;
 }
 
+// Fecha/hora de captura de un lote (created_ts) y, si vino de Requisiciones, la última vez que
+// el motor lo extrajo (requi_ultima_sync). Los lotes migrados el 22-sep-2026 comparten la misma hora.
+function loteCapturaHtml_(item) {
+  const fmt = (ts) => {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleString("es-MX", { timeZone: "America/Mexico_City", day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).replace(/\./g, "").replace(/,/g, "");
+  };
+  const deRequi = String(item.origen || "").toUpperCase() === "REQUISICION";
+  const origen = deRequi ? "Requisición" : "Manual";
+  const sync = (deRequi || item.requi_ultima_sync)
+    ? `<div style="font-size:10px; opacity:0.6; font-weight:600;" title="Última vez que el motor de Requisiciones extrajo este lote">Requi: ${escapeHtml(fmt(item.requi_ultima_sync))}</div>` : "";
+  return `<div style="font-weight:800; font-size:12px;">${escapeHtml(fmt(item.created_ts))}</div>
+    <div style="font-size:10px; opacity:0.6; font-weight:600;">${origen}</div>${sync}`;
+}
+
 function renderLotesAdmin() {
   const tbody = $("lotesAdminTbody");
   if (!tbody) return;
@@ -9712,7 +9729,7 @@ function renderLotesAdmin() {
   updateLogisticsSummary();
 
   if (!BATCH_CATALOG.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="muted">Sin lotes cargados.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="muted">Sin lotes cargados.</td></tr>`;
     return;
   }
 
@@ -9744,7 +9761,7 @@ function renderLotesAdmin() {
   );
 
   if (!finalFiltered.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="muted" style="padding:24px;">No se encontraron resultados para "${BATCH_SEARCH_QUERY || BATCH_FILTER}".</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="muted" style="padding:24px;">No se encontraron resultados para "${BATCH_SEARCH_QUERY || BATCH_FILTER}".</td></tr>`;
     return;
   }
 
@@ -9780,6 +9797,7 @@ function renderLotesAdmin() {
           <td style="font-weight:800; text-transform:uppercase; font-size:11px; letter-spacing:0.02em; color: var(--md-sys-color-on-surface-variant); opacity: 0.7;">
              ${escapeHtml(item.municipio)}
           </td>
+          <td>${loteCapturaHtml_(item)}</td>
           <td>
             <div style="display:flex; gap: 4px; justify-content:center;">
               <button type="button" class="md-edit-btn group save-btn" title="Guardar" onclick="saveLoteEdit(${idx})">
@@ -9817,6 +9835,7 @@ function renderLotesAdmin() {
           <td style="font-weight:800; text-transform:uppercase; font-size:11px; letter-spacing:0.02em;">
              ${escapeHtml(item.municipio)}
           </td>
+          <td>${loteCapturaHtml_(item)}</td>
           <td>
             <div style="display:flex; gap: 4px; justify-content:center;">
               <button type="button" class="md-edit-btn group" title="Editar lote" onclick="startLoteEdit(${idx})">
