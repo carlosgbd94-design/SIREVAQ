@@ -378,6 +378,7 @@
   }
 
   async function resolverLote(db, cacheLotes, biologicoId, numeroLote, caducidad, dosisOverride) {
+    numeroLote = String(numeroLote || '').trim().toUpperCase();
     const key = biologicoId + '::' + numeroLote;
     if (cacheLotes.has(key)) return cacheLotes.get(key);
 

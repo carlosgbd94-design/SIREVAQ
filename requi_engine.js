@@ -174,7 +174,7 @@
       let lote = '';
       celdas.forEach((c, i) => {
         if (lote || usadas.has(i)) return;
-        if (/\d/.test(c)) { lote = c.replace(/\s+/g, ' '); usadas.add(i); }
+        if (/\d/.test(c)) { lote = c.replace(/\s+/g, ' ').toUpperCase(); usadas.add(i); }
       });
 
       const fila = { bio: bio || bioPorDefecto || null, bioTexto, lote, caducidadTexto, cantidad, error: '' };

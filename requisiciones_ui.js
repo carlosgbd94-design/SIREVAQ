@@ -1014,7 +1014,7 @@ async function agregarRapido() {
   if (estado.guardandoRapido || !estado.requisicion) return;
   const bioId = estado.bioRapido;
   if (!bioId) { toast('Elige primero el biológico.', true); return; }
-  const numeroLote = $('rapLote').value.trim() || LOTE_PENDIENTE; // sin lote = "por definir"
+  const numeroLote = $('rapLote').value.trim().toUpperCase() || LOTE_PENDIENTE; // sin lote = "por definir"
   const caducidadTexto = numeroLote === LOTE_PENDIENTE ? '' : $('rapCad').value.trim();
   const cantidad = Number($('rapCant').value);
   if (!cantidad || cantidad <= 0) { toast('La cantidad debe ser mayor a 0.', true); $('rapCant').focus(); return; }
@@ -1328,7 +1328,7 @@ async function confirmarAsignarLotes() {
   const vistos = new Set();
   const lotes = [];
   for (const f of a.filas) {
-    const numero = String(f.lote || '').trim();
+    const numero = String(f.lote || '').trim().toUpperCase();
     const cant = Number(f.cant);
     if (!numero || numero.toUpperCase() === LOTE_PENDIENTE) { toast('Falta el número de lote en uno de los renglones.', true); return; }
     if (!Number.isInteger(cant) || cant <= 0) { toast(`La cantidad del lote ${numero} debe ser un entero mayor a 0.`, true); return; }
@@ -1629,7 +1629,7 @@ async function importarPegado() {
       if (f.res.estado === 'EXISTE') {
         if (f.caducidad && !f.res.lote.caducidad) caducidadesPorCompletar.push({ lote: f.res.lote, caducidad: f.caducidad });
       } else {
-        nuevos.push({ requi_biologico_id: f.bio.id, numero_lote: f.lote, caducidad: f.caducidad });
+        nuevos.push({ requi_biologico_id: f.bio.id, numero_lote: String(f.lote).trim().toUpperCase(), caducidad: f.caducidad });
       }
     });
 
@@ -2583,6 +2583,14 @@ function instalarEventos() {
   $('textoSugerencias').addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-sug]');
     if (b) { $('textoValor').value = b.dataset.sug; $('textoValor').focus(); }
+  });
+
+  // Números de lote: se escriben (y se guardan) siempre en MAYÚSCULAS.
+  document.addEventListener('input', (ev) => {
+    const inp = ev.target;
+    if (!inp.matches || !inp.matches('#rapLote, input[data-campo="lote"]')) return;
+    const alto = inp.value.toUpperCase();
+    if (alto !== inp.value) { const p = inp.selectionStart; inp.value = alto; try { inp.setSelectionRange(p, p); } catch (e) { /* tipo sin selección */ } }
   });
 
   // Prellenar cantidades (modal)

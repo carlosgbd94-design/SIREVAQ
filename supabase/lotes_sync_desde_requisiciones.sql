@@ -82,7 +82,7 @@ begin
     where not exists (
       select 1 from lotes x
       where x.biologico = c.biologico and upper(btrim(x.lote)) = c.lote
-        and x.municipio = c.municipio and x.tipo = 'NORMAL')
+        and x.municipio in (c.municipio, '*', 'TODOS') and x.tipo = 'NORMAL')   -- '*'/'TODOS' = ya aplica a todos los destinos
   ),
   ins as (
     insert into lotes (biologico, lote, caducidad, municipio, tipo, origen)
