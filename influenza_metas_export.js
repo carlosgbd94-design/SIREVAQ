@@ -288,6 +288,15 @@
     ws.getCell("H4").value = `METAS ${ctx.campana}`;
   }
 
+  // La plantilla trae nombres definidos («temp», filtro) que apuntan a la hoja «CLUES JS1», que no se exporta:
+  // en Excel quedan como vínculos rotos hacia el archivo original. Se quitan los que apunten a hojas que ya no existen.
+  function quitarVinculosHeredados(wb) {
+    const existentes = new Set(wb.worksheets.map((w) => w.name));
+    const hojaDe = (rango) => { const m = /^'((?:[^']|'')+)'!|^([^'!]+)!/.exec(String(rango)); return m ? (m[1] || m[2]).replace(/''/g, "'") : null; };
+    const modelo = (wb.definedNames && wb.definedNames.model) || [];
+    wb.definedNames.model = modelo.filter((n) => (n.ranges || []).every((r) => { const h = hojaDe(r); return !h || existentes.has(h); }));
+  }
+
   /**
    * Arma el libro de un municipio a partir de la plantilla oficial.
    * ctx: { ExcelJS, plantilla (ArrayBuffer/Buffer), muni, campana, metas, unidades, rubroIds }
@@ -333,6 +342,7 @@
     });
     llenarComparacion(hojaComp, hojas.map((h) => h.nombre), base);
     llenarHojaJeringa(hojaJer, unidadesHoja);
+    quitarVinculosHeredados(wb);
     return wb;
   }
 
