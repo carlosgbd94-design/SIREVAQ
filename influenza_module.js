@@ -4052,7 +4052,7 @@ function metaAgregarFranja(tbody, previo, rb, colspan) {
   const tr = document.createElement("tr");
   tr.className = "meta-grupo-row";
   tr.style.setProperty("--g", metaColorGrupo(rb));
-  tr.innerHTML = `<td colspan="${colspan}"><span class="meta-grupo-cat">${rb.categoria}</span> <b>${rb.grupo}</b></td><td class="meta-cmp-cell meta-grupo-cmp"></td>`;
+  tr.innerHTML = `<td colspan="${colspan}"><span class="meta-grupo-txt"><span class="meta-grupo-cat">${rb.categoria}</span> <b>${rb.grupo}</b></span></td><td class="meta-cmp-cell meta-grupo-cmp"></td>`;
   tbody.appendChild(tr);
 }
 
@@ -4093,6 +4093,88 @@ function metaPintarFrascos(td, total, permiteAbierto, soloInformar) {
   td.style.color = color;
   td.innerHTML = txt;
   return estado;
+}
+
+// Deja fijos al desplazar: encabezado, franja del bloque, columnas Grupo/Edad y los renglones TOTAL/FRASCOS.
+// Mide lo que el CSS no puede saber (alto del encabezado y ancho real de la primera columna).
+function metaFijarFilas() {
+  const thead = document.getElementById("influenzaMetasThead");
+  const tbody = document.getElementById("influenzaMetasTbody");
+  const wrap = thead && thead.closest(".tableWrap");
+  if (!wrap || !tbody) return;
+  const marcar = (celdas) => { if (celdas[0]) celdas[0].classList.add("meta-fx1"); if (celdas[1]) celdas[1].classList.add("meta-fx2"); };
+  thead.querySelectorAll("tr").forEach(tr => marcar(tr.children));
+  tbody.querySelectorAll("tr[data-rb]").forEach(tr => marcar(tr.children));
+  tbody.querySelectorAll("tr.meta-total-row > td:first-child").forEach(td => td.classList.add("meta-fx-total"));
+  const th1 = thead.querySelector("th");
+  if (th1 && th1.offsetWidth) wrap.style.setProperty("--meta-c1w", `${th1.offsetWidth}px`);
+  if (thead.offsetHeight) wrap.style.setProperty("--meta-th-h", `${thead.offsetHeight}px`);
+}
+
+// Exportar metas al formato oficial. Jurisdicción elige un municipio o «Todos» (un .zip con un archivo por
+// municipio); el municipal exporta el municipio que tiene seleccionado. Usa lo último guardado.
+const METAS_EXPORT_PLANTILLA = "./Formatos/Metas Influenza Querétaro 2025-2026.xlsx";
+
+function metaSincronizarExportar() {
+  const sel = document.getElementById("metaExportMuni");
+  const lbl = document.getElementById("metaExportMuniLbl");
+  if (!sel || !lbl) return;
+  const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";
+  sel.style.display = lbl.style.display = esJuris ? "" : "none";
+  if (!esJuris || sel.options.length) return;
+  const M = (window.InfluenzaMetasExport || {}).MUNICIPIOS || {};
+  sel.innerHTML = `<option value="TODOS">Todos (un archivo por municipio)</option>`
+    + Object.keys(M).map(k => `<option value="${k}">${M[k].archivo}</option>`).join("");
+}
+
+function metaDescargar(contenido, nombre, tipo) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([contenido], { type: tipo }));
+  link.download = nombre;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+}
+
+async function exportInfluenzaMetasExcel() {
+  const btn = document.getElementById("btnExportInfluenzaMetas");
+  const X = window.InfluenzaMetasExport;
+  if (!X) { showToast("No se cargó el exportador de metas. Recarga la página.", false, "bad"); return; }
+  const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";
+  const eleccion = esJuris ? (document.getElementById("metaExportMuni")?.value || "TODOS")
+    : String(document.getElementById("adminInfluenzaMuni")?.value || USER.municipio || "").toUpperCase();
+  const munis = eleccion === "TODOS" ? Object.keys(X.MUNICIPIOS) : [eleccion];
+  if (btn) btn.disabled = true;
+  try {
+    await window.ensureLibsLoaded("exceljs", "jszip");
+    const resp = await fetch(encodeURI(METAS_EXPORT_PLANTILLA));
+    if (!resp.ok) throw new Error(`No se pudo leer la plantilla (${resp.status})`);
+    const plantilla = await resp.arrayBuffer();
+    const campana = document.getElementById("metaCampaignSelect").value;
+    const archivos = [];
+    for (const muni of munis) {
+      const wb = await X.construirLibroMetas({
+        ExcelJS, plantilla, muni, campana, metas: _adminMetasArray, unidades: _allUnidades,
+        rubroIds: INFLUENZA_RUBROS.map(r => r.id)
+      });
+      archivos.push({ nombre: X.nombreArchivo(muni, campana), datos: await X.escribirLibro(wb, window.JSZip) });
+    }
+    const xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    if (archivos.length === 1) {
+      metaDescargar(archivos[0].datos, archivos[0].nombre, xlsx);
+    } else {
+      const zip = new window.JSZip();
+      archivos.forEach(a => zip.file(a.nombre, a.datos));
+      metaDescargar(await zip.generateAsync({ type: "uint8array" }), `Metas Influenza ${campana}.zip`, "application/zip");
+    }
+    showToast("Metas exportadas con lo último guardado.", true, "good");
+  } catch (err) {
+    console.error("Error al exportar las metas de Influenza:", err);
+    showToast("No se pudo generar el Excel de metas.", false, "bad");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function renderMetasConfigurationGrid() {
@@ -4170,7 +4252,7 @@ function renderMetasConfigurationGrid() {
     tbody.appendChild(pie);
 
     const pieFr = document.createElement("tr");
-    pieFr.className = "meta-total-row";
+    pieFr.className = "meta-total-row meta-frascos-row";
     pieFr.innerHTML = `<td class="p-3 text-xs font-black" colspan="2" title="Un frasco = 10 dosis">FRASCOS</td>`
       + ids.map(id => `<td class="p-3 text-center text-[11px] font-black" id="frs_${id}"></td>`).join("")
       + `<td class="p-3 text-center text-[11px] font-black" id="frs_J"></td><td class="meta-cmp-cell p-3"></td>`;
@@ -4259,7 +4341,7 @@ function renderMetasConfigurationGrid() {
     // Querétaro municipio es el único que puede cerrar con frasco abierto (lo habitual: una sola unidad).
     const permiteAbierto = String(selectMuni).toUpperCase() === "QUERETARO";
     const pieFr = document.createElement("tr");
-    pieFr.className = "meta-total-row";
+    pieFr.className = "meta-total-row meta-frascos-row";
     pieFr.innerHTML = `<td class="p-3 text-xs font-black" colspan="2" title="Un frasco = 10 dosis" id="frs_label">FRASCOS</td><td class="p-3 text-center text-[11px] font-black" id="frs_meta"></td>`
       + muniUnits.map(u => `<td class="p-3 text-center text-[11px] font-black" id="frs_${u.clues}"></td>`).join("")
       + `<td class="meta-cmp-cell p-3"></td>`;
@@ -4320,6 +4402,11 @@ function renderMetasConfigurationGrid() {
     };
     recalcular();
   }
+
+  metaFijarFilas();
+  metaSincronizarExportar();
+  const btnExp = document.getElementById("btnExportInfluenzaMetas");
+  if (btnExp) btnExp.onclick = exportInfluenzaMetasExcel;
 
   // Enlazar guardado
   document.getElementById("btnSaveInfluenzaMetas").onclick = async () => {

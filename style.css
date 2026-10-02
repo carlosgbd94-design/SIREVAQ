@@ -14116,3 +14116,34 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 .inf-aviso--info { border-color: #e2e8f0; background: #f8fafc; color: #334155; }
 .inf-pill-regla { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; background: #fef3c7; color: #92400e; padding: 1px 7px; border-radius: 20px; }
 #secInfluenzaConfig .frs-box { padding: 12px 14px; border-radius: 12px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 12px; font-weight: 600; color: #334155; line-height: 1.5; }
+
+/* Distribución de Metas: la tabla se desplaza dentro de su caja y se quedan fijos el encabezado, la franja del
+   bloque (Primera dosis, Segunda dosis...), las columnas Grupo/Edad y, abajo, los renglones TOTAL y FRASCOS. */
+#secInfluenzaMetas .tableWrap { max-height: max(420px, calc(100vh - 250px)); }
+#secInfluenzaMetas .meta-fx1, #secInfluenzaMetas .meta-fx2 { position: sticky; z-index: 4; background: #ffffff; }
+#secInfluenzaMetas .meta-fx1 { left: 0; }
+#secInfluenzaMetas .meta-fx2 { left: var(--meta-c1w, 244px); box-shadow: 8px 0 10px -8px rgba(15, 23, 42, .22); }
+#secInfluenzaMetas th.meta-fx1, #secInfluenzaMetas th.meta-fx2 { z-index: 14; background: #f8fafc !important; color: #334155 !important; }
+#secInfluenzaMetas .tableWrap.is-scrolled th.meta-fx1, #secInfluenzaMetas .tableWrap.is-scrolled th.meta-fx2 { background: var(--md-sys-color-primary) !important; color: #ffffff !important; }
+#secInfluenzaMetas .meta-rubro-row:focus-within > td:not(.meta-cmp-cell) { background: #f5f3ff; }
+#secInfluenzaMetas .meta-grupo-row td { position: sticky; top: var(--meta-th-h, 46px); z-index: 6; }
+#secInfluenzaMetas .meta-grupo-row td .meta-grupo-txt { position: sticky; left: 12px; display: inline-block; }
+#secInfluenzaMetas .meta-grupo-row td.meta-grupo-cmp { z-index: 8; }
+#secInfluenzaMetas .meta-total-row td { position: sticky; bottom: 52px; z-index: 7; height: 40px; box-shadow: 0 -8px 10px -8px rgba(15, 23, 42, .25); }
+#secInfluenzaMetas .meta-frascos-row td { position: sticky; bottom: 0; z-index: 7; height: 52px; padding-top: 4px !important; padding-bottom: 4px !important; line-height: 1.2; box-shadow: none; border-top: 1px solid #e2e8f0; }
+#secInfluenzaMetas .meta-total-row td.meta-cmp-cell, #secInfluenzaMetas .meta-frascos-row td.meta-cmp-cell { z-index: 9; }
+#secInfluenzaMetas .meta-total-row td.meta-fx-total { left: 0; z-index: 10; }
+#secInfluenzaMetas .meta-frascos-row td[data-estado="mal"] { background: #fee2e2; }
+#secInfluenzaMetas .meta-frascos-row td[data-estado="aviso"] { background: #fef3c7; }
+#secInfluenzaMetas .meta-frascos-row td[data-estado="ok"] { background: #dcfce7; }
+
+/* Exportar metas al formato oficial (a la derecha de la barra de campaña) */
+#secInfluenzaMetas .meta-exp-grupo { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+#secInfluenzaMetas .meta-exp-btn {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  min-height: 40px !important; height: 40px !important; padding: 0 16px !important; width: auto !important;
+  border-radius: 12px !important; border: 1px solid #4c1d95 !important; background: #4c1d95 !important; color: #ffffff !important;
+  font-family: inherit !important; font-size: 12px !important; font-weight: 800 !important;
+}
+#secInfluenzaMetas .meta-exp-btn:disabled { opacity: .6; cursor: progress; }
+#secInfluenzaMetas thead th { background-color: #f8fafc; }

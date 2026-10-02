@@ -250,3 +250,72 @@ test('Metas: Tab va a la derecha, Enter baja; al terminar fila/columna salta a l
   await expect(inp('r1', 'CORREGIDORA')).toBeFocused();
   await expect(inp('r1', 'QUERETARO')).toHaveValue('10');
 });
+
+test('Metas municipales: fila de frascos (Querétaro admite abierto), repartir parejo y pegado desde Excel', async ({ page }) => {
+  await montarMetas(page, 'MUNICIPAL', [meta(null, 'QUERETARO', 100)]);
+  const q1 = page.locator('input[data-rb="r1"][data-clues="Q1"]');
+  await q1.fill('215');
+  await expect(page.locator('#frs_Q1')).toHaveAttribute('data-estado', 'aviso');   // Querétaro: abierto = ámbar
+  await expect(page.locator('#frs_Q1')).toContainText('21.5');
+  await q1.fill('220');
+  await expect(page.locator('#frs_Q1')).toHaveAttribute('data-estado', 'ok');
+
+  // Repartir parejo: 100 entre 3 unidades -> 34/33/33
+  await page.locator('tr[data-rb="r1"] .meta-split-btn').click();
+  await expect(q1).toHaveValue('34');
+  await expect(page.locator('input[data-rb="r1"][data-clues="Q3"]')).toHaveValue('33');
+
+  // Pegado de bloque (2 filas x 2 columnas) desde Q1/r1
+  await q1.focus();
+  await page.evaluate(() => {
+    const el = document.querySelector('input[data-rb="r1"][data-clues="Q1"]');
+    const dt = new DataTransfer(); dt.setData('text/plain', '10\t20\n30\t40\n');
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(page.locator('input[data-rb="r1"][data-clues="Q2"]')).toHaveValue('20');
+  const r2 = await page.evaluate(() => INFLUENZA_RUBROS[1].id);
+  await expect(page.locator(`input[data-rb="${r2}"][data-clues="Q2"]`)).toHaveValue('40');
+});
+
+test('Metas jurisdiccionales: frasco abierto en rojo salvo Querétaro', async ({ page }) => {
+  await montarMetas(page, 'JURISDICCIONAL', []);
+  await page.locator('input[data-rb="r1"][data-muni="QUERETARO"]').fill('15');
+  await page.locator('input[data-rb="r1"][data-muni="CORREGIDORA"]').fill('15');
+  await expect(page.locator('#frs_QUERETARO')).toHaveAttribute('data-estado', 'aviso');
+  await expect(page.locator('#frs_CORREGIDORA')).toHaveAttribute('data-estado', 'mal');
+  await page.locator('input[data-rb="r1"][data-muni="CORREGIDORA"]').fill('20');
+  await expect(page.locator('#frs_CORREGIDORA')).toHaveAttribute('data-estado', 'ok');
+});
+
+test('Metas: al desplazar quedan fijos el encabezado, la franja del bloque, Grupo/Edad y los renglones TOTAL y FRASCOS', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 800 });
+  await montarMetas(page, 'MUNICIPAL', [meta(null, 'QUERETARO', 100)]);
+  const wrap = page.locator('#secInfluenzaMetas .tableWrap');
+  await wrap.evaluate((e) => { e.scrollTop = 600; });
+  const pos = await page.evaluate(() => {
+    const w = document.querySelector('#secInfluenzaMetas .tableWrap').getBoundingClientRect();
+    const r = (s) => document.querySelector(s).getBoundingClientRect();
+    return {
+      wTop: w.top, wBottom: w.bottom,
+      frascos: r('#frs_Q1'), total: r('#tot_Q1'), th: r('#influenzaMetasThead th'),
+      franja: r('.meta-grupo-row td')
+    };
+  });
+  expect(Math.abs(pos.frascos.bottom - pos.wBottom)).toBeLessThan(3);        // FRASCOS pegado al borde inferior
+  expect(Math.abs(pos.total.bottom - pos.frascos.top)).toBeLessThan(3);      // TOTAL justo encima
+  expect(Math.abs(pos.th.top - pos.wTop)).toBeLessThan(3);                   // encabezado arriba
+  // La franja del bloque que se está trabajando queda debajo del encabezado
+  const franjas = await page.evaluate(() => [...document.querySelectorAll('.meta-grupo-row td:first-child')]
+    .map((td) => td.getBoundingClientRect().top));
+  const alTope = franjas.filter((t) => Math.abs(t - (pos.th.bottom)) < 3);
+  expect(alTope.length).toBeGreaterThan(0);
+  // Columna Grupo/Edad fija al desplazar en horizontal (modo jurisdiccional: más columnas que ancho)
+  await montarMetas(page, 'JURISDICCIONAL', []);
+  await expect.poll(() => wrap.evaluate((e) => e.scrollWidth > e.clientWidth)).toBe(true);
+  await wrap.evaluate((e) => { e.scrollLeft = 300; });
+  const izq = await page.evaluate(() => {
+    const w = document.querySelector('#secInfluenzaMetas .tableWrap').getBoundingClientRect();
+    return { w: w.left, c: document.querySelector('#influenzaMetasTbody tr[data-rb] td').getBoundingClientRect().left };
+  });
+  expect(Math.abs(izq.c - izq.w)).toBeLessThan(3);
+});
