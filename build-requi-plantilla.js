@@ -126,7 +126,8 @@ function estilo(cel, cambios) { cel.style = { ...clonar(cel.style || {}), ...cam
 
   // Recuadros de sellos. En el Excel original eran cuadros de texto flotantes (los
   // que ExcelJS no conserva), así que se dibujan como celdas combinadas con borde
-  // punteado: izquierdo vacío y derecho con la marca de agua "SELLO UNIDAD".
+  // punteado y VACÍOS, como en el original (ahí los cuadros de texto no traen texto: una
+  // marca de agua "SELLO UNIDAD" en F9F9F9 salía casi negra en impresoras de tóner).
   const punteado = { style: 'dotted', color: { argb: 'FF000000' } };
   const recuadro = (c1, c2) => {
     ws.mergeCells(SELLO_DESDE, c1, SELLO_HASTA, c2);
@@ -147,12 +148,6 @@ function estilo(cel, cambios) { cel.style = { ...clonar(cel.style || {}), ...cam
   };
   recuadro(1, 3);
   recuadro(8, 11);
-  const marca = ws.getCell(`H${SELLO_DESDE}`);
-  marca.value = 'SELLO' + String.fromCharCode(10) + 'UNIDAD';
-  estilo(marca, {
-    font: { name: 'Arial', size: 138, color: { argb: 'FFF9F9F9' } },
-    alignment: { horizontal: 'center', vertical: 'middle', wrapText: true }
-  });
 
   // 5) Cuadro de jeringas (M:Q) fuera, y la hoja lista para Carta.
   for (let r = 1; r <= FIN_VIEJO + DESPLAZA + 3; r++) {

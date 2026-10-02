@@ -31,6 +31,9 @@
   // capturados en esas celdas (cantidades, lotes) que de otro modo se
   // quedarían pegados en cualquier renglón que esta exportación no llene.
   const TOTAL_RENGLONES_PLANTILLA = 21;
+  // Recuadros de sellos: filas 77-89 de la plantilla (índice 0-based de la 77 = 76, 13 filas).
+  const SELLO_FILA_INI = 76;
+  const SELLO_FILAS = 13;
 
   function limpiarDatosPrevios(ws) {
     for (let orden = 1; orden <= TOTAL_RENGLONES_PLANTILLA; orden++) {
@@ -89,6 +92,11 @@
     destinoNombre: 'B9', folio: 'H9',
     destinoDireccion: 'B10', mesLabel: 'H10'
   };
+
+  function esUltimoDiaDelMes(iso) {
+    const [a, m, d] = String(iso).split('-').map(Number);
+    return d === new Date(Date.UTC(a, m, 0)).getUTCDate();
+  }
 
   function escribir(ws, addr, valor) {
     if (valor === undefined) return; // no tocar la celda si no hay dato
@@ -214,10 +222,60 @@
         if (r.numeroLote) escribir(ws, `I${fila}`, r.numeroLote);
         // 'Z' -- ExcelJS serializa Date a número de serie con sus componentes
         // UTC; una medianoche LOCAL sin 'Z' se serializa con ".25" de fracción de día.
-        if (r.caducidad) escribir(ws, `J${fila}`, new Date(r.caducidad + 'T00:00:00Z'));
+        if (r.caducidad) {
+          escribir(ws, `J${fila}`, new Date(r.caducidad + 'T00:00:00Z'));
+          // Se captura sin día (08-29) -> se guarda el último del mes y sale "AGO-29" (formato de la
+          // plantilla). Si trae un día distinto del último (27-08-29), sale completo: "27-AGO-29".
+          if (!esUltimoDiaDelMes(r.caducidad)) ws.getCell(`J${fila}`).numFmt = 'dd-mmm-yy';
+        }
       });
     });
     return { sinRenglon, agregadas };
+  }
+
+
+  // Marca de agua "SELLO UNIDAD" del recuadro derecho (solo UNIDAD y hospitales). En el formato
+  // original es un CUADRO DE TEXTO flotante con letra #F9F9F9: impreso sale gris clarito. Como texto de
+  // celda las impresoras de tóner lo sacaban casi negro, así que se inserta como cuadro de texto real.
+  // ExcelJS no maneja formas, por eso se agrega al XML del dibujo de la hoja ya generado.
+  function xmlCuadroSello(filaIni, filaFin) {
+    const run = (t) => `<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="es-MX" sz="13800"><a:solidFill><a:srgbClr val="F9F9F9"/></a:solidFill><a:latin typeface="Arial" pitchFamily="34" charset="0"/><a:cs typeface="Arial" pitchFamily="34" charset="0"/></a:rPr><a:t>${t}</a:t></a:r></a:p>`;
+    return '<xdr:twoCellAnchor editAs="oneCell">'
+      + `<xdr:from><xdr:col>7</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${filaIni}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>`
+      + `<xdr:to><xdr:col>11</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${filaFin}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>`
+      + '<xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="900" name="Sello unidad"/><xdr:cNvSpPr txBox="1"/></xdr:nvSpPr>'
+      + '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></xdr:spPr>'
+      + '<xdr:txBody><a:bodyPr vertOverflow="clip" horzOverflow="clip" wrap="square" rtlCol="0" anchor="ctr"/><a:lstStyle/>'
+      + run('SELLO') + run('UNIDAD') + '</xdr:txBody></xdr:sp><xdr:clientData/></xdr:twoCellAnchor>';
+  }
+
+  // sellos: [{ nombre (de la pestaña), agregadas (renglones que bajaron el recuadro) }]
+  async function agregarSellos(buffer, sellos) {
+    if (!sellos.length) return buffer;
+    const Zip = typeof JSZip !== 'undefined' ? JSZip : require('jszip');
+    const zip = await Zip.loadAsync(buffer);
+    const leer = async (ruta) => zip.file(ruta).async('string');
+    const wbXml = await leer('xl/workbook.xml');
+    const wbRels = await leer('xl/_rels/workbook.xml.rels');
+    const attr = (tag, nombre) => { const m = tag.match(new RegExp(nombre + '="([^"]*)"')); return m ? m[1] : ''; };
+    const desescapar = (t) => t.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+    for (const sello of sellos) {
+      const tagHoja = (wbXml.match(/<sheet [^>]*>/g) || []).find((t) => desescapar(attr(t, 'name')) === sello.nombre);
+      if (!tagHoja) continue;
+      const rid = attr(tagHoja, 'r:id');
+      const tagRel = (wbRels.match(/<Relationship [^>]*>/g) || []).find((t) => attr(t, 'Id') === rid);
+      if (!tagRel) continue;
+      const rutaHoja = 'xl/' + attr(tagRel, 'Target').replace(/^\/?(xl\/)?/, '');
+      const rutaRels = rutaHoja.replace('worksheets/', 'worksheets/_rels/') + '.rels';
+      if (!zip.file(rutaRels)) continue;
+      const tagDib = ((await leer(rutaRels)).match(/<Relationship [^>]*>/g) || []).find((t) => /\/drawing$/.test(attr(t, 'Type')));
+      if (!tagDib) continue;
+      const rutaDib = 'xl/' + attr(tagDib, 'Target').replace(/^\.\.\//, '');
+      const xml = await leer(rutaDib);
+      const desde = SELLO_FILA_INI + sello.agregadas;
+      zip.file(rutaDib, xml.replace('</xdr:wsDr>', xmlCuadroSello(desde, desde + SELLO_FILAS) + '</xdr:wsDr>'));
+    }
+    return zip.generateAsync({ type: Zip.support.nodebuffer ? 'nodebuffer' : 'uint8array' });
   }
 
   // Llena UNA hoja de la plantilla (encabezado, biológicos, pie y firmas).
@@ -232,18 +290,18 @@
     const { sinRenglon, agregadas } = escribirBiologicos(ws, catalogo || [], filasPorBiologico || {});
     escribirFirmas(ws, firmas || {}, agregadas);
     ws.pageSetup.printArea = `A1:K${FILA_FINAL_PLANTILLA + agregadas}`;
-    return { sinRenglon };
+    return { sinRenglon, agregadas };
   }
 
-  async function generar({ plantillaBuffer, encabezado, firmas, catalogo, filasPorBiologico }) {
+  async function generar({ plantillaBuffer, encabezado, firmas, catalogo, filasPorBiologico, conSello }) {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(plantillaBuffer);
     const ws = wb.getWorksheet(HOJA);
     if (!ws) throw new Error(`La plantilla no tiene la hoja "${HOJA}".`);
-    const { sinRenglon } = llenarHoja(ws, { encabezado, firmas, catalogo, filasPorBiologico });
+    const { sinRenglon, agregadas } = llenarHoja(ws, { encabezado, firmas, catalogo, filasPorBiologico });
     ocultarOtrasHojas(wb, HOJA);
 
-    const buffer = await wb.xlsx.writeBuffer();
+    const buffer = await agregarSellos(await wb.xlsx.writeBuffer(), conSello ? [{ nombre: ws.name, agregadas }] : []);
     // `sobrantes` se conserva vacío por compatibilidad: ya no hay límite de 2 lotes.
     return { buffer, sobrantes: [], sinRenglon };
   }
@@ -284,12 +342,16 @@
     }
     const sinRenglon = new Set();
     const usados = new Set();
+    const sellos = [];
     hojas.forEach((datos, i) => {
-      llenarHoja(hs[i], datos).sinRenglon.forEach((x) => sinRenglon.add(x));
+      const { sinRenglon: sr, agregadas } = llenarHoja(hs[i], datos);
+      sr.forEach((x) => sinRenglon.add(x));
+      if (datos.conSello) sellos.push({ i, agregadas });
     });
     hojas.forEach((datos, i) => { hs[i].name = nombreHojaUnico(datos.nombreHoja, usados); });
+    sellos.forEach((x) => { x.nombre = hs[x.i].name; });
     wb.views = [{ activeTab: 0, firstSheet: 0, visibility: 'visible', x: 0, y: 0, width: 20000, height: 10000, tabRatio: 800 }];
-    const buffer = await wb.xlsx.writeBuffer();
+    const buffer = await agregarSellos(await wb.xlsx.writeBuffer(), sellos);
     return { buffer, sobrantes: [], sinRenglon: [...sinRenglon] };
   }
 

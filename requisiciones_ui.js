@@ -2462,7 +2462,7 @@ function renderPaso3() {
 
 async function obtenerPlantillaBuffer() {
   if (!estado.plantillaBuffer) {
-    const resp = await fetch('requisiciones_plantilla.xlsx');
+    const resp = await fetch('requisiciones_plantilla.xlsx', { cache: 'no-cache' });
     estado.plantillaBuffer = await resp.arrayBuffer();
   }
   return estado.plantillaBuffer;
@@ -2542,7 +2542,9 @@ async function construirDatosDestino(nivel, destino) {
 
   const nombreArchivo = `Requisicion_${nivel}_${(destinoNombre || destino).replace(/[^\wÁÉÍÓÚÑáéíóúñ ]/g, '').trim().replace(/\s+/g, '_')}_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}${sufijoEntregaArchivo()}.xlsx`;
 
-  return { encabezado, firmas, catalogo: estado.catalogo, filasPorBiologico, nombreArchivo };
+  // La marca de agua "SELLO UNIDAD" solo va en las requisiciones de unidad y de hospitales.
+  const conSello = nivel === 'UNIDAD' || (nivel === 'MUNICIPAL' && esHospital(destino));
+  return { encabezado, firmas, catalogo: estado.catalogo, filasPorBiologico, nombreArchivo, conSello };
 }
 
 function descargarBlob(blob, nombreArchivo) {
