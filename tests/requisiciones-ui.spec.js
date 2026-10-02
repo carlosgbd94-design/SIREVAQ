@@ -835,7 +835,7 @@ test('Requisiciones: la barra de abajo no encima el chip de guardado con los pas
   await page.addStyleTag({ content: '.material-symbols-rounded { font-size: 0 !important; display: inline-block; width: 20px; height: 20px; overflow: hidden; }' });
   await page.click('#chipsBio .chip-bio[data-bio="bio-hexa"]');
   await page.fill('#rapLote', 'ANCHO1');                       // chip en "Falta guardar" (su texto más largo)
-  for (const ancho of [1600, 1400, 1250, 1100, 1000, 900, 800, 600, 420]) {
+  for (const ancho of [1600, 1400, 1250, 1120, 1100, 1060, 1024, 990, 960, 930, 900, 800, 600, 420]) {
     await page.setViewportSize({ width: ancho, height: 800 });
     await page.waitForTimeout(350);
     const r = await page.evaluate(() => {
@@ -845,6 +845,9 @@ test('Requisiciones: la barra de abajo no encima el chip de guardado con los pas
         const e = document.querySelector(s); if (!e || getComputedStyle(e).display === 'none' || !e.getBoundingClientRect().width) return false;
         return getComputedStyle(e).overflowX !== 'hidden' && e.scrollWidth > e.clientWidth + 1;   // (con overflow oculto se recorta, no se encima)
       });
+      // Las pestañas de pasos no deben quedar recortadas (con scroll interno se verían cortadas: "3 ·").
+      const hojas = document.querySelector('.dock-hojas');
+      if (hojas.scrollWidth > hojas.clientWidth + 1) desborda.push('.dock-hojas (pestañas recortadas)');
       return { desborda, dock: caja('#dockPasos'), partes: { pasos: caja('.dock-hojas'), estado: caja('#dockEstado'), chip: caja('#dockGuardado'), acciones: caja('.dock-acciones') } };
     });
     expect(r.desborda, `texto que se sale de su caja @${ancho}`).toEqual([]);

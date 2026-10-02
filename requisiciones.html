@@ -394,6 +394,7 @@
   .dock-guardado { flex: none; }
   @media (min-width: 761px) { #pagina .dock-sis { max-width: min(1440px, calc(100vw - 28px)); } }   /* con todo visible mide ~1360px */
   @media (max-width: 1480px) { #dockEstado, .hoja-largo { display: none; } }
+  @media (max-width: 1120px) { #pagina .hoja-tab:not(.activo) .hoja-nombre { display: none; } }   /* pantalla horizontal angosta: solo el paso activo lleva nombre, así ninguna pestaña queda recortada */
   @media (max-width: 1040px) { .dg-txt small { display: none; } .dock-guardado { max-width: 150px; } }
   @media (max-width: 900px) { #pagina .dock-etiqueta { display: none; } #pagina .dock-btn { padding: 10px 13px; } }
   @media (max-width: 560px) { #pagina .hoja-nombre { display: none; } }   /* teléfono: los pasos quedan como ícono + avance */
