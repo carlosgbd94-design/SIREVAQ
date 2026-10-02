@@ -21883,6 +21883,9 @@ window.openBioEditModal = function() {
           ${escapeHtml(bioName)}
         </td>
         <td style="padding:12px; text-align:center;">
+          <span title="Promedio mensual de consumo (frascos)" style="display:inline-block; min-width:48px; padding:6px 10px; border-radius:8px; background:#f1f5f9; color:#334155; font-weight:800; font-size:13px;">${Number(promedioFrascos).toLocaleString("es-MX", { maximumFractionDigits: 1 })}</span>
+        </td>
+        <td style="padding:12px; text-align:center;">
           <input type="number" min="0" class="input-exist" value="${existQty}" style="width:75px; text-align:center; padding:6px; border-radius:8px; border:1px solid #cbd5e1; font-weight:700; font-size:13px;" />
         </td>
         <td style="padding:12px; text-align:center;">
@@ -21893,11 +21896,15 @@ window.openBioEditModal = function() {
   }).join("");
 
   modal.style.display = "flex";
+  modal.classList.add("show");
 };
 
 window.closeBioEditModal = function() {
   const modal = $("modalBioEditOverlay");
-  if (modal) modal.style.display = "none";
+  if (modal) {
+    modal.classList.remove("show");
+    modal.style.display = "none";
+  }
   const liveOverlay = $("liveViewOverlay");
   if (liveOverlay) {
     liveOverlay.classList.add("show");
