@@ -130,3 +130,34 @@ test('un municipio sale en UN libro: una pestaña por unidad y la municipal al f
   expect(mun.getCell('I54').value).toBe('M1');
   wb.worksheets.forEach((w) => expect(w.getImages().length).toBe(2));   // los dos logos en cada pestaña
 });
+
+test('varios biológicos con varios lotes a la vez (primero, de en medio y último) no se pisan entre sí', async () => {
+  const lotes = (n, pref) => Array.from({ length: n }, (_, i) => ({ cantidad: i + 1, numeroLote: `${pref}${i + 1}`, caducidad: '2027-12-31' }));
+  const { buffer } = await generar({ ...base, filasPorBiologico: { b6508: lotes(4, 'A'), b2526: lotes(3, 'B'), b6509: lotes(5, 'C') } });
+  const ws = (await abrir(buffer)).getWorksheet('GENERAL');
+  // extras: +2 (orden 1), +1 (orden 5), +3 (orden 21) = 6 filas más
+  for (let i = 0; i < 4; i++) expect(ws.getCell(`I${14 + i}`).value).toBe(`A${i + 1}`);
+  expect(ws.getCell('F14').value).toBe(10);                                  // 1+2+3+4
+  expect(String(ws.getCell('B24').value)).toBe('2526');                       // HepB bajó 2
+  for (let i = 0; i < 3; i++) expect(ws.getCell(`I${24 + i}`).value).toBe(`B${i + 1}`);
+  expect(String(ws.getCell('B57').value)).toBe('6509');                       // VRS bajó 3 (2+1)
+  for (let i = 0; i < 5; i++) expect(ws.getCell(`I${57 + i}`).value).toBe(`C${i + 1}`);
+  expect(ws.getCell('A73').value).toBe('ELA');                                // firmas: 67 + 6
+  expect(ws.getCell('A80').value).toBe('ENT');                                // 74 + 6
+  expect(ws.pageSetup.printArea).toBe('A1:K95');                              // 89 + 6
+  // Entre bloques no se perdió ningún biológico: todos los códigos siguen en orden
+  const codigos = [];
+  ws.eachRow((fila, n) => { const c = fila.getCell('B'); if (n >= 14 && n <= 62 && c.master.address === c.address && /^\d+$/.test(String(c.value))) codigos.push(String(c.value)); });
+  expect(codigos).toEqual(CODIGOS);
+});
+
+test('los nombres de pestaña son válidos aunque la unidad traiga caracteres raros, sea larguísima o se repita', async () => {
+  const { generarLibro } = require('../requisiciones_export_excel.js');
+  const hoja = (nombreHoja) => ({ nombreHoja, catalogo, filasPorBiologico: {}, encabezado: {}, firmas: {} });
+  const largo = 'C.S SAN MIGUEL LÁZARO CÁRDENAS (EL COLORADO) ANEXO';
+  const { buffer } = await generarLibro({ plantillaBuffer, hojas: [hoja(largo), hoja(largo), hoja('A/B\C?D*E[F]G:H'), hoja(''), hoja(undefined)] });
+  const nombres = (await abrir(buffer)).worksheets.map((w) => w.name);
+  expect(nombres).toHaveLength(5);
+  expect(new Set(nombres.map((n) => n.toUpperCase())).size).toBe(5);          // únicos
+  nombres.forEach((n) => { expect(n.length).toBeLessThanOrEqual(31); expect(n).not.toMatch(/[\/?*[\]:]/); expect(n.trim()).not.toBe(''); });
+});

@@ -320,7 +320,7 @@ function marcarEscritura(constructor) {
 
 function inicioEscritura() {
   const g = estado.guardado;
-  if (g.escribiendo === 0) g.rafagaConError = false;
+  if (g.escribiendo === 0) { g.rafagaConError = false; g.desde = Date.now(); }
   g.escribiendo++;
   actualizarEstadoGuardado();
 }
@@ -356,10 +356,15 @@ function haceCuanto(ms) {
 
 // Celdas de las matrices con una cantidad tecleada que todavía no coincide con lo guardado.
 function celdasSinGuardar() {
+  // Índice (destino|biológico|lote -> cantidad) para no recorrer todo el reparto por cada celda:
+  // con ~50 unidades x ~20 lotes esto corre en cada tecla y en cada guardado.
+  const guardado = new Map();
+  estado.distMunicipio.forEach((d) => guardado.set(`M|${d.municipio}|${d.requi_biologico_id}|${d.lote_id}`, Number(d.cantidad)));
+  estado.distUnidad.forEach((d) => guardado.set(`U|${d.unidad_id}|${d.requi_biologico_id}|${d.lote_id}`, Number(d.cantidad)));
   const cambios = [];
   document.querySelectorAll('#matrizMunicipio input.celda, #matrizUnidad input.celda').forEach((inp) => {
     const c = cambioDeInput(inp);
-    if (c.cantidad !== cantidadGuardada(c)) cambios.push(c);
+    if (c.cantidad !== (guardado.get(`${c.tipo}|${c.destino}|${c.bio}|${c.lote}`) || 0)) cambios.push(c);
   });
   return cambios;
 }
@@ -408,7 +413,7 @@ function actualizarEstadoGuardado() {
   const pend = pendientesDeCaptura();
   const textos = {
     ok: ['Todo guardado', g.ultimo ? haceCuanto(g.ultimo) : 'Se guarda solo al instante', 'cloud_done'],
-    guardando: ['Guardando…', 'un momento', 'sync'],
+    guardando: ['Guardando…', (g.desde && Date.now() - g.desde > 20000) ? 'Tarda más de lo normal: revisa tu conexión' : 'un momento', 'sync'],
     sucio: ['Falta guardar', sin[0] ? sin[0].titulo : '', 'edit_note'],
     error: ['No se guardó', g.error || 'Revisa lo marcado en rojo', 'cloud_off']
   };
@@ -643,9 +648,8 @@ async function guardarCabecera() {
 async function cargarEntregasMes(anio, mes) {
   const { data, error } = await estado.db.from('requi_requisiciones').select('*')
     .eq('anio', anio).eq('mes', mes).order('entrega');
-  if (error) { toast('Error al cargar: ' + error.message, true); return false; }
-  estado.entregasMes = data || [];
-  return true;
+  if (error) { toast('Error al cargar: ' + error.message, true); return null; }
+  return data || [];
 }
 
 function renderEntregas() {
@@ -662,7 +666,10 @@ function renderEntregas() {
 async function cargarRequisicion(entregaPreferida) {
   const anio = Number($('selAnio').value);
   const mes = Number($('selMes').value);
-  if (!(await cargarEntregasMes(anio, mes))) return;
+  const token = (estado.cargaToken = (estado.cargaToken || 0) + 1);
+  const entregas = await cargarEntregasMes(anio, mes);
+  if (!entregas || token !== estado.cargaToken) return;   // falló, o ya se pidió otro mes/entrega después
+  estado.entregasMes = entregas;
   const lista = estado.entregasMes;
   const actual = estado.requisicion && estado.requisicion.anio === anio && estado.requisicion.mes === mes ? estado.requisicion.entrega : null;
   const buscada = typeof entregaPreferida === 'number' ? entregaPreferida : actual;
@@ -719,6 +726,7 @@ function cerrarConfirmar(valor) {
 // Diálogo propio (en lugar del prompt del navegador). Devuelve el texto, o null si se cancela.
 function pedirTexto({ titulo, descripcion, etiqueta, valor, placeholder, aceptar, sugerencias }) {
   return new Promise((resolve) => {
+    if (estado.dialogoTexto) estado.dialogoTexto.resolve(null);   // nunca dos a la vez
     estado.dialogoTexto = { resolve };
     $('textoTitulo').textContent = titulo;
     $('textoDescripcion').textContent = descripcion || '';
@@ -869,7 +877,15 @@ async function abrirDesdeHistorial(id, filas) {
   if (!r) return;
   if ([...$('selAnio').options].some((o) => o.value === String(r.anio))) $('selAnio').value = r.anio;
   if ([...$('selMes').options].some((o) => o.value === String(r.mes))) $('selMes').value = r.mes;
-  await cargarEntregasMes(r.anio, r.mes);
+  // El año del historial puede no estar en el selector (solo trae el anterior, el actual y el siguiente).
+  if (![...$('selAnio').options].some((o) => o.value === String(r.anio))) {
+    $('selAnio').insertAdjacentHTML('afterbegin', `<option value="${r.anio}">${r.anio}</option>`);
+    $('selAnio').value = r.anio;
+  }
+  const entregas = await cargarEntregasMes(r.anio, r.mes);
+  if (!entregas) return;
+  estado.cargaToken = (estado.cargaToken || 0) + 1;
+  estado.entregasMes = entregas;
   estado.requisicion = estado.entregasMes.find((e) => e.id === r.id) || r;
   renderEstadoRequisicion();
   renderEntregas();
@@ -882,13 +898,24 @@ async function abrirDesdeHistorial(id, filas) {
 async function cargarDatosRequisicion() {
   if (!estado.requisicion) return;
   const reqId = estado.requisicion.id;
-  const [{ data: items }, { data: dm }, du] = await Promise.all([
+  const [rItems, rDm, du] = await Promise.all([
     estado.db.from('requi_items_jurisdiccion').select('*, requi_lotes(numero_lote, caducidad)').eq('requisicion_id', reqId).order('created_at'),
     estado.db.from('requi_distribucion_municipio').select('*').eq('requisicion_id', reqId),
     traerTodo(() => estado.db.from('requi_distribucion_unidad').select('*').eq('requisicion_id', reqId))
   ]);
-  estado.items = items || [];
-  estado.distMunicipio = dm || [];
+  // Si mientras tanto se cambió de mes/entrega, esta respuesta ya es vieja: no se pinta.
+  if (!estado.requisicion || estado.requisicion.id !== reqId) return;
+  // Una lectura fallida NO se toma por "no hay nada capturado": se avisa y se deja lo que había.
+  const fallo = rItems.error || rDm.error || (du.incompleto ? { message: 'la lectura del reparto a unidades quedó incompleta' } : null);
+  if (fallo) {
+    toast(`No se pudo cargar la requisición: ${fallo.message}. Revisa tu conexión y vuelve a cargarla.`, true);
+    $('hintCabecera').textContent = 'La requisición no se pudo leer completa. Revisa tu conexión y toca "Cargar" (la carpeta) para reintentar; no captures nada hasta que cargue.';
+    $('hintCabecera').style.display = 'block';
+    return;
+  }
+  $('hintCabecera').style.display = 'none';
+  estado.items = rItems.data || [];
+  estado.distMunicipio = rDm.data || [];
   estado.distUnidad = du || [];
   estado.previa = null;
   if (!estado.catalogo.some((b) => b.id === estado.bioRapido)) estado.bioRapido = null;
@@ -908,7 +935,6 @@ function esc(t) {
 }
 
 function nombreCorto(bio) { return RequiEngine.nombreCortoBio(bio); }
-function esMunicipioReal(v) { return MUNICIPIOS_REALES.some((m) => m.v === v); }
 // Un destino tiene Paso 3 si hay unidades registradas para él: los 4 municipios y, cada hospital, él mismo
 // como su única unidad (lo que se le asigna en el paso 2 se le pasa solo; ver unidadDeHospital).
 function tieneUnidades(v) { return estado.unidades.some((u) => u.municipio === v); }
@@ -955,7 +981,7 @@ async function traerTodo(construir) {
   const todo = [];
   for (let desde = 0; ; desde += tam) {
     const { data, error } = await construir().order('id').range(desde, desde + tam - 1);
-    if (error) { toast('No se pudieron cargar todos los datos: ' + error.message, true); break; }
+    if (error) { toast('No se pudieron cargar todos los datos: ' + error.message, true); todo.incompleto = true; break; }
     todo.push(...(data || []));
     if (!data || data.length < tam) break;
   }
@@ -1539,6 +1565,12 @@ function agregarFilaAsignar() {
 }
 
 async function confirmarAsignarLotes() {
+  if (estado.asignando) return;
+  estado.asignando = true;
+  try { await confirmarAsignarLotesInterno(); } finally { estado.asignando = false; }
+}
+
+async function confirmarAsignarLotesInterno() {
   const a = estado.asig;
   if (!a) return;
   const bioId = a.item.requi_biologico_id;
@@ -1673,8 +1705,11 @@ async function guardarCantidades() {
     }
     if (faltantes.length) {
       const { data, error } = await estado.db.from('requi_lotes').insert(faltantes).select();
-      if (error) throw error;
-      (data || []).forEach((l) => (estado.lotesPorBiologico[l.requi_biologico_id] ||= []).push(l));
+      if (error && error.code === '23505') {            // ya existía (otra sesión lo creó): se vuelve a leer
+        faltantes.forEach((f) => { delete estado.lotesPorBiologico[f.requi_biologico_id]; });
+        for (const f of faltantes) await lotesExistentesDe(f.requi_biologico_id);
+      } else if (error) throw error;
+      else (data || []).forEach((l) => (estado.lotesPorBiologico[l.requi_biologico_id] ||= []).push(l));
     }
     // 2) Un renglón "por definir" por biológico (si ya había, se reemplaza su cantidad).
     const filas = valores.map((v) => ({
@@ -2082,7 +2117,7 @@ function guardarReparto(cambiosBrutos) {
     if (error) {
       const inputsAceptados = aceptados.map(localizarInput).filter(Boolean);
       repintar(inputsAceptados);
-      toast(error.message.replace(/^.*?ERROR:\s*/, ''), true);
+      toast(String(error.message || error).replace(/^.*?ERROR:\s*/, ''), true);
       return;
     }
     repintar();
@@ -2581,6 +2616,14 @@ const R2_PUBLIC_URL = 'https://pub-149cbeba11c04e8c9ba986d1addcdcc0.r2.dev';
 const R2_BUCKET = 'sirevaq-evidencias';
 const MAX_PDF_BYTES = 40 * 1024 * 1024;
 
+// Token aleatorio para la ruta (crypto.randomUUID solo existe en https/localhost; getRandomValues sí en todos).
+function uuidSeguro() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+  const b = new Uint8Array(16);
+  window.crypto.getRandomValues(b);
+  return [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+
 function nombreTransferencia(anio, mes) {
   const m = MESES.find((x) => x.v === Number(mes));
   return `Transferencias_${m ? m.l : mes}_${anio}.pdf`;
@@ -2644,7 +2687,7 @@ async function subirTransferencia() {
     mensaje: `Ya hay una transferencia de ${etiquetaMes({ anio, mes })}. ¿Reemplazarla con este archivo?`
   }))) return;
   // Mismo mes = misma ruta (se sobrescribe); mes nuevo = token nuevo.
-  const ruta = previa ? previa.ruta : `Requisiciones/Transferencias/${crypto.randomUUID()}/${nombre}`;
+  const ruta = previa ? previa.ruta : `Requisiciones/Transferencias/${uuidSeguro()}/${nombre}`;
 
   $('transSubir').disabled = true;
   $('transSubir').textContent = 'Subiendo…';
@@ -2810,7 +2853,7 @@ function instalarEventos() {
   const programarRefresco = () => { clearTimeout(refrescoGuardado); refrescoGuardado = setTimeout(actualizarEstadoGuardado, 120); };
   document.addEventListener('input', programarRefresco, true);
   document.addEventListener('change', programarRefresco, true);
-  setInterval(() => { if (!document.hidden) actualizarEstadoGuardado(); }, 15000);
+  setInterval(() => { if (!document.hidden) actualizarEstadoGuardado(); }, 5000);
   window.addEventListener('beforeunload', (ev) => {
     if (estado.puedeEditar && ['guardando', 'sucio'].includes(faseGuardado())) { ev.preventDefault(); ev.returnValue = ''; }
   });

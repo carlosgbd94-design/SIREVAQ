@@ -665,3 +665,68 @@ test('Requisiciones: sin permiso de edición no hay chip de guardado ni botón G
   await expect(page.locator('#dockGuardado')).toBeHidden();
   await expect(page.locator('#btnGuardarTodo')).toBeHidden();
 });
+
+
+test('Requisiciones: si falla la lectura NO se muestra la requisición vacía y se puede reintentar', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
+  await page.fill('#rapLote', 'LEER1');
+  await page.fill('#rapCant', '10');
+  await page.press('#rapCant', 'Enter');
+  await expect(page.locator('#tbodyBiologicos')).toContainText('LEER1');
+
+  // Se cae la lectura de lo surtido al recargar: lo que ya estaba en pantalla no se borra y se avisa
+  await page.evaluate(() => { window.__FAKE_FALLAR__ = ['requi_items_jurisdiccion']; });
+  await page.click('#btnCargar');
+  await expect(page.locator('#toast')).toContainText('No se pudo cargar la requisición');
+  await expect(page.locator('#hintCabecera')).toBeVisible();
+  await expect(page.locator('#hintCabecera')).toContainText('no captures nada');
+  await expect(page.locator('#tbodyBiologicos')).toContainText('LEER1');
+
+  // Al volver la conexión, "Cargar" reintenta y quita el aviso
+  await page.evaluate(() => { window.__FAKE_FALLAR__ = []; });
+  await page.click('#btnCargar');
+  await expect(page.locator('#hintCabecera')).toBeHidden();
+  await expect(page.locator('#tbodyBiologicos')).toContainText('LEER1');
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: el analizador de caducidades y la máscara aguantan entradas raras', async ({ page }) => {
+  await preparar(page, { conReq: true });
+  const p = (t) => page.evaluate((x) => parsearCaducidadInteligente(x), t);
+  expect(await p('15-07-29')).toBe('2029-07-15');
+  expect(await p('15/07/2029')).toBe('2029-07-15');
+  expect(await p('150729')).toBe('2029-07-15');
+  expect(await p('07-29')).toBe('2029-07-31');                 // mes y año: último día del mes
+  expect(await p('JUL-29')).toBe('2029-07-31');
+  expect(await p('jul-29')).toBe('2029-07-31');
+  expect(await p('29-02-28')).toBe('2028-02-29');              // bisiesto
+  expect(await p('')).toBeNull();
+  expect(await p('abc')).toBeNull();
+  expect(await p('99-99-99')).toBeNull();                      // mes imposible
+  expect(await p('00-00-00')).toBeNull();
+  expect(await p('15-13-29')).toBeNull();
+  const m = (t) => page.evaluate((x) => formatearFechaTecleada(x, { inputType: 'insertText' }), t);
+  expect(await m('')).toBe('');
+  expect(await m('9')).toBe('09-');
+  expect(await m('0')).toBe('0');
+  expect(await m('00')).toBe('00-');
+  expect(await m('3')).toBe('3');
+  expect(await m('31-')).toBe('31-');
+  expect(await m('31-1')).toBe('31-1');
+  expect(await m('1/')).toBe('01-');
+  expect(await m('15-07-2')).toBe('15-07-2');
+  expect(await m('15-07-299999')).toBe('15-07-29');
+  expect(await page.evaluate(() => formatearFechaTecleada('15072029', { inputType: 'insertFromPaste' }))).toBe('15-07-29');
+  expect(await page.evaluate(() => formatearFechaTecleada('15/7/2029', { inputType: 'insertFromPaste' }))).toBe('15-07-29');
+  // Al borrar no se vuelve a poner el guion (si no, no se podría borrar)
+  expect(await page.evaluate(() => formatearFechaTecleada('31-', { inputType: 'deleteContentBackward' }))).toBe('31-');
+  // Nunca revienta con basura
+  for (const basura of ['  ', '--', '..', 'ñ', '１２', '<script>', '31-06-29-12']) {
+    await page.evaluate((x) => formatearFechaTecleada(x, { inputType: 'insertText' }), basura);
+  }
+  expect(await page.evaluate(() => formatDdMmAa('2029-07-15'))).toBe('15-07-29');
+  expect(await page.evaluate(() => formatMmmAa('2029-07-15'))).toBe('JUL-29');
+  expect(await page.evaluate(() => fechaLarga('2029-07-15'))).toMatch(/15 de julio de 2029/);
+});

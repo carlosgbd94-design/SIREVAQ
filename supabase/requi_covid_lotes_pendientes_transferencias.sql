@@ -17,8 +17,8 @@ values
 on conflict (clave_articulo) do nothing;
 
 -- 2) Lotes por definir --------------------------------------------------------
--- Reglas: `p_lotes` = [{numero_lote, caducidad?, cantidad}, ...] para el ítem
--- "POR DEFINIR" indicado. El reparto ya hecho de ese ítem se pasa a los lotes
+-- Reglas: `p_lotes` = [{numero_lote, caducidad?, cantidad}, ...] para el renglón
+-- indicado (por definir o con lote real: sirve para asignar, cambiar o dividir lote). El reparto ya hecho de ese ítem se pasa a los lotes
 -- nuevos llenando en orden (primer lote hasta agotarlo, luego el siguiente);
 -- lo que no alcance a cubrirse se queda en "POR DEFINIR" (nunca se pierde).
 -- Corre con los permisos de quien llama (RLS: solo ADMIN/JURISDICCIONAL).
@@ -53,9 +53,6 @@ declare
 begin
   select * into v_item from requi_items_jurisdiccion where id = p_item_id;
   if not found then raise exception 'No existe ese renglón de lo surtido.'; end if;
-  if (select numero_lote from requi_lotes where id = v_item.lote_id) <> c_pend then
-    raise exception 'Este renglón ya tiene lote asignado.';
-  end if;
 
   v_n := jsonb_array_length(p_lotes);
   if v_n is null or v_n = 0 then raise exception 'Captura al menos un lote.'; end if;

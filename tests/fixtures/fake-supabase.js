@@ -79,6 +79,8 @@
   }
 
   function ejecutar(q) {
+    // Prueba de fallos de red: window.__FAKE_FALLAR__ = ['tabla', ...] hace fallar las LECTURAS de esas tablas.
+    if (q.op === 'select' && (window.__FAKE_FALLAR__ || []).includes(q.tabla)) return { data: null, error: { message: 'Failed to fetch' } };
     const trabajo = {};
     Object.keys(db).forEach((t) => { trabajo[t] = db[t].map((r) => ({ ...r })); });
     let filas = trabajo[q.tabla];
