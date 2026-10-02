@@ -171,10 +171,31 @@ function cadHtml(fechaIso) {
   return `<span class="cad-tip" title="${esc(fechaLarga(fechaIso))}">${esc(formatMmmAa(fechaIso))}</span>`;
 }
 
+// Por qué no se entendió una fecha (para decírselo al usuario en vez de un genérico "no la entiendo").
+function motivoCaducidadInvalida(texto) {
+  const partes = String(texto || '').trim().split(/[^0-9]+/).filter(Boolean);
+  let dd = null, mm = null, yy = null;
+  if (partes.length === 3) [dd, mm, yy] = partes;
+  else if (partes.length === 1 && partes[0].length === 6) [dd, mm, yy] = [partes[0].slice(0, 2), partes[0].slice(2, 4), partes[0].slice(4, 6)];
+  else if (partes.length === 1 && partes[0].length === 8) [dd, mm, yy] = [partes[0].slice(0, 2), partes[0].slice(2, 4), partes[0].slice(6, 8)];
+  if (mm !== null) {
+    const mes = Number(mm);
+    if (!mes || mes > 12) return 'El mes debe ser de 01 a 12';
+    const anio = 2000 + Number(String(yy).slice(-2));
+    const ultimo = new Date(anio, mes, 0).getDate();
+    if (!Number(dd) || Number(dd) > ultimo) return `${MESES[mes - 1].l} de ${anio} solo llega al día ${ultimo}`;
+  }
+  return 'No la entiendo';
+}
+
+function errorCaducidad(texto) {
+  return `${motivoCaducidadInvalida(texto)}. Usa por ejemplo 15-07-29.`;
+}
+
 function vistaCaducidad(texto) {
   if (!String(texto || '').trim()) return '';
   const iso = parsearCaducidadInteligente(texto);
-  return iso ? `= ${formatMmmAa(iso)}` : 'No la entiendo';
+  return iso ? `= ${formatMmmAa(iso)}` : motivoCaducidadInvalida(texto);
 }
 
 // Máscara al teclear: 31 -> "31-" (salta solo al mes), 06 -> "31-06-", 29 -> "31-06-29" y ahí se detiene
@@ -238,7 +259,7 @@ function actualizarVistaCad(inp) {
   if (!span) return;
   const v = vistaCaducidad(inp.value);
   span.textContent = v;
-  span.classList.toggle('mal', v === 'No la entiendo');
+  span.classList.toggle('mal', !!v && !v.startsWith('='));
 }
 
 function parsearCaducidadInteligente(texto) {
@@ -267,8 +288,13 @@ function parsearCaducidadInteligente(texto) {
   if (!mesNum || mesNum < 1 || mesNum > 12) return null;
   const anioCompleto = 2000 + Number(yy);
   const ultimoDiaDelMes = new Date(anioCompleto, mesNum, 0).getDate();
-  let diaNum = dd ? Number(dd) : ultimoDiaDelMes;
-  if (!diaNum || diaNum < 1 || diaNum > ultimoDiaDelMes) diaNum = ultimoDiaDelMes;
+  // Con día explícito, tiene que existir en ese mes (31-04-29 y 29-02-29 no existen): se rechaza en vez de
+  // acomodarlo al último día. Sin día (07-29 o JUL-29) se toma el último día del mes.
+  let diaNum = ultimoDiaDelMes;
+  if (dd) {
+    diaNum = Number(dd);
+    if (!diaNum || diaNum < 1 || diaNum > ultimoDiaDelMes) return null;
+  }
   return `${anioCompleto}-${String(mesNum).padStart(2, '0')}-${String(diaNum).padStart(2, '0')}`;
 }
 
@@ -352,6 +378,53 @@ function haceCuanto(ms) {
   const min = Math.floor(seg / 60);
   if (min < 60) return `hace ${min} min`;
   return `hace ${Math.floor(min / 60)} h`;
+}
+
+// Lo escrito en la captura rápida y sin agregar (incompleto, no se puede mandar a la base) se guarda como
+// borrador en este navegador y se recupera al volver a abrir la requisición: así no hace falta el aviso
+// "¿Seguro que quieres salir?" del navegador (que no se puede personalizar).
+const clave_borrador = (id) => `sirevaq_requi_borrador_${id}`;
+const CAMPOS_RAPIDA = ['rapLote', 'rapCad', 'rapCant'];
+
+function guardarBorrador() {
+  try {
+    if (!estado.requisicion || !estado.puedeEditar) return;
+    const clave = clave_borrador(estado.requisicion.id);
+    if (!(estado.bioRapido && CAMPOS_RAPIDA.some((id) => $(id).value.trim()))) { localStorage.removeItem(clave); return; }
+    localStorage.setItem(clave, JSON.stringify({ bio: estado.bioRapido, lote: $('rapLote').value, cad: $('rapCad').value, cant: $('rapCant').value, t: Date.now() }));
+  } catch (e) { /* sin almacenamiento local: no pasa nada */ }
+}
+
+async function restaurarBorrador() {
+  try {
+    const req = estado.requisicion;
+    if (!req || !estado.puedeEditar || estado.borradorRevisadoPara === req.id) return;
+    estado.borradorRevisadoPara = req.id;
+    const clave = clave_borrador(req.id);
+    const crudo = localStorage.getItem(clave);
+    if (!crudo) return;
+    const b = JSON.parse(crudo);
+    if (!estado.catalogo.some((x) => x.id === b.bio) || Date.now() - Number(b.t) > 7 * 24 * 3600 * 1000) { localStorage.removeItem(clave); return; }
+    if (CAMPOS_RAPIDA.some((id) => $(id).value.trim())) return;
+    await seleccionarBioRapido(b.bio, false);
+    $('rapLote').value = b.lote || '';
+    $('rapCad').value = b.cad || '';
+    $('rapCant').value = b.cant || '';
+    actualizarVistaCad($('rapCad'));
+    guardarBorrador();
+    toast('Recuperé lo que tenías escrito en la captura rápida: falta darle Agregar.');
+    actualizarEstadoGuardado();
+  } catch (e) { /* borrador dañado: se ignora */ }
+}
+
+// Al salir de la pestaña o cerrarla: las celdas tecleadas se confirman (igual que al salir de la celda) y
+// lo de la captura rápida queda de borrador.
+function guardarPendientesAlSalir() {
+  guardarBorrador();
+  if (estado.puedeEditar && estado.requisicion) {
+    const celdas = celdasSinGuardar();
+    if (celdas.length) guardarReparto(celdas);
+  }
 }
 
 // Celdas de las matrices con una cantidad tecleada que todavía no coincide con lo guardado.
@@ -924,6 +997,7 @@ async function cargarDatosRequisicion() {
   document.body.classList.add('con-dock');
   renderDestinosMasivos();
   activarPaso(estado.pasoActual || 1, { sinScroll: true });
+  restaurarBorrador();
 }
 
 // ---------------------------------------------------------------------------
@@ -1193,6 +1267,7 @@ function limpiarRapida() {
   actualizarVistaCad($('rapCad'));
   $('rapCant').value = '';
   $('rapNota').innerHTML = '';
+  guardarBorrador();   // vacío: quita el borrador
 }
 
 // Al teclear el lote: lo compara contra los ya conocidos del biológico y, si
@@ -1265,7 +1340,7 @@ async function agregarRapido() {
   let caducidad = null;
   if (caducidadTexto) {
     caducidad = parsearCaducidadInteligente(caducidadTexto);
-    if (!caducidad) { toast('No entendí la caducidad. Usa por ejemplo 15-07-29.', true); $('rapCad').focus(); return; }
+    if (!caducidad) { toast(errorCaducidad(caducidadTexto), true); $('rapCad').focus(); return; }
   }
 
   estado.guardandoRapido = true;
@@ -1387,7 +1462,7 @@ async function guardarEdicionItem(itemId) {
   let caducidad = item.requi_lotes.caducidad;
   if (caducidadTexto) {
     const parseada = parsearCaducidadInteligente(caducidadTexto);
-    if (!parseada) { toast('No entendí la caducidad. Usa por ejemplo 15-07-29.', true); return; }
+    if (!parseada) { toast(errorCaducidad(caducidadTexto), true); return; }
     caducidad = parseada;
   }
 
@@ -1587,7 +1662,7 @@ async function confirmarAsignarLotesInterno() {
     let caducidad = null;
     if (String(f.cad || '').trim()) {
       caducidad = parsearCaducidadInteligente(f.cad);
-      if (!caducidad) { toast(`No entendí la caducidad del lote ${numero}. Usa por ejemplo 15-07-29.`, true); return; }
+      if (!caducidad) { toast(`Lote ${numero}: ${errorCaducidad(f.cad)}`, true); return; }
     }
     const res = RequiEngine.compararLote(numero, existentes);
     if (res.estado === 'EXISTE' && itemDe(bioId, res.lote.id)) { toast(`El lote ${numero} ya está capturado este mes: edita ese renglón en vez de asignarlo aquí.`, true); return; }
@@ -2854,9 +2929,14 @@ function instalarEventos() {
   document.addEventListener('input', programarRefresco, true);
   document.addEventListener('change', programarRefresco, true);
   setInterval(() => { if (!document.hidden) actualizarEstadoGuardado(); }, 5000);
+  // El aviso del navegador solo sale si hay una escritura en vuelo (dura una fracción de segundo); lo tecleado
+  // sin confirmar ya no lo necesita: se guarda al salir o queda de borrador.
   window.addEventListener('beforeunload', (ev) => {
-    if (estado.puedeEditar && ['guardando', 'sucio'].includes(faseGuardado())) { ev.preventDefault(); ev.returnValue = ''; }
+    if (estado.puedeEditar && estado.guardado.escribiendo > 0) { ev.preventDefault(); ev.returnValue = ''; }
   });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') guardarPendientesAlSalir(); });
+  window.addEventListener('pagehide', guardarPendientesAlSalir);
+  $('rapida').addEventListener('input', () => { clearTimeout(estado.borradorTimer); estado.borradorTimer = setTimeout(guardarBorrador, 300); });
 
   // Confirmación propia
   $('confirmarAceptar').addEventListener('click', () => cerrarConfirmar(true));
@@ -2979,6 +3059,7 @@ function instalarEventos() {
   document.addEventListener('click', (ev) => {
     if (!estado.bioRapido || !ev.target.isConnected) return;
     if (ev.target.closest('#chipsBio, #rapida, #tbodyBiologicos, .modal-fondo, .dock-sis, #toast, .ayuda-btn')) return;
+    if (CAMPOS_RAPIDA.some((id) => $(id).value.trim())) return;   // con algo escrito, un clic suelto no lo descarta (Escape sí)
     seleccionarBioRapido(null);
   });
 

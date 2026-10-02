@@ -7609,6 +7609,13 @@ async function supabaseRequest(action = "", payload, options = {}) {
         // 1. Construir la URL de la Edge Function (proxy uploader sin CORS)
         const edgeFunctionUrl = `${SUPABASE_URL}/functions/v1/r2-signer`;
         const supabaseAnonKey = SUPABASE_KEY;
+        // Token de la sesión: r2-signer lo usa para saber quién sube y a qué carpeta puede. Los clientes que
+        // no lo mandan se rechazan cuando se activa R2_ALLOW_ANON=false en la función.
+        let accessToken = null;
+        try {
+          const { data: { session: sesionSubida } } = await supabase.auth.getSession();
+          accessToken = sesionSubida ? sesionSubida.access_token : null;
+        } catch (e) { /* sin token: la función decide */ }
 
         // 2. Subir el archivo via FormData a la Edge Function (que sube a R2 server-side, sin CORS)
         const formData = new FormData();
@@ -7620,6 +7627,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
           const xhr = new XMLHttpRequest();
           xhr.open("POST", edgeFunctionUrl, true);
           xhr.setRequestHeader("apikey", supabaseAnonKey);
+          if (accessToken) xhr.setRequestHeader("Authorization", "Bearer " + accessToken);
           // Sin timeout, una conexión pobre/inestable (típico en unidades rurales) deja
           // el xhr colgado sin onload NI onerror: el usuario ve "Subiendo…" para siempre
           // y, si no lo nota, siente que "no pasó nada". 2 min es holgado para el límite

@@ -424,11 +424,11 @@ test('Requisiciones: la caducidad se teclea con máscara DD-MM-AA y no admite m�
   await cad.focus();
   await page.keyboard.type('31');
   await expect(cad).toHaveValue('31-');                      // salta solo al mes
-  await page.keyboard.type('06');
-  await expect(cad).toHaveValue('31-06-');
+  await page.keyboard.type('07');
+  await expect(cad).toHaveValue('31-07-');
   await page.keyboard.type('29');
-  await expect(cad).toHaveValue('31-06-29');
-  await expect(page.locator('#rapCant')).toBeFocused();      // fecha completa: pasa a la cantidad
+  await expect(cad).toHaveValue('31-07-29');
+  await expect(page.locator('#rapCant')).toBeFocused();      // fecha completa y válida: pasa a la cantidad
   await cad.fill('');
   await cad.focus();
   await page.keyboard.type('311445555');                     // los dígitos de más no entran
@@ -707,6 +707,18 @@ test('Requisiciones: el analizador de caducidades y la máscara aguantan entrada
   expect(await p('99-99-99')).toBeNull();                      // mes imposible
   expect(await p('00-00-00')).toBeNull();
   expect(await p('15-13-29')).toBeNull();
+  // Días que no existen en ese mes se rechazan (antes se acomodaban al último día)
+  expect(await p('31-04-29')).toBeNull();
+  expect(await p('29-02-29')).toBeNull();                      // 2029 no es bisiesto
+  expect(await p('30-02-28')).toBeNull();
+  expect(await p('31-06-29')).toBeNull();
+  expect(await p('31-07-29')).toBe('2029-07-31');
+  const v = (x) => page.evaluate((y) => vistaCaducidad(y), x);
+  expect(await v('31-04-29')).toBe('Abril de 2029 solo llega al día 30');
+  expect(await v('29-02-29')).toBe('Febrero de 2029 solo llega al día 28');
+  expect(await v('15-13-29')).toBe('El mes debe ser de 01 a 12');
+  expect(await v('15-07-29')).toBe('= JUL-29');
+  expect(await v('')).toBe('');
   const m = (t) => page.evaluate((x) => formatearFechaTecleada(x, { inputType: 'insertText' }), t);
   expect(await m('')).toBe('');
   expect(await m('9')).toBe('09-');
@@ -729,4 +741,87 @@ test('Requisiciones: el analizador de caducidades y la máscara aguantan entrada
   expect(await page.evaluate(() => formatDdMmAa('2029-07-15'))).toBe('15-07-29');
   expect(await page.evaluate(() => formatMmmAa('2029-07-15'))).toBe('JUL-29');
   expect(await page.evaluate(() => fechaLarga('2029-07-15'))).toMatch(/15 de julio de 2029/);
+});
+
+
+test('Requisiciones: una fecha que no existe no se puede guardar y el aviso dice por qué', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
+  await page.fill('#rapLote', 'FECHA1');
+  await page.locator('#rapCad').focus();
+  await page.keyboard.type('310429');                          // 31 de abril: no existe
+  await expect(page.locator('#rapCad ~ .cad-vista')).toHaveText('Abril de 2029 solo llega al día 30');
+  await expect(page.locator('#rapCad ~ .cad-vista')).toHaveClass(/mal/);
+  await page.fill('#rapCant', '10');
+  await page.press('#rapCant', 'Enter');
+  await expect(page.locator('#toast')).toContainText('Abril de 2029 solo llega al día 30');
+  expect(await db(page, 'db.requi_items_jurisdiccion.length')).toBe(0);
+  await page.fill('#rapCad', '30-04-29');                      // corregida, sí se guarda
+  await page.press('#rapCant', 'Enter');
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.length')).toBe(1);
+  expect(await db(page, "db.requi_lotes.find((l) => l.numero_lote === 'FECHA1').caducidad")).toBe('2029-04-30');
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: lo escrito sin agregar se recupera al volver y ya no se usa el aviso nativo al salir', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
+  await page.fill('#rapLote', 'BORR1');
+  await page.fill('#rapCant', '7');
+
+  // Con algo tecleado y sin confirmar, el navegador NO debe preguntar al salir...
+  const avisaTecleado = await page.evaluate(() => { const ev = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(ev); return ev.defaultPrevented; });
+  expect(avisaTecleado).toBe(false);
+  // ...solo si hay una escritura a la base en vuelo
+  const avisaEscribiendo = await page.evaluate(() => { estado.guardado.escribiendo = 1; const ev = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(ev); estado.guardado.escribiendo = 0; return ev.defaultPrevented; });
+  expect(avisaEscribiendo).toBe(true);
+
+  // Al cerrar/ocultar la pestaña queda el borrador
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  const borrador = await page.evaluate(() => JSON.parse(localStorage.getItem('sirevaq_requi_borrador_req-hoy')));
+  expect(borrador).toMatchObject({ bio: 'bio-srp', lote: 'BORR1', cant: '7' });
+
+  // Al volver a abrir: se recupera, avisa y deja agregarlo
+  await page.reload({ waitUntil: 'load' });
+  await expect(page.locator('#rapLote')).toHaveValue('BORR1');
+  await expect(page.locator('#rapCant')).toHaveValue('7');
+  await expect(page.locator('#chipsBio .chip-bio.activo')).toHaveCount(1);
+  await expect(page.locator('#toast')).toContainText('Recuperé');
+  await expect(page.locator('#dockGuardado')).toHaveClass(/sucio/);
+  await page.press('#rapCant', 'Enter');
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.length')).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem('sirevaq_requi_borrador_req-hoy'))).toBeNull();   // ya no hay borrador
+
+  // Un clic suelto no descarta lo escrito (Escape sí)
+  await page.click('#chipsBio .chip-bio[data-bio="bio-hexa"]');
+  await page.fill('#rapLote', 'NOPIERDAS');
+  await page.click('h1');
+  await expect(page.locator('#rapLote')).toHaveValue('NOPIERDAS');
+  await page.locator('#rapLote').focus();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#chipsBio .chip-bio.activo')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('sirevaq_requi_borrador_req-hoy'))).toBeNull();
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: las cantidades tecleadas en una matriz se confirman solas al salir de la pestaña', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
+  await page.fill('#rapLote', 'SAL1');
+  await page.fill('#rapCant', '100');
+  await page.press('#rapCant', 'Enter');
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.length')).toBe(1);
+  await page.click('.paso-tab[data-paso="2"]');
+  const lote = await loteId(page, 'SAL1');
+  await page.fill(celda2(lote, 'CORREGIDORA'), '45');           // sin salir de la celda
+  await expect(page.locator('#dockGuardado')).toHaveClass(/sucio/);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => db(page, 'db.requi_distribucion_municipio.filter((d) => d.requisicion_id === "req-hoy").map((d) => d.cantidad)')).toEqual([45]);
+  expect(errores).toEqual([]);
 });
