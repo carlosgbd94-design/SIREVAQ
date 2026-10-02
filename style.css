@@ -14168,3 +14168,85 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaMetas .meta-fx-total::after { top: 0; bottom: 0; left: 100%; width: 14px; background: linear-gradient(to right, rgba(15, 23, 42, .13), rgba(15, 23, 42, 0)); }
 #secInfluenzaMetas .meta-cmp-cell:not(th)::before { top: 0; bottom: 0; right: 100%; width: 14px; background: linear-gradient(to left, rgba(15, 23, 42, .13), rgba(15, 23, 42, 0)); }
 #secInfluenzaMetas .meta-total-row td.meta-fx-total { overflow: visible; }
+
+/* Panel de captura de Influenza: guía por pasos, ayuda y aviso de captura cerrada */
+.inf-aviso--cerrada { display: flex; align-items: flex-start; gap: 10px; border-color: #cbd5e1; background: #f1f5f9; color: #334155; }
+.inf-aviso--cerrada > .material-symbols-rounded { font-size: 20px; color: #64748b; flex: 0 0 auto; }
+#influenzaPasosGuia { display: flex; flex-direction: column; gap: 10px; }
+.inf-pasos-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.inf-paso { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-radius: 20px; border: 1px solid #e2e8f0; background: #ffffff; box-shadow: 0 1px 3px rgba(15, 23, 42, .05); min-width: 0; }
+.inf-paso-num { flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; background: #f1f5f9; color: #64748b; }
+.inf-paso-num .material-symbols-rounded { font-size: 16px; }
+.inf-paso-cuerpo { min-width: 0; }
+.inf-paso-titulo { font-size: 12px; font-weight: 800; color: #1e293b; line-height: 1.25; }
+.inf-paso-texto { margin-top: 3px; font-size: 11px; font-weight: 600; color: #64748b; line-height: 1.4; overflow-wrap: anywhere; }
+.inf-paso.is-active { border-color: #c4b5fd; background: #faf5ff; }
+.inf-paso.is-active .inf-paso-num { background: #7c3aed; color: #ffffff; }
+.inf-paso.is-done .inf-paso-num { background: #10b981; color: #ffffff; }
+.inf-paso.is-lock { opacity: .6; }
+.inf-ayuda { border: 1px solid #e2e8f0; border-radius: 20px; background: #ffffff; padding: 0 16px; }
+.inf-ayuda > summary { display: flex; align-items: center; gap: 8px; padding: 11px 0; cursor: pointer; font-size: 12px; font-weight: 800; color: #6d28d9; list-style: none; }
+.inf-ayuda > summary::-webkit-details-marker { display: none; }
+.inf-ayuda > summary .material-symbols-rounded { font-size: 18px; }
+.inf-ayuda ul { margin: 0; padding: 0 0 14px 18px; display: flex; flex-direction: column; gap: 7px; font-size: 12px; font-weight: 500; color: #475569; line-height: 1.5; }
+@media (max-width: 900px) { .inf-pasos-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .inf-pasos-grid { grid-template-columns: 1fr; } }
+.inf-pasos-cab { display: flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #6d28d9; }
+
+/* Historial de reportes de Influenza (unidad): resumen + tarjetas */
+.inf-hist-resumen { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.inf-hist-stat { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 20px; border: 1px solid #e2e8f0; background: #f8fafc; min-width: 0; }
+.inf-hist-stat-ico { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 14px; display: flex; align-items: center; justify-content: center; }
+.inf-hist-stat-ico .material-symbols-rounded { font-size: 22px; }
+.inf-tono-violeta { background: #ede9fe; color: #6d28d9; }
+.inf-tono-verde { background: #d1fae5; color: #047857; }
+.inf-tono-ambar { background: #fef3c7; color: #b45309; }
+.inf-tono-azul { background: #dbeafe; color: #1d4ed8; }
+.inf-tono-gris { background: #e2e8f0; color: #475569; }
+.inf-hist-stat-txt { min-width: 0; }
+.inf-hist-stat-etq { font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #64748b; }
+.inf-hist-stat-val { font-size: 20px; font-weight: 800; color: #1e293b; line-height: 1.2; }
+.inf-hist-stat-val small { font-size: 12px; font-weight: 700; color: #94a3b8; }
+.inf-hist-stat-nota { font-size: 11px; font-weight: 600; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inf-hist-folio-mini { font-size: 12px; font-weight: 800; letter-spacing: .02em; color: #6d28d9; }
+
+.inf-hist-card { display: flex; align-items: center; gap: 16px; padding: 14px 18px 14px 14px; border-radius: 22px; border: 1px solid #e2e8f0; background: #ffffff; box-shadow: 0 1px 3px rgba(15, 23, 42, .05); cursor: pointer; transition: border-color .2s, box-shadow .2s, transform .2s; }
+.inf-hist-card:focus-visible { outline: 2px solid #8b5cf6; outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  .inf-hist-card:hover { border-color: #c4b5fd; box-shadow: 0 8px 22px rgba(109, 40, 217, .12); transform: translateY(-1px); }
+  .inf-hist-card:hover .inf-hist-accion { background: #7c3aed; color: #ffffff; }
+}
+.inf-hist-fecha { flex: 0 0 62px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 0; border-radius: 16px; background: #f5f3ff; color: #6d28d9; line-height: 1.1; }
+.inf-hist-mes { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.inf-hist-dia { font-size: 24px; font-weight: 800; }
+.inf-hist-anio { font-size: 10px; font-weight: 700; color: #8b5cf6; }
+.inf-hist-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.inf-hist-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.inf-hist-folio { font-size: 11px; font-weight: 800; letter-spacing: .05em; color: #6d28d9; margin-right: 2px; }
+.inf-hist-titulo { font-size: 14px; font-weight: 800; color: #1e293b; }
+.inf-hist-titulo span { font-size: 12px; font-weight: 600; color: #94a3b8; }
+.inf-hist-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 11px; font-weight: 600; color: #64748b; }
+.inf-hist-meta > span { display: inline-flex; align-items: center; gap: 4px; }
+.inf-hist-meta .material-symbols-rounded { font-size: 14px; color: #94a3b8; }
+.inf-hist-avatar { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: #ede9fe; color: #6d28d9; font-size: 10px; font-weight: 800; }
+.inf-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px; border: 1px solid; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.inf-chip .material-symbols-rounded { font-size: 12px; }
+.inf-chip--verde { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+.inf-chip--azul { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.inf-chip--ambar { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.inf-hist-dosis { flex: 0 0 96px; text-align: right; }
+.inf-hist-dosis-num { font-size: 22px; font-weight: 800; color: #1e293b; line-height: 1.1; }
+.inf-hist-dosis-etq { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #94a3b8; }
+.inf-hist-barra { margin-top: 6px; height: 5px; border-radius: 5px; background: #e2e8f0; overflow: hidden; }
+.inf-hist-barra span { display: block; height: 100%; border-radius: 5px; background: #8b5cf6; }
+.inf-hist-accion { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #f1f5f9; color: #64748b; transition: background .2s, color .2s; }
+.inf-hist-accion .material-symbols-rounded { font-size: 20px; }
+@media (max-width: 900px) { .inf-hist-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) {
+  .inf-hist-resumen { grid-template-columns: 1fr; }
+  .inf-hist-card { flex-wrap: wrap; }
+  .inf-hist-fecha { flex-basis: 54px; }
+  .inf-hist-dosis { flex: 1 1 100%; display: flex; align-items: center; gap: 10px; text-align: left; }
+  .inf-hist-barra { flex: 1; margin-top: 0; }
+  .inf-hist-accion { display: none; }
+}

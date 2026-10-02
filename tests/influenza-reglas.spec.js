@@ -38,6 +38,8 @@ const modulo = fs.readFileSync(path.join(raiz, 'influenza_module.js'), 'utf8');
 const rubros = modulo.slice(modulo.indexOf('const INFLUENZA_RUBROS'), modulo.indexOf('];', modulo.indexOf('const INFLUENZA_RUBROS')) + 2);
 const reglasFn = modulo.slice(modulo.indexOf('// Regla de calendario (2ª dosis'), modulo.indexOf('function renderCaptureGrid() {'));
 const gridFn = modulo.slice(modulo.indexOf('function renderCaptureGrid() {'), modulo.indexOf('function updateFlaskCalculation() {'));
+const isoFn = modulo.slice(modulo.indexOf('function getISOWeek('), modulo.indexOf('let _campaignConfig'));
+const semanasFn = modulo.slice(modulo.indexOf('function generateCampaignWeeks()'), modulo.indexOf('function campaignSeasonLabel()'));
 const saveFn = modulo.slice(modulo.indexOf('function influenzaVentanaError('), modulo.indexOf('// --- LÓGICA DE ADMINISTRACIÓN Y MUNICIPIOS ---'));
 
 async function montarCaptura(page, fecha, valoresGuardados) {
@@ -64,7 +66,7 @@ async function montarCaptura(page, fecha, valoresGuardados) {
       'var RealDate = Date; Date = class extends RealDate { getDay() { return 5; } };   // la captura solo se permite jueves/viernes'
     ].join('\n')
   });
-  await page.addScriptTag({ content: rubros + reglasFn + gridFn + saveFn + 'window.__grid = renderCaptureGrid; window.__save = saveInfluenzaReport;' });
+  await page.addScriptTag({ content: rubros + isoFn + semanasFn + reglasFn + gridFn + saveFn + 'window.__grid = renderCaptureGrid; window.__save = saveInfluenzaReport;' });
   await page.evaluate(() => window.__grid());
 }
 
@@ -149,4 +151,46 @@ test('Captura de unidad: el jueves previo al primer viernes ya se puede, una sem
 test('Captura de unidad: después del 2-abr la temporada ya no admite semanas', async ({ page }) => {
   expect(await ventana(page, '2027-04-09T12:00:00', '2027-04-09')).toContain('fuera de la campaña');
   expect(await ventana(page, '2027-04-01T12:00:00', '2027-04-02')).toBeNull();
+});
+
+test('Captura cerrada (antes del 12-oct): la tabla queda bloqueada, avisa y el guardado se rechaza', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-02T12:00:00') });
+  await montarCaptura(page, '2026-10-16');
+  const r = await page.evaluate(async ([i, fn]) => {
+    _campaignConfig = { fecha_inicio: i, fecha_fin: fn };
+    window.__grid();
+    const habilitados = [...document.querySelectorAll('[id^="input_inf_"]')].filter(x => !x.disabled).length;
+    const aviso = !!document.querySelector('.inf-aviso--cerrada');
+    await window.__save();
+    return { habilitados, aviso, guardados: window.__guardados.length, estado: window.influenzaEstadoCaptura('2026-10-16').abierta };
+  }, [INI27, FIN27]);
+  expect(r).toEqual({ habilitados: 0, aviso: true, guardados: 0, estado: false });
+});
+
+test('Folio: usa el de la base y, si falta, lo deriva del id con el mismo formato', async ({ page }) => {
+  await montarCaptura(page, '2026-10-16');
+  const f = await page.evaluate(() => [
+    window.influenzaFolio({ folio: 'INF-20261016-ABCD1234', fecha: '2026-10-16' }),
+    window.influenzaFolio({ id: 'abcd1234-0000', fecha: '2026-10-16' })
+  ]);
+  expect(f).toEqual(['INF-20261016-ABCD1234', 'INF-20261016-ABCD1234']);
+});
+
+test('Cortes de fin de mes: solo si el mes termina de lunes a jueves (en viernes ya es su reporte; fin de semana no aplica)', () => {
+  expect(R.cortes('2026-10-12', '2027-04-02')).toEqual(['2026-11-30', '2026-12-31', '2027-03-31']);
+  // 30-nov-2022 fue miércoles: ese día se captura su propio reporte
+  expect(R.cortes('2022-10-10', '2022-12-30')).toContain('2022-11-30');
+  // la campaña que termina entre semana también cierra con su propio corte
+  expect(R.cortes('2026-10-12', '2027-03-31')).toContain('2027-03-31');
+});
+
+test('Corte de fin de mes: se captura el mismo día aunque no sea jueves ni viernes, y aparece en la lista de semanas', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-30T12:00:00') });   // lunes
+  await montarCaptura(page, '2026-11-30');
+  const r = await page.evaluate(([i, fn]) => {
+    _campaignConfig = { fecha_inicio: i, fecha_fin: fn };
+    Date = class extends Date { getDay() { return 1; } };
+    return { corte: influenzaEsCorte('2026-11-30'), abre: influenzaSemanaAbre('2026-11-30'), semanas: generateCampaignWeeks().filter(w => w.corte).map(w => w.fecha), estado: influenzaEstadoCaptura('2026-11-30').abierta, viernes: influenzaEstadoCaptura('2026-12-04').abierta };
+  }, [INI27, FIN27]);
+  expect(r).toEqual({ corte: true, abre: '2026-11-30', semanas: ['2026-11-30', '2026-12-31', '2027-03-31'], estado: true, viernes: false });
 });

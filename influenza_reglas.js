@@ -68,7 +68,34 @@
     return null;
   }
 
-  const api = { sumaMeses, ventanas, fechaLarga, fechaCorta, reglaDosis };
+  function diaSemana(ymd) {
+    const { y, m, d } = partes(ymd);
+    return new Date(Date.UTC(y, m - 1, d)).getUTCDay();   // 0 = domingo ... 5 = viernes
+  }
+
+  /**
+   * Cortes de fin de mes: los reportes son de viernes, pero el SIS corta por mes calendario. Si el mes (o la
+   * campaña) termina de lunes a jueves, esos días ya no caben en el viernes siguiente (cae en otro mes), así que
+   * se captura un reporte extra fechado el último día. Si termina en viernes ya es su reporte; si termina en
+   * sábado o domingo no se aplica nada en fin de semana: esos días entran en el reporte del viernes anterior.
+   */
+  function cortes(inicio, fin) {
+    if (!inicio || !fin) return [];
+    const out = [];
+    const agrega = (ymd) => {
+      const dow = diaSemana(ymd);
+      if (dow >= 1 && dow <= 4 && ymd >= inicio && ymd <= fin && !out.includes(ymd)) out.push(ymd);
+    };
+    const a = partes(inicio), z = partes(fin);
+    const meses = (z.y - a.y) * 12 + (z.m - a.m);
+    for (let i = 0; i <= meses; i++) {
+      agrega(aYmd(new Date(Date.UTC(a.y, a.m - 1 + i + 1, 0))));   // último día de ese mes
+    }
+    agrega(fin);
+    return out.sort();
+  }
+
+  const api = { sumaMeses, ventanas, fechaLarga, fechaCorta, reglaDosis, cortes, diaSemana };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.InfluenzaReglas = api;
 })(typeof window !== "undefined" ? window : globalThis);

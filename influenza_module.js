@@ -320,6 +320,14 @@ function generateCampaignWeeks() {
     weeks.push({ semana: weekNum, fecha: ymd, label: `Semana ${weekNum} (Viernes ${ymd})` });
     d.setDate(d.getDate() + 7);
   }
+
+  // Cortes de fin de mes entre semana (ver InfluenzaReglas.cortes): reporte extra fechado el último día del mes.
+  const cortes = window.InfluenzaReglas ? window.InfluenzaReglas.cortes(startStr, endStr) : [];
+  cortes.forEach(ymd => {
+    const weekNum = getISOWeek(new Date(ymd + "T12:00:00"));
+    weeks.push({ semana: weekNum, fecha: ymd, corte: true, label: `Semana ${weekNum} (Corte de mes ${ymd})` });
+  });
+  weeks.sort((a, b) => a.fecha.localeCompare(b.fecha));
   return weeks;
 }
 
@@ -358,15 +366,14 @@ function renderInfluenzaWeekPicker() {
     const isCaptured = !!captureRecord;
     const isSinMov = captureRecord && (captureRecord.sin_movimiento === true || captureRecord.sin_movimiento === 'SI');
     const isCurrent = w.fecha === currentWeekFecha;
-    const isFuture = w.fecha > today && !isCurrent;
     
     let statusBadge = "";
     if (isSinMov) {
       statusBadge = `<span style="background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900; display: inline-flex; align-items: center; gap: 4px;" class="shrink-0 shadow-sm"><span class="material-symbols-rounded text-xs" style="font-size:11px; color: #1d4ed8;">pause_circle</span>Sin Movimiento</span>`;
     } else if (isCaptured) {
       statusBadge = `<span style="background-color: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900; display: inline-flex; align-items: center; gap: 4px;" class="shrink-0 shadow-sm"><span class="material-symbols-rounded text-xs" style="font-size:11px; color: #047857;">check_circle</span>Capturado</span>`;
-    } else if (isFuture) {
-      statusBadge = `<span style="background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 800;" class="shrink-0">Futuro</span>`;
+    } else if (influenzaVentanaError(w.fecha)) {
+      statusBadge = `<span style="background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 800; white-space: nowrap;" class="shrink-0">Abre ${influenzaDiaCorto(influenzaSemanaAbre(w.fecha))}</span>`;
     } else {
       statusBadge = `<span style="background-color: #fffbeb; color: #b45309; border: 1px solid #fde68a; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900; display: inline-flex; align-items: center; gap: 4px;" class="shrink-0 shadow-sm"><span class="material-symbols-rounded text-xs" style="font-size:11px; color: #b45309;">error</span>Pendiente</span>`;
     }
@@ -406,7 +413,7 @@ function renderInfluenzaWeekPicker() {
           <span class="text-xs shrink-0" ${textStyle}>Semana ${w.semana}</span>
           ${currentBadge}
         </div>
-        <span class="text-[10px] mt-0.5 truncate" ${labelStyle}>Corte: ${w.fecha}</span>
+        <span class="text-[10px] mt-0.5 truncate" ${labelStyle}>${w.corte ? "Corte de fin de mes · " + influenzaDiaCorto(w.fecha) : "Viernes " + influenzaFechaCorta(w.fecha)} ${w.fecha.slice(0, 4)}</span>
       </div>
       <div class="flex items-center gap-2 shrink-0">
         ${statusBadge}
@@ -438,15 +445,18 @@ function updateInfluenzaWeekBtnLabel(fecha) {
     const isCaptured = !!captureRecord;
     const isSinMov = captureRecord && (captureRecord.sin_movimiento === true || captureRecord.sin_movimiento === 'SI');
     
+    const chip = (cls, icon, txt) => `<span class="${cls} border text-[10px] font-extrabold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shrink-0" style="white-space:nowrap;"><span class="material-symbols-rounded" style="font-size:12px;">${icon}</span>${txt}</span>`;
     let statusBadge = "";
     if (isSinMov) {
-      statusBadge = `<span class="text-blue-700 bg-blue-50 border border-blue-200 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm"><span class="material-symbols-rounded text-xs" style="font-size:12px;">pause_circle</span>Sin Movimiento</span>`;
+      statusBadge = chip("text-blue-700 bg-blue-50 border-blue-200", "pause_circle", "Sin Movimiento");
     } else if (isCaptured) {
-      statusBadge = `<span class="text-emerald-700 bg-emerald-50 border border-emerald-200 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm"><span class="material-symbols-rounded text-xs" style="font-size:12px;">check_circle</span>Capturado</span>`;
+      statusBadge = chip("text-emerald-700 bg-emerald-50 border-emerald-200", "check_circle", "Capturado");
+    } else if (influenzaVentanaError(fecha)) {
+      statusBadge = chip("text-slate-600 bg-slate-100 border-slate-300", "schedule", `Abre ${influenzaDiaCorto(influenzaSemanaAbre(fecha))}`);
     } else {
-      statusBadge = `<span class="text-amber-700 bg-amber-50 border border-amber-200 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm"><span class="material-symbols-rounded text-xs" style="font-size:12px;">error</span>Pendiente</span>`;
+      statusBadge = chip("text-amber-700 bg-amber-50 border-amber-200", "error", "Pendiente");
     }
-    labelSpan.innerHTML = `<span class="font-extrabold text-violet-700">Semana ${selected.semana}</span> <span class="text-slate-400 font-bold">(${selected.fecha})</span> ${statusBadge}`;
+    labelSpan.innerHTML = `<span class="font-extrabold text-violet-700 shrink-0" style="white-space:nowrap;">Semana ${selected.semana}${selected.corte ? " · corte" : ""}</span> <span class="text-slate-400 font-bold shrink-0" style="white-space:nowrap;">· ${influenzaFechaCorta(selected.fecha)}</span> ${statusBadge}`;
   } else {
     labelSpan.innerHTML = `<span class="text-slate-400 font-bold">Seleccionar semana...</span>`;
   }
@@ -473,6 +483,7 @@ function updateInfluenzaSinMovimientoUI() {
     chkINF.checked = SIN_MOVIMIENTO_INF;
     chkINF.disabled = false;
   }
+  if (!influenzaEstadoCaptura(selectedFecha).abierta) chkINF.disabled = true;
 
   // Update styles
   const iconBg = document.getElementById("iconSinMovimientoINFBg");
@@ -668,6 +679,17 @@ async function initInfluenzaCaptureFlow() {
     };
   }
 
+  const nombreInf = document.getElementById("nombreINFLUENZA");
+  if (nombreInf && !nombreInf.dataset.pasos) {
+    nombreInf.dataset.pasos = "1";
+    nombreInf.addEventListener("input", actualizarPasosInfluenza);
+  }
+  const gridInf = document.getElementById("influenzaCaptureGroupsContainer");
+  if (gridInf && !gridInf.dataset.pasos) {
+    gridInf.dataset.pasos = "1";
+    gridInf.addEventListener("input", actualizarPasosInfluenza);
+  }
+
   // Cargar datos iniciales
   await loadInfluenzaUnitData();
   if (weekSelect) {
@@ -733,8 +755,18 @@ function renderCaptureGrid() {
   container.innerHTML = "";
 
   const selectedFecha = document.getElementById("influenza_semana").value;
+  const estado = influenzaEstadoCaptura(selectedFecha);
+  const capturaCerrada = !estado.abierta;
+  if (capturaCerrada) {
+    const cerrado = document.createElement("div");
+    cerrado.className = "inf-aviso inf-aviso--cerrada";
+    cerrado.innerHTML = `<span class="material-symbols-rounded">lock_clock</span><div><b>Captura cerrada.</b> ${estado.motivo} Puedes revisar la tabla, pero todavía no se puede guardar información.</div>`;
+    container.appendChild(cerrado);
+  }
+  const nombreInp = document.getElementById("nombreINFLUENZA");
+  if (nombreInp) nombreInp.disabled = capturaCerrada;
   const avisoHtml = avisoReglasSemana(selectedFecha);
-  if (avisoHtml) {
+  if (avisoHtml && !capturaCerrada) {
     const aviso = document.createElement("div");
     aviso.className = "flex flex-col gap-2";
     aviso.innerHTML = avisoHtml;
@@ -801,7 +833,7 @@ function renderCaptureGrid() {
       const acum = acumuladosPrevios[rb.id];
       const val = isSinMovActive ? 0 : (currentValores[rb.id] !== undefined ? currentValores[rb.id] : "");
       const reglaCal = reglaDosisRubro(rb, selectedFecha);
-      const isLocked = meta === 0 || isSinMovActive || !!reglaCal;
+      const isLocked = meta === 0 || isSinMovActive || !!reglaCal || capturaCerrada;
 
       const row = document.createElement("tr");
 
@@ -926,7 +958,58 @@ function renderCaptureGrid() {
 
     container.appendChild(card);
   });
+
+  actualizarPasosInfluenza();
+  if (typeof syncCommandHub === "function") syncCommandHub();
 }
+
+// --- Guía por pasos del panel de captura ---
+
+/** Pinta los 4 pasos (y la ayuda) según el estado real de la captura: semana, nombre, dosis y guardado con folio. */
+function actualizarPasosInfluenza() {
+  const box = document.getElementById("influenzaPasosGuia");
+  if (!box) return;
+
+  const fecha = document.getElementById("influenza_semana")?.value || "";
+  const estado = influenzaEstadoCaptura(fecha);
+  const nombre = (document.getElementById("nombreINFLUENZA")?.value || "").trim();
+  const sinMov = !!document.getElementById("chkSinMovimientoINF")?.checked;
+  const hayDosis = INFLUENZA_RUBROS.some(rb => Number(document.getElementById(`input_inf_${rb.id}`)?.value || 0) > 0);
+  const semana = generateCampaignWeeks().find(w => w.fecha === fecha);
+
+  const pasos = [
+    { titulo: "Elige la semana", ok: !!semana,
+      texto: semana ? (semana.corte ? `Corte de fin de mes · ${influenzaDiaCorto(fecha)}` : `Semana ${semana.semana} · viernes ${influenzaFechaCorta(fecha)}`) : "Selecciona la semana que vas a reportar." },
+    { titulo: "Escribe tu nombre", ok: !!nombre,
+      texto: nombre ? nombre : "Quien captura queda registrado en el reporte." },
+    { titulo: "Captura las dosis", ok: sinMov || hayDosis || estado.guardado,
+      texto: sinMov ? "Marcaste «Sin movimiento»: se guarda en ceros."
+        : (estado.guardado ? "Ya hay dosis guardadas; puedes corregirlas." : "Anota lo aplicado esta semana. Si no hubo, usa «Sin movimiento».") },
+    { titulo: "Guarda y recibe tu folio", ok: estado.guardado,
+      texto: estado.guardado ? `Folio ${estado.folio}` : "Con el botón azul de guardar. Cada reporte recibe un folio único." }
+  ];
+
+  let activo = estado.abierta ? pasos.findIndex(p => !p.ok) : -1;
+  if (activo < 0) activo = pasos.length;
+
+  const claseDe = (p, i) => (!estado.abierta && !p.ok) ? "is-lock" : (p.ok ? "is-done" : (i === activo ? "is-active" : ""));
+  const tarjetas = pasos.map((p, i) => `
+    <div class="inf-paso ${claseDe(p, i)}">
+      <div class="inf-paso-num">${p.ok ? '<span class="material-symbols-rounded">check</span>' : i + 1}</div>
+      <div class="inf-paso-cuerpo">
+        <div class="inf-paso-titulo">${p.titulo}</div>
+        <div class="inf-paso-texto">${p.texto}</div>
+      </div>
+    </div>`).join("");
+
+  box.innerHTML = `
+    <div class="inf-pasos-cab">
+      <span>Tu reporte en 4 pasos</span>
+      <button type="button" class="ayuda-btn" data-ayuda="influenza_captura" title="Cómo funciona este panel" aria-label="Cómo funciona este panel"><span class="material-symbols-rounded">help</span></button>
+    </div>
+    <div class="inf-pasos-grid">${tarjetas}</div>`;
+}
+window.actualizarPasosInfluenza = actualizarPasosInfluenza;
 
 function updateFlaskCalculation() {
   // El cálculo y control de frascos para UNIDAD ha sido removido de su formulario.
@@ -944,10 +1027,54 @@ function _highlightInfluenzaText(text, queryWords) {
   return escaped.replace(regex, '<mark class="bg-violet-100 text-violet-900 rounded px-0.5 font-extrabold">$1</mark>');
 }
 
+const INF_MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+function _infTotalDosis(r) {
+  return Object.values(r?.valores || {}).reduce((s, v) => s + Number(v || 0), 0);
+}
+
+/** Tarjetas de resumen del historial: reportes capturados vs. esperados, dosis y avance, sin movimiento y último folio. */
+function pintarResumenHistorialInfluenza() {
+  const box = document.getElementById("influenzaHistorialResumen");
+  if (!box) return;
+
+  const hoy = new Date().toLocaleDateString("en-CA");
+  const esperados = generateCampaignWeeks().filter(w => w.fecha <= hoy);
+  const capturadas = new Set(_influenzaCapturasCache.map(r => r.fecha));
+  const pendientes = esperados.filter(w => !capturadas.has(w.fecha)).length;
+  const dosis = _influenzaCapturasCache.reduce((s, r) => s + _infTotalDosis(r), 0);
+  const meta = Object.values(_influenzaMetasCache).reduce((s, v) => s + Number(v || 0), 0);
+  const avance = meta > 0 ? Math.round((dosis / meta) * 100) : null;
+  const sinMov = _influenzaCapturasCache.filter(r => r.sin_movimiento === true || r.sin_movimiento === "SI").length;
+  const ultimo = [..._influenzaCapturasCache].sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+  const L = window.InfluenzaReglas ? window.InfluenzaReglas.fechaLarga : (x) => x;
+
+  const tarjeta = (icono, tono, etiqueta, valor, nota) => `
+    <div class="inf-hist-stat">
+      <div class="inf-hist-stat-ico inf-tono-${tono}"><span class="material-symbols-rounded">${icono}</span></div>
+      <div class="inf-hist-stat-txt">
+        <div class="inf-hist-stat-etq">${etiqueta}</div>
+        <div class="inf-hist-stat-val">${valor}</div>
+        <div class="inf-hist-stat-nota">${nota}</div>
+      </div>
+    </div>`;
+
+  box.innerHTML = [
+    tarjeta("fact_check", pendientes ? "ambar" : "verde", "Reportes capturados", `${_influenzaCapturasCache.length}<small> de ${esperados.length}</small>`,
+      pendientes ? `${pendientes} pendiente${pendientes === 1 ? "" : "s"} a la fecha` : "Al corriente"),
+    tarjeta("vaccines", "violeta", "Dosis aplicadas", dosis.toLocaleString("es-MX"),
+      avance === null ? "Sin meta asignada" : `${avance}% de tu meta anual`),
+    tarjeta("pause_circle", "azul", "Sin movimiento", String(sinMov), sinMov === 1 ? "semana en ceros" : "semanas en ceros"),
+    tarjeta("tag", "gris", "Último folio", ultimo ? `<span class="inf-hist-folio-mini">${influenzaFolio(ultimo)}</span>` : "—",
+      ultimo ? `Semana del ${L(ultimo.fecha)}` : "Aún no hay reportes")
+  ].join("");
+}
+
 async function loadInfluenzaHistoryList() {
   const container = document.getElementById("influenzaHistorialList");
   if (!container) return;
   container.innerHTML = "";
+  pintarResumenHistorialInfluenza();
 
   const searchInput = document.getElementById("influenzaHistorialSearch");
   const limitSelect = document.getElementById("influenzaHistorialLimit");
@@ -1028,9 +1155,7 @@ async function loadInfluenzaHistoryList() {
       Object.values(r.valores).forEach(v => totalDosis += Number(v || 0));
     }
 
-    const shortId = r.id ? r.id.substring(0, 8).toUpperCase() : "TEMP";
-    const dateStr = r.fecha.replace(/-/g, "");
-    const folio = `INF-${dateStr}-${shortId}`;
+    const folio = influenzaFolio(r);
     
     // Construct friendly Spanish date representation for smart search
     let friendlyDate = "";
@@ -1101,44 +1226,65 @@ async function loadInfluenzaHistoryList() {
     return;
   }
 
+  const metaTotal = Object.values(_influenzaMetasCache).reduce((acc, v) => acc + Number(v || 0), 0);
+  const corteDe = (f) => influenzaEsCorte(f);
+
   itemsToDisplay.forEach(p => {
     const r = p.original;
+    const sinMov = r.sin_movimiento === true || r.sin_movimiento === "SI";
+    const [yy, mm, dd] = r.fecha.split("-").map(Number);
+    const semana = generateCampaignWeeks().find(w => w.fecha === r.fecha);
+    const pct = metaTotal > 0 ? Math.min(100, Math.round((p.totalDosis / metaTotal) * 100)) : 0;
     const folioFormatted = _highlightInfluenzaText(p.folio, queryWords);
+    const capturadoFormatted = _highlightInfluenzaText(r.capturado_por || "Desconocido", queryWords);
     const fechaFormatted = _highlightInfluenzaText(r.fecha, queryWords);
-    const friendlyDateFormatted = p.friendlyDate ? _highlightInfluenzaText(p.friendlyDate, queryWords) : "";
-    const capturadoFormatted = _highlightInfluenzaText(r.capturado_por || 'Desconocido', queryWords);
+    const inicial = String(r.capturado_por || "?").trim().charAt(0).toUpperCase() || "?";
+    const actualizado = r.updated_at ? new Date(r.updated_at).toLocaleDateString("es-MX", { day: "numeric", month: "short" }) : "";
+    const ediciones = Array.isArray(r.historial_ediciones) ? Math.max(0, r.historial_ediciones.length - 1) : 0;
+
+    const estado = sinMov
+      ? `<span class="inf-chip inf-chip--azul"><span class="material-symbols-rounded">pause_circle</span>Sin movimiento</span>`
+      : `<span class="inf-chip inf-chip--verde"><span class="material-symbols-rounded">check_circle</span>Capturado</span>`;
+    const tipo = corteDe(r.fecha) ? `<span class="inf-chip inf-chip--ambar"><span class="material-symbols-rounded">event_available</span>Corte de fin de mes</span>` : "";
 
     const card = document.createElement("div");
-    card.className = "p-5 rounded-2xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer bg-white shadow-sm hover:shadow-md";
-    card.style.backgroundColor = "#ffffff";
+    card.className = "inf-hist-card";
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
     card.innerHTML = `
-      <div class="flex items-start gap-3">
-        <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600 shrink-0 mt-0.5">
-          <span class="material-symbols-rounded text-[22px]">assignment</span>
+      <div class="inf-hist-fecha">
+        <span class="inf-hist-mes">${INF_MESES_LARGOS[mm - 1].slice(0, 3)}</span>
+        <span class="inf-hist-dia">${dd}</span>
+        <span class="inf-hist-anio">${yy}</span>
+      </div>
+      <div class="inf-hist-cuerpo">
+        <div class="inf-hist-top">
+          <span class="inf-hist-folio">${folioFormatted}</span>
+          ${estado}${tipo}
         </div>
-        <div>
-          <div class="text-[11px] font-black text-violet-600 mb-1 tracking-wider uppercase">${folioFormatted}</div>
-          <div class="text-sm font-extrabold text-slate-700 flex items-center gap-1.5">
-            <span class="material-symbols-rounded text-slate-400 text-base">calendar_today</span>
-            Semana: ${fechaFormatted} ${friendlyDateFormatted ? `<span class="text-xs text-slate-400 font-bold">(${friendlyDateFormatted})</span>` : ''}
-          </div>
-          <div class="text-xs text-slate-500 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>Dosis: <strong class="text-slate-700">${p.totalDosis}</strong></span>
-            <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>Responsable: <strong class="text-slate-700">${capturadoFormatted}</strong></span>
-          </div>
+        <div class="inf-hist-titulo">${semana ? `Semana ${semana.semana}` : "Semana"} <span>· ${p.friendlyDate || fechaFormatted}</span></div>
+        <div class="inf-hist-meta">
+          <span class="inf-hist-resp"><span class="inf-hist-avatar">${inicial}</span>${capturadoFormatted}</span>
+          ${actualizado ? `<span><span class="material-symbols-rounded">schedule</span>Guardado ${actualizado}</span>` : ""}
+          ${ediciones ? `<span><span class="material-symbols-rounded">edit_note</span>${ediciones} edici${ediciones === 1 ? "ón" : "ones"}</span>` : ""}
         </div>
       </div>
-      <button class="bg-violet-50 text-violet-700 hover:bg-violet-600 hover:text-white transition-all h-[36px] px-4 rounded-xl text-xs font-black flex items-center justify-center gap-1 shrink-0 self-end sm:self-center shadow-sm">
-        <span class="material-symbols-rounded text-[18px]">edit</span> Cargar reporte
-      </button>
+      <div class="inf-hist-dosis">
+        <div class="inf-hist-dosis-num">${p.totalDosis.toLocaleString("es-MX")}</div>
+        <div class="inf-hist-dosis-etq">dosis</div>
+        <div class="inf-hist-barra" title="${pct}% de tu meta anual"><span style="width:${pct}%"></span></div>
+      </div>
+      <div class="inf-hist-accion"><span class="material-symbols-rounded">chevron_right</span></div>
     `;
-    card.onclick = () => {
+    const abrir = () => {
       document.getElementById("influenza_semana").value = r.fecha;
-      renderCaptureGrid();
+      document.getElementById("influenza_semana").dispatchEvent(new Event("change"));
       // Cambiar automáticamente a la pestaña de captura
       document.getElementById("subtabUnitCaptura").click();
       showToast(`Reporte con folio ${p.folio} cargado para edición/consulta.`, true, "info");
     };
+    card.onclick = abrir;
+    card.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); abrir(); } };
     container.appendChild(card);
   });
 }
@@ -1161,10 +1307,75 @@ function influenzaVentanaError(fecha) {
 }
 window.influenzaVentanaError = influenzaVentanaError;
 
+function influenzaFechaCorta(ymd) {
+  return window.InfluenzaReglas ? window.InfluenzaReglas.fechaCorta(ymd) : ymd;
+}
+
+function influenzaDiaCorto(ymd) {
+  const dias = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+  const dow = window.InfluenzaReglas ? window.InfluenzaReglas.diaSemana(ymd) : 0;
+  return `${dias[dow]} ${influenzaFechaCorta(ymd)}`;
+}
+
+function influenzaDiaAnterior(ymd) {
+  const [y, m, d] = String(ymd).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+}
+
+/** Primer día en que se puede capturar la semana de `fecha`: el jueves previo, o el inicio de la campaña si es después. */
+function influenzaSemanaAbre(fecha) {
+  if (influenzaEsCorte(fecha)) return fecha;   // el corte de fin de mes se captura el mismo día
+  const jueves = influenzaDiaAnterior(fecha);
+  const ini = _campaignConfig.fecha_inicio;
+  return ini && ini > jueves ? ini : jueves;
+}
+
+/** true si `fecha` es un corte de fin de mes entre semana (no un viernes de corte). */
+function influenzaEsCorte(fecha) {
+  return !!(window.InfluenzaReglas && window.InfluenzaReglas.cortes(_campaignConfig.fecha_inicio, _campaignConfig.fecha_fin).includes(fecha));
+}
+
+/** Folio del reporte: el que asigna la base (columna folio); si aún no existe, el mismo formato derivado del id. */
+function influenzaFolio(r) {
+  if (!r) return "";
+  if (r.folio) return r.folio;
+  const shortId = r.id ? String(r.id).substring(0, 8).toUpperCase() : "TEMP";
+  return `INF-${String(r.fecha || "").replace(/-/g, "")}-${shortId}`;
+}
+window.influenzaFolio = influenzaFolio;
+
+/**
+ * Estado de la captura de la semana elegida: abierta (se puede guardar) o cerrada con su motivo, y si ya hay
+ * reporte guardado (con su folio). Lo usan el panel, los pasos y el botón flotante de Guardar.
+ */
+function influenzaEstadoCaptura(fecha) {
+  fecha = fecha || document.getElementById("influenza_semana")?.value;
+  const reporte = _influenzaCapturasCache.find(r => r.fecha === fecha) || null;
+  let motivo = influenzaVentanaError(fecha);
+  if (!motivo && fecha) {
+    const dow = new Date().getDay();
+    const hoy = new Date().toLocaleDateString("en-CA");
+    const esSuCorte = influenzaEsCorte(fecha) && fecha === hoy;   // el corte de fin de mes se captura ese mismo día
+    if (dow !== 4 && dow !== 5 && !esSuCorte) {
+      motivo = influenzaEsCorte(fecha)
+        ? `El corte de fin de mes se captura el ${influenzaFechaCorta(fecha)} (o el jueves o viernes siguiente).`
+        : "El reporte de Influenza solo se captura los jueves y viernes.";
+    }
+  }
+  return { abierta: !motivo, motivo, reporte, guardado: !!reporte, folio: reporte ? influenzaFolio(reporte) : "" };
+}
+window.influenzaEstadoCaptura = influenzaEstadoCaptura;
+
 async function saveInfluenzaReport() {
   const selectedFecha = document.getElementById("influenza_semana").value;
   const nombre = document.getElementById("nombreINFLUENZA").value.trim();
   const campana = document.getElementById("influenza_campana").value;
+
+  const cierre = influenzaEstadoCaptura(selectedFecha);
+  if (!cierre.abierta) {
+    showToast(cierre.motivo, false, "bad");
+    return;
+  }
 
   if (!nombre) {
     showToast("Por favor ingresa el nombre de quien reporta la captura.", false, "bad");
@@ -1274,6 +1485,8 @@ async function saveInfluenzaReport() {
     action: async () => {
       const res = await AppService.call("saveinfluenza_captura", payload);
       await loadInfluenzaUnitData();
+      const folioGuardado = res?.folio || influenzaFolio(_influenzaCapturasCache.find(r => r.fecha === selectedFecha));
+      if (folioGuardado) showToast(`Folio del reporte: ${folioGuardado}`, true, "info");
       updateInfluenzaWeekBtnLabel(selectedFecha);
       updateInfluenzaSinMovimientoUI();
       renderCaptureGrid();
@@ -1514,12 +1727,11 @@ function mapDateToMonthAndWeek(fechaStr) {
     temp.setDate(temp.getDate() + 1);
   }
   
+  // Un viernes es su número de viernes del mes; el corte de fin de mes entre semana va en la columna que sigue.
   const day = d.getDate();
-  const weekIndex = fridays.indexOf(day);
-  
   return {
     month: monthName,
-    weekNumInMonth: weekIndex >= 0 ? weekIndex + 1 : 1
+    weekNumInMonth: fridays.filter(f => f < day).length + 1
   };
 }
 
@@ -2045,7 +2257,7 @@ function updateInfluenzaDashboardVisuals(muni, minFecha, maxFecha) {
 
   weeksSorted.forEach((wFecha, idx) => {
     const weekNum = campaignWeeks.find(cw => cw.fecha === wFecha)?.semana || "N/A";
-    trendLabels.push(`Sem. ${weekNum}`);
+    trendLabels.push(`Sem. ${weekNum}${campaignWeeks.find(cw => cw.fecha === wFecha)?.corte ? " (corte)" : ""}`);
     
     let weekDoses = 0;
     _adminCapturasArray.forEach(c => {

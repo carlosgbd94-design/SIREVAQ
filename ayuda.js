@@ -23,6 +23,27 @@
   const N = (texto) => ({ tipo: 'nota', texto });
 
   const CONTENIDO = {
+    // ------------------------------------------------- Influenza: captura semanal
+    influenza_captura: {
+      titulo: 'Cómo funciona la captura de Influenza',
+      subtitulo: 'Un reporte por semana, con folio, validado contra la meta de tu unidad.',
+      bloques: [
+        T('Cuándo se captura'),
+        I('event', '#7c3aed', 'Un reporte por viernes de corte', 'Cada semana se reporta con fecha del viernes. Se captura el jueves o el viernes; la semana se abre el jueves previo.'),
+        I('event_available', '#0284c7', 'Corte de fin de mes', 'Si el mes termina de lunes a jueves, ese último día se captura un reporte extra (por ejemplo, un miércoles 30): jueves y viernes ya serían del mes siguiente. Aparece en la lista de semanas como «Corte de fin de mes» y se captura el mismo día.'),
+        I('lock_clock', '#64748b', 'Panel cerrado', 'Antes del inicio de la campaña, fuera de sus fechas o antes de que abra la semana no se puede escribir ni guardar; el aviso te dice cuándo abre.'),
+        T('Cómo se captura'),
+        P(1, 'Elige la semana', 'En «Semana a reportar». Las etiquetas dicen si ya está capturada, pendiente o cuándo abre.'),
+        P(2, 'Escribe tu nombre', 'Queda registrado como quien capturó el reporte.'),
+        P(3, 'Captura las dosis', 'En «Esta semana». Meta anual es lo asignado a tu unidad y Acumulado lo ya reportado; el avance se calcula solo y no puedes pasar de la meta. Si no aplicaste dosis, activa «Sin movimiento».'),
+        P(4, 'Guarda', 'Con el botón azul. Cada reporte recibe un folio único, que ves en el paso 4 y en el Historial de Reportes.'),
+        T('Rubros bloqueados'),
+        I('block', '#d97706', 'Sin meta', 'Tu unidad no tiene meta en ese rubro, así que no se captura.'),
+        I('schedule', '#d97706', '2ª y 1ª dosis', 'No hay 2ª dosis durante el 1er mes de la campaña ni 1ª dosis durante el último mes.'),
+        N('Mientras el panel esté abierto puedes volver a guardar la misma semana para corregirla; las ediciones quedan en el historial del reporte.')
+      ]
+    },
+
     // ---------------------------------------------------------------- SINBA-SIS
     sinba: {
       titulo: 'Cómo funciona el SINBA-SIS',

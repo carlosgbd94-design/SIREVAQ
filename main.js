@@ -8181,15 +8181,18 @@ async function supabaseRequest(action = "", payload, options = {}) {
           capturado_por: String(capturado_por || USER?.usuario || "").toUpperCase(),
           editado_por: edPor,
           historial_ediciones: hist,
+          ...(payload.sin_movimiento === undefined ? {} : { sin_movimiento: payload.sin_movimiento === true }),
           updated_at: new Date().toISOString()
         };
 
-        const { error } = await supabase
+        const { data: guardado, error } = await supabase
           .from('influenza_capturas')
-          .upsert(record, { onConflict: 'clues,fecha' });
+          .upsert(record, { onConflict: 'clues,fecha' })
+          .select('folio')
+          .maybeSingle();
 
         if (error) throw error;
-        return { ok: true };
+        return { ok: true, folio: guardado?.folio || null };
       }
 
       case "getsis_variables": {
@@ -19246,6 +19249,11 @@ async function getHistoryMetrics(mes, _ignored, force = false) {
             }
             temp.setDate(temp.getDate() + 1);
           }
+          // Además de los viernes, el corte de fin de mes entre semana (InfluenzaReglas.cortes) es un reporte esperado.
+          if (window.InfluenzaReglas) {
+            window.InfluenzaReglas.cortes(activeCamp.fecha_inicio, activeCamp.fecha_fin)
+              .filter(ymd => ymd.startsWith(m)).forEach(ymd => expectedFridays.push(ymd));
+          }
           if (expectedFridays.length > 0) {
             isCampanaActiveInMonth = true;
             const lastDayOfMonthYmd = dateToLocalYmd(new Date(y, mn, 0, 12, 0, 0));
@@ -24482,10 +24490,17 @@ function syncCommandHub() {
     const flowStatus = getPinolFlowStatus();
     isSaveDisabled = (flowStatus !== "NONE");
   } else if (captureTab === "INFLUENZA") {
-    const day = new Date().getDay();
-    if (day !== 4 && day !== 5) {
+    // Misma regla que el panel: campaña iniciada, semana ya abierta (jueves previo) y solo jueves/viernes.
+    const estInf = typeof window.influenzaEstadoCaptura === "function" ? window.influenzaEstadoCaptura() : null;
+    if (estInf && !estInf.abierta) {
       isValidDate = false;
-      reasonInvalid = "La captura de Influenza solo se puede realizar los días Jueves o Viernes.";
+      reasonInvalid = estInf.motivo;
+    } else if (!estInf) {
+      const day = new Date().getDay();
+      if (day !== 4 && day !== 5) {
+        isValidDate = false;
+        reasonInvalid = "La captura de Influenza solo se puede realizar los días Jueves o Viernes.";
+      }
     }
     isSaveDisabled = !isValidDate;
   }
@@ -24495,6 +24510,7 @@ function syncCommandHub() {
   if (captureTab === "SR") isSaved = !!HAS_TODAY_SR;
   if (captureTab === "CONS") isSaved = !!HAS_TODAY_CONS;
   if (captureTab === "BIO") isSaved = !!HAS_SAVED_BIO;
+  if (captureTab === "INFLUENZA" && typeof window.influenzaEstadoCaptura === "function") isSaved = window.influenzaEstadoCaptura().guardado;
   if (captureTab === "PINOL") {
     // Pinol state machine: check for pending solicitud from this unit
     try {

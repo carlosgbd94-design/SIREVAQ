@@ -77,7 +77,8 @@
   <!-- Estilos -->
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.96" type="text/css">
+  <link rel="stylesheet" href="ayuda.css?v=1">
+  <link rel="stylesheet" href="style.css?v=2026.97" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -330,7 +331,8 @@
        (ensurePdfAssetsLoaded) solo al exportar el PDF de Resguardo.
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
-  <script src="dist/bundle-head.js?v=2026.71" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script defer src="ayuda.js?v=6"></script>
+  <script src="dist/bundle-head.js?v=2026.73" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -1739,6 +1741,9 @@
             <!-- SECCIÓN DE CAPTURA -->
             <div id="secUnitCaptura" class="flex flex-col gap-6 relative w-full overflow-visible">
 
+              <!-- Guía por pasos (se pinta desde influenza_module.js: actualizarPasosInfluenza) -->
+              <div id="influenzaPasosGuia" class="w-full"></div>
+
               <!-- Barra de Controles Superior (Campaña + Semana + Responsable) -->
               <div
                 class="bg-surface border border-slate-200 rounded-[24px] px-5 py-4 shadow-sm flex flex-wrap gap-4 items-end relative z-50"
@@ -1754,14 +1759,14 @@
                   </select>
                 </div>
                 <!-- Semana a Reportar Custom Premium Picker -->
-                <div class="relative" style="min-width: 260px; flex: 0 1 auto;">
+                <div class="relative" style="min-width: 330px; flex: 0 1 auto;">
                   <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Semana a
                     Reportar</label>
                   <button type="button" id="influenza_semana_btn"
-                    class="w-full bg-white rounded-full px-4 py-1.5 text-xs font-extrabold text-slate-700 outline-none flex items-center justify-between gap-2 transition-all duration-200 hover:border-violet-300"
-                    style="min-height: 34px; border: 1px solid rgba(203, 213, 225, 0.8) !important; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), inset 0 -1.5px 0 rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.02) !important;">
-                    <span id="influenza_semana_label" class="flex items-center gap-1.5">Seleccionar semana...</span>
-                    <span class="material-symbols-rounded text-slate-400 text-[18px]">expand_more</span>
+                    class="w-full bg-white rounded-full text-xs font-extrabold text-slate-700 outline-none flex items-center transition-all duration-200 hover:border-violet-300"
+                    style="min-height: 34px; gap: 10px; padding: 4px 10px 4px 16px !important; border: 1px solid rgba(203, 213, 225, 0.8) !important; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), inset 0 -1.5px 0 rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.02) !important;">
+                    <span id="influenza_semana_label" class="flex items-center gap-1.5 flex-1 min-w-0" style="overflow:hidden; text-align:left;">Seleccionar semana...</span>
+                    <span class="material-symbols-rounded text-slate-400 shrink-0" style="font-size:20px; width:20px; flex:0 0 20px;">expand_more</span>
                   </button>
                   <input type="hidden" id="influenza_semana" />
 
@@ -1825,7 +1830,7 @@
               <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <h4 class="text-sm font-black text-violet-950 uppercase tracking-wider m-0">Historial de Reportes Capturados</h4>
                 <div class="flex items-center gap-2">
-                  <button type="button" onclick="ExportManager.exportToExcel('Reportes_Influenza_SIREVAQ', 'Capturas', ['Folio', 'Fecha', 'Dosis'], _influenzaCapturasCache.map(c => [c.id || 'INF-001', c.fecha, Object.values(c.valores||{}).reduce((a,b)=>a+Number(b||0),0)]))" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                  <button type="button" onclick="ExportManager.exportToExcel('Reportes_Influenza_SIREVAQ', 'Capturas', ['Folio', 'Fecha', 'Dosis'], _influenzaCapturasCache.map(c => [influenzaFolio(c), c.fecha, Object.values(c.valores||{}).reduce((a,b)=>a+Number(b||0),0)]))" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
                     <span class="material-symbols-rounded text-sm">table_view</span>
                     <span>Excel</span>
                   </button>
@@ -1844,6 +1849,9 @@
                   </button>
                 </div>
               </div>
+
+              <!-- Resumen del historial (se pinta desde influenza_module.js: pintarResumenHistorialInfluenza) -->
+              <div id="influenzaHistorialResumen" class="inf-hist-resumen"></div>
 
               <!-- Buscador del Historial y Controles Premium -->
               <div class="flex flex-col gap-4 mb-4">
