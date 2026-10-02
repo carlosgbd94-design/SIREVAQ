@@ -38,7 +38,7 @@ const modulo = fs.readFileSync(path.join(raiz, 'influenza_module.js'), 'utf8');
 const rubros = modulo.slice(modulo.indexOf('const INFLUENZA_RUBROS'), modulo.indexOf('];', modulo.indexOf('const INFLUENZA_RUBROS')) + 2);
 const reglasFn = modulo.slice(modulo.indexOf('// Regla de calendario (2ª dosis'), modulo.indexOf('function renderCaptureGrid() {'));
 const gridFn = modulo.slice(modulo.indexOf('function renderCaptureGrid() {'), modulo.indexOf('function updateFlaskCalculation() {'));
-const saveFn = modulo.slice(modulo.indexOf('async function saveInfluenzaReport() {'), modulo.indexOf('// --- LÓGICA DE ADMINISTRACIÓN Y MUNICIPIOS ---'));
+const saveFn = modulo.slice(modulo.indexOf('function influenzaVentanaError('), modulo.indexOf('// --- LÓGICA DE ADMINISTRACIÓN Y MUNICIPIOS ---'));
 
 async function montarCaptura(page, fecha, valoresGuardados) {
   await page.goto('/reference.html');
@@ -112,4 +112,41 @@ test('Un valor ya guardado en un rubro bloqueado no impide volver a guardar el r
   await montarCaptura(page, '2025-10-17', { r6: 7 });
   await page.evaluate(() => window.__save());
   expect(await page.evaluate(() => window.__guardados.length)).toBe(1);
+});
+
+// ─── Temporada 2026-2027: abre lun 12-oct-2026, cierra vie 2-abr-2027 ───────
+const INI27 = '2026-10-12';
+const FIN27 = '2027-04-02';
+
+test('Temporada 2026-2027: 2ª dosis desde el 12-nov y 1ª dosis hasta el 2-mar', () => {
+  expect(R.ventanas(INI27, FIN27)).toEqual({ segundasDesde: '2026-11-12', primerasHasta: '2027-03-02' });
+  const b = (g, f) => !!R.reglaDosis(g, f, INI27, FIN27);
+  expect(b('Segunda dosis', '2026-10-16')).toBe(true);
+  expect(b('Segunda dosis', '2026-11-06')).toBe(true);
+  expect(b('Segunda dosis', '2026-11-13')).toBe(false);   // primer viernes con 2ª dosis
+  expect(b('Primera dosis', '2027-02-26')).toBe(false);   // último viernes con 1ª dosis
+  expect(b('Primera dosis', '2027-03-05')).toBe(true);
+});
+
+async function ventana(page, ahora, fecha) {
+  await page.clock.install({ time: new Date(ahora) });
+  await montarCaptura(page, fecha);
+  return page.evaluate(([f, i, fn]) => {
+    _campaignConfig = { fecha_inicio: i, fecha_fin: fn };
+    return window.influenzaVentanaError(f);
+  }, [fecha, INI27, FIN27]);
+}
+
+test('Captura de unidad: antes del 12-oct no se puede reportar', async ({ page }) => {
+  expect(await ventana(page, '2026-10-02T12:00:00', '2026-10-16')).toContain('inicia el 12 oct 2026');
+});
+
+test('Captura de unidad: el jueves previo al primer viernes ya se puede, una semana antes no', async ({ page }) => {
+  expect(await ventana(page, '2026-10-15T12:00:00', '2026-10-16')).toBeNull();
+  expect(await ventana(page, '2026-10-15T12:00:00', '2026-10-23')).toContain('aún no se puede capturar');
+});
+
+test('Captura de unidad: después del 2-abr la temporada ya no admite semanas', async ({ page }) => {
+  expect(await ventana(page, '2027-04-09T12:00:00', '2027-04-09')).toContain('fuera de la campaña');
+  expect(await ventana(page, '2027-04-01T12:00:00', '2027-04-02')).toBeNull();
 });

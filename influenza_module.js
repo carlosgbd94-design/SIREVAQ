@@ -280,7 +280,7 @@ async function loadCampaignConfig() {
     _allCampaigns = data || [];
     const infCampanas = _allCampaigns.filter(c => c.nombre && c.nombre.startsWith("Campaña Influenza"));
     
-    _activeCampaign = infCampanas.find(c => c.activo) || _allCampaigns.find(c => c.activo) || infCampanas[0] || _allCampaigns[0] || null;
+    _activeCampaign = infCampanas.find(c => c.activo) || infCampanas[0] || null;
 
     if (_activeCampaign) {
       _campaignConfig.fecha_inicio = _activeCampaign.fecha_inicio;
@@ -301,31 +301,18 @@ async function loadCampaignConfig() {
   populateCampaignSelectors();
 }
 
-// Generar semanas epidemiológicas de Influenza
+// Generar semanas epidemiológicas de Influenza.
+// Los reportes son semanales y SIEMPRE caen en viernes (el avance/medallas de main.js cuenta los viernes
+// dentro de la temporada), así que la lista arranca en el primer viernes >= inicio y termina en el último
+// viernes <= fin, aunque las fechas de la temporada no sean viernes (ej. inicio jueves 1-oct).
+// Siempre se usa la campaña seleccionada/activa; no se salta a otra temporada al terminar la actual.
 function generateCampaignWeeks() {
   const weeks = [];
   const startStr = _campaignConfig.fecha_inicio || "2025-10-03";
   const endStr   = _campaignConfig.fecha_fin    || "2026-04-25";
-  let d = new Date(startStr + "T12:00:00");
+  const d = new Date(startStr + "T12:00:00");
   const end = new Date(endStr + "T12:00:00");
-
-  // Si la campaña ya terminó, generar semanas de la SIGUIENTE campaña
-  const today = new Date();
-  if (today > end) {
-    // Calcular fecha de inicio de la nueva campaña (primer viernes de octubre del año siguiente)
-    const nextYear = end.getFullYear() + 1;
-    d = new Date(`${nextYear}-10-01T12:00:00`);
-    // Avanzar hasta el primer viernes
-    while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
-    const nextEnd = new Date(`${nextYear + 1}-04-30T12:00:00`);
-    while (d <= nextEnd) {
-      const ymd = d.toISOString().split('T')[0];
-      const weekNum = getISOWeek(d);
-      weeks.push({ semana: weekNum, fecha: ymd, label: `Semana ${weekNum} (Viernes ${ymd})` });
-      d.setDate(d.getDate() + 7);
-    }
-    return weeks;
-  }
+  while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
 
   while (d <= end) {
     const ymd = d.toISOString().split('T')[0];
@@ -334,6 +321,13 @@ function generateCampaignWeeks() {
     d.setDate(d.getDate() + 7);
   }
   return weeks;
+}
+
+/** "2026-2027": temporada de la campaña seleccionada, para títulos y nombres de archivo de los reportes. */
+function campaignSeasonLabel() {
+  const nombre = _selectedCampaign?.nombre || document.getElementById("influenza_campana")?.value || "";
+  const m = String(nombre).match(/(\d{4}-\d{4})/);
+  return m ? m[1] : deriveCampaignName(_campaignConfig.fecha_inicio, _campaignConfig.fecha_fin);
 }
 
 // Helper para renderizar el Selector de Semanas Premium en el Dropdown
@@ -1149,6 +1143,24 @@ async function loadInfluenzaHistoryList() {
   });
 }
 
+/**
+ * Ventana de captura de la unidad: no se captura antes de que inicie la campaña, ni fuera de ella, ni una
+ * semana futura (a lo mucho el jueves previo al viernes del reporte). null = se puede capturar.
+ * Lo mismo lo exige el trigger influenza_trg_ventana_captura en la base.
+ */
+function influenzaVentanaError(fecha) {
+  const ini = _campaignConfig.fecha_inicio, fin = _campaignConfig.fecha_fin;
+  if (!ini || !fin || !fecha) return null;
+  const hoy = new Date().toLocaleDateString("en-CA");
+  const manana = new Date(Date.now() + 86400000).toLocaleDateString("en-CA");
+  const L = window.InfluenzaReglas ? window.InfluenzaReglas.fechaLarga : (x) => x;
+  if (hoy < ini) return `La campaña de Influenza inicia el ${L(ini)}. Aún no se pueden capturar reportes.`;
+  if (fecha < ini || fecha > fin) return `La semana del ${L(fecha)} queda fuera de la campaña (${L(ini)} al ${L(fin)}).`;
+  if (fecha > manana) return `La semana del ${L(fecha)} aún no se puede capturar: se abre el jueves previo.`;
+  return null;
+}
+window.influenzaVentanaError = influenzaVentanaError;
+
 async function saveInfluenzaReport() {
   const selectedFecha = document.getElementById("influenza_semana").value;
   const nombre = document.getElementById("nombreINFLUENZA").value.trim();
@@ -1203,6 +1215,12 @@ async function saveInfluenzaReport() {
 
   if (hasOverMetaError) {
     showToast("No se puede guardar el reporte. Uno o más rubros superan la meta asignada.", false, "bad");
+    return;
+  }
+
+  const ventanaError = influenzaVentanaError(selectedFecha);
+  if (ventanaError) {
+    showToast(ventanaError, false, "bad");
     return;
   }
 
@@ -1527,7 +1545,7 @@ async function exportInfluenzaExcelOficialUnidad() {
     const sheetMeta = wb.getWorksheet('ANÁLIS DE META-LOGRO') || wb.worksheets[1];
 
     if (sheetMeta) {
-      sheetMeta.getCell('A5').value = `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal 2025-2026 - ${USER.unidad} (${USER.clues})`;
+      sheetMeta.getCell('A5').value = `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal ${campaignSeasonLabel()} - ${USER.unidad} (${USER.clues})`;
 
       INFLUENZA_RUBROS.forEach((rb, idx) => {
         const metaVal = Number(_influenzaMetasCache[rb.id] || 0);
@@ -1543,7 +1561,7 @@ async function exportInfluenzaExcelOficialUnidad() {
       sheetMeta.getCell('G55').value = { formula: 'SUM(G9:G54)' };
     }
 
-    const sheetsToRemove = ['INSTRUCTIVO', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL'];
+    const sheetsToRemove = ['INSTRUCTIVO', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO'];
     sheetsToRemove.forEach(name => {
       const sh = wb.getWorksheet(name);
       if (sh) wb.removeWorksheet(sh.id);
@@ -1553,7 +1571,7 @@ async function exportInfluenzaExcelOficialUnidad() {
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Análisis_Meta_Logro_Influenza_2025-2026_${String(USER.unidad || '').replace(/ /g, "_")}_${fechaCorte}.xlsx`;
+    link.download = `Análisis_Meta_Logro_Influenza_${campaignSeasonLabel()}_${String(USER.unidad || '').replace(/ /g, "_")}_${fechaCorte}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1579,7 +1597,7 @@ async function exportUnitReportExcel(report, fecha) {
     const sheetMeta = wb.getWorksheet('ANÁLIS DE META-LOGRO') || wb.worksheets[1];
     
     if (sheetMeta) {
-      sheetMeta.getCell('A5').value = `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal 2025-2026 - ${report.unidad} (${report.clues})`;
+      sheetMeta.getCell('A5').value = `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal ${campaignSeasonLabel()} - ${report.unidad} (${report.clues})`;
       
       INFLUENZA_RUBROS.forEach((rb, idx) => {
         // Meta
@@ -1601,7 +1619,7 @@ async function exportUnitReportExcel(report, fecha) {
     }
     
     // Eliminar hojas que no correspondan
-    const sheetsToRemove = ['INSTRUCTIVO', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL'];
+    const sheetsToRemove = ['INSTRUCTIVO', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO'];
     sheetsToRemove.forEach(name => {
       const sh = wb.getWorksheet(name);
       if (sh) wb.removeWorksheet(sh.id);
@@ -1611,7 +1629,7 @@ async function exportUnitReportExcel(report, fecha) {
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Análisis_Meta_Logro_Influenza_2025-2026_${report.unidad.replace(/ /g, "_")}_${fecha}.xlsx`;
+    link.download = `Análisis_Meta_Logro_Influenza_${campaignSeasonLabel()}_${report.unidad.replace(/ /g, "_")}_${fecha}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1637,7 +1655,7 @@ async function exportMunicipalConcentradoExcel(muni, fecha) {
     
     const sheetMeta = wb.getWorksheet('ANÁLIS DE META-LOGRO') || wb.worksheets[1];
     if (sheetMeta) {
-      sheetMeta.getCell('A5').value = `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal 2025-2026 - Concentrado Municipal: ${muni}`;
+      sheetMeta.getCell('A5').value = `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal ${campaignSeasonLabel()} - Concentrado Municipal: ${muni}`;
       
       INFLUENZA_RUBROS.forEach((rb, idx) => {
         // Meta del municipio (suma de las de cada unidad)
@@ -1678,7 +1696,7 @@ async function exportMunicipalConcentradoExcel(muni, fecha) {
     ws.getCell('B2').value = "ANÁLISIS DE META-LOGRO DE INFLUENZA";
     ws.getCell('B2').font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FF2E1065' } };
     
-    ws.getCell('B3').value = `Concentrado Municipal - ${muni} | Campaña: 2025-2026 | Semana Epidemiológica: ${fecha}`;
+    ws.getCell('B3').value = `Concentrado Municipal - ${muni} | Campaña: ${campaignSeasonLabel()} | Semana Epidemiológica: ${fecha}`;
     ws.getCell('B3').font = { name: 'Arial', size: 11, italic: true, color: { argb: 'FF64748B' } };
     
     const headers = ["#", "UNIDAD DE SALUD", "CLUES", "META ANUAL", "LOGRO ACUMULADO", "% AVANCE"];
@@ -1799,7 +1817,7 @@ async function exportMunicipalConcentradoExcel(muni, fecha) {
     }
     
     // Eliminar hojas del mensual que no se necesitan
-    const sheetsToRemove = ['INSTRUCTIVO', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL'];
+    const sheetsToRemove = ['INSTRUCTIVO', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO'];
     sheetsToRemove.forEach(name => {
       const sh = wb.getWorksheet(name);
       if (sh) wb.removeWorksheet(sh.id);
@@ -2447,8 +2465,10 @@ function initValidationTab() {
 
   if (!valSemanaSelect) return;
 
-  // Bind weeks options once
-  if (!valSemanaSelect.innerHTML.trim()) {
+  // Las semanas se rearman si cambia la campaña (no solo la primera vez)
+  const weeksKey = (_selectedCampaign?.nombre || "") + "|" + _campaignConfig.fecha_inicio + "|" + _campaignConfig.fecha_fin;
+  if (!valSemanaSelect.innerHTML.trim() || valSemanaSelect.dataset.weeksKey !== weeksKey) {
+    valSemanaSelect.dataset.weeksKey = weeksKey;
     const weeks = generateCampaignWeeks();
     valSemanaSelect.innerHTML = weeks.map(w => `<option value="${w.fecha}">${w.label}</option>`).join("");
     // Select last week by default or current week
@@ -3600,7 +3620,7 @@ async function exportWeeklyMonthlyUnitExcel(clues, unidadNombre, mesAnio) {
     }
     
     // Obtener capturas del mes y unidad
-    const campana = document.getElementById("influenza_campana")?.value || "2025-2026";
+    const campana = campaignSeasonLabel();
     const unitCaptures = _adminCapturasArray.filter(c => c.clues === clues);
     
     unitCaptures.forEach(cap => {
@@ -3730,7 +3750,7 @@ async function generateConcentradoSimpleFile(muniName, type = "municipio") {
       }
     }
     
-    const campana = document.getElementById("influenza_campana")?.value || "2025-2026";
+    const campana = campaignSeasonLabel();
     applyPremiumFooterAndPageSetup(ws, campana);
     
     const buffer = await wb.xlsx.writeBuffer();
@@ -3836,7 +3856,7 @@ async function generateConcentradoDetalladoFile(muniName, type = "municipio") {
     centerHeadersAcrossColumns(ws, currentColumn - 1);
     
     // Formato de página y pie de página
-    const campana = document.getElementById("influenza_campana")?.value || "2025-2026";
+    const campana = campaignSeasonLabel();
     applyPremiumFooterAndPageSetup(ws, campana);
     
     const buffer = await wb.xlsx.writeBuffer();
@@ -5632,7 +5652,7 @@ function renderCampaignConfigScreen() {
             isActivo = true;
           }
         } else {
-          const activeCamp = _allCampaigns.find(x => x.activo);
+          const activeCamp = _allCampaigns.find(x => x.activo && x.nombre && x.nombre.startsWith("Campaña Influenza"));
           if (!activeCamp) {
             isActivo = true;
           }

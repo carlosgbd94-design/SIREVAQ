@@ -16,7 +16,7 @@ async function montar(page) {
   await page.evaluate((code) => {
     window.__llamadas = 0;
     window.__respuesta = () => ({ data: { id: 1, nombre: 'Campaña Influenza 2026-2027' }, error: null });
-    window.supabase = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: () => { window.__llamadas++; return new Promise((r) => setTimeout(() => r(window.__respuesta()), 30)); } }) }) }) };
+    window.supabase = { from: () => ({ select: () => ({ eq: () => ({ ilike: () => ({ maybeSingle: () => { window.__llamadas++; return new Promise((r) => setTimeout(() => r(window.__respuesta()), 30)); } }) }) }) }) };
     // eslint-disable-next-line no-eval
     (0, eval)(code + '\nwindow.getActiveCampaign = getActiveCampaign; window.invalidateActiveCampaign = invalidateActiveCampaign;');
   }, bloque);

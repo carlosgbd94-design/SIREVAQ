@@ -152,7 +152,7 @@ function getActiveCampaign() {
     return _activeCampaignPromise;
   }
   _activeCampaignAt = now;
-  const req = window.supabase.from('campanas').select('*').eq('activo', true).maybeSingle();
+  const req = window.supabase.from('campanas').select('*').eq('activo', true).ilike('nombre', 'Campaña Influenza%').maybeSingle();
   // Los errores no se cachean: el siguiente llamado vuelve a intentar
   const p = Promise.resolve(req).then(
     (res) => {
@@ -6223,7 +6223,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
         let resInf = [];
         if (tipo === "INF") {
           const { data: activeCamp } = await getActiveCampaign();
-          const camp = activeCamp ? activeCamp.nombre.replace("Campaña Influenza ", "") : "2025-2026";
+          const camp = activeCamp ? activeCamp.nombre : "";
           const { data: infData } = await supabase.from('influenza_capturas').select('*').eq('fecha', fIniStr).eq('anio_campana', camp);
           resInf = infData || [];
         }
@@ -7471,7 +7471,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
           return { ok: true, data: filteredData, meta: { fecha: filteredData.length ? filteredData[0].fecha_pedido_programada : targetFecha, tipo } };
         } else if (tipo === "INF") {
           const { data: activeCamp } = await getActiveCampaign();
-          const camp = activeCamp ? activeCamp.nombre.replace("Campaña Influenza ", "") : "2025-2026";
+          const camp = activeCamp ? activeCamp.nombre : "";
           const { data, error } = await window.supabase
             .from('influenza_capturas')
             .select('*')
@@ -8113,7 +8113,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
       case "getinfluenza_metas": {
         const { anio_campana } = payload;
-        const camp = anio_campana || "2025-2026";
+        const camp = anio_campana || (await getActiveCampaign()).data?.nombre || "";
         const { data, error } = await supabase
           .from('influenza_metas')
           .select('*')
@@ -8134,7 +8134,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
       case "getinfluenza_capturas": {
         const { clues, municipio, anio_campana } = payload;
-        const camp = anio_campana || "2025-2026";
+        const camp = anio_campana || (await getActiveCampaign()).data?.nombre || "";
         let query = supabase.from('influenza_capturas').select('*').eq('anio_campana', camp);
         if (clues) {
           query = query.eq('clues', clues);
@@ -8148,7 +8148,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
       case "saveinfluenza_captura": {
         const { clues, unidad, municipio, fecha, anio_campana, valores, capturado_por, editado_por } = payload;
-        const camp = anio_campana || "2025-2026";
+        const camp = anio_campana || (await getActiveCampaign()).data?.nombre || "";
         const edPor = editado_por || "UNIDAD";
 
         // Obtener captura previa si existe para historial
@@ -8260,7 +8260,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
         const { data, error } = await supabase
           .from('influenza_remesas')
           .select('*')
-          .eq('anio_campana', anio_campana || "2025-2026")
+          .eq('anio_campana', anio_campana || (await getActiveCampaign()).data?.nombre || "")
           .order('numero_entrega', { ascending: true });
         if (error) throw error;
         return { ok: true, data: data || [] };
@@ -8304,6 +8304,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
           .from('campanas')
           .select('id, nombre, fecha, activo, fecha_inicio, fecha_fin')
           .eq('activo', true)
+          .ilike('nombre', 'Campaña Influenza%')
           .maybeSingle();
         if (error) throw error;
         return { ok: true, data: data || null };
@@ -16840,8 +16841,8 @@ window.activateAdminSubPanel = function (panelId) {
       window.renderSisMappingTable();
     }
   }
-  if (panelId === 'capacitaciones') {
-    loadCapacitacionesAdmin();
+  if (panelId === 'evidencias') {
+    loadEvidAperturasAdmin();
   }
   if (panelId === 'parametros') {
     if (typeof window.initConsoleParametros === 'function') {
@@ -16853,9 +16854,6 @@ window.activateAdminSubPanel = function (panelId) {
       window.initConsoleJeringas();
     }
   }
-  if (panelId === 'campanas') {
-    loadCampanasAdmin();
-  }
   if (panelId === 'auditoria') {
     if (typeof window.initConsoleAuditoria === 'function') {
       window.initConsoleAuditoria();
@@ -16863,113 +16861,136 @@ window.activateAdminSubPanel = function (panelId) {
   }
 };
 
-// --- GESTIÓN DE CAPACITACIONES (ADMIN PANEL) ---
-async function loadCapacitacionesAdmin() {
-  const tbody = $("adminCapacitacionesTbody");
+// --- APERTURAS DE EVIDENCIAS (ADMIN PANEL): capacitaciones + campañas en un solo panel ---
+// Capacitaciones y campañas viven en tablas distintas pero se administran igual: nombre + fecha del
+// evento (las unidades tienen 30 días desde esa fecha para subir evidencia) + activo/inactivo.
+// La temporada de Influenza también es una fila de "campanas", pero NO es una apertura de evidencias:
+// sus fechas se editan en Meta-Logro Influenza, así que aquí se excluye.
+const EVID_TIPOS = {
+  capacitacion: { tabla: "capacitaciones", etiqueta: "Capacitación", icono: "school", carpeta: "Evidencia_de_capacitaciones" },
+  campana: { tabla: "campanas", etiqueta: "Campaña", icono: "campaign", carpeta: "Evidencias_de_campana" }
+};
+let _evidAperturas = [];
+let _evidFiltro = "all";
+let _evidTipoModal = "capacitacion";
+
+const _evidNombreLimpio = (n) => String(n || "").replace(/_/g, " ");
+const _evidNormalizar = (n) => n.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, "_");
+
+function _evidCierre(ymd) {
+  return new Date(new Date(ymd + "T00:00:00").getTime() + 30 * 24 * 60 * 60 * 1000);
+}
+
+async function loadEvidAperturasAdmin() {
+  const tbody = $("adminEvidAperturasTbody");
   if (!tbody) return;
 
   try {
-    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-400">Cargando capacitaciones...</td></tr>';
-    
-    const [capRes, evRes] = await Promise.all([
-      supabase.from("capacitaciones").select("*").order("created_at", { ascending: false }),
-      supabase.rpc("get_capacitaciones_evidencia_stats")
+    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-400">Cargando aperturas...</td></tr>';
+
+    const [capRes, campRes, statsRes] = await Promise.all([
+      supabase.from("capacitaciones").select("id, nombre, fecha, activo, created_at"),
+      supabase.from("campanas").select("id, nombre, fecha, activo, created_at").not("nombre", "ilike", "Campaña Influenza%"),
+      supabase.rpc("get_aperturas_evidencia_stats")
     ]);
 
     if (capRes.error) throw capRes.error;
-    const data = capRes.data;
+    if (campRes.error) throw campRes.error;
+    if (statsRes.error) console.warn("No se pudo cargar el conteo de evidencias por apertura:", statsRes.error);
 
-    if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-400">No hay capacitaciones creadas.</td></tr>';
-      return;
-    }
+    const unidades = {};
+    (statsRes.data || []).forEach(r => { unidades[`${r.tipo}|${r.nombre}`] = Number(r.unidades_count) || 0; });
 
-    if (evRes.error) console.warn("No se pudo cargar el conteo de evidencias por capacitación:", evRes.error);
+    _evidAperturas = [
+      ...(capRes.data || []).map(r => ({ ...r, tipo: "capacitacion" })),
+      ...(campRes.data || []).map(r => ({ ...r, tipo: "campana" }))
+    ].map(r => ({ ...r, unidades: unidades[`${r.tipo}|${r.nombre}`] || 0 }))
+     .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
 
-    // Unidades únicas que han subido evidencia por cada capacitación (agregado en SQL,
-    // vía get_capacitaciones_evidencia_stats -- reemplaza a la tabla "archivos_drive"
-    // que nunca se migró de Google Drive a Supabase; ahora las evidencias viven en R2).
-    const capUnitsMap = {};
-    (evRes.data || []).forEach(row => {
-      capUnitsMap[row.capacitacion] = Number(row.unidades_count) || 0;
-    });
-
-    const now = new Date();
-
-    tbody.innerHTML = data.map(c => {
-      const evDate = new Date(c.fecha + "T00:00:00");
-      const limitDate = new Date(evDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-      const isExpired = now > limitDate;
-
-      const unitsCount = capUnitsMap[c.nombre] || 0;
-
-      const statusBadge = c.activo 
-        ? '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100/80 text-emerald-700">Activo</span>'
-        : '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500">Inactivo</span>';
-      
-      const deadlineBadge = isExpired
-        ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100/80 text-amber-800" title="Plazo cerrado para unidades">
-            <span class="material-symbols-rounded" style="font-size:13px;">lock</span> CERRADO (${limitDate.toLocaleDateString()})
-           </span>`
-        : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-100/80 text-teal-800" title="Plazo abierto para unidades">
-            <span class="material-symbols-rounded" style="font-size:13px;">schedule</span> ${limitDate.toLocaleDateString()}
-           </span>`;
-
-      // Botones ultralimpios sin contenedores pesados con micro-animación al pasar el mouse
-      const downloadZipBtn = `<button onclick="window.downloadCapacitacionZip('${c.nombre}')" title="Descargar paquete de evidencias ZIP" class="action-icon-btn btn-zip"><span class="material-symbols-rounded block">download_for_offline</span></button>`;
-
-      const editBtn = `<button onclick="window.openEditCapacitacionModal('${c.id}', '${c.nombre}', '${c.fecha}')" title="Editar capacitación" class="action-icon-btn btn-edit"><span class="material-symbols-rounded block">edit</span></button>`;
-
-      const toggleBtn = c.activo
-        ? `<button onclick="window.toggleCapacitacionStatus('${c.id}', false)" title="Desactivar" class="action-icon-btn btn-deactivate"><span class="material-symbols-rounded block">block</span></button>`
-        : `<button onclick="window.toggleCapacitacionStatus('${c.id}', true)" title="Activar" class="action-icon-btn btn-activate"><span class="material-symbols-rounded block">check_circle</span></button>`;
-
-      const deleteBtn = `<button onclick="window.deleteCapacitacion('${c.id}', '${c.nombre}')" title="Eliminar capacitación" class="action-icon-btn btn-delete"><span class="material-symbols-rounded block">delete</span></button>`;
-
-      const unitsBadge = `<span class="px-2.5 py-1 rounded-xl text-[12px] font-extrabold bg-blue-50 text-blue-700 border border-blue-100 inline-flex items-center gap-1">
-          <span class="material-symbols-rounded text-blue-500" style="font-size:14px;">domain</span> ${unitsCount} unidades
-        </span>`;
-
-      return `
-        <tr class="hover:bg-slate-50/80 transition-colors">
-          <td class="px-6 py-4 font-bold text-primary text-xs text-left max-w-0 w-full" title="${c.nombre.replace(/_/g, ' ')}">
-            <div class="truncate">${c.nombre.replace(/_/g, ' ')}</div>
-          </td>
-          <td class="px-4 py-4 text-slate-600 font-semibold text-xs text-left whitespace-nowrap">${c.fecha}</td>
-          <td class="px-4 py-4 text-left">${deadlineBadge}</td>
-          <td class="px-4 py-4 text-center">${unitsBadge}</td>
-          <td class="px-4 py-4 text-left">${statusBadge}</td>
-          <td class="px-6 py-4 text-right">
-            <div class="inline-flex items-center justify-end gap-0.5">
-              ${downloadZipBtn}
-              ${editBtn}
-              ${toggleBtn}
-              ${deleteBtn}
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join("");
+    renderEvidAperturas();
   } catch (err) {
-    console.error("Error al cargar capacitaciones de admin:", err);
-    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">Error al cargar capacitaciones.</td></tr>';
+    console.error("Error al cargar aperturas de evidencias:", err);
+    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">Error al cargar aperturas.</td></tr>';
   }
 }
 
+function renderEvidAperturas() {
+  const tbody = $("adminEvidAperturasTbody");
+  if (!tbody) return;
+
+  document.querySelectorAll("#evidAperturaFilter .evid-filter-chip").forEach(b =>
+    b.classList.toggle("is-active", b.dataset.filter === _evidFiltro));
+
+  const rows = _evidAperturas.filter(r => _evidFiltro === "all" || r.tipo === _evidFiltro);
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-400">No hay aperturas creadas.</td></tr>';
+    return;
+  }
+
+  const now = new Date();
+  tbody.innerHTML = rows.map(c => {
+    const t = EVID_TIPOS[c.tipo];
+    const limitDate = _evidCierre(c.fecha);
+    const isExpired = now > limitDate;
+    const nombre = _evidNombreLimpio(c.nombre);
+
+    const tipoBadge = `<span class="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider ${c.tipo === "campana" ? "text-teal-700" : "text-blue-700"}">
+        <span class="material-symbols-rounded" style="font-size:13px;">${t.icono}</span>${t.etiqueta}</span>`;
+
+    const statusBadge = c.activo
+      ? '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100/80 text-emerald-700">Activo</span>'
+      : '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500">Inactivo</span>';
+
+    const deadlineBadge = isExpired
+      ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100/80 text-amber-800" title="Plazo cerrado para unidades">
+          <span class="material-symbols-rounded" style="font-size:13px;">lock</span> CERRADO (${limitDate.toLocaleDateString()})
+         </span>`
+      : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-100/80 text-teal-800" title="Plazo abierto para unidades">
+          <span class="material-symbols-rounded" style="font-size:13px;">schedule</span> ${limitDate.toLocaleDateString()}
+         </span>`;
+
+    const unitsBadge = `<span class="px-2.5 py-1 rounded-xl text-[12px] font-extrabold bg-blue-50 text-blue-700 border border-blue-100 inline-flex items-center gap-1">
+        <span class="material-symbols-rounded text-blue-500" style="font-size:14px;">domain</span> ${c.unidades} unidades
+      </span>`;
+
+    const zipBtn = `<button onclick="window.downloadEvidAperturaZip('${c.tipo}', '${c.nombre}')" title="Descargar paquete de evidencias ZIP" class="action-icon-btn btn-zip"><span class="material-symbols-rounded block">download_for_offline</span></button>`;
+    const editBtn = `<button onclick="window.openEvidAperturaModal('${c.tipo}', '${c.id}')" title="Editar apertura" class="action-icon-btn btn-edit"><span class="material-symbols-rounded block">edit</span></button>`;
+    const toggleBtn = c.activo
+      ? `<button onclick="window.toggleEvidApertura('${c.tipo}', '${c.id}', false)" title="Desactivar" class="action-icon-btn btn-deactivate"><span class="material-symbols-rounded block">block</span></button>`
+      : `<button onclick="window.toggleEvidApertura('${c.tipo}', '${c.id}', true)" title="Activar" class="action-icon-btn btn-activate"><span class="material-symbols-rounded block">check_circle</span></button>`;
+    const deleteBtn = `<button onclick="window.deleteEvidApertura('${c.tipo}', '${c.id}')" title="Eliminar apertura" class="action-icon-btn btn-delete"><span class="material-symbols-rounded block">delete</span></button>`;
+
+    return `
+      <tr class="hover:bg-slate-50/80 transition-colors">
+        <td class="px-6 py-4 text-left max-w-0 w-full" title="${nombre}">
+          <div class="truncate font-bold text-primary text-xs">${nombre}</div>
+          <div class="mt-1">${tipoBadge}</div>
+        </td>
+        <td class="px-4 py-4 text-slate-600 font-semibold text-xs text-left whitespace-nowrap">${c.fecha}</td>
+        <td class="px-4 py-4 text-left">${deadlineBadge}</td>
+        <td class="px-4 py-4 text-center">${unitsBadge}</td>
+        <td class="px-4 py-4 text-left">${statusBadge}</td>
+        <td class="px-6 py-4 text-right">
+          <div class="inline-flex items-center justify-end gap-0.5">${zipBtn}${editBtn}${toggleBtn}${deleteBtn}</div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
 // Descargar evidencias en ZIP
-window.downloadCapacitacionZip = async function (capacitacionNombre) {
-  const cleanName = capacitacionNombre.replace(/_/g, ' ');
+window.downloadEvidAperturaZip = async function (tipo, nombreCarpeta) {
+  const t = EVID_TIPOS[tipo];
+  const cleanName = _evidNombreLimpio(nombreCarpeta);
   try {
     showOverlay(`Buscando archivos de "${cleanName}"...`, "Preparando descarga");
-    // Evidencias reales viven en R2 (r2_objects) + Supabase Storage, no en la tabla
-    // "archivos_drive" (nunca migrada de Google Drive). p_max_rows alto para no truncar
-    // capacitaciones con muchas unidades reportando evidencia.
+    // Evidencias reales viven en R2 (r2_objects) + Supabase Storage, no en "archivos_drive".
     const { data: allFiles, error } = await supabase
-      .rpc("get_evidences_list_by_category", { category_name: "Evidencia_de_capacitaciones", p_max_rows: 5000 });
+      .rpc("get_evidences_list_by_category", { category_name: t.carpeta, p_max_rows: 5000 });
 
     if (error) throw error;
 
-    const prefix = `Evidencia_de_capacitaciones/${capacitacionNombre}/`;
+    const prefix = `${t.carpeta}/${nombreCarpeta}/`;
     const files = (allFiles || []).filter(f => String(f.name || "").startsWith(prefix));
 
     if (!files || files.length === 0) {
@@ -16989,7 +17010,7 @@ window.downloadCapacitacionZip = async function (capacitacionNombre) {
     }
 
     const zip = new JSZip();
-    const folder = zip.folder(capacitacionNombre);
+    const folder = zip.folder(nombreCarpeta);
     let downloadedCount = 0;
 
     for (let i = 0; i < files.length; i++) {
@@ -17021,7 +17042,7 @@ window.downloadCapacitacionZip = async function (capacitacionNombre) {
 
     const link = document.createElement("a");
     link.href = URL.createObjectURL(content);
-    link.download = `Evidencias_${capacitacionNombre}.zip`;
+    link.download = `Evidencias_${nombreCarpeta}.zip`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -17033,11 +17054,11 @@ window.downloadCapacitacionZip = async function (capacitacionNombre) {
   }
 };
 
-window.toggleCapacitacionStatus = async function (id, newStatus) {
+window.toggleEvidApertura = async function (tipo, id, newStatus) {
   try {
     showOverlay("Actualizando estado...", "Guardando");
     const { error } = await supabase
-      .from("capacitaciones")
+      .from(EVID_TIPOS[tipo].tabla)
       .update({ activo: newStatus })
       .eq("id", id);
     invalidateActiveCampaign();
@@ -17045,159 +17066,121 @@ window.toggleCapacitacionStatus = async function (id, newStatus) {
     hideOverlay();
     if (error) throw error;
     showToast("Estado actualizado con éxito", true, "good");
-    loadCapacitacionesAdmin();
+    loadEvidAperturasAdmin();
   } catch (err) {
     hideOverlay();
     showToast("Error al cambiar estado: " + err.message, false, "bad");
   }
 };
 
-window.openEditCapacitacionModal = function (id, nombre, fecha) {
-  $("editCapId").value = id;
-  $("editCapNombre").value = nombre.replace(/_/g, ' ');
-  $("editCapFecha").value = fecha;
-
-  const overlay = $("editCapacitacionOverlay");
-  const modal = overlay?.querySelector(".modal");
-  if (overlay && modal) {
-    overlay.classList.add("show");
-    if (typeof gsap !== 'undefined') {
-      gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.3 });
-      gsap.fromTo(modal, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(1.7)" });
-    }
-  }
-};
-
-function closeEditCapacitacionModal() {
-  const overlay = $("editCapacitacionOverlay");
-  const modal = overlay?.querySelector(".modal");
-  if (overlay && modal) {
-    if (typeof gsap !== 'undefined') {
-      gsap.to(modal, { scale: 0.9, opacity: 0, duration: 0.25 });
-      gsap.to(overlay, { opacity: 0, duration: 0.25, onComplete: () => {
-        overlay.classList.remove("show");
-        $("editCapId").value = "";
-        $("editCapNombre").value = "";
-        $("editCapFecha").value = "";
-      }});
-    } else {
-      overlay.classList.remove("show");
-      $("editCapId").value = "";
-      $("editCapNombre").value = "";
-      $("editCapFecha").value = "";
-    }
-  }
-}
-
-$("btnCancelEditCap")?.addEventListener("click", closeEditCapacitacionModal);
-
-$("btnSaveEditCap")?.addEventListener("click", async () => {
-  const id = $("editCapId")?.value;
-  const nombre = $("editCapNombre")?.value.trim();
-  const fecha = $("editCapFecha")?.value;
-
-  if (!id || !nombre || !fecha) {
-    showToast("Por favor llena todos los campos", false, "warn");
-    return;
-  }
-
-  const normalizedNombre = nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, '_');
-
-  try {
-    showOverlay("Actualizando capacitación...", "Guardando");
-
-    // 📩 Si la fecha cambia, la notificación original (calculada con la fecha vieja)
-    // queda desactualizada y nadie se entera del nuevo plazo — hay que avisar de nuevo.
-    const { data: prevRow } = await supabase.from("capacitaciones").select("fecha").eq("id", id).maybeSingle();
-    const fechaChanged = prevRow && prevRow.fecha !== fecha;
-
-    const { error } = await supabase
-      .from("capacitaciones")
-      .update({
-        nombre: normalizedNombre,
-        fecha: fecha
-      })
-      .eq("id", id);
-
-    hideOverlay();
-    if (error) throw error;
-
-    showToast("Capacitación actualizada correctamente", true, "good");
-    closeEditCapacitacionModal();
-    loadCapacitacionesAdmin();
-
-    if (fechaChanged) {
-      const evDate = new Date(fecha + "T00:00:00");
-      const limitDate = new Date(evDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-      sendEventNotification(normalizedNombre.replace(/_/g, ' '), limitDate.toLocaleDateString(), "capacitacion", "updated");
-    }
-  } catch (err) {
-    hideOverlay();
-    showToast("Error al editar: " + err.message, false, "bad");
-  }
-});
-
-window.deleteCapacitacion = async function (id, nombre) {
-  const displayNombre = nombre.replace(/_/g, ' ');
-  if (!confirm(`¿Estás seguro de eliminar la capacitación "${displayNombre}"?\n\nEsta acción no se puede deshacer.`)) {
+window.deleteEvidApertura = async function (tipo, id) {
+  const row = _evidAperturas.find(r => r.tipo === tipo && r.id === id);
+  if (!row) return;
+  const t = EVID_TIPOS[tipo];
+  if (!confirm(`¿Estás seguro de eliminar ${tipo === "campana" ? "la campaña" : "la capacitación"} "${_evidNombreLimpio(row.nombre)}"?\n\nEsta acción no se puede deshacer.`)) {
     return;
   }
 
   try {
-    showOverlay("Eliminando capacitación...", "Procesando");
-    const { error } = await supabase
-      .from("capacitaciones")
-      .delete()
-      .eq("id", id);
+    showOverlay("Eliminando apertura...", "Procesando");
+    const { error } = await supabase.from(t.tabla).delete().eq("id", id);
+    invalidateActiveCampaign();
 
     hideOverlay();
     if (error) throw error;
 
-    showToast("Capacitación eliminada", true, "good");
-    loadCapacitacionesAdmin();
+    showToast("Apertura eliminada", true, "good");
+    loadEvidAperturasAdmin();
   } catch (err) {
     hideOverlay();
     showToast("Error al eliminar: " + err.message, false, "bad");
   }
 };
 
-// Modal Nueva Capacitación
-$("btnOpenNewCapacitacionModal")?.addEventListener("click", () => {
-  const overlay = $("newCapacitacionOverlay");
-  const modal = overlay?.querySelector(".modal");
-  if (overlay && modal) {
-    overlay.classList.add("show");
-    if (typeof gsap !== 'undefined') {
-      gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.3 });
-      gsap.fromTo(modal, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(1.7)" });
-    }
-  }
-});
+// Modal Crear / Editar apertura
+function _setEvidTipoModal(tipo) {
+  _evidTipoModal = tipo;
+  document.querySelectorAll("#evidAperturaTipo button").forEach(b => b.classList.toggle("is-active", b.dataset.tipo === tipo));
+  const ph = tipo === "campana" ? "Ej: Campaña Sarampión 2026" : "Ej: Capacitación Influenza 2026";
+  $("evidAperturaNombre").placeholder = ph;
+}
 
-function closeNewCapacitacionModal() {
-  const overlay = $("newCapacitacionOverlay");
+function _actualizarCierreEvid() {
+  const f = $("evidAperturaFecha")?.value;
+  const box = $("evidAperturaCierre");
+  if (!box) return;
+  box.textContent = f ? `Las unidades podrán subir evidencia hasta el ${_evidCierre(f).toLocaleDateString()}.` : "";
+}
+
+window.openEvidAperturaModal = function (tipo, id) {
+  const row = id ? _evidAperturas.find(r => r.tipo === tipo && r.id === id) : null;
+  const overlay = $("evidAperturaOverlay");
   const modal = overlay?.querySelector(".modal");
-  if (overlay && modal) {
-    if (typeof gsap !== 'undefined') {
-      gsap.to(modal, { scale: 0.9, opacity: 0, duration: 0.25 });
-      gsap.to(overlay, { opacity: 0, duration: 0.25, onComplete: () => {
-        overlay.classList.remove("show");
-        $("newCapNombre").value = "";
-        $("newCapFecha").value = "";
-      }});
-    } else {
-      overlay.classList.remove("show");
-      $("newCapNombre").value = "";
-      $("newCapFecha").value = "";
-    }
+  if (!overlay || !modal || (id && !row)) return;
+
+  $("evidAperturaId").value = row ? row.id : "";
+  _setEvidTipoModal(row ? row.tipo : (_evidFiltro === "campana" ? "campana" : "capacitacion"));
+  document.querySelectorAll("#evidAperturaTipo button").forEach(b => { b.disabled = !!row; });
+  $("evidAperturaNombre").value = row ? _evidNombreLimpio(row.nombre) : "";
+  // Con evidencia ya subida el nombre es la carpeta: cambiarlo dejaría los archivos huérfanos.
+  const nombreBloqueado = !!row && row.unidades > 0;
+  $("evidAperturaNombre").readOnly = nombreBloqueado;
+  $("evidAperturaNombre").style.background = nombreBloqueado ? "#f1f5f9" : "";
+  $("evidAperturaNombreHint").style.display = nombreBloqueado ? "block" : "none";
+  $("evidAperturaFecha").value = row ? row.fecha : "";
+  $("evidAperturaTitle").textContent = row ? "Editar apertura" : "Nueva apertura";
+  $("evidAperturaSub").textContent = row
+    ? "Modifica el nombre o la fecha establecida para la recepción de evidencias."
+    : "Las unidades podrán subir evidencia de este evento.";
+  $("btnSaveEvidApertura").textContent = row ? "Guardar Cambios" : "Crear";
+  _actualizarCierreEvid();
+
+  overlay.classList.add("show");
+  if (typeof gsap !== 'undefined') {
+    gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.3 });
+    gsap.fromTo(modal, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(1.7)" });
+  }
+};
+
+function closeEvidAperturaModal() {
+  const overlay = $("evidAperturaOverlay");
+  const modal = overlay?.querySelector(".modal");
+  if (!overlay || !modal) return;
+  const limpiar = () => {
+    overlay.classList.remove("show");
+    $("evidAperturaId").value = "";
+    $("evidAperturaNombre").value = "";
+    $("evidAperturaFecha").value = "";
+  };
+  if (typeof gsap !== 'undefined') {
+    gsap.to(modal, { scale: 0.9, opacity: 0, duration: 0.25 });
+    gsap.to(overlay, { opacity: 0, duration: 0.25, onComplete: limpiar });
+  } else {
+    limpiar();
   }
 }
 
-$("btnCancelNewCap")?.addEventListener("click", closeNewCapacitacionModal);
+$("btnOpenNewEvidApertura")?.addEventListener("click", () => window.openEvidAperturaModal(null, null));
+$("btnCancelEvidApertura")?.addEventListener("click", closeEvidAperturaModal);
+$("evidAperturaFecha")?.addEventListener("input", _actualizarCierreEvid);
+$("evidAperturaFecha")?.addEventListener("change", _actualizarCierreEvid);
+$("evidAperturaTipo")?.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-tipo]");
+  if (b && !b.disabled) _setEvidTipoModal(b.dataset.tipo);
+});
+$("evidAperturaFilter")?.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-filter]");
+  if (!b) return;
+  _evidFiltro = b.dataset.filter;
+  renderEvidAperturas();
+});
 
-$("btnSaveNewCap")?.addEventListener("click", async () => {
-  const nombre = $("newCapNombre")?.value.trim();
-  const fecha = $("newCapFecha")?.value;
+$("btnSaveEvidApertura")?.addEventListener("click", async () => {
+  const id = $("evidAperturaId")?.value;
+  const nombre = $("evidAperturaNombre")?.value.trim();
+  const fecha = $("evidAperturaFecha")?.value;
+  const tipo = _evidTipoModal;
+  const t = EVID_TIPOS[tipo];
 
   if (!nombre || !fecha) {
     showToast("Por favor llena todos los campos", false, "warn");
@@ -17205,39 +17188,68 @@ $("btnSaveNewCap")?.addEventListener("click", async () => {
   }
 
   // Sanitizar el nombre para usar como nombre de carpeta
-  const normalizedNombre = nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, '_');
+  const normalizedNombre = _evidNormalizar(nombre);
+  if (!normalizedNombre) {
+    showToast("El nombre debe incluir letras o números", false, "warn");
+    return;
+  }
+  if (tipo === "campana" && /^Campana_Influenza/i.test(normalizedNombre)) {
+    showToast("Ese nombre está reservado para la temporada de Influenza. Elige otro.", false, "warn");
+    return;
+  }
 
   try {
-    showOverlay("Creando capacitación...", "Guardando");
-    const { error } = await supabase
-      .from("capacitaciones")
-      .insert({
-        nombre: normalizedNombre,
-        fecha: fecha,
-        activo: true
-      });
+    if (id) {
+      showOverlay("Actualizando apertura...", "Guardando");
+      const prev = _evidAperturas.find(r => r.tipo === tipo && r.id === id);
+      const fechaChanged = prev && prev.fecha !== fecha;
+      const patch = { fecha };
+      if (!(prev && prev.unidades > 0)) patch.nombre = normalizedNombre;
+      // Las campañas (a diferencia de las capacitaciones) también llevan fecha_inicio; se mantiene alineada.
+      if (tipo === "campana") patch.fecha_inicio = fecha;
+
+      const { error } = await supabase.from(t.tabla).update(patch).eq("id", id);
+      invalidateActiveCampaign();
+      hideOverlay();
+      if (error) {
+        if (error.code === "23505") throw new Error("Ya existe una apertura con este nombre");
+        throw error;
+      }
+
+      showToast("Apertura actualizada correctamente", true, "good");
+      closeEvidAperturaModal();
+      loadEvidAperturasAdmin();
+
+      // 📩 Si la fecha cambia, la notificación original queda desactualizada: hay que avisar de nuevo.
+      if (fechaChanged) {
+        sendEventNotification(_evidNombreLimpio(patch.nombre || prev.nombre), _evidCierre(fecha).toLocaleDateString(), tipo, "updated");
+      }
+      return;
+    }
+
+    showOverlay("Creando apertura...", "Guardando");
+    const record = { nombre: normalizedNombre, fecha, activo: true };
+    if (tipo === "campana") record.fecha_inicio = fecha;
+    const { error } = await supabase.from(t.tabla).insert(record);
     invalidateActiveCampaign();
 
     hideOverlay();
     if (error) {
       if (error.code === "23505") {
-        throw new Error("Ya existe una capacitación con este nombre");
+        throw new Error("Ya existe una apertura con este nombre");
       }
       throw error;
     }
 
-    showToast("Capacitación creada con éxito", true, "good");
-    closeNewCapacitacionModal();
-    loadCapacitacionesAdmin();
+    showToast("Apertura creada con éxito", true, "good");
+    closeEvidAperturaModal();
+    loadEvidAperturasAdmin();
 
     // 📩 Notificación automática
-    const evDate = new Date(fecha + "T00:00:00");
-    const limitDate = new Date(evDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-    sendEventNotification(normalizedNombre.replace(/_/g, ' '), limitDate.toLocaleDateString(), "capacitacion");
-
+    sendEventNotification(_evidNombreLimpio(normalizedNombre), _evidCierre(fecha).toLocaleDateString(), tipo);
   } catch (err) {
     hideOverlay();
-    showToast("Error al crear: " + err.message, false, "bad");
+    showToast("Error al guardar: " + err.message, false, "bad");
   }
 });
 
@@ -17282,146 +17294,6 @@ async function sendEventNotification(eventName, limitDateStr, eventType, mode = 
     console.error("Error al despachar notificaciones automáticas:", err);
   }
 }
-
-// --- GESTIÓN DE CAMPAÑAS (ADMIN PANEL) ---
-async function loadCampanasAdmin() {
-  const tbody = $("adminCampanasTbody");
-  if (!tbody) return;
-
-  try {
-    tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Cargando campañas...</td></tr>';
-    
-    const { data, error } = await supabase
-      .from("campanas")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-
-    if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">No hay campañas creadas.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = data.map(c => {
-      const statusBadge = c.activo 
-        ? '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Activo</span>'
-        : '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">Inactivo</span>';
-      
-      const actionBtn = c.activo
-        ? `<button onclick="window.toggleCampanaStatus('${c.id}', false)" class="px-3 py-1 rounded bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold hover:bg-slate-200 cursor-pointer">Desactivar</button>`
-        : `<button onclick="window.toggleCampanaStatus('${c.id}', true)" class="px-3 py-1 rounded bg-primary/10 text-primary border border-primary/20 text-xs font-bold hover:bg-primary/20 cursor-pointer">Activar</button>`;
-
-      return `
-        <tr class="hover:bg-slate-50">
-          <td class="px-6 py-4 font-bold text-primary">${c.nombre.replace(/_/g, ' ')}</td>
-          <td class="px-6 py-4 text-slate-500 font-semibold">${c.fecha}</td>
-          <td class="px-6 py-4">${statusBadge}</td>
-          <td class="px-6 py-4">${actionBtn}</td>
-        </tr>
-      `;
-    }).join("");
-  } catch (err) {
-    console.error("Error al cargar campañas de admin:", err);
-    tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-red-500">Error al cargar campañas.</td></tr>';
-  }
-}
-
-window.toggleCampanaStatus = async function (id, newStatus) {
-  try {
-    showOverlay("Actualizando estado...", "Guardando");
-    const { error } = await supabase
-      .from("campanas")
-      .update({ activo: newStatus })
-      .eq("id", id);
-
-    hideOverlay();
-    if (error) throw error;
-    showToast("Estado de campaña actualizado", true, "good");
-    loadCampanasAdmin();
-  } catch (err) {
-    hideOverlay();
-    showToast("Error al cambiar estado: " + err.message, false, "bad");
-  }
-};
-
-// Modal Nueva Campaña
-$("btnOpenNewCampanaModal")?.addEventListener("click", () => {
-  const overlay = $("newCampanaOverlay");
-  const modal = overlay?.querySelector(".modal");
-  if (overlay && modal) {
-    overlay.classList.add("show");
-    if (typeof gsap !== 'undefined') {
-      gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.3 });
-      gsap.fromTo(modal, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(1.7)" });
-    }
-  }
-});
-
-function closeNewCampanaModal() {
-  const overlay = $("newCampanaOverlay");
-  const modal = overlay?.querySelector(".modal");
-  if (overlay && modal) {
-    if (typeof gsap !== 'undefined') {
-      gsap.to(modal, { scale: 0.9, opacity: 0, duration: 0.25 });
-      gsap.to(overlay, { opacity: 0, duration: 0.25, onComplete: () => {
-        overlay.classList.remove("show");
-        $("newCampNombre").value = "";
-        $("newCampFecha").value = "";
-      }});
-    } else {
-      overlay.classList.remove("show");
-      $("newCampNombre").value = "";
-      $("newCampFecha").value = "";
-    }
-  }
-}
-
-$("btnCancelNewCamp")?.addEventListener("click", closeNewCampanaModal);
-
-$("btnSaveNewCamp")?.addEventListener("click", async () => {
-  const nombre = $("newCampNombre")?.value.trim();
-  const fecha = $("newCampFecha")?.value;
-
-  if (!nombre || !fecha) {
-    showToast("Por favor llena todos los campos", false, "warn");
-    return;
-  }
-
-  const normalizedNombre = nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, '_');
-
-  try {
-    showOverlay("Creando campaña...", "Guardando");
-    const { error } = await supabase
-      .from("campanas")
-      .insert({
-        nombre: normalizedNombre,
-        fecha: fecha,
-        activo: true
-      });
-
-    hideOverlay();
-    if (error) {
-      if (error.code === "23505") {
-        throw new Error("Ya existe una campaña con este nombre");
-      }
-      throw error;
-    }
-
-    showToast("Campaña creada con éxito", true, "good");
-    closeNewCampanaModal();
-    loadCampanasAdmin();
-
-    // 📩 Notificación automática
-    const evDate = new Date(fecha + "T00:00:00");
-    const limitDate = new Date(evDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-    sendEventNotification(normalizedNombre.replace(/_/g, ' '), limitDate.toLocaleDateString(), "campana");
-
-  } catch (err) {
-    hideOverlay();
-    showToast("Error al crear campaña: " + err.message, false, "bad");
-  }
-});
 
 const rBtn = $("btnRefreshUsers");
 if (rBtn) {
@@ -19355,14 +19227,14 @@ async function getHistoryMetrics(mes, _ignored, force = false) {
       // Check if Influenza campaign is active in this month
       let expectedFridays = [];
       let isCampanaActiveInMonth = false;
-      let campName = "2025-2026";
+      let campName = "";
       let allCampCaptures = [];
       let allCampMetas = [];
 
       try {
         const { data: activeCamp } = await getActiveCampaign();
         if (activeCamp) {
-          campName = activeCamp.nombre.replace("Campaña Influenza ", "");
+          campName = activeCamp.nombre; // anio_campana se guarda con el nombre completo
           const [y, mn] = m.split("-").map(Number);
           const temp = new Date(y, mn - 1, 1, 12, 0, 0);
           while (temp.getMonth() === mn - 1) {
@@ -19379,7 +19251,7 @@ async function getHistoryMetrics(mes, _ignored, force = false) {
             const lastDayOfMonthYmd = dateToLocalYmd(new Date(y, mn, 0, 12, 0, 0));
             const [capturesRes, metasRes] = await Promise.all([
               window.supabase.from('influenza_capturas').select('clues, fecha, valores').eq('anio_campana', campName).lte('fecha', lastDayOfMonthYmd),
-              window.supabase.from('influenza_metas').select('clues, metas')
+              window.supabase.from('influenza_metas').select('clues, metas').eq('anio_campana', campName)
             ]);
             allCampCaptures = capturesRes.data || [];
             allCampMetas = metasRes.data || [];
@@ -24726,6 +24598,12 @@ function syncCommandHub() {
       hubSave.onclick = async () => {
         if (!navigator.onLine && window.OfflineDB && captureTab === "INFLUENZA") {
           // INTERCEPCIÓN MODO OFFLINE AUTOMÁTICA (solo Influenza soporta guardado sin conexión)
+          const ventanaErr = typeof window.influenzaVentanaError === "function"
+            ? window.influenzaVentanaError(document.getElementById("influenza_semana")?.value) : null;
+          if (ventanaErr) {
+            showToast(ventanaErr, false, "bad");
+            return;
+          }
           const isSinMov = document.getElementById("chkSinMovimientoINF")?.checked || false;
           const valores = {};
           if (typeof INFLUENZA_RUBROS !== "undefined") {

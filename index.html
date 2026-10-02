@@ -330,7 +330,7 @@
        (ensurePdfAssetsLoaded) solo al exportar el PDF de Resguardo.
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
-  <script src="dist/bundle-head.js?v=2026.66" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.69" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -4158,14 +4158,9 @@
                 <span>Mapeador SIS</span>
               </button>
 
-              <button class="nav-tab" id="tabAdminCapacitaciones" data-role-gate="ADMIN" onclick="activateAdminSubPanel('capacitaciones')">
-                <span class="material-symbols-rounded">school</span>
-                <span>Capacitaciones</span>
-              </button>
-
-              <button class="nav-tab" id="tabAdminCampanas" data-role-gate="ADMIN" onclick="activateAdminSubPanel('campanas')">
-                <span class="material-symbols-rounded">campaign</span>
-                <span>Campañas</span>
+              <button class="nav-tab" id="tabAdminEvidencias" data-role-gate="ADMIN" onclick="activateAdminSubPanel('evidencias')">
+                <span class="material-symbols-rounded">folder_open</span>
+                <span>Evidencias</span>
               </button>
 
               <button class="nav-tab" id="tabAdminAuditoria" data-role-gate="ADMIN" onclick="activateAdminSubPanel('auditoria')">
@@ -5554,33 +5549,37 @@
           </div>
         </div>
 
-        <!-- SUB-PANEL 7: GESTIÓN DE CAPACITACIONES -->
-        <div id="adminSection_capacitaciones"
+        <!-- SUB-PANEL 7: APERTURAS DE EVIDENCIAS (capacitaciones + campañas) -->
+        <div id="adminSection_evidencias"
           class="admin-sub-panel animate-in fade-in slide-in-from-bottom-4 duration-500" style="display:none;">
           <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h4 class="text-[18px] font-black text-primary m-0 tracking-tight">Gestión de Capacitaciones
-                Jurisdiccionales</h4>
-              <p class="text-[12px] font-bold text-slate-400 mt-1">Crea nuevas capacitaciones activas o desactívalas
-                para organizar las evidencias.</p>
+              <h4 class="text-[18px] font-black text-primary m-0 tracking-tight">Aperturas de Evidencias</h4>
+              <p class="text-[12px] font-bold text-slate-400 mt-1">Abre capacitaciones y campañas para que las unidades
+                suban su evidencia. Cada apertura da 30 días de plazo a partir de su fecha.</p>
             </div>
-            <button class="btn-premium-action btn-save-animate" id="btnOpenNewCapacitacionModal" style="margin-top:0;">
-              <span class="material-symbols-rounded">add</span> Nueva Capacitación
+            <button class="btn-premium-action btn-save-animate" id="btnOpenNewEvidApertura" style="margin-top:0;">
+              <span class="material-symbols-rounded">add</span> Nueva apertura
             </button>
           </div>
 
           <div class="bg-surface rounded-3xl border border-outline-variant/30 shadow-sm overflow-hidden">
             <div class="p-6">
-              <div class="rounded-2xl border border-outline-variant/20 overflow-hidden">
+              <div id="evidAperturaFilter" class="inline-flex gap-1 p-1 rounded-full bg-slate-100 mb-4" role="tablist" aria-label="Filtrar aperturas">
+                <button type="button" class="evid-filter-chip is-active" data-filter="all">Todas</button>
+                <button type="button" class="evid-filter-chip" data-filter="capacitacion">Capacitaciones</button>
+                <button type="button" class="evid-filter-chip" data-filter="campana">Campañas</button>
+              </div>
+              <div class="overflow-x-auto rounded-2xl border border-outline-variant/20">
                 <table class="w-full text-left border-collapse bg-surface/50">
                   <thead>
                     <tr class="bg-primary/5">
                       <th class="px-6 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30 text-left">
-                        Nombre Capacitación</th>
+                        Apertura</th>
                       <th class="px-4 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30 text-left">
                         Fecha Evento</th>
                       <th class="px-4 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30 text-left">
-                        Cierre Carga (1 Mes)</th>
+                        Cierre Carga (30 días)</th>
                       <th class="px-4 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30 text-center">
                         Unidades</th>
                       <th class="px-4 py-4 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30 text-left">
@@ -5589,60 +5588,23 @@
                         Acciones</th>
                     </tr>
                   </thead>
-                  <tbody id="adminCapacitacionesTbody" class="divide-y divide-outline-variant/20">
+                  <tbody id="adminEvidAperturasTbody" class="divide-y divide-outline-variant/20">
                     <tr>
-                      <td colspan="6" class="px-6 py-4 text-center text-slate-400">Cargando capacitaciones...</td>
+                      <td colspan="6" class="px-6 py-4 text-center text-slate-400">Cargando aperturas...</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
-        </div>
-
-        <!-- SUB-PANEL 8: GESTIÓN DE CAMPAÑAS -->
-        <div id="adminSection_campanas" class="admin-sub-panel animate-in fade-in slide-in-from-bottom-4 duration-500"
-          style="display:none;">
-          <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h4 class="text-[18px] font-black text-primary m-0 tracking-tight">Gestión de Campañas Especiales</h4>
-              <p class="text-[12px] font-bold text-slate-400 mt-1">Crea nuevas campañas activas o desactívalas para
-                organizar las evidencias de campaña.</p>
-            </div>
-            <button class="btn-premium-action btn-save-animate" id="btnOpenNewCampanaModal" style="margin-top:0;">
-              <span class="material-symbols-rounded">add</span> Nueva Campaña
-            </button>
-          </div>
-
-          <div class="bg-surface rounded-3xl border border-outline-variant/30 shadow-sm overflow-hidden">
-            <div class="p-6">
-              <div class="overflow-x-auto rounded-2xl border border-outline-variant/20">
-                <table class="w-full text-left border-collapse bg-surface/50 shadow-sm">
-                  <thead>
-                    <tr class="bg-primary/5">
-                      <th
-                        class="px-6 py-3 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30">
-                        Nombre Campaña</th>
-                      <th
-                        class="px-6 py-3 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30">
-                        Fecha</th>
-                      <th
-                        class="px-6 py-3 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30">
-                        Estado</th>
-                      <th
-                        class="px-6 py-3 text-[10px] font-black text-primary uppercase tracking-widest border-b border-outline-variant/30 w-24">
-                        Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody id="adminCampanasTbody" class="divide-y divide-outline-variant/20">
-                    <tr>
-                      <td colspan="4" class="px-6 py-4 text-center text-slate-400">Cargando campañas...</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <style>
+            .evid-filter-chip { border: 0; background: transparent; padding: 6px 16px; border-radius: 999px; font-size: 12px; font-weight: 800; color: #64748b; cursor: pointer; transition: background .15s, color .15s; }
+            .evid-filter-chip.is-active { background: #fff; color: var(--md-sys-color-primary); box-shadow: 0 1px 3px rgba(15,23,42,.12); }
+            .evid-type-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 14px; background: #f1f5f9; }
+            .evid-type-seg button { border: 0; background: transparent; height: 38px; border-radius: 10px; font-size: 13px; font-weight: 800; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+            .evid-type-seg button.is-active { background: #fff; color: var(--md-sys-color-primary); box-shadow: 0 1px 3px rgba(15,23,42,.12); }
+            .evid-type-seg button:disabled { cursor: not-allowed; opacity: .55; }
+          </style>
         </div>
 
         <!-- SUB-PANEL 9: AUDITORÍA DE INTEGRIDAD DE DATOS -->
@@ -7469,120 +7431,51 @@
     </div>
   </div>
 
-  <!-- ✅ NUEVA CAPACITACION MODAL -->
-  <div class="overlay" id="newCapacitacionOverlay"
+  <!-- ✅ APERTURA DE EVIDENCIA (crear / editar capacitación o campaña) -->
+  <div class="overlay" id="evidAperturaOverlay"
     style="display:none; background: rgba(3,8,18,0.55) !important; z-index:9999;">
     <div class="modal"
       style="max-width:440px; background: var(--md-sys-color-surface); border-radius: 28px; box-shadow: var(--md-shadow-5); overflow: hidden; display: flex; flex-direction: column; padding: 0;">
       <div class="modalHead"
         style="background: linear-gradient(135deg, #002244 0%, #004488 100%); padding: 28px 28px 20px;">
-        <button type="button" class="js1-modal-close-x js1-modal-close-x-light" id="btnCancelNewCap" aria-label="Cerrar">
+        <button type="button" class="js1-modal-close-x js1-modal-close-x-light" id="btnCancelEvidApertura" aria-label="Cerrar">
           <span class="material-symbols-rounded">close</span>
         </button>
         <div class="modalEyebrow" style="color: rgba(255,255,255,0.8);">
-          <span class="material-symbols-rounded" style="font-size:16px;">school</span>
-          Gestión Jurisdiccional
+          <span class="material-symbols-rounded" style="font-size:16px;">folder_open</span>
+          Aperturas de Evidencias
         </div>
-        <div class="modalTitle" style="color: #fff;">Crear Capacitación</div>
-        <div class="modalSub" style="color: rgba(255,255,255,0.75);">Registra un nuevo evento para que aparezca como
-          opción de carpeta virtual.</div>
+        <div class="modalTitle" style="color: #fff;" id="evidAperturaTitle">Nueva apertura</div>
+        <div class="modalSub" style="color: rgba(255,255,255,0.75);" id="evidAperturaSub">Las unidades podrán subir evidencia
+          de este evento.</div>
       </div>
       <div class="modalBody" style="padding: 24px 28px;">
+        <input type="hidden" id="evidAperturaId">
         <div class="modalFields" style="display: flex; flex-direction: column; gap: 16px;">
           <div class="fieldCard">
-            <label for="newCapNombre">Nombre de la capacitación</label>
-            <input type="text" id="newCapNombre" placeholder="Ej: Capacitacion Influenza 2026" required
-              style="width: 100%; height: 44px; border-radius: 12px; border: 1px solid #cbd5e1; padding: 0 16px; font-weight: 700; outline: none; font-size: 13px;">
+            <label>Tipo de evento</label>
+            <div class="evid-type-seg" id="evidAperturaTipo">
+              <button type="button" data-tipo="capacitacion" class="is-active"><span class="material-symbols-rounded" style="font-size:18px;">school</span>Capacitación</button>
+              <button type="button" data-tipo="campana"><span class="material-symbols-rounded" style="font-size:18px;">campaign</span>Campaña</button>
+            </div>
           </div>
           <div class="fieldCard">
-            <label for="newCapFecha">Fecha de la capacitación</label>
-            <input type="date" id="newCapFecha" required
+            <label for="evidAperturaNombre">Nombre</label>
+            <input type="text" id="evidAperturaNombre" placeholder="Ej: Capacitación Influenza 2026" required
               style="width: 100%; height: 44px; border-radius: 12px; border: 1px solid #cbd5e1; padding: 0 16px; font-weight: 700; outline: none; font-size: 13px;">
+            <div id="evidAperturaNombreHint" style="display:none; font-size:11px; font-weight:700; color:#94a3b8; margin-top:6px;">
+              El nombre no se puede cambiar: ya hay unidades con evidencia subida bajo este nombre.</div>
+          </div>
+          <div class="fieldCard">
+            <label for="evidAperturaFecha">Fecha del evento</label>
+            <input type="date" id="evidAperturaFecha" required
+              style="width: 100%; height: 44px; border-radius: 12px; border: 1px solid #cbd5e1; padding: 0 16px; font-weight: 700; outline: none; font-size: 13px;">
+            <div id="evidAperturaCierre" style="font-size:12px; font-weight:700; color:#0f766e; margin-top:8px; min-height:16px;"></div>
           </div>
         </div>
         <div class="modalFooter"
-          style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 16px; border-t: 1px solid #e2e8f0;">
-          <button class="btn-premium-action btn-save-animate" id="btnSaveNewCap" type="button"
-            style="height: 40px; padding: 0 20px; border-radius: 10px; font-weight: 800; cursor: pointer; border: none; background: var(--md-sys-color-primary); color: #fff; display: flex; align-items: center; gap: 8px; margin-top: 0;">Crear</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ✅ EDITAR CAPACITACION MODAL -->
-  <div class="overlay" id="editCapacitacionOverlay"
-    style="display:none; background: rgba(3,8,18,0.55) !important; z-index:9999;">
-    <div class="modal"
-      style="max-width:440px; background: var(--md-sys-color-surface); border-radius: 28px; box-shadow: var(--md-shadow-5); overflow: hidden; display: flex; flex-direction: column; padding: 0;">
-      <div class="modalHead"
-        style="background: linear-gradient(135deg, #002244 0%, #004488 100%); padding: 28px 28px 20px;">
-        <button type="button" class="js1-modal-close-x js1-modal-close-x-light" id="btnCancelEditCap" aria-label="Cerrar">
-          <span class="material-symbols-rounded">close</span>
-        </button>
-        <div class="modalEyebrow" style="color: rgba(255,255,255,0.8);">
-          <span class="material-symbols-rounded" style="font-size:16px;">edit</span>
-          Gestión Jurisdiccional
-        </div>
-        <div class="modalTitle" style="color: #fff;">Editar Capacitación</div>
-        <div class="modalSub" style="color: rgba(255,255,255,0.75);">Modifica el nombre o la fecha establecida para la recepción de evidencias.</div>
-      </div>
-      <div class="modalBody" style="padding: 24px 28px;">
-        <input type="hidden" id="editCapId">
-        <div class="modalFields" style="display: flex; flex-direction: column; gap: 16px;">
-          <div class="fieldCard">
-            <label for="editCapNombre">Nombre de la capacitación</label>
-            <input type="text" id="editCapNombre" placeholder="Ej: Capacitacion Influenza 2026" required
-              style="width: 100%; height: 44px; border-radius: 12px; border: 1px solid #cbd5e1; padding: 0 16px; font-weight: 700; outline: none; font-size: 13px;">
-          </div>
-          <div class="fieldCard">
-            <label for="editCapFecha">Fecha de la capacitación</label>
-            <input type="date" id="editCapFecha" required
-              style="width: 100%; height: 44px; border-radius: 12px; border: 1px solid #cbd5e1; padding: 0 16px; font-weight: 700; outline: none; font-size: 13px;">
-          </div>
-        </div>
-        <div class="modalFooter"
-          style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 16px; border-t: 1px solid #e2e8f0;">
-          <button class="btn-premium-action btn-save-animate" id="btnSaveEditCap" type="button"
-            style="height: 40px; padding: 0 20px; border-radius: 10px; font-weight: 800; cursor: pointer; border: none; background: var(--md-sys-color-primary); color: #fff; display: flex; align-items: center; gap: 8px; margin-top: 0;">Guardar Cambios</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ✅ NUEVA CAMPANA MODAL -->
-  <div class="overlay" id="newCampanaOverlay"
-    style="display:none; background: rgba(3,8,18,0.55) !important; z-index:9999;">
-    <div class="modal"
-      style="max-width:440px; background: var(--md-sys-color-surface); border-radius: 28px; box-shadow: var(--md-shadow-5); overflow: hidden; display: flex; flex-direction: column; padding: 0;">
-      <div class="modalHead"
-        style="background: linear-gradient(135deg, #0f766e 0%, #115e59 100%); padding: 28px 28px 20px;">
-        <button type="button" class="js1-modal-close-x js1-modal-close-x-light" id="btnCancelNewCamp" aria-label="Cerrar">
-          <span class="material-symbols-rounded">close</span>
-        </button>
-        <div class="modalEyebrow" style="color: rgba(255,255,255,0.8);">
-          <span class="material-symbols-rounded" style="font-size:16px;">campaign</span>
-          Gestión de Campañas
-        </div>
-        <div class="modalTitle" style="color: #fff;">Crear Campaña</div>
-        <div class="modalSub" style="color: rgba(255,255,255,0.75);">Registra un nuevo evento de campaña para que
-          aparezca como opción de carpeta virtual.</div>
-      </div>
-      <div class="modalBody" style="padding: 24px 28px;">
-        <div class="modalFields" style="display: flex; flex-direction: column; gap: 16px;">
-          <div class="fieldCard">
-            <label for="newCampNombre">Nombre de la campaña</label>
-            <input type="text" id="newCampNombre" placeholder="Ej: Campaña Sarampión 2026" required
-              style="width: 100%; height: 44px; border-radius: 12px; border: 1px solid #cbd5e1; padding: 0 16px; font-weight: 700; outline: none; font-size: 13px;">
-          </div>
-          <div class="fieldCard">
-            <label for="newCampFecha">Fecha de la campaña</label>
-            <input type="date" id="newCampFecha" required
-              style="width: 100%; height: 44px; border-radius: 12px; border: 1px solid #cbd5e1; padding: 0 16px; font-weight: 700; outline: none; font-size: 13px;">
-          </div>
-        </div>
-        <div class="modalFooter"
-          style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 16px; border-t: 1px solid #e2e8f0;">
-          <button class="btn-premium-action btn-save-animate" id="btnSaveNewCamp" type="button"
+          style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 16px;">
+          <button class="btn-premium-action btn-save-animate" id="btnSaveEvidApertura" type="button"
             style="height: 40px; padding: 0 20px; border-radius: 10px; font-weight: 800; cursor: pointer; border: none; background: var(--md-sys-color-primary); color: #fff; display: flex; align-items: center; gap: 8px; margin-top: 0;">Crear</button>
         </div>
       </div>
