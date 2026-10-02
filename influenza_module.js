@@ -3985,6 +3985,26 @@ function metaEnlazarInputs(raiz, alCambiar) {
       if (alCambiar) alCambiar();
     });
     inp.addEventListener("blur", () => { if (inp.value === "") { inp.value = "0"; if (alCambiar) alCambiar(); } });
+    // Pegado desde Excel: un bloque de celdas se reparte hacia la derecha y hacia abajo a partir del campo
+    // activo. Un valor suelto se pega normal.
+    inp.addEventListener("paste", (e) => {
+      const texto = (e.clipboardData || window.clipboardData)?.getData("text") || "";
+      if (!/[\t\r\n]/.test(texto.trim())) return;
+      const filas = [...raiz.querySelectorAll("tr[data-rb]")];
+      const r0 = filas.indexOf(inp.closest("tr"));
+      if (r0 < 0) return;
+      e.preventDefault();
+      const c0 = [...inp.closest("tr").querySelectorAll("input.meta-num")].indexOf(inp);
+      texto.replace(/\r/g, "").replace(/\n+$/, "").split("\n").forEach((linea, i) => {
+        const campos = filas[r0 + i]?.querySelectorAll("input.meta-num");
+        if (!campos) return;
+        linea.split("\t").forEach((v, j) => {
+          if (!campos[c0 + j]) return;
+          campos[c0 + j].value = String(parseInt(v.replace(/[^\d]/g, ""), 10) || 0);
+        });
+      });
+      if (alCambiar) alCambiar();
+    });
     // Tab avanza a la derecha (Shift+Tab a la izquierda) y al terminar la fila salta a la siguiente;
     // Enter / flecha abajo bajan por la misma columna (Shift+Enter / flecha arriba suben) y al terminar
     // la columna pasan a la siguiente. Siempre con scroll automático hasta el campo.
@@ -4053,6 +4073,26 @@ function metaSincronizarSelectorMuni() {
     general.dispatchEvent(new Event("change"));
     renderMetasConfigurationGrid();
   };
+}
+
+// Un frasco rinde 10 dosis: la meta total de una unidad/destino debería cerrar en frascos completos. Solo
+// avisa (no bloquea): Querétaro municipio puede tener una unidad con frasco abierto (p. ej. Pedro Escobedo);
+// en los demás municipios y en los hospitales una meta abierta se marca en rojo.
+function metaPintarFrascos(td, total, permiteAbierto, soloInformar) {
+  if (!td) return "ok";
+  const resto = total % 10;
+  const f = total / 10;
+  let estado = "ok", color = "#16a34a", txt = `${f} fr. ✓`;
+  if (resto) {
+    txt = `${f.toFixed(1)} fr. abierto<br><span style="font-weight:600;font-size:10px">+${10 - resto} → ${Math.ceil(f)} · −${resto} → ${Math.floor(f)}</span>`;
+    if (soloInformar) { estado = "info"; color = "#64748b"; }
+    else if (permiteAbierto) { estado = "aviso"; color = "#d97706"; }
+    else { estado = "mal"; color = "#dc2626"; }
+  } else if (soloInformar) color = "#64748b";
+  td.dataset.estado = estado;
+  td.style.color = color;
+  td.innerHTML = txt;
+  return estado;
 }
 
 function renderMetasConfigurationGrid() {
@@ -4129,6 +4169,13 @@ function renderMetasConfigurationGrid() {
          <td class="meta-cmp-cell p-3 text-center" id="cmp_TOTAL"><b id="tot_juris">0</b><div class="meta-cmp-msg"></div></td>`;
     tbody.appendChild(pie);
 
+    const pieFr = document.createElement("tr");
+    pieFr.className = "meta-total-row";
+    pieFr.innerHTML = `<td class="p-3 text-xs font-black" colspan="2" title="Un frasco = 10 dosis">FRASCOS</td>`
+      + ids.map(id => `<td class="p-3 text-center text-[11px] font-black" id="frs_${id}"></td>`).join("")
+      + `<td class="p-3 text-center text-[11px] font-black" id="frs_J"></td><td class="meta-cmp-cell p-3"></td>`;
+    tbody.appendChild(pieFr);
+
     const pintar = (celda, ref, suma) => {
       const msg = celda.querySelector(".meta-cmp-msg");
       if (!ref && !suma) { celda.dataset.estado = "vacio"; msg.textContent = ""; return; }
@@ -4153,8 +4200,12 @@ function renderMetasConfigurationGrid() {
         granJ += suma;
         granRef += ref;
       });
-      ids.forEach(id => { document.getElementById(`tot_${id}`).textContent = porDestino[id]; });
+      ids.forEach(id => {
+        document.getElementById(`tot_${id}`).textContent = porDestino[id];
+        metaPintarFrascos(document.getElementById(`frs_${id}`), porDestino[id], id === "QUERETARO");
+      });
       document.getElementById("tot_J").textContent = granJ;
+      metaPintarFrascos(document.getElementById("frs_J"), granJ, true, true);
       document.getElementById("tot_juris").textContent = granRef;
       pintar(document.getElementById("cmp_TOTAL"), granRef, granJ);
     };
@@ -4193,7 +4244,8 @@ function renderMetasConfigurationGrid() {
           const v = rec ? Number(rec.metas[rb.id] || 0) : 0;
           return `<td class="p-2 text-center">${inputMeta(`data-rb="${rb.id}" data-clues="${u.clues}"`, v, "clues-meta-input")}</td>`;
         }).join("")
-        + `<td class="meta-cmp-cell p-3 text-center align-middle" id="cmp_${rb.id}"><b class="meta-cmp-num"></b><div class="meta-cmp-msg"></div></td>`;
+        + `<td class="meta-cmp-cell p-3 text-center align-middle" id="cmp_${rb.id}"><b class="meta-cmp-num"></b><div class="meta-cmp-msg"></div>
+          <span class="meta-split-btn material-symbols-rounded" role="button" tabindex="0" title="Repartir la meta de este renglón en partes iguales entre las unidades" style="font-size:18px;cursor:pointer;color:#7c3aed;user-select:none">call_split</span></td>`;
       tbody.appendChild(row);
     });
 
@@ -4203,6 +4255,15 @@ function renderMetasConfigurationGrid() {
       + muniUnits.map(u => `<td class="p-3 text-center text-xs font-black" id="tot_${u.clues}">0</td>`).join("")
       + `<td class="meta-cmp-cell p-3 text-center" id="cmp_TOTAL"><b class="meta-cmp-num"></b><div class="meta-cmp-msg"></div></td>`;
     tbody.appendChild(pie);
+
+    // Querétaro municipio es el único que puede cerrar con frasco abierto (lo habitual: una sola unidad).
+    const permiteAbierto = String(selectMuni).toUpperCase() === "QUERETARO";
+    const pieFr = document.createElement("tr");
+    pieFr.className = "meta-total-row";
+    pieFr.innerHTML = `<td class="p-3 text-xs font-black" colspan="2" title="Un frasco = 10 dosis" id="frs_label">FRASCOS</td><td class="p-3 text-center text-[11px] font-black" id="frs_meta"></td>`
+      + muniUnits.map(u => `<td class="p-3 text-center text-[11px] font-black" id="frs_${u.clues}"></td>`).join("")
+      + `<td class="meta-cmp-cell p-3"></td>`;
+    tbody.appendChild(pieFr);
 
     const pintar = (celda, ref, suma) => {
       celda.querySelector(".meta-cmp-num").textContent = `${suma} de ${ref}`;
@@ -4228,11 +4289,35 @@ function renderMetasConfigurationGrid() {
         granRef += ref;
         granSuma += suma;
       });
-      muniUnits.forEach(u => { document.getElementById(`tot_${u.clues}`).textContent = porUnidad[u.clues]; });
+      let abiertas = 0;
+      muniUnits.forEach(u => {
+        document.getElementById(`tot_${u.clues}`).textContent = porUnidad[u.clues];
+        if (metaPintarFrascos(document.getElementById(`frs_${u.clues}`), porUnidad[u.clues], permiteAbierto) !== "ok") abiertas++;
+      });
+      document.getElementById("frs_label").innerHTML = (permiteAbierto && abiertas > 1)
+        ? `FRASCOS<div style="font-size:10px;font-weight:600;color:#d97706;text-transform:none">${abiertas} unidades con frasco abierto (lo habitual es 1)</div>` : "FRASCOS";
+      metaPintarFrascos(document.getElementById("frs_meta"), granRef, permiteAbierto, true);
       document.getElementById("tot_meta").textContent = granRef;
       pintar(document.getElementById("cmp_TOTAL"), granRef, granSuma);
     };
     metaEnlazarInputs(tbody, recalcular);
+    // Repartir en partes iguales la meta del renglón (el residuo va a las primeras unidades).
+    const repartirParejo = (tr) => {
+      const campos = [...tr.querySelectorAll("input.clues-meta-input")];
+      if (!campos.length) return;
+      const meta = Number(tr.dataset.meta) || 0;
+      const base = Math.floor(meta / campos.length), resto = meta % campos.length;
+      campos.forEach((c, i) => { c.value = String(base + (i < resto ? 1 : 0)); });
+      recalcular();
+    };
+    tbody.onclick = (e) => {
+      const b = e.target.closest(".meta-split-btn");
+      if (b) repartirParejo(b.closest("tr"));
+    };
+    tbody.onkeydown = (e) => {
+      const b = e.target.closest?.(".meta-split-btn");
+      if (b && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); repartirParejo(b.closest("tr")); }
+    };
     recalcular();
   }
 
