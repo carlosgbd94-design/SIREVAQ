@@ -1516,7 +1516,7 @@ async function exportInfluenzaExcelOficialUnidad() {
   try {
     showToast("Generando reporte de Excel...", true, "info");
 
-    const response = await fetch("./Análisis_Meta_Logro_Influenza_2025-2026_UNIDAD_DE_SALUD.xlsx");
+    const response = await fetch(encodeURI("./Formatos/Análisis_Meta_Logro_Influenza_2025-2026_UNIDAD_DE_SALUD.xlsx"));
     if (!response.ok) throw new Error("No se pudo cargar la plantilla de Excel.");
     const arrayBuffer = await response.arrayBuffer();
 
@@ -1568,7 +1568,7 @@ async function exportUnitReportExcel(report, fecha) {
   try {
     showToast("Generando reporte de Excel...", true, "info");
     
-    const response = await fetch("./Análisis_Meta_Logro_Influenza_2025-2026_UNIDAD_DE_SALUD.xlsx");
+    const response = await fetch(encodeURI("./Formatos/Análisis_Meta_Logro_Influenza_2025-2026_UNIDAD_DE_SALUD.xlsx"));
     if (!response.ok) throw new Error("No se pudo cargar la plantilla de Excel.");
     const arrayBuffer = await response.arrayBuffer();
     
@@ -1626,7 +1626,7 @@ async function exportMunicipalConcentradoExcel(muni, fecha) {
   try {
     showToast("Generando concentrado municipal de Excel...", true, "info");
     
-    const response = await fetch("./Análisis_Meta_Logro_Influenza_2025-2026_UNIDAD_DE_SALUD.xlsx");
+    const response = await fetch(encodeURI("./Formatos/Análisis_Meta_Logro_Influenza_2025-2026_UNIDAD_DE_SALUD.xlsx"));
     if (!response.ok) throw new Error("No se pudo cargar la plantilla de Excel.");
     const arrayBuffer = await response.arrayBuffer();
     
@@ -3575,7 +3575,7 @@ async function exportWeeklyMonthlyUnitExcel(clues, unidadNombre, mesAnio) {
     const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
     const mesNombre = monthNames[mes - 1];
     
-    const response = await fetch("./PLANTILLA REPORTE POR SEMANA.xlsx");
+    const response = await fetch(encodeURI("./Formatos/PLANTILLA REPORTE POR SEMANA.xlsx"));
     if (!response.ok) throw new Error("No se pudo cargar la plantilla de reporte semanal.");
     const arrayBuffer = await response.arrayBuffer();
     
@@ -3673,7 +3673,7 @@ async function generateConcentradoSimpleFile(muniName, type = "municipio") {
     const scopeLabel = type === "jurisdiccion" ? "JURISDICCION SANITARIA" : `MUNICIPIO DE ${muniName}`;
     showToast(`Generando Concentrado Simple para ${scopeLabel}...`, true, "info");
     
-    const response = await fetch("./PLANTILLA, CONCENTRADO DE INFLUENZA.xlsx");
+    const response = await fetch(encodeURI("./Formatos/PLANTILLA, CONCENTRADO DE INFLUENZA.xlsx"));
     if (!response.ok) throw new Error("No se pudo cargar la plantilla de concentrado.");
     const arrayBuffer = await response.arrayBuffer();
     
@@ -3776,7 +3776,7 @@ async function generateConcentradoDetalladoFile(muniName, type = "municipio") {
     const scopeLabel = type === "jurisdiccion" ? "CONSOLIDADO JURISDICCIONAL" : `MUNICIPIO: ${muniName}`;
     showToast(`Generando Concentrado Detallado para ${scopeLabel}...`, true, "info");
     
-    const response = await fetch("./PLANTILLA, CONCENTRADO DE INFLUENZA CON UNIDADES O MUNICIPIOS.xlsx");
+    const response = await fetch(encodeURI("./Formatos/PLANTILLA, CONCENTRADO DE INFLUENZA CON UNIDADES O MUNICIPIOS.xlsx"));
     if (!response.ok) throw new Error("No se pudo cargar la plantilla detallada.");
     const arrayBuffer = await response.arrayBuffer();
     
