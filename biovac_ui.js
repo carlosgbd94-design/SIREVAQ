@@ -1130,8 +1130,20 @@ function _lotesYaCargadosComoRecibido() {
   return new Set(
     estado.renglones.filter((r) => r.categoria === 'NORMAL'
       && (Number(r.recibido_frascos) > 0 || String(r.observaciones || '').indexOf('Cargado desde Requisiciones') === 0))
-      .map((r) => r.biovac_lotes.biologico_id + '::' + r.biovac_lotes.numero_lote)
+      .map((r) => r.biovac_lotes.biologico_id + '::' + _normLote(r.biovac_lotes.numero_lote))
   );
+}
+
+// Mayúsculas/espacios no distinguen lotes ("ab12 " y "AB12" son el mismo): evita duplicarlos.
+function _normLote(n) { return String(n || '').trim().toUpperCase(); }
+
+// La precarga hacia las unidades solo se ofrece desde la ÚLTIMA SEMANA del mes del
+// Movimiento (y en meses ya pasados): antes de eso nadie captura su SIS y la requisición
+// todavía puede cambiar -- lo precargado no se actualiza solo si luego se modifica.
+function ventanaPrecargaAbierta(anio, mes, hoy = new Date()) {
+  const ultimoDia = new Date(anio, mes, 0).getDate();
+  const apertura = new Date(anio, mes - 1, ultimoDia - 6);
+  return hoy >= apertura;
 }
 
 // Requisiciones captura TODO en frascos (piezas físicas recibidas), igual
@@ -1142,19 +1154,28 @@ function _lotesYaCargadosComoRecibido() {
 // se cargaba como 1.1 -- reportado por el usuario con captura real.
 function _candidatosDesdeReparto(reparto, folioOracle) {
   const yaCargados = _lotesYaCargadosComoRecibido();
-  return reparto
+  // Un mes puede tener varias entregas con el mismo lote: se SUMAN en un solo candidato
+  // (si no, el segundo renglón sobrescribiría al primero al guardar).
+  const porLote = new Map();
+  reparto
     .filter((r) => r.requi_catalogo_biologicos.biovac_biologico_id)
     // "POR DEFINIR" es solo un marcador de cantidad en Requisiciones (aún sin lote real):
     // precargarlo crearía un lote falso en el Movimiento y, al asignar el lote real, el
     // recibido se contaría dos veces. Se espera a que tenga su número de lote.
-    .filter((r) => String(r.requi_lotes.numero_lote || '').trim().toUpperCase() !== 'POR DEFINIR')
-    .filter((r) => String(r.requi_lotes.numero_lote || '').trim() !== '')
-    .filter((r) => !yaCargados.has(r.requi_catalogo_biologicos.biovac_biologico_id + '::' + r.requi_lotes.numero_lote))
-    .map((r) => ({
-      ...r, folioOracle,
-      bio: estado.biologicos.find((b) => b.id === r.requi_catalogo_biologicos.biovac_biologico_id),
-      frascos: Number(r.cantidad)
-    }));
+    .filter((r) => _normLote(r.requi_lotes.numero_lote) !== '' && _normLote(r.requi_lotes.numero_lote) !== 'POR DEFINIR')
+    .filter((r) => Number(r.cantidad) > 0)
+    .forEach((r) => {
+      const clave = r.requi_catalogo_biologicos.biovac_biologico_id + '::' + _normLote(r.requi_lotes.numero_lote);
+      if (yaCargados.has(clave)) return;
+      const previo = porLote.get(clave);
+      if (previo) previo.frascos += Number(r.cantidad);
+      else porLote.set(clave, {
+        ...r, folioOracle,
+        bio: estado.biologicos.find((b) => b.id === r.requi_catalogo_biologicos.biovac_biologico_id),
+        frascos: Number(r.cantidad)
+      });
+    });
+  return [...porLote.values()].filter((c) => c.bio);
 }
 
 // Con 1 solo lote un párrafo corrido se lee bien, pero con varios
@@ -1174,12 +1195,25 @@ async function _confirmarYCargarCandidatos(candidatos, { titulo, mensaje, inform
   // informativo (rol UNIDAD): la jurisdicción ya repartió esos lotes a la
   // unidad -- solo se AVISA que se van a precargar; no se puede rechazar. Ya
   // cargados en el Movimiento, la unidad sí puede editar las cantidades.
-  const aceptar = await mostrarModal({
-    titulo, mensaje, detalleHtml: _detalleHtmlCandidatos(candidatos),
-    textoAceptar: informativo ? 'Entendido, precargar' : 'Sí, cargar', sinCancelar: informativo
-  });
-  if (!aceptar && !informativo) return;
+  // Nunca dos precargas a la vez (doble carga del Movimiento) ni escribir en un Movimiento
+  // distinto al que se mostró si la persona cambió de unidad/mes con el aviso abierto.
+  if (estado.precargando) return;
+  estado.precargando = true;
+  const movimientoId = estado.movimiento.id;
+  try {
+    const aceptar = await mostrarModal({
+      titulo, mensaje, detalleHtml: _detalleHtmlCandidatos(candidatos),
+      textoAceptar: informativo ? 'Entendido, precargar' : 'Sí, cargar', sinCancelar: informativo
+    });
+    if (!aceptar && !informativo) return;
+    if (!estado.movimiento || estado.movimiento.id !== movimientoId) return;
+    await _precargarCandidatos(candidatos, movimientoId);
+  } finally {
+    estado.precargando = false;
+  }
+}
 
+async function _precargarCandidatos(candidatos, movimientoId) {
   let cargados = 0;
   mostrarCargando(`Cargando ${candidatos.length} lote(s) desde Requisiciones…`);
   try {
@@ -1188,11 +1222,14 @@ async function _confirmarYCargarCandidatos(candidatos, { titulo, mensaje, inform
       if (!bio) continue;
       const frascos = c.frascos;
 
-      let { data: lote } = await estado.db.from('biovac_lotes')
-        .select('id').eq('biologico_id', bio.id).eq('numero_lote', c.requi_lotes.numero_lote).maybeSingle();
+      const numeroLote = _normLote(c.requi_lotes.numero_lote);
+      const { data: delBio, error: errSel } = await estado.db.from('biovac_lotes')
+        .select('id, numero_lote').eq('biologico_id', bio.id);
+      if (errSel) continue;
+      let lote = (delBio || []).find((l) => _normLote(l.numero_lote) === numeroLote);
       if (!lote) {
         const { data: nuevo, error: errIns } = await estado.db.from('biovac_lotes')
-          .insert({ biologico_id: bio.id, numero_lote: c.requi_lotes.numero_lote, caducidad: c.requi_lotes.caducidad })
+          .insert({ biologico_id: bio.id, numero_lote: numeroLote, caducidad: c.requi_lotes.caducidad })
           .select('id').single();
         if (errIns) continue;
         lote = nuevo;
@@ -1206,7 +1243,7 @@ async function _confirmarYCargarCandidatos(candidatos, { titulo, mensaje, inform
       // así que un arrastre ya cargado no se pierde -- y existencia_final se
       // recalcula sola vía trigger (biovac_calc_existencia_final).
       const { error: errRenglon } = await estado.db.from('biovac_renglones').upsert({
-        movimiento_id: estado.movimiento.id, lote_id: lote.id, categoria: 'NORMAL',
+        movimiento_id: movimientoId, lote_id: lote.id, categoria: 'NORMAL',
         recibido_frascos: frascos,
         observaciones: `Cargado desde Requisiciones (${frascos} frasco(s))`
           + (c.folioOracle ? ` · folio ${c.folioOracle}` : '')
@@ -1268,6 +1305,7 @@ async function ofrecerCargaDesdeRequisiciones() {
 
 async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
   if (!unidadClues) return;
+  if (!ventanaPrecargaAbierta(estado.movimiento.anio, estado.movimiento.mes)) return;
 
   // Un mes puede tener varias entregas (cada una es su propia requisición): se juntan todas.
   const { data: reqsMes } = await estado.db.from('requi_requisiciones')
