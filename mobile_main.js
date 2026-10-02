@@ -749,7 +749,13 @@
         }
         if (data) {
             const isAdmin = currentProfile && (currentProfile.rol === 'ADMIN' || currentProfile.rol === 'JURISDICCIONAL');
-            const userMuni = normalizeMunicipioKey(currentProfile?.municipio);
+            // Hospitales (HENM/NHG): están bajo municipio QUERETARO, pero sus lotes se asignan
+            // con municipio "HENM"/"NHG" (mismo criterio que loteHospitalKeyForUser_ en main.js).
+            const cluesPerfil = String(currentProfile?.clues || currentProfile?.clues_asignado || '').trim().toUpperCase();
+            const unidadPerfil = normalizeMunicipioKey(currentProfile?.unidad);
+            const hospitalKey = cluesPerfil === 'QTSSA001740' || unidadPerfil === 'HENM' || unidadPerfil.includes('FELIPE NUNEZ LARA') || unidadPerfil.includes('NINO Y LA MUJER') ? 'HENM'
+                : (cluesPerfil === 'QTSSA002901' || unidadPerfil === 'NHG' || unidadPerfil === 'NHGQ' || unidadPerfil.includes('NUEVO HOSPITAL GENERAL') ? 'NHG' : '');
+            const userMuni = hospitalKey || normalizeMunicipioKey(currentProfile?.municipio);
 
             // Los lotes A.R.F./Canje solo se usan en Movimiento de Biológico --
             // nunca deben ofrecerse en la captura de existencia de las unidades
@@ -760,7 +766,8 @@
                 if (isAdmin || !userMuni) return true;
                 if (!l.municipio) return false;
                 const loteMuni = normalizeMunicipioKey(l.municipio);
-                return loteMuni === "*" || loteMuni === "TODOS" || loteMuni.includes(userMuni);
+                return loteMuni === "*" || loteMuni === "TODOS"
+                    || (hospitalKey ? loteMuni === hospitalKey : loteMuni.includes(userMuni));
             });
 
             // allLotesNormal: mismo filtro de tipo, pero SIN restringir por

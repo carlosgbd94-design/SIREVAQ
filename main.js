@@ -9463,6 +9463,18 @@ document.addEventListener("input", (e) => {
   }
 });
 
+// Clave de municipio con la que el panel Lotes asigna lotes a un hospital ("HENM"/"NHG"),
+// o "" si la unidad no es hospital.
+function loteHospitalKeyForUser_(user) {
+  const clues = String(user?.clues || user?.clues_asignado || "").trim().toUpperCase();
+  if (clues === "QTSSA001740") return "HENM";
+  if (clues === "QTSSA002901") return "NHG";
+  const u = normalizeTextKey_(user?.unidad || "");
+  if (u === "HENM" || u.includes("FELIPE NUNEZ LARA") || u.includes("NINO Y LA MUJER")) return "HENM";
+  if (u === "NHG" || u === "NHGQ" || u.includes("NUEVO HOSPITAL GENERAL")) return "NHG";
+  return "";
+}
+
 async function loadBatchesForSession(user) {
   if (!user) return;
   try {
@@ -9492,7 +9504,11 @@ async function loadBatchesForSession(user) {
     });
 
     // FILTRO DE LOTES SEGURO Y ANTIMALCRIADEZ DE JS
-    const userMuni = normalizeTextKey_(user.municipio || AppState.municipio);
+    // Los hospitales (HENM, NHG) están dados de alta bajo municipio QUERETARO, pero sus lotes
+    // se asignan en el panel Lotes con municipio "HENM"/"NHG": se compara contra esa clave y
+    // no contra el municipio del perfil (si no, ni veían sus lotes ni dejaban de ver los de Querétaro).
+    const hospitalKey = loteHospitalKeyForUser_(user);
+    const userMuni = hospitalKey || normalizeTextKey_(user.municipio || AppState.municipio);
     const seenLotes = new Set();
     UNIT_BATCHES = allLotes.filter(l => {
       // Los lotes A.R.F./Canje solo se usan en Movimiento de Biológico —
@@ -9504,7 +9520,8 @@ async function loadBatchesForSession(user) {
         isMatch = true;
       } else if (l.municipio) {
         const loteMuni = normalizeTextKey_(l.municipio);
-        isMatch = loteMuni === "*" || loteMuni === "TODOS" || loteMuni.includes(userMuni);
+        isMatch = loteMuni === "*" || loteMuni === "TODOS"
+          || (hospitalKey ? loteMuni === hospitalKey : loteMuni.includes(userMuni));
       }
 
       if (isMatch) {
@@ -9712,9 +9729,19 @@ function renderLotesAdmin() {
     const query = BATCH_SEARCH_QUERY.toLowerCase().trim();
     finalFiltered = filtered.filter(x =>
       String(x.lote || "").toLowerCase().includes(query) ||
-      String(x.biologico || "").toLowerCase().includes(query)
+      String(x.biologico || "").toLowerCase().includes(query) ||
+      String(x.municipio || "").toLowerCase().includes(query)
     );
   }
+
+  // Orden estable: biológico (como en BIOS_LIST) > lote > municipio. Sin esto el panel se
+  // mostraba en el orden en que la BD devolvía las filas y un mismo lote quedaba disperso.
+  const ordBio = (b) => { const i = window.BIOS_LIST.indexOf(b); return i < 0 ? 999 : i; };
+  finalFiltered = [...finalFiltered].sort((a, b) =>
+    ordBio(a.biologico) - ordBio(b.biologico)
+    || String(a.lote || "").localeCompare(String(b.lote || ""))
+    || String(a.municipio || "").localeCompare(String(b.municipio || ""), "es")
+  );
 
   if (!finalFiltered.length) {
     tbody.innerHTML = `<tr><td colspan="7" class="muted" style="padding:24px;">No se encontraron resultados para "${BATCH_SEARCH_QUERY || BATCH_FILTER}".</td></tr>`;
