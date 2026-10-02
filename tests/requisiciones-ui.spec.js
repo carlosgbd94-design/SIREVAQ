@@ -596,3 +596,72 @@ test('Requisiciones: NHGQ y HENM aparecen como unidades en el paso 3 y reciben s
   await expect.poll(() => db(page, 'db.requi_distribucion_unidad.find((d) => d.unidad_id === "un-nhg" && d.requisicion_id === "req-hoy").cantidad')).toBe(60);
   expect(errores).toEqual([]);
 });
+
+test('Requisiciones: el chip de guardado muestra qué está guardado y qué falta, y Guardar/Ctrl+S confirman lo tecleado', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  const chip = page.locator('#dockGuardado');
+  await expect(chip).toHaveClass(/\bok\b/);
+  await expect(page.locator('#dockGuardadoTitulo')).toHaveText('Todo guardado');
+
+  // Algo escrito en la captura rápida y sin agregar: "Falta guardar"
+  await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
+  await page.fill('#rapLote', 'G1');
+  await expect(chip).toHaveClass(/\bsucio\b/);
+  await expect(page.locator('#dockGuardadoTitulo')).toHaveText('Falta guardar');
+  await expect(page.locator('#dockGuardadoTexto')).toContainText('Captura rápida');
+  await expect(page.locator('#btnGuardarTodo')).not.toHaveClass(/en-reposo/);
+
+  // Guardar sin cantidad: avisa y sigue pendiente
+  await page.click('#btnGuardarTodo');
+  await expect(page.locator('#toast')).toContainText('cantidad');
+  await expect(chip).toHaveClass(/\bsucio\b/);
+
+  // Con la cantidad, Guardar lo agrega y todo queda guardado
+  await page.fill('#rapCant', '100');
+  await page.click('#btnGuardarTodo');
+  await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.length')).toBe(1);
+  await expect(chip).toHaveClass(/\bok\b/);
+  await expect(page.locator('#toast')).toContainText('Todo guardado');
+  await expect(page.locator('#dockGuardadoTexto')).toContainText('hace');
+  await expect(page.locator('#btnGuardarTodo')).toHaveClass(/en-reposo/);
+
+  // Una cantidad tecleada en la matriz (sin salir de la celda) es "sin confirmar"; Ctrl+S la guarda
+  await page.click('.paso-tab[data-paso="2"]');
+  const lote = await loteId(page, 'G1');
+  await page.fill(celda2(lote, 'CORREGIDORA'), '60');
+  await expect(chip).toHaveClass(/\bsucio\b/);
+  await expect(page.locator('#dockGuardadoTexto')).toContainText('celda');
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => db(page, `db.requi_distribucion_municipio.filter((d) => d.requisicion_id === "req-hoy").map((d) => d.cantidad)`)).toEqual([60]);
+  await expect(chip).toHaveClass(/\bok\b/);
+
+  // El panel de pendientes dice qué falta por completar y lleva al paso
+  await page.click('#dockGuardado');
+  await expect(page.locator('#panelPendientes')).toBeVisible();
+  await expect(page.locator('#panelPendientes')).toContainText('Todo guardado');
+  await expect(page.locator('#panelPendientes')).toContainText('Paso 2');
+  await expect(page.locator('#dockGuardadoPend')).toBeVisible();
+  await page.click('#panelPendientes [data-pp="paso2"]');
+  await expect(page.locator('#panelPendientes')).toBeHidden();
+  await expect(page.locator('#panelPaso2')).toHaveClass(/activo/);
+  await page.click('#dockGuardado');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#panelPendientes')).toBeHidden();
+
+  // Si la base rechaza algo, el chip lo dice (y se limpia con el siguiente guardado bueno)
+  await page.evaluate(() => { inicioEscritura(); finEscritura({ message: 'ERROR: Excede lo surtido' }); });
+  await expect(chip).toHaveClass(/\berror\b/);
+  await expect(page.locator('#dockGuardadoTitulo')).toHaveText('No se guardó');
+  await expect(page.locator('#dockGuardadoTexto')).toContainText('Excede lo surtido');
+  await page.evaluate(() => { inicioEscritura(); finEscritura(null); });
+  await expect(chip).toHaveClass(/\bok\b/);
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: sin permiso de edición no hay chip de guardado ni botón Guardar', async ({ page }) => {
+  await preparar(page, { rol: 'VISUALIZADOR_JURISDICCIONAL', conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await expect(page.locator('#dockGuardado')).toBeHidden();
+  await expect(page.locator('#btnGuardarTodo')).toBeHidden();
+});

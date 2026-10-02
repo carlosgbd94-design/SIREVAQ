@@ -94,6 +94,7 @@ const estado = {
   pegado: [],
   pegadoToken: 0,
   entregasMes: [],     // requisiciones (entregas) del año/mes elegido
+  guardado: { escribiendo: 0, ultimo: null, error: null, rafagaConError: false },   // estado de guardado (ver instrumentarEscrituras)
   asig: null,          // modal "Asignar lotes"
   transferencias: [],
   guardandoRapido: false,
@@ -103,6 +104,7 @@ const estado = {
 function $(id) { return document.getElementById(id); }
 
 function toast(msg, esError) {
+  toast.ultimo = { error: !!esError, cuando: Date.now() };
   const t = $('toast');
   t.textContent = msg;
   t.classList.toggle('err', !!esError);
@@ -271,7 +273,222 @@ function parsearCaducidadInteligente(texto) {
 }
 
 function initDb() {
-  estado.db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  estado.db = instrumentarEscrituras(window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY));
+}
+
+// ---------------------------------------------------------------------------
+// Estado de guardado. Todo se guarda al instante (al salir de una celda, con Enter, con
+// "Agregar"…), pero antes no se veía: ahora cada escritura a la base se cuenta aquí y el chip
+// de la barra de abajo muestra "Guardando…", "Todo guardado · hace 5 s", "Falta guardar" (hay
+// algo tecleado sin confirmar) o "No se guardó" (la base lo rechazó). El botón Guardar (o
+// Ctrl+S) confirma lo tecleado y avisa cuando todo quedó guardado.
+// ---------------------------------------------------------------------------
+
+const TABLAS_SIN_AVISO = new Set(['requi_pdf_generados', 'r2_objects']);   // bitácoras: no son "lo que captura el usuario"
+
+function instrumentarEscrituras(cliente) {
+  const from = cliente.from.bind(cliente);
+  cliente.from = (tabla) => {
+    const constructor = from(tabla);
+    if (TABLAS_SIN_AVISO.has(tabla)) return constructor;
+    ['insert', 'upsert', 'update', 'delete'].forEach((m) => {
+      if (typeof constructor[m] !== 'function') return;
+      const original = constructor[m].bind(constructor);
+      constructor[m] = (...args) => marcarEscritura(original(...args));
+    });
+    return constructor;
+  };
+  if (typeof cliente.rpc === 'function') {
+    const rpc = cliente.rpc.bind(cliente);
+    cliente.rpc = (...args) => marcarEscritura(rpc(...args));
+  }
+  return cliente;
+}
+
+// Cuenta la escritura cuando se ejecuta (al hacer await) y registra cómo terminó.
+function marcarEscritura(constructor) {
+  const original = constructor.then.bind(constructor);
+  constructor.then = (ok, ko) => {
+    inicioEscritura();
+    return original(
+      (res) => { finEscritura(res && res.error ? res.error : null); return ok ? ok(res) : res; },
+      (err) => { finEscritura(err || { message: 'Sin conexión' }); if (ko) return ko(err); throw err; }
+    );
+  };
+  return constructor;
+}
+
+function inicioEscritura() {
+  const g = estado.guardado;
+  if (g.escribiendo === 0) g.rafagaConError = false;
+  g.escribiendo++;
+  actualizarEstadoGuardado();
+}
+
+function finEscritura(error) {
+  const g = estado.guardado;
+  g.escribiendo = Math.max(0, g.escribiendo - 1);
+  if (error) { g.rafagaConError = true; g.error = String(error.message || error).replace(/^.*?ERROR:\s*/, ''); }
+  if (g.escribiendo === 0) {
+    if (!g.rafagaConError) { g.error = null; g.ultimo = Date.now(); pulsoGuardado(); }
+    actualizarEstadoGuardado();
+  } else {
+    actualizarEstadoGuardado();
+  }
+}
+
+function pulsoGuardado() {
+  const chip = $('dockGuardado');
+  if (!chip) return;
+  chip.classList.remove('pulso');
+  void chip.offsetWidth;       // reinicia la animación
+  chip.classList.add('pulso');
+}
+
+function haceCuanto(ms) {
+  const seg = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (seg < 8) return 'hace un momento';
+  if (seg < 60) return `hace ${seg} s`;
+  const min = Math.floor(seg / 60);
+  if (min < 60) return `hace ${min} min`;
+  return `hace ${Math.floor(min / 60)} h`;
+}
+
+// Celdas de las matrices con una cantidad tecleada que todavía no coincide con lo guardado.
+function celdasSinGuardar() {
+  const cambios = [];
+  document.querySelectorAll('#matrizMunicipio input.celda, #matrizUnidad input.celda').forEach((inp) => {
+    const c = cambioDeInput(inp);
+    if (c.cantidad !== cantidadGuardada(c)) cambios.push(c);
+  });
+  return cambios;
+}
+
+// Lo que está tecleado pero aún no se guardó.
+function sinGuardar() {
+  const lista = [];
+  if (!estado.requisicion || !estado.puedeEditar) return lista;
+  const rap = estado.bioRapido && ['rapLote', 'rapCad', 'rapCant'].some((id) => $(id).value.trim());
+  if (rap) lista.push({ tipo: 'rapida', titulo: 'Captura rápida sin agregar', texto: 'Tienes un lote escrito: falta darle Agregar.' });
+  if (document.querySelector('tr.fila-lote-capturado .btn-guardar-edicion')) lista.push({ tipo: 'edicion', titulo: 'Renglón en edición', texto: 'Falta confirmar con la palomita.' });
+  const celdas = celdasSinGuardar().length;
+  if (celdas) lista.push({ tipo: 'celdas', titulo: `${plural(celdas, 'celda', 'celdas')} sin confirmar`, texto: 'Se guardan al salir de la celda o con Enter.' });
+  return lista;
+}
+
+// Lo que falta por completar (no es obligatorio, pero conviene verlo antes de cerrar la entrega).
+function pendientesDeCaptura() {
+  const lista = [];
+  if (!estado.requisicion) return lista;
+  const porDefinir = estado.items.filter((i) => esPendiente(i) && Number(i.cantidad_surtida) > 0);
+  if (porDefinir.length) lista.push({ paso: 1, icono: 'hourglass_top', titulo: `${plural(porDefinir.length, 'biológico con lote por definir', 'biológicos con lote por definir')}`, texto: 'Asigna los lotes cuando lleguen.', ir: 'Ir al paso 1' });
+  const av = estado.avance || calcularAvance();
+  const resumen = (arr) => ({ vacio: arr.filter((x) => x.est === 'vacio').length, parcial: arr.filter((x) => x.est === 'parcial').length });
+  const frase = ({ vacio, parcial }) => [vacio ? `${plural(vacio, 'sin repartir', 'sin repartir')}` : '', parcial ? `${plural(parcial, 'con saldo', 'con saldo')}` : ''].filter(Boolean).join(' · ');
+  const r2 = resumen(av.p2), r3 = resumen(av.p3);
+  if (r2.vacio + r2.parcial) lista.push({ paso: 2, icono: 'alt_route', titulo: 'Paso 2: reparto a municipios y hospitales', texto: frase(r2), ir: 'Ir al paso 2' });
+  if (r3.vacio + r3.parcial) lista.push({ paso: 3, icono: 'local_hospital', titulo: 'Paso 3: reparto a unidades', texto: frase(r3), ir: 'Ir al paso 3' });
+  return lista;
+}
+
+function faseGuardado() {
+  const g = estado.guardado;
+  if (g.escribiendo > 0) return 'guardando';
+  if (g.error) return 'error';
+  if (sinGuardar().length) return 'sucio';
+  return 'ok';
+}
+
+function actualizarEstadoGuardado() {
+  const chip = $('dockGuardado');
+  if (!chip) return;
+  const g = estado.guardado;
+  const fase = faseGuardado();
+  const sin = fase === 'sucio' ? sinGuardar() : [];
+  const pend = pendientesDeCaptura();
+  const textos = {
+    ok: ['Todo guardado', g.ultimo ? haceCuanto(g.ultimo) : 'Se guarda solo al instante', 'cloud_done'],
+    guardando: ['Guardando…', 'un momento', 'sync'],
+    sucio: ['Falta guardar', sin[0] ? sin[0].titulo : '', 'edit_note'],
+    error: ['No se guardó', g.error || 'Revisa lo marcado en rojo', 'cloud_off']
+  };
+  const [titulo, texto, icono] = textos[fase];
+  chip.classList.remove('ok', 'guardando', 'sucio', 'error');
+  chip.classList.add(fase);
+  $('dockGuardadoIcono').textContent = icono;
+  $('dockGuardadoTitulo').textContent = titulo;
+  $('dockGuardadoTexto').textContent = texto;
+  $('dockGuardadoTexto').title = texto;
+  const temas = sin.length + pend.length;
+  $('dockGuardadoPend').textContent = temas || '';
+  $('dockGuardadoPend').style.display = temas ? 'inline-flex' : 'none';
+  chip.setAttribute('aria-label', `${titulo}. ${texto}${temas ? `. ${plural(temas, 'tema pendiente', 'temas pendientes')}` : ''}`);
+  const btn = $('btnGuardarTodo');
+  if (btn) {
+    btn.classList.toggle('en-reposo', fase === 'ok' || fase === 'guardando');
+    btn.title = fase === 'ok' ? 'Todo está guardado (Ctrl+S)' : 'Guardar lo que está pendiente (Ctrl+S)';
+  }
+  $('avisoGuardado').textContent = `${titulo}. ${texto}`;
+  if ($('panelPendientes').style.display !== 'none') renderPanelPendientes();
+}
+
+function renderPanelPendientes() {
+  const g = estado.guardado;
+  const fase = faseGuardado();
+  const sin = sinGuardar();
+  const pend = pendientesDeCaptura();
+  const cab = {
+    ok: ['cloud_done', 'Todo guardado', g.ultimo ? `Último guardado ${haceCuanto(g.ultimo)}. Lo que capturas se guarda solo.` : 'Lo que capturas se guarda solo, al salir de cada celda o al dar Agregar.'],
+    guardando: ['sync', 'Guardando…', 'Un momento, se está enviando a la base.'],
+    sucio: ['edit_note', 'Falta guardar', 'Hay datos tecleados que todavía no se confirmaron.'],
+    error: ['cloud_off', 'No se guardó', g.error || 'La base rechazó el último cambio.']
+  }[fase];
+  const filaSin = sin.map((x) => `<li class="pp-item aviso"><span class="material-symbols-rounded">edit_note</span><div><b>${esc(x.titulo)}</b><small>${esc(x.texto)}</small></div><button type="button" class="btn btn-primary btn-sm" data-pp="guardar">Guardar</button></li>`).join('');
+  const filaPend = pend.map((x) => `<li class="pp-item"><span class="material-symbols-rounded">${x.icono}</span><div><b>${esc(x.titulo)}</b><small>${esc(x.texto)}</small></div><button type="button" class="btn btn-outline btn-sm" data-pp="paso${x.paso}">${esc(x.ir)}</button></li>`).join('');
+  const cerrada = estado.requisicion && estado.requisicion.estado === 'CERRADA';
+  const todoAlDia = !sin.length && !pend.length;
+  $('panelPendientes').innerHTML = `
+    <div class="pp-cab ${fase}"><span class="material-symbols-rounded">${cab[0]}</span><div><b>${cab[1]}</b><small>${esc(cab[2])}</small></div></div>
+    ${sin.length ? `<div class="pp-sec">Sin guardar</div><ul class="pp-lista">${filaSin}</ul>` : ''}
+    ${pend.length ? `<div class="pp-sec">Por completar</div><ul class="pp-lista">${filaPend}</ul>` : ''}
+    ${todoAlDia ? `<div class="pp-vacio"><span class="material-symbols-rounded">task_alt</span>No queda nada pendiente.${cerrada ? ' La entrega ya está cerrada.' : ' Ya puedes cerrar la entrega.'}</div>` : ''}
+    <div class="pp-pie"><kbd>Ctrl</kbd> + <kbd>S</kbd> guarda lo pendiente</div>`;
+}
+
+function alternarPanelPendientes(forzar) {
+  const panel = $('panelPendientes');
+  const abrir = typeof forzar === 'boolean' ? forzar : panel.style.display === 'none';
+  if (abrir) { renderPanelPendientes(); panel.style.display = 'block'; } else panel.style.display = 'none';
+  $('dockGuardado').setAttribute('aria-expanded', abrir ? 'true' : 'false');
+}
+
+function esperarEscrituras(maxMs) {
+  return new Promise((resolve) => {
+    const limite = Date.now() + (maxMs || 6000);
+    const mirar = () => (estado.guardado.escribiendo === 0 || Date.now() > limite ? resolve() : setTimeout(mirar, 40));
+    mirar();
+  });
+}
+
+// Botón Guardar / Ctrl+S: confirma lo tecleado y espera a que todo llegue a la base.
+async function guardarTodo() {
+  if (!estado.puedeEditar || !estado.requisicion) return;
+  const antes = sinGuardar();
+  const hizoAlgo = antes.length > 0;
+  if (antes.some((x) => x.tipo === 'rapida')) await agregarRapido();
+  const edicion = document.querySelector('tr.fila-lote-capturado .btn-guardar-edicion');
+  if (edicion) await guardarEdicionItem(edicion.dataset.item);
+  const cambios = celdasSinGuardar();
+  if (cambios.length) await guardarReparto(cambios);
+  await estado.cola;
+  await esperarEscrituras();
+  actualizarEstadoGuardado();
+  const fase = faseGuardado();
+  if (fase === 'ok') toast(hizoAlgo ? 'Todo guardado ✓' : 'Ya estaba todo guardado ✓');
+  else if (fase === 'error') toast('No se guardó: ' + estado.guardado.error, true);
+  else if (fase === 'sucio' && !(toast.ultimo && toast.ultimo.error && Date.now() - toast.ultimo.cuando < 800)) {
+    toast('Aún falta algo por guardar: ' + sinGuardar()[0].titulo.toLowerCase() + '.', true);   // (si ya salió el aviso concreto, no se pisa)
+  }
 }
 
 async function cargarSesionReal() {
@@ -824,6 +1041,7 @@ function renderAvance() {
       texto: a.p3.length ? `${c3} de ${plural(a.p3.length, 'asignación repartida', 'asignaciones repartidas')}` : 'Primero reparte el paso 2' }
   ];
   estado.pasos = pasos;
+  setTimeout(actualizarEstadoGuardado, 0);   // el avance cambia lo "por completar" del chip
 
   // Stepper superior
   $('stepper').innerHTML = pasos.map((p, i) => `${i ? `<span class="st-linea ${pasos[i - 1].hecho ? 'hecho' : ''}"></span>` : ''}
@@ -2569,6 +2787,34 @@ function instalarEventos() {
     if (completa) { const c = ev.target.closest('tr').querySelector('.inp-editar-cantidad'); if (c) c.focus(); }
   });
 
+  // Estado de guardado: chip, panel de pendientes, botón Guardar y Ctrl+S
+  $('dockGuardado').addEventListener('click', (ev) => { ev.stopPropagation(); alternarPanelPendientes(); });
+  $('panelPendientes').addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const b = ev.target.closest('[data-pp]');
+    if (!b) return;
+    const acc = b.dataset.pp;
+    if (acc === 'guardar') guardarTodo();
+    else { alternarPanelPendientes(false); activarPaso(Number(acc.replace('paso', ''))); if (acc === 'paso1') { const av = $('avisoPendientes'); if (av && av.style.display !== 'none') av.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }
+  });
+  document.addEventListener('click', () => alternarPanelPendientes(false));
+  $('btnGuardarTodo').addEventListener('click', guardarTodo);
+  document.addEventListener('keydown', (ev) => {
+    if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey && ev.key.toLowerCase() === 's') {
+      ev.preventDefault();
+      guardarTodo();
+    }
+  });
+  // Lo tecleado sin confirmar se refleja al momento en el chip.
+  let refrescoGuardado;
+  const programarRefresco = () => { clearTimeout(refrescoGuardado); refrescoGuardado = setTimeout(actualizarEstadoGuardado, 120); };
+  document.addEventListener('input', programarRefresco, true);
+  document.addEventListener('change', programarRefresco, true);
+  setInterval(() => { if (!document.hidden) actualizarEstadoGuardado(); }, 15000);
+  window.addEventListener('beforeunload', (ev) => {
+    if (estado.puedeEditar && ['guardando', 'sucio'].includes(faseGuardado())) { ev.preventDefault(); ev.returnValue = ''; }
+  });
+
   // Confirmación propia
   $('confirmarAceptar').addEventListener('click', () => cerrarConfirmar(true));
   $('confirmarCancelar').addEventListener('click', () => cerrarConfirmar(false));
@@ -2678,6 +2924,7 @@ function instalarEventos() {
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
     if ($('modalConfirmar').style.display !== 'none') cerrarConfirmar(false);
+    else if ($('panelPendientes').style.display !== 'none') alternarPanelPendientes(false);
     else if ($('modalTexto').style.display !== 'none') cerrarTexto(null);
     else if ($('modalPegar').style.display !== 'none') cerrarPegar();
     else if ($('modalAsignar').style.display !== 'none') cerrarAsignarLotes();

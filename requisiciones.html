@@ -387,6 +387,47 @@
   .confirmar-hoja[data-tono="info"] .confirmar-icono { background: #e0f2fe; color: #0369a1; }
   .confirmar-hoja[data-tono="peligro"] .btn-primary { background: #b91c1c; }
   .confirmar-hoja .modal-pie { border-top: none; }
+  /* Chip de guardado (barra de abajo) y panel de pendientes */
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .dock-guardado { appearance: none; border: none; background: transparent; display: flex; align-items: center; gap: 8px; padding: 3px 10px 3px 4px; border-radius: 999px; cursor: pointer; font-family: inherit; color: #0f172a; max-width: 250px; text-align: left; }
+  .dg-ico { width: 30px; height: 30px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; background: rgba(22,163,74,.15); color: #15803d; }
+  .dg-ico .material-symbols-rounded { font-size: 19px; }
+  .dock-guardado.guardando .dg-ico { background: rgba(2,132,199,.15); color: #0369a1; }
+  .dock-guardado.guardando .dg-ico .material-symbols-rounded { animation: dg-gira 1s linear infinite; }
+  .dock-guardado.sucio .dg-ico { background: #fef3c7; color: #b45309; }
+  .dock-guardado.error .dg-ico { background: #fee2e2; color: #b91c1c; }
+  .dg-txt { display: flex; flex-direction: column; min-width: 0; }
+  .dg-txt b { font: 800 12px 'Poppins', sans-serif; white-space: nowrap; }
+  .dg-txt small { font-size: 11px; font-weight: 600; color: #5b6b80; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+  .dock-guardado.error .dg-txt b { color: #b91c1c; }
+  .dock-guardado.sucio .dg-txt b { color: #b45309; }
+  .dg-pend { min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; background: #f59e0b; color: #fff; font: 800 10.5px 'Poppins', sans-serif; align-items: center; justify-content: center; }
+  .dock-guardado.pulso .dg-ico { animation: dg-pulso .9s ease-out; }
+  @keyframes dg-gira { to { transform: rotate(360deg); } }
+  @keyframes dg-pulso { 0% { box-shadow: 0 0 0 0 rgba(22,163,74,.45); } 100% { box-shadow: 0 0 0 11px rgba(22,163,74,0); } }
+  @media (prefers-reduced-motion: reduce) { .dock-guardado .dg-ico, .dock-guardado .dg-ico .material-symbols-rounded { animation: none !important; } }
+  @media (hover: hover) { .dock-guardado:hover { background: rgba(15,23,42,.07); } }
+  @media (max-width: 760px) { .dg-txt { display: none; } .dock-guardado { padding: 3px; } }
+  .panel-pendientes { position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%); z-index: 950; width: min(440px, calc(100vw - 24px)); max-height: 60vh; overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 20px; box-shadow: 0 16px 48px rgba(15,23,42,.22); padding: 6px 6px 10px; }
+  .pp-cab { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #f0fdf4; }
+  .pp-cab > .material-symbols-rounded { font-size: 26px; color: #15803d; }
+  .pp-cab.guardando { background: #f0f9ff; } .pp-cab.guardando > .material-symbols-rounded { color: #0369a1; }
+  .pp-cab.sucio { background: #fffbeb; } .pp-cab.sucio > .material-symbols-rounded { color: #b45309; }
+  .pp-cab.error { background: #fef2f2; } .pp-cab.error > .material-symbols-rounded { color: #b91c1c; }
+  .pp-cab b { display: block; font: 800 14px 'Poppins', sans-serif; color: var(--primary); }
+  .pp-cab small { font-size: 12px; color: var(--muted); }
+  .pp-sec { padding: 12px 14px 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .pp-lista { list-style: none; margin: 0; padding: 0 6px; }
+  .pp-item { display: flex; align-items: center; gap: 11px; padding: 9px 8px; border-radius: 12px; }
+  .pp-item > .material-symbols-rounded { font-size: 22px; color: #64748b; flex: none; }
+  .pp-item.aviso > .material-symbols-rounded { color: #b45309; }
+  .pp-item > div { flex: 1; min-width: 0; }
+  .pp-item b { display: block; font-size: 12.5px; color: var(--text); }
+  .pp-item small { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .pp-vacio { display: flex; align-items: center; gap: 8px; padding: 14px; font-size: 12.5px; font-weight: 700; color: #15803d; }
+  .pp-pie { padding: 8px 14px 0; font-size: 11px; color: var(--muted); }
+  .pp-pie kbd { font: 700 10.5px ui-monospace, Consolas, monospace; padding: 1px 5px; border: 1px solid var(--outline-variant); border-radius: 5px; background: #f8fafc; }
   .sugerencias-texto { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .cad-tip { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
   /* La vista previa de la caducidad (= JUL-29) flota debajo del campo: no le suma altura, así
@@ -611,11 +652,21 @@
         <b><span class="dock-punto" id="dockPunto"></span><span id="dockEstadoTitulo"></span></b>
         <small id="dockEstadoTexto"></small>
       </div>
+      <button type="button" class="dock-guardado ok solo-edicion" id="dockGuardado" aria-haspopup="dialog" aria-expanded="false" aria-controls="panelPendientes">
+        <span class="dg-ico"><span class="material-symbols-rounded" id="dockGuardadoIcono">cloud_done</span></span>
+        <span class="dg-txt"><b id="dockGuardadoTitulo">Todo guardado</b><small id="dockGuardadoTexto">Se guarda solo al instante</small></span>
+        <span class="dg-pend" id="dockGuardadoPend" style="display:none;"></span>
+      </button>
+      <span class="sr-only" id="avisoGuardado" role="status" aria-live="polite"></span>
       <div class="dock-acciones">
+        <button type="button" class="dock-btn dock-guardar en-reposo solo-edicion" id="btnGuardarTodo" title="Todo está guardado (Ctrl+S)"><span class="material-symbols-rounded">save</span><span class="dock-etiqueta">Guardar</span></button>
         <button type="button" class="dock-btn dock-guardar" id="btnSiguiente" title="Ir al siguiente paso"><span class="dock-etiqueta">Siguiente</span><span class="material-symbols-rounded">arrow_forward</span></button>
         <button type="button" class="dock-btn dock-enviar solo-edicion" id="btnCerrarMes" style="display:none;" title="Cerrar esta entrega: marca la requisición como enviada"><span class="material-symbols-rounded">lock</span><span class="dock-etiqueta">Cerrar entrega</span></button>
       </div>
     </nav>
+
+    <!-- Qué está guardado y qué falta (se abre desde el chip de la barra de abajo) -->
+    <div class="panel-pendientes" id="panelPendientes" role="dialog" aria-label="Estado de guardado y pendientes" style="display:none;"></div>
 
     <!-- PASO 1 -->
     <div class="paso-panel activo" id="panelPaso1">
