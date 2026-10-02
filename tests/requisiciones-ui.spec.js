@@ -825,3 +825,41 @@ test('Requisiciones: las cantidades tecleadas en una matriz se confirman solas a
   await expect.poll(() => db(page, 'db.requi_distribucion_municipio.filter((d) => d.requisicion_id === "req-hoy").map((d) => d.cantidad)')).toEqual([45]);
   expect(errores).toEqual([]);
 });
+
+
+test('Requisiciones: la barra de abajo no encima el chip de guardado con los pasos, en ningún ancho', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  // Sin la fuente de íconos (en las pruebas no hay red) el nombre del ícono se pintaría como texto y ensancharía
+  // los botones: se simula cada ícono como una caja de 20px, que es lo que mide con la fuente real.
+  await page.addStyleTag({ content: '.material-symbols-rounded { font-size: 0 !important; display: inline-block; width: 20px; height: 20px; overflow: hidden; }' });
+  await page.click('#chipsBio .chip-bio[data-bio="bio-hexa"]');
+  await page.fill('#rapLote', 'ANCHO1');                       // chip en "Falta guardar" (su texto más largo)
+  for (const ancho of [1600, 1400, 1250, 1100, 1000, 900, 800, 600, 420]) {
+    await page.setViewportSize({ width: ancho, height: 800 });
+    await page.waitForTimeout(350);
+    const r = await page.evaluate(() => {
+      const caja = (s) => { const e = document.querySelector(s); if (!e) return null; const c = getComputedStyle(e); if (c.display === 'none') return null; const b = e.getBoundingClientRect(); return b.width ? { izq: b.left, der: b.right } : null; };
+      // El texto que se sale de su caja (nowrap sin lugar) se pinta ENCIMA de lo de al lado aunque las cajas no se toquen.
+      const desborda = ['#dockEstado', '#dockGuardado', '#dockGuardado .dg-txt', '#dockEstado b', '#dockEstado small'].filter((s) => {
+        const e = document.querySelector(s); if (!e || getComputedStyle(e).display === 'none' || !e.getBoundingClientRect().width) return false;
+        return getComputedStyle(e).overflowX !== 'hidden' && e.scrollWidth > e.clientWidth + 1;   // (con overflow oculto se recorta, no se encima)
+      });
+      return { desborda, dock: caja('#dockPasos'), partes: { pasos: caja('.dock-hojas'), estado: caja('#dockEstado'), chip: caja('#dockGuardado'), acciones: caja('.dock-acciones') } };
+    });
+    expect(r.desborda, `texto que se sale de su caja @${ancho}`).toEqual([]);
+    const partes = Object.entries(r.partes).filter(([, v]) => v);
+    for (let i = 0; i < partes.length; i++) {
+      // dentro de la barra
+      expect(partes[i][1].izq, `${partes[i][0]} @${ancho}`).toBeGreaterThanOrEqual(r.dock.izq - 1);
+      expect(partes[i][1].der, `${partes[i][0]} @${ancho}`).toBeLessThanOrEqual(r.dock.der + 1);
+      // sin encimarse con ninguna otra parte
+      for (let j = i + 1; j < partes.length; j++) {
+        const a = partes[i][1], b = partes[j][1];
+        expect(a.der <= b.izq + 1 || b.der <= a.izq + 1, `${partes[i][0]} y ${partes[j][0]} se encíman @${ancho}`).toBe(true);
+      }
+    }
+    expect(r.partes.chip, `el chip debe verse @${ancho}`).not.toBeNull();
+  }
+  expect(errores).toEqual([]);
+});
