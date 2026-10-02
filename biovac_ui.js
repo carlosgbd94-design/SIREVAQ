@@ -1898,7 +1898,7 @@ function renderPanelAgregar(bio) {
           <option value="CANJE">Canje</option>
         </select>
       </div>
-      <div class="campo" style="width:260px">
+      <div class="campo campo-lote">
         <label>2. N° de lote</label>
         <select data-nuevo-lote disabled><option value="">Primero elige el Estatus…</option></select>
         <span class="ayuda">Lotes dados de alta en Carga de lotes por municipio -- para A.R.F. se ofrecen también los lotes dados de alta como Normal, porque suele ser el mismo lote en dictamen</span>
@@ -1907,11 +1907,11 @@ function renderPanelAgregar(bio) {
         <label>Caducidad</label>
         <input type="text" data-nuevo-caducidad placeholder="Se completa al elegir el lote" readonly>
       </div>
-      <div class="campo" style="grid-column: span 2">
+      <div class="campo campo-tipo">
         <label>3. ¿Qué cantidad es?</label>
         <div class="tipo-cantidad">
-          <label class="t-ant"${antOk ? '' : ' style="opacity:.45; cursor:not-allowed" title="La existencia anterior solo se captura el primer mes: después viene sola del cierre del mes pasado."'}><input type="radio" name="tipo-cant-${bioId}" value="ANTERIOR" data-nuevo-tipo-cantidad ${antOk ? 'checked' : 'disabled'}><b>Existencia anterior</b>${antOk ? 'Lo que ya tenía del mes pasado' : 'Solo el primer mes: ahora viene sola del cierre anterior'}</label>
-          <label class="t-rec"><input type="radio" name="tipo-cant-${bioId}" value="RECIBIDO" data-nuevo-tipo-cantidad ${antOk ? '' : 'checked'}><b>Recibido este mes</b>Una entrada nueva de un lote que NO tenía</label>
+          <label class="t-ant"${antOk ? ' title="Lo que ya tenía del mes pasado"' : ' style="opacity:.45; cursor:not-allowed" title="La existencia anterior solo se captura el primer mes: después viene sola del cierre del mes pasado."'}><input type="radio" name="tipo-cant-${bioId}" value="ANTERIOR" data-nuevo-tipo-cantidad ${antOk ? 'checked' : 'disabled'}><b>Existencia anterior</b></label>
+          <label class="t-rec" title="Una entrada nueva de un lote que NO tenía"><input type="radio" name="tipo-cant-${bioId}" value="RECIBIDO" data-nuevo-tipo-cantidad ${antOk ? '' : 'checked'}><b>Recibido este mes</b></label>
         </div>
       </div>
       <div class="campo">
@@ -2346,12 +2346,12 @@ function renderGuiaCaptura(m, editable) {
   if (!editable || !esUnidad || m.id === null) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
   cont.style.display = 'flex';
   cont.innerHTML = `
-    <div class="paso ant"><b>① Existencia anterior</b>${estado.anteriorEditable === false
+    <div class="paso ant"><b><i class="n">1</i>Existencia anterior</b>${estado.anteriorEditable === false
       ? 'Viene <u>sola</u> del cierre del mes pasado: no se captura ni se edita.'
       : 'Lo que te quedó del mes pasado: <u>un renglón por lote</u>. Solo se captura este primer mes.'}</div>
-    <div class="paso rec"><b>② Recibido</b>Entradas de este mes. ¿Es un lote que ya tienes? Captúralo en <u>su misma fila</u>, no lo agregues otra vez.</div>
-    <div class="paso sal"><b>③ Aplicadas y desechadas</b>Lo que salió durante el mes.</div>
-    <div class="paso fin"><b>④ Final</b>Se calcula sola.${estado.anteriorEditable === false ? ' Con el bote quitas un lote que no corresponde.' : ' Con el lápiz corriges una cifra; con el bote quitas el lote.'}</div>`;
+    <div class="paso rec"><b><i class="n">2</i>Recibido</b>Entradas de este mes. ¿Es un lote que ya tienes? Captúralo en <u>su misma fila</u>, no lo agregues otra vez.</div>
+    <div class="paso sal"><b><i class="n">3</i>Aplicadas y desechadas</b>Lo que salió durante el mes.</div>
+    <div class="paso fin"><b><i class="n">4</i>Final</b>Se calcula sola.${estado.anteriorEditable === false ? ' Con el bote quitas un lote que no corresponde.' : ' Con el lápiz corriges una cifra; con el bote quitas el lote.'}</div>`;
 }
 
 async function eliminarRenglon(renglonId) {
