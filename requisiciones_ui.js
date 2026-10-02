@@ -50,15 +50,6 @@ const DIRECCION_HOSPITAL = {
 const DIRECCION_JURISDICCION = 'Circuito Moises Solana S/N, Col. Vista Alegre, Santiago de Querétaro. Qro.';
 const COPIAS_SUGERIDAS = { JURISDICCIONAL: 2, MUNICIPAL: 2, UNIDAD: 3 };
 
-// Puente opcional hacia la tabla "lotes" (panel "Carga de lotes por
-// municipio", ya usado por Biovac) -- solo aplica a los 4 municipios reales.
-const MUNICIPIO_A_LOTES = { CORREGIDORA: 'CORREGIDORA', HUIMILPAN: 'HUIMILPAN', MARQUES: 'EL MARQUÉS', QUERETARO: 'QUERÉTARO' };
-const CODIGO_A_LOTES_BIOLOGICO = {
-  '148': 'NEUMOCÓCICA 13', '150': 'ROTAVIRUS', '6135': 'HEXAVALENTE', '2526': 'HEPATITIS B',
-  '3825': 'HEPATITIS A', '6187': 'HEPATITIS A', '3800': 'SR', '3801': 'BCG', '3805': 'DPT', '3808': 'TDPA',
-  '3810': 'TD', '6056': 'VARICELA', '3820': 'SRP', '6317': 'INFLUENZA', '6501': 'VPH', '6509': 'VSR'
-};
-
 // Mismos colores que ya usa BioVac por biológico (CLAVE_COLORES en
 // biovac_ui.js) -- una vacuna se ve del mismo color en toda la app, no solo
 // aquí. Los selects de Biológico/Lote de Paso 2 y 3 eran texto plano puro
@@ -1367,16 +1358,44 @@ async function confirmarAsignarLotes() {
     const { data, error } = await estado.db.rpc('requi_asignar_lotes', { p_item_id: a.item.id, p_lotes: lotes });
     if (error) { toast(error.message.replace(/^.*?ERROR:\s*/, ''), true); return; }
     delete estado.lotesPorBiologico[bioId];
-    const nombres = new Set(lotes.map((l) => l.numero_lote.toUpperCase()));
     cerrarAsignarLotes();
     await cargarDatosRequisicion();
     const quedan = data && Number(data.quedan_pendientes);
     toast(quedan ? `Lotes asignados. Quedan ${quedan} ${a.pend ? 'por definir' : `en ${a.item.requi_lotes.numero_lote}`}.` : 'Lotes asignados.');
-    // Espejo hacia la tabla "lotes" (lo que antes se omitió por estar "por definir").
-    const paraLotes = estado.distMunicipio.filter((d) => d.requi_biologico_id === bioId && Number(d.cantidad) > 0 && nombres.has(String(numeroLoteDe(bioId, d.lote_id)).toUpperCase()));
-    if (paraLotes.length) (async () => { for (const d of paraLotes) await sincronizarLotePublico(d.municipio, bioId, d.lote_id, Number(d.cantidad)); })();
   } finally {
     $('asigGuardar').disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Catálogo de lotes (panel "Lotes"): lo alimenta solo el servidor (trigger sobre
+// el reparto a municipios, ver lotes_sync_desde_requisiciones.sql). Este botón
+// es la revisión a demanda del mes elegido: da de alta lo que falte, nunca
+// duplica ni borra, y avisa de lo que requiere atención humana.
+// ---------------------------------------------------------------------------
+
+async function sincronizarLotes() {
+  if (!estado.puedeEditar) return;
+  const btn = $('btnSyncLotes');
+  btn.disabled = true;
+  try {
+    const { data, error } = await estado.db.rpc('lotes_sincronizar_desde_requisiciones', {
+      p_anio: Number($('selAnio').value), p_mes: Number($('selMes').value)
+    });
+    if (error) { toast(error.message.replace(/^.*?ERROR:\s*/, ''), true); return; }
+    const nuevos = (data.lotes_nuevos || []).length;
+    const avisos = [];
+    if (data.por_definir_omitidos) avisos.push(`${plural(data.por_definir_omitidos, 'reparto sigue', 'repartos siguen')} con lote "por definir"`);
+    if ((data.conflictos_caducidad || []).length) avisos.push('caducidad distinta a la del panel Lotes en ' + data.conflictos_caducidad.map((c) => `${c.biologico} ${c.lote}`).join(', ') + ' (se respetó la del panel)');
+    if (data.sin_caducidad) avisos.push(`${plural(data.sin_caducidad, 'lote sin caducidad omitido', 'lotes sin caducidad omitidos')}`);
+    if (data.biologicos_sin_equivalente) avisos.push('sin equivalente en Lotes: ' + data.biologicos_sin_equivalente);
+    const base = data.insertados
+      ? `Panel Lotes actualizado: ${plural(data.insertados, 'alta', 'altas')} (${plural(nuevos, 'lote nuevo', 'lotes nuevos')}).`
+      : 'El panel Lotes ya estaba al día.';
+    if (avisos.length) await confirmar({ titulo: 'Sincronización de lotes', tono: 'aviso', aceptar: 'Entendido', cancelar: 'Cerrar', mensaje: base + ' Ojo: ' + avisos.join('; ') + '.' });
+    else toast(base);
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -1855,9 +1874,6 @@ function guardarReparto(cambiosBrutos) {
     });
     toast(aceptados.length === 1 ? `Guardado: ${etiquetaCambio(aceptados[0])} = ${aceptados[0].cantidad}` : `Se guardaron ${aceptados.length} celdas.`);
 
-    // En segundo plano: espejo hacia la tabla "lotes" del sistema anterior.
-    const paraLotes = aceptados.filter((c) => c.tipo === 'M');
-    if (paraLotes.length) (async () => { for (const c of paraLotes) await sincronizarLotePublico(c.destino, c.bio, c.lote, c.cantidad); })();
   });
 }
 
@@ -2107,31 +2123,6 @@ function renderPaso3() {
       ${cols.map((c) => `<td>${celdaHtml(`data-unidad="${u.id}" data-bio="${c.bio}" data-lote="${c.lote}"`, cantidadGuardada({ tipo: 'U', destino: u.id, bio: c.bio, lote: c.lote }))}</td>`).join('')}
       <td><button type="button" class="icon-btn-pure" data-export-unidad="${u.id}" title="Exportar Excel de esta unidad"><span class="material-symbols-rounded">download</span></button></td>
     </tr>`).join('')}</tbody>`;
-}
-
-// Automático desde guardarReparto -- no es una acción que el
-// usuario dispare, así que nunca interrumpe con un toast: si el biológico
-// o el municipio no tienen equivalente en el sistema viejo (ej. Hospitales,
-// o un biológico que no existía cuando se armó ese catálogo), simplemente
-// no hay nada que sincronizar ahí. Si falla la escritura, no es grave --
-// solo afecta el autocompletado de caducidad en captura de aplicaciones,
-// no ningún conteo de inventario -- se reintenta solo en el siguiente
-// guardado de este mismo reparto.
-async function sincronizarLotePublico(municipio, biologicoId, loteId, cantidad) {
-  const bio = estado.catalogo.find((b) => b.id === biologicoId);
-  const lote = estado.items.find((i) => i.requi_biologico_id === biologicoId && i.lote_id === loteId);
-  const nombreLotesTabla = bio ? CODIGO_A_LOTES_BIOLOGICO[bio.codigo_articulo] : null;
-  const municipioLotesTabla = MUNICIPIO_A_LOTES[municipio];
-  if (!nombreLotesTabla || !municipioLotesTabla || !lote || esPendiente(lote)) return;
-
-  const numeroLote = lote.requi_lotes.numero_lote;
-  await estado.db.from('lotes').delete()
-    .eq('biologico', nombreLotesTabla).eq('lote', numeroLote).eq('municipio', municipioLotesTabla);
-  // cantidad 0 = ya no se reparte a este municipio -- se queda borrado, no se reinserta.
-  if (cantidad > 0) {
-    await estado.db.from('lotes')
-      .insert({ biologico: nombreLotesTabla, lote: numeroLote, caducidad: lote.requi_lotes.caducidad, municipio: municipioLotesTabla, tipo: 'NORMAL' });
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2595,6 +2586,7 @@ function instalarEventos() {
   });
 
   // Prellenar cantidades (modal)
+  $('btnSyncLotes').addEventListener('click', sincronizarLotes);
   $('btnPrellenar').addEventListener('click', abrirCantidades);
   $('cantCerrar').addEventListener('click', cerrarCantidades);
   $('cantCancelar').addEventListener('click', cerrarCantidades);

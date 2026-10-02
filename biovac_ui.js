@@ -1144,6 +1144,11 @@ function _candidatosDesdeReparto(reparto, folioOracle) {
   const yaCargados = _lotesYaCargadosComoRecibido();
   return reparto
     .filter((r) => r.requi_catalogo_biologicos.biovac_biologico_id)
+    // "POR DEFINIR" es solo un marcador de cantidad en Requisiciones (aún sin lote real):
+    // precargarlo crearía un lote falso en el Movimiento y, al asignar el lote real, el
+    // recibido se contaría dos veces. Se espera a que tenga su número de lote.
+    .filter((r) => String(r.requi_lotes.numero_lote || '').trim().toUpperCase() !== 'POR DEFINIR')
+    .filter((r) => String(r.requi_lotes.numero_lote || '').trim() !== '')
     .filter((r) => !yaCargados.has(r.requi_catalogo_biologicos.biovac_biologico_id + '::' + r.requi_lotes.numero_lote))
     .map((r) => ({
       ...r, folioOracle,

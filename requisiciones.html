@@ -18,7 +18,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
-<script defer src="requisiciones_ui.js?v=3"></script>
+<script defer src="requisiciones_ui.js?v=4"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -623,7 +623,8 @@
 
       <div class="tarjeta solo-edicion">
         <h2 style="margin:0 0 4px;"><span class="material-symbols-rounded">bolt</span> Captura rápida<button type="button" class="ayuda-btn" data-ayuda="requi1" title="Cómo funciona el paso 1" aria-label="Cómo funciona el paso 1"><span class="material-symbols-rounded">help</span></button>
-          <button type="button" class="btn btn-outline btn-sm" id="btnPrellenar" style="margin-left:auto;" title="Capturar solo cuánto llegó de cada biológico; los lotes se asignan después"><span class="material-symbols-rounded" style="font-size:15px">format_list_numbered</span> Prellenar cantidades</button>
+          <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSyncLotes" style="margin-left:auto;" title="Revisa que los lotes repartidos este mes estén dados de alta en el panel Lotes (nunca duplica ni borra)"><span class="material-symbols-rounded" style="font-size:15px">sync</span> Sincronizar lotes</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btnPrellenar" style="margin-left:8px;" title="Capturar solo cuánto llegó de cada biológico; los lotes se asignan después"><span class="material-symbols-rounded" style="font-size:15px">format_list_numbered</span> Prellenar cantidades</button>
           <button type="button" class="btn btn-outline btn-sm" id="btnPegarSurtido"><span class="material-symbols-rounded" style="font-size:15px">content_paste</span> Pegar desde Excel</button>
         </h2>
         <p class="hint" style="margin-top:8px;"><b>1.</b> Toca el biológico · <b>2.</b> escribe lote, caducidad y cantidad · <b>Enter</b> guarda y te deja listo para el siguiente lote del mismo biológico. <b>¿Aún no hay lotes?</b> Usa <b>Prellenar cantidades</b> (todos los biológicos de golpe) o deja el lote vacío; después los asignas con "Asignar lotes". La caducidad se teclea <b>DD-MM-AA</b> y se muestra MMM-AA.</p>

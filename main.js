@@ -7940,22 +7940,41 @@ async function supabaseRequest(action = "", payload, options = {}) {
       }
 
       case "savelotes": {
-        const items = payload.lotes || [];
-        // 1. Limpiar catálogo actual
-        const { error: delError } = await supabase.from('lotes').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Borrar todo
-        if (delError) throw delError;
+        // Antes borraba TODA la tabla y reinsertaba la copia del navegador: una copia vieja
+        // (o un fallo a medio camino) borraba lotes dados de alta por Requisiciones u otro
+        // usuario. Ahora cada operación es puntual: altas (sin duplicar), cambios por id y
+        // eliminaciones explícitas -- nada que no se mencione se toca.
+        const toRow = (it) => ({
+          biologico: it.biologico,
+          lote: it.lote,
+          caducidad: mmmaaToIsoDate(it.caducidad), // CONVERSIÓN PARA DB
+          fecha_recepcion: it.fecha_recepcion || null,
+          municipio: it.municipio || "*",
+          tipo: it.tipo || "NORMAL"
+        });
+        const items = payload.upsert || [];
+        const eliminar = payload.eliminar || [];
+        if (!Array.isArray(items) || !Array.isArray(eliminar)) throw new Error("savelotes: formato inválido");
 
-        // 2. Insertar nuevos
-        if (items.length) {
-          const { error: insError } = await supabase.from('lotes').insert(items.map(it => ({
-            biologico: it.biologico,
-            lote: it.lote,
-            caducidad: mmmaaToIsoDate(it.caducidad), // CONVERSIÓN PARA DB
-            fecha_recepcion: it.fecha_recepcion || null,
-            municipio: it.municipio || "*",
-            tipo: it.tipo || "NORMAL"
-          })));
+        const nuevos = items.filter(it => !it.id).map(toRow);
+        if (nuevos.length) {
+          const { error: insError } = await supabase.from('lotes')
+            .upsert(nuevos, { onConflict: 'biologico,lote,municipio,tipo', ignoreDuplicates: true });
           if (insError) throw insError;
+        }
+        for (const it of items.filter(x => x.id)) {
+          const { error: updError } = await supabase.from('lotes').update(toRow(it)).eq('id', it.id);
+          if (updError) throw updError;
+        }
+        const ids = eliminar.filter(x => x && x.id).map(x => x.id);
+        if (ids.length) {
+          const { error: delError } = await supabase.from('lotes').delete().in('id', ids);
+          if (delError) throw delError;
+        }
+        for (const x of eliminar.filter(y => y && !y.id)) {
+          const { error: delError } = await supabase.from('lotes').delete()
+            .eq('biologico', x.biologico).eq('lote', x.lote).eq('municipio', x.municipio).eq('tipo', x.tipo || 'NORMAL');
+          if (delError) throw delError;
         }
         return { ok: true };
       }
@@ -9971,12 +9990,12 @@ $("btnAddLoteRow")?.addEventListener("click", async () => {
       eventTitle: "Alta de Lote(s)",
       eventMsg: "Lotes registrados y guardados en Supabase.",
       action: async () => {
-        // AppService.call expects the entire catalog for saving since it truncates the table
-        return await AppService.call("savelotes", { lotes: BATCH_CATALOG });
+        return await AppService.call("savelotes", { upsert: newLotes });
       }
     });
 
-    renderLotesAdmin();
+    // Recarga desde el servidor: trae los ids reales y cualquier alta automática de Requisiciones.
+    await refreshLotesAdmin();
   } else {
     showToast("El lote ya existe en los municipios seleccionados", false, "warn");
   }
@@ -10047,12 +10066,12 @@ window.saveLoteEdit = async function (idx) {
     eventTitle: "Edición de Lote",
     eventMsg: "Lote editado y guardado en Supabase.",
     action: async () => {
-      // Assuming saveLotes replaces or upserts the catalog
-      return await AppService.call("savelotes", { lotes: BATCH_CATALOG });
+      return await AppService.call("savelotes", { upsert: [item] });
     }
   });
 
-  renderLotesAdmin();
+  // Si el cambio falló (p. ej. choca con otro lote), la recarga deja la tabla como está en el servidor.
+  await refreshLotesAdmin();
 }
 
 let pendingDeleteIdx = null;
@@ -10086,16 +10105,14 @@ window.confirmDeleteLote = async function () {
 
   closeDeleteModal();
 
-  BATCH_CATALOG.splice(idx, 1);
-
   await AppService.runCapture({
     title: "Eliminando",
     msg: "Actualizando catálogo...",
     successMsg: "Lote eliminado correctamente",
-    action: () => AppService.call("savelotes", { lotes: BATCH_CATALOG })
+    action: () => AppService.call("savelotes", { eliminar: [item] })
   });
 
-  renderLotesAdmin();
+  await refreshLotesAdmin();
 }
 
 // ==========================================
