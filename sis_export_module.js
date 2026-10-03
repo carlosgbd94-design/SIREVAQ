@@ -1,43 +1,16 @@
 /**
- * SIS / SINBA -- Exportación del concentrado mensual SIS-06-P a CSV
+ * SIS / SINBA -- Exportación del concentrado mensual a CSV
  * (CLUES, MUNICIPIO, VARIABLE_SIS, MES, ANIO, VALOR), mismo formato que ya
- * acepta el panel RDA existente (rda_parser.js -> registros_sis), para
- * reemplazar la subida manual del concentrador de Python.
+ * acepta el panel RDA existente (rda_parser.js -> registros_sis).
  *
- * La captura de SIS-06-P en sí vive en biovac.html (ver sis06p_biovac_module.js,
- * Fase 3) -- este módulo solo lee `sis06p_capturas` para exportar, desde el
- * panel RDA de `index.html` (roles MUNICIPAL/JURISDICCIONAL/ADMIN).
+ * Las filas NO se arman aquí: salen del servidor (RPC sis_filas_csv), la misma
+ * fuente con la que se publica a registros_sis (sis_publicar_registros_sis),
+ * así el CSV y la tabla de indicadores nunca difieren. Solo se exporta un
+ * municipio cuando TODAS sus unidades ya están validadas.
+ *
+ * La captura de SIS-06-P vive en biovac.html (sis06p_biovac_module.js); este
+ * módulo solo sirve al panel RDA de `index.html` (MUNICIPAL/JURISDICCIONAL/ADMIN).
  */
-
-let _sisVariablesCache = [];
-let _sisVariablesByFilaExcel = new Map();
-
-function buildSISCSVRowsForCaptura(captura, sisVarByFila) {
-  const rows = [];
-  const { clues, municipio, mes, anio, valores } = captura;
-
-  (sisVarByFila || _sisVariablesByFilaExcel).forEach((varDef, filaExcel) => {
-    const v = (valores || {})[String(filaExcel)] || (valores || {})[filaExcel] || {};
-    const total = Number(v.total || 0);
-    if (varDef.clave_general) {
-      rows.push({ CLUES: clues, MUNICIPIO: municipio, VARIABLE_SIS: varDef.clave_general, MES: mes, ANIO: anio, VALOR: total });
-    }
-    const afro = Number(v.afro || 0);
-    if (varDef.clave_afro && afro > 0) {
-      rows.push({ CLUES: clues, MUNICIPIO: municipio, VARIABLE_SIS: varDef.clave_afro, MES: mes, ANIO: anio, VALOR: afro });
-    }
-    const indigena = Number(v.indigena || 0);
-    if (varDef.clave_indigena && indigena > 0) {
-      rows.push({ CLUES: clues, MUNICIPIO: municipio, VARIABLE_SIS: varDef.clave_indigena, MES: mes, ANIO: anio, VALOR: indigena });
-    }
-    const migrante = Number(v.migrante || 0);
-    if (varDef.clave_migrante && migrante > 0) {
-      rows.push({ CLUES: clues, MUNICIPIO: municipio, VARIABLE_SIS: varDef.clave_migrante, MES: mes, ANIO: anio, VALOR: migrante });
-    }
-  });
-
-  return rows;
-}
 
 function downloadSISCSV(filename, rows) {
   const headers = ["CLUES", "MUNICIPIO", "VARIABLE_SIS", "MES", "ANIO", "VALOR"];
@@ -69,102 +42,48 @@ function initSISExportModalDefaults() {
   mesSelect.dataset.defaulted = "1";
 }
 
-// Suma las capturas semanales de Influenza (influenza_capturas.valores,
-// mapa plano {rubro_id: dosis}) que caen dentro del mes/año calendario
-// pedido, y las traduce a filas SIS vía window.INFLUENZA_SIS_MAPPING --
-// fuente única de verdad ya definida en influenza_module.js (mismo bundle
-// que este archivo en index.html, no hay que duplicarla aquí). Solo emite
-// filas si la unidad reportó algo ese mes (si no hubo captura, no hay nada
-// que decir de Influenza ese periodo -- distinto a SIS-06-P, que si existe
-// un renglón siempre completa las 94 claves con clave, aquí puede no haber
-// ninguna semana de esa campaña dentro del mes).
-function buildInfluenzaCSVRows(clues, municipio, mes, anio, capturasInfluenza) {
-  const mapping = window.INFLUENZA_SIS_MAPPING || {};
-  const enMes = (capturasInfluenza || []).filter((c) => {
-    if (!c.fecha) return false;
-    const d = new Date(c.fecha + "T12:00:00");
-    return (d.getMonth() + 1) === Number(mes) && d.getFullYear() === Number(anio);
-  });
-  if (enMes.length === 0) return [];
-
-  const sumas = {};
-  enMes.forEach((c) => {
-    Object.entries(c.valores || {}).forEach(([rubro, val]) => {
-      sumas[rubro] = (sumas[rubro] || 0) + Number(val || 0);
-    });
-  });
-
-  return Object.entries(mapping).map(([rubro, clave]) => ({
-    CLUES: clues, MUNICIPIO: municipio, VARIABLE_SIS: clave, MES: mes, ANIO: anio, VALOR: sumas[rubro] || 0
-  }));
-}
-
 async function exportSISConcentrado({ mes, anio }) {
   try {
-    if (_sisVariablesCache.length === 0) {
-      const resVars = await AppService.call("getsis_variables", {});
-      _sisVariablesCache = resVars.data || [];
-      _sisVariablesByFilaExcel = new Map(_sisVariablesCache.map(v => [Number(v.fila_excel), v]));
-    }
-
     const role = String((USER && USER.rol) || "").trim().toUpperCase();
     const isJurisdiccional = role === "ADMIN" || role === "JURISDICCIONAL" || role === "VISUALIZADOR_JURISDICCIONAL";
     const municipiosAllowed = USER?.municipiosAllowed || (USER?.municipio ? [USER.municipio] : []);
 
+    // Municipios con captura ese mes dentro del alcance del usuario.
     const resCapturas = await AppService.call("getsis06p_capturas", {});
-    let capturas = (resCapturas.data || []).filter(c => Number(c.mes) === Number(mes) && Number(c.anio) === Number(anio));
+    const capturas = (resCapturas.data || []).filter(c => Number(c.mes) === Number(mes) && Number(c.anio) === Number(anio));
+    let municipios = [...new Set(capturas.map(c => c.municipio).filter(Boolean))];
+    if (!isJurisdiccional) municipios = municipios.filter(m => municipiosAllowed.includes(m));
 
-    // Influenza vive en su propia tabla (influenza_capturas, semanal) -- se
-    // lee directo de Supabase (mismo patrón ya usado por concentrado_ui.js
-    // para sis_variables_mapeo), no vía AppService (ese handler solo filtra
-    // por anio_campana, y aquí conviene filtrar por mes calendario en JS).
-    let queryInfluenza = window.supabase.from('influenza_capturas').select('clues, municipio, fecha, valores');
-    if (!isJurisdiccional) queryInfluenza = queryInfluenza.in('municipio', municipiosAllowed);
-    const { data: capturasInfluenzaAll, error: errInfluenza } = await queryInfluenza;
-    if (errInfluenza) console.error("Error cargando influenza_capturas para exportar:", errInfluenza);
-    const capturasInfluenza = capturasInfluenzaAll || [];
-
-    if (!isJurisdiccional) {
-      capturas = capturas.filter(c => municipiosAllowed.includes(c.municipio));
-    }
-
-    // Agrupar Influenza por CLUES -- una CLUES puede no tener sis06p_capturas
-    // ese mes pero sí Influenza (o viceversa), así que la unión de ambos
-    // conjuntos de CLUES define qué filas se generan.
-    const cluesInfo = new Map();
-    capturas.forEach(c => cluesInfo.set(c.clues, { clues: c.clues, municipio: c.municipio }));
-    capturasInfluenza.forEach(c => { if (!cluesInfo.has(c.clues)) cluesInfo.set(c.clues, { clues: c.clues, municipio: c.municipio }); });
-
-    if (cluesInfo.size === 0) {
+    if (municipios.length === 0) {
       showToast("No hay concentrados capturados para ese mes/año en tu alcance.", false, "warn");
       return;
     }
 
     let rows = [];
-    capturas.forEach(c => {
-      rows = rows.concat(buildSISCSVRowsForCaptura(c, _sisVariablesByFilaExcel));
-    });
-    // El catálogo sis_variables (104 filas del paloteo SIS-06-P) no tiene
-    // ninguna fila de Influenza (ni "INFLUENZA" como biológico, ni las 46
-    // claves BIE/BIO de INFLUENZA_SIS_MAPPING) -- verificado contra la base
-    // real -- así que buildSISCSVRowsForCaptura nunca emite esas claves.
-    // Influenza SIEMPRE se agrega aparte, para toda CLUES con capturas esta
-    // ventana, sin riesgo de duplicar nada.
-    cluesInfo.forEach(({ clues, municipio }) => {
-      const capturasDeEstaClues = capturasInfluenza.filter(c => c.clues === clues);
-      rows = rows.concat(buildInfluenzaCSVRows(clues, municipio, mes, anio, capturasDeEstaClues));
-    });
+    const omitidos = [];
+    for (const municipio of municipios) {
+      const { data, error } = await window.supabase.rpc("sis_filas_csv", { p_mes: Number(mes), p_anio: Number(anio), p_municipio: municipio });
+      if (error) {
+        // Normalmente: todavía faltan unidades por validar en ese municipio.
+        omitidos.push(`${municipio}: ${error.message}`);
+        continue;
+      }
+      rows = rows.concat((data || []).map(f => ({ CLUES: f.clues, MUNICIPIO: f.municipio, VARIABLE_SIS: f.variable_sis, MES: Number(mes), ANIO: Number(anio), VALOR: f.valor })));
+    }
 
-    rows.sort((a, b) => (a.MES - b.MES) || String(a.MUNICIPIO).localeCompare(String(b.MUNICIPIO)) || String(a.CLUES).localeCompare(String(b.CLUES)));
+    if (rows.length === 0) {
+      showToast(`Nada que exportar. ${omitidos.join(" | ")}`, false, "warn");
+      return;
+    }
 
     const scopeLabel = isJurisdiccional ? "JURISDICCIONAL" : municipiosAllowed.join("-");
-    const filename = `SIS_${scopeLabel}_${mes}_${anio}.csv`;
-    downloadSISCSV(filename, rows);
+    downloadSISCSV(`SIS_${scopeLabel}_${mes}_${anio}.csv`, rows);
 
-    if (!isJurisdiccional) {
-      showToast("⚠️ Sube este archivo junto con los de los demás municipios de este mes: el panel RDA reemplaza todos los datos del mes al subir, y subir solo un municipio puede borrar los datos de los demás hasta que se vuelvan a cargar.", true, "warn");
+    const nClues = new Set(rows.map(r => r.CLUES)).size;
+    if (omitidos.length > 0) {
+      showToast(`⚠️ Exportado ${nClues} CLUES, pero NO se incluyó: ${omitidos.join(" | ")}. Subir este archivo reemplaza todo el mes en el panel RDA; mejor usa «Publicar a indicadores» en Seguimiento del SINBA-SIS.`, true, "warn");
     } else {
-      showToast(`✅ Concentrado exportado: ${cluesInfo.size} CLUES, ${rows.length} filas.`, true, "good");
+      showToast(`✅ Concentrado exportado: ${nClues} CLUES, ${rows.length} filas. Para cargarlo a indicadores usa «Publicar a indicadores» (no reemplaza otros municipios).`, true, "good");
     }
   } catch (err) {
     console.error("Error al exportar concentrado SIS:", err);

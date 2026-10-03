@@ -384,7 +384,27 @@
       if (!completo) btn.style.opacity = '0.5';
       btn.innerHTML = '<span class="material-symbols-rounded">download</span> Descargar CSV oficial';
       btn.addEventListener('click', () => exportarCSVOficialMunicipio(municipio, mes, anio));
-      barra.appendChild(btn);
+      const btnPub = document.createElement('button');
+      btnPub.type = 'button';
+      btnPub.className = completo ? 'btn-primario btn-mini' : 'btn-fantasma btn-mini';
+      btnPub.disabled = !completo;
+      if (!completo) btnPub.style.opacity = '0.5';
+      btnPub.innerHTML = '<span class="material-symbols-rounded">cloud_upload</span> Publicar a indicadores';
+      const estadoPub = document.createElement('div');
+      estadoPub.style.cssText = 'flex-basis:100%; font-size:11.5px; font-weight:600; color:var(--muted);';
+      btnPub.addEventListener('click', async () => {
+        btnPub.disabled = true;
+        const hecho = await publicarMunicipio(municipio, mes, anio, etiqueta);
+        btnPub.disabled = false;
+        if (hecho) pintarEstadoPublicacion(estadoPub, municipio, mes, anio);
+      });
+      const acciones = document.createElement('div');
+      acciones.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap;';
+      acciones.appendChild(btn);
+      acciones.appendChild(btnPub);
+      barra.appendChild(acciones);
+      barra.appendChild(estadoPub);
+      if (completo) pintarEstadoPublicacion(estadoPub, municipio, mes, anio);
       tarjeta.appendChild(barra);
 
       const comparativoCont = document.createElement('div');
@@ -478,62 +498,18 @@
     }
   }
 
+  // Filas oficiales del municipio, armadas en el SERVIDOR con las mismas reglas con que se publica a
+  // registros_sis (sis_filas_csv): solo CLUES validadas, las 4 claves de cada variable aun en 0 y Influenza
+  // del mes. Falla (con el motivo) si falta validar alguna unidad: nunca sale un CSV a medias.
   async function exportarCSVOficialMunicipio(municipio, mes, anio) {
     try {
-      const [{ data: variables, error: eVars }, { data: capturas, error: eCap }] = await Promise.all([
-        estado.db.from('sis_variables').select('*').eq('activo', true).order('orden'),
-        estado.db.from('sis06p_capturas').select('clues, valores').eq('municipio', municipio).eq('mes', mes).eq('anio', anio)
-      ]);
-      if (eVars) throw eVars;
-      if (eCap) throw eCap;
-
-      if (!capturas || capturas.length === 0) {
-        toast('No hay concentrados capturados para ese mes/año en este municipio.', 'error');
+      const { data, error } = await estado.db.rpc('sis_filas_csv', { p_mes: mes, p_anio: anio, p_municipio: municipio });
+      if (error) throw error;
+      const rows = (data || []).map((f) => ({ CLUES: f.clues, VARIABLE: f.variable_sis, VALOR: f.valor, MES: mes, 'AÑO': anio, MUNICIPIO: f.municipio || municipio }));
+      if (rows.length === 0) {
+        toast('No hay concentrados validados para ese mes/año en este municipio.', 'error');
         return;
       }
-
-      const cluesList = capturas.map((c) => c.clues);
-      const { data: capturasInfluenza, error: eInf } = await estado.db.from('influenza_capturas')
-        .select('clues, fecha, valores').in('clues', cluesList);
-      if (eInf) console.error('[SIS-06-P] Error cargando influenza para export oficial:', eInf);
-
-      const mapping = (window.SIS06PBiovac && window.SIS06PBiovac.INFLUENZA_SIS_MAPPING) || {};
-
-      const rows = [];
-      capturas.forEach((c) => {
-        const valores = c.valores || {};
-        (variables || []).forEach((v) => {
-          const val = valores[String(v.fila_excel)] || {};
-          const total = Number(val.total || 0);
-          if (v.clave_general) rows.push({ CLUES: c.clues, VARIABLE: v.clave_general, VALOR: total, MES: mes, AÑO: anio, MUNICIPIO: municipio });
-          const afro = Number(val.afro || 0);
-          if (v.clave_afro && afro > 0) rows.push({ CLUES: c.clues, VARIABLE: v.clave_afro, VALOR: afro, MES: mes, AÑO: anio, MUNICIPIO: municipio });
-          const indigena = Number(val.indigena || 0);
-          if (v.clave_indigena && indigena > 0) rows.push({ CLUES: c.clues, VARIABLE: v.clave_indigena, VALOR: indigena, MES: mes, AÑO: anio, MUNICIPIO: municipio });
-          const migrante = Number(val.migrante || 0);
-          if (v.clave_migrante && migrante > 0) rows.push({ CLUES: c.clues, VARIABLE: v.clave_migrante, VALOR: migrante, MES: mes, AÑO: anio, MUNICIPIO: municipio });
-        });
-
-        const infEnMes = (capturasInfluenza || []).filter((ci) => {
-          if (ci.clues !== c.clues || !ci.fecha) return false;
-          const d = new Date(ci.fecha + 'T12:00:00');
-          return (d.getMonth() + 1) === Number(mes) && d.getFullYear() === Number(anio);
-        });
-        if (infEnMes.length > 0) {
-          const sumas = {};
-          infEnMes.forEach((ci) => {
-            Object.entries(ci.valores || {}).forEach(([rubro, val]) => { sumas[rubro] = (sumas[rubro] || 0) + Number(val || 0); });
-          });
-          Object.entries(mapping).forEach(([rubro, clave]) => {
-            rows.push({ CLUES: c.clues, VARIABLE: clave, VALOR: sumas[rubro] || 0, MES: mes, AÑO: anio, MUNICIPIO: municipio });
-          });
-        }
-      });
-
-      // Ordenado por número de CLUES ascendente -- Array.sort de JS es
-      // estable, así que dentro de cada CLUES las filas conservan el orden
-      // del catálogo (orden) en el que se construyeron arriba.
-      rows.sort((a, b) => String(a.CLUES).localeCompare(String(b.CLUES)));
 
       const headers = ['CLUES', 'VARIABLE', 'VALOR', 'MES', 'AÑO', 'MUNICIPIO'];
       const csvLines = [headers.join(',')].concat(
@@ -549,11 +525,51 @@
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      toast(`CSV oficial generado: ${cluesList.length} CLUES, ${rows.length} filas.`, 'ok');
+      toast(`CSV oficial generado: ${new Set(rows.map((r) => r.CLUES)).size} CLUES, ${rows.length} filas.`, 'ok');
     } catch (err) {
       console.error('[SIS-06-P] Error exportando CSV oficial del municipio:', err);
       toast(err.message || 'Error al exportar el CSV oficial.', 'error');
     }
+  }
+
+  // Carga el concentrado validado del municipio a registros_sis (la tabla que alimenta los indicadores).
+  // Es idempotente: reemplaza SOLO las mismas llaves (CLUES x clave) de ese mes -- nunca duplica ni toca
+  // otros municipios, otras claves ni meses anteriores. Hay que repetirla si después se corrige algo.
+  async function publicarMunicipio(municipio, mes, anio, etiqueta) {
+    const ok = await mostrarModal({
+      titulo: 'Publicar a indicadores',
+      mensaje: `Se cargará el SIS validado de ${etiqueta} (${String(mes).padStart(2, '0')}/${anio}) a la tabla que alimenta los indicadores. Si ya se había publicado, se reemplaza SOLO lo de este municipio y este mes; no se toca nada más.`,
+      textoAceptar: 'Publicar'
+    });
+    if (!ok) return false;
+    try {
+      const usuario = (estado.perfil ? nombreCompletoDePerfil(estado.perfil) : null);
+      const { data, error } = await estado.db.rpc('sis_publicar_registros_sis', { p_mes: mes, p_anio: anio, p_municipio: municipio, p_usuario: usuario });
+      if (error) throw error;
+      const omitidas = (data && data.clues_omitidas) || [];
+      toast(`✅ Publicado: ${data.insertadas} filas de ${(data.clues_publicadas || []).length} unidad(es)${data.reemplazadas ? ` (reemplazó ${data.reemplazadas} previas)` : ''}.${omitidas.length ? ' Sin catálogo SIS, omitidas: ' + omitidas.join(', ') + '.' : ''}`, 'ok');
+      return true;
+    } catch (err) {
+      console.error('[SIS-06-P] Error publicando a registros_sis:', err);
+      toast(err.message || 'Error al publicar.', 'error');
+      return false;
+    }
+  }
+
+  async function pintarEstadoPublicacion(cont, municipio, mes, anio) {
+    try {
+      const { data } = await estado.db.rpc('sis_estado_publicacion', { p_mes: mes, p_anio: anio, p_municipio: municipio });
+      const p = Array.isArray(data) ? data[0] : null;
+      if (!p) { cont.textContent = 'Aún no publicado a indicadores.'; cont.style.color = 'var(--muted)'; return; }
+      const cuando = new Date(p.publicado_en).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+      if (p.desactualizada) {
+        cont.textContent = `⚠ Publicado el ${cuando}${p.publicado_por ? ' por ' + p.publicado_por : ''}, pero hubo cambios después: vuelve a publicar.`;
+        cont.style.color = 'var(--warning)';
+      } else {
+        cont.textContent = `Publicado el ${cuando}${p.publicado_por ? ' por ' + p.publicado_por : ''} (${p.filas} filas).`;
+        cont.style.color = 'var(--success)';
+      }
+    } catch (e) { cont.textContent = ''; }
   }
 
   // Saltar directo a modo revisión de una unidad desde la fila del

@@ -1,3 +1,6 @@
+-- NOTA (2026-10): cerrar_mes / abrir_correccion / aplicar_correccion y el trigger 20 fueron REEMPLAZADOS por
+-- supabase/sis_cadena_existencias_y_publicacion.sql (ajuste manual de la existencia anterior, cascada sin huecos,
+-- guardias de rol). Lo que está en la base es esa versión; esta queda como historial.
 -- ============================================================================
 -- BioVac — Motor de reglas (PL/pgSQL)
 --

@@ -227,3 +227,20 @@ test('Municipal: avisos de correcciones de Jurisdicción con la fila gris, la co
   await page.evaluate(() => { window.__rpcCorr = [{ id: 'c2', municipio: 'QUERETARO', lote_id: 'l1', numero_lote: 'X', biologico_id: 'bio1', nombre_excel: 'B', categoria: 'NORMAL', motivo: 'm', creado_por: 'j', creado_en: '2026-10-05T10:00:00Z', obj_recibido: 1, act_recibido: 0, act_aplicadas_a: 0, act_aplicadas_b: 0, act_desechadas_a: 0, act_desechadas_b: 0, coincide: false }]; estado.perfil.rol = 'UNIDAD'; return cargarCorreccionesJurisdiccion(false); });
   await expect(panel.locator('.corr-item')).toHaveCount(0);
 });
+
+test('Existencia anterior encadenada: la unidad no la edita, el municipal sí (y se ve su ajuste)', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await pintar(page, { rol: 'MUNICIPAL', anteriorEditable: false });
+  await expect(page.locator('[data-action="editar-ant"]')).toHaveCount(2);        // lápiz disponible para el municipal
+  await expect(page.locator('input.ant-input')).toHaveCount(2);
+  await expect(page.locator('.tag-ajuste-ant')).toHaveCount(0);                    // sin ajuste, sin etiqueta
+
+  // Un renglón con ajuste manual (cierre 15, capturado 13 -> -2) muestra la etiqueta.
+  await page.evaluate(() => { estado.renglones[0].ajuste_anterior_frascos = -2; render(); });
+  await expect(page.locator('.tag-ajuste-ant')).toHaveCount(1);
+  await expect(page.locator('.tag-ajuste-ant')).toContainText('-2');
+
+  await pintar(page, { rol: 'UNIDAD', anteriorEditable: false });
+  await expect(page.locator('[data-action="editar-ant"]')).toHaveCount(0);        // la unidad sigue bloqueada
+  await expect(page.locator('input.ant-input')).toHaveCount(0);
+});

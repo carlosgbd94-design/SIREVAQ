@@ -1181,9 +1181,15 @@
       _sisVariablesCache = vars || [];
     }
 
+    // Influenza se pide SOLO del mes (por rango de fecha en el servidor): traer toda la campaña de todas las
+    // unidades rebasa el tope de 1000 filas de PostgREST y recortaba datos en silencio.
+    const iniMes = `${anio}-${String(mes).padStart(2, '0')}-01`;
+    const sigAnio = Number(mes) === 12 ? Number(anio) + 1 : Number(anio);
+    const sigMes = Number(mes) === 12 ? 1 : Number(mes) + 1;
+    const finMes = `${sigAnio}-${String(sigMes).padStart(2, '0')}-01`;
     const [{ data: capturas, error: eC }, { data: capturasInf, error: eI }] = await Promise.all([
       estado.db.from('sis06p_capturas').select('clues, valores').in('clues', cluesList).eq('mes', mes).eq('anio', anio),
-      estado.db.from('influenza_capturas').select('clues, fecha, valores').in('clues', cluesList)
+      estado.db.from('influenza_capturas').select('clues, fecha, valores').in('clues', cluesList).gte('fecha', iniMes).lt('fecha', finMes)
     ]);
     if (eC) throw eC;
     if (eI) console.error('[SIS-06-P] Error cargando influenza para CSV municipal:', eI);
@@ -1207,28 +1213,25 @@
         const val = valores[String(v.fila_excel)] || {};
         const total = Number(val.total || 0);
         if (v.clave_general) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_general, MES: mes, ANIO: anio, VALOR: total });
+        // Mismas filas que sis_filas_csv / la publicación a registros_sis: las claves de afro/indígena/migrante
+        // salen siempre (aun en 0), igual que la rejilla histórica.
         const afro = Number(val.afro || 0);
-        if (v.clave_afro && afro > 0) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_afro, MES: mes, ANIO: anio, VALOR: afro });
+        if (v.clave_afro) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_afro, MES: mes, ANIO: anio, VALOR: afro });
         const indigena = Number(val.indigena || 0);
-        if (v.clave_indigena && indigena > 0) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_indigena, MES: mes, ANIO: anio, VALOR: indigena });
+        if (v.clave_indigena) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_indigena, MES: mes, ANIO: anio, VALOR: indigena });
         const migrante = Number(val.migrante || 0);
-        if (v.clave_migrante && migrante > 0) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_migrante, MES: mes, ANIO: anio, VALOR: migrante });
+        if (v.clave_migrante) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_migrante, MES: mes, ANIO: anio, VALOR: migrante });
       });
 
-      const infEnMes = (infPorClues.get(u.clues) || []).filter((c) => {
-        if (!c.fecha) return false;
-        const d = new Date(c.fecha + 'T12:00:00');
-        return (d.getMonth() + 1) === Number(mes) && d.getFullYear() === Number(anio);
+      // La consulta ya trae solo las semanas cuyo viernes cae en este mes.
+      const infEnMes = infPorClues.get(u.clues) || [];
+      const sumas = {};
+      infEnMes.forEach((c) => {
+        Object.entries(c.valores || {}).forEach(([rubro, val]) => { sumas[rubro] = (sumas[rubro] || 0) + Number(val || 0); });
       });
-      if (infEnMes.length > 0) {
-        const sumas = {};
-        infEnMes.forEach((c) => {
-          Object.entries(c.valores || {}).forEach(([rubro, val]) => { sumas[rubro] = (sumas[rubro] || 0) + Number(val || 0); });
-        });
-        Object.entries(INFLUENZA_SIS_MAPPING).forEach(([rubro, clave]) => {
-          rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: clave, MES: mes, ANIO: anio, VALOR: sumas[rubro] || 0 });
-        });
-      }
+      Object.entries(INFLUENZA_SIS_MAPPING).forEach(([rubro, clave]) => {
+        rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: clave, MES: mes, ANIO: anio, VALOR: sumas[rubro] || 0 });
+      });
     });
 
     // Ordenado por CLUES ascendente -- sort de JS es estable, así que dentro
@@ -1280,10 +1283,19 @@
     `).join('');
   }
 
+  // La vista previa de arriba incluye borradores (se va llenando); la DESCARGA sale del servidor y solo
+  // cuando TODAS las unidades del municipio están validadas -- el mismo origen que la publicación a
+  // registros_sis, para que un CSV a medias nunca se suba por error.
   async function downloadCSV() {
     let rows;
     try {
-      rows = await filasCSVSegunRol();
+      const activa = datosUnidadActiva();
+      if (!activa) return;
+      const mes = Number(document.getElementById('selMes').value);
+      const anio = Number(document.getElementById('selAnio').value);
+      const { data, error } = await estado.db.rpc('sis_filas_csv', { p_mes: mes, p_anio: anio, p_municipio: activa.municipio });
+      if (error) throw error;
+      rows = (data || []).map((f) => ({ CLUES: f.clues, MUNICIPIO: f.municipio, VARIABLE_SIS: f.variable_sis, MES: mes, ANIO: anio, VALOR: f.valor }));
     } catch (err) {
       toast(err.message || 'Error al generar el CSV.', 'error');
       return;

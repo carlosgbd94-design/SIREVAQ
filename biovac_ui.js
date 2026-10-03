@@ -1366,7 +1366,7 @@ async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
 async function cargarRenglones() {
   const [{ data, error }, { data: ediciones }] = await Promise.all([
     estado.db.from('biovac_renglones')
-      .select(`id, categoria, existencia_anterior_frascos, recibido_frascos, aplicadas_a, aplicadas_b, desechadas_a, desechadas_b, existencia_final_frascos, observaciones,
+      .select(`id, categoria, existencia_anterior_frascos, ajuste_anterior_frascos, recibido_frascos, aplicadas_a, aplicadas_b, desechadas_a, desechadas_b, existencia_final_frascos, observaciones,
         biovac_lotes ( id, numero_lote, caducidad, dosis_por_frasco_override, biologico_id,
           biovac_catalogo_biologicos ( id, clave, nombre_excel, bloque_id, presentacion, dosis_por_frasco, regla_especial ) )`)
       .eq('movimiento_id', estado.movimiento.id),
@@ -1441,7 +1441,8 @@ function render() {
     .toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
 
   document.getElementById('btnCerrarMes').style.display = m.estado === 'BORRADOR' ? 'inline-block' : 'none';
-  document.getElementById('btnAbrirCorreccion').style.display = m.estado === 'CERRADO' ? 'inline-block' : 'none';
+  // La unidad no reabre un mes ya cerrado (el servidor tampoco lo permite): solo MUNICIPAL/JURISDICCIONAL/ADMIN.
+  document.getElementById('btnAbrirCorreccion').style.display = (m.estado === 'CERRADO' && !(estado.perfil && estado.perfil.rol === 'UNIDAD')) ? 'inline-block' : 'none';
   document.getElementById('btnAplicarCorreccion').style.display = m.estado === 'EN_CORRECCION' ? 'inline-block' : 'none';
   document.getElementById('btnGuardarCabecera').disabled = !cabeceraEditable;
 
@@ -1773,8 +1774,14 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
 
   // La corrección jurisdiccional (ADMIN/JURISDICCIONAL) solo admite los campos de movimiento; la existencia
   // anterior la corrige la propia unidad o el municipal.
-  const puedeEditarAnt = editable && estado.anteriorEditable !== false
+  const puedeEditarAnt = editable && anteriorEditablePorRol()
     && !(estado.correccionEsJurisdiccional && estado.movimiento.estado === 'EN_CORRECCION');
+  // Un mes encadenado (la anterior viene del cierre del mes pasado) que el municipal corrigió a mano:
+  // se muestra cuánto se separa del cierre. Ese ajuste se conserva si el mes de origen cambia después.
+  const ajusteAnt = Number(r.ajuste_anterior_frascos) || 0;
+  const tagAjusteAnt = (estado.anteriorEditable === false && Math.abs(ajusteAnt) > 0.0001)
+    ? `<span class="tag-ajuste-ant" title="Ajuste manual sobre el cierre del mes anterior (${ajusteAnt > 0 ? '+' : ''}${redondearFrascos(ajusteAnt)}). Si ese mes cambia, este ajuste se conserva.">${ajusteAnt > 0 ? '+' : ''}${redondearFrascos(ajusteAnt)} ajuste</span>`
+    : '';
   const campo = (campo, valor, clase) => editable
     ? `<input type="number" step="any" inputmode="decimal" class="${clase || ''}" data-renglon="${r.id}" data-campo="${campo}" value="${valor ? valor : ''}" placeholder="0">`
     : `<span>${valor || 0}</span>`;
@@ -1809,7 +1816,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
       ${vencidoArf ? '<div class="badge-vencido"><span class="material-symbols-rounded">warning</span> Caducado</div>' : ''}
       ${bloqueadoNormal ? '<div class="badge-vencido"><span class="material-symbols-rounded">warning</span> Debe desecharse</div>' : ''}
     </td>
-    <td class="col-anterior c-ant"><span class="ant-valor" data-ant-valor="${r.id}">${redondearFrascos(r.existencia_anterior_frascos) || 0}</span>${puedeEditarAnt ? `<input type="number" step="any" inputmode="decimal" class="ant-input" data-renglon="${r.id}" data-campo="existencia_anterior_frascos" value="${r.existencia_anterior_frascos ? r.existencia_anterior_frascos : ''}" placeholder="0">` : ''}</td>
+    <td class="col-anterior c-ant"><span class="ant-valor" data-ant-valor="${r.id}">${redondearFrascos(r.existencia_anterior_frascos) || 0}</span>${tagAjusteAnt}${puedeEditarAnt ? `<input type="number" step="any" inputmode="decimal" class="ant-input" data-renglon="${r.id}" data-campo="existencia_anterior_frascos" value="${r.existencia_anterior_frascos ? r.existencia_anterior_frascos : ''}" placeholder="0">` : ''}</td>
     <td class="col-mov c-rec">${campo('recibido_frascos', r.recibido_frascos)}</td>
     <td class="col-mov c-apl${split ? ' col-dosis-05' : ''}">${campo('aplicadas_a', r.aplicadas_a)}</td>
     ${split ? `<td class="col-mov c-apl col-dosis-1">${campo('aplicadas_b', r.aplicadas_b)}</td>` : ''}
@@ -1884,7 +1891,7 @@ function panelPasarArfHtml(renglonId, existenciaActual) {
 
 function renderPanelAgregar(bio) {
   const bioId = bio.id;
-  const antOk = estado.anteriorEditable !== false;
+  const antOk = anteriorEditablePorRol();
   return `
   <button class="btn-mini btn-secundario" style="margin-top:14px" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add</span> Agregar lote</button>
   <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
@@ -2204,6 +2211,14 @@ function irACasillaRecibido(renglonId) {
 // Existencia anterior: solo se captura el primer mes de la unidad (después viene sola del cierre del mes
 // pasado). Los meses previos al arranque por unidad son de prueba y se dejan editar.
 // ---------------------------------------------------------------------------
+// La unidad no edita la anterior de un mes encadenado (queda bloqueada). El municipal y la jurisdicción sí:
+// al corregirla, el servidor guarda la diferencia contra el cierre del mes pasado como "ajuste" y, si ese
+// mes cambia después, la anterior se recalcula como cierre + ajuste (la secuencia no se rompe).
+function anteriorEditablePorRol() {
+  const rol = estado.perfil ? estado.perfil.rol : null;
+  return estado.anteriorEditable !== false || Boolean(rol && rol !== 'UNIDAD');
+}
+
 async function calcularAnteriorEditable(unidadId, anio, mes) {
   try {
     const inicio = estado.inicioPorUnidad || '2026-10-01';
@@ -2328,7 +2343,7 @@ function renderBannerMovimiento(m, esJurisdiccional) {
   if (esJurisdiccional || !rol) { cont.innerHTML = ''; return; }
   if (m.estado === 'CERRADO' && rol !== 'UNIDAD') {
     cont.innerHTML = `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock</span>
-      <div class="texto"><b>Movimiento cerrado por la unidad</b>Para corregir lotes, cantidades o eliminar renglones, ábrelo en modo corrección: queda registrado y el cambio se propaga a los meses siguientes.</div>
+      <div class="texto"><b>Movimiento cerrado por la unidad</b>Para corregir lotes, cantidades, la existencia anterior o eliminar renglones, ábrelo en modo corrección: queda registrado y los meses siguientes se recalculan solos (la existencia de cada mes arrastra la del anterior y tus ajustes manuales se conservan).</div>
       <button type="button" class="btn-primario" data-banner="corregir"><span class="material-symbols-rounded">edit_note</span> Corregir movimiento</button></div>`;
   } else if (m.estado === 'EN_CORRECCION') {
     cont.innerHTML = `<div class="banner-mov correccion"><span class="material-symbols-rounded">edit_note</span>
@@ -2533,7 +2548,7 @@ async function agregarLote(bioId, panel) {
   }
   const tipoCantidad = (panel.querySelector('[data-nuevo-tipo-cantidad]:checked') || {}).value || 'ANTERIOR';
   const cantidad = Number(panel.querySelector('[data-nuevo-cantidad]').value) || 0;
-  if (tipoCantidad === 'ANTERIOR' && estado.anteriorEditable === false) {
+  if (tipoCantidad === 'ANTERIOR' && !anteriorEditablePorRol()) {
     toast('La existencia anterior solo se captura el primer mes; ahora viene sola del cierre anterior. Usa "Recibido".', 'error');
     return;
   }

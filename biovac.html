@@ -43,9 +43,9 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_export_excel.js?v=2026.2"></script>
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
-<script defer src="biovac_ui.js?v=2026.52"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.37"></script>
-<script defer src="sis06p_dashboard_module.js?v=2026.10"></script>
+<script defer src="biovac_ui.js?v=2026.53"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.38"></script>
+<script defer src="sis06p_dashboard_module.js?v=2026.11"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.1"></script>
 <script defer src="municipal_guiado.js?v=2"></script>
 <style>
@@ -523,6 +523,8 @@ window.onunhandledrejection = function (event) {
      independiente de si ya se reconoció la alerta correspondiente (ver
      alerta-correcciones): reconocer solo dice "ya lo vi", no debe borrar
      de la vista quién editó el dato. */
+  .tag-ajuste-ant { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 800; color: #b45309; background: rgba(245,158,11,.14); border: 1px solid rgba(245,158,11,.35); padding: 1px 7px; border-radius: 20px; white-space: nowrap; vertical-align: middle; cursor: help; }
+  table.renglones tr.fila-editando td.c-ant .tag-ajuste-ant { display: none; }
   .tag-editado-jurisdiccion { font-size: 9px; font-weight: 800; color: var(--secondary); background: rgba(14,165,233,.12); border: 1px solid rgba(14,165,233,.3); padding: 1px 8px; border-radius: 20px; margin-left: 6px; }
   .valor-final {
     display: inline-block; min-width: 34px; font-weight: 800; font-size: 15px; color: var(--primary);
