@@ -296,10 +296,11 @@
           if (!f) return;
           const x = Math.round(num(f[bl.key]) * 100) / 100;
           suma += x;
-          ws.getCell(fs, 2 + i).value = x;
+          if (x !== 0) ws.getCell(fs, 2 + i).value = x;
         });
-        ws.getCell(fs, 2 + d.unidades.length).value = d.unidades.length
-          ? { formula: `SUM(B${fs}:${colLetra(1 + d.unidades.length)}${fs})`, result: Math.round(suma * 100) / 100 } : 0;
+        const sumaR = Math.round(suma * 100) / 100;
+        if (sumaR !== 0) ws.getCell(fs, 2 + d.unidades.length).value = d.unidades.length
+          ? { formula: `SUM(B${fs}:${colLetra(1 + d.unidades.length)}${fs})`, result: sumaR } : 0;
         ws.getCell(fs, 2 + d.unidades.length).font = negrita;
         fs += 1;
       });

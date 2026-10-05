@@ -150,16 +150,18 @@
   function escribirDatosRenglon(ws, fila, r, split) {
     const row = ws.getRow(fila);
     const caducidad = fechaExcel(r.caducidad);
-    row.getCell(2).value = r.existenciaAnterior === '' ? null : r.existenciaAnterior;
+    // Los ceros no se exportan: celda vacía (las fórmulas tratan vacío como 0).
+    const sinCero = (v) => (v === '' || v === 0 || v === null || v === undefined || Number.isNaN(v) ? null : v);
+    row.getCell(2).value = sinCero(r.existenciaAnterior);
     row.getCell(3).value = r.numeroLote || null;
     row.getCell(4).value = caducidad;
-    row.getCell(5).value = r.recibido === '' ? null : r.recibido;
+    row.getCell(5).value = sinCero(r.recibido);
     row.getCell(6).value = r.numeroLote || null;
     row.getCell(7).value = caducidad;
-    row.getCell(8).value = r.aplicadasA === '' ? null : r.aplicadasA;
-    if (split) row.getCell(9).value = r.aplicadasB === '' ? null : r.aplicadasB;
-    row.getCell(11).value = r.desechadasA === '' ? null : r.desechadasA;
-    if (split) row.getCell(12).value = r.desechadasB === '' ? null : r.desechadasB;
+    row.getCell(8).value = sinCero(r.aplicadasA);
+    if (split) row.getCell(9).value = sinCero(r.aplicadasB);
+    row.getCell(11).value = sinCero(r.desechadasA);
+    if (split) row.getCell(12).value = sinCero(r.desechadasB);
     row.getCell(15).value = r.numeroLote || null;
     row.getCell(16).value = caducidad;
   }
