@@ -258,6 +258,58 @@ test('Municipal de un solo municipio: no aparece el selector de municipio en Con
   await expect(page.locator('#frascoMuniCol')).toBeHidden();
 });
 
+test('Municipal: no guarda si se pasa ni si falta; solo guarda cuando suma exacto lo asignado', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 458, asignacion: { QUERETARO: 312 }, manual: [] }];
+    renderFrascosDistribution();
+    window.__toasts = []; window.__llamadas = [];
+  });
+  const guardados = () => page.evaluate(() => window.__llamadas.filter((l) => l[0] === 'guardarinfluenza_reparto').length);
+  const ultimoToast = () => page.evaluate(() => window.__toasts[window.__toasts.length - 1] || '');
+
+  // Se pasa (400 en una sola unidad)
+  await page.fill('#batch_frascos_Q1', '400');
+  await page.click('#btnSaveFrascoEntrega');
+  expect(await guardados()).toBe(0);
+  expect(await ultimoToast()).toContain('te pasaste por 88 frascos');
+  await expect(page.locator('#kpiPorBox')).toHaveClass(/frs-shake/);
+
+  // Faltan frascos (dos unidades fijas que suman menos y la tercera también fija)
+  await page.evaluate(() => { _muniRepartoState.fijos = { Q1: 100, Q2: 100, Q3: 100 }; _muniRepartoState.editados = new Set(['Q1', 'Q2', 'Q3']); refreshRepartoMunicipal('QUERETARO'); });
+  await page.click('#btnSaveFrascoEntrega');
+  expect(await guardados()).toBe(0);
+  expect(await ultimoToast()).toContain('faltan 12 frascos por repartir');
+
+  // Exacto: sí guarda y no hay aviso nuevo
+  await page.evaluate(() => { window.__toasts = []; _muniRepartoState.fijos = { Q1: 100, Q2: 100, Q3: 112 }; refreshRepartoMunicipal('QUERETARO'); });
+  await page.click('#btnSaveFrascoEntrega');
+  await expect.poll(guardados).toBe(1);
+  expect(await page.evaluate(() => window.__toasts.length)).toBe(0);
+});
+
+test('Jurisdicción: no guarda la entrega si faltan o sobran frascos', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate(() => { _adminRemesasArray = []; renderFrascosDistribution(); window.__toasts = []; window.__llamadas = []; });
+  const guardados = () => page.evaluate(() => window.__llamadas.filter((l) => l[0] === 'saveinfluenza_remesa').length);
+  await page.fill('#remesaTotalInput', '458');
+  // Fijar todos los destinos con un total menor (faltan 8)
+  await page.evaluate(() => { _remesaState.fijos = { QUERETARO: 300, CORREGIDORA: 50, MARQUES: 40, HUIMILPAN: 20, HENM: 20, NHG: 20 }; _remesaState.editados = new Set(Object.keys(_remesaState.fijos)); refreshRemesa(); });
+  await page.click('#btnSaveRemesa');
+  expect(await guardados()).toBe(0);
+  expect((await page.evaluate(() => window.__toasts))[0]).toContain('faltan 8 frascos por repartir');
+  await expect(page.locator('#remesaResumen')).toHaveClass(/frs-shake/);
+  // Sobran
+  await page.evaluate(() => { window.__toasts = []; _remesaState.fijos.QUERETARO = 320; refreshRemesa(); });
+  await page.click('#btnSaveRemesa');
+  expect(await guardados()).toBe(0);
+  expect((await page.evaluate(() => window.__toasts))[0]).toContain('te pasaste por 12 frascos');
+  // Exacto
+  await page.evaluate(() => { _remesaState.fijos.QUERETARO = 308; refreshRemesa(); });
+  await page.click('#btnSaveRemesa');
+  await expect.poll(guardados).toBe(1);
+});
+
 test('Concentrado por entregas: columnas por destino y total entregado', async ({ page }) => {
   await montar(page, 'JURISDICCIONAL');
   await page.evaluate(() => {

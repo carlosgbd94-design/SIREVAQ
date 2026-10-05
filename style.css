@@ -13951,6 +13951,9 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaFrascos .frs-row:hover td { background: #f8fafc; }
 #secInfluenzaFrascos .frs-sub { font-size: 10px; font-weight: 400; color: #94a3b8; }
 #secInfluenzaFrascos .frs-muted { color: #64748b; }
+@keyframes frs-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(7px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(5px); } }
+#secInfluenzaFrascos .frs-shake { animation: frs-shake .45s ease-in-out; box-shadow: 0 0 0 3px #fb7185; }
+@media (prefers-reduced-motion: reduce) { #secInfluenzaFrascos .frs-shake { animation: none; } }
 /* Municipal: lo que le toca al municipio y a cada unidad, en grande (antes solo estaba en la leyenda verde). */
 #secInfluenzaFrascos .frs-kpis { display: flex; flex-wrap: wrap; gap: 14px; }
 #secInfluenzaFrascos .frs-kpi {

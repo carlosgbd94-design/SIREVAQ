@@ -4944,6 +4944,26 @@ function frascoResumenReparto(el, total, res, tieneMeta) {
   }
 }
 
+// Guardar un reparto exige que sume EXACTO lo asignado: si se pasa o falta no se guarda, se dice cuánto
+// y se sacude el recuadro correspondiente para que no pase desapercibido.
+function frascoBloquearGuardado(porAsignar, sinMeta, ids) {
+  const regla = "El reparto debe sumar exactamente los frascos asignados.";
+  const msg = sinMeta
+    ? "No se puede guardar: ninguna unidad tiene meta capturada, así que no hay con qué repartir los frascos."
+    : porAsignar < 0
+      ? `No se puede guardar: te pasaste por ${frascoFmt(-porAsignar)} frascos. ${regla}`
+      : `No se puede guardar: faltan ${frascoFmt(porAsignar)} frascos por repartir. ${regla}`;
+  showToast(msg, false, "bad");
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove("frs-shake");
+    void el.offsetWidth;
+    el.classList.add("frs-shake");
+  });
+  return msg;
+}
+
 // Sobre una entrega ya guardada todo está "fijo"; en cuanto el usuario cambia algo
 // se sueltan los que no editó él para que el reparto se vuelva a calcular.
 function frascoSoltarCargados(state) {
@@ -5056,14 +5076,14 @@ function refreshRemesa(enfocado) {
 
 async function saveRemesa() {
   const fecha = document.getElementById("remesaFechaInput").value;
-  const { total, res } = calcularRemesa();
+  const { total, res, items } = calcularRemesa();
   const numero = _remesaState.numero;
   if (!total || !fecha) {
     showToast("Captura la fecha y el total de frascos recibidos.", false, "bad");
     return;
   }
-  if (res.porAsignar < 0) {
-    showToast("El reparto rebasa el total de frascos recibidos.", false, "bad");
+  if (res.porAsignar !== 0) {
+    frascoBloquearGuardado(res.porAsignar, items.every(i => !i.meta), ["remesaResumen"]);
     return;
   }
   const campana = document.getElementById("metaCampaignSelect").value;
@@ -5071,9 +5091,7 @@ async function saveRemesa() {
     btnId: "btnSaveRemesa",
     title: "Guardando reparto",
     msg: `Guardando el reparto de la ${frascoOrdinal(numero)}...`,
-    successMsg: res.porAsignar > 0
-      ? `Reparto guardado; quedan ${res.porAsignar} frascos sin asignar`
-      : "Reparto de la entrega guardado correctamente",
+    successMsg: "Reparto de la entrega guardado correctamente",
     eventTitle: "Influenza",
     eventMsg: `Reparto de la ${frascoOrdinal(numero)} de frascos`,
     action: async () => {
@@ -5243,8 +5261,9 @@ async function saveFrascosDelivery() {
   const units = frascoUnidadesMunicipio(muni);
   const res = InfluenzaReparto.repartirFrascos(
     total, units.map(u => ({ id: u.clues, meta: frascoMetaUnidad(u.clues) })), _muniRepartoState.fijos);
-  if (res.porAsignar < 0) {
-    showToast("El reparto rebasa los frascos que asignó la Jurisdicción.", false, "bad");
+  if (res.porAsignar !== 0) {
+    frascoBloquearGuardado(res.porAsignar, units.every(u => !frascoMetaUnidad(u.clues)), ["kpiPorBox", "frascosMuniResumen"]);
+    document.getElementById("frascosMuniKpis")?.scrollIntoView({ block: "center", behavior: "smooth" });
     return;
   }
   const rows = units.map(u => ({ clues: u.clues, cantidad_frascos: res.frascos[u.clues] || 0 }));
@@ -5254,9 +5273,7 @@ async function saveFrascosDelivery() {
     btnId: "btnSaveFrascoEntrega",
     title: "Guardando reparto",
     msg: `Guardando el reparto de la ${frascoOrdinal(numero)} entre las unidades...`,
-    successMsg: res.porAsignar > 0
-      ? `Reparto guardado; quedan ${res.porAsignar} frascos sin asignar`
-      : "Reparto guardado correctamente",
+    successMsg: "Reparto guardado correctamente",
     eventTitle: "Influenza",
     eventMsg: `Reparto municipal de la ${frascoOrdinal(numero)} de frascos`,
     action: async () => {
