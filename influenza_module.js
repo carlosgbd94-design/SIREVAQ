@@ -4641,6 +4641,26 @@ async function saveInfluenzaMetasConfig() {
         });
       }
     });
+
+    // Si Jurisdicción cambia la meta de un municipio y las metas por unidad ya capturadas dejan de
+    // sumarla exacta, se guarda igual pero se avisa (el municipal es quien debe reajustar sus unidades).
+    const descuadrados = [];
+    ["QUERETARO", "CORREGIDORA", "MARQUES", "HUIMILPAN"].forEach(m => {
+      const unidades = _adminMetasArray.filter(r =>
+        r.clues && !FRASCO_CLUES_HOSPITAL.has(r.clues) && String(r.municipio).toUpperCase() === m);
+      if (!unidades.length) return;   // el municipal aún no reparte entre sus unidades
+      const sumas = {};
+      INFLUENZA_RUBROS.forEach(rb => {
+        sumas[rb.id] = unidades.reduce((s, r) => s + (Number((r.metas || {})[rb.id]) || 0), 0);
+      });
+      const nuevaMeta = rows.find(r => r.municipio === m && !r.clues).metas;
+      const d = metaDescuadreRubros(nuevaMeta, sumas);
+      const n = d.sobran.length + d.faltan.length;
+      if (n) descuadrados.push(`${FRASCO_DESTINOS.find(x => x.id === m).label} (${n} rubro${n > 1 ? "s" : ""})`);
+    });
+    if (descuadrados.length) {
+      avisoFaltantes = `Guardado, pero las metas por unidad ya no suman la meta municipal en: ${descuadrados.join(", ")}. Avisa al municipal para que las ajuste.`;
+    }
   } else {
     // Guardar desglose de las CLUES del municipio (sin hospitales: su meta viene de Jurisdicción)
     const muniUnits = frascoUnidadesMunicipio(selectMuni);

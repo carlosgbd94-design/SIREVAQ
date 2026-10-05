@@ -13992,7 +13992,7 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaMetas .meta-total-row td { background: #f8fafc; border-top: 2px solid #e2e8f0; }
 #secInfluenzaMetas .meta-total-row td.meta-cmp-cell[data-estado="ok"] { background: #dcfce7; }
 #secInfluenzaMetas .meta-total-row td.meta-cmp-cell[data-estado="mal"] { background: #fee2e2; }
-#secInfluenzaMetas .meta-num { width: 80px !important; height: 38px !important; padding: 0 8px !important; text-align: center !important; }
+#secInfluenzaMetas .meta-num { width: 80px !important; height: 34px !important; padding: 0 8px !important; text-align: center !important; }
 #secInfluenzaMetas .meta-juris-input { background: #ffffff !important; border-color: #94a3b8 !important; }
 
 /* Barra de campaña de Distribución de Metas: compacta, etiqueta y selector en una fila. */
@@ -14034,7 +14034,7 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 
 /* Distribución de Metas: la tabla se desplaza dentro de su caja y se quedan fijos el encabezado, la franja del
    bloque (Primera dosis, Segunda dosis...), las columnas Grupo/Edad y, abajo, los renglones TOTAL y FRASCOS. */
-#secInfluenzaMetas .tableWrap { max-height: max(420px, calc(100vh - 250px)); }
+#secInfluenzaMetas .tableWrap { max-height: max(460px, calc(100vh - 190px)); }
 #secInfluenzaMetas .meta-fx1, #secInfluenzaMetas .meta-fx2 { position: sticky; z-index: 4; background: #ffffff; }
 #secInfluenzaMetas .meta-fx1 { left: 0; }
 #secInfluenzaMetas .meta-fx2 { left: var(--meta-c1w, 244px); }
@@ -14044,13 +14044,26 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaMetas .meta-grupo-row td { position: sticky; top: var(--meta-th-h, 46px); z-index: 6; }
 #secInfluenzaMetas .meta-grupo-row td .meta-grupo-txt { position: sticky; left: 12px; display: inline-block; }
 #secInfluenzaMetas .meta-grupo-row td.meta-grupo-cmp { z-index: 8; }
-#secInfluenzaMetas .meta-total-row td { position: sticky; bottom: 60px; z-index: 7; height: 40px; border-top: 0; }
-#secInfluenzaMetas .meta-frascos-row td { position: sticky; bottom: 0; z-index: 7; height: 60px; padding: 6px 8px !important; line-height: 1.2; vertical-align: middle; }
+#secInfluenzaMetas .meta-total-row td { position: sticky; bottom: 54px; z-index: 7; height: 38px; border-top: 0; }
+#secInfluenzaMetas .meta-frascos-row td { position: sticky; bottom: 0; z-index: 7; height: 54px; padding: 6px 8px !important; line-height: 1.2; vertical-align: middle; }
 #secInfluenzaMetas .meta-total-row td.meta-cmp-cell, #secInfluenzaMetas .meta-frascos-row td.meta-cmp-cell { z-index: 9; }
 #secInfluenzaMetas .meta-total-row td.meta-fx-total { left: 0; z-index: 10; }
 #secInfluenzaMetas .meta-frascos-row td[data-estado="mal"] { background: #fee2e2; }
 #secInfluenzaMetas .meta-frascos-row td[data-estado="aviso"] { background: #fef3c7; }
 #secInfluenzaMetas .meta-frascos-row td[data-estado="ok"] { background: #dcfce7; }
+
+/* Filas compactas: la altura de cada renglón la marcaba la columna «Comparación» (campo + mensaje apilados,
+   ~82px) y, con el encabezado y los renglones TOTAL/FRASCOS fijos, solo cabían 2-3 renglones. Ahora el mensaje
+   va junto al número y el renglón mide ~46px, con aire entre columnas. */
+#secInfluenzaMetas .meta-rubro-row > td { padding: 6px 8px; vertical-align: middle; }
+#secInfluenzaMetas #influenzaMetasThead th { padding-left: 8px; padding-right: 8px; }
+#secInfluenzaMetas .meta-total-row > td, #secInfluenzaMetas .meta-frascos-row > td { padding-left: 8px; padding-right: 8px; }
+#secInfluenzaMetas .meta-cmp-cell { min-width: 184px; }
+#secInfluenzaMetas .meta-rubro-row > td.meta-cmp-cell > *,
+#secInfluenzaMetas .meta-total-row > td.meta-cmp-cell > * { display: inline-block; vertical-align: middle; }
+#secInfluenzaMetas .meta-rubro-row > td.meta-cmp-cell .meta-cmp-msg,
+#secInfluenzaMetas .meta-total-row > td.meta-cmp-cell .meta-cmp-msg { margin: 0 0 0 8px; min-height: 0; white-space: nowrap; }
+#secInfluenzaMetas .meta-total-row > td { padding-top: 6px; padding-bottom: 6px; }
 
 /* Exportar metas al formato oficial (a la derecha de la barra de campaña) */
 #secInfluenzaMetas .meta-exp-grupo { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; }

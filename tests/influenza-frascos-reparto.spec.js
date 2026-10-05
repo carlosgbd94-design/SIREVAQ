@@ -313,6 +313,25 @@ test('Metas municipales: guardar bloquea si las unidades se pasan y avisa si fal
   expect((await toasts()).length).toBe(2);
 });
 
+test('Metas jurisdiccionales: si cambian la meta de un municipio y sus unidades ya no suman, guarda y avisa', async ({ page }) => {
+  await montarMetas(page, 'JURISDICCIONAL', [
+    meta(null, 'QUERETARO', 100), meta('Q1', 'QUERETARO', 60), meta('Q2', 'QUERETARO', 40)]);
+  await page.evaluate(() => { window.__toasts = []; window.__llamadas = []; });
+  const q = page.locator('input[data-rb="r1"][data-muni="QUERETARO"]');
+  await expect(q).toHaveValue('100');
+  await page.click('#btnSaveInfluenzaMetas');                // sin cambios: cuadra, sin aviso
+  await expect.poll(() => page.evaluate(() => window.__llamadas.length)).toBe(1);
+  expect(await page.evaluate(() => window.__toasts)).toEqual([]);
+
+  await q.fill('90');                                         // las unidades suman 100: ya no cuadra
+  await page.click('#btnSaveInfluenzaMetas');
+  await expect.poll(() => page.evaluate(() => window.__llamadas.length)).toBe(2);
+  await expect.poll(() => page.evaluate(() => window.__toasts.length)).toBe(1);
+  const aviso = (await page.evaluate(() => window.__toasts))[0];
+  expect(aviso).toContain('Querétaro (1 rubro)');
+  expect(aviso).not.toContain('Corregidora');
+});
+
 test('Metas: Tab va a la derecha, Enter baja; al terminar fila/columna salta a la siguiente', async ({ page }) => {
   await montarMetas(page, 'JURISDICCIONAL', []);
   const inp = (rb, m) => page.locator(`input[data-rb="${rb}"][data-muni="${m}"]`);
