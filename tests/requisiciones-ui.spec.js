@@ -918,3 +918,30 @@ test('Requisiciones: la entrega de influenza ya vinculada a otra requisición no
   await expect(page.locator('#infTraer')).toBeDisabled();
   expect(errores).toEqual([]);
 });
+
+test('Requisiciones: la confirmación de reemplazar se ve por encima del modal de Traer reparto de influenza', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__FAKE_INFLUENZA__ = true;
+    window.__FAKE_INFLUENZA_UNI__ = [{ unidad_id: 'un-q1', cantidad: 40 }];
+  });
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  // Primera vez: se trae el reparto (los avisos se aceptan solos)
+  await page.click('#btnTraerInfluenza');
+  await page.click('#infTraer');
+  await expect(page.locator('#modalInfluenza')).toBeHidden();
+  await page.evaluate(() => { window.__AUTO_CONFIRMAR__ = false; });
+  // Segunda vez: ya hay influenza, así que pide confirmar el reemplazo con el modal todavía abierto
+  await page.click('#btnTraerInfluenza');
+  await expect(page.locator('#infDetalle')).toContainText('se reemplazan');
+  await page.click('#infTraer');
+  await expect(page.locator('#modalConfirmar')).toBeVisible();
+  await expect(page.locator('#modalInfluenza')).toBeVisible();
+  const arriba = await page.evaluate(() => {
+    const r = document.querySelector('#modalConfirmar .modal-hoja').getBoundingClientRect();
+    const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!(el && el.closest('#modalConfirmar'));
+  });
+  expect(arriba).toBe(true);
+  expect(errores).toEqual([]);
+});
