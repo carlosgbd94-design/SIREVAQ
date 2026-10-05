@@ -202,6 +202,62 @@ test('Municipal: el lote ya no se captura aquí, se muestra el que asignó Requi
   expect(g.caducidad).toBeUndefined();
 });
 
+test('Municipal: cifras grandes de lo asignado, repartido y por repartir (y el aviso si se pasa)', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 458, asignacion: { QUERETARO: 312 }, manual: [] }];
+    renderFrascosDistribution();
+  });
+  await expect(page.locator('#kpiTotal')).toHaveText('312');
+  await expect(page.locator('#kpiDosis')).toContainText('3,120 dosis');
+  await expect(page.locator('#kpiDosis')).toContainText('Querétaro');
+  await expect(page.locator('#kpiAsignado')).toHaveText('312');
+  await expect(page.locator('#kpiPor')).toHaveText('0');
+  await expect(page.locator('#kpiPorBox')).toHaveAttribute('data-estado', 'ok');
+  // La cantidad de cada unidad es lo principal de su fila (campo grande)
+  expect(await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('batch_frascos_Q1')).fontSize))).toBeGreaterThanOrEqual(18);
+
+  await page.fill('#batch_frascos_Q1', '400');                 // se pasa: 400 + resto > 312
+  await expect(page.locator('#kpiPorBox')).toHaveAttribute('data-estado', 'excede');
+  await expect(page.locator('#kpiPorBox .frs-kpi-lbl')).toHaveText('Te pasaste por');
+  await page.fill('#batch_frascos_Q1', '100');
+  await page.fill('#batch_frascos_Q2', '');
+  await expect(page.locator('#kpiAsignado')).toHaveText('312');
+});
+
+test('Municipal con dos municipios (Corregidora y Huimilpan): puede cambiar de municipio en Control de frascos', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    document.getElementById('adminInfluenzaMuni').innerHTML = '<option value="CORREGIDORA">CORREGIDORA</option><option value="HUIMILPAN">HUIMILPAN</option>';
+    _allUnidades.push({ clues: 'C1', unidad: 'CS CORREGIDORA UNO', municipio: 'CORREGIDORA' }, { clues: 'H1', unidad: 'CS HUIMILPAN UNO', municipio: 'HUIMILPAN' }, { clues: 'H2', unidad: 'CS HUIMILPAN DOS', municipio: 'HUIMILPAN' });
+    _adminMetasArray.push({ clues: 'C1', municipio: 'CORREGIDORA', metas: { r1: 500 } }, { clues: 'H1', municipio: 'HUIMILPAN', metas: { r1: 300 } }, { clues: 'H2', municipio: 'HUIMILPAN', metas: { r1: 100 } });
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 377, asignacion: { CORREGIDORA: 247, HUIMILPAN: 130 }, manual: [] }];
+    renderFrascosDistribution();
+  });
+  await expect(page.locator('#frascoMuniCol')).toBeVisible();
+  await expect(page.locator('#frascoMuniSelect option')).toHaveCount(2);
+  await expect(page.locator('#kpiTotal')).toHaveText('247');
+  await expect(page.locator('#frascosBatchTbody tr')).toHaveCount(1);
+
+  await page.selectOption('#frascoMuniSelect', 'HUIMILPAN');
+  await expect(page.locator('#kpiTotal')).toHaveText('130');
+  await expect(page.locator('#kpiDosis')).toContainText('Huimilpan');
+  await expect(page.locator('#frascosBatchTbody tr')).toHaveCount(2);
+  expect(await page.evaluate(() => ['H1', 'H2'].map((c) => document.getElementById('batch_frascos_' + c).value))).toEqual(['98', '32']);   // 130 por meta 3:1
+  expect(await page.evaluate(() => document.getElementById('adminInfluenzaMuni').value)).toBe('HUIMILPAN');
+
+  await page.click('#btnSaveFrascoEntrega');
+  const g = (await page.evaluate(() => window.__llamadas)).find((l) => l[0] === 'guardarinfluenza_reparto')[1];
+  expect(g.municipio).toBe('HUIMILPAN');
+  expect(g.rows.map((r) => r.cantidad_frascos)).toEqual([98, 32]);
+});
+
+test('Municipal de un solo municipio: no aparece el selector de municipio en Control de frascos', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => { _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 10, asignacion: { QUERETARO: 10 }, manual: [] }]; renderFrascosDistribution(); });
+  await expect(page.locator('#frascoMuniCol')).toBeHidden();
+});
+
 test('Concentrado por entregas: columnas por destino y total entregado', async ({ page }) => {
   await montar(page, 'JURISDICCIONAL');
   await page.evaluate(() => {

@@ -4845,6 +4845,25 @@ function frascoUnidadesMunicipio(muni) {
     String(u.municipio).toUpperCase() === String(muni).toUpperCase() && !FRASCO_CLUES_HOSPITAL.has(u.clues));
 }
 
+// Municipal que atiende más de un municipio (p. ej. Corregidora y Huimilpan): selector propio en Control de
+// frascos, igual que en Distribución de Metas; comparte valor con el selector general de la pestaña Avances.
+function frascoSincronizarSelectorMuni() {
+  const general = document.getElementById("adminInfluenzaMuni");
+  const sel = document.getElementById("frascoMuniSelect");
+  const col = document.getElementById("frascoMuniCol");
+  if (!general || !sel || !col) return;
+  const mostrar = USER.rol === "MUNICIPAL" && general.options.length > 1;
+  col.style.display = mostrar ? "" : "none";
+  if (!mostrar) return;
+  sel.innerHTML = general.innerHTML;
+  sel.value = general.value;
+  sel.onchange = () => {
+    general.value = sel.value;
+    general.dispatchEvent(new Event("change"));
+    renderFrascosDistribution();
+  };
+}
+
 function frascoEntero(v) {
   return parseInt(String(v == null ? "" : v).replace(/[^\d]/g, ""), 10) || 0;
 }
@@ -5100,6 +5119,8 @@ function renderFrascosMunicipal(muni) {
     sel.innerHTML = "";
     tbody.innerHTML = "";
     frascoPintarResumen(resumen, "info", "La Jurisdicción todavía no asigna frascos a este municipio. Cuando reparta una entrega aparecerá aquí.");
+    const kpisVacio = document.getElementById("frascosMuniKpis");
+    if (kpisVacio) kpisVacio.style.display = "none";
     return;
   }
 
@@ -5195,8 +5216,19 @@ function refreshRepartoMunicipal(muni, enfocado) {
     frascoPintarPctReal(document.getElementById(`mr_real_${it.id}`), res.frascos[it.id] || 0, total, sumaMeta ? it.meta * 100 / sumaMeta : null);
   });
   frascoResumenReparto(document.getElementById("frascosMuniResumen"), total, res, sumaMeta > 0);
-  const cab = document.getElementById("frascosMuniResumen");
-  if (cab) cab.innerHTML = `Jurisdicción asignó <b>${frascoFmt(total)}</b> frascos a ${muni === "MARQUES" ? "El Marqués" : muni} en la ${frascoOrdinal(numero)}. ` + cab.innerHTML;
+
+  // Cifras grandes: lo asignado al municipio, lo ya repartido a sus unidades y lo que falta.
+  const kpis = document.getElementById("frascosMuniKpis");
+  if (kpis) {
+    kpis.style.display = "";
+    document.getElementById("kpiTotal").textContent = frascoFmt(total);
+    document.getElementById("kpiDosis").textContent = `${(FRASCO_DESTINOS.find(d => d.id === String(muni).toUpperCase()) || { label: muni }).label} · ${frascoOrdinal(numero)} · ${frascoFmt(total * DOSIS_POR_FRASCO)} dosis`;
+    document.getElementById("kpiAsignado").textContent = frascoFmt(res.asignado);
+    document.getElementById("kpiPor").textContent = frascoFmt(Math.abs(res.porAsignar));
+    const caja = document.getElementById("kpiPorBox");
+    caja.dataset.estado = res.porAsignar === 0 ? "ok" : res.porAsignar > 0 ? "falta" : "excede";
+    caja.querySelector(".frs-kpi-lbl").textContent = res.porAsignar < 0 ? "Te pasaste por" : "Por repartir";
+  }
 }
 
 async function saveFrascosDelivery() {
@@ -5472,6 +5504,7 @@ function renderFrascosDistribution() {
     if (adminMuniTableContainer) adminMuniTableContainer.style.setProperty("display", "none", "important");
     if (!historyTbody || !muni) return;
 
+    frascoSincronizarSelectorMuni();
     renderFrascosMunicipal(muni);
     renderFrascosMatrix(muni);
 

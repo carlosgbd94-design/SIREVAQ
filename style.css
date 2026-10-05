@@ -13951,6 +13951,33 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaFrascos .frs-row:hover td { background: #f8fafc; }
 #secInfluenzaFrascos .frs-sub { font-size: 10px; font-weight: 400; color: #94a3b8; }
 #secInfluenzaFrascos .frs-muted { color: #64748b; }
+/* Municipal: lo que le toca al municipio y a cada unidad, en grande (antes solo estaba en la leyenda verde). */
+#secInfluenzaFrascos .frs-kpis { display: flex; flex-wrap: wrap; gap: 14px; }
+#secInfluenzaFrascos .frs-kpi {
+  display: flex; flex-direction: column; justify-content: center; gap: 2px; flex: 1 1 180px;
+  padding: 14px 18px; border-radius: 16px; border: 1px solid #e2e8f0; background: #f8fafc;
+}
+#secInfluenzaFrascos .frs-kpi b { font-size: 30px; line-height: 1.05; font-weight: 900; color: #1e293b; font-variant-numeric: tabular-nums; }
+#secInfluenzaFrascos .frs-kpi small { font-size: 12px; font-weight: 700; color: #64748b; }
+#secInfluenzaFrascos .frs-kpi-lbl { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #64748b; }
+#secInfluenzaFrascos .frs-kpi--main { flex: 1.4 1 260px; background: #4c1d95; border-color: #4c1d95; }
+#secInfluenzaFrascos .frs-kpi--main b { font-size: 40px; color: #ffffff; }
+#secInfluenzaFrascos .frs-kpi--main .frs-kpi-lbl, #secInfluenzaFrascos .frs-kpi--main small { color: #ddd6fe; }
+#secInfluenzaFrascos .frs-kpi[data-estado="ok"] { background: #ecfdf5; border-color: #a7f3d0; }
+#secInfluenzaFrascos .frs-kpi[data-estado="ok"] b { color: #065f46; }
+#secInfluenzaFrascos .frs-kpi[data-estado="falta"] { background: #fffbeb; border-color: #fde68a; }
+#secInfluenzaFrascos .frs-kpi[data-estado="falta"] b { color: #b45309; }
+#secInfluenzaFrascos .frs-kpi[data-estado="excede"] { background: #fff1f2; border-color: #fecdd3; }
+#secInfluenzaFrascos .frs-kpi[data-estado="excede"] b { color: #be123c; }
+/* Cada unidad: su cantidad de frascos es lo principal de la fila. */
+#secInfluenzaFrascos th.frs-th-frascos { color: #4c1d95 !important; background: #f5f3ff !important; }
+#secInfluenzaFrascos #frascosBatchTbody .frs-num {
+  width: 110px !important; height: 44px !important; font-size: 20px !important; font-weight: 900 !important;
+  color: #4c1d95 !important; background-color: #f5f3ff !important; border: 2px solid #c4b5fd !important; border-radius: 12px !important;
+}
+#secInfluenzaFrascos #frascosBatchTbody .frs-num:focus { border-color: #7c3aed !important; background-color: #ffffff !important; }
+#secInfluenzaFrascos #frascosBatchTbody td { padding-top: 12px; padding-bottom: 12px; }
+
 /* Formulario de la entrega (municipal): campos en una sola fila y el estado de los lotes a la derecha. */
 #secInfluenzaFrascos .frs-formrow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 20px; }
 #secInfluenzaFrascos .frs-formcol { display: flex; flex-direction: column; flex: 0 1 220px; min-width: 180px; }
