@@ -454,6 +454,7 @@
         document.getElementById('profileName').textContent = dataProfile.nombre || dataProfile.usuario || currentUser.email;
         document.getElementById('profileRole').textContent = dataProfile.rol || 'UNIDAD';
         refreshProfileContactUiMobile();
+        if (ensureCalendarioCap()) window.CalendarioCap.checkReminders();
         
         const isAdmin = dataProfile.rol === 'ADMIN' || dataProfile.rol === 'JURISDICCIONAL';
         document.getElementById('profileClues').textContent = dataProfile.clues || (isAdmin ? 'QTSSA012154 (Jurisdicción 1)' : 'Ninguna');
@@ -516,6 +517,25 @@
             window.__perfilCuentaInit = true;
         }
         return true;
+    };
+
+    // Calendario anual de capacitaciones (calendario_capacitaciones.js)
+    const ensureCalendarioCap = () => {
+        if (!window.CalendarioCap) return false;
+        if (!window.__calendarioCapInit) {
+            window.CalendarioCap.init({
+                getClient: () => supabaseClient,
+                getUser: () => ({ rol: currentProfile?.rol, usuario: currentProfile?.usuario || currentUser?.email }),
+                toast: (msg, kind) => showToast(msg, kind === 'bad' ? 'error' : 'success')
+            });
+            window.__calendarioCapInit = true;
+        }
+        return true;
+    };
+    window.openCalendarioCapacitaciones = () => {
+        if (!ensureCalendarioCap()) { showToast('No se pudo cargar el calendario. Recarga la página.', 'error'); return; }
+        document.getElementById('profileDropdown')?.classList.add('hidden');
+        window.CalendarioCap.openCalendar();
     };
 
     window.openContactoModal = () => {
@@ -3594,6 +3614,7 @@
         document.getElementById('chkBiometria')?.addEventListener('change', (e) => handleRegisterBiometrics(e.target.checked));
 
         document.getElementById('btnThemeToggleProfile')?.addEventListener('click', toggleTheme);
+        document.getElementById('btnCalendarioCapMobile')?.addEventListener('click', () => window.openCalendarioCapacitaciones());
         document.getElementById('btnProfileContactMobile')?.addEventListener('click', () => window.openContactoModal());
         document.getElementById('btnProfileChangePasswordMobile')?.addEventListener('click', () => window.openChangePasswordFlow());
         document.getElementById('btnLogout')?.addEventListener('click', async () => {
