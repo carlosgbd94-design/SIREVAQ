@@ -5044,6 +5044,14 @@ function renderFrascosMunicipal(muni) {
     units.forEach(u => {
       _muniRepartoState.fijos[u.clues] = previas.filter(p => p.clues === u.clues).reduce((s, p) => s + Number(p.cantidad_frascos || 0), 0);
     });
+    // Lo guardado que no coincide con el reparto por meta se marca como editado (y se conserva):
+    // así una edición anterior no pasa por un error del cálculo.
+    const porMetaGuardado = InfluenzaReparto.repartirFrascos(
+      frascosRecibidosMunicipio(muni, numero), units.map(u => ({ id: u.clues, meta: frascoMetaUnidad(u.clues) })), {}).frascos;
+    units.forEach(u => {
+      if (_muniRepartoState.fijos[u.clues] !== (porMetaGuardado[u.clues] || 0)) _muniRepartoState.editados.add(u.clues);
+    });
+    frascoSoltarCargados(_muniRepartoState);
   }
   document.getElementById("frascoFechaInput").value = previas[0]?.fecha_entrega
     || remesas.find(r => r.numero_entrega === numero)?.fecha || new Date().toISOString().split("T")[0];

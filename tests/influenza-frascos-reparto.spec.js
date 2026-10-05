@@ -38,7 +38,7 @@ const DATOS = `
   var AppService = {
     call: async function (a, p) { window.__llamadas.push([a, p]); return { ok: true, data: [] }; },
     // Igual que el real: si la acción no devuelve {ok:true} se toma como error.
-    runCapture: async function (o) { const r = await o.action(); if (!r || !r.ok) throw new Error('Error al procesar la solicitud'); return r; }
+    runCapture: async function (o) { try { const r = await o.action(); if (!r || !r.ok) throw new Error('Error al procesar la solicitud'); return r; } catch (e) { window.__errores.push(e.message); throw e; } }
   };
   var loadInfluenzaAdminData = async function () {};
 `;
@@ -49,7 +49,7 @@ async function montar(page, rol) {
   await page.addStyleTag({ path: path.join(raiz, 'dock_glass.css') });
   await page.addStyleTag({ path: path.join(raiz, 'style.css') });
   await page.evaluate(([h, r]) => {
-    window.__ROL__ = r; window.__toasts = []; window.__llamadas = [];
+    window.__ROL__ = r; window.__toasts = []; window.__llamadas = []; window.__errores = [];
     document.body.innerHTML = `${h}<select id="adminInfluenzaMuni"><option value="QUERETARO">Q</option></select>
       <select id="metaCampaignSelect"><option value="2025-2026">x</option></select>`;
     document.getElementById('secInfluenzaFrascos').classList.remove('hidden');
@@ -97,6 +97,7 @@ test('Jurisdicción: reparte 458 frascos por meta sin rebasar el total y permite
   const remesa = llamadas.find((l) => l[0] === 'saveinfluenza_remesa')[1];
   expect(remesa.total_frascos).toBe(458);
   expect(remesa.numero_entrega).toBe(1);
+  expect(await page.evaluate(() => window.__errores)).toEqual([]);   // el guardado no marca error
   expect(llamadas.filter((l) => l[0] === 'guardarinfluenza_reparto').every((l) => l[1].anio_campana === '2025-2026')).toBe(true);
   expect(Object.values(remesa.asignacion).reduce((a, b) => a + b, 0)).toBe(458);
   // Los hospitales quedan registrados como su propio destino, con su CLUES
@@ -139,7 +140,34 @@ test('Municipal: reparte lo que asignó Jurisdicción entre sus unidades (sin ho
   const g = (await page.evaluate(() => window.__llamadas)).find((l) => l[0] === 'guardarinfluenza_reparto')[1];
   expect(g.municipio).toBe('QUERETARO');
   expect(g.anio_campana).toBe('2025-2026');
+  expect(await page.evaluate(() => window.__errores)).toEqual([]);   // el guardado no marca error
   expect(g.rows.map((r) => r.cantidad_frascos)).toEqual([127, 85, 100]);
+});
+
+test('Municipal: lo guardado fuera de la meta se marca como editado y lo demás sigue por meta', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 458, asignacion: { QUERETARO: 312 }, manual: [] }];
+    _adminFrascosArray = [
+      { municipio: 'QUERETARO', clues: 'Q1', numero_entrega: 1, cantidad_frascos: 156, fecha_entrega: '2026-10-05' },
+      { municipio: 'QUERETARO', clues: 'Q2', numero_entrega: 1, cantidad_frascos: 104, fecha_entrega: '2026-10-05' },
+      { municipio: 'QUERETARO', clues: 'Q3', numero_entrega: 1, cantidad_frascos: 52, fecha_entrega: '2026-10-05' }];
+    renderFrascosDistribution();
+  });
+  // Guardado por meta: nada marcado
+  await expect(page.locator('#mr_mark_Q1')).toHaveText('');
+  await expect(page.locator('#mr_mark_Q3')).toHaveText('');
+  // Guardado con una edición vieja en Q3 (80 en vez de 52): se ve y dice cuánto le tocaba
+  await page.evaluate(() => {
+    _adminFrascosArray = [
+      { municipio: 'QUERETARO', clues: 'Q1', numero_entrega: 1, cantidad_frascos: 156, fecha_entrega: '2026-10-05' },
+      { municipio: 'QUERETARO', clues: 'Q2', numero_entrega: 1, cantidad_frascos: 76, fecha_entrega: '2026-10-05' },
+      { municipio: 'QUERETARO', clues: 'Q3', numero_entrega: 1, cantidad_frascos: 80, fecha_entrega: '2026-10-05' }];
+    renderFrascosDistribution();
+  });
+  await expect(page.locator('#mr_mark_Q2')).toHaveText('editado · por meta: 104');
+  await expect(page.locator('#mr_mark_Q3')).toHaveText('editado · por meta: 52');
+  await expect(page.locator('#mr_mark_Q1')).toHaveText('');
 });
 
 test('Concentrado por entregas: columnas por destino y total entregado', async ({ page }) => {
