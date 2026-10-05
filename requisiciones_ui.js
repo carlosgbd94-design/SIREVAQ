@@ -2673,7 +2673,8 @@ async function construirDatosDestino(nivel, destino) {
     origenNombre: 'JURISDICCIÓN SANITARIA N.1', area: 'VACUNAS', origenDireccion: DIRECCION_JURISDICCION,
     fechaEnvio: fechaExcelUtc(estado.requisicion.fecha_envio),
     destinoNombre, folio: estado.requisicion.folio_oracle || '', destinoDireccion,
-    mesLabel: mesInfo ? `${mesInfo.l.toUpperCase()} ${estado.requisicion.anio}${variasEntregas() ? ` · ENTREGA ${estado.requisicion.entrega}${estado.requisicion.etiqueta ? ' (' + estado.requisicion.etiqueta.toUpperCase() + ')' : ''}` : ''}` : ''
+    // Solo el nombre del mes: la entrega/etiqueta es control interno y no se imprime.
+    mesLabel: mesInfo ? mesInfo.l.toUpperCase() : ''
   };
 
   const nombreArchivo = `Requisicion_${nivel}_${(destinoNombre || destino).replace(/[^\wÁÉÍÓÚÑáéíóúñ ]/g, '').trim().replace(/\s+/g, '_')}_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}${sufijoEntregaArchivo()}.xlsx`;

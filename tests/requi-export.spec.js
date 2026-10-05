@@ -14,7 +14,7 @@ const catalogo = CODIGOS.map((c, i) => ({ id: 'b' + c, orden: i + 1, nombre: 'V'
 const plantillaBuffer = fs.readFileSync(path.join(__dirname, '..', 'requisiciones_plantilla.xlsx'));
 const base = {
   plantillaBuffer, catalogo,
-  encabezado: { destinoNombre: 'C.S JURICA', destinoDireccion: 'Privada Lirios S/N', mesLabel: 'OCTUBRE 2026' },
+  encabezado: { destinoNombre: 'C.S JURICA', destinoDireccion: 'Privada Lirios S/N', mesLabel: 'OCTUBRE' },
   firmas: { elaboro_nombre: 'ELA', autorizo_nombre: 'AUT', entrega_nombre: 'ENT', recibe_nombre: 'REC' }
 };
 
@@ -101,7 +101,7 @@ test('un municipio sale en UN libro: una pestaña por unidad y la municipal al f
   const { generarLibro } = require('../requisiciones_export_excel.js');
   const hoja = (nombreHoja, destino, filas) => ({
     nombreHoja, catalogo, filasPorBiologico: filas,
-    encabezado: { destinoNombre: destino, destinoDireccion: 'dir ' + destino, mesLabel: 'OCTUBRE 2026' },
+    encabezado: { destinoNombre: destino, destinoDireccion: 'dir ' + destino, mesLabel: 'OCTUBRE' },
     firmas: { elaboro_nombre: 'ELA' }
   });
   const { buffer, sinRenglon } = await generarLibro({
