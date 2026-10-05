@@ -643,7 +643,7 @@ async function loadInfluenzaUnitData() {
     _influenzaCapturasCache = resCapturas.data || [];
 
     // 3. Distribución de frascos
-    const resFrascos = await AppService.call("getinfluenza_distribucion", { clues: USER.clues });
+    const resFrascos = await AppService.call("getinfluenza_distribucion", { clues: USER.clues, anio_campana: campana });
     _influenzaDistribucionCache = resFrascos.data || [];
 
     // 📈 4. CONEXIÓN AUTOMÁTICA: Pronóstico de Desabasto
@@ -1536,7 +1536,7 @@ async function loadInfluenzaAdminData() {
     _allUnidades = units || [];
 
     // 4. Cargar entregas de frascos
-    const resFrascos = await AppService.call("getinfluenza_distribucion", {});
+    const resFrascos = await AppService.call("getinfluenza_distribucion", { anio_campana: campana });
     _adminFrascosArray = resFrascos.data || [];
 
     // 5. Entregas (remesas) repartidas por Jurisdicción
@@ -4810,6 +4810,19 @@ function frascoPintarResumen(el, tono, html) {
   el.innerHTML = html;
 }
 
+// "% real": qué parte de los frascos recibidos se asignó de verdad a este renglón.
+// Junto al % de la meta permite ver de un vistazo cuánto se desvió una edición manual
+// (se marca en ámbar cuando la diferencia pasa de medio punto porcentual).
+function frascoPintarPctReal(el, frascos, total, metaPct) {
+  if (!el) return;
+  if (!total) { el.className = "c frs-real frs-muted"; el.textContent = "—"; return; }
+  const real = frascos * 100 / total;
+  const dif = metaPct == null ? 0 : real - metaPct;
+  const desv = Math.abs(dif) > 0.5;
+  el.className = "c frs-real" + (desv ? " frs-real--desv" : "");
+  el.innerHTML = `${real.toFixed(2)}%` + (desv ? `<small title="Diferencia contra el % de la meta">${dif > 0 ? "+" : ""}${dif.toFixed(2)} pts</small>` : "");
+}
+
 function frascoResumenReparto(el, total, res, tieneMeta) {
   if (!total) {
     frascoPintarResumen(el, "info", "Captura el total de frascos recibidos para calcular el reparto.");
@@ -4880,6 +4893,7 @@ function cargarRemesaSeleccionada() {
         <input type="text" inputmode="numeric" autocomplete="off" id="rem_inp_${d.id}" class="frs-num">
         <div class="frs-mark" id="rem_mark_${d.id}"></div>
       </td>
+      <td class="c frs-real" id="rem_real_${d.id}"></td>
       <td class="c frs-muted" id="rem_dos_${d.id}"></td>`;
     tbody.appendChild(tr);
     tr.querySelector("input").addEventListener("input", (e) => {
@@ -4898,7 +4912,7 @@ function cargarRemesaSeleccionada() {
   tf.className = "frs-total";
   tf.innerHTML = `<td>TOTAL</td><td class="c" id="rem_meta_T"></td>
     <td class="c" id="rem_pct_T"></td><td class="c" id="rem_inp_T"></td>
-    <td class="c" id="rem_dos_T"></td>`;
+    <td class="c" id="rem_real_T"></td><td class="c" id="rem_dos_T"></td>`;
   tbody.appendChild(tf);
   refreshRemesa();
 }
@@ -4920,7 +4934,9 @@ function refreshRemesa(enfocado) {
     if (inp !== enfocado) inp.value = total || v ? String(v) : "";
     document.getElementById(`rem_mark_${it.id}`).textContent = _remesaState.editados.has(it.id) ? "editado" : "";
     document.getElementById(`rem_dos_${it.id}`).textContent = frascoFmt(v * DOSIS_POR_FRASCO);
+    frascoPintarPctReal(document.getElementById(`rem_real_${it.id}`), v, total, sumaMeta ? it.meta * 100 / sumaMeta : null);
   });
+  frascoPintarPctReal(document.getElementById("rem_real_T"), res.asignado, total, 100);
   document.getElementById("rem_meta_T").textContent = frascoFmt(sumaMeta);
   document.getElementById("rem_pct_T").textContent = sumaMeta ? "100%" : "—";
   document.getElementById("rem_inp_T").textContent = frascoFmt(res.asignado);
@@ -4962,6 +4978,7 @@ async function saveRemesa() {
       // Los hospitales son su propio destino (una sola unidad): su entrega queda registrada de una vez.
       for (const d of FRASCO_DESTINOS.filter(x => x.hospital)) {
         await AppService.call("guardarinfluenza_reparto", {
+          anio_campana: campana,
           municipio: d.id,
           numero_entrega: numero,
           fecha,
@@ -5040,7 +5057,8 @@ function renderFrascosMunicipal(muni) {
       <td class="c">
         <input type="text" inputmode="numeric" autocomplete="off" id="batch_frascos_${u.clues}" class="frs-num">
         <div class="frs-mark" id="mr_mark_${u.clues}"></div>
-      </td>`;
+      </td>
+      <td class="c frs-real" id="mr_real_${u.clues}"></td>`;
     tbody.appendChild(tr);
     tr.querySelector("input").addEventListener("input", (e) => {
       frascoSoltarCargados(_muniRepartoState);
@@ -5070,6 +5088,7 @@ function refreshRepartoMunicipal(muni, enfocado) {
     const inp = document.getElementById(`batch_frascos_${it.id}`);
     if (inp !== enfocado) inp.value = String(res.frascos[it.id] || 0);
     document.getElementById(`mr_mark_${it.id}`).textContent = _muniRepartoState.editados.has(it.id) ? "editado" : "";
+    frascoPintarPctReal(document.getElementById(`mr_real_${it.id}`), res.frascos[it.id] || 0, total, sumaMeta ? it.meta * 100 / sumaMeta : null);
   });
   frascoResumenReparto(document.getElementById("frascosMuniResumen"), total, res, sumaMeta > 0);
   const cab = document.getElementById("frascosMuniResumen");
@@ -5095,6 +5114,7 @@ async function saveFrascosDelivery() {
     return;
   }
   const rows = units.map(u => ({ clues: u.clues, cantidad_frascos: res.frascos[u.clues] || 0 }));
+  const campana = document.getElementById("metaCampaignSelect").value;
 
   await AppService.runCapture({
     btnId: "btnSaveFrascoEntrega",
@@ -5106,7 +5126,7 @@ async function saveFrascosDelivery() {
     eventTitle: "Influenza",
     eventMsg: `Reparto municipal de la ${frascoOrdinal(numero)} de frascos`,
     action: async () => {
-      await AppService.call("guardarinfluenza_reparto", { municipio: muni, numero_entrega: numero, fecha, lote, caducidad, rows });
+      await AppService.call("guardarinfluenza_reparto", { anio_campana: campana, municipio: muni, numero_entrega: numero, fecha, lote, caducidad, rows });
       await loadInfluenzaAdminData();
       renderFrascosDistribution();
     }

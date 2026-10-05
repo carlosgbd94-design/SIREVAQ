@@ -8056,8 +8056,9 @@ async function supabaseRequest(action = "", payload, options = {}) {
       }
 
       case "getinfluenza_distribucion": {
-        const { clues, municipio } = payload;
+        const { clues, municipio, anio_campana } = payload;
         let query = supabase.from('influenza_distribucion_frascos').select('*');
+        if (anio_campana) query = query.eq('anio_campana', anio_campana);
         if (clues) {
           query = query.eq('clues', clues);
         } else if (municipio) {
@@ -8123,8 +8124,9 @@ async function supabaseRequest(action = "", payload, options = {}) {
       }
 
       case "guardarinfluenza_reparto": {
-        const { municipio, numero_entrega, fecha, lote, caducidad, rows } = payload;
+        const { anio_campana, municipio, numero_entrega, fecha, lote, caducidad, rows } = payload;
         const { data, error } = await supabase.rpc('influenza_guardar_reparto', {
+          p_campana: anio_campana,
           p_municipio: municipio,
           p_numero: Number(numero_entrega),
           p_fecha: fecha,

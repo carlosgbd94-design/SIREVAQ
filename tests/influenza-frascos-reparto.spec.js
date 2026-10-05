@@ -70,11 +70,16 @@ test('Jurisdicción: reparte 458 frascos por meta sin rebasar el total y permite
   expect(await valores(page, DEST)).toEqual(['312', '47', '36', '16', '26', '21']);
   await expect(page.locator('#remesaResumen')).toContainText('Reparto completo: 458 de 458');
   await expect(page.locator('#rem_pct_QUERETARO')).toHaveText('68.18%');
+  await expect(page.locator('#rem_real_QUERETARO')).toHaveText('68.12%');   // 312 / 458, casi igual a su % de meta
+  await expect(page.locator('#rem_real_QUERETARO small')).toHaveCount(0);
 
   // Editar solo frascos: Querétaro a 400, el resto se reparte con lo que queda
   await page.fill('#rem_inp_QUERETARO', '400');
   expect(await valores(page, DEST)).toEqual(['400', '19', '15', '6', '10', '8']);
   await expect(page.locator('#rem_mark_QUERETARO')).toHaveText('editado');
+  await expect(page.locator('#rem_real_QUERETARO')).toContainText('87.34%');   // 400 / 458
+  await expect(page.locator('#rem_real_QUERETARO small')).toContainText('+19.15 pts');
+  await expect(page.locator('#rem_real_T')).toHaveText('100.00%');
 
   // Pasarse del total avisa y no deja guardar
   await page.fill('#rem_inp_QUERETARO', '500');
@@ -91,6 +96,7 @@ test('Jurisdicción: reparte 458 frascos por meta sin rebasar el total y permite
   const remesa = llamadas.find((l) => l[0] === 'saveinfluenza_remesa')[1];
   expect(remesa.total_frascos).toBe(458);
   expect(remesa.numero_entrega).toBe(1);
+  expect(llamadas.filter((l) => l[0] === 'guardarinfluenza_reparto').every((l) => l[1].anio_campana === '2025-2026')).toBe(true);
   expect(Object.values(remesa.asignacion).reduce((a, b) => a + b, 0)).toBe(458);
   // Los hospitales quedan registrados como su propio destino, con su CLUES
   const hosp = llamadas.filter((l) => l[0] === 'guardarinfluenza_reparto').map((l) => [l[1].municipio, l[1].rows[0].clues, l[1].rows[0].cantidad_frascos]);
@@ -110,9 +116,12 @@ test('Municipal: reparte lo que asignó Jurisdicción entre sus unidades (sin ho
 
   await page.fill('#batch_frascos_Q3', '100');
   expect(await v()).toEqual(['127', '85', '100']);       // 212 restantes por meta 3:2 (el decimal mayor se lleva el sobrante)
+  await expect(page.locator('#mr_real_Q3')).toContainText('32.05%');    // 100 / 312 vs. 16.67% de su meta
+  await expect(page.locator('#mr_real_Q3 small')).toContainText('+15.38 pts');
   await page.click('#btnSaveFrascoEntrega');
   const g = (await page.evaluate(() => window.__llamadas)).find((l) => l[0] === 'guardarinfluenza_reparto')[1];
   expect(g.municipio).toBe('QUERETARO');
+  expect(g.anio_campana).toBe('2025-2026');
   expect(g.rows.map((r) => r.cantidad_frascos)).toEqual([127, 85, 100]);
 });
 

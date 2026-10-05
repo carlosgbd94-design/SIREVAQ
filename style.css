@@ -13951,6 +13951,9 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaFrascos .frs-row:hover td { background: #f8fafc; }
 #secInfluenzaFrascos .frs-sub { font-size: 10px; font-weight: 400; color: #94a3b8; }
 #secInfluenzaFrascos .frs-muted { color: #64748b; }
+#secInfluenzaFrascos .frs-real { font-variant-numeric: tabular-nums; }
+#secInfluenzaFrascos .frs-real--desv { color: #b45309; font-weight: 800; }
+#secInfluenzaFrascos .frs-real small { display: block; font-size: 10px; font-weight: 700; }
 #secInfluenzaFrascos .frs-mark { min-height: 12px; font-size: 10px; font-weight: 800; color: #d97706; text-align: center; }
 #secInfluenzaFrascos .frs-bold td, #secInfluenzaFrascos .frs-bold th, #secInfluenzaFrascos .frs-bold { font-weight: 900; }
 /* Matriz estilo plantilla de Excel */
