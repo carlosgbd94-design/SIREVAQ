@@ -79,25 +79,28 @@
   }
   const invalidate = () => { cache = { rows: null, at: 0 }; };
 
+  // Avisa por notificación a las unidades (ALL_CLUES) y a los usuarios municipales (MUNICIPAL_USERS_ALL):
+  // son los alcances que el panel de Avisos entiende. Lanza error si Supabase rechaza el insert.
   async function notifyUnits(row, mode) {
     const user = cfg.getUser() || {};
     const titulo = mode === 'updated' ? 'Capacitación actualizada' : 'Nueva capacitación programada';
     const msg = `${mode === 'updated' ? 'Se actualizó' : 'Se programó'} "${row.tema}" el ${fmtLong(row.fecha)}`
       + `${horario(row) ? ', ' + horario(row) : ''}. Sede: ${row.sede}. Consulta el Calendario de capacitaciones.`;
-    const client = cfg.getClient();
-    for (const destino of ['UNIDAD', 'MUNICIPAL']) {
-      await client.from('notificaciones').insert({
-        id: crypto.randomUUID(),
-        from_usuario: user.usuario || 'SISTEMA',
-        from_rol: user.rol || 'ADMIN',
-        target_scope: 'ROLE',
-        target_usuario: destino,
-        type: 'INFO',
-        title: titulo,
-        message: msg,
-        status: 'UNREAD',
-      });
-    }
+    const now = new Date();
+    const records = ['ALL_CLUES', 'MUNICIPAL_USERS_ALL'].map((scope) => ({
+      id: 'NOTIF:CAP:' + crypto.randomUUID(),
+      created_ts: now.toISOString(),
+      created_date: iso(now),
+      from_usuario: user.usuario || 'SISTEMA',
+      from_rol: user.rol || 'ADMIN',
+      target_scope: scope,
+      type: 'INFO',
+      title: titulo,
+      message: msg,
+      status: 'UNREAD',
+    }));
+    const { error } = await cfg.getClient().from('notificaciones').insert(records);
+    if (error) throw error;
   }
 
   // ── Archivo .ics (agregar al calendario del celular) ──────────────────────
@@ -361,12 +364,19 @@
           payload.creado_por = (cfg.getUser() || {}).usuario || null;
           res = await client.from(TABLE).insert(payload).select().single();
         } else {
+          if (payload.fecha !== row.fecha) payload.recordatorio_3d_ts = null;
           res = await client.from(TABLE).update(payload).eq('id', row.id).select().single();
         }
         if (res.error) { saveBtn.disabled = false; return fail('No se pudo guardar: ' + res.error.message); }
-        if (notify.checked) { try { await notifyUnits(res.data, isNew ? 'created' : 'updated'); } catch (e) { console.warn('[CalendarioCap] notificación', e); } }
+        let notifyFailed = false;
+        if (notify.checked) {
+          try { await notifyUnits(res.data, isNew ? 'created' : 'updated'); }
+          catch (e) { notifyFailed = true; console.warn('[CalendarioCap] notificación', e); }
+        }
         closeForm();
-        toast(isNew ? 'Capacitación agregada al calendario' : 'Capacitación actualizada', 'good');
+        toast(notifyFailed ? 'Capacitación guardada, pero no se pudo enviar la notificación a las unidades.'
+          : (isNew ? 'Capacitación agregada al calendario' : 'Capacitación actualizada') + (notify.checked ? ' y notificada' : ''),
+          notifyFailed ? 'bad' : 'good');
         state.year = parseISO(payload.fecha).getFullYear();
         invalidate(); await load(true); refreshBadges();
       });

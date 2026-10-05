@@ -39,3 +39,28 @@ create policy "cal_cap_write_juris" on public.calendario_capacitaciones
   with check (exists (select 1 from perfiles p
                       where p.id = (select auth.uid()) and p.activo = 'SI'
                         and upper(p.rol) in ('ADMIN', 'JURISDICCIONAL')));
+
+-- =============================================================================
+-- Recordatorio automático por correo (faltan 3 días o menos).
+-- Edge Function: supabase/functions/capacitacion-recordatorio (supabase functions deploy capacitacion-recordatorio)
+-- pg_cron la invoca a diario 08:00 hora de México (14:00 UTC). Cada capacitación se avisa una sola vez
+-- (recordatorio_3d_ts); el cliente lo regresa a NULL si cambia su fecha. Pruebas: POST {"dry_run": true}
+-- o {"test_to": "correo@x.com"}.
+-- =============================================================================
+alter table public.calendario_capacitaciones add column if not exists recordatorio_3d_ts timestamptz;
+
+select cron.schedule(
+  'enviar-recordatorio-capacitacion',
+  '0 14 * * *',
+  $$
+  select net.http_post(
+    url := 'https://utclfqjietlxzlorxhrs.supabase.co/functions/v1/capacitacion-recordatorio',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'cron_email_alerts_service_role_key')
+    ),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+  $$
+);

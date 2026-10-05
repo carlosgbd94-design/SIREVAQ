@@ -17176,31 +17176,23 @@ async function sendEventNotification(eventName, limitDateStr, eventType, mode = 
     : `Se ha habilitado la subida de evidencia de ${label} "${eventName}". Se tendrá hasta el día ${limitDateStr} para subir la réplica/evidencia correspondiente.`;
 
   try {
-    // 1. Notificar a UNIDAD
-    await supabase.from("notificaciones").insert({
+    // ALL_CLUES = unidades (+ jurisdicción/admin); MUNICIPAL_USERS_ALL = municipales. Son los alcances
+    // que el panel de Avisos reconoce ("ROLE" no se mostraba a nadie) y llevan fecha de creación.
+    const now = new Date();
+    const records = ["ALL_CLUES", "MUNICIPAL_USERS_ALL"].map(scope => ({
       id: crypto.randomUUID(),
+      created_ts: now.toISOString(),
+      created_date: todayYmdLocal(),
       from_usuario: USER?.usuario || 'SISTEMA',
       from_rol: USER?.rol || 'ADMIN',
-      target_scope: "ROLE",
-      target_usuario: "UNIDAD",
+      target_scope: scope,
       type: "INFO",
       title: title,
       message: msg,
       status: 'UNREAD'
-    });
-
-    // 2. Notificar a MUNICIPAL
-    await supabase.from("notificaciones").insert({
-      id: crypto.randomUUID(),
-      from_usuario: USER?.usuario || 'SISTEMA',
-      from_rol: USER?.rol || 'ADMIN',
-      target_scope: "ROLE",
-      target_usuario: "MUNICIPAL",
-      type: "INFO",
-      title: title,
-      message: msg,
-      status: 'UNREAD'
-    });
+    }));
+    const { error: notifErr } = await supabase.from("notificaciones").insert(records);
+    if (notifErr) throw notifErr;
   } catch (err) {
     console.error("Error al despachar notificaciones automáticas:", err);
   }
