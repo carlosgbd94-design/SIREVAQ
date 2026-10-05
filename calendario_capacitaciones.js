@@ -134,10 +134,10 @@
     :host(.dark){--bg:#1e293b;--fg:#f1f5f9;--muted:#94a3b8;--line:#334155;--field:#0f172a;--accent:#38bdf8;--accent-fg:#082f49;--accent-soft:rgba(56,189,248,.14);--ok:#34d399;--warn:#fbbf24;--warn-bg:rgba(251,191,36,.16);--bad:#f87171}
     *{box-sizing:border-box;font-family:'Inter','Poppins',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
     .ov{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.5);animation:fade .18s ease-out}
-    .card{width:100%;max-width:960px;max-height:calc(100dvh - 32px);overflow:auto;background:var(--bg);color:var(--fg);border-radius:28px;padding:24px;box-shadow:0 16px 48px rgba(0,0,0,.22);animation:rise .22s ease-out}
+    .card{width:100%;max-width:900px;max-height:calc(100dvh - 32px);overflow:auto;background:var(--bg);color:var(--fg);border-radius:28px;padding:20px 22px;box-shadow:0 16px 48px rgba(0,0,0,.22);animation:rise .22s ease-out}
     .card.sm{max-width:520px}
     .embedded{background:var(--bg);color:var(--fg);border-radius:28px;padding:24px;border:1px solid var(--line)}
-    .head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+    .head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
     h2{margin:0;font-size:20px;font-weight:800;letter-spacing:-.01em}
     .sub{margin:2px 0 0;font-size:12.5px;color:var(--muted);font-weight:500}
     .tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -153,17 +153,24 @@
     .btn:focus-visible,.ib:focus-visible,.chip:focus-visible,.day:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     .chip{all:unset;cursor:pointer;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:800;color:var(--muted);background:var(--field)}
     .chip.on{background:var(--accent-soft);color:var(--accent)}
-    .next{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:18px;background:var(--accent-soft);margin-bottom:18px}
+    .next{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:16px;background:var(--accent-soft);margin-bottom:14px}
     .next.soon{background:var(--warn-bg)}
-    .next .big{flex:none;width:52px;text-align:center;line-height:1}
-    .next .big b{display:block;font-size:24px;font-weight:800}
+    .next .big{flex:none;width:44px;text-align:center;line-height:1}
+    .next .big b{display:block;font-size:20px;font-weight:800}
     .next .big span{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
     .next .t{font-size:14px;font-weight:800}
     .next .s{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:2px}
-    .months{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:12px;margin-bottom:22px}
-    .mini{border:1px solid var(--line);border-radius:16px;padding:10px 10px 8px}
-    .mini h4{margin:0 0 6px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
-    .mini.cur h4{color:var(--accent)}
+    .layout{display:grid;grid-template-columns:268px minmax(0,1fr);gap:18px;align-items:start}
+    .side{border:1px solid var(--line);border-radius:18px;padding:10px 12px 12px}
+    .mnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+    .mnav b{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+    .mnav b.cur{color:var(--accent)}
+    .mnav .ib{width:30px;height:30px}
+    .mini .day{height:30px;width:30px;margin:0 auto;font-size:12px}
+    .mini .grid .dh{padding-bottom:4px}
+    .legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:10px;font-size:11px;font-weight:600;color:var(--muted)}
+    .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+    .scroller{max-height:var(--agenda-h,min(62dvh,560px));overflow:auto;padding-right:4px;scrollbar-width:thin}
     .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;text-align:center}
     .grid .dh{font-size:9.5px;font-weight:800;color:var(--muted);padding-bottom:2px}
     .day{all:unset;box-sizing:border-box;height:22px;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;border-radius:50%;color:var(--fg)}
@@ -171,8 +178,9 @@
     .day.ev{background:var(--accent);color:var(--accent-fg);font-weight:800;cursor:pointer}
     .day.ev.past{background:var(--muted);opacity:.6}
     .day.ev.soon{background:var(--warn);color:#fff}
-    .agenda h3{margin:18px 0 8px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-    .ev-row{display:flex;gap:14px;padding:14px;border:1px solid var(--line);border-radius:18px;margin-bottom:8px;transition:background .3s,border-color .3s}
+    .agenda h3:first-child{margin-top:0}
+    .agenda h3{margin:12px 0 6px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+    .ev-row{display:flex;gap:12px;padding:11px 12px;border:1px solid var(--line);border-radius:16px;margin-bottom:6px;transition:background .3s,border-color .3s}
     .ev-row.flash{background:var(--accent-soft);border-color:var(--accent)}
     .ev-row.past{opacity:.62}
     .date{flex:none;width:52px;text-align:center;border-radius:14px;background:var(--field);padding:6px 0;line-height:1}
@@ -206,12 +214,13 @@
     @keyframes fade{from{opacity:0}to{opacity:1}}
     @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
     @media (prefers-reduced-motion:reduce){.ov,.card{animation:none}}
-    @media (max-width:560px){.ov{align-items:flex-end;padding:0}.card{max-width:none;border-radius:28px 28px 0 0;padding:18px}.ev-row{padding:12px;gap:10px}.fld.two{grid-template-columns:1fr}.embedded{padding:16px}}
+    @media (max-width:720px){.layout{grid-template-columns:1fr}.scroller{max-height:none;overflow:visible}}
+    @media (max-width:560px){.mini .day{height:26px;width:26px;font-size:11.5px}.legend{display:none}.side{padding:8px 10px 8px}.next .s{font-size:12px}.sub{display:none}.head{margin-bottom:8px}.ov{align-items:flex-end;padding:0}.card{max-width:none;border-radius:28px 28px 0 0;padding:18px}.ev-row{padding:12px;gap:10px}.fld.two{grid-template-columns:1fr}.embedded{padding:16px}}
   `;
 
   // ── Vista (modal o incrustada) ────────────────────────────────────────────
   function createView(root, opts) {
-    const state = { year: today().getFullYear(), rows: [], loading: true, error: '', onlyUpcoming: false };
+    const state = { year: today().getFullYear(), month: today().getMonth(), rows: [], loading: true, error: '', onlyUpcoming: false };
     const mount = el('div');
     root.append(mount);
 
@@ -248,7 +257,7 @@
         } else grid.append(el('div', { class: cls.join(' '), text: String(d) }));
       }
       const cur = state.year === t.getFullYear() && m === t.getMonth();
-      return el('div', { class: 'mini' + (cur ? ' cur' : '') }, el('h4', { text: MESES[m] }), grid);
+      return el('div', { class: 'mini' + (cur ? ' cur' : '') }, grid);
     }
 
     function focusEvent(id) {
@@ -412,10 +421,6 @@
             el('div', { class: 's', text: `${c.text} · ${fmtLong(upcoming.fecha)}${horario(upcoming) ? ' · ' + horario(upcoming) : ''} · ${upcoming.sede}` }))));
       }
 
-      const months = el('div', { class: 'months' });
-      for (let m = 0; m < 12; m++) months.append(miniMonth(m, yearRows()));
-      mount.append(months);
-
       const agenda = el('div', { class: 'agenda' });
       if (!rows.length) {
         agenda.append(el('div', { class: 'empty', text: opts.editable
@@ -425,11 +430,41 @@
         let mes = -1;
         rows.forEach((r) => {
           const m = parseISO(r.fecha).getMonth();
-          if (m !== mes) { mes = m; agenda.append(el('h3', { text: MESES[m] })); }
+          if (m !== mes) { mes = m; agenda.append(el('h3', { text: MESES[m], 'data-month': String(m) })); }
           agenda.append(eventRow(r));
         });
       }
-      mount.append(agenda);
+      const scroller = el('div', { class: 'scroller' }, agenda);
+
+      // Mes visible: navegación ‹ › y una sola cuadrícula (en vez de los 12 meses a la vez)
+      const t = today();
+      const isCur = state.year === t.getFullYear() && state.month === t.getMonth();
+      const goMonth = (delta) => {
+        let m = state.month + delta, y = state.year;
+        if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+        state.month = m; state.year = y; render();
+        const h = mount.querySelector(`[data-month="${m}"]`);
+        if (h) h.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      };
+      const side = el('div', { class: 'side' },
+        el('div', { class: 'mnav' },
+          el('button', { class: 'ib', type: 'button', 'aria-label': 'Mes anterior', text: '‹', onclick: () => goMonth(-1) }),
+          el('b', { class: isCur ? 'cur' : '', text: MESES[state.month] + ' ' + state.year }),
+          el('button', { class: 'ib', type: 'button', 'aria-label': 'Mes siguiente', text: '›', onclick: () => goMonth(1) })),
+        miniMonth(state.month, yearRows()),
+        el('div', { class: 'legend' },
+          el('span', null, el('i', { style: 'background:var(--accent)' }), 'Programada'),
+          el('span', null, el('i', { style: 'background:var(--warn)' }), 'Próxima (≤ 7 días)'),
+          el('span', null, el('i', { style: 'background:var(--muted);opacity:.6' }), 'Realizada')));
+      mount.append(el('div', { class: 'layout' }, side, scroller));
+      // La primera vez que se abre, la agenda baja sola hasta la próxima capacitación.
+      if (!state.scrolled) {
+        state.scrolled = true;
+        requestAnimationFrame(() => {
+          const r = scroller.querySelector('.ev-row:not(.past)');
+          if (r) scroller.scrollTop = r.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 4;
+        });
+      }
     }
 
     load(false);
