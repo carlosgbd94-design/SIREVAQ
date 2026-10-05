@@ -37,7 +37,8 @@ const DATOS = `
   var _llamadas = [];
   var AppService = {
     call: async function (a, p) { window.__llamadas.push([a, p]); return { ok: true, data: [] }; },
-    runCapture: async function (o) { return o.action(); }
+    // Igual que el real: si la acción no devuelve {ok:true} se toma como error.
+    runCapture: async function (o) { const r = await o.action(); if (!r || !r.ok) throw new Error('Error al procesar la solicitud'); return r; }
   };
   var loadInfluenzaAdminData = async function () {};
 `;
@@ -76,7 +77,7 @@ test('Jurisdicción: reparte 458 frascos por meta sin rebasar el total y permite
   // Editar solo frascos: Querétaro a 400, el resto se reparte con lo que queda
   await page.fill('#rem_inp_QUERETARO', '400');
   expect(await valores(page, DEST)).toEqual(['400', '19', '15', '6', '10', '8']);
-  await expect(page.locator('#rem_mark_QUERETARO')).toHaveText('editado');
+  await expect(page.locator('#rem_mark_QUERETARO')).toHaveText('editado · por meta: 312');
   await expect(page.locator('#rem_real_QUERETARO')).toContainText('87.34%');   // 400 / 458
   await expect(page.locator('#rem_real_QUERETARO small')).toContainText('+19.15 pts');
   await expect(page.locator('#rem_real_T')).toHaveText('100.00%');
@@ -101,6 +102,22 @@ test('Jurisdicción: reparte 458 frascos por meta sin rebasar el total y permite
   // Los hospitales quedan registrados como su propio destino, con su CLUES
   const hosp = llamadas.filter((l) => l[0] === 'guardarinfluenza_reparto').map((l) => [l[1].municipio, l[1].rows[0].clues, l[1].rows[0].cantidad_frascos]);
   expect(hosp).toEqual([['HENM', 'QTSSA001740', 26], ['NHG', 'QTSSA002901', 21]]);
+});
+
+test('Jurisdicción: con las metas reales de la campaña 2026-2027 (HENM 1300, NHGQ 1500) reparte 25 y 29 de 2700', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate(() => {
+    const m = { QUERETARO: 99837, CORREGIDORA: 12590, MARQUES: 15890, HUIMILPAN: 6630, HENM: 1300, NHG: 1500 };
+    _adminMetasArray = Object.entries(m).map(([municipio, n]) => ({ clues: null, municipio, metas: { r1: n } }));
+    _adminRemesasArray = [];
+    renderFrascosDistribution();
+  });
+  await page.fill('#remesaTotalInput', '2700');
+  expect(await valores(page, DEST)).toEqual(['1957', '247', '311', '130', '26', '29']);
+  await expect(page.locator('#remesaResumen')).toContainText('Reparto completo: 2,700 de 2,700');
+  // Una edición vieja de NHGQ (89) se nota: dice cuánto le tocaría por meta
+  await page.fill('#rem_inp_NHG', '89');
+  await expect(page.locator('#rem_mark_NHG')).toHaveText('editado · por meta: 29');
 });
 
 test('Municipal: reparte lo que asignó Jurisdicción entre sus unidades (sin hospitales)', async ({ page }) => {

@@ -4823,6 +4823,12 @@ function frascoPintarPctReal(el, frascos, total, metaPct) {
   el.innerHTML = `${real.toFixed(2)}%` + (desv ? `<small title="Diferencia contra el % de la meta">${dif > 0 ? "+" : ""}${dif.toFixed(2)} pts</small>` : "");
 }
 
+// Marca de un renglón editado a mano: dice cuánto le tocaría por meta, para que una edición
+// vieja (se conserva al guardar) no pase como un error del cálculo.
+function frascoMarcaEditado(editado, proporcional) {
+  return editado ? `editado · por meta: ${frascoFmt(proporcional)}` : "";
+}
+
 function frascoResumenReparto(el, total, res, tieneMeta) {
   if (!total) {
     frascoPintarResumen(el, "info", "Captura el total de frascos recibidos para calcular el reparto.");
@@ -4921,18 +4927,19 @@ function calcularRemesa() {
   const total = frascoEntero(document.getElementById("remesaTotalInput").value);
   const items = FRASCO_DESTINOS.map(d => ({ id: d.id, meta: frascoMetaDestino(d.id) }));
   const res = InfluenzaReparto.repartirFrascos(total, items, _remesaState.fijos);
-  return { total, items, res, sumaMeta: items.reduce((s, i) => s + i.meta, 0) };
+  const porMeta = InfluenzaReparto.repartirFrascos(total, items, {}).frascos;
+  return { total, items, res, porMeta, sumaMeta: items.reduce((s, i) => s + i.meta, 0) };
 }
 
 function refreshRemesa(enfocado) {
-  const { total, items, res, sumaMeta } = calcularRemesa();
+  const { total, items, res, porMeta, sumaMeta } = calcularRemesa();
   items.forEach(it => {
     const v = res.frascos[it.id] || 0;
     document.getElementById(`rem_meta_${it.id}`).textContent = frascoFmt(it.meta);
     document.getElementById(`rem_pct_${it.id}`).textContent = sumaMeta ? `${(it.meta * 100 / sumaMeta).toFixed(2)}%` : "—";
     const inp = document.getElementById(`rem_inp_${it.id}`);
     if (inp !== enfocado) inp.value = total || v ? String(v) : "";
-    document.getElementById(`rem_mark_${it.id}`).textContent = _remesaState.editados.has(it.id) ? "editado" : "";
+    document.getElementById(`rem_mark_${it.id}`).textContent = frascoMarcaEditado(_remesaState.editados.has(it.id), porMeta[it.id]);
     document.getElementById(`rem_dos_${it.id}`).textContent = frascoFmt(v * DOSIS_POR_FRASCO);
     frascoPintarPctReal(document.getElementById(`rem_real_${it.id}`), v, total, sumaMeta ? it.meta * 100 / sumaMeta : null);
   });
@@ -4987,6 +4994,7 @@ async function saveRemesa() {
       }
       await loadInfluenzaAdminData();
       renderFrascosDistribution();
+      return { ok: true };
     }
   });
 }
@@ -5082,12 +5090,13 @@ function refreshRepartoMunicipal(muni, enfocado) {
   const items = units.map(u => ({ id: u.clues, meta: frascoMetaUnidad(u.clues) }));
   const sumaMeta = items.reduce((s, i) => s + i.meta, 0);
   const res = InfluenzaReparto.repartirFrascos(total, items, _muniRepartoState.fijos);
+  const porMeta = InfluenzaReparto.repartirFrascos(total, items, {}).frascos;
   items.forEach(it => {
     document.getElementById(`mr_meta_${it.id}`).textContent = frascoFmt(it.meta);
     document.getElementById(`mr_pct_${it.id}`).textContent = sumaMeta ? `${(it.meta * 100 / sumaMeta).toFixed(2)}%` : "—";
     const inp = document.getElementById(`batch_frascos_${it.id}`);
     if (inp !== enfocado) inp.value = String(res.frascos[it.id] || 0);
-    document.getElementById(`mr_mark_${it.id}`).textContent = _muniRepartoState.editados.has(it.id) ? "editado" : "";
+    document.getElementById(`mr_mark_${it.id}`).textContent = frascoMarcaEditado(_muniRepartoState.editados.has(it.id), porMeta[it.id]);
     frascoPintarPctReal(document.getElementById(`mr_real_${it.id}`), res.frascos[it.id] || 0, total, sumaMeta ? it.meta * 100 / sumaMeta : null);
   });
   frascoResumenReparto(document.getElementById("frascosMuniResumen"), total, res, sumaMeta > 0);
@@ -5129,6 +5138,7 @@ async function saveFrascosDelivery() {
       await AppService.call("guardarinfluenza_reparto", { anio_campana: campana, municipio: muni, numero_entrega: numero, fecha, lote, caducidad, rows });
       await loadInfluenzaAdminData();
       renderFrascosDistribution();
+      return { ok: true };
     }
   });
 }
