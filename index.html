@@ -94,7 +94,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=1">
-  <link rel="stylesheet" href="style.css?v=2026.104" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.105" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -348,7 +348,7 @@
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
   <script defer src="ayuda.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.87" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.88" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3457,7 +3457,9 @@
                 <label for="remesaTotalInput" class="frs-lbl">Total de frascos recibidos</label>
                 <input id="remesaTotalInput" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 458" class="frs-field">
               </div>
-              <div style="display:flex;align-items:flex-end">
+              <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
+                <button type="button" id="btnRemesaCuadrar" class="frs-btn"
+                  title="Reparte lo que falta (o quita lo que sobra) solo entre los destinos que no cambiaste">Cuadrar con los demás</button>
                 <button type="button" id="btnRemesaReset" class="frs-btn"
                   title="Descartar ediciones y repartir todo proporcional a la meta">Restablecer proporcional</button>
               </div>
@@ -3499,9 +3501,10 @@
                     <b id="kpiTotal">0</b>
                     <small id="kpiDosis"></small>
                   </div>
-                  <div class="frs-kpi">
+                  <div class="frs-kpi" id="kpiRepBox" data-estado="ok">
                     <span class="frs-kpi-lbl">Repartidos a tus unidades</span>
                     <b id="kpiAsignado">0</b>
+                    <small id="kpiAsignadoDe"></small>
                   </div>
                   <div class="frs-kpi" id="kpiPorBox" data-estado="ok">
                     <span class="frs-kpi-lbl">Por repartir</span>
@@ -3525,6 +3528,12 @@
                     <input id="frascoFechaInput" type="date" class="frs-field">
                   </div>
                   <div id="frascosLotesEstado" class="frs-lotesestado" role="status"></div>
+                  <div class="frs-acciones">
+                    <button type="button" id="btnMuniCuadrar" class="frs-btn"
+                      title="Reparte lo que falta (o quita lo que sobra) solo entre las unidades que no cambiaste, según su meta">Cuadrar con las demás</button>
+                    <button type="button" id="btnMuniReset" class="frs-btn"
+                      title="Descartar lo que cambiaste y volver al reparto por meta">Restablecer por meta</button>
+                  </div>
                 </div>
 
                 <!-- Tabla de captura por unidad -->
@@ -3548,6 +3557,17 @@
                     <tbody id="frascosBatchTbody">
                       <!-- JS poblará la lista de unidades del municipio -->
                     </tbody>
+                    <tfoot>
+                      <tr id="mr_total_row" class="frs-total" data-estado="ok">
+                        <td class="p-3 text-xs font-black">TOTAL</td>
+                        <td class="p-3 text-center" id="mr_meta_T"></td>
+                        <td class="p-3 text-center" id="mr_pct_T"></td>
+                        <td class="p-3 text-center" id="mr_otras_T"></td>
+                        <td class="p-3 text-center frs-total-frascos" id="mr_inp_T"></td>
+                        <td class="p-3 text-center frs-real" id="mr_real_T"></td>
+                        <td class="p-3"></td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </div>

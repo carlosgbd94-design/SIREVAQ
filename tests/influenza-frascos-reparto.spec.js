@@ -75,17 +75,29 @@ test('Jurisdicción: reparte 458 frascos por meta sin rebasar el total y permite
   await expect(page.locator('#rem_real_QUERETARO')).toHaveText('68.12%');   // 312 / 458, casi igual a su % de meta
   await expect(page.locator('#rem_real_QUERETARO small')).toHaveCount(0);
 
-  // Editar solo frascos: Querétaro a 400, el resto se reparte con lo que queda
+  // Editar Querétaro a 400: SOLO cambia Querétaro; los demás no se mueven y el total muestra lo real (546 de 458)
   await page.fill('#rem_inp_QUERETARO', '400');
-  expect(await valores(page, DEST)).toEqual(['400', '19', '15', '6', '10', '8']);
+  expect(await valores(page, DEST)).toEqual(['400', '47', '36', '16', '26', '21']);
   await expect(page.locator('#rem_mark_QUERETARO')).toHaveText('editado · por meta: 312');
   await expect(page.locator('#rem_real_QUERETARO')).toContainText('87.34%');   // 400 / 458
   await expect(page.locator('#rem_real_QUERETARO small')).toContainText('+19.15 pts');
-  await expect(page.locator('#rem_real_T')).toHaveText('100.00%');
+  await expect(page.locator('#rem_inp_T')).toHaveText('546 de 458');
+  await expect(page.locator('#remesaResumen')).toContainText('546 frascos repartidos de 458');
+  await expect(page.locator('#remesaResumen')).toContainText('te pasaste por 88');
+  await expect(page.locator('#rem_inp_QUERETARO')).toHaveClass(/frs-num--excede/);   // la que cambiaste, en rojo
+  await expect(page.locator('#rem_inp_CORREGIDORA')).not.toHaveClass(/frs-num--excede/);
+  await page.click('#btnSaveRemesa');                                         // se pasa: no guarda
+  expect(await page.evaluate(() => window.__llamadas.length)).toBe(0);
 
-  // Pasarse del total avisa y no deja guardar
+  // «Cuadrar con los demás»: ahora sí se reparte lo que queda (58) entre los que no tocaste
+  await page.click('#btnRemesaCuadrar');
+  expect(await valores(page, DEST)).toEqual(['400', '19', '15', '6', '10', '8']);
+  await expect(page.locator('#rem_real_T')).toHaveText('100.00%');
+  await expect(page.locator('#remesaResumen')).toContainText('Reparto completo: 458 de 458');
+
+  // Pasarse otra vez avisa y no deja guardar
   await page.fill('#rem_inp_QUERETARO', '500');
-  await expect(page.locator('#remesaResumen')).toContainText('Te pasaste por 42');
+  await expect(page.locator('#remesaResumen')).toContainText('te pasaste por 100');
   await page.click('#btnSaveRemesa');
   expect(await page.evaluate(() => window.__llamadas.length)).toBe(0);
 
@@ -134,7 +146,11 @@ test('Municipal: reparte lo que asignó Jurisdicción entre sus unidades (sin ho
   expect(await v()).toEqual(['156', '104', '52']);
 
   await page.fill('#batch_frascos_Q3', '100');
-  expect(await v()).toEqual(['127', '85', '100']);       // 212 restantes por meta 3:2 (el decimal mayor se lleva el sobrante)
+  expect(await v()).toEqual(['156', '104', '100']);      // solo cambia Q3; las demás no se mueven (suma 360, se pasa)
+  await expect(page.locator('#mr_inp_T')).toHaveText('360 de 312');
+  await page.click('#btnMuniCuadrar');                   // ahora sí: los 212 restantes por meta 3:2
+  expect(await v()).toEqual(['127', '85', '100']);       // (el decimal mayor se lleva el sobrante)
+  await expect(page.locator('#mr_inp_T')).toHaveText('312 de 312');
   await expect(page.locator('#mr_real_Q3')).toContainText('32.05%');    // 100 / 312 vs. 16.67% de su meta
   await expect(page.locator('#mr_real_Q3 small')).toContainText('+15.38 pts');
   await page.click('#btnSaveFrascoEntrega');
@@ -217,11 +233,23 @@ test('Municipal: cifras grandes de lo asignado, repartido y por repartir (y el a
   // La cantidad de cada unidad es lo principal de su fila (campo grande)
   expect(await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('batch_frascos_Q1')).fontSize))).toBeGreaterThanOrEqual(18);
 
-  await page.fill('#batch_frascos_Q1', '400');                 // se pasa: 400 + resto > 312
+  await page.fill('#batch_frascos_Q1', '400');                 // se pasa: 400 + 104 + 52 = 556
+  await expect(page.locator('#kpiAsignado')).toHaveText('556');
+  await expect(page.locator('#kpiAsignadoDe')).toHaveText('de 312 asignados');
+  await expect(page.locator('#kpiRepBox')).toHaveAttribute('data-estado', 'excede');
+  await expect(page.locator('#kpiPor')).toHaveText('244');
   await expect(page.locator('#kpiPorBox')).toHaveAttribute('data-estado', 'excede');
   await expect(page.locator('#kpiPorBox .frs-kpi-lbl')).toHaveText('Te pasaste por');
-  await page.fill('#batch_frascos_Q1', '100');
-  await page.fill('#batch_frascos_Q2', '');
+  await expect(page.locator('#batch_frascos_Q1')).toHaveClass(/frs-num--excede/);
+  await expect(page.locator('#batch_frascos_Q2')).not.toHaveClass(/frs-num--excede/);
+  await page.fill('#batch_frascos_Q1', '100');                 // faltan: 100 + 104 + 52 = 256
+  await expect(page.locator('#kpiPorBox')).toHaveAttribute('data-estado', 'falta');
+  await expect(page.locator('#kpiPor')).toHaveText('56');
+  await expect(page.locator('#batch_frascos_Q1')).toHaveClass(/frs-num--falta/);
+  await page.fill('#batch_frascos_Q1', '156');                 // exacto otra vez
+  await expect(page.locator('#kpiRepBox')).toHaveAttribute('data-estado', 'ok');
+  await expect(page.locator('#batch_frascos_Q1')).not.toHaveClass(/frs-num--(excede|falta)/);
+  await page.fill('#batch_frascos_Q2', '');                    // vacío = vuelve a su parte por meta
   await expect(page.locator('#kpiAsignado')).toHaveText('312');
 });
 
@@ -272,7 +300,7 @@ test('Municipal: no guarda si se pasa ni si falta; solo guarda cuando suma exact
   await page.fill('#batch_frascos_Q1', '400');
   await page.click('#btnSaveFrascoEntrega');
   expect(await guardados()).toBe(0);
-  expect(await ultimoToast()).toContain('te pasaste por 88 frascos');
+  expect(await ultimoToast()).toContain('te pasaste por 244 frascos');
   await expect(page.locator('#kpiPorBox')).toHaveClass(/frs-shake/);
 
   // Faltan frascos (dos unidades fijas que suman menos y la tercera también fija)
@@ -308,6 +336,57 @@ test('Jurisdicción: no guarda la entrega si faltan o sobran frascos', async ({ 
   await page.evaluate(() => { _remesaState.fijos.QUERETARO = 308; refreshRemesa(); });
   await page.click('#btnSaveRemesa');
   await expect.poll(guardados).toBe(1);
+});
+
+test('Municipal: con 100 frascos, tocar una unidad NO mueve las demás y muestra "105 de 100" con la unidad en rojo', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 100, asignacion: { QUERETARO: 100 }, manual: [] }];
+    renderFrascosDistribution();
+    window.__toasts = []; window.__llamadas = [];
+  });
+  const v = () => page.evaluate(() => ['Q1', 'Q2', 'Q3'].map((c) => document.getElementById('batch_frascos_' + c).value));
+  expect(await v()).toEqual(['50', '33', '17']);
+  await expect(page.locator('#mr_inp_T')).toHaveText('100 de 100');
+  await expect(page.locator('#mr_total_row')).toHaveAttribute('data-estado', 'ok');
+
+  await page.fill('#batch_frascos_Q1', '55');                  // me paso por 5
+  expect(await v()).toEqual(['55', '33', '17']);               // las otras unidades NO se movieron
+  await expect(page.locator('#mr_inp_T')).toHaveText('105 de 100');
+  await expect(page.locator('#mr_total_row')).toHaveAttribute('data-estado', 'excede');
+  await expect(page.locator('#frascosMuniResumen')).toContainText('105 frascos repartidos de 100');
+  await expect(page.locator('#kpiAsignado')).toHaveText('105');
+  await expect(page.locator('#batch_frascos_Q1')).toHaveClass(/frs-num--excede/);     // la unidad alterada, en rojo
+  await expect(page.locator('#batch_frascos_Q3')).not.toHaveClass(/frs-num--excede/);
+  await page.click('#btnSaveFrascoEntrega');
+  expect(await page.evaluate(() => window.__llamadas.length)).toBe(0);                // bloqueado
+  expect((await page.evaluate(() => window.__toasts))[0]).toContain('te pasaste por 5 frascos');
+
+  await page.fill('#batch_frascos_Q1', '45');                  // me quedo corto por 5
+  expect(await v()).toEqual(['45', '33', '17']);
+  await expect(page.locator('#mr_inp_T')).toHaveText('95 de 100');
+  await expect(page.locator('#mr_total_row')).toHaveAttribute('data-estado', 'falta');
+  await expect(page.locator('#batch_frascos_Q1')).toHaveClass(/frs-num--falta/);
+  await page.click('#btnSaveFrascoEntrega');
+  expect(await page.evaluate(() => window.__llamadas.length)).toBe(0);                // también bloqueado
+
+  await page.fill('#batch_frascos_Q1', '50');                  // exacto
+  await expect(page.locator('#mr_total_row')).toHaveAttribute('data-estado', 'ok');
+  await page.click('#btnSaveFrascoEntrega');
+  await expect.poll(() => page.evaluate(() => window.__llamadas.filter((l) => l[0] === 'guardarinfluenza_reparto').length)).toBe(1);
+});
+
+test('Municipal: «Restablecer por meta» descarta lo que cambiaste', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 100, asignacion: { QUERETARO: 100 }, manual: [] }];
+    renderFrascosDistribution();
+  });
+  await page.fill('#batch_frascos_Q1', '90');
+  await page.fill('#batch_frascos_Q2', '10');
+  await page.click('#btnMuniReset');
+  expect(await page.evaluate(() => ['Q1', 'Q2', 'Q3'].map((c) => document.getElementById('batch_frascos_' + c).value))).toEqual(['50', '33', '17']);
+  await expect(page.locator('#batch_frascos_Q1')).not.toHaveClass(/frs-num--(excede|falta)/);
 });
 
 test('Concentrado por entregas: columnas por destino y total entregado', async ({ page }) => {

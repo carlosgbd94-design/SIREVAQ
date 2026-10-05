@@ -4822,8 +4822,9 @@ const FRASCO_CLUES_HOSPITAL = new Set(FRASCO_DESTINOS.filter(d => d.hospital).ma
 let _adminRemesasArray = [];
 // fijos: frascos que NO se recalculan (editados a mano, o cargados de una entrega guardada).
 // editados: los que el usuario tocó de verdad (se guardan como "manual").
-let _remesaState = { numero: null, fijos: {}, editados: new Set() };
-let _muniRepartoState = { numero: null, fijos: {}, editados: new Set() };
+// tocados: los renglones que el usuario escribió en esta sesión (se marcan en rojo/ámbar si el total no cuadra).
+let _remesaState = { numero: null, fijos: {}, editados: new Set(), tocados: new Set() };
+let _muniRepartoState = { numero: null, fijos: {}, editados: new Set(), tocados: new Set() };
 
 function frascoSumaMetas(metas) {
   return Object.values(metas || {}).reduce((a, v) => a + (Number(v) || 0), 0);
@@ -4936,9 +4937,9 @@ function frascoResumenReparto(el, total, res, tieneMeta) {
   if (!total) {
     frascoPintarResumen(el, "info", "Captura el total de frascos recibidos para calcular el reparto.");
   } else if (res.porAsignar < 0) {
-    frascoPintarResumen(el, "bad", `⚠️ Te pasaste por <b>${frascoFmt(-res.porAsignar)}</b> frascos: asignado ${frascoFmt(res.asignado)} de ${frascoFmt(total)}. Baja alguna cantidad.`);
+    frascoPintarResumen(el, "bad", `⚠️ <b>${frascoFmt(res.asignado)} frascos repartidos de ${frascoFmt(total)}</b>: te pasaste por <b>${frascoFmt(-res.porAsignar)}</b>. Baja lo que cambiaste (marcado en rojo) o usa «Cuadrar con las demás».`);
   } else if (res.porAsignar > 0) {
-    frascoPintarResumen(el, "warn", `Asignado ${frascoFmt(res.asignado)} de ${frascoFmt(total)} frascos. Faltan <b>${frascoFmt(res.porAsignar)}</b> por asignar${tieneMeta ? "" : " (ningún destino tiene meta capturada)"}.`);
+    frascoPintarResumen(el, "warn", `<b>${frascoFmt(res.asignado)} frascos repartidos de ${frascoFmt(total)}</b>: faltan <b>${frascoFmt(res.porAsignar)}</b> por repartir${tieneMeta ? ". Sube alguna cantidad o usa «Cuadrar con las demás»" : " (ninguna unidad tiene meta capturada)"}.`);
   } else {
     frascoPintarResumen(el, "good", `✅ Reparto completo: ${frascoFmt(res.asignado)} de ${frascoFmt(total)} frascos (${frascoFmt(res.asignado * DOSIS_POR_FRASCO)} dosis).`);
   }
@@ -4964,8 +4965,38 @@ function frascoBloquearGuardado(porAsignar, sinMeta, ids) {
   return msg;
 }
 
-// Sobre una entrega ya guardada todo está "fijo"; en cuanto el usuario cambia algo
-// se sueltan los que no editó él para que el reparto se vuelva a calcular.
+// Marca en rojo (se pasa) o ámbar (falta) SOLO los renglones que el usuario tocó; no mueve ningún otro.
+function frascoMarcarInputs(ids, prefijo, res, total, tocados) {
+  const exceso = res.porAsignar < 0;
+  const falta = res.porAsignar > 0 && total > 0;
+  ids.forEach(id => {
+    const inp = document.getElementById(`${prefijo}${id}`);
+    if (!inp) return;
+    inp.classList.toggle("frs-num--excede", exceso && tocados.has(id));
+    inp.classList.toggle("frs-num--falta", falta && tocados.has(id));
+  });
+}
+
+// «Cuadrar con las demás»: acción explícita que reparte lo que falta (o quita lo que sobra) entre los renglones
+// que NO se tocaron, proporcional a su meta. Los que se tocaron no se mueven.
+function frascoCuadrar(total, items, state) {
+  const tocados = {};
+  items.forEach(it => { if (state.tocados.has(it.id) && it.id in state.fijos) tocados[it.id] = state.fijos[it.id]; });
+  const r = InfluenzaReparto.cuadrarResto(total, items, tocados);
+  if (!r.ok) {
+    const motivos = {
+      "no-hay-libres": "No hay otros renglones que ajustar: todos los tocaste.",
+      "tocados-se-pasan": `Lo que cambiaste ya suma ${frascoFmt(r.sumaTocados)}, más que los ${frascoFmt(total)} asignados: baja esas cantidades primero.`,
+      "sin-meta": "Los demás renglones no tienen meta capturada, no hay con qué cuadrarlos."
+    };
+    showToast(motivos[r.motivo] || "No se pudo cuadrar.", false, "bad");
+    return false;
+  }
+  r.libres.forEach(id => { state.fijos[id] = r.frascos[id]; });
+  return true;
+}
+
+// Al cambiar el total recibido (Jurisdicción) se sueltan los renglones que no editó el usuario para recalcularlos por meta.
 function frascoSoltarCargados(state) {
   const nuevos = {};
   state.editados.forEach(id => { if (id in state.fijos) nuevos[id] = state.fijos[id]; });
@@ -4996,7 +5027,13 @@ function renderRemesaPanel() {
     document.getElementById("btnRemesaReset").addEventListener("click", () => {
       _remesaState.fijos = {};
       _remesaState.editados = new Set();
+      _remesaState.tocados = new Set();
       refreshRemesa();
+    });
+    document.getElementById("btnRemesaCuadrar").addEventListener("click", () => {
+      const { total, items } = calcularRemesa();
+      if (!total) { showToast("Captura primero el total de frascos recibidos.", false, "bad"); return; }
+      if (frascoCuadrar(total, items, _remesaState)) refreshRemesa();
     });
     document.getElementById("btnSaveRemesa").addEventListener("click", saveRemesa);
   }
@@ -5009,6 +5046,7 @@ function cargarRemesaSeleccionada() {
   document.getElementById("remesaFechaInput").value = r ? r.fecha : new Date().toISOString().split("T")[0];
   _remesaState.fijos = r ? { ...r.asignacion } : {};
   _remesaState.editados = new Set(r ? (r.manual || []) : []);
+  _remesaState.tocados = new Set();
 
   const tbody = document.getElementById("remesaTbody");
   tbody.innerHTML = "";
@@ -5025,14 +5063,16 @@ function cargarRemesaSeleccionada() {
       <td class="c frs-real" id="rem_real_${d.id}"></td>
       <td class="c frs-muted" id="rem_dos_${d.id}"></td>`;
     tbody.appendChild(tr);
+    // Tocar un destino SOLO cambia ese destino: los demás se quedan como estaban.
     tr.querySelector("input").addEventListener("input", (e) => {
-      frascoSoltarCargados(_remesaState);
       if (e.target.value.trim() === "") {
         delete _remesaState.fijos[d.id];
         _remesaState.editados.delete(d.id);
+        _remesaState.tocados.delete(d.id);
       } else {
         _remesaState.fijos[d.id] = frascoEntero(e.target.value);
         _remesaState.editados.add(d.id);
+        _remesaState.tocados.add(d.id);
       }
       refreshRemesa(e.target);
     });
@@ -5049,8 +5089,8 @@ function cargarRemesaSeleccionada() {
 function calcularRemesa() {
   const total = frascoEntero(document.getElementById("remesaTotalInput").value);
   const items = FRASCO_DESTINOS.map(d => ({ id: d.id, meta: frascoMetaDestino(d.id) }));
-  const res = InfluenzaReparto.repartirFrascos(total, items, _remesaState.fijos);
-  const porMeta = InfluenzaReparto.repartirFrascos(total, items, {}).frascos;
+  const res = InfluenzaReparto.repartoLibre(total, items, _remesaState.fijos);
+  const porMeta = res.base;
   return { total, items, res, porMeta, sumaMeta: items.reduce((s, i) => s + i.meta, 0) };
 }
 
@@ -5069,8 +5109,11 @@ function refreshRemesa(enfocado) {
   frascoPintarPctReal(document.getElementById("rem_real_T"), res.asignado, total, 100);
   document.getElementById("rem_meta_T").textContent = frascoFmt(sumaMeta);
   document.getElementById("rem_pct_T").textContent = sumaMeta ? "100%" : "—";
-  document.getElementById("rem_inp_T").textContent = frascoFmt(res.asignado);
+  document.getElementById("rem_inp_T").textContent = total ? `${frascoFmt(res.asignado)} de ${frascoFmt(total)}` : frascoFmt(res.asignado);
   document.getElementById("rem_dos_T").textContent = frascoFmt(res.asignado * DOSIS_POR_FRASCO);
+  const filaTotal = document.getElementById("rem_inp_T").closest("tr");
+  if (filaTotal) filaTotal.dataset.estado = !total ? "" : res.porAsignar === 0 ? "ok" : res.porAsignar > 0 ? "falta" : "excede";
+  frascoMarcarInputs(items.map(i => i.id), "rem_inp_", res, total, _remesaState.tocados);
   frascoResumenReparto(document.getElementById("remesaResumen"), total, res, sumaMeta > 0);
 }
 
@@ -5163,6 +5206,7 @@ function renderFrascosMunicipal(muni) {
   // Cada vez que se abre una entrega se parte de lo ya guardado (todo fijo) o de cero.
   _muniRepartoState.fijos = {};
   _muniRepartoState.editados = new Set();
+  _muniRepartoState.tocados = new Set();
   if (previas.length) {
     units.forEach(u => {
       _muniRepartoState.fijos[u.clues] = previas.filter(p => p.clues === u.clues).reduce((s, p) => s + Number(p.cantidad_frascos || 0), 0);
@@ -5202,18 +5246,38 @@ function renderFrascosMunicipal(muni) {
       <td class="c frs-real" id="mr_real_${u.clues}"></td>
       <td class="c">${frascoLoteHtml(numero, u.clues)}</td>`;
     tbody.appendChild(tr);
+    // Tocar una unidad SOLO cambia esa unidad: las demás se quedan como estaban y el total se ajusta a la suma real.
     tr.querySelector("input").addEventListener("input", (e) => {
-      frascoSoltarCargados(_muniRepartoState);
       if (e.target.value.trim() === "") {
         delete _muniRepartoState.fijos[u.clues];
         _muniRepartoState.editados.delete(u.clues);
+        _muniRepartoState.tocados.delete(u.clues);
       } else {
         _muniRepartoState.fijos[u.clues] = frascoEntero(e.target.value);
         _muniRepartoState.editados.add(u.clues);
+        _muniRepartoState.tocados.add(u.clues);
       }
       refreshRepartoMunicipal(muni, e.target);
     });
   });
+
+  const btnCuadrar = document.getElementById("btnMuniCuadrar");
+  const btnReset = document.getElementById("btnMuniReset");
+  if (btnCuadrar && !btnCuadrar.dataset.bound) {
+    btnCuadrar.dataset.bound = "1";
+    btnCuadrar.addEventListener("click", () => {
+      const m = document.getElementById("adminInfluenzaMuni").value;
+      const tot = frascosRecibidosMunicipio(m, _muniRepartoState.numero);
+      const its = frascoUnidadesMunicipio(m).map(x => ({ id: x.clues, meta: frascoMetaUnidad(x.clues) }));
+      if (frascoCuadrar(tot, its, _muniRepartoState)) refreshRepartoMunicipal(m);
+    });
+    btnReset.addEventListener("click", () => {
+      _muniRepartoState.fijos = {};
+      _muniRepartoState.editados = new Set();
+      _muniRepartoState.tocados = new Set();
+      refreshRepartoMunicipal(document.getElementById("adminInfluenzaMuni").value);
+    });
+  }
   refreshRepartoMunicipal(muni);
 }
 
@@ -5223,8 +5287,8 @@ function refreshRepartoMunicipal(muni, enfocado) {
   const units = frascoUnidadesMunicipio(muni);
   const items = units.map(u => ({ id: u.clues, meta: frascoMetaUnidad(u.clues) }));
   const sumaMeta = items.reduce((s, i) => s + i.meta, 0);
-  const res = InfluenzaReparto.repartirFrascos(total, items, _muniRepartoState.fijos);
-  const porMeta = InfluenzaReparto.repartirFrascos(total, items, {}).frascos;
+  const res = InfluenzaReparto.repartoLibre(total, items, _muniRepartoState.fijos);
+  const porMeta = res.base;
   items.forEach(it => {
     document.getElementById(`mr_meta_${it.id}`).textContent = frascoFmt(it.meta);
     document.getElementById(`mr_pct_${it.id}`).textContent = sumaMeta ? `${(it.meta * 100 / sumaMeta).toFixed(2)}%` : "—";
@@ -5234,6 +5298,21 @@ function refreshRepartoMunicipal(muni, enfocado) {
     frascoPintarPctReal(document.getElementById(`mr_real_${it.id}`), res.frascos[it.id] || 0, total, sumaMeta ? it.meta * 100 / sumaMeta : null);
   });
   frascoResumenReparto(document.getElementById("frascosMuniResumen"), total, res, sumaMeta > 0);
+  frascoMarcarInputs(items.map(i => i.id), "batch_frascos_", res, total, _muniRepartoState.tocados);
+
+  // Renglón TOTAL de la tabla: lo repartido contra lo asignado, con el color del estado.
+  const sumaOtras = units.reduce((s, u) => s + _adminFrascosArray
+    .filter(d => d.clues === u.clues && d.numero_entrega !== numero).reduce((a, d) => a + Number(d.cantidad_frascos || 0), 0), 0);
+  const estadoTot = res.porAsignar === 0 ? "ok" : res.porAsignar > 0 ? "falta" : "excede";
+  const filaTot = document.getElementById("mr_total_row");
+  if (filaTot) {
+    filaTot.dataset.estado = estadoTot;
+    document.getElementById("mr_meta_T").textContent = frascoFmt(sumaMeta);
+    document.getElementById("mr_pct_T").textContent = sumaMeta ? "100%" : "—";
+    document.getElementById("mr_otras_T").textContent = frascoFmt(sumaOtras);
+    document.getElementById("mr_inp_T").textContent = `${frascoFmt(res.asignado)} de ${frascoFmt(total)}`;
+    frascoPintarPctReal(document.getElementById("mr_real_T"), res.asignado, total, 100);
+  }
 
   // Cifras grandes: lo asignado al municipio, lo ya repartido a sus unidades y lo que falta.
   const kpis = document.getElementById("frascosMuniKpis");
@@ -5242,9 +5321,11 @@ function refreshRepartoMunicipal(muni, enfocado) {
     document.getElementById("kpiTotal").textContent = frascoFmt(total);
     document.getElementById("kpiDosis").textContent = `${(FRASCO_DESTINOS.find(d => d.id === String(muni).toUpperCase()) || { label: muni }).label} · ${frascoOrdinal(numero)} · ${frascoFmt(total * DOSIS_POR_FRASCO)} dosis`;
     document.getElementById("kpiAsignado").textContent = frascoFmt(res.asignado);
+    document.getElementById("kpiAsignadoDe").textContent = `de ${frascoFmt(total)} asignados`;
+    document.getElementById("kpiRepBox").dataset.estado = estadoTot;
     document.getElementById("kpiPor").textContent = frascoFmt(Math.abs(res.porAsignar));
     const caja = document.getElementById("kpiPorBox");
-    caja.dataset.estado = res.porAsignar === 0 ? "ok" : res.porAsignar > 0 ? "falta" : "excede";
+    caja.dataset.estado = estadoTot;
     caja.querySelector(".frs-kpi-lbl").textContent = res.porAsignar < 0 ? "Te pasaste por" : "Por repartir";
   }
 }
@@ -5259,10 +5340,10 @@ async function saveFrascosDelivery() {
   }
   const total = frascosRecibidosMunicipio(muni, numero);
   const units = frascoUnidadesMunicipio(muni);
-  const res = InfluenzaReparto.repartirFrascos(
+  const res = InfluenzaReparto.repartoLibre(
     total, units.map(u => ({ id: u.clues, meta: frascoMetaUnidad(u.clues) })), _muniRepartoState.fijos);
   if (res.porAsignar !== 0) {
-    frascoBloquearGuardado(res.porAsignar, units.every(u => !frascoMetaUnidad(u.clues)), ["kpiPorBox", "frascosMuniResumen"]);
+    frascoBloquearGuardado(res.porAsignar, units.every(u => !frascoMetaUnidad(u.clues)), ["kpiRepBox", "kpiPorBox", "frascosMuniResumen"]);
     document.getElementById("frascosMuniKpis")?.scrollIntoView({ block: "center", behavior: "smooth" });
     return;
   }

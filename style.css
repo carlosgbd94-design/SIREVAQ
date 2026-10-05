@@ -13972,6 +13972,22 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaFrascos .frs-kpi[data-estado="falta"] b { color: #b45309; }
 #secInfluenzaFrascos .frs-kpi[data-estado="excede"] { background: #fff1f2; border-color: #fecdd3; }
 #secInfluenzaFrascos .frs-kpi[data-estado="excede"] b { color: #be123c; }
+/* Renglón que se tocó y deja el total fuera de lo asignado: rojo si se pasa, ámbar si falta. */
+#secInfluenzaFrascos .frs-num--excede { border-color: #e11d48 !important; background-color: #fff1f2 !important; color: #be123c !important; }
+#secInfluenzaFrascos .frs-num--falta { border-color: #f59e0b !important; background-color: #fffbeb !important; color: #b45309 !important; }
+#secInfluenzaFrascos #frascosBatchTbody .frs-num.frs-num--excede { border-color: #e11d48 !important; background-color: #fff1f2 !important; color: #be123c !important; }
+#secInfluenzaFrascos #frascosBatchTbody .frs-num.frs-num--falta { border-color: #f59e0b !important; background-color: #fffbeb !important; color: #b45309 !important; }
+#secInfluenzaFrascos .frs-num.frs-num--excede:focus,
+#secInfluenzaFrascos #frascosBatchTbody .frs-num.frs-num--excede:focus { border-color: #e11d48 !important; background-color: #ffffff !important; color: #be123c !important; box-shadow: 0 0 0 3px rgba(225, 29, 72, .18); }
+#secInfluenzaFrascos .frs-num.frs-num--falta:focus,
+#secInfluenzaFrascos #frascosBatchTbody .frs-num.frs-num--falta:focus { border-color: #f59e0b !important; background-color: #ffffff !important; color: #b45309 !important; box-shadow: 0 0 0 3px rgba(245, 158, 11, .2); }
+/* Renglón TOTAL con el estado del reparto (municipal y Jurisdicción) */
+#secInfluenzaFrascos tr.frs-total td { font-weight: 900; font-size: 13px; border-top: 2px solid #cbd5e1; background: #f8fafc; }
+#secInfluenzaFrascos tr.frs-total[data-estado="ok"] td { background: #ecfdf5; color: #065f46; }
+#secInfluenzaFrascos tr.frs-total[data-estado="falta"] td { background: #fffbeb; color: #b45309; }
+#secInfluenzaFrascos tr.frs-total[data-estado="excede"] td { background: #fff1f2; color: #be123c; }
+#secInfluenzaFrascos .frs-total-frascos { font-size: 16px !important; }
+#secInfluenzaFrascos .frs-acciones { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 /* Cada unidad: su cantidad de frascos es lo principal de la fila. */
 #secInfluenzaFrascos th.frs-th-frascos { color: #4c1d95 !important; background: #f5f3ff !important; }
 #secInfluenzaFrascos #frascosBatchTbody .frs-num {
