@@ -17165,10 +17165,10 @@ async function sendEventNotification(eventName, limitDateStr, eventType, mode = 
     : `Se ha habilitado la subida de evidencia de ${label} "${eventName}". Se tendrá hasta el día ${limitDateStr} para subir la réplica/evidencia correspondiente.`;
 
   try {
-    // ALL_CLUES = unidades (+ jurisdicción/admin); MUNICIPAL_USERS_ALL = municipales. Son los alcances
-    // que el panel de Avisos reconoce ("ROLE" no se mostraba a nadie) y llevan fecha de creación.
+    // GLOBAL: una sola fila para todos los usuarios activos (sin duplicados para admin/jurisdicción);
+    // lleva fecha de creación, que antes faltaba y descolocaba el aviso en la bandeja.
     const now = new Date();
-    const records = ["ALL_CLUES", "MUNICIPAL_USERS_ALL"].map(scope => ({
+    const records = ["GLOBAL"].map(scope => ({
       id: crypto.randomUUID(),
       created_ts: now.toISOString(),
       created_date: todayYmdLocal(),

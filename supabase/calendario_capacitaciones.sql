@@ -30,15 +30,18 @@ drop policy if exists "cal_cap_select" on public.calendario_capacitaciones;
 create policy "cal_cap_select" on public.calendario_capacitaciones
   for select to authenticated using (true);
 
+-- Escritura separada por comando (una sola política ALL duplicaba la de SELECT y la evaluaba en cada lectura).
 drop policy if exists "cal_cap_write_juris" on public.calendario_capacitaciones;
-create policy "cal_cap_write_juris" on public.calendario_capacitaciones
-  for all to authenticated
-  using (exists (select 1 from perfiles p
-                 where p.id = (select auth.uid()) and p.activo = 'SI'
-                   and upper(p.rol) in ('ADMIN', 'JURISDICCIONAL')))
-  with check (exists (select 1 from perfiles p
-                      where p.id = (select auth.uid()) and p.activo = 'SI'
-                        and upper(p.rol) in ('ADMIN', 'JURISDICCIONAL')));
+drop policy if exists "cal_cap_insert_juris" on public.calendario_capacitaciones;
+drop policy if exists "cal_cap_update_juris" on public.calendario_capacitaciones;
+drop policy if exists "cal_cap_delete_juris" on public.calendario_capacitaciones;
+create policy "cal_cap_insert_juris" on public.calendario_capacitaciones for insert to authenticated
+  with check (exists (select 1 from perfiles p where p.id = (select auth.uid()) and p.activo = 'SI' and upper(p.rol) in ('ADMIN', 'JURISDICCIONAL')));
+create policy "cal_cap_update_juris" on public.calendario_capacitaciones for update to authenticated
+  using (exists (select 1 from perfiles p where p.id = (select auth.uid()) and p.activo = 'SI' and upper(p.rol) in ('ADMIN', 'JURISDICCIONAL')))
+  with check (exists (select 1 from perfiles p where p.id = (select auth.uid()) and p.activo = 'SI' and upper(p.rol) in ('ADMIN', 'JURISDICCIONAL')));
+create policy "cal_cap_delete_juris" on public.calendario_capacitaciones for delete to authenticated
+  using (exists (select 1 from perfiles p where p.id = (select auth.uid()) and p.activo = 'SI' and upper(p.rol) in ('ADMIN', 'JURISDICCIONAL')));
 
 -- =============================================================================
 -- Recordatorio automático por correo (faltan 3 días o menos).

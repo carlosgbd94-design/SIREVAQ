@@ -41,6 +41,8 @@
     return n;
   };
 
+  const uid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
   const pad = (n) => String(n).padStart(2, '0');
   const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const parseISO = (s) => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
@@ -79,16 +81,16 @@
   }
   const invalidate = () => { cache = { rows: null, at: 0 }; };
 
-  // Avisa por notificación a las unidades (ALL_CLUES) y a los usuarios municipales (MUNICIPAL_USERS_ALL):
-  // son los alcances que el panel de Avisos entiende. Lanza error si Supabase rechaza el insert.
+  // Avisa por notificación a todos los usuarios activos (alcance GLOBAL: una sola fila, sin duplicados para
+  // admin/jurisdicción, y el trigger fanout_notification_trigger la reparte a cada buzón). Lanza error si falla.
   async function notifyUnits(row, mode) {
     const user = cfg.getUser() || {};
     const titulo = mode === 'updated' ? 'Capacitación actualizada' : 'Nueva capacitación programada';
     const msg = `${mode === 'updated' ? 'Se actualizó' : 'Se programó'} "${row.tema}" el ${fmtLong(row.fecha)}`
       + `${horario(row) ? ', ' + horario(row) : ''}. Sede: ${row.sede}. Consulta el Calendario de capacitaciones.`;
     const now = new Date();
-    const records = ['ALL_CLUES', 'MUNICIPAL_USERS_ALL'].map((scope) => ({
-      id: 'NOTIF:CAP:' + crypto.randomUUID(),
+    const records = ['GLOBAL'].map((scope) => ({
+      id: 'NOTIF:CAP:' + uid(),
       created_ts: now.toISOString(),
       created_date: iso(now),
       from_usuario: user.usuario || 'SISTEMA',
