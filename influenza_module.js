@@ -4575,8 +4575,31 @@ function renderMetasConfigurationGrid() {
   };
 }
 
+// Rubros donde la suma de las unidades no coincide con la meta municipal.
+// sobran / faltan: [{ id, dif }] con dif > 0.
+function metaDescuadreRubros(metasMunicipio, sumasUnidades) {
+  const sobran = [], faltan = [];
+  INFLUENZA_RUBROS.forEach(rb => {
+    const ref = Number(metasMunicipio[rb.id]) || 0;
+    const suma = Number(sumasUnidades[rb.id]) || 0;
+    if (suma > ref) sobran.push({ id: rb.id, dif: suma - ref });
+    else if (suma < ref) faltan.push({ id: rb.id, dif: ref - suma });
+  });
+  return { sobran, faltan };
+}
+
+function metaListaRubros(lista) {
+  const etq = (it) => {
+    const rb = INFLUENZA_RUBROS.find(r => r.id === it.id);
+    return `${rb.grupo} ${rb.edad} (${it.dif})`;
+  };
+  const mostrar = lista.slice(0, 3).map(etq).join(", ");
+  return lista.length > 3 ? `${mostrar} y ${lista.length - 3} más` : mostrar;
+}
+
 async function saveInfluenzaMetasConfig() {
   const isMuni = USER.rol === "MUNICIPAL";
+  let avisoFaltantes = "";
   const selectMuni = document.getElementById("adminInfluenzaMuni").value;
   const campana = document.getElementById("metaCampaignSelect").value;
 
@@ -4622,27 +4645,26 @@ async function saveInfluenzaMetasConfig() {
     // Guardar desglose de las CLUES del municipio (sin hospitales: su meta viene de Jurisdicción)
     const muniUnits = frascoUnidadesMunicipio(selectMuni);
     
-    // Validación previa: Que ningún rubro tenga restante negativo
-    let hasValidationError = false;
+    // Validación previa: las unidades no pueden pasarse de la meta municipal en ningún rubro
+    // (bloquea) y deberían sumarla exacta (si faltan, guarda pero avisa cuáles rubros).
+    const muniMetaRec = _adminMetasArray.find(m => !m.clues && m.municipio.toUpperCase() === selectMuni.toUpperCase());
+    const sumasUnidades = {};
     INFLUENZA_RUBROS.forEach(rb => {
-      const muniMetaRec = _adminMetasArray.find(m => !m.clues && m.municipio.toUpperCase() === selectMuni.toUpperCase());
-      const muniMeta = muniMetaRec ? (muniMetaRec.metas[rb.id] || 0) : 0;
-
       let sum = 0;
       muniUnits.forEach(u => {
         const input = document.querySelector(`input[data-rb="${rb.id}"][data-clues="${u.clues}"]`);
         sum += input ? (parseInt(input.value) || 0) : 0;
       });
-
-      if (sum > muniMeta) {
-        hasValidationError = true;
-      }
+      sumasUnidades[rb.id] = sum;
     });
-
-    if (hasValidationError) {
-      showToast("Error de validación. La suma asignada a las unidades supera la meta municipal en uno o más rubros.", false, "bad");
+    const descuadre = metaDescuadreRubros((muniMetaRec && muniMetaRec.metas) || {}, sumasUnidades);
+    if (descuadre.sobran.length) {
+      showToast(`Error de validación. Las unidades suman más que la meta municipal en ${metaListaRubros(descuadre.sobran)}.`, false, "bad");
       return;
     }
+    avisoFaltantes = descuadre.faltan.length
+      ? `Guardado, pero las unidades suman menos que la meta municipal en ${metaListaRubros(descuadre.faltan)}.`
+      : "";
 
     muniUnits.forEach(u => {
       const metasObj = {};
@@ -4672,6 +4694,7 @@ async function saveInfluenzaMetasConfig() {
       const res = await AppService.call("saveinfluenza_metas", { rows });
       await loadInfluenzaAdminData();
       renderMetasConfigurationGrid();
+      if (avisoFaltantes) showToast(avisoFaltantes, false, "warn");
       if (typeof confetti === 'function') {
         confetti({
           particleCount: 150,

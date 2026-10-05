@@ -229,7 +229,7 @@ test('Barra flotante: un solo subpanel visible a la vez y el historial solo es m
 // ─── Distribución de Metas: sin "0" pegado y columna Comparación ───────────
 const seccionMetas = html.slice(html.indexOf('<div id="secInfluenzaMetas"'), html.indexOf('<!-- SECCIÓN 3: CONTROL DE FRASCOS -->'));
 const rubros = modulo.slice(modulo.indexOf('const INFLUENZA_RUBROS'), modulo.indexOf('];', modulo.indexOf('const INFLUENZA_RUBROS')) + 2);
-const gridFn = modulo.slice(modulo.indexOf('function metaEnlazarInputs'), modulo.indexOf('async function saveInfluenzaMetasConfig'));
+const gridFn = modulo.slice(modulo.indexOf('function metaEnlazarInputs'), modulo.indexOf('// 3. CONTROL DE FRASCOS'));
 
 async function montarMetas(page, rol, metas) {
   await page.goto('/reference.html');
@@ -278,6 +278,39 @@ test('Metas municipales: Comparación contra lo distribuido entre las unidades',
   await page.locator('input[data-rb="r1"][data-clues="Q3"]').fill('5');
   await expect(cmp).toContainText('Sobran 5');
   await expect(cmp).toHaveAttribute('data-estado', 'mal');
+});
+
+test('Metas municipales: guardar bloquea si las unidades se pasan y avisa si faltan (suma exacta)', async ({ page }) => {
+  await montarMetas(page, 'MUNICIPAL', [meta(null, 'QUERETARO', 100)]);
+  await page.evaluate(() => { window.__toasts = []; window.__llamadas = []; window.__errores = []; });
+  const guardados = () => page.evaluate(() => window.__llamadas.filter((l) => l[0] === 'saveinfluenza_metas').length);
+  const toasts = () => page.evaluate(() => window.__toasts);
+  const poner = async (q1, q2, q3) => {
+    await page.locator('input[data-rb="r1"][data-clues="Q1"]').fill(q1);
+    await page.locator('input[data-rb="r1"][data-clues="Q2"]').fill(q2);
+    await page.locator('input[data-rb="r1"][data-clues="Q3"]').fill(q3);
+  };
+
+  // Se pasan (105 de 100): no guarda
+  await poner('60', '40', '5');
+  await page.click('#btnSaveInfluenzaMetas');
+  await expect.poll(toasts).toHaveLength(1);
+  expect((await toasts())[0]).toContain('más que la meta municipal');
+  expect(await guardados()).toBe(0);
+
+  // Faltan 10: guarda y avisa en qué rubro
+  await poner('50', '40', '0');
+  await page.click('#btnSaveInfluenzaMetas');
+  await expect.poll(guardados).toBe(1);
+  await expect.poll(async () => (await toasts()).length).toBe(2);
+  expect((await toasts())[1]).toContain('menos que la meta municipal');
+  expect((await toasts())[1]).toContain('(10)');
+
+  // Exacto: guarda sin aviso
+  await poner('60', '40', '0');
+  await page.click('#btnSaveInfluenzaMetas');
+  await expect.poll(guardados).toBe(2);
+  expect((await toasts()).length).toBe(2);
 });
 
 test('Metas: Tab va a la derecha, Enter baja; al terminar fila/columna salta a la siguiente', async ({ page }) => {
