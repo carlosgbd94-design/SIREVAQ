@@ -166,49 +166,90 @@ function textFor(caps: Cap[], hoy: string) {
   return lines.join('\n')
 }
 
+const MESES_C = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC']
+const MOD_ICON: Record<string, string> = { PRESENCIAL: '🏢', VIRTUAL: '💻', MIXTA: '🔀' }
+
 function htmlFor(caps: Cap[], hoy: string, platformUrl: string) {
-  const row = (label: string, value: string) => value
-    ? `<tr><td style="padding:3px 10px 3px 0;font-size:12px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;vertical-align:top;">${label}</td><td style="padding:3px 0;font-size:14px;font-weight:600;color:#1e293b;">${value}</td></tr>`
-    : ''
+  // Todo con tablas e estilos en línea: es lo único que Gmail/Outlook respetan igual.
+  const detail = (icon: string, label: string, value: string, extra = '') => value ? `
+        <tr>
+          <td style="padding:0 20px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #eef2f7;"><tr>
+              <td width="44" valign="top" style="padding:14px 0;">
+                <div style="width:34px;height:34px;line-height:34px;text-align:center;font-size:16px;background:#eff6ff;border-radius:10px;">${icon}</div>
+              </td>
+              <td valign="top" style="padding:14px 0 14px 4px;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#94a3b8;">${label}</div>
+                <div style="font-size:15px;font-weight:600;color:#0f172a;line-height:1.4;margin-top:2px;">${value}</div>
+                ${extra}
+              </td>
+            </tr></table>
+          </td>
+        </tr>` : ''
+
   const cards = caps.map((c) => {
     const n = diffDays(c.fecha, hoy)
+    const d = toUtcDate(c.fecha)
+    const urgent = n <= 1
+    const pillBg = urgent ? '#fff7ed' : '#eff6ff'
+    const pillFg = urgent ? '#c2410c' : '#1d4ed8'
+    const dir = c.direccion ? `<div style="font-size:13px;font-weight:500;color:#64748b;line-height:1.4;margin-top:3px;">${esc(c.direccion)}</div>` : ''
+    const notas = c.notas ? `
+        <tr><td style="padding:4px 20px 20px 20px;">
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 14px;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#b45309;">📝 Importante</div>
+            <div style="font-size:14px;font-weight:500;color:#78350f;line-height:1.5;margin-top:4px;">${esc(c.notas)}</div>
+          </div>
+        </td></tr>` : '<tr><td style="height:8px;font-size:0;line-height:0;">&nbsp;</td></tr>'
     return `
-      <div style="margin-top:18px;border:1px solid #bfdbfe;border-radius:12px;overflow:hidden;">
-        <div style="background:#eff6ff;padding:12px 14px;">
-          <span style="display:inline-block;background:#1d4ed8;color:#fff;border-radius:9999px;padding:3px 10px;font-size:11px;font-weight:800;text-transform:uppercase;">${esc(cuando(n))}</span>
-          <div style="font-size:16px;font-weight:800;color:#0f172a;margin-top:8px;line-height:1.3;word-break:break-word;">${esc(c.tema)}</div>
-        </div>
-        <table role="presentation" cellpadding="0" cellspacing="0" style="padding:12px 14px;border-collapse:collapse;"><tbody>
-          ${row('Fecha', esc(longDate(c.fecha)))}
-          ${row('Horario', esc(horario(c)))}
-          ${row('Sede', esc(c.sede))}
-          ${row('Dirección', esc(c.direccion || ''))}
-          ${row('Modalidad', esc(MODALIDAD[c.modalidad] || 'Presencial'))}
-          ${row('Dirigido a', esc(c.dirigido_a || ''))}
-          ${row('Notas', esc(c.notas || ''))}
-        </tbody></table>
-      </div>`
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;border:1px solid #dbe3ef;border-radius:18px;background:#ffffff;border-collapse:separate;overflow:hidden;">
+      <tr>
+        <td style="padding:20px 20px 16px 20px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td width="72" valign="top">
+              <table role="presentation" width="68" cellpadding="0" cellspacing="0" style="border-radius:14px;overflow:hidden;border:1px solid #bfdbfe;border-collapse:separate;">
+                <tr><td align="center" bgcolor="#1d4ed8" style="background:#1d4ed8;color:#ffffff;font-size:11px;font-weight:800;letter-spacing:1.2px;padding:5px 0;">${MESES_C[d.getUTCMonth()]}</td></tr>
+                <tr><td align="center" bgcolor="#eff6ff" style="background:#eff6ff;color:#0f172a;font-size:30px;font-weight:800;line-height:1;padding:10px 0 2px 0;">${d.getUTCDate()}</td></tr>
+                <tr><td align="center" bgcolor="#eff6ff" style="background:#eff6ff;color:#64748b;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:0 0 8px 0;">${DIAS[d.getUTCDay()].slice(0, 3)}</td></tr>
+              </table>
+            </td>
+            <td valign="top" style="padding-left:6px;">
+              <span style="display:inline-block;background:${pillBg};color:${pillFg};border-radius:9999px;padding:4px 12px;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;">${esc(cuando(n))}</span>
+              <div style="font-size:19px;font-weight:800;color:#0f172a;line-height:1.3;margin-top:8px;word-break:break-word;">${esc(c.tema)}</div>
+            </td>
+          </tr></table>
+        </td>
+      </tr>
+      ${detail('🕗', 'Horario', esc(horario(c)))}
+      ${detail('📍', 'Sede', esc(c.sede), dir)}
+      ${detail(MOD_ICON[c.modalidad] || '🏢', 'Modalidad', esc(MODALIDAD[c.modalidad] || 'Presencial'))}
+      ${detail('👥', 'Dirigido a', esc(c.dirigido_a || ''))}
+      ${notas}
+    </table>`
   }).join('')
 
   return `<!DOCTYPE html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="x-apple-disable-message-reformatting"></head>
-<body style="margin:0;padding:8px;background:#f1f5f9;">
-<div style="font-family:'Inter','Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;border:1px solid #bfdbfe;">
-  <div style="background:linear-gradient(135deg,#0b3d91 0%,#1d6fd1 100%);padding:26px 16px;text-align:center;border-radius:13px 13px 0 0;">
-    <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:800;">📅 Recordatorio de capacitación</h1>
-    <p style="color:#dbeafe;margin:8px 0 0 0;font-size:14px;font-weight:500;">Calendario anual de capacitaciones</p>
-  </div>
-  <div style="padding:22px 16px;color:#334155;line-height:1.55;">
-    <p style="margin:0;font-size:14px;color:#475569;">Se aproxima ${caps.length === 1 ? 'la siguiente capacitación' : 'las siguientes capacitaciones'}. Agenda y confirma tu asistencia:</p>
-    ${cards}
-    <div style="text-align:center;margin:28px 0 6px 0;">
-      <a href="${esc(platformUrl)}" style="background:#1d4ed8;color:#ffffff;padding:13px 30px;border-radius:8px;font-weight:600;font-size:15px;text-decoration:none;display:inline-block;">Ver calendario en la Plataforma</a>
-    </div>
-  </div>
-  <div style="background:#f8fafc;padding:18px 14px;text-align:center;border-top:1px solid #e2e8f0;border-radius:0 0 13px 13px;">
-    <p style="margin:0;color:#64748b;font-size:12px;font-weight:500;">Jurisdicción Sanitaria 1 - SIREVAQ</p>
-    <p style="margin:5px 0 0 0;color:#94a3b8;font-size:11px;">Correo automático de no-reply. Se envía una sola vez cuando faltan 3 días o menos.</p>
-  </div>
-</div>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="x-apple-disable-message-reformatting"><meta name="color-scheme" content="light only"></head>
+<body style="margin:0;padding:0;background:#eef2f7;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#eef2f7" style="background:#eef2f7;"><tr><td align="center" style="padding:16px 8px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;font-family:'Inter','Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+    <tr><td align="center" bgcolor="#0b3d91" style="background:#0b3d91;background-image:linear-gradient(135deg,#0b3d91 0%,#1d6fd1 100%);border-radius:20px 20px 0 0;padding:32px 20px 28px 20px;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#93c5fd;text-transform:uppercase;">Jurisdicción Sanitaria 1</div>
+      <div style="font-size:26px;font-weight:800;color:#ffffff;margin-top:10px;line-height:1.2;">📅 Recordatorio de capacitación</div>
+      <div style="font-size:14px;font-weight:500;color:#dbeafe;margin-top:8px;">${caps.length === 1 ? 'Se aproxima tu próxima capacitación' : 'Se aproximan ' + caps.length + ' capacitaciones'}</div>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:4px 16px 28px 16px;">
+      ${cards}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding-top:28px;">
+        <a href="${esc(platformUrl)}" style="background:#1d4ed8;color:#ffffff;padding:14px 34px;border-radius:12px;font-weight:700;font-size:15px;text-decoration:none;display:inline-block;">Ver calendario completo</a>
+        <div style="font-size:12px;color:#94a3b8;margin-top:12px;font-weight:500;">Consulta todas las fechas y sedes del año en la plataforma.</div>
+      </td></tr></table>
+    </td></tr>
+    <tr><td align="center" bgcolor="#ffffff" style="background:#ffffff;border-top:1px solid #e2e8f0;border-radius:0 0 20px 20px;padding:20px 16px;">
+      <div style="font-size:12px;font-weight:700;color:#64748b;">Jurisdicción Sanitaria 1 · SIREVAQ</div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px;line-height:1.5;">Correo automático, no respondas a este mensaje.<br>Se envía una sola vez cuando faltan 3 días o menos.</div>
+    </td></tr>
+  </table>
+</td></tr></table>
 </body></html>`
 }
