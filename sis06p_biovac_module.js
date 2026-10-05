@@ -719,7 +719,7 @@
             <span class="sis-card-title">${biologico}</span>
           </span>
           <span style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
-            <span class="sis-card-count" style="background:${capturadas > 0 ? accent.tint : '#f1f5f9'}; color:${capturadas > 0 ? accent.hex : '#94a3b8'};">${capturadas}/${vars.length}</span>
+            <span class="sis-card-count" style="background:${capturadas > 0 ? accent.tint : '#f1f5f9'}; color:${capturadas > 0 ? accent.hex : '#526071'};">${capturadas}/${vars.length}</span>
             <span class="material-symbols-rounded sis-chevron" style="font-size:18px; color:#94a3b8; transition:transform .32s cubic-bezier(.4,0,.2,1);">expand_more</span>
           </span>
         </div>

@@ -117,7 +117,13 @@ body.con-dock .feedback-fab { bottom: 92px; right: 18px; width: 48px; height: 48
 body.con-dock .feedback-fab .material-symbols-rounded { font-size: 22px; }
 body.con-dock .toast { bottom: 96px; }
 
-@media (max-width: 900px) { .dock-estado small, .hoja-largo { display: none; } .hoja-pildora { padding: 1px 6px; } }
+/* Tablet y ventanas angostas: la barra no cabe con texto en todas las hojas ni con la línea de estatus; solo la hoja activa lleva nombre */
+@media (max-width: 900px) {
+  .dock-estado small, .hoja-largo { display: none; }
+  .dock-estado { display: none !important; }
+  .hoja-pildora { padding: 1px 6px; }
+  .hoja-tab:not(.activo) .hoja-nombre { display: none; }
+}
 @media (max-width: 760px) {
   .dock-sis { bottom: 8px; max-width: calc(100vw - 16px); padding: 5px; gap: 4px; }
   .dock-estado { display: none !important; }

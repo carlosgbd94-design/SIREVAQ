@@ -33,7 +33,7 @@ window.onunhandledrejection = function (event) {
 })();
 </script>
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="dock_glass.css?v=7">
+<link rel="stylesheet" href="dock_glass.css?v=8">
 <link rel="stylesheet" href="ayuda.css?v=1">
 <link rel="stylesheet" href="municipal_guiado.css?v=2">
 <script defer src="ayuda.js?v=6"></script>
@@ -44,7 +44,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="biovac_ui.js?v=2026.53"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.39"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.40"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.13"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.2"></script>
@@ -56,7 +56,7 @@ window.onunhandledrejection = function (event) {
     --outline: #73777f; --outline-variant: #e2e8f0;
     --text: #1a1c20; --muted: #64748b;
     --error: #ba1a1a; --error-bg: #fef2f2; --error-border: #fecaca;
-    --success: #10b981; --success-bg: #f0fdf9;
+    --success: #047857; --success-bg: #f0fdf9;
     --warning: #b45309; --warning-bg: #fffbeb; --warning-border: #fde68a;
     --canje: #7c3aed; --canje-bg: #f5f3ff; --canje-border: #ddd6fe;
     --shadow-1: 0 1px 3px rgba(0,0,0,.06); --shadow-2: 0 4px 8px rgba(0,0,0,.10);
@@ -200,7 +200,7 @@ window.onunhandledrejection = function (event) {
     vertical-align: middle; margin-left: 8px; position: relative; top: -2px;
   }
   .estado-badge:empty { display: none; }
-  .estado-BORRADOR { background: #f1f5f9; color: var(--muted); }
+  .estado-BORRADOR { background: #f1f5f9; color: #526071; }
   .estado-CERRADO { background: var(--success-bg); color: var(--success); }
   .estado-EN_CORRECCION { background: var(--warning-bg); color: var(--warning); }
   .estado-CONCENTRADO { background: rgba(14,165,233,.12); color: var(--secondary); }
@@ -952,22 +952,22 @@ window.onunhandledrejection = function (event) {
 <nav id="toggleSeccionUnidad" class="dock-sis" style="display:none;" aria-label="Hojas del SINBA-SIS">
   <div class="dock-hojas" id="dockHojas" role="tablist">
     <span class="hoja-tinta" id="hojaTinta" aria-hidden="true"></span>
-    <button type="button" class="hoja-tab activo" id="btnSeccionSIS06P" data-seccion="sis06p" role="tab" style="--hoja:#0284c7;">
+    <button type="button" class="hoja-tab activo" id="btnSeccionSIS06P" aria-label="Hoja SIS-06-P (paloteo)" data-seccion="sis06p" role="tab" style="--hoja:#0284c7;">
       <span class="material-symbols-rounded">summarize</span><span class="hoja-nombre">SIS-06-P</span><span class="hoja-pildora" id="pildoraSIS06P"></span>
     </button>
-    <button type="button" class="hoja-tab" id="btnSeccionMovimiento" data-seccion="movimiento" role="tab" style="--hoja:#d97706;">
+    <button type="button" class="hoja-tab" id="btnSeccionMovimiento" aria-label="Hoja Movimiento de Biológico" data-seccion="movimiento" role="tab" style="--hoja:#d97706;">
       <span class="material-symbols-rounded">inventory_2</span><span class="hoja-nombre">Movimiento<span class="hoja-largo"> de Biológico</span></span><span class="hoja-pildora" id="pildoraMovimiento"></span>
     </button>
-    <button type="button" class="hoja-tab" id="btnSeccionCEH" data-seccion="ceh" role="tab" style="--hoja:#16a34a;">
+    <button type="button" class="hoja-tab" id="btnSeccionCEH" aria-label="Hoja SIS-SS-CE-H" data-seccion="ceh" role="tab" style="--hoja:#16a34a;">
       <span class="material-symbols-rounded">table_view</span><span class="hoja-nombre">SIS-SS-CE-H</span><span class="hoja-pildora" id="pildoraCEH"></span>
     </button>
-    <button type="button" class="hoja-tab" id="btnSeccionInfluenza" data-seccion="influenza" role="tab" style="--hoja:#C26750;">
+    <button type="button" class="hoja-tab" id="btnSeccionInfluenza" aria-label="Hoja Influenza" data-seccion="influenza" role="tab" style="--hoja:#C26750;">
       <span class="material-symbols-rounded">vaccines</span><span class="hoja-nombre">Influenza</span><span class="hoja-pildora" id="pildoraInfluenza"></span>
     </button>
-    <button type="button" class="hoja-tab" id="btnSeccionCSV" data-seccion="csv" role="tab" style="--hoja:#7c3aed;">
+    <button type="button" class="hoja-tab" id="btnSeccionCSV" aria-label="Hoja CSV" data-seccion="csv" role="tab" style="--hoja:#7c3aed;">
       <span class="material-symbols-rounded">description</span><span class="hoja-nombre">CSV</span>
     </button>
-    <button type="button" class="hoja-tab" id="btnSeccionSeguimiento" data-seccion="seguimiento" role="tab" style="--hoja:#db2777; display:none;">
+    <button type="button" class="hoja-tab" id="btnSeccionSeguimiento" aria-label="Seguimiento del mes" data-seccion="seguimiento" role="tab" style="--hoja:#db2777; display:none;">
       <span class="material-symbols-rounded">fact_check</span><span class="hoja-nombre">Seguimiento</span>
     </button>
   </div>
@@ -978,7 +978,7 @@ window.onunhandledrejection = function (event) {
   <div class="dock-acciones">
     <button type="button" class="dock-btn" id="btnImprimirSIS06P" style="display:none;" title="Imprimir el concentrado SIS-06-P validado"><span class="material-symbols-rounded">print</span><span class="dock-etiqueta">Imprimir</span></button>
     <button type="button" class="dock-btn dock-validar" id="btnMarcarValidado" style="display:none;" title="Marcar como Validado"><span class="material-symbols-rounded">verified</span><span class="dock-etiqueta">Validar</span></button>
-    <button type="button" class="dock-btn dock-enviar" id="btnEnviarSIS06P" style="display:none;" title="Enviar el SINBA-SIS para validación"><span class="material-symbols-rounded">send</span><span class="dock-etiqueta">Enviar</span></button>
+    <button type="button" class="dock-btn dock-enviar" id="btnEnviarSIS06P" aria-label="Enviar el SINBA-SIS para validación" style="display:none;" title="Enviar el SINBA-SIS para validación"><span class="material-symbols-rounded">send</span><span class="dock-etiqueta">Enviar</span></button>
     <button type="button" class="dock-btn dock-guardar en-reposo" id="btnGuardarSIS06P" title="Guardar concentrado SIS-06-P"><span class="material-symbols-rounded" id="iconoGuardarSIS">check</span><span class="dock-etiqueta" id="etiquetaGuardarSIS">Guardado</span></button>
     <button type="button" class="dock-btn" id="btnExportarSISCompleto" title="Exportar el Excel oficial del SINBA-SIS (SIS-06-P, Movimiento de Biológico, SIS-SS-CE-H e Influenza)"><span class="material-symbols-rounded">download</span><span class="dock-etiqueta">Exportar</span></button>
   </div>

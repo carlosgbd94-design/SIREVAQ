@@ -1352,3 +1352,9 @@ html.dark #loginScreen .bg-white\/70 {
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
+
+/* Accesibilidad: slate-400 (#94a3b8) sobre blanco da 2.6:1; los textos chicos de la versión móvil necesitan >= 4.5:1 */
+.text-slate-400 { color: #64748b !important; }
+
+/* La etiqueta de estado del botón flotante es solo informativa: no debe tapar los botones +/- de abajo */
+#hubStatusChip { pointer-events: none; }
