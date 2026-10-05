@@ -1287,33 +1287,14 @@
   // cuando TODAS las unidades del municipio están validadas -- el mismo origen que la publicación a
   // registros_sis, para que un CSV a medias nunca se suba por error.
   async function downloadCSV() {
-    let rows;
-    try {
-      const activa = datosUnidadActiva();
-      if (!activa) return;
-      const mes = Number(document.getElementById('selMes').value);
-      const anio = Number(document.getElementById('selAnio').value);
-      const { data, error } = await estado.db.rpc('sis_filas_csv', { p_mes: mes, p_anio: anio, p_municipio: activa.municipio });
-      if (error) throw error;
-      rows = (data || []).map((f) => ({ CLUES: f.clues, MUNICIPIO: f.municipio, VARIABLE_SIS: f.variable_sis, MES: mes, ANIO: anio, VALOR: f.valor }));
-    } catch (err) {
-      toast(err.message || 'Error al generar el CSV.', 'error');
-      return;
+    const activa = datosUnidadActiva();
+    if (!activa) return;
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    // Mismo CSV, mismo formato y mismo origen que "Descargar CSV oficial" de Seguimiento (sis_csv.js)
+    if (window.SIS06PDashboard && window.SIS06PDashboard.exportarCSVOficialMunicipio) {
+      await window.SIS06PDashboard.exportarCSVOficialMunicipio(activa.municipio, mes, anio);
     }
-    if (rows.length === 0) { toast('No hay datos para descargar.', 'error'); return; }
-    const headers = ['CLUES', 'MUNICIPIO', 'VARIABLE_SIS', 'MES', 'ANIO', 'VALOR'];
-    const csvLines = [headers.join(',')].concat(
-      rows.map((r) => headers.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(','))
-    );
-    const blob = new Blob(['﻿' + csvLines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `SIS06P_${rows[0].MUNICIPIO}_${rows[0].MES}_${rows[0].ANIO}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   }
 
   // ---------------------------------------------------------------------------

@@ -76,21 +76,25 @@ serve(async (req) => {
 
     // 4. Leer Payload
     const payload = await req.json();
-    const { usuario: internalID } = payload;
+    const { id: targetId, usuario: internalID } = payload;
     const redirectTo = typeof payload.redirectTo === 'string' ? payload.redirectTo : undefined;
 
-    if (!internalID) {
-      throw new Error('El ID de usuario es obligatorio');
+    if (!targetId && !internalID) {
+      throw new Error('Falta identificar al usuario');
     }
 
-    // Buscar el usuario real en 'perfiles' para obtener su Auth ID y correo
-    const { data: targetProfile, error: targetError } = await supabaseAdmin
-      .from('perfiles')
-      .select('id, email')
-      .eq('usuario', internalID)
-      .single();
-
-    if (targetError || !targetProfile) {
+    // Buscar el perfil por id (uuid). Con el ID interno solo si identifica a UNA cuenta: antes `.single()`
+    // fallaba con un mensaje confuso cuando había dos cuentas con el mismo texto.
+    const consulta = supabaseAdmin.from('perfiles').select('id, email, usuario');
+    const { data: encontrados, error: targetError } = targetId
+      ? await consulta.eq('id', targetId)
+      : await consulta.eq('usuario', String(internalID).trim());
+    if (targetError) throw new Error('No se pudo consultar el perfil del usuario');
+    if ((encontrados || []).length > 1) {
+      throw new Error(`Hay varias cuentas con el ID interno '${internalID}'; usa la lista de usuarios.`);
+    }
+    const targetProfile = (encontrados || [])[0];
+    if (!targetProfile) {
       throw new Error('No se encontró el perfil del usuario en la base de datos');
     }
     if (!targetProfile.email) {
@@ -121,7 +125,7 @@ serve(async (req) => {
     const { error: legacyError } = await supabaseAdmin
       .from('usuarios_legacy')
       .update({ password: null, must_change: true })
-      .eq('usuario', internalID);
+      .eq('usuario', targetProfile.usuario);
 
     if (legacyError) console.error("Error al actualizar legacy:", legacyError);
 

@@ -12,20 +12,9 @@
  * módulo solo sirve al panel RDA de `index.html` (MUNICIPAL/JURISDICCIONAL/ADMIN).
  */
 
+// El CSV lo genera sis_csv.js (un solo formato para todo SIREVAQ)
 function downloadSISCSV(filename, rows) {
-  const headers = ["CLUES", "MUNICIPIO", "VARIABLE_SIS", "MES", "ANIO", "VALOR"];
-  const csvLines = [headers.join(",")].concat(
-    rows.map(r => headers.map(h => `"${String(r[h] ?? "").replace(/"/g, '""')}"`).join(","))
-  );
-  const blob = new Blob(["﻿" + csvLines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  window.SIS_CSV.descargar(filename, rows);
 }
 
 function initSISExportModalDefaults() {
@@ -68,7 +57,7 @@ async function exportSISConcentrado({ mes, anio }) {
         omitidos.push(`${municipio}: ${error.message}`);
         continue;
       }
-      rows = rows.concat((data || []).map(f => ({ CLUES: f.clues, MUNICIPIO: f.municipio, VARIABLE_SIS: f.variable_sis, MES: Number(mes), ANIO: Number(anio), VALOR: f.valor })));
+      rows = rows.concat(window.SIS_CSV.aFilas(data, mes, anio, municipio));
     }
 
     if (rows.length === 0) {

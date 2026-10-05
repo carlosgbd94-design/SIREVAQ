@@ -313,11 +313,11 @@ window.INFLUENZA_SIS_MAPPING||console.error("[rda_calculator] window.INFLUENZA_S
             #rdaDetailTable tbody tr:hover td:nth-child(2) {
                 background-color: var(--md-sys-color-surface-variant) !important;
             }
-        `,document.head.appendChild(i);const l=document.createElement("select");l.id="rdaFilterAnio",l.innerHTML=`
+        `,document.head.appendChild(i);const l=document.createElement("select");l.id="rdaFilterAnio",l.setAttribute("aria-label","A\xF1o de los indicadores"),l.innerHTML=`
             <option value="2025">A\xF1o 2025</option>
             <option value="2026" selected>A\xF1o 2026</option>
             <option value="2027">A\xF1o 2027</option>
-        `,l.addEventListener("change",()=>{_rdaCache.anio=parseInt(l.value,10),_rdaCache.unidades=null,d(),loadAndRender()}),t.appendChild(l);const s=document.createElement("select");s.id="rdaFilterTemporalidad",s.innerHTML=`
+        `,l.addEventListener("change",()=>{_rdaCache.anio=parseInt(l.value,10),_rdaCache.unidades=null,d(),loadAndRender()}),t.appendChild(l);const s=document.createElement("select");s.id="rdaFilterTemporalidad",s.setAttribute("aria-label","Periodo: acumulado, mes o trimestre"),s.innerHTML=`
             <option value="0" selected>\u26A1 Cierre Acumulado a la Fecha</option>
             <optgroup label="Corte por Mes Espec\xEDfico">
                 <option value="1">Mes: Enero</option>
@@ -369,7 +369,7 @@ window.INFLUENZA_SIS_MAPPING||console.error("[rda_calculator] window.INFLUENZA_S
                         <option value="T3" ${D==="T3"?"selected":""}>3er Trimestre (Jul - Sep)</option>
                         <option value="T4" ${D==="T4"?"selected":""}>4to Trimestre (Oct - Dic)</option>
                     </optgroup>
-                `};const r=document.createElement("select");r.id="rdaFilterEsquema",r.innerHTML=`
+                `};const r=document.createElement("select");r.id="rdaFilterEsquema",r.setAttribute("aria-label","Esquema de vacunaci\xF3n"),r.innerHTML=`
             <option value="basico">Esquema B\xE1sico (0 a 8 a\xF1os)</option>
             <option value="adultos">Esquemas Adolescentes y Adultos</option>
             <option value="mayores">Esquemas Adultos Mayores</option>

@@ -53,26 +53,33 @@ serve(async (req) => {
 
     // 4. Leer Payload
     const payload = await req.json();
-    const { usuario: internalID } = payload;
-    
-    if (!internalID) {
-      throw new Error('El ID de usuario es obligatorio');
+    const { id: targetId, usuario: internalID } = payload;
+
+    if (!targetId && !internalID) {
+      throw new Error('Falta identificar al usuario');
     }
 
-    // Buscar el usuario real en 'perfiles' para obtener su Auth ID
-    const { data: targetProfiles, error: targetError } = await supabaseAdmin
-      .from('perfiles')
-      .select('id, email')
-      .ilike('usuario', String(internalID).trim())
-      .limit(1);
-
-    if (targetError) {
-      console.error("Error al buscar perfil:", targetError);
+    // Buscar el perfil por id (uuid). El ID interno `usuario` solo es respaldo y debe coincidir
+    // EXACTAMENTE con una cuenta: antes era ILIKE ("_" = comodín) con LIMIT 1 y podía borrar a OTRA persona.
+    let targetProfile: { id: string; email: string | null; usuario: string; rol: string } | null = null;
+    if (targetId) {
+      const { data, error: targetError } = await supabaseAdmin.from('perfiles').select('id, email, usuario, rol').eq('id', targetId).maybeSingle();
+      if (targetError) throw new Error(`Error al buscar el perfil: ${targetError.message}`);
+      targetProfile = data;
+    } else {
+      const { data, error: targetError } = await supabaseAdmin.from('perfiles').select('id, email, usuario, rol').eq('usuario', String(internalID).trim());
+      if (targetError) throw new Error(`Error al buscar el perfil: ${targetError.message}`);
+      if ((data || []).length > 1) throw new Error(`Hay varias cuentas con el ID interno '${internalID}'; elimínala desde la lista de usuarios.`);
+      targetProfile = (data || [])[0] || null;
     }
-
-    const targetProfile = targetProfiles && targetProfiles.length > 0 ? targetProfiles[0] : null;
 
     if (targetProfile) {
+      if (targetProfile.id === user.id) throw new Error('No puedes eliminar tu propia cuenta.');
+      if (targetProfile.rol === 'ADMIN') {
+        const { count } = await supabaseAdmin.from('perfiles').select('id', { count: 'exact', head: true }).eq('rol', 'ADMIN').neq('id', targetProfile.id).eq('activo', 'SI');
+        if (!count) throw new Error('Es el único administrador activo: no se puede eliminar.');
+      }
+
       // 5. Eliminar usuario en Auth
       const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(
         targetProfile.id
@@ -88,19 +95,19 @@ serve(async (req) => {
         .eq('id', targetProfile.id);
         
       if (delPerfilError) console.error("Error al borrar perfil:", delPerfilError);
-    } else {
+    } else if (internalID) {
+      // Sin perfil: solo se limpia la fila heredada con ese ID interno EXACTO
       console.warn(`No se encontró perfil para ${internalID}, procediendo a borrar de legacy si existe.`);
+    } else {
+      throw new Error('No se encontró el usuario');
     }
 
-    const { error: delLegacyError } = await supabaseAdmin
-      .from('usuarios_legacy')
-      .delete()
-      .ilike('usuario', String(internalID).trim());
-      
-    if (delLegacyError) console.error("Error al borrar legacy:", delLegacyError);
-
-    if (!targetProfile && delLegacyError) {
-      throw new Error(`No se encontró el perfil del usuario '${internalID}' y hubo error al borrar en legacy.`);
+    // Fila heredada: solo si ya NINGUNA otra cuenta usa ese ID interno (coincidencia exacta, no ILIKE)
+    const legacyId = targetProfile ? targetProfile.usuario : String(internalID).trim();
+    const { count: otras } = await supabaseAdmin.from('perfiles').select('id', { count: 'exact', head: true }).eq('usuario', legacyId);
+    if (!otras) {
+      const { error: delLegacyError } = await supabaseAdmin.from('usuarios_legacy').delete().eq('usuario', legacyId);
+      if (delLegacyError) console.error("Error al borrar legacy:", delLegacyError);
     }
 
     return new Response(

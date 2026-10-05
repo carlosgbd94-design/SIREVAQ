@@ -130,41 +130,6 @@ function populateCampaignSelectors() {
       if (_selectedCampaign) {
         el.value = _selectedCampaign.nombre;
       }
-      
-      // Si el wrapper premium ya existe, actualizarlo sin recrearlo (evita el bug de display:none
-      // cuando el contenedor padre aún está oculto al momento del rebuild)
-      const existingWrapper = document.getElementById(`${id}_custom_wrapper`);
-      if (existingWrapper) {
-        // Forzar visibilidad del wrapper y actualizar el label del botón
-        existingWrapper.style.removeProperty("display");
-        existingWrapper.style.display = "inline-block";
-        const btn = existingWrapper.querySelector("button > span.truncate");
-        if (btn && el.options[el.selectedIndex]) {
-          btn.textContent = el.options[el.selectedIndex].text;
-        }
-        // Actualizar opciones en el panel desplegable
-        const optPanel = existingWrapper.querySelector("div");
-        if (optPanel) {
-          optPanel.innerHTML = "";
-          Array.from(el.options).forEach(opt => {
-            const item = document.createElement("button");
-            item.type = "button";
-            item.dataset.value = opt.value;
-            item.className = "w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 rounded-full hover:bg-slate-100 transition-colors duration-150" + (opt.value === el.value ? " bg-violet-50 text-violet-700" : "");
-            item.textContent = opt.text;
-            item.onclick = () => {
-              el.value = opt.value;
-              el.dispatchEvent(new Event("change", { bubbles: true }));
-              optPanel.classList.add("hidden");
-              optPanel.style.display = "none";
-            };
-            optPanel.appendChild(item);
-          });
-        }
-      } else if (window.createPremiumCustomDropdown) {
-        // Solo crear desde cero si no existe el wrapper
-        window.createPremiumCustomDropdown(el);
-      }
     }
   });
 
@@ -191,12 +156,6 @@ async function selectCampaignByName(name) {
     const el = document.getElementById(id);
     if (el && el.value !== name) {
       el.value = name;
-      // Solo actualizar el label del wrapper premium si ya existe — no recrearlo
-      const wrapper = document.getElementById(`${id}_custom_wrapper`);
-      if (wrapper) {
-        const labelSpan = wrapper.querySelector("button > span.truncate");
-        if (labelSpan) labelSpan.textContent = name;
-      }
     }
   });
 
@@ -510,9 +469,7 @@ function updateInfluenzaSinMovimientoUI() {
   // Bloquear selectores principales (Semana y Campaña)
   const isSinMovActive = chkINF.checked;
   const weekBtn = document.getElementById("influenza_semana_btn");
-  // El dropdown "premium" custom fue desactivado (createPremiumCustomDropdown es un no-op en
-  // main.js); el selector real es el <select id="influenza_campana"> nativo, así que se
-  // bloquea directamente en vez de buscar un wrapper que ya no se genera.
+  // El selector real es el <select id="influenza_campana"> nativo: se bloquea directamente.
   const campSelect = document.getElementById("influenza_campana");
 
   if (isSinMovActive) {
@@ -586,26 +543,9 @@ async function initInfluenzaCaptureFlow() {
   // Activar pestaña por defecto (Captura de Reporte)
   document.getElementById("subtabUnitCaptura")?.click();
   
-  // Forzar visibilidad del wrapper del selector de campaña DESPUÉS de que el panel sea visible.
-  // Esto corrige el bug donde createPremiumCustomDropdown se llamó mientras secUnitCaptura
-  // aún tenía display:none, lo que causaba que wasOriginallyHidden = true y el wrapper
-  // quedaba oculto con display:none !important de forma permanente.
+  // Los selectores de campaña son <select> nativos: solo hay que realinear el indicador de pestañas
+  // cuando el panel ya es visible.
   setTimeout(() => {
-    ["influenza_campana", "metaCampaignSelect"].forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      const wrapper = document.getElementById(`${id}_custom_wrapper`);
-      if (wrapper) {
-        // Forzar el wrapper a visible (anula cualquier display:none !important puesto durante init)
-        wrapper.style.setProperty("display", "inline-block", "important");
-        if (el._premiumHiddenBySelf !== false) {
-          el._premiumHiddenBySelf = true;
-        }
-      } else if (window.createPremiumCustomDropdown) {
-        // Si no existe aún (raro), crearlo ahora que el panel es visible
-        window.createPremiumCustomDropdown(el);
-      }
-    });
     if (typeof syncTabGroupIndicator === 'function') {
       syncTabGroupIndicator('#influenzaUnitTabsContainer');
     }
@@ -628,17 +568,6 @@ async function initInfluenzaCaptureFlow() {
     // Toggle dropdown
     weekBtn.onclick = (e) => {
       e.stopPropagation();
-
-      // Cerrar otros dropdowns premium estándar abiertos en el DOM
-      document.querySelectorAll("[id$=_custom_wrapper] > div").forEach(d => {
-        d.classList.add("hidden");
-        d.style.display = "none";
-        const wrp = d.parentElement;
-        if (wrp) {
-          wrp.style.zIndex = "";
-          if (typeof setParentZIndex === 'function') setParentZIndex(wrp, "");
-        }
-      });
 
       const isHidden = weekDropdown.classList.contains("hidden");
       if (isHidden) {

@@ -33,7 +33,7 @@ window.onunhandledrejection = function (event) {
 })();
 </script>
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="dock_glass.css?v=6">
+<link rel="stylesheet" href="dock_glass.css?v=7">
 <link rel="stylesheet" href="ayuda.css?v=1">
 <link rel="stylesheet" href="municipal_guiado.css?v=2">
 <script defer src="ayuda.js?v=6"></script>
@@ -44,10 +44,11 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="biovac_ui.js?v=2026.53"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.38"></script>
-<script defer src="sis06p_dashboard_module.js?v=2026.11"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.39"></script>
+<script defer src="sis_csv.js?v=2"></script>
+<script defer src="sis06p_dashboard_module.js?v=2026.13"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.2"></script>
-<script defer src="municipal_guiado.js?v=2"></script>
+<script defer src="municipal_guiado.js?v=3"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -356,7 +357,7 @@ window.onunhandledrejection = function (event) {
   .inf-cta-txt b { display: block; font-size: 13.5px; color: #7c2d12; font-family: 'Poppins', sans-serif; }
   .inf-cta-txt span { font-size: 12px; color: #9a3412; line-height: 1.45; }
   .inf-cta-btn {
-    background: #C26750; color: #fff; padding: 14px 24px; border-radius: 16px; font-size: 14px; font-weight: 800; gap: 9px;
+    background: #A94F39; color: #fff; padding: 14px 24px; border-radius: 16px; font-size: 14px; font-weight: 800; gap: 9px;
     box-shadow: 0 6px 18px -6px rgba(194,103,80,.7);
   }
   .inf-cta-btn:hover:not(:disabled) { background: #a8513a; transform: translateY(-1px); box-shadow: 0 10px 22px -6px rgba(194,103,80,.8); }
@@ -934,7 +935,7 @@ window.onunhandledrejection = function (event) {
     <div id="filaCabeceraMovimiento" style="display:none">
       <div class="campo">
         <label>Responsable</label>
-        <input type="text" id="inpResponsable">
+        <input type="text" id="inpResponsable" aria-label="Responsable o capturista del SINBA-SIS">
       </div>
       <div class="campo">
         <label>Corte</label>

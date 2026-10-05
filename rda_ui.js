@@ -213,6 +213,7 @@ function initRDADashboard() {
         // Selector de Año Base (Ordenado Cronológicamente)
         const selAnio = document.createElement('select');
         selAnio.id = 'rdaFilterAnio';
+        selAnio.setAttribute('aria-label', 'Año de los indicadores');
         selAnio.innerHTML = `
             <option value="2025">Año 2025</option>
             <option value="2026" selected>Año 2026</option>
@@ -229,6 +230,7 @@ function initRDADashboard() {
         // Selector de Temporalidad (Cierre Acumulado / Mes Específico / Trimestre)
         const selTemp = document.createElement('select');
         selTemp.id = 'rdaFilterTemporalidad';
+        selTemp.setAttribute('aria-label', 'Periodo: acumulado, mes o trimestre');
         selTemp.innerHTML = `
             <option value="0" selected>⚡ Cierre Acumulado a la Fecha</option>
             <optgroup label="Corte por Mes Específico">
@@ -318,6 +320,7 @@ function initRDADashboard() {
         // Selector de Esquemas moderno y limpio
         const sel = document.createElement('select');
         sel.id = 'rdaFilterEsquema';
+        sel.setAttribute('aria-label', 'Esquema de vacunación');
         sel.innerHTML = `
             <option value="basico">Esquema Básico (0 a 8 años)</option>
             <option value="adultos">Esquemas Adolescentes y Adultos</option>

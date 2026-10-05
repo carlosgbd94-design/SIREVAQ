@@ -503,28 +503,12 @@
   // del mes. Falla (con el motivo) si falta validar alguna unidad: nunca sale un CSV a medias.
   async function exportarCSVOficialMunicipio(municipio, mes, anio) {
     try {
-      const { data, error } = await estado.db.rpc('sis_filas_csv', { p_mes: mes, p_anio: anio, p_municipio: municipio });
-      if (error) throw error;
-      const rows = (data || []).map((f) => ({ CLUES: f.clues, VARIABLE: f.variable_sis, VALOR: f.valor, MES: mes, 'AÑO': anio, MUNICIPIO: f.municipio || municipio }));
+      const rows = await window.SIS_CSV.filasDeMunicipio(estado.db, municipio, mes, anio);
       if (rows.length === 0) {
         toast('No hay concentrados validados para ese mes/año en este municipio.', 'error');
         return;
       }
-
-      const headers = ['CLUES', 'VARIABLE', 'VALOR', 'MES', 'AÑO', 'MUNICIPIO'];
-      const csvLines = [headers.join(',')].concat(
-        rows.map((r) => headers.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(','))
-      );
-      const blob = new Blob(['﻿' + csvLines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `SIS_${municipio}_${mes}_${anio}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
+      window.SIS_CSV.descargar(`SIS_${municipio}_${mes}_${anio}.csv`, rows);
       toast(`CSV oficial generado: ${new Set(rows.map((r) => r.CLUES)).size} CLUES, ${rows.length} filas.`, 'ok');
     } catch (err) {
       console.error('[SIS-06-P] Error exportando CSV oficial del municipio:', err);
@@ -535,8 +519,8 @@
   // Carga el concentrado validado del municipio a registros_sis (la tabla que alimenta los indicadores).
   // Es idempotente: reemplaza SOLO las mismas llaves (CLUES x clave) de ese mes -- nunca duplica ni toca
   // otros municipios, otras claves ni meses anteriores. Hay que repetirla si después se corrige algo.
-  async function publicarMunicipio(municipio, mes, anio, etiqueta) {
-    const ok = await mostrarModal({
+  async function publicarMunicipio(municipio, mes, anio, etiqueta, opciones = {}) {
+    const ok = opciones.automatica || await mostrarModal({
       titulo: 'Publicar a indicadores',
       mensaje: `Se cargará el SIS validado de ${etiqueta} (${String(mes).padStart(2, '0')}/${anio}) a la tabla que alimenta los indicadores. Si ya se había publicado, se reemplaza SOLO lo de este municipio y este mes; no se toca nada más.`,
       textoAceptar: 'Publicar'
@@ -547,11 +531,20 @@
       const { data, error } = await estado.db.rpc('sis_publicar_registros_sis', { p_mes: mes, p_anio: anio, p_municipio: municipio, p_usuario: usuario });
       if (error) throw error;
       const omitidas = (data && data.clues_omitidas) || [];
-      toast(`✅ Publicado: ${data.insertadas} filas de ${(data.clues_publicadas || []).length} unidad(es)${data.reemplazadas ? ` (reemplazó ${data.reemplazadas} previas)` : ''}.${omitidas.length ? ' Sin catálogo SIS, omitidas: ' + omitidas.join(', ') + '.' : ''}`, 'ok');
+      const cuando = opciones.automatica ? `Con la última validación de ${etiqueta} se cargó solo a indicadores` : 'Publicado';
+      toast(`✅ ${cuando}: ${data.insertadas} filas de ${(data.clues_publicadas || []).length} unidad(es)${data.reemplazadas ? ` (reemplazó ${data.reemplazadas} previas)` : ''}.${omitidas.length ? ' Sin catálogo SIS, omitidas: ' + omitidas.join(', ') + '.' : ''}`, 'ok');
+      document.dispatchEvent(new CustomEvent('sis06p:publicado', { detail: { municipio, mes, anio } }));
+      // Igual que la carga de CSV del panel RDA: datos nuevos en registros_sis => recalcular el motor de reabasto.
+      // El servidor solo lo permite a ADMIN/JURISDICCIONAL; para un municipal se omite (lo recalcula la jurisdicción).
+      const rolActualPub = estado.perfil ? estado.perfil.rol : null;
+      if (rolActualPub === 'ADMIN' || rolActualPub === 'JURISDICCIONAL') {
+        estado.db.rpc('calcular_reabasto_pendientes', { p_anio: anio })
+          .then(({ error: eReabasto }) => { if (eReabasto) console.warn('[SIS-06-P] Reabasto no recalculado tras publicar:', eReabasto); });
+      }
       return true;
     } catch (err) {
       console.error('[SIS-06-P] Error publicando a registros_sis:', err);
-      toast(err.message || 'Error al publicar.', 'error');
+      toast((opciones.automatica ? 'La validación quedó guardada, pero no se pudo cargar a indicadores: ' : '') + (err.message || 'Error al publicar.') + (opciones.automatica ? ' Usa «Cargar a indicadores» para reintentar.' : ''), 'error');
       return false;
     }
   }
@@ -571,6 +564,32 @@
       }
     } catch (e) { cont.textContent = ''; }
   }
+
+  // Al validar la ÚLTIMA unidad pendiente de un municipio, el concentrado se carga solo a registros_sis (la tabla
+  // que alimenta los indicadores): ya no hace falta acordarse de «Publicar». Es idempotente -- reemplaza solo las
+  // mismas llaves (CLUES x clave) de ese mes -- así que si después se corrige algo basta con validar o publicar de
+  // nuevo. El servidor vuelve a exigir que TODAS las unidades estén validadas, el arranque de captura y el rol.
+  let _publicandoAuto = false;
+  async function publicarSiMunicipioCompleto(detalle) {
+    if (_publicandoAuto || !detalle) return;
+    _publicandoAuto = true;
+    try {
+      const { clues, mes, anio } = detalle;
+      const filas = await cargarFilas(mes, anio);
+      if (!filas) return;
+      const fila = filas.find((f) => f.clues === clues);
+      if (!fila) return;
+      const municipio = fila.municipio;
+      const delMunicipio = filas.filter((f) => f.municipio === municipio);
+      if (delMunicipio.length === 0 || !delMunicipio.every((f) => f.estado === 'VALIDADO')) return;
+      await publicarMunicipio(municipio, mes, anio, MUNICIPIO_LABEL[municipio] || municipio, { automatica: true });
+    } catch (err) {
+      console.error('[SIS-06-P] Publicación automática tras validar:', err);
+    } finally {
+      _publicandoAuto = false;
+    }
+  }
+  document.addEventListener('sis06p:validado', (ev) => { publicarSiMunicipioCompleto(ev.detail); });
 
   // Saltar directo a modo revisión de una unidad desde la fila del
   // dashboard -- usa #selUnidadRevision (CLUES), no #selUnidad (ese es el
@@ -610,5 +629,5 @@
     return data || [];
   }
 
-  window.SIS06PDashboard = { render, cargarFilas, renderBannerVentana, renderComparativoAplicado, exportarCSVOficialMunicipio, MUNICIPIO_LABEL };
+  window.SIS06PDashboard = { render, cargarFilas, renderBannerVentana, renderComparativoAplicado, exportarCSVOficialMunicipio, publicarMunicipio, pintarEstadoPublicacion, MUNICIPIO_LABEL };
 })();

@@ -488,7 +488,12 @@
         <div><b>CSV oficial</b><small>El archivo que se sube al departamento de estadística: una fila por clave SIS de cada unidad validada.</small></div>
         <button type="button" class="btn-primario" id="munDescargarCSV" ${listo ? '' : 'disabled'} title="${listo ? 'Descargar el CSV oficial' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">download</span> Descargar CSV oficial</button>
       </div>
-      <p class="mun-nota-csv">Abajo, la vista previa del CSV para el panel RDA de SIREVAQ (formato distinto al oficial).</p>`;
+      <div class="mun-entregar">
+        <div><b>Indicadores (RDA)</b><small id="munPubEstado">${listo ? 'Consultando…' : 'Se carga sola al validar la última unidad.'}</small></div>
+        <button type="button" class="btn-secundario" id="munPublicar" ${listo ? '' : 'disabled'} title="${listo ? 'Cargar de nuevo el concentrado validado a los indicadores' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">cloud_upload</span> Cargar a indicadores</button>
+      </div>
+      <p class="mun-nota-csv">Abajo, la vista previa: se va llenando con lo que capturan las unidades. El archivo que se descarga tiene el mismo formato que la hoja CSV del Excel oficial.</p>`;
+    if (listo && window.SIS06PDashboard) window.SIS06PDashboard.pintarEstadoPublicacion($('munPubEstado'), muni, mes, anio);
     // Recibido vs requisición: informativo, nunca bloquea.
     try {
       const { data, error } = await estado.db.rpc('sis06p_recibido_vs_requisicion', { p_mes: mes, p_anio: anio, p_municipio: muni });
@@ -533,6 +538,11 @@
       else if (t.closest('#munVolverConcentrado')) irAPaso(3);
       else if (t.closest('#munIrPendientes')) { st.filtro = 'ENVIADO'; irAPaso(1); }
       else if (t.closest('#munDescargarCSV')) window.SIS06PDashboard.exportarCSVOficialMunicipio(st.muni, periodo().mes, periodo().anio);
+      else if (t.closest('#munPublicar')) {
+        const { mes, anio } = periodo();
+        window.SIS06PDashboard.publicarMunicipio(st.muni, mes, anio, etiquetaMuni(st.muni) || st.muni)
+          .then((hecho) => { if (hecho) window.SIS06PDashboard.pintarEstadoPublicacion($('munPubEstado'), st.muni, mes, anio); });
+      }
     });
     document.addEventListener('change', (ev) => {
       if (st.activo && ev.target && ev.target.id === 'munRevSelect') cambiarUnidad(ev.target.value);
@@ -544,6 +554,11 @@
       const p = $(h.pildora); if (p) observador.observe(p, { attributes: true, childList: true, characterData: true, subtree: true });
     });
     document.addEventListener('sis06p:validado', () => { if (st.activo) alValidar(); });
+    // La publicación automática termina después de la validación: repinta el estado en el paso de entrega.
+    document.addEventListener('sis06p:publicado', (ev) => {
+      const el = $('munPubEstado');
+      if (st.activo && el && ev.detail) window.SIS06PDashboard.pintarEstadoPublicacion(el, ev.detail.municipio, ev.detail.mes, ev.detail.anio);
+    });
     const alCambiarPeriodo = async () => {
       if (!st.activo) return;
       await refrescarFilas();

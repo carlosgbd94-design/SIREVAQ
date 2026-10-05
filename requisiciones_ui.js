@@ -641,10 +641,10 @@ async function renderFirmasMunicipio() {
     return `
       <div class="barra" data-firma-municipio="${m.v}" style="padding:10px 12px; background:var(--surface-container); border-radius:12px;">
         <div class="campo" style="min-width:110px;"><label>Municipio</label><div style="font-weight:800; padding:9px 0;">${m.l}</div></div>
-        <div class="campo"><label>Entrega — Nombre</label><input type="text" class="inp-firma-entrega-n" value="${(d.entrega_nombre || '').replace(/"/g, '&quot;')}"></div>
-        <div class="campo"><label>Entrega — Cargo</label><input type="text" class="inp-firma-entrega-c" value="${(d.entrega_cargo || '').replace(/"/g, '&quot;')}"></div>
-        <div class="campo"><label>Recibe — Nombre</label><input type="text" class="inp-firma-recibe-n" value="${(d.recibe_nombre || '').replace(/"/g, '&quot;')}"></div>
-        <div class="campo"><label>Recibe — Cargo</label><input type="text" class="inp-firma-recibe-c" value="${(d.recibe_cargo || '').replace(/"/g, '&quot;')}"></div>
+        <div class="campo"><label>Entrega — Nombre</label><input type="text" class="inp-firma-entrega-n" aria-label="Entrega: nombre (${m.l})" value="${(d.entrega_nombre || '').replace(/"/g, '&quot;')}"></div>
+        <div class="campo"><label>Entrega — Cargo</label><input type="text" class="inp-firma-entrega-c" aria-label="Entrega: cargo (${m.l})" value="${(d.entrega_cargo || '').replace(/"/g, '&quot;')}"></div>
+        <div class="campo"><label>Recibe — Nombre</label><input type="text" class="inp-firma-recibe-n" aria-label="Recibe: nombre (${m.l})" value="${(d.recibe_nombre || '').replace(/"/g, '&quot;')}"></div>
+        <div class="campo"><label>Recibe — Cargo</label><input type="text" class="inp-firma-recibe-c" aria-label="Recibe: cargo (${m.l})" value="${(d.recibe_cargo || '').replace(/"/g, '&quot;')}"></div>
         <button class="btn btn-primary btn-sm" data-guardar-firma-municipio="${m.v}"><span class="material-symbols-rounded" style="font-size:14px">save</span> Guardar</button>
       </div>
     `;
@@ -1928,7 +1928,7 @@ function renderVistaPegado() {
   const opciones = estado.catalogo.map((b) => `<option value="${b.id}">${esc(nombreCorto(b))}</option>`).join('');
   $('pegarVista').innerHTML = filas.length ? `
     <table class="vista-pegado">
-      <thead><tr><th></th><th>Biológico</th><th>Lote</th><th>Caducidad</th><th>Cantidad</th><th>Estado</th></tr></thead>
+      <thead><tr><th><span class="sr-only">Incluir</span></th><th>Biológico</th><th>Lote</th><th>Caducidad</th><th>Cantidad</th><th>Estado</th></tr></thead>
       <tbody>${filas.map((f, i) => `
         <tr class="${f.error ? 'fila-error' : ''}">
           <td><input type="checkbox" data-pegar-inc="${i}" ${f.incluir ? 'checked' : ''} ${f.error ? 'disabled' : ''}></td>

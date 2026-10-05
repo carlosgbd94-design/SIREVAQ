@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1">
 <script defer src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="dock_glass.css?v=6">
+<link rel="stylesheet" href="dock_glass.css?v=7">
 <link rel="stylesheet" href="ayuda.css?v=1">
 <script defer src="ayuda.js?v=5"></script>
 <script defer src="dock_glass.js?v=4"></script>
@@ -18,13 +18,13 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
-<script defer src="requisiciones_ui.js?v=5"></script>
+<script defer src="requisiciones_ui.js?v=6"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
     --surface: #ffffff; --surface-container: #f1f4f8;
     --outline: #73777f; --outline-variant: #e2e8f0;
-    --text: #1a1c20; --muted: #64748b;
+    --text: #1a1c20; --muted: #556275;
     --error: #ba1a1a; --error-bg: #fef2f2; --error-border: #fecaca;
     --success: #10b981; --success-bg: #f0fdf9;
     --warning: #b45309; --warning-bg: #fffbeb; --warning-border: #fde68a;
@@ -563,11 +563,11 @@
     <div class="barra" style="margin-top:16px; align-items:center;">
       <div class="campo">
         <label>Año</label>
-        <select id="selAnio"></select>
+        <select id="selAnio" aria-label="Año"></select>
       </div>
       <div class="campo">
         <label>Mes</label>
-        <select id="selMes"></select>
+        <select id="selMes" aria-label="Mes"></select>
       </div>
       <div class="grupo-acciones">
         <button class="btn-icono" id="btnCargar" title="Cargar la requisición ya guardada de este año/mes"><span class="material-symbols-rounded">folder_open</span></button>
@@ -587,7 +587,7 @@
       <p class="hint" style="margin-bottom:10px;">Historial de requisiciones capturadas -- da clic en "Abrir" para saltar directo a ese mes.</p>
       <div class="tbl-scroll" style="max-height:280px;">
         <table class="tbl">
-          <thead><tr><th>Mes</th><th>Estado</th><th></th><th>Fecha de envío</th><th>Creó</th><th></th></tr></thead>
+          <thead><tr><th>Mes</th><th>Estado</th><th><span class="sr-only">Detalle</span></th><th>Fecha de envío</th><th>Creó</th><th><span class="sr-only">Acciones</span></th></tr></thead>
           <tbody id="tbodyExplorador"></tbody>
         </table>
       </div>
@@ -605,16 +605,16 @@
       <div style="margin-bottom:18px;">
         <label style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; display:block; margin-bottom:8px;">Jurisdiccional</label>
         <div class="barra" style="margin-bottom:10px;">
-          <div class="campo"><label>Elaboró — Nombre</label><input type="text" id="jurElaboroNombre"></div>
+          <div class="campo"><label>Elaboró — Nombre</label><input type="text" id="jurElaboroNombre" aria-label="Elaboró: nombre"></div>
           <div class="campo"><label>Elaboró — Cargo</label><input type="text" id="jurElaboroCargo" placeholder="Ej. Responsable PVU"></div>
-          <div class="campo"><label>Autorizó — Nombre</label><input type="text" id="jurAutorizoNombre"></div>
+          <div class="campo"><label>Autorizó — Nombre</label><input type="text" id="jurAutorizoNombre" aria-label="Autorizó: nombre"></div>
           <div class="campo"><label>Autorizó — Cargo</label><input type="text" id="jurAutorizoCargo" placeholder="Ej. Administrador de Jurisdicción Sanitaria No. 1"></div>
         </div>
         <div class="barra">
-          <div class="campo"><label>Entrega (jurisdiccional) — Nombre</label><input type="text" id="jurEntregaNombre"></div>
-          <div class="campo"><label>Entrega — Cargo</label><input type="text" id="jurEntregaCargo"></div>
-          <div class="campo"><label>Recibe (jurisdiccional) — Nombre</label><input type="text" id="jurRecibeNombre"></div>
-          <div class="campo"><label>Recibe — Cargo</label><input type="text" id="jurRecibeCargo"></div>
+          <div class="campo"><label>Entrega (jurisdiccional) — Nombre</label><input type="text" id="jurEntregaNombre" aria-label="Entrega (jurisdiccional): nombre"></div>
+          <div class="campo"><label>Entrega — Cargo</label><input type="text" id="jurEntregaCargo" aria-label="Entrega (jurisdiccional): cargo"></div>
+          <div class="campo"><label>Recibe (jurisdiccional) — Nombre</label><input type="text" id="jurRecibeNombre" aria-label="Recibe (jurisdiccional): nombre"></div>
+          <div class="campo"><label>Recibe — Cargo</label><input type="text" id="jurRecibeCargo" aria-label="Recibe (jurisdiccional): cargo"></div>
           <button class="btn btn-primary btn-sm" id="btnGuardarFirmasJuris"><span class="material-symbols-rounded" style="font-size:14px">save</span> Guardar</button>
         </div>
       </div>
@@ -787,7 +787,7 @@
         <button type="button" class="icon-btn-pure" id="textoCerrar" title="Cerrar"><span class="material-symbols-rounded">close</span></button>
       </div>
       <div class="modal-cuerpo">
-        <div class="campo"><label for="textoValor" id="textoEtiqueta"></label><input type="text" id="textoValor" maxlength="40" autocomplete="off" style="width:100%;"></div>
+        <div class="campo"><label for="textoValor" id="textoEtiqueta"></label><input type="text" id="textoValor" maxlength="40" autocomplete="off" style="width:100%;" aria-label="Valor"></div>
         <div class="sugerencias-texto" id="textoSugerencias"></div>
       </div>
       <div class="modal-pie">

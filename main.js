@@ -1399,20 +1399,6 @@ function fixUtf8Text_(v) {
     .replace(/Â/g, "");
 }
 
-function canSeeMunicipio_(user, municipio) {
-  if (!user) return false;
-  if (user.rol === "ADMIN" || user.rol === "JURISDICCIONAL" || user.rol === "VISUALIZADOR_JURISDICCIONAL") return true;
-  let allowed = Array.isArray(user.municipiosAllowed)
-    ? user.municipiosAllowed.map(x => normalizeTextKey_(x)).filter(Boolean)
-    : [];
-  if (allowed.length === 0 && user.municipio) {
-    allowed = String(user.municipio).split(/[;,]/).map(x => normalizeTextKey_(x)).filter(Boolean);
-  }
-  if (allowed.includes("*")) return true;
-  const m = normalizeTextKey_(fixUtf8Text_(municipio));
-  if (!m) return false;
-  return allowed.includes(m);
-}
 
 function isCaravanaUnit_(u) {
   if (!u) return false;
@@ -2357,13 +2343,6 @@ function applyNotifTemplate(templateKey) {
   showToast("Plantilla aplicada");
 }
 
-function bindNotifTemplateEvents() {
-  $("notifTemplate")?.addEventListener("change", (e) => {
-    const key = e.target?.value || "";
-    if (!key) return;
-    applyNotifTemplate(key);
-  });
-}
 
 
 
@@ -3791,8 +3770,6 @@ function bindNotificationsUiEvents() {
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") {
       closeTopNotifDropdown();
-      // 🛡️ Cierre de dropdowns de píldora personalizados
-      document.querySelectorAll(".premium-custom-options-panel").forEach(p => p.classList.add("hidden"));
       // 📁 Cierre de Modal Drive QR
       const modalDriveQR = $("modalDriveQR");
       if (modalDriveQR) {
@@ -3894,6 +3871,9 @@ window.openDriveQRModal = function(e) {
 };
 
 function initDriveQRModule() {
+  // Se invoca desde varios puntos de arranque: sin esto cada clic de Copiar/Descargar se ejecutaba N veces.
+  if (window._driveQrModuleReady) return;
+  window._driveQrModuleReady = true;
   const currentYear = new Date().getFullYear();
   const driveTitle = `Repositorio vacunas ${currentYear}`;
 
@@ -3958,152 +3938,6 @@ if (document.readyState === "loading") {
   setTimeout(initDriveQRModule, 100);
 }
 
-function renderDriveQRCodeOnCanvas(textUrl) {
-  const canvas = $("qrDriveCanvas");
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  const size = 300;
-  canvas.width = size;
-  canvas.height = size;
-
-  const qr = generateQRCodeMatrix(textUrl);
-  const modules = qr.length;
-  const cellSize = size / modules;
-
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, size, size);
-
-  ctx.fillStyle = "#0f172a";
-  for (let r = 0; r < modules; r++) {
-    for (let c = 0; c < modules; c++) {
-      if (qr[r][c]) {
-        const x = c * cellSize;
-        const y = r * cellSize;
-        const radius = cellSize * 0.25;
-        
-        ctx.beginPath();
-        if (ctx.roundRect) {
-          ctx.roundRect(x, y, cellSize - 0.4, cellSize - 0.4, radius);
-        } else {
-          ctx.rect(x, y, cellSize - 0.4, cellSize - 0.4);
-        }
-        ctx.fill();
-      }
-    }
-  }
-
-  // Draw Center Google Drive Logo Plate
-  const centerSize = size * 0.28;
-  const cx = size / 2;
-  const cy = size / 2;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, centerSize / 2 + 5, 0, Math.PI * 2);
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = "#cbd5e1";
-  ctx.stroke();
-
-  // Draw 2026 Google Drive PNG Isotype
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.onload = () => {
-    ctx.drawImage(img, cx - (centerSize * 0.7) / 2, cy - (centerSize * 0.7) / 2, centerSize * 0.7, centerSize * 0.7);
-  };
-  img.src = "https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/Google-Drive-New-Icon-2026-PNG.png";
-
-  ctx.restore();
-}
-
-function drawDriveIsotypeCenter(ctx, cx, cy, s) {
-  ctx.save();
-  ctx.translate(cx, cy);
-  const scale = s / 78;
-  ctx.scale(scale, scale);
-  ctx.translate(-43.65, -39);
-
-  ctx.fillStyle = "#0066da";
-  ctx.beginPath();
-  ctx.moveTo(6.6, 66.85); ctx.lineTo(10.45, 73.5); ctx.lineTo(13.75, 76.8); ctx.lineTo(27.5, 53); ctx.lineTo(0, 53); ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "#00ac47";
-  ctx.beginPath();
-  ctx.moveTo(43.65, 25); ctx.lineTo(29.9, 1.2); ctx.lineTo(26.6, 4.5); ctx.lineTo(1.2, 48.5); ctx.lineTo(0, 53); ctx.lineTo(27.5, 53); ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "#ea4335";
-  ctx.beginPath();
-  ctx.moveTo(73.55, 76.8); ctx.lineTo(76.85, 73.5); ctx.lineTo(78.45, 70.75); ctx.lineTo(84.5, 60.25); ctx.lineTo(85.7, 55.7); ctx.lineTo(58.2, 55.7); ctx.lineTo(63.8, 65.4); ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "#00832d";
-  ctx.beginPath();
-  ctx.moveTo(43.65, 25); ctx.lineTo(57.4, 48.8); ctx.lineTo(84.9, 48.8); ctx.lineTo(83.7, 44.25); ctx.lineTo(58.3, 0.25); ctx.lineTo(55, -3.05); ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "#2684fc";
-  ctx.beginPath();
-  ctx.moveTo(57.4, 48.8); ctx.lineTo(29.9, 48.8); ctx.lineTo(16.15, 72.6); ctx.lineTo(17.5, 73.8); ctx.lineTo(72.5, 73.8); ctx.lineTo(77, 72.6); ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "#ffba00";
-  ctx.beginPath();
-  ctx.moveTo(43.65, 25); ctx.lineTo(57.4, 1.2); ctx.lineTo(52.9, 0); ctx.lineTo(34.5, 0); ctx.lineTo(30, 1.2); ctx.closePath();
-  ctx.fill();
-
-  ctx.restore();
-}
-
-function generateQRCodeMatrix(text) {
-  const N = 37;
-  const matrix = Array.from({ length: N }, () => Array(N).fill(false));
-
-  function drawFinder(r, c) {
-    for (let i = -1; i <= 7; i++) {
-      for (let j = -1; j <= 7; j++) {
-        const nr = r + i, nc = c + j;
-        if (nr >= 0 && nr < N && nc >= 0 && nc < N) {
-          if (i >= 0 && i <= 6 && (j === 0 || j === 6) || j >= 0 && j <= 6 && (i === 0 || i === 6) || (i >= 2 && i <= 4 && j >= 2 && j <= 4)) {
-            matrix[nr][nc] = true;
-          } else {
-            matrix[nr][nc] = false;
-          }
-        }
-      }
-    }
-  }
-
-  drawFinder(0, 0);
-  drawFinder(0, N - 7);
-  drawFinder(N - 7, 0);
-
-  for (let i = 8; i < N - 8; i++) {
-    matrix[6][i] = (i % 2 === 0);
-    matrix[i][6] = (i % 2 === 0);
-  }
-
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) hash = (hash << 5) - hash + text.charCodeAt(i);
-
-  for (let r = 0; r < N; r++) {
-    for (let c = 0; c < N; c++) {
-      const inFinder1 = (r <= 7 && c <= 7);
-      const inFinder2 = (r <= 7 && c >= N - 8);
-      const inFinder3 = (r >= N - 8 && c <= 7);
-      const inTiming = (r === 6 || c === 6);
-
-      if (!inFinder1 && !inFinder2 && !inFinder3 && !inTiming) {
-        const v = Math.sin(r * 12.9898 + c * 78.233 + hash) * 43758.5453;
-        matrix[r][c] = (v - Math.floor(v)) > 0.48;
-      }
-    }
-  }
-
-  return matrix;
-}
 
 let CURRENT_NOTIF_TAB = "system";
 
@@ -4331,13 +4165,6 @@ function syncTopNotifMirror(unread = null, total = null) {
   }
 }
 
-async function _dispatchBatch(requests) {
-  const res = await apiCall("batch", { requests });
-  if (res.error && res.error.includes("Acción inválida: batch")) {
-    return Promise.all(requests.map(r => apiCall(r.action, r)));
-  }
-  return res.data;
-}
 
 async function loadNotifUnitCatalog(forceRefresh = false) {
   const cacheKey = buildCacheKey("UNIT_CATALOG", "NOTIFS");
@@ -7528,6 +7355,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
         const { data, error } = await supabase.functions.invoke('admin-create-user', {
           body: {
             email: payload.email,
+            nombre: payload.nombre,
             usuario: payload.usuario,
             municipio: payload.municipio,
             clues: payload.clues,
@@ -7562,7 +7390,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
           throw new Error(data.error || "No se pudo crear el usuario");
         }
 
-        return { ok: true, message: data.message };
+        return { ok: true, message: data.message, usuario: data.usuario, id: data.id };
       }
 
       case "uploadfile": {
@@ -7763,6 +7591,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
         const { data, error } = await supabase.functions.invoke('admin-reset-password', {
           body: {
+            id: payload.id,
             usuario: payload.usuario,
             redirectTo: window.location.origin + window.location.pathname.replace('index.html', '') + 'reset.html'
           },
@@ -7795,6 +7624,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
         const { data, error } = await supabase.functions.invoke('admin-delete-user', {
           body: {
+            id: payload.id,
             usuario: payload.usuario
           },
           headers: {
@@ -7827,6 +7657,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
         const { data, error } = await supabase.functions.invoke('admin-set-active', {
           body: {
+            id: payload.id,
             usuario: payload.usuario,
             activo: !!payload.activo
           },
@@ -7860,7 +7691,11 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
         const { data, error } = await supabase.functions.invoke('admin-update-user', {
           body: {
+            id: payload.id,
             usuario: payload.usuario,
+            email: payload.email,
+            nombre: payload.nombre,
+            explicito: true,
             rol: payload.rol,
             municipio: payload.municipio,
             clues: payload.clues,
@@ -8365,7 +8200,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
         return { ok: true };
       }
       default:
-        return _rawApiCall(payload);
+        return { ok: false, error: `Acción inválida: ${action}` };
     }
   } catch (err) {
     const isJwtExpired = err?.code === "PGRST303" || /jwt expired/i.test(err?.message || "");
@@ -8384,53 +8219,6 @@ async function supabaseRequest(action = "", payload, options = {}) {
   }
 }
 
-async function _dispatchBatch() {
-  const queue = [...API_BATCH_QUEUE];
-  API_BATCH_QUEUE = [];
-  API_BATCH_TIMER = null;
-
-  if (!queue.length) return;
-
-  // Si solo hay una petición, la enviamos normal
-  if (queue.length === 1) {
-    const { body, resolve, reject } = queue[0];
-    _rawApiCall(body).then(resolve).catch(reject);
-    return;
-  }
-
-  // Petición agrupada
-  const batchBody = {
-    action: "batch",
-    token: TOKEN,
-    requests: queue.map(q => q.body)
-  };
-
-  try {
-    const res = await _rawApiCall(batchBody);
-
-    // 🛡️ DEGRADACIÓN GRÁCIL: Si el servidor no soporta batching, reintentamos uno por uno
-    const err = String(res?.error || "");
-    if (res && !res.ok && (err.includes("Acción inválida: batch") || err.includes("batch] @v2"))) {
-      // En lugar de advertencia ruidosa, si estamos en migración podemos ser más discretos
-      // console.warn("⚠️ Servidor en transición (Modo Batch no activo). Reintentando individualmente…");
-      queue.forEach(q => {
-        _rawApiCall(q.body).then(q.resolve).catch(q.reject);
-      });
-      return;
-    }
-
-    if (res.ok && Array.isArray(res.data)) {
-      queue.forEach((q, i) => q.resolve(res.data[i] || { ok: false, error: "Sin respuesta interna" }));
-    } else {
-      queue.forEach(q => q.resolve(res)); // Error de dispatcher
-    }
-  } catch (e) {
-    queue.forEach(q => q.reject(e));
-  }
-}
-
-// 🛑 _rawApiCall y lógica de GAS eliminados por obsolescencia.
-// Toda la comunicación ahora es 1:1 con Supabase vía AppService.
 
 
 // ==========================================
@@ -9328,7 +9116,7 @@ async function hydrateSessionUi(user, status, opts = {}) {
   }
 
   // ✅ OPTIMIZACIÓN: Carga concurrente y agrupada
-  // Al usar apiCall para múltiples cosas aquí, el API_BATCH_TIMER las agrupará en UN solo POST
+  // Las consultas se lanzan en paralelo (Promise.all)
   try {
     // ? Visibilidad de pestañas por Rol
     const isOps = user?.rol && ["ADMIN", "MUNICIPAL", "JURISDICCIONAL", "VISUALIZADOR_JURISDICCIONAL", "CARAVANAS"].includes(user.rol);
@@ -10697,7 +10485,7 @@ document.addEventListener("DOMContentLoaded", () => {
         wrap.classList.toggle("is-scrolled", isScrolled);
       }
     }
-  }, true); // Capture phase required for scroll events
+  }, { capture: true, passive: true }); // Capture phase required for scroll events; passive: nunca bloquea el scroll
 });
 
 document.addEventListener("visibilitychange", () => {
@@ -11094,7 +10882,7 @@ function getConsumiblesOperationalRangeClient(base) {
     if (isMexicanHoliday(jueves)) {
       return {
         fechaInicio: base,
-        fechaFin: formatDateLocal(jueves)
+        fechaFin: `${jueves.getFullYear()}-${String(jueves.getMonth() + 1).padStart(2, "0")}-${String(jueves.getDate()).padStart(2, "0")}`
       };
     }
   }
@@ -11286,9 +11074,6 @@ function canSeeMunicipio_(user, targetMuni) {
   const normalizedTarget = normalizeText(targetMuni);
   const result = allowed.some(a => normalizeText(a) === normalizedTarget);
 
-  if (!result && role === "MUNICIPAL") {
-    console.log(`[Hierarchy DEBUG] Access Denied: target=${normalizedTarget}, allowed=[${allowed.map(a => normalizeText(a)).join(',')}]`);
-  }
 
   return result;
 }
@@ -14325,15 +14110,6 @@ function updateDynamicGreeting(timeGreeting = null, customSubtitle = null) {
     `;
 }
 
-async function runPostLoginInit(user) {
-  const fechaHoy = todayYmdLocal();
-  await Promise.all([
-    getTodayReports(fechaHoy),
-    loadNotifications({ silent: true }),
-    getCaptureOverview(fechaHoy, "SR"),
-    refreshPinolBadgeOnly?.()
-  ]);
-}
 
 // 🛑 Duplicado de hydrateSessionUi eliminado.
 
@@ -16804,7 +16580,6 @@ window.activateAdminSubPanel = function (panelId) {
   if (panelId === 'dashboard') {
     const activeSub = document.querySelector(".admin-tab.border-primary")?.id;
     if (activeSub === 'tabAdminUsers') refreshUsers();
-    else if (activeSub === 'tabAdminCatalog') loadUnitCatalogAdmin();
     else if (activeSub === 'tabAdminAperturas') {
       loadConsumiblesOverrideAdmin();
       loadExistenciaOverrideAdmin();
@@ -17019,7 +16794,7 @@ window.downloadEvidAperturaZip = async function (tipo, nombreCarpeta) {
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
       const url = f.public_url || `${SUPABASE_URL}/storage/v1/object/public/evidencias/${encodeURIComponent(f.name)}`;
-      updateOverlay(`Descargando (${i + 1}/${files.length}): ${f.name.split('/').pop()}`, "Generando ZIP");
+      updateOverlayProgress(i, files.length, `Descargando (${i + 1}/${files.length}): ${f.name.split('/').pop()}`, "Generando ZIP");
       try {
         const resp = await fetch(url);
         if (resp.ok) {
@@ -17039,7 +16814,7 @@ window.downloadEvidAperturaZip = async function (tipo, nombreCarpeta) {
       return;
     }
 
-    updateOverlay("Empaquetando ZIP final...", "Descargando");
+    updateOverlayProgress(files.length, files.length, "Empaquetando ZIP final...", "Descargando");
     const content = await zip.generateAsync({ type: "blob" });
     hideOverlay();
 
@@ -17309,11 +17084,103 @@ if (rBtn) {
   };
 }
 
-// --- Lógica del Modal "Alta de Usuario" / "Editar Usuario (Mover CLUES)" ---
-let EDIT_USER_CTX = null; // null = modo alta; string (usuario) = modo edición
+// --- Lógica del modal "Alta de Usuario" / "Editar Usuario (mover CLUES)" ---
+//
+// Reglas (ver supabase/functions/admin-*-user):
+//  * Una cuenta se identifica por su `id` (uuid de Auth), nunca por el texto `usuario`: varias
+//    personas pueden compartir la misma unidad (CLUES) y cada una tiene su cuenta, su correo y su
+//    historial; editar/suspender/eliminar a una no toca a las demás.
+//  * Mover una cuenta de CLUES / municipio NO borra nada: cambia solo su ubicación institucional. Los
+//    reportes ya capturados conservan la CLUES con la que se capturaron.
+//  * El servidor toma unidad y municipio del catálogo según la CLUES elegida.
+const JURIS_CLUES = "QTSSA012154";
+const JURIS_UNIDAD = "OFICINAS DE LA JURISDICCIÓN SANITARIA 1";
+const USR_MUNICIPIOS_CATALOGO = [
+  ["QUERETARO", "Querétaro"], ["CORREGIDORA", "Corregidora"], ["MARQUES", "El Marqués"],
+  ["HUIMILPAN", "Huimilpan"], ["HENM", "Hospital HENM"], ["NHG", "Hospital NHG"]
+];
+let EDIT_USER_CTX = null; // null = modo alta; objeto de USERS_CACHE (con .id) = modo edición
+
+const usrNorm = (str) => String(str || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim();
+
+function usrMunicipiosSeleccionados() {
+  return Array.from(document.querySelectorAll("#createMunicipiosChips input:checked")).map((i) => i.value);
+}
+
+function usrRenderMunicipiosChips(seleccion = []) {
+  const cont = $("createMunicipiosChips");
+  if (!cont) return;
+  const sel = new Set(seleccion.map(usrNorm));
+  cont.innerHTML = USR_MUNICIPIOS_CATALOGO.map(([val, label]) => `
+    <label class="usr-chip">
+      <input type="checkbox" value="${val}" ${sel.has(val) ? "checked" : ""}>
+      <span>${label}</span>
+    </label>`).join("");
+}
+
+// Municipio efectivo a enviar según el rol (lista separada por comas en MUNICIPAL/JURISDICCIONAL)
+function usrMunicipioParaRol(rol) {
+  if (rol === "MUNICIPAL" || rol === "JURISDICCIONAL") return usrMunicipiosSeleccionados().join(",");
+  if (rol === "UNIDAD") return $("createMunicipio")?.value || "";
+  return "";
+}
+
+// Muestra solo los controles que aplican al rol elegido
+function usrAplicarLayoutRol(rol) {
+  const boxMuni = $("createMunicipioBox");
+  const boxUnidad = $("createUnidadBox");
+  const group = $("createMunicipiosGroup");
+  const hint = $("createMunicipiosHint");
+  const legend = $("createMunicipiosLegend");
+  const esUnidad = rol === "UNIDAD";
+  const esMuni = rol === "MUNICIPAL";
+  const esJuris = rol === "JURISDICCIONAL";
+
+  if (boxMuni) boxMuni.style.display = esUnidad || !rol ? "" : "none";
+  if (boxUnidad) boxUnidad.style.display = esUnidad || !rol ? "" : "none";
+  if (group) group.style.display = esMuni || esJuris ? "" : "none";
+  if (legend) legend.textContent = esJuris ? "Hospitales a su cargo (opcional)" : "Municipios a cargo";
+  if (hint) {
+    hint.textContent = esJuris
+      ? "Solo si hace de municipal de los hospitales (HENM / NHG). Si no, déjalo vacío: ve toda la jurisdicción."
+      : esMuni
+        ? "Puede ser más de uno. Solo verá y validará lo de estos municipios."
+        : "";
+  }
+  if (!esUnidad && $("createClues")) {
+    if (rol) {
+      $("createClues").value = rol === "ADMIN" ? "" : JURIS_CLUES;
+    }
+  }
+  usrRefrescarAvisoUnidad();
+}
+
+// Aviso de otras cuentas que ya usan la CLUES elegida (no se tocan; solo informa)
+function usrRefrescarAvisoUnidad() {
+  const aviso = $("createUnidadAviso");
+  if (!aviso) return;
+  const rol = $("createRol")?.value;
+  const clues = ($("createClues")?.value || "").trim();
+  if (rol !== "UNIDAD" || !clues) { aviso.style.display = "none"; aviso.textContent = ""; return; }
+  const propios = EDIT_USER_CTX ? EDIT_USER_CTX.id : null;
+  const otros = (USERS_CACHE || []).filter((u) => u.clues === clues && u.id !== propios);
+  if (otros.length === 0) {
+    aviso.style.display = "";
+    aviso.style.background = "rgba(16,185,129,.10)";
+    aviso.style.color = "#047857";
+    aviso.textContent = "Esta unidad todavía no tiene cuentas.";
+    return;
+  }
+  const nombres = otros.map((u) => u.nombre ? `${u.usuario} (${u.nombre})` : u.usuario).join(", ");
+  aviso.style.display = "";
+  aviso.style.background = "rgba(79,70,229,.08)";
+  aviso.style.color = "#3730a3";
+  aviso.textContent = `Esta unidad ya tiene ${otros.length} cuenta${otros.length === 1 ? "" : "s"}: ${nombres}. ${EDIT_USER_CTX ? "Mover esta cuenta aquí" : "Agregar una cuenta más"} no modifica a las demás: cada persona conserva su acceso y todas comparten la misma unidad.`;
+}
 
 function resetCreateUserForm() {
   if ($("createEmail")) { $("createEmail").value = ""; $("createEmail").readOnly = false; }
+  if ($("createNombre")) $("createNombre").value = "";
   if ($("createUsuarioID")) { $("createUsuarioID").value = ""; $("createUsuarioID").readOnly = false; }
   if ($("createRol")) $("createRol").value = "";
   if ($("createUnidad")) {
@@ -17323,12 +17190,43 @@ function resetCreateUserForm() {
   }
   if ($("createClues")) $("createClues").value = "";
   if ($("createMunicipio")) { $("createMunicipio").value = ""; $("createMunicipio").disabled = false; }
+  usrRenderMunicipiosChips([]);
+  usrAplicarLayoutRol("");
+}
+
+let _usrFocoPrevio = null;
+function usrMostrarModal() {
+  const modal = document.getElementById("createUserModal");
+  if (!modal) return;
+  _usrFocoPrevio = document.activeElement;
+  modal.classList.add("show");
+  modal.setAttribute("aria-hidden", "false");
+  setTimeout(() => ($("createEmail") && !$("createEmail").readOnly ? $("createEmail") : $("createRol"))?.focus(), 60);
 }
 
 window.closeCreateUserModal = function closeCreateUserModal() {
   EDIT_USER_CTX = null;
-  document.getElementById('createUserModal')?.classList.remove('show');
+  const modal = document.getElementById("createUserModal");
+  if (!modal) return;
+  modal.classList.remove("show");
+  modal.setAttribute("aria-hidden", "true");
+  if (_usrFocoPrevio && typeof _usrFocoPrevio.focus === "function") _usrFocoPrevio.focus();
 };
+
+// Escape cierra el modal y el foco no se escapa de él (diálogo modal accesible)
+document.addEventListener("keydown", (e) => {
+  const modal = document.getElementById("createUserModal");
+  if (!modal || !modal.classList.contains("show")) return;
+  if (e.key === "Escape") { e.preventDefault(); window.closeCreateUserModal(); return; }
+  if (e.key !== "Tab") return;
+  const foco = Array.from(modal.querySelectorAll("button, input, select, [tabindex]:not([tabindex='-1'])"))
+    .filter((el) => !el.disabled && !el.readOnly && el.offsetParent !== null);
+  if (!foco.length) return;
+  const primero = foco[0];
+  const ultimo = foco[foco.length - 1];
+  if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+  else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+});
 
 window.openCreateUserModal = function openCreateUserModal() {
   EDIT_USER_CTX = null;
@@ -17336,27 +17234,28 @@ window.openCreateUserModal = function openCreateUserModal() {
   if ($("createUserModalEyebrowTxt")) $("createUserModalEyebrowTxt").textContent = "Nuevo Acceso Institucional";
   if ($("createUserModalIcon")) $("createUserModalIcon").textContent = "person_add";
   if ($("createUserModalTitle")) $("createUserModalTitle").textContent = "Alta de Usuario";
-  if ($("createUserModalSub")) $("createUserModalSub").innerHTML = "Se enviará un enlace al correo de la persona para que cree su propia contraseña. No hay contraseña provisional.";
-  if ($("createUsuarioIDLabel")) $("createUsuarioIDLabel").textContent = "ID de Usuario";
+  if ($("createUserModalSub")) $("createUserModalSub").innerHTML = "Se enviará un enlace al correo de la persona para que cree su propia contraseña. Una unidad puede tener varias cuentas.";
+  if ($("createUsuarioIDLabel")) $("createUsuarioIDLabel").textContent = "ID de usuario";
   if ($("createUserModalBtnIcon")) $("createUserModalBtnIcon").textContent = "check_circle";
   if ($("createUserModalBtnTxt")) $("createUserModalBtnTxt").textContent = "Registrar";
-  document.getElementById('createUserModal').classList.add('show');
+  usrMostrarModal();
 };
 
 window.openEditUserModal = async function openEditUserModal(u) {
   if (!u) return;
-  EDIT_USER_CTX = u.usuario;
+  EDIT_USER_CTX = u;
   resetCreateUserForm();
 
-  if ($("createUserModalEyebrowTxt")) $("createUserModalEyebrowTxt").textContent = "Editar Acceso / Mover CLUES";
+  if ($("createUserModalEyebrowTxt")) $("createUserModalEyebrowTxt").textContent = "Editar acceso / mover CLUES";
   if ($("createUserModalIcon")) $("createUserModalIcon").textContent = "edit_location_alt";
   if ($("createUserModalTitle")) $("createUserModalTitle").textContent = "Editar Usuario";
-  if ($("createUserModalSub")) $("createUserModalSub").textContent = "Puedes reasignar el rol, municipio, unidad o CLUES de este usuario sin afectar sus reportes históricos.";
-  if ($("createUsuarioIDLabel")) $("createUsuarioIDLabel").textContent = "ID de Usuario (no editable)";
+  if ($("createUserModalSub")) $("createUserModalSub").textContent = "Puedes reasignar rol, municipio, unidad o CLUES, y corregir correo y nombre, sin borrar la cuenta ni afectar sus reportes históricos.";
+  if ($("createUsuarioIDLabel")) $("createUsuarioIDLabel").textContent = "ID de usuario (no editable)";
   if ($("createUserModalBtnIcon")) $("createUserModalBtnIcon").textContent = "save";
   if ($("createUserModalBtnTxt")) $("createUserModalBtnTxt").textContent = "Guardar cambios";
 
-  if ($("createEmail")) { $("createEmail").value = u.email || ""; $("createEmail").readOnly = true; }
+  if ($("createEmail")) $("createEmail").value = u.email || "";
+  if ($("createNombre")) $("createNombre").value = u.nombre || "";
   if ($("createUsuarioID")) { $("createUsuarioID").value = u.usuario || ""; $("createUsuarioID").readOnly = true; }
   if ($("createRol")) {
     // El selector de alta no incluye ADMIN a propósito (no se crean admins desde este modal),
@@ -17366,48 +17265,70 @@ window.openEditUserModal = async function openEditUserModal(u) {
     }
     $("createRol").value = u.rol || "";
   }
-  if ($("createMunicipio")) $("createMunicipio").value = u.municipio || "";
-  if ($("createClues")) $("createClues").value = u.clues || "";
 
-  // Reconstruir el catálogo de Unidad para el municipio actual antes de fijar el valor existente
   const rol = u.rol || "";
-  if ((rol === "UNIDAD" || rol === "MUNICIPAL") && u.municipio) {
+  usrAplicarLayoutRol(rol);
+
+  if (rol === "MUNICIPAL" || rol === "JURISDICCIONAL") {
+    usrRenderMunicipiosChips(String(u.municipio || "").split(/[;,]/).map((m) => m.trim()).filter(Boolean));
+  }
+
+  if (rol === "UNIDAD") {
+    if ($("createMunicipio")) $("createMunicipio").value = u.municipio || "";
     let catalog = (typeof NOTIF_UNIT_CATALOG !== "undefined") ? NOTIF_UNIT_CATALOG : [];
     if (catalog.length === 0 && typeof loadNotifUnitCatalog === "function") {
       catalog = await loadNotifUnitCatalog();
     }
-    const munNorm = normalizeText(u.municipio);
-    if (rol === "UNIDAD") {
-      const filtered = catalog.filter(x => normalizeText(x.municipio || x.MUNICIPIO || "") === munNorm);
-      let html = '<option value="">Selecciona la Unidad</option>';
-      filtered.forEach(x => {
-        const name = x.unidad || x.UNIDAD || x.nombre || "";
-        html += `<option value="${name}">${name}</option>`;
-      });
-      if ($("createUnidad")) $("createUnidad").innerHTML = html;
-    }
+    usrLlenarUnidades(catalog, u.municipio);
+    if ($("createUnidad")) $("createUnidad").value = u.unidad || "";
+    if ($("createClues")) $("createClues").value = u.clues || "";
   }
-  if (rol === "JURISDICCIONAL" || rol === "VISUALIZADOR_JURISDICCIONAL" || rol === "CARAVANAS") {
-    if ($("createUnidad")) $("createUnidad").innerHTML = '<option value="OFICINAS DE LA JURISDICCIÓN SANITARIA 1">OFICINAS DE LA JURISDICCIÓN SANITARIA 1</option>';
-    if ($("createMunicipio")) $("createMunicipio").disabled = true;
-  }
-  if ($("createUnidad")) $("createUnidad").value = u.unidad || "";
-
-  document.getElementById('createUserModal').classList.add('show');
+  usrRefrescarAvisoUnidad();
+  usrMostrarModal();
 };
+
+function usrLlenarUnidades(catalog, municipio) {
+  const munNorm = usrNorm(municipio);
+  const filtradas = catalog.filter((x) => usrNorm(x.municipio || x.MUNICIPIO || "") === munNorm);
+  let html = '<option value="">Selecciona la Unidad</option>';
+  filtradas.forEach((x) => {
+    const name = x.unidad || x.UNIDAD || x.nombre || "";
+    html += `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`;
+  });
+  if ($("createUnidad")) $("createUnidad").innerHTML = html;
+}
 
 const btnCreateUser = $("btnSubmitCreateUser");
 if (btnCreateUser) {
   btnCreateUser.onclick = async () => {
     const email = $("createEmail")?.value.trim();
-    const usuarioID = $("createUsuarioID")?.value.trim();
+    const nombre = $("createNombre")?.value.trim() || "";
+    const usuarioID = $("createUsuarioID")?.value.trim() || "";
     const rol = $("createRol")?.value;
     const unidad = $("createUnidad")?.value;
     const clues = $("createClues")?.value.trim() || "";
-    const municipio = $("createMunicipio")?.value;
+    const municipio = usrMunicipioParaRol(rol);
 
-    if (!email || !usuarioID || !rol) {
-      showToast("El correo de acceso, el ID de usuario y el rol son obligatorios", false);
+    if (!email || !rol) {
+      showToast("El correo de acceso y el rol son obligatorios", false);
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast("El correo no tiene un formato válido", false);
+      $("createEmail")?.focus();
+      return;
+    }
+    if (nombre && nombre.length < 3) {
+      showToast("El nombre debe tener al menos 3 caracteres", false);
+      $("createNombre")?.focus();
+      return;
+    }
+    if (rol === "UNIDAD" && !clues) {
+      showToast("Elige el municipio y la unidad: la CLUES se completa sola", false);
+      return;
+    }
+    if (rol === "MUNICIPAL" && !municipio) {
+      showToast("Elige al menos un municipio a cargo", false);
       return;
     }
 
@@ -17419,7 +17340,10 @@ if (btnCreateUser) {
       const payload = isEdit
         ? {
           action: "adminupdateuser",
-          usuario: EDIT_USER_CTX,
+          id: EDIT_USER_CTX.id,
+          usuario: EDIT_USER_CTX.usuario,
+          email: email,
+          nombre: nombre,
           rol: rol,
           unidad: unidad,
           clues: clues,
@@ -17428,7 +17352,8 @@ if (btnCreateUser) {
         : {
           action: "admincreateuser",
           email: email,       // Credencial Supabase Auth
-          usuario: usuarioID, // Identificador interno en tablas
+          nombre: nombre,
+          usuario: usuarioID, // Identificador interno (opcional: el servidor genera uno único)
           rol: rol,
           unidad: unidad,
           clues: clues,
@@ -17438,12 +17363,11 @@ if (btnCreateUser) {
       const res = await apiCall(payload);
       if (res && res.ok) {
         showToast(res.message || (isEdit ? "Usuario actualizado exitosamente" : "Usuario dado de alta exitosamente"), true);
-        document.getElementById('createUserModal').classList.remove('show');
-        EDIT_USER_CTX = null;
+        window.closeCreateUserModal();
         resetCreateUserForm();
         await refreshUsers();
       } else {
-        showToast(res.error || "Hubo un error al procesar la solicitud", false);
+        showToast((res && res.error) || "Hubo un error al procesar la solicitud", false);
       }
     } catch (err) {
       showToast(err.message || "Error de conexión", false);
@@ -17455,7 +17379,7 @@ if (btnCreateUser) {
   };
 }
 
-// Lógica dinámica para el formulario (Cascada y Auto-completado)
+// Lógica dinámica para el formulario (cascada rol -> municipio -> unidad -> CLUES)
 const createRol = $("createRol");
 const createUnidad = $("createUnidad");
 const createClues = $("createClues");
@@ -17466,98 +17390,52 @@ if (createRol && createUnidad && createClues && createMunicipio) {
   createRol.addEventListener("change", () => {
     const val = createRol.value;
 
-    // Reset
     createUnidad.disabled = false;
     createMunicipio.disabled = false;
     createClues.value = "";
     createUnidad.innerHTML = '<option value="">Selecciona la Unidad</option>';
+    createMunicipio.value = "";
+    usrRenderMunicipiosChips([]);
 
-    if (val === "JURISDICCIONAL" || val === "VISUALIZADOR_JURISDICCIONAL" || val === "MUNICIPAL" || val === "CARAVANAS") {
-      createUnidad.innerHTML = '<option value="OFICINAS DE LA JURISDICCIÓN SANITARIA 1">OFICINAS DE LA JURISDICCIÓN SANITARIA 1</option>';
-      createUnidad.value = "OFICINAS DE LA JURISDICCIÓN SANITARIA 1";
-      createClues.value = "QTSSA012154";
-      createUnidad.disabled = true;
-
-      if (val === "JURISDICCIONAL") {
-        createMunicipio.value = "";
-        createMunicipio.disabled = true;
-        createUsuarioID.value = "QTSSA012154_JURISDICCIONAL";
-      } else if (val === "VISUALIZADOR_JURISDICCIONAL") {
-        createMunicipio.value = "";
-        createMunicipio.disabled = true;
-        createUsuarioID.value = "QTSSA012154_VIZ_JUR";
-      } else if (val === "CARAVANAS") {
-        createMunicipio.value = "";
-        createMunicipio.disabled = true;
-        createUsuarioID.value = "QTSSA012154_CARAVANAS";
-      } else {
-        // MUNICIPAL: Permite elegir municipio pero bloquea unidad
-        createMunicipio.disabled = false;
-        createMunicipio.value = "";
-        createUsuarioID.value = "";
-      }
-    } else if (val === "UNIDAD") {
-      createUnidad.value = "";
-      createClues.value = "";
-      createMunicipio.value = "";
-      createUnidad.disabled = false;
-      createMunicipio.disabled = false;
-      createUsuarioID.value = "";
+    // Sugerencia de ID (editable). Si ya existe, el servidor agrega _2, _3... para no pisar la cuenta de otra persona.
+    if (!EDIT_USER_CTX) {
+      createUsuarioID.value = val === "JURISDICCIONAL" ? `${JURIS_CLUES}_JURISDICCIONAL`
+        : val === "VISUALIZADOR_JURISDICCIONAL" ? `${JURIS_CLUES}_VIZ_JUR`
+        : val === "CARAVANAS" ? `${JURIS_CLUES}_CARAVANAS`
+        : "";
     }
 
-    // En modo edición el ID de usuario es inmutable: no se regenera con la cascada
-    if (EDIT_USER_CTX) createUsuarioID.value = EDIT_USER_CTX;
+    if (val !== "UNIDAD" && val !== "") {
+      createUnidad.innerHTML = `<option value="${JURIS_UNIDAD}">${JURIS_UNIDAD}</option>`;
+      createUnidad.value = JURIS_UNIDAD;
+    }
+    usrAplicarLayoutRol(val);
   });
 
   createMunicipio.addEventListener("change", async () => {
     const rol = createRol.value;
-    const mun = createMunicipio.value;
-
-    if (rol === "UNIDAD" || rol === "MUNICIPAL") {
-      // Asegurar que el catálogo esté cargado
-      let catalog = (typeof NOTIF_UNIT_CATALOG !== "undefined") ? NOTIF_UNIT_CATALOG : [];
-      if (catalog.length === 0 && typeof loadNotifUnitCatalog === "function") {
-        catalog = await loadNotifUnitCatalog();
-      }
-
-      const norm = (str) => String(str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-      const munNorm = norm(mun);
-
-      if (rol === "UNIDAD") {
-        const filtered = catalog.filter(x => norm(x.municipio || x.MUNICIPIO || "") === munNorm);
-        let html = '<option value="">Selecciona la Unidad</option>';
-        filtered.forEach(u => {
-          const name = u.unidad || u.UNIDAD || u.nombre || "";
-          html += `<option value="${name}">${name}</option>`;
-        });
-        createUnidad.innerHTML = html;
-        createUnidad.value = "";
-        createClues.value = "";
-      }
-
-      if (rol === "MUNICIPAL") {
-        createUsuarioID.value = `QTSSA012154_${munNorm.replace(/\s+/g, '_')}`;
-      }
-    }
-
-    if (EDIT_USER_CTX) createUsuarioID.value = EDIT_USER_CTX;
-  });
-
-  createUnidad.addEventListener("change", async () => {
-    const rol = createRol.value;
     if (rol !== "UNIDAD") return;
 
-    const val = createUnidad.value;
-    const mun = createMunicipio.value;
-
     let catalog = (typeof NOTIF_UNIT_CATALOG !== "undefined") ? NOTIF_UNIT_CATALOG : [];
-    const norm = (str) => String(str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-    const munNorm = norm(mun);
-    const valNorm = norm(val);
+    if (catalog.length === 0 && typeof loadNotifUnitCatalog === "function") {
+      catalog = await loadNotifUnitCatalog();
+    }
+    usrLlenarUnidades(catalog, createMunicipio.value);
+    createUnidad.value = "";
+    createClues.value = "";
+    usrRefrescarAvisoUnidad();
+  });
 
-    const match = catalog.find(x => {
-      const itemMun = norm(x.municipio || x.MUNICIPIO || "");
-      const itemUni = norm(x.unidad || x.UNIDAD || x.nombre || "");
+  createUnidad.addEventListener("change", () => {
+    if (createRol.value !== "UNIDAD") return;
+
+    const catalog = (typeof NOTIF_UNIT_CATALOG !== "undefined") ? NOTIF_UNIT_CATALOG : [];
+    const munNorm = usrNorm(createMunicipio.value);
+    const valNorm = usrNorm(createUnidad.value);
+
+    const match = catalog.find((x) => {
+      const itemMun = usrNorm(x.municipio || x.MUNICIPIO || "");
+      const itemUni = usrNorm(x.unidad || x.UNIDAD || x.nombre || "");
       return itemMun === munNorm && itemUni === valNorm;
     });
 
@@ -17565,10 +17443,10 @@ if (createRol && createUnidad && createClues && createMunicipio) {
       const clues = match.clues || match.CLUES || "";
       const unitName = match.unidad || match.UNIDAD || match.nombre || "";
       createClues.value = clues;
-      // Generar ID con CLUES + NOMBRE DE UNIDAD (normalizado)
-      const unitID = norm(unitName).replace(/\s+/g, '_');
-      createUsuarioID.value = EDIT_USER_CTX ? EDIT_USER_CTX : `${clues}_${unitID}`;
+      // ID sugerido: CLUES + nombre de la unidad. En edición el ID no cambia (el historial queda ligado a él).
+      if (!EDIT_USER_CTX) createUsuarioID.value = `${clues}_${usrNorm(unitName).replace(/\s+/g, "_")}`;
     }
+    usrRefrescarAvisoUnidad();
   });
 }
 
@@ -17847,7 +17725,7 @@ function filterUsersCache(users, filters) {
     if (activo && String(u.activo || "SI").toUpperCase() !== activo) return false;
     if (query) {
       const haystack = normalizeText(
-        [u.usuario, u.email, u.clues, u.municipio, u.unidad, u.rol].filter(Boolean).join(" | ")
+        [u.usuario, u.nombre, u.email, u.clues, u.municipio, u.unidad, u.rol].filter(Boolean).join(" | ")
       );
       if (!haystack.includes(query)) return false;
     }
@@ -17878,92 +17756,108 @@ function renderUsersRows(users) {
   tbody.innerHTML = "";
 
   if (users.length === 0) {
-    tbody.innerHTML = `<div class="sgb-empty">Sin usuarios que coincidan con el filtro</div>`;
+    tbody.innerHTML = `<div class="sgb-empty" role="status">Sin usuarios que coincidan con el filtro</div>`;
     return;
   }
+
+  // Cuántas cuentas comparten cada CLUES (varias personas pueden compartir unidad)
+  const porClues = new Map();
+  (USERS_CACHE || []).forEach((u) => {
+    if (u.rol !== "UNIDAD" || !u.clues) return;
+    porClues.set(u.clues, (porClues.get(u.clues) || 0) + 1);
+  });
 
   for (const u of users) {
     const row = document.createElement("div");
     row.className = "sgb-row sgb-body-row group";
 
-    const isActivo = u.activo === "SI";
+    const isActivo = String(u.activo || "SI").toUpperCase() === "SI";
     const roleClass = u.rol === "ADMIN" ? "bg-primary/10 text-primary border-primary/20" : "bg-slate-100 text-slate-600 border-slate-200";
     const statusColorClass = isActivo ? "text-emerald-700" : "text-rose-700";
     const ubicacion = [u.clues, (u.unidad || u.municipio)].filter(Boolean).join(" · ");
+    const compartida = u.rol === "UNIDAD" ? (porClues.get(u.clues) || 1) : 1;
+    const subtitulo = u.nombre
+      ? u.nombre
+      : (u.must_change ? "Pendiente: crear contraseña" : "");
+    const uid = escapeAttr(u.id || "");
+    const etiqueta = escapeAttr(u.usuario);
 
     row.innerHTML = `
       <div class="sgb-cell flex flex-col min-w-0">
          <span class="sgb-truncate font-extrabold text-primary text-[13px] tracking-tight" title="${escapeHtml(u.usuario)}">${escapeHtml(u.usuario)}</span>
-         <span class="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">Cuenta Activa</span>
+         ${subtitulo ? `<span class="sgb-truncate sgb-sub" title="${escapeHtml(subtitulo)}">${escapeHtml(subtitulo)}</span>` : ""}
       </div>
       <div class="sgb-cell">
          <span class="sgb-truncate font-bold text-slate-600 text-[13px] tracking-tight" title="${escapeHtml(u.email || 'Sin correo registrado')}">${escapeHtml(u.email || 'Sin correo registrado')}</span>
       </div>
       <div class="sgb-cell">
-         <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${roleClass}">${escapeHtml(u.rol)}</span>
+         <span class="sgb-role px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${roleClass}" title="${escapeAttr(u.rol)}">${escapeHtml(String(u.rol||"").replace(/_/g," "))}</span>
       </div>
-      <div class="sgb-cell">
+      <div class="sgb-cell flex flex-col min-w-0">
          <span class="sgb-truncate font-bold text-slate-600 text-[12px] tracking-tight" title="${escapeHtml(ubicacion || 'Sin asignar')}">${escapeHtml(ubicacion || '—')}</span>
+         ${compartida > 1 ? `<span class="sgb-sub">${compartida} cuentas en esta unidad</span>` : ""}
       </div>
       <div class="sgb-cell flex items-center gap-2">
-         <span class="w-2.5 h-2.5 rounded-full shrink-0 ${isActivo ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-400'}"></span>
+         <span class="w-2.5 h-2.5 rounded-full shrink-0 ${isActivo ? 'bg-emerald-500' : 'bg-rose-400'}" aria-hidden="true"></span>
          <span class="sgb-truncate text-[11px] font-black uppercase tracking-wide ${statusColorClass}">${isActivo ? 'Habilitado' : 'Suspendido'}</span>
       </div>
       <div class="sgb-actions">
-        <button class="sgb-icon-btn sgb-icon-btn--edit" data-action="edit" data-user="${escapeAttr(u.usuario)}" title="Editar / Mover CLUES">
-          <span class="material-symbols-rounded">edit</span>
+        <button type="button" class="sgb-icon-btn sgb-icon-btn--edit" data-action="edit" data-id="${uid}" title="Editar / mover CLUES" aria-label="Editar o mover de CLUES a ${etiqueta}">
+          <span class="material-symbols-rounded" aria-hidden="true">edit</span>
         </button>
-        <button class="sgb-icon-btn sgb-icon-btn--reset" data-action="reset" data-user="${escapeAttr(u.usuario)}" title="Nueva Contraseña">
-          <span class="material-symbols-rounded">key</span>
+        <button type="button" class="sgb-icon-btn sgb-icon-btn--reset" data-action="reset" data-id="${uid}" title="Nueva contraseña" aria-label="Enviar enlace de nueva contraseña a ${etiqueta}">
+          <span class="material-symbols-rounded" aria-hidden="true">key</span>
         </button>
-        <button class="sgb-icon-btn ${isActivo ? 'sgb-icon-btn--block' : 'sgb-icon-btn--activate'}" data-action="toggle" data-user="${escapeAttr(u.usuario)}" data-active="${escapeAttr(u.activo)}" title="${isActivo ? 'Bloquear Acceso' : 'Activar Acceso'}">
-          <span class="material-symbols-rounded">${isActivo ? 'block' : 'check_circle'}</span>
+        <button type="button" class="sgb-icon-btn ${isActivo ? 'sgb-icon-btn--block' : 'sgb-icon-btn--activate'}" data-action="toggle" data-id="${uid}" data-active="${isActivo ? 'SI' : 'NO'}" title="${isActivo ? 'Suspender acceso' : 'Reactivar acceso'}" aria-label="${isActivo ? 'Suspender el acceso de' : 'Reactivar el acceso de'} ${etiqueta}">
+          <span class="material-symbols-rounded" aria-hidden="true">${isActivo ? 'block' : 'check_circle'}</span>
         </button>
-        <button class="sgb-icon-btn sgb-icon-btn--delete" data-action="delete" data-user="${escapeAttr(u.usuario)}" title="Eliminar definitivamente">
-          <span class="material-symbols-rounded">delete</span>
+        <button type="button" class="sgb-icon-btn sgb-icon-btn--delete" data-action="delete" data-id="${uid}" title="Eliminar definitivamente" aria-label="Eliminar definitivamente a ${etiqueta}">
+          <span class="material-symbols-rounded" aria-hidden="true">delete</span>
         </button>
       </div>`;
     tbody.appendChild(row);
   }
 
-  // VINCULAR EVENTOS
+  // VINCULAR EVENTOS (cada acción opera sobre la cuenta por su id, nunca por el texto del usuario)
   document.querySelectorAll("#usersTbody .sgb-icon-btn").forEach(btn => {
     btn.onclick = async () => {
       const action = btn.dataset.action;
-      const targetUser = btn.dataset.user;
+      const target = USERS_CACHE.find(x => x.id === btn.dataset.id);
+      if (!target) { showToast("No se encontró la cuenta; actualiza la lista", false); return; }
       const currentActive = btn.dataset.active;
 
       if (action === "edit") {
-        const u = USERS_CACHE.find(x => x.usuario === targetUser);
-        if (u) openEditUserModal(u);
+        openEditUserModal(target);
         return;
       }
 
-      if (action === "delete" && !confirm(`¿Estás seguro de eliminar a ${targetUser}?`)) return;
+      if (action === "delete" && !confirm(`¿Eliminar definitivamente a ${target.usuario}${target.email ? " (" + target.email + ")" : ""}?\n\nSe borra su acceso. Los reportes que ya capturó se conservan. Esta acción no se puede deshacer.`)) return;
+      if (action === "toggle" && String(currentActive || "SI").toUpperCase() === "SI" &&
+        !confirm(`¿Suspender el acceso de ${target.usuario}? Se cerrará su sesión y no podrá entrar hasta que lo reactives.`)) return;
 
       try {
         showOverlay("Procesando...", "Admin");
         let r;
         if (action === "toggle") {
           const newActive = String(currentActive || "SI").toUpperCase() !== "SI";
-          r = await apiCall({ action: "adminSetActive", usuario: targetUser, activo: newActive });
+          r = await apiCall({ action: "adminSetActive", id: target.id, usuario: target.usuario, activo: newActive });
         } else if (action === "reset") {
           hideOverlay();
-          if (!confirm(`Se invalidará la contraseña actual de ${targetUser} y se le enviará un enlace a su correo para crear una nueva. ¿Continuar?`)) return;
+          if (!confirm(`Se invalidará la contraseña actual de ${target.usuario} y se le enviará un enlace a su correo para crear una nueva. ¿Continuar?`)) return;
           showOverlay("Procesando...", "Admin");
-          r = await apiCall({ action: "adminResetPassword", usuario: targetUser });
+          r = await apiCall({ action: "adminResetPassword", id: target.id, usuario: target.usuario });
         } else if (action === "delete") {
-          r = await apiCall({ action: "adminDeleteUser", usuario: targetUser });
+          r = await apiCall({ action: "adminDeleteUser", id: target.id, usuario: target.usuario });
         }
 
         if (r && r.ok) {
           showToast(r.message || "Operación exitosa", true);
           await refreshUsers();
         } else {
-          showToast(r.error || "Error en la operación", false);
+          showToast((r && r.error) || "Error en la operación", false);
         }
       } catch (e) {
-        showToast("Error de conexión", false);
+        showToast(e && e.message ? e.message : "Error de conexión", false);
       } finally {
         hideOverlay();
       }
@@ -25071,63 +24965,6 @@ async function loginWithPasskey() {
 }
 
 // ===== REALTIME COMPOSER UX & SOUNDS =====
-function playNotificationSound(type = "success") {
-  if (!$("chkNotifSound")?.checked) return;
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    const now = ctx.currentTime;
-
-    if (type === "success" || type === "sent") {
-      const notes = [
-        { f: 523.25, d: 0.3, t: 0.0 },  // C5
-        { f: 659.25, d: 0.3, t: 0.08 }, // E5
-        { f: 783.99, d: 0.3, t: 0.16 }, // G5
-        { f: 1046.50, d: 0.5, t: 0.24 } // C6
-      ];
-      notes.forEach(note => {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = "sine";
-        o.connect(g);
-        g.connect(ctx.destination);
-        o.frequency.setValueAtTime(note.f, now + note.t);
-        g.gain.setValueAtTime(0.1, now + note.t);
-        g.gain.exponentialRampToValueAtTime(0.001, now + note.t + note.d);
-        o.start(now + note.t);
-        o.stop(now + note.t + note.d);
-      });
-    } else if (type === "incoming" || type === "receive") {
-      const freqs = [587.33, 698.46, 880.00];
-      freqs.forEach((f, idx) => {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.connect(g);
-        g.connect(ctx.destination);
-        o.frequency.setValueAtTime(f, now + (idx * 0.08));
-        g.gain.setValueAtTime(0.12, now + (idx * 0.08));
-        g.gain.exponentialRampToValueAtTime(0.005, now + (idx * 0.08) + 0.25);
-        o.start(now + (idx * 0.08));
-        o.stop(now + (idx * 0.08) + 0.25);
-      });
-    } else if (type === "error" || type === "bad") {
-      osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(180, now);
-      osc.frequency.linearRampToValueAtTime(120, now + 0.25);
-      gain.gain.setValueAtTime(0.08, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-      osc.start(now);
-      osc.stop(now + 0.25);
-    }
-  } catch (e) {
-    console.warn("AudioContext failed:", e);
-  }
-}
 
 function showWebNotification(title, body, priority = "info") {
   if (Notification.permission === "granted" && !document.hasFocus()) {
@@ -25797,17 +25634,28 @@ function animateKpiCounter(el, targetVal) {
 }
 
 // ===== RASTREADOR DE SPOTLIGHT GLOW PARA TARJETAS PREMIUM =====
-document.addEventListener("mousemove", (e) => {
-  // e.target puede ser document/window u otro nodo sin closest()
-  if (!(e.target instanceof Element)) return;
-  const card = e.target.closest(".kpiCard, .liveFeedItem, .glow-card");
-  if (!card) return;
-  const rect = card.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  card.style.setProperty("--mx", `${x}px`);
-  card.style.setProperty("--my", `${y}px`);
-});
+// Se agrupa a un cálculo por frame (antes: getBoundingClientRect + escritura de
+// estilo en CADA mousemove, decenas de veces por frame con ratón de alta frecuencia).
+(function initSpotlightTracker() {
+  let rafId = null;
+  let lastEv = null;
+  document.addEventListener("mousemove", (e) => {
+    lastEv = e;
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      const ev = lastEv;
+      lastEv = null;
+      // e.target puede ser document/window u otro nodo sin closest()
+      if (!ev || !(ev.target instanceof Element)) return;
+      const card = ev.target.closest(".kpiCard, .liveFeedItem, .glow-card");
+      if (!card) return;
+      const rect = card.getBoundingClientRect();
+      card.style.setProperty("--mx", `${ev.clientX - rect.left}px`);
+      card.style.setProperty("--my", `${ev.clientY - rect.top}px`);
+    });
+  }, { passive: true });
+})();
 
 // ===== DISCORD FEEDBACK LOGIC =====
 // El Feedback ya NO viaja directo a Discord (el webhook estaba público en este archivo):
@@ -26658,103 +26506,10 @@ window.switchProfileCardTab = function(tab) {
   });
 };
 
-const setParentZIndex = (element, val) => {
-  let curr = element.parentElement;
-  if (curr && curr !== document.body) {
-    const computedStyle = getComputedStyle(curr);
-    if (curr.classList.contains("relative") || computedStyle.position === "relative" || computedStyle.position === "absolute" || computedStyle.position === "fixed") {
-      if (val) {
-        if (curr._originalZIndex === undefined) {
-          curr._originalZIndex = curr.style.zIndex || "";
-        }
-        curr.style.setProperty("z-index", val, "important");
-      } else {
-        curr.style.zIndex = curr._originalZIndex || "";
-      }
-    }
-  }
-};
 
-function createPremiumCustomDropdown(selectId) {
-  // Renderizado nativo estilizado por CSS puro
-  return;
-}
-function createPremiumCustomDropdown(select) {
-  // Renderizado nativo estilizado por CSS puro
-  return;
-}
-
-function convertAllSelectsToPremium() {
-  // Renderizado nativo estilizado por CSS puro
-  return;
-}
-
-window.createPremiumCustomDropdown = createPremiumCustomDropdown;
-window.convertAllSelectsToPremium = convertAllSelectsToPremium;
-
-window.createPremiumCustomDropdown = createPremiumCustomDropdown;
-window.convertAllSelectsToPremium = convertAllSelectsToPremium;
-
-
-
-window.createPremiumCustomDropdown = createPremiumCustomDropdown;
-window.convertAllSelectsToPremium = convertAllSelectsToPremium;
-
-window.addEventListener("load", () => {
-  setTimeout(() => {
-    convertAllSelectsToPremium();
-  }, 300);
-
-  // Observador de mutaciones para convertir dinámicamente cualquier select o input de fecha nuevo.
-  // ONLY reacts to addedNodes - never does a full-DOM scan on every mutation,
-  // because that scan was disconnecting live observers every time the calendar re-rendered.
-  const observer = new MutationObserver((mutations) => {
-    // 1. Limpiar wrappers huérfanos (cuyo elemento original ya no exista en el DOM)
-    document.querySelectorAll("[id$=_custom_wrapper]").forEach(wrp => {
-      const originalId = wrp.id.replace("_custom_wrapper", "");
-      const originalElem = document.getElementById(originalId);
-      if (!originalElem || !document.body.contains(originalElem)) {
-        wrp.remove();
-      }
-    });
-
-    let hasNewSelects = false;
-
-    mutations.forEach(mutation => {
-      mutation.addedNodes.forEach(node => {
-        if (node.nodeType === 1) {
-          // Skip nodes that are themselves premium wrappers or their children
-          if (node.id && node.id.endsWith("_custom_wrapper")) return;
-          if (node.closest && node.closest("[id$=_custom_wrapper]")) return;
-
-          if (node.nodeName === "SELECT") {
-            if (!node.classList.contains("premium-custom-hidden-select") && !node.classList.contains("exclude-premium")) {
-              hasNewSelects = true;
-            }
-          } else if (typeof node.querySelectorAll === "function") {
-            const selects = node.querySelectorAll("select:not(.premium-custom-hidden-select):not(.exclude-premium)");
-            if (selects.length > 0) hasNewSelects = true;
-            const dates = node.querySelectorAll("input[type='date']:not(.premium-custom-hidden-select):not(.exclude-premium), input[type='month']:not(.premium-custom-hidden-select):not(.exclude-premium)");
-            if (dates.length > 0) hasNewDates = true;
-          }
-        }
-      });
-    });
-
-    if (hasNewSelects) {
-      convertAllSelectsToPremium();
-    }
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
-});
-
-// Listener global para cerrar cualquier desplegable o calendario abierto con la tecla Escape
+// Listener global para cerrar el selector de semana de Influenza con la tecla Escape
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" || e.key === "Esc") {
-    document.querySelectorAll("[id$=_custom_wrapper] > div").forEach(d => {
-      d.classList.add("hidden");
-      d.style.display = "none";
-    });
     const influenzaSemanaDropdown = document.getElementById("influenza_semana_dropdown");
     if (influenzaSemanaDropdown) {
       influenzaSemanaDropdown.classList.add("hidden");
@@ -26766,20 +26521,6 @@ document.addEventListener("keydown", (e) => {
 // ==========================================
 // 📁 GOOGLE DRIVE REPOSITORIO & QR GENERATOR MODULE
 // ==========================================
-window.openDriveQRModal = function(e) {
-  if (e) {
-    e.preventDefault();
-    e.stopPropagation();
-  }
-  const modalQR = document.getElementById("modalDriveQR");
-  if (!modalQR) return;
-
-  modalQR.classList.remove("hidden");
-  modalQR.style.display = "flex";
-
-  const DRIVE_URL = "https://drive.google.com/drive/folders/1YUldgn8gpb18OYcbyp1sBG6BRJ2hvy4D?usp=sharing";
-  renderDriveQRCodeOnCanvas(DRIVE_URL);
-};
 
 function renderDriveQRCodeOnCanvas(textUrl) {
   const canvas = document.getElementById("qrDriveCanvas");
@@ -26826,77 +26567,5 @@ function drawCenterDriveLogo(ctx, size) {
   logoImg.src = "https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/Google-Drive-New-Icon-2026-PNG.png";
 
   ctx.restore();
-}
-
-function initDriveQRModule() {
-  const currentYear = new Date().getFullYear();
-  const driveTitle = `Repositorio vacunas ${currentYear}`;
-
-  const elTitle = document.getElementById("profileDriveTitle");
-  if (elTitle) elTitle.textContent = driveTitle;
-
-  const modalTitle = document.getElementById("modalDriveQRTitle");
-  if (modalTitle) modalTitle.textContent = driveTitle;
-
-  const btnOpenQR = document.getElementById("btnOpenDriveQR");
-  const modalQR = document.getElementById("modalDriveQR");
-  const btnCloseQR = document.getElementById("btnCloseDriveQR");
-  const btnCopyLink = document.getElementById("btnCopyDriveLink");
-  const btnDownloadQR = document.getElementById("btnDownloadDriveQR");
-
-  const DRIVE_URL = "https://drive.google.com/drive/folders/1YUldgn8gpb18OYcbyp1sBG6BRJ2hvy4D?usp=sharing";
-
-  if (btnOpenQR && modalQR) {
-    btnOpenQR.onclick = (e) => window.openDriveQRModal(e);
-  }
-
-  if (btnCloseQR && modalQR) {
-    btnCloseQR.addEventListener("click", () => {
-      modalQR.classList.add("hidden");
-      modalQR.style.display = "none";
-    });
-    modalQR.addEventListener("click", (e) => {
-      if (e.target === modalQR) {
-        modalQR.classList.add("hidden");
-        modalQR.style.display = "none";
-      }
-    });
-  }
-
-  if (btnCopyLink) {
-    btnCopyLink.addEventListener("click", () => {
-      navigator.clipboard.writeText(DRIVE_URL).then(() => {
-        if (typeof showToast === 'function') {
-          showToast("Enlace de Google Drive copiado al portapapeles", true);
-        } else {
-          alert("Enlace de Google Drive copiado");
-        }
-      }).catch(() => {
-        if (typeof showToast === 'function') {
-          showToast("Error al copiar enlace", false);
-        }
-      });
-    });
-  }
-
-  if (btnDownloadQR) {
-    btnDownloadQR.addEventListener("click", () => {
-      const canvas = document.getElementById("qrDriveCanvas");
-      if (!canvas) return;
-      const link = document.createElement("a");
-      link.download = `Repositorio_Vacunas_${currentYear}_QR.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-      if (typeof showToast === 'function') {
-        showToast("Código QR descargado correctamente", true);
-      }
-    });
-  }
-}
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initDriveQRModule);
-} else {
-  setTimeout(initDriveQRModule, 100);
 }
 

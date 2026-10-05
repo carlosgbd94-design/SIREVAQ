@@ -4,6 +4,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    // Rendimiento: marca <html> para que style.css pause animaciones decorativas
+    // (equipo modesto / "reducir movimiento") o todas (pestaña oculta).
+    (function () {
+      try {
+        var de = document.documentElement;
+        var weak = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
+                   (navigator.deviceMemory && navigator.deviceMemory <= 4);
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (weak || reduce) de.classList.add('perf-lite');
+        document.addEventListener('visibilitychange', function () {
+          de.classList.toggle('tab-hidden', document.hidden);
+        });
+      } catch (e) { }
+    })();
+  </script>
   <title>SIREVAQ</title>
   <script>
     // Un enlace de recuperación de contraseña debe ir siempre a reset.html (página
@@ -35,7 +51,7 @@
        main.js: solo lo usan funciones de exportación del dashboard, nunca la
        pantalla de login, así que no tiene por qué bloquear DOMContentLoaded. -->
   <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js" defer></script>
-  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <script src="https://unpkg.com/lucide@1.52.0/dist/umd/lucide.min.js" defer></script>
 
   <!-- Módulos de Optimización y Modales SIREVAQ -->
   <script src="sirevaq_storage.js" defer></script>
@@ -76,9 +92,9 @@
 
   <!-- Estilos -->
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="dock_glass.css?v=6">
+  <link rel="stylesheet" href="dock_glass.css?v=7">
   <link rel="stylesheet" href="ayuda.css?v=1">
-  <link rel="stylesheet" href="style.css?v=2026.97" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.98" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -332,7 +348,7 @@
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
   <script defer src="ayuda.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.74" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.78" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -920,12 +936,12 @@
           <!-- Opciones de Contraseña -->
           <div id="passwordOptionsContainer"
             class="flex flex-col sm:flex-row items-center sm:justify-between w-full mt-2 gap-2">
-            <label id="desktopRememberMe" class="flex items-center gap-2 text-slate-600 cursor-pointer text-sm">
+            <label id="desktopRememberMe" class="flex items-center gap-2 text-slate-600 cursor-pointer text-sm" style="color:#475569;">
               <input type="checkbox" style="width: 15px; height: 15px; accent-color: #0ea5e9; cursor: pointer;">
               Recordarme
             </label>
             <button type="button" id="btnForgotPassword"
-              class="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-primary/40 hover:text-primary transition-all text-center sm:text-right bg-transparent border-none cursor-pointer">
+              class="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-slate-600 hover:text-primary transition-all text-center sm:text-right bg-transparent border-none cursor-pointer">
               ¿Olvidaste tu contraseña?
             </button>
           </div>
@@ -941,7 +957,7 @@
           </button>
 
           <button type="button" id="btnMagicLink"
-            class="w-full text-center text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-primary/40 hover:text-primary transition-all bg-transparent border-none cursor-pointer mt-3">
+            class="w-full text-center text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-slate-600 hover:text-primary transition-all bg-transparent border-none cursor-pointer mt-3">
             Entrar con enlace mágico
           </button>
 
@@ -973,7 +989,7 @@
         </form>
 
         <footer class="mt-5 sm:mt-8 border-t border-primary/5 pt-4 text-center w-full" id="loginFooter">
-          <p class="text-[8px] sm:text-[9px] text-primary/30 font-black uppercase tracking-[0.2em]">Jurisdicción
+          <p class="text-[8px] sm:text-[9px] text-slate-600 font-black uppercase tracking-[0.2em]">Jurisdicción
             Sanitaria No. 1</p>
         </footer>
       </div>
@@ -1100,17 +1116,17 @@
                 <input type="text" id="archivosSearch" class="evd-search-input" placeholder="Buscar por CLUES, unidad o archivo...">
               </div>
               <div id="archivosFiltrosUnidadMuni" class="evd-filter-group">
-                <select id="archivosFiltroMunicipio" class="evd-select" title="Filtrar por municipio">
+                <select id="archivosFiltroMunicipio" class="evd-select" title="Filtrar por municipio" aria-label="Filtrar por municipio">
                   <option value="">Todos los municipios</option>
                 </select>
-                <select id="archivosFiltroUnidad" class="evd-select" title="Filtrar por unidad">
+                <select id="archivosFiltroUnidad" class="evd-select" title="Filtrar por unidad" aria-label="Filtrar por unidad">
                   <option value="">Todas las unidades</option>
                 </select>
               </div>
               <div class="evd-filter-group">
-                <input type="date" id="archivosFiltroDesde" class="evd-date" title="Desde">
+                <input type="date" id="archivosFiltroDesde" class="evd-date" title="Desde" aria-label="Desde (fecha)">
                 <span class="evd-date-sep">—</span>
-                <input type="date" id="archivosFiltroHasta" class="evd-date" title="Hasta">
+                <input type="date" id="archivosFiltroHasta" class="evd-date" title="Hasta" aria-label="Hasta (fecha)">
               </div>
               <button type="button" id="btnArchivosLimpiarFiltros" class="evd-clear-btn" title="Limpiar filtros">
                 <span class="material-symbols-rounded">filter_alt_off</span>
@@ -1632,7 +1648,7 @@
                       id="fechaPedidoBIOBox">—</div>
                     <div class="text-[11px] font-bold text-primary/60 italic mt-1.5" id="bioHint">—</div>
                   </div>
-                  <input id="fechaPedidoBIO" disabled style="display:none">
+                  <input id="fechaPedidoBIO" disabled style="display:none" aria-label="Fecha objetivo del pedido de biológico">
                 </div>
 
                 <!-- 🛡️ OPCIÓN: NO HACER PEDIDO MENSUAL (Solo existencias) -->
@@ -1880,7 +1896,7 @@
                       class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 shadow-sm">
                       <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Mostrar:</span>
                       <select id="influenzaHistorialLimit"
-                        class="bg-transparent text-xs font-extrabold text-slate-700 outline-none cursor-pointer">
+                        class="bg-transparent text-xs font-extrabold text-slate-700 outline-none cursor-pointer" aria-label="Registros a mostrar">
                         <option value="10">10</option>
                         <option value="20">20</option>
                         <option value="50">50</option>
@@ -1894,7 +1910,7 @@
                       class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 shadow-sm">
                       <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Orden:</span>
                       <select id="influenzaHistorialSort"
-                        class="bg-transparent text-xs font-extrabold text-slate-700 outline-none cursor-pointer">
+                        class="bg-transparent text-xs font-extrabold text-slate-700 outline-none cursor-pointer" aria-label="Orden del historial">
                         <option value="newest">Más recientes</option>
                         <option value="oldest">Más antiguos</option>
                         <option value="doses-desc">Mayor dosis</option>
@@ -2221,7 +2237,7 @@
                   <span id="lblSoundIcon" class="material-symbols-rounded text-[18px] text-primary/70">volume_up</span>
                   <span class="text-[11px] sm:text-[12px] font-extrabold text-slate-700">Efectos de Sonido</span>
                   <label class="premium-switch scale-90">
-                    <input type="checkbox" id="chkNotifSound" checked>
+                    <input type="checkbox" id="chkNotifSound" checked aria-label="Sonido de las notificaciones">
                     <span class="slider"></span>
                   </label>
                 </div>
@@ -2437,13 +2453,13 @@
           <!-- Derecha: Todos los Controles Distribuidos Cómodamente -->
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end; flex:1;">
             <!-- Dropdown tipo ampliado -->
-            <select id="summaryTipo" class="src-pill-input" style="min-width:240px; width:260px !important; flex:0 1 auto;">
+            <select id="summaryTipo" class="src-pill-input" style="min-width:240px; width:260px !important; flex:0 1 auto;" aria-label="Tipo de resumen">
               <option value="SR">Existencia de biológicos</option>
               <option value="CONS">Consumibles</option>
               <option value="BIO">Pedido de biológico</option>
             </select>
             <!-- Fecha -->
-            <input type="date" id="summaryFecha" class="src-pill-input" style="width:145px !important;">
+            <input type="date" id="summaryFecha" class="src-pill-input" style="width:145px !important;" aria-label="Fecha del resumen">
             <!-- Barra de Avance -->
             <div style="display:flex; align-items:center; gap:10px; height:44px; padding:0 14px; background:#fff; border-radius:14px; border:1px solid rgba(203, 213, 225, 0.8); box-shadow:0 1px 3px rgba(15,23,42,0.04); white-space:nowrap;">
               <span style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.06em;">AVANCE</span>
@@ -2593,7 +2609,7 @@
                 class="material-symbols-rounded text-slate-400 text-[16px] mr-1.5 pointer-events-none">calendar_month</span>
               <input type="month" id="histMesEvaluacion"
                 class="font-bold text-slate-700 text-[12px] uppercase cursor-pointer bg-transparent"
-                style="width: 135px; border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;">
+                style="width: 135px; border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;" aria-label="Mes a evaluar">
             </div>
           </div>
           <!-- Filtro de Municipio (Para roles con múltiples municipios o supervisores) -->
@@ -2605,7 +2621,7 @@
                 class="material-symbols-rounded text-slate-400 text-[16px] mr-1.5 pointer-events-none">location_on</span>
               <select id="histMunicipioFilter"
                 class="font-bold text-slate-700 text-[12px] uppercase cursor-pointer bg-transparent"
-                style="border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 20px 0 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;"></select>
+                style="border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 20px 0 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;" aria-label="Municipio"></select>
             </div>
           </div>
           <!-- Divider line -->
@@ -2726,7 +2742,7 @@
               <span class="material-symbols-rounded text-slate-400 text-[16px] mr-1.5 pointer-events-none">calendar_month</span>
               <select id="concFilterAnio"
                 class="font-bold text-slate-700 text-[12px] uppercase cursor-pointer bg-transparent"
-                style="border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 20px 0 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;"></select>
+                style="border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 20px 0 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;" aria-label="Año del concentrado"></select>
             </div>
           </div>
           <div class="flex items-center gap-2 px-2">
@@ -2735,7 +2751,7 @@
               class="relative flex items-center h-[36px] bg-surface border border-slate-200/80 rounded-xl px-3 hover:border-primary/40 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 transition-all">
               <select id="concFilterMesIni"
                 class="font-bold text-slate-700 text-[12px] uppercase cursor-pointer bg-transparent"
-                style="border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 20px 0 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;"></select>
+                style="border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 20px 0 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;" aria-label="Mes inicial"></select>
             </div>
           </div>
           <div class="flex items-center gap-2 px-2">
@@ -2744,7 +2760,7 @@
               class="relative flex items-center h-[36px] bg-surface border border-slate-200/80 rounded-xl px-3 hover:border-primary/40 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 transition-all">
               <select id="concFilterMesFin"
                 class="font-bold text-slate-700 text-[12px] uppercase cursor-pointer bg-transparent"
-                style="border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 20px 0 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;"></select>
+                style="border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 20px 0 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;" aria-label="Mes final"></select>
             </div>
           </div>
           <div class="h-5 w-[1px] bg-slate-200"></div>
@@ -2755,7 +2771,7 @@
               <span class="material-symbols-rounded text-slate-400 text-[16px] mr-1.5 pointer-events-none">location_on</span>
               <select id="concFilterMunicipio"
                 class="font-bold text-slate-700 text-[12px] uppercase cursor-pointer bg-transparent"
-                style="min-width:160px; border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 20px 0 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;"></select>
+                style="min-width:160px; border: 0 !important; outline: none !important; box-shadow: none !important; padding: 0 20px 0 0 !important; background: transparent !important; -webkit-appearance: none; appearance: none; line-height: 1;" aria-label="Municipio del concentrado"></select>
             </div>
           </div>
           <div class="h-5 w-[1px] bg-slate-200"></div>
@@ -3038,7 +3054,7 @@
                 id="adminInfluenzaUnitDetailTitle">Detalle por Unidad de Salud</h4>
               <div class="flex items-center gap-3">
                 <select id="reporteSemanalMesSelect"
-                  class="bg-surface border border-slate-300 rounded-xl px-4 py-1.5 text-xs font-semibold text-slate-700 outline-none">
+                  class="bg-surface border border-slate-300 rounded-xl px-4 py-1.5 text-xs font-semibold text-slate-700 outline-none" aria-label="Mes del reporte semanal">
                   <!-- JS poblará con meses de campaña -->
                 </select>
                 <button
@@ -3082,8 +3098,8 @@
             </div>
 
             <!-- Select y botón ocultos para mantener compatibilidad técnica con otras funciones -->
-            <select id="validationInfluenzaClues" class="hidden"></select>
-            <button class="hidden" id="btnLoadValidationReport"></button>
+            <select id="validationInfluenzaClues" class="hidden" aria-label="Unidad a validar"></select>
+            <button class="hidden" id="btnLoadValidationReport" aria-label="Cargar reporte a validar"></button>
           </div>
 
           <!-- SUB-PANEL 1: CONTROL DE ENTREGAS (DASHBOARD) -->
@@ -3314,8 +3330,7 @@
                         Diferencia</th>
                       <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center w-[140px]">
                         Estado</th>
-                      <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center w-[60px]">
-                      </th>
+                      <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center w-[60px]"><span class="sr-only">Acciones</span></th>
                     </tr>
                   </thead>
                   <tbody id="conciliacionTbody">
@@ -3866,14 +3881,14 @@
 
             <!-- Filtro Municipio Píldora -->
             <div style="flex-shrink: 0 !important;">
-              <select id="pinolFiltroMunicipio" style="height: 44px !important; border-radius: 14px !important; border: 1px solid #cbd5e1 !important; background: #ffffff !important; padding: 0 36px 0 14px !important; font-size: 12px !important; font-weight: 700 !important; color: #334155 !important; box-shadow: 0 1px 3px rgba(15,23,42,0.06) !important;">
+              <select id="pinolFiltroMunicipio" style="height: 44px !important; border-radius: 14px !important; border: 1px solid #cbd5e1 !important; background: #ffffff !important; padding: 0 36px 0 14px !important; font-size: 12px !important; font-weight: 700 !important; color: #334155 !important; box-shadow: 0 1px 3px rgba(15,23,42,0.06) !important;" aria-label="Filtrar por municipio">
                 <option value="TODOS">Todos los Municipios</option>
               </select>
             </div>
 
             <!-- Filtro Estatus Píldora -->
             <div style="flex-shrink: 0 !important;">
-              <select id="pinolFiltroEstatus" style="height: 44px !important; border-radius: 14px !important; border: 1px solid #cbd5e1 !important; background: #ffffff !important; padding: 0 36px 0 14px !important; font-size: 12px !important; font-weight: 700 !important; color: #334155 !important; box-shadow: 0 1px 3px rgba(15,23,42,0.06) !important;">
+              <select id="pinolFiltroEstatus" style="height: 44px !important; border-radius: 14px !important; border: 1px solid #cbd5e1 !important; background: #ffffff !important; padding: 0 36px 0 14px !important; font-size: 12px !important; font-weight: 700 !important; color: #334155 !important; box-shadow: 0 1px 3px rgba(15,23,42,0.06) !important;" aria-label="Filtrar por estatus">
                 <option value="TODOS">Todos los Estatus</option>
                 <option value="PENDIENTE">Pendientes</option>
                 <option value="ENTREGADO">En Tránsito (Entregadas)</option>
@@ -3903,7 +3918,7 @@
             <thead>
               <tr class="bg-surface-variant text-surface-onVariant uppercase tracking-[0.05em] font-extrabold text-xs border-b border-outline-variant/30">
                 <th class="p-4 text-center" style="width: 40px !important;">
-                  <input type="checkbox" id="pinolSelectAll" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" title="Seleccionar todos" />
+                  <input type="checkbox" id="pinolSelectAll" aria-label="Seleccionar todas las solicitudes" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" title="Seleccionar todos" />
                 </th>
                 <th class="p-4" style="width: 105px !important;">Fecha</th>
                 <th class="p-4" style="width: 120px !important;">Municipio</th>
@@ -3951,7 +3966,7 @@
             <div class="mb-5">
               <label
                 class="text-[10px] font-black text-primary/50 uppercase tracking-widest block mb-2 px-2">Biológico</label>
-              <select id="loteBio" class="w-full"></select>
+              <select id="loteBio" class="w-full" aria-label="Biológico del lote"></select>
             </div>
 
             <!-- Fila 2: Lote, Caducidad y Recepción (FORZADO HORIZONTAL) -->
@@ -3977,12 +3992,12 @@
                   Recepción</label>
                 <div class="modern-input-group">
                   <span class="input-icon material-symbols-rounded">calendar_month</span>
-                  <input type="date" id="loteRec" class="h-[50px]">
+                  <input type="date" id="loteRec" class="h-[50px]" aria-label="Fecha de recepción del lote">
                 </div>
               </div>
               <div style="flex: 1;">
                 <label class="text-[10px] font-black text-primary/50 uppercase tracking-widest block mb-2 px-2">Tipo</label>
-                <select id="loteTipo" class="h-[50px] w-full">
+                <select id="loteTipo" class="h-[50px] w-full" aria-label="Tipo de lote">
                   <option value="NORMAL">Normal</option>
                   <option value="ARF">A.R.F. (en dictamen)</option>
                   <option value="CANJE">Canje</option>
@@ -4085,7 +4100,7 @@
             class="rounded-xl h-12 text-[14px] font-bold">
         </div>
 
-        <div class="tableWrap" id="lotesTableWrap">
+        <div class="tableWrap" id="lotesTableWrap" tabindex="0" role="region" aria-label="Tabla de lotes">
           <table class="summaryTable">
             <thead>
               <tr>
@@ -4226,7 +4241,7 @@
                 <div class="modern-input-group">
                   <span class="input-icon material-symbols-rounded">event</span>
                   <input type="date" id="consOverrideDate"
-                    class="text-[14px] font-bold w-full bg-transparent outline-none">
+                    class="text-[14px] font-bold w-full bg-transparent outline-none" aria-label="Fecha de apertura de consumibles">
                 </div>
                 <div class="modern-input-group">
                   <span class="input-icon material-symbols-rounded">edit_note</span>
@@ -4280,7 +4295,7 @@
                 <div class="modern-input-group">
                   <span class="input-icon material-symbols-rounded">event</span>
                   <input type="date" id="existenciaOverrideDate"
-                    class="text-[14px] font-bold w-full bg-transparent outline-none">
+                    class="text-[14px] font-bold w-full bg-transparent outline-none" aria-label="Fecha de apertura de existencia">
                 </div>
                 <div class="modern-input-group">
                   <span class="input-icon material-symbols-rounded">edit_note</span>
@@ -4330,7 +4345,7 @@
                     <div class="modern-input-group h-[48px]">
                       <span class="input-icon material-symbols-rounded text-[18px]">calendar_today</span>
                       <input type="month" id="bioOverrideMonth"
-                        class="text-[13px] font-bold w-full bg-transparent outline-none">
+                        class="text-[13px] font-bold w-full bg-transparent outline-none" aria-label="Mes del calendario de biológicos">
                     </div>
                   </div>
                   <div class="flex-1 flex flex-col gap-1.5">
@@ -4338,7 +4353,7 @@
                     <div class="modern-input-group h-[48px]">
                       <span class="input-icon material-symbols-rounded text-[18px]">local_shipping</span>
                       <input type="date" id="bioOverrideTarget"
-                        class="text-[13px] font-bold w-full bg-transparent outline-none">
+                        class="text-[13px] font-bold w-full bg-transparent outline-none" aria-label="Fecha objetivo del pedido">
                     </div>
                   </div>
                 </div>
@@ -4348,7 +4363,7 @@
                     <div class="modern-input-group h-[48px]">
                       <span class="input-icon material-symbols-rounded text-[18px]">play_arrow</span>
                       <input type="date" id="bioOverrideStart"
-                        class="text-[13px] font-bold w-full bg-transparent outline-none">
+                        class="text-[13px] font-bold w-full bg-transparent outline-none" aria-label="Inicio de la ventana de captura">
                     </div>
                   </div>
                   <div class="flex-1 flex flex-col gap-1.5">
@@ -4356,7 +4371,7 @@
                     <div class="modern-input-group h-[48px]">
                       <span class="input-icon material-symbols-rounded text-[18px]">stop</span>
                       <input type="date" id="bioOverrideEnd"
-                        class="text-[13px] font-bold w-full bg-transparent outline-none">
+                        class="text-[13px] font-bold w-full bg-transparent outline-none" aria-label="Fin de la ventana de captura">
                     </div>
                   </div>
                 </div>
@@ -4561,7 +4576,7 @@
               display: grid;
               /* fr reparte el espacio SOBRANTE tras restar la columna fija de acciones:
                  así nunca desborda su propio min-width, sin importar el ancho real. */
-              grid-template-columns: 1.5fr 2.1fr 0.8fr 1.8fr 1.3fr 108px;
+              grid-template-columns: 1.5fr 1.9fr 1.25fr 1.8fr 1.2fr 108px;
               align-items: center;
               column-gap: 14px;
               min-width: 820px;
@@ -4636,8 +4651,80 @@
               display: inline-flex;
               align-items: center;
               justify-content: center;
-              color: #94a3b8;
+              color: #64748b;
               transition: color .2s ease, transform .2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+            #adminSection_seguridad .sgb-icon-btn:focus-visible {
+              outline: 2px solid #4f46e5 !important;
+              outline-offset: 3px;
+              border-radius: 6px;
+              color: #4f46e5;
+            }
+            @media (pointer: coarse) {
+              /* dedo: zona de toque de 40px sin cambiar el tamaño del símbolo */
+              #adminSection_seguridad .sgb-icon-btn { min-width: 40px; min-height: 40px; }
+              #adminSection_seguridad .sgb-actions { gap: 2px; }
+            }
+            #adminSection_seguridad .sgb-role {
+              display: inline-block;
+              max-width: 100%;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              vertical-align: middle;
+            }
+            #adminSection_seguridad .sgb-sub {
+              display: block;
+              font-size: 10.5px;
+              font-weight: 700;
+              color: #64748b;
+              margin-top: 2px;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+            /* Chips de municipios a cargo (modal de usuarios) */
+            #createUserModal .usr-chip {
+              position: relative;
+              display: inline-flex;
+              align-items: center;
+              cursor: pointer;
+            }
+            #createUserModal .usr-chip input {
+              position: absolute;
+              opacity: 0;
+              width: 1px !important;
+              height: 1px !important;
+              min-height: 0 !important;
+              padding: 0 !important;
+              pointer-events: none;
+            }
+            #createUserModal .usr-chip span {
+              display: inline-flex;
+              align-items: center;
+              min-height: 36px;
+              padding: 0 14px;
+              border-radius: 999px;
+              border: 1.5px solid #cbd5e1;
+              background: #fff;
+              color: #334155;
+              font-size: 12px;
+              font-weight: 800;
+              transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+            }
+            #createUserModal .usr-chip input:checked + span {
+              background: #e0e7ff;
+              border-color: #4f46e5;
+              color: #3730a3;
+            }
+            #createUserModal .usr-chip input:checked + span::before {
+              content: "✓";
+              margin-right: 6px;
+              font-weight: 900;
+            }
+            #createUserModal .usr-chip input:focus-visible + span {
+              outline: 2px solid #4f46e5;
+              outline-offset: 2px;
             }
             #adminSection_seguridad .sgb-icon-btn .material-symbols-rounded {
               font-size: 19px;
@@ -4684,7 +4771,7 @@
                   Institucional</h4>
               </div>
               <div class="flex items-center gap-3">
-                <span class="text-[11px] font-bold text-primary/60 uppercase" id="usersCount">...</span>
+                <span class="text-[11px] font-bold text-primary/60 uppercase" id="usersCount" role="status" aria-live="polite">...</span>
                 <button
                   class="flex items-center justify-center gap-2 h-10 px-5 rounded-full text-xs font-black uppercase tracking-widest text-primary-on shadow-[0_8px_16px_-4px_rgba(79,70,229,0.5)] transition-all hover:-translate-y-1 hover:shadow-[0_12px_24px_-6px_rgba(79,70,229,0.7)]"
                   style="background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);"
@@ -4699,10 +4786,10 @@
             <div class="sgb-toolbar">
               <div class="sgb-search">
                 <span class="material-symbols-rounded">search</span>
-                <input type="text" id="usersSearchInput" placeholder="Buscar por usuario, correo, CLUES o unidad..."
+                <input type="text" id="usersSearchInput" aria-label="Buscar usuarios" placeholder="Buscar por usuario, nombre, correo, CLUES o unidad..."
                   autocomplete="off">
               </div>
-              <select id="usersRoleFilter" class="sgb-filter">
+              <select id="usersRoleFilter" class="sgb-filter" aria-label="Filtrar por rol">
                 <option value="">Todos los roles</option>
                 <option value="ADMIN">ADMIN</option>
                 <option value="UNIDAD">UNIDAD</option>
@@ -4711,7 +4798,7 @@
                 <option value="VISUALIZADOR_JURISDICCIONAL">VISUALIZADOR JURISDICCIONAL</option>
                 <option value="CARAVANAS">CARAVANAS</option>
               </select>
-              <select id="usersStatusFilter" class="sgb-filter">
+              <select id="usersStatusFilter" class="sgb-filter" aria-label="Filtrar por estado">
                 <option value="">Todos los estados</option>
                 <option value="SI">Habilitado</option>
                 <option value="NO">Suspendido</option>
@@ -5188,12 +5275,12 @@
               </div>
 
               <div class="spm-actions-block">
-                <select class="spm-pill-select-custom spm-muni-select" id="spmParamMuniSelect" onchange="window.spmFilterUnitsByMuni(this.value)">
+                <select class="spm-pill-select-custom spm-muni-select" id="spmParamMuniSelect" onchange="window.spmFilterUnitsByMuni(this.value)" aria-label="Municipio de los parámetros">
                   <option value="">Cargando municipios...</option>
                 </select>
 
                 <div id="spmBufferPctWrap" style="display:none; align-items:center; gap:6px; flex-wrap:nowrap; flex-shrink:0;">
-                  <select id="spmCalcMode" class="spm-pill-select-custom" style="flex:0 0 210px; width:210px;" onchange="window.spmToggleCalcMode()" title="Método de cálculo del colchón de seguridad">
+                  <select id="spmCalcMode" aria-label="Método de cálculo del colchón de seguridad" class="spm-pill-select-custom" style="flex:0 0 210px; width:210px;" onchange="window.spmToggleCalcMode()" title="Método de cálculo del colchón de seguridad">
                     <option value="colchon_fijo">Colchón fijo</option>
                     <option value="nivel_servicio">Nivel de servicio</option>
                     <option value="reabasto_inteligente">Reabasto inteligente</option>
@@ -5329,12 +5416,12 @@
               </div>
 
               <div class="spm-actions-block">
-                <select class="spm-pill-select-custom spm-muni-select" id="jerParamMuniSelect" onchange="window.jerFilterUnitsByMuni(this.value)">
+                <select class="spm-pill-select-custom spm-muni-select" id="jerParamMuniSelect" onchange="window.jerFilterUnitsByMuni(this.value)" aria-label="Municipio de los parámetros de jeringas">
                   <option value="">Cargando municipios...</option>
                 </select>
 
                 <div id="jerBufferPctWrap" style="display:none; align-items:center; gap:6px; flex-wrap:nowrap; flex-shrink:0;">
-                  <select id="jerCalcMode" class="spm-pill-select-custom" style="flex:0 0 210px; width:210px;" onchange="window.jerToggleCalcMode()" title="Método de cálculo del colchón de seguridad">
+                  <select id="jerCalcMode" aria-label="Método de cálculo del colchón de seguridad (jeringas)" class="spm-pill-select-custom" style="flex:0 0 210px; width:210px;" onchange="window.jerToggleCalcMode()" title="Método de cálculo del colchón de seguridad">
                     <option value="colchon_fijo">Colchón fijo</option>
                     <option value="nivel_servicio">Nivel de servicio</option>
                   </select>
@@ -5497,7 +5584,7 @@
                   <span class="material-symbols-rounded text-sm text-white">upload_file</span>
                   📥 Cargar Catálogo Federal (.xlsx / .csv)
                 </button>
-                <input type="file" id="sisKeyImportInput" accept=".xlsx,.xls,.csv" style="display:none;" onchange="window.handleImportFederalKeyCatalog(this.files)">
+                <input type="file" id="sisKeyImportInput" accept=".xlsx,.xls,.csv" style="display:none;" onchange="window.handleImportFederalKeyCatalog(this.files)" aria-label="Archivo del catálogo federal (xlsx o csv)">
 
                 <button type="button" onclick="window.clearRegistrosSisTable()" style="background-color: #e11d48 !important; color: #ffffff !important; border: none !important;" class="px-4 py-2 rounded-xl font-extrabold text-xs cursor-pointer flex items-center gap-2 transition-all shadow-sm hover:bg-rose-700">
                   <span class="material-symbols-rounded text-sm text-white">delete_sweep</span>
@@ -5573,7 +5660,7 @@
 
           <div class="bg-surface rounded-3xl border border-outline-variant/30 shadow-sm overflow-hidden">
             <div class="p-6">
-              <div id="evidAperturaFilter" class="inline-flex gap-1 p-1 rounded-full bg-slate-100 mb-4" role="tablist" aria-label="Filtrar aperturas">
+              <div id="evidAperturaFilter" class="inline-flex gap-1 p-1 rounded-full bg-slate-100 mb-4" role="group" aria-label="Filtrar aperturas">
                 <button type="button" class="evid-filter-chip is-active" data-filter="all">Todas</button>
                 <button type="button" class="evid-filter-chip" data-filter="capacitacion">Capacitaciones</button>
                 <button type="button" class="evid-filter-chip" data-filter="campana">Campañas</button>
@@ -5913,7 +6000,7 @@
                   background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface);
                   font-size: 13px; font-weight: 700; outline: none; cursor: pointer;
                   box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.2s ease;
-                ">
+                " aria-label="Municipio">
               <option value="">Todos los municipios</option>
             </select>
 
@@ -5923,7 +6010,7 @@
                   background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface);
                   font-size: 13px; font-weight: 700; outline: none; cursor: pointer;
                   box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.2s ease;
-                ">
+                " aria-label="Unidad">
               <option value="">Todas las unidades</option>
             </select>
           </div>
@@ -6179,7 +6266,7 @@
                 style="font-size: 12px; font-weight: 900; color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 16px;">
                 Distribución de Avance</div>
               <div style="flex: 1; position: relative; display: flex; align-items: center; justify-content: center;">
-                <img id="pdfChartAvance" src="" style="max-height: 100%; max-width: 100%; object-fit: contain;">
+                <img id="pdfChartAvance" src="" style="max-height: 100%; max-width: 100%; object-fit: contain;" alt="">
               </div>
             </div>
             <div
@@ -6188,7 +6275,7 @@
                 style="font-size: 12px; font-weight: 900; color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 16px;">
                 Top Unidades / Municipios de la Jurisdicción</div>
               <div style="flex: 1; position: relative; display: flex; align-items: center; justify-content: center;">
-                <img id="pdfChartTop" src="" style="max-height: 100%; max-width: 100%; object-fit: contain;">
+                <img id="pdfChartTop" src="" style="max-height: 100%; max-width: 100%; object-fit: contain;" alt="">
               </div>
             </div>
           </div>
@@ -6994,8 +7081,9 @@
   <div id="createUserModal"
     class="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-surface-on/50 opacity-0 invisible transition-all duration-300 [&.show]:opacity-100 [&.show]:visible"
     aria-hidden="true">
-    <div
-      class="modal w-full max-w-[500px] bg-surface border border-outline-variant/30 rounded-[28px] overflow-hidden shadow-[0_24px_48px_-12px_rgba(0,0,0,0.25)] transform scale-95 transition-transform duration-300 [[class~='show']_&]:scale-100 flex flex-col">
+    <div role="dialog" aria-modal="true" aria-labelledby="createUserModalTitle"
+      style="max-height:92vh; overflow-y:auto;"
+      class="modal w-full max-w-[500px] bg-surface border border-outline-variant/30 rounded-[28px] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.25)] transform scale-95 transition-transform duration-300 [[class~='show']_&]:scale-100 flex flex-col">
       <div class="modalHead">
         <button type="button" class="js1-modal-close-x"
           onclick="window.closeCreateUserModal ? window.closeCreateUserModal() : document.getElementById('createUserModal').classList.remove('show')" aria-label="Cerrar">
@@ -7012,22 +7100,22 @@
         </div>
       </div>
 
-      <div class="modalBody" style="padding:10px 16px; display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+      <div class="modalBody" style="padding:10px 16px; display:grid; grid-template-columns: 1fr 1fr; gap:10px 8px;">
         <div class="flex flex-col gap-0.5">
-          <label class="text-[9px] font-bold text-primary/50 uppercase ml-1">Acceso (Correo)</label>
-          <input type="email" id="createEmail" placeholder="ejemplo@js1.com"
-            class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-9 px-3 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all" />
+          <label for="createEmail" class="text-[10px] font-bold text-slate-600 uppercase ml-1">Acceso (correo)</label>
+          <input type="email" id="createEmail" placeholder="ejemplo@correo.com" autocomplete="off"
+            class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-10 px-3 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all" />
         </div>
         <div class="flex flex-col gap-0.5">
-          <label class="text-[9px] font-bold text-primary/50 uppercase ml-1" id="createUsuarioIDLabel">ID de Usuario</label>
-          <input type="text" id="createUsuarioID" placeholder="ID INTERNO"
-            class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-9 px-3 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all" />
+          <label for="createNombre" class="text-[10px] font-bold text-slate-600 uppercase ml-1">Nombre (opcional)</label>
+          <input type="text" id="createNombre" placeholder="Nombre de la persona" autocomplete="off" maxlength="120"
+            class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-10 px-3 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all" />
         </div>
 
         <div class="flex flex-col gap-0.5">
-          <label class="text-[9px] font-bold text-primary/50 uppercase ml-1">Rol</label>
+          <label for="createRol" class="text-[10px] font-bold text-slate-600 uppercase ml-1">Rol</label>
           <select id="createRol"
-            class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-9 px-2 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer">
+            class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-10 px-2 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer">
             <option value="">Selecciona...</option>
             <option value="UNIDAD">UNIDAD</option>
             <option value="MUNICIPAL">MUNICIPAL</option>
@@ -7036,11 +7124,17 @@
             <option value="CARAVANAS">CARAVANAS</option>
           </select>
         </div>
-
         <div class="flex flex-col gap-0.5">
-          <label class="text-[9px] font-bold text-primary/50 uppercase ml-1">Municipio</label>
+          <label for="createUsuarioID" class="text-[10px] font-bold text-slate-600 uppercase ml-1" id="createUsuarioIDLabel">ID de usuario</label>
+          <input type="text" id="createUsuarioID" placeholder="Opcional: se genera solo" autocomplete="off"
+            class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-10 px-3 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all" />
+        </div>
+
+        <!-- UNIDAD: municipio + unidad (CLUES). Otros roles: municipios a cargo o nada. -->
+        <div class="flex flex-col gap-0.5" id="createMunicipioBox">
+          <label for="createMunicipio" class="text-[10px] font-bold text-slate-600 uppercase ml-1">Municipio</label>
           <select id="createMunicipio"
-            class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-9 px-2 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer">
+            class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-10 px-2 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer">
             <option value="">Selecciona...</option>
             <option value="QUERETARO">QUERETARO</option>
             <option value="CORREGIDORA">CORREGIDORA</option>
@@ -7049,18 +7143,26 @@
           </select>
         </div>
 
-        <div class="col-span-2 flex flex-col gap-0.5">
-          <label class="text-[9px] font-bold text-primary/50 uppercase ml-1">Unidad Institucional</label>
+        <fieldset id="createMunicipiosGroup" class="col-span-2 border border-outline-variant/40 rounded-lg px-3 pb-2 pt-1 m-0" style="display:none;">
+          <legend class="text-[10px] font-bold text-slate-600 uppercase px-1" id="createMunicipiosLegend">Municipios a cargo</legend>
+          <div id="createMunicipiosChips" class="flex flex-wrap gap-2 pt-1"></div>
+          <p class="text-slate-600 m-0 mt-1.5" id="createMunicipiosHint" style="font-size:11px;"></p>
+        </fieldset>
+
+        <div class="flex flex-col gap-0.5" id="createUnidadBox">
+          <label for="createUnidad" class="text-[10px] font-bold text-slate-600 uppercase ml-1">Unidad institucional</label>
           <select id="createUnidad"
-            class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-9 px-3 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer">
+            class="bg-surface-variant/20 rounded-lg border border-outline-variant/50 outline-none h-10 px-3 text-xs font-bold w-full focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer">
             <option value="">Selecciona la Unidad</option>
           </select>
         </div>
 
+        <div class="col-span-2 leading-snug rounded-lg px-3 py-2 m-0" id="createUnidadAviso" role="status" aria-live="polite" style="display:none; font-size:11.5px;"></div>
+
         <div class="col-span-2 flex flex-col gap-0.5">
-          <label class="text-[9px] font-bold text-primary/50 uppercase ml-1">CLUES</label>
-          <input type="text" id="createClues" placeholder="Auto-completado" readonly
-            class="bg-surface-variant/10 rounded-lg border border-outline-variant/30 h-8 px-3 text-[11px] font-bold w-full text-primary/40" />
+          <label for="createClues" class="text-[10px] font-bold text-slate-600 uppercase ml-1">CLUES</label>
+          <input type="text" id="createClues" placeholder="Se completa al elegir la unidad" readonly
+            class="bg-surface-variant/10 rounded-lg border border-outline-variant/30 h-9 px-3 text-[11px] font-bold w-full text-primary/70" />
         </div>
       </div>
 
@@ -8359,11 +8461,11 @@
       <!-- Filters (Muni / Unidad) -->
       <div class="flex flex-col gap-3 mb-6">
         <select id="rdaMobileMuni"
-          class="w-full h-11 bg-surface border border-slate-200 rounded-xl px-4 text-[13px] font-bold text-slate-700 outline-none shadow-sm focus:border-primary/50">
+          class="w-full h-11 bg-surface border border-slate-200 rounded-xl px-4 text-[13px] font-bold text-slate-700 outline-none shadow-sm focus:border-primary/50" aria-label="Municipio">
           <option value="">Todos los municipios</option>
         </select>
         <select id="rdaMobileUnidad"
-          class="w-full h-11 bg-surface border border-slate-200 rounded-xl px-4 text-[13px] font-bold text-slate-700 outline-none shadow-sm focus:border-primary/50">
+          class="w-full h-11 bg-surface border border-slate-200 rounded-xl px-4 text-[13px] font-bold text-slate-700 outline-none shadow-sm focus:border-primary/50" aria-label="Unidad">
           <option value="">Todas las unidades</option>
         </select>
       </div>
@@ -8402,7 +8504,7 @@
 
 
   <!-- UPLOAD COMPONENT (Hidden, triggered by Admin Button) -->
-  <input type="file" id="rdaCsvInput" accept=".csv,.xlsx,.xls" multiple class="hidden">
+  <input type="file" id="rdaCsvInput" accept=".csv,.xlsx,.xls" multiple class="hidden" aria-label="Archivo CSV de indicadores RDA">
 
   <!-- ==================================================================================== -->
 
@@ -8466,7 +8568,7 @@
 
   <!-- Empaquetado: bundle-body.js = rda_calculator + rda_parser + param_calculator
        + rda_ui, en ese mismo orden. Generado por build-bundle.js. -->
-  <script src="dist/bundle-body.js?v=2026.27" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
+  <script src="dist/bundle-body.js?v=2026.28" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
 
   <!-- FEEDBACK FAB & MODAL -->
   <style>

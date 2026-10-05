@@ -33,6 +33,7 @@ const GROUP_HEAD = [
   'influenza_reparto.js',
   'influenza_metas_export.js',
   'influenza_module.js',
+  'sis_csv.js',
   'sis_export_module.js',
 ];
 

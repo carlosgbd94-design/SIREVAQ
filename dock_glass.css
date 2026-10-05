@@ -36,7 +36,7 @@ body.con-dock { padding-bottom: 104px; }
      (blur + saturación), un borde de luz fino y una sombra suave -- no un
      color propio. Sobre una zona vacía se ve tenue, como en One UI. */
   background: rgba(255,255,255,.26);
-  -webkit-backdrop-filter: blur(24px) saturate(185%) brightness(1.06); backdrop-filter: blur(24px) saturate(185%) brightness(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(140%) brightness(1.06); backdrop-filter: blur(14px) saturate(140%) brightness(1.06);
   border: 1px solid rgba(255,255,255,.6);
   box-shadow: 0 0 0 1px rgba(15,23,42,.07), 0 12px 32px rgba(15,23,42,.18);
 }
@@ -101,17 +101,17 @@ body.con-dock { padding-bottom: 104px; }
 .dock-btn .material-symbols-rounded { font-size: 20px; }
 .dock-btn:disabled { cursor: not-allowed; }
 .dock-btn:disabled { opacity: .55; }
-.dock-guardar { background: #0284c7; color: #fff; }
+.dock-guardar { background: #0369a1; color: #fff; }
 .dock-guardar.en-reposo { background: rgba(15,23,42,.07); color: #475569; }
 .dock-enviar { background: #0f172a; color: #fff; }
 .dock-enviar:disabled { background: rgba(15,23,42,.07); color: #64748b; opacity: .7; }
-.dock-validar { background: #16a34a; color: #fff; }
+.dock-validar { background: #15803d; color: #fff; }
 .dock-validar .material-symbols-rounded { color: inherit; }
 @media (hover: hover) and (pointer: fine) {
   .dock-btn:hover:not(:disabled) { background: rgba(15,23,42,.13); color: #0f172a; }
-  .dock-guardar:hover:not(:disabled) { background: #0369a1; color: #fff; }
+  .dock-guardar:hover:not(:disabled) { background: #075985; color: #fff; }
   .dock-enviar:hover:not(:disabled) { background: #1e293b; color: #fff; }
-  .dock-validar:hover:not(:disabled) { background: #15803d; color: #fff; }
+  .dock-validar:hover:not(:disabled) { background: #166534; color: #fff; }
 }
 body.con-dock .feedback-fab { bottom: 92px; right: 18px; width: 48px; height: 48px; }
 body.con-dock .feedback-fab .material-symbols-rounded { font-size: 22px; }
