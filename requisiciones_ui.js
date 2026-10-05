@@ -1817,6 +1817,116 @@ async function guardarCantidades() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Traer el reparto de influenza: el reparto de frascos (Influenza > Control de frascos) se hace
+// primero, porque cada municipio necesita su distribución para armar su requisición. Aquí se
+// trae a esta requisición con el lote "por definir"; cuando llegan los lotes se asignan con
+// "Asignar lotes". La base valida todo (rol, requisición abierta, sin pisar lotes reales).
+// ---------------------------------------------------------------------------
+
+const INFLUENZA_CODIGO = '6317';
+
+function bioInfluenza() { return estado.catalogo.find((b) => String(b.codigo_articulo) === INFLUENZA_CODIGO) || null; }
+
+function ordinalEntrega(n) { return `${n}ª entrega`; }
+
+function opcionesRemesas() {
+  const vinculadas = estado.influenzaVinculos || [];
+  return (estado.influenzaRemesas || []).map((r) => {
+    const otra = vinculadas.find((v) => v.influenza_campana === r.anio_campana && v.influenza_entrega === r.numero_entrega && v.id !== estado.requisicion.id);
+    return { ...r, valor: `${r.numero_entrega}|${r.anio_campana}`, otra };
+  });
+}
+
+function textoDestinos(asignacion) {
+  const orden = ['QUERETARO', 'CORREGIDORA', 'MARQUES', 'HUIMILPAN', 'HENM', 'NHG'];
+  return orden.filter((d) => Number(asignacion[d]) > 0).map((d) => `${etiquetaMunicipio(d)} ${Number(asignacion[d]).toLocaleString('es-MX')}`).join(' · ');
+}
+
+function actualizarDetalleInfluenza() {
+  const op = opcionesRemesas().find((o) => o.valor === $('infEntrega').value);
+  const bio = bioInfluenza();
+  const propios = bio ? estado.items.filter((i) => i.requi_biologico_id === bio.id && Number(i.cantidad_surtida) > 0) : [];
+  const conLote = propios.filter((i) => !esPendiente(i));
+  const actual = propios.reduce((acc, i) => acc + Number(i.cantidad_surtida || 0), 0);
+  let aviso = '';
+  let bloquea = false;
+  if (!op) { $('infDetalle').textContent = ''; $('infTraer').disabled = true; return; }
+  if (op.otra) { aviso = `Esta entrega ya está vinculada a la requisición de ${etiquetaMes(op.otra)} · Entrega ${op.otra.entrega}.`; bloquea = true; }
+  else if (conLote.length) { aviso = 'La influenza de esta requisición ya tiene lotes asignados; para no pisarlos, corrige su reparto directo en los pasos 2 y 3.'; bloquea = true; }
+  else if (actual > 0) aviso = `Esta requisición ya tiene ${actual.toLocaleString('es-MX')} frascos de influenza: se reemplazan por el reparto.`;
+  $('infDetalle').innerHTML = `<b>${Number(op.total_frascos).toLocaleString('es-MX')} frascos recibidos</b> · ${esc(textoDestinos(op.asignacion || {}))}${aviso ? `<br><span style="color:#b45309;font-weight:700">${esc(aviso)}</span>` : ''}`;
+  $('infTraer').disabled = bloquea;
+}
+
+async function abrirTraerInfluenza() {
+  if (!estado.puedeEditar || !estado.requisicion) return;
+  if (!bioInfluenza()) { toast('La vacuna de influenza no está en el catálogo de esta requisición.', true); return; }
+  $('infEntrega').innerHTML = '<option value="">Cargando…</option>';
+  $('infDetalle').textContent = '';
+  $('infTraer').disabled = true;
+  $('modalInfluenza').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  const [rem, vinc] = await Promise.all([
+    estado.db.from('influenza_remesas').select('anio_campana, numero_entrega, fecha, total_frascos, asignacion')
+      .order('anio_campana', { ascending: false }).order('numero_entrega'),
+    estado.db.from('requi_requisiciones').select('id, anio, mes, entrega, influenza_campana, influenza_entrega').not('influenza_entrega', 'is', null)
+  ]);
+  if (rem.error || vinc.error) { cerrarTraerInfluenza(); toast('No se pudo leer el reparto de influenza: ' + (rem.error || vinc.error).message, true); return; }
+  estado.influenzaRemesas = rem.data || [];
+  estado.influenzaVinculos = vinc.data || [];
+  const ops = opcionesRemesas();
+  if (!ops.length) {
+    $('infEntrega').innerHTML = '<option value="">Sin entregas repartidas</option>';
+    $('infDetalle').textContent = 'Jurisdicción todavía no registra ninguna entrega en Influenza > Control de frascos.';
+    return;
+  }
+  $('infEntrega').innerHTML = ops.map((o) => `<option value="${esc(o.valor)}">${esc(o.anio_campana)} · ${ordinalEntrega(o.numero_entrega)} · ${Number(o.total_frascos).toLocaleString('es-MX')} frascos${o.otra ? ' (ya vinculada)' : ''}</option>`).join('');
+  const propia = ops.find((o) => !o.otra && estado.requisicion.influenza_entrega === o.numero_entrega && estado.requisicion.influenza_campana === o.anio_campana);
+  const libre = ops.find((o) => !o.otra && !estado.influenzaVinculos.some((v) => v.influenza_campana === o.anio_campana && v.influenza_entrega === o.numero_entrega));
+  $('infEntrega').value = (propia || libre || ops[0]).valor;
+  actualizarDetalleInfluenza();
+  $('infEntrega').focus();
+}
+
+function cerrarTraerInfluenza() {
+  $('modalInfluenza').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function traerRepartoInfluenza() {
+  const op = opcionesRemesas().find((o) => o.valor === $('infEntrega').value);
+  if (!op || !estado.requisicion) return;
+  const bio = bioInfluenza();
+  const actual = bio ? estado.items.filter((i) => i.requi_biologico_id === bio.id).reduce((acc, i) => acc + Number(i.cantidad_surtida || 0), 0) : 0;
+  if (actual > 0 && !(await confirmar({
+    titulo: 'Reemplazar la influenza de esta requisición', tono: 'aviso', aceptar: 'Reemplazar',
+    mensaje: `Hoy tiene ${actual.toLocaleString('es-MX')} frascos de influenza capturados; se reemplazan por el reparto de la ${ordinalEntrega(op.numero_entrega)} (${Number(op.total_frascos).toLocaleString('es-MX')} frascos).`
+  }))) return;
+  $('infTraer').disabled = true;
+  try {
+    const { data, error } = await estado.db.rpc('requi_traer_reparto_influenza', {
+      p_requisicion: estado.requisicion.id, p_campana: op.anio_campana, p_numero: op.numero_entrega
+    });
+    if (error) { toast(error.message.replace(/^.*?ERROR:\s*/, ''), true); return; }
+    estado.requisicion.influenza_campana = op.anio_campana;
+    estado.requisicion.influenza_entrega = op.numero_entrega;
+    delete estado.lotesPorBiologico[bio.id];
+    cerrarTraerInfluenza();
+    await cargarDatosRequisicion();
+    const sinReparto = (data.destinos_sin_reparto_a_unidades || []).map(etiquetaMunicipio);
+    const sinUnidad = data.clues_sin_unidad || [];
+    const base = `Se trajeron ${Number(data.frascos).toLocaleString('es-MX')} frascos de influenza: ${plural(data.destinos, 'destino', 'destinos')} y ${plural(data.unidades, 'unidad', 'unidades')}. Los lotes quedan por definir.`;
+    const avisos = [];
+    if (sinReparto.length) avisos.push(`todavía no reparten entre sus unidades: ${sinReparto.join(', ')} (su reparto interno se hace en Influenza > Control de frascos)`);
+    if (sinUnidad.length) avisos.push(`CLUES sin unidad en Requisiciones: ${sinUnidad.join(', ')}`);
+    if (avisos.length) await confirmar({ titulo: 'Reparto de influenza traído', tono: 'aviso', aceptar: 'Entendido', cancelar: 'Cerrar', mensaje: base + ' Ojo: ' + avisos.join('; ') + '.' });
+    else toast(base);
+  } finally {
+    $('infTraer').disabled = false;
+  }
+}
+
 // Lo que sigue "por definir" sale así en el Excel: se avisa antes de exportar.
 async function confirmarExportarConPendientes() {
   const n = estado.items.filter((i) => esPendiente(i) && Number(i.cantidad_surtida) > 0).length;
@@ -2993,6 +3103,12 @@ function instalarEventos() {
   // Prellenar cantidades (modal)
   $('btnSyncLotes').addEventListener('click', sincronizarLotes);
   $('btnPrellenar').addEventListener('click', abrirCantidades);
+  $('btnTraerInfluenza').addEventListener('click', abrirTraerInfluenza);
+  $('infCerrar').addEventListener('click', cerrarTraerInfluenza);
+  $('infCancelar').addEventListener('click', cerrarTraerInfluenza);
+  $('infTraer').addEventListener('click', traerRepartoInfluenza);
+  $('infEntrega').addEventListener('change', actualizarDetalleInfluenza);
+  $('modalInfluenza').addEventListener('click', (ev) => { if (ev.target === $('modalInfluenza')) cerrarTraerInfluenza(); });
   $('cantCerrar').addEventListener('click', cerrarCantidades);
   $('cantCancelar').addEventListener('click', cerrarCantidades);
   $('cantGuardar').addEventListener('click', guardarCantidades);
@@ -3080,6 +3196,7 @@ function instalarEventos() {
     else if ($('modalPegar').style.display !== 'none') cerrarPegar();
     else if ($('modalAsignar').style.display !== 'none') cerrarAsignarLotes();
     else if ($('modalCantidades').style.display !== 'none') cerrarCantidades();
+    else if ($('modalInfluenza').style.display !== 'none') cerrarTraerInfluenza();
     else if ($('modalTransferencias').style.display !== 'none') cerrarTransferencias();
     else if (estado.bioRapido) { seleccionarBioRapido(null); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
   });

@@ -13951,6 +13951,21 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaFrascos .frs-row:hover td { background: #f8fafc; }
 #secInfluenzaFrascos .frs-sub { font-size: 10px; font-weight: 400; color: #94a3b8; }
 #secInfluenzaFrascos .frs-muted { color: #64748b; }
+/* Formulario de la entrega (municipal): campos en una sola fila y el estado de los lotes a la derecha. */
+#secInfluenzaFrascos .frs-formrow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 20px; }
+#secInfluenzaFrascos .frs-formcol { display: flex; flex-direction: column; flex: 0 1 220px; min-width: 180px; }
+#secInfluenzaFrascos .frs-formcol .frs-lbl { margin-bottom: 6px; }
+#secInfluenzaFrascos .frs-lotesestado {
+  display: inline-flex; align-items: center; gap: 8px; flex: 1 1 260px; min-height: 40px;
+  padding: 8px 14px; border-radius: 12px; border: 1px solid #e2e8f0; background: #f8fafc;
+  font-size: 12px; font-weight: 600; color: #475569; line-height: 1.35;
+}
+#secInfluenzaFrascos .frs-lotesestado .material-symbols-rounded { font-size: 18px; flex: none; }
+#secInfluenzaFrascos .frs-lotesestado--good { background: #ecfdf5; border-color: #a7f3d0; color: #064e3b; }
+#secInfluenzaFrascos .frs-lotesestado--warn { background: #fffbeb; border-color: #fde68a; color: #78350f; }
+#secInfluenzaFrascos .frs-lote { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #ede9fe; color: #4c1d95; font-weight: 800; font-size: 11px; white-space: nowrap; }
+#secInfluenzaFrascos .frs-lote small { font-weight: 700; opacity: .75; margin-left: 4px; }
+#secInfluenzaFrascos .frs-lote--pend { background: #fef3c7; color: #92400e; }
 #secInfluenzaFrascos .frs-real { font-variant-numeric: tabular-nums; }
 #secInfluenzaFrascos .frs-real--desv { color: #b45309; font-weight: 800; }
 #secInfluenzaFrascos .frs-real small { display: block; font-size: 10px; font-weight: 700; }

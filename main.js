@@ -8094,6 +8094,15 @@ async function supabaseRequest(action = "", payload, options = {}) {
         return { ok: true, count: records.length };
       }
 
+      case "getinfluenza_lotes_entregas": {
+        const { anio_campana } = payload;
+        const { data, error } = await supabase.rpc('influenza_lotes_entregas', {
+          p_campana: anio_campana || (await getActiveCampaign()).data?.nombre || ""
+        });
+        if (error) throw error;
+        return { ok: true, data: data || [] };
+      }
+
       case "getinfluenza_remesas": {
         const { anio_campana } = payload;
         const { data, error } = await supabase

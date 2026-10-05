@@ -94,7 +94,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=1">
-  <link rel="stylesheet" href="style.css?v=2026.101" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.102" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -348,7 +348,7 @@
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
   <script defer src="ayuda.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.84" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.85" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3494,30 +3494,16 @@
                   unidades</h4>
                 <div id="frascosMuniResumen" class="frs-box"></div>
 
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <label for="frascoFechaInput" class="block text-xs font-bold text-slate-500 mb-1">Fecha de
-                      Entrega</label>
-                    <input id="frascoFechaInput" type="date"
-                      class="w-full bg-surface border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none">
-                  </div>
-                  <div>
-                    <label for="frascoEntregaInput" class="block text-xs font-bold text-slate-500 mb-1">Número de
-                      Entrega / Remesa</label>
+                <div class="frs-formrow">
+                  <div class="frs-formcol">
+                    <label for="frascoEntregaInput" class="frs-lbl">Entrega</label>
                     <select id="frascoEntregaInput" class="frs-field"></select>
                   </div>
-                  <div>
-                    <label for="frascoLoteInput" class="block text-xs font-bold text-slate-500 mb-1">Lote</label>
-                    <input id="frascoLoteInput" type="text"
-                      class="w-full bg-surface border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
-                      placeholder="Ej: LF12345A">
+                  <div class="frs-formcol">
+                    <label for="frascoFechaInput" class="frs-lbl">Fecha de entrega</label>
+                    <input id="frascoFechaInput" type="date" class="frs-field">
                   </div>
-                  <div>
-                    <label for="frascoCaducidadInput" class="block text-xs font-bold text-slate-500 mb-1">Fecha de
-                      Caducidad</label>
-                    <input id="frascoCaducidadInput" type="date"
-                      class="w-full bg-surface border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none">
-                  </div>
+                  <div id="frascosLotesEstado" class="frs-lotesestado" role="status"></div>
                 </div>
 
                 <!-- Tabla de captura por unidad -->
@@ -3534,6 +3520,8 @@
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Frascos de esta entrega</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center"
                           title="Porcentaje de los frascos de la entrega que realmente se asignó a esta unidad">% real</th>
+                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center"
+                          title="El lote real se asigna en Requisiciones; aquí solo se consulta">Lote</th>
                       </tr>
                     </thead>
                     <tbody id="frascosBatchTbody">

@@ -30,8 +30,15 @@
     requi_distribucion_municipio: [],
     requi_distribucion_unidad: [],
     requi_pdf_generados: [],
+    influenza_remesas: [],
     lotes: []
   };
+  // Influenza (opcional): vacuna 6317 en el catálogo y una entrega repartida de 100 frascos
+  // (Querétaro 60, ya repartido entre dos unidades; Corregidora 40, aún sin reparto interno).
+  if (window.__FAKE_INFLUENZA__) {
+    db.requi_catalogo_biologicos.push(bio('bio-flu', '6317', 'VACUNA ANTIINFLUENZA 10/D', 'MULTIDOSIS', 4));
+    db.influenza_remesas.push({ anio_campana: 'Campaña Influenza 2026-2027', numero_entrega: 1, fecha: '2026-10-05', total_frascos: 100, asignacion: { QUERETARO: 60, CORREGIDORA: 40 } });
+  }
   if (window.__FAKE_CON_REQ__) {
     const hoy = new Date();
     db.requi_requisiciones.push({ id: 'req-hoy', anio: hoy.getFullYear(), mes: hoy.getMonth() + 1, entrega: 1, etiqueta: null, estado: 'BORRADOR', fue_corregido: false, creado_por: 'x', fecha_envio: null });
@@ -151,6 +158,7 @@
       update(obj) { q.op = 'update'; q.payload = obj; return api; },
       delete() { q.op = 'delete'; return api; },
       eq(c, v) { q.filtros.push((r) => r[c] === v); return api; },
+      not(c, op, v) { if (op === 'is') q.filtros.push((r) => (v === null ? r[c] != null : r[c] !== v)); return api; },
       gt(c, v) { q.filtros.push((r) => r[c] > v); return api; },
       or(expr) {
         const m = expr.match(/^anio\.lt\.(\d+),and\(anio\.eq\.(\d+),mes\.lt\.(\d+)\),and\(anio\.eq\.(\d+),mes\.eq\.(\d+),entrega\.lt\.(\d+)\)$/);
@@ -222,12 +230,43 @@
     return { data: { quedan_pendientes: Math.max(quedan, 0) }, error: null };
   }
 
+  // Versión simplificada de requi_traer_reparto_influenza (supabase/influenza_requisiciones_vinculo.sql).
+  function rpcTraerInfluenza({ p_requisicion, p_campana, p_numero }) {
+    const req = db.requi_requisiciones.find((r) => r.id === p_requisicion);
+    if (!req || req.estado !== 'BORRADOR') return { data: null, error: { message: 'ERROR: La requisición está cerrada; no se puede traer el reparto' } };
+    const rem = db.influenza_remesas.find((r) => r.anio_campana === p_campana && r.numero_entrega === p_numero);
+    if (!rem) return { data: null, error: { message: 'ERROR: La Jurisdicción todavía no registra la entrega' } };
+    const bio = db.requi_catalogo_biologicos.find((b) => b.codigo_articulo === '6317');
+    if (db.requi_requisiciones.some((r) => r.id !== p_requisicion && r.influenza_campana === p_campana && r.influenza_entrega === p_numero)) {
+      return { data: null, error: { message: 'ERROR: La entrega ya está vinculada a otra requisición' } };
+    }
+    const conLoteReal = db.requi_items_jurisdiccion.some((i) => i.requisicion_id === p_requisicion && i.requi_biologico_id === bio.id
+      && (db.requi_lotes.find((l) => l.id === i.lote_id) || {}).numero_lote !== 'POR DEFINIR');
+    if (conLoteReal) return { data: null, error: { message: 'ERROR: La influenza de esta requisición ya tiene lotes asignados' } };
+    let lote = db.requi_lotes.find((l) => l.requi_biologico_id === bio.id && l.numero_lote === 'POR DEFINIR');
+    if (!lote) { lote = { id: uid(), requi_biologico_id: bio.id, numero_lote: 'POR DEFINIR', caducidad: null }; db.requi_lotes.push(lote); }
+    const propio = (d) => d.requisicion_id === p_requisicion && d.requi_biologico_id === bio.id;
+    db.requi_distribucion_unidad = db.requi_distribucion_unidad.filter((d) => !propio(d));
+    db.requi_distribucion_municipio = db.requi_distribucion_municipio.filter((d) => !propio(d));
+    db.requi_items_jurisdiccion = db.requi_items_jurisdiccion.filter((d) => !propio(d));
+    const destinos = Object.entries(rem.asignacion).filter(([, v]) => Number(v) > 0);
+    const total = destinos.reduce((a, [, v]) => a + Number(v), 0);
+    db.requi_items_jurisdiccion.push({ id: uid(), requisicion_id: p_requisicion, requi_biologico_id: bio.id, lote_id: lote.id, cantidad_surtida: total });
+    destinos.forEach(([municipio, v]) => db.requi_distribucion_municipio.push({ id: uid(), requisicion_id: p_requisicion, municipio, requi_biologico_id: bio.id, lote_id: lote.id, cantidad: Number(v) }));
+    const unidades = window.__FAKE_INFLUENZA_UNI__ || [];
+    unidades.forEach((u) => db.requi_distribucion_unidad.push({ id: uid(), requisicion_id: p_requisicion, unidad_id: u.unidad_id, requi_biologico_id: bio.id, lote_id: lote.id, cantidad: u.cantidad }));
+    req.influenza_campana = p_campana; req.influenza_entrega = p_numero;
+    const conUnidades = new Set(unidades.map((u) => (db.requi_unidades.find((x) => x.id === u.unidad_id) || {}).municipio));
+    return { data: { frascos: total, destinos: destinos.length, unidades: unidades.length, clues_sin_unidad: [],
+      destinos_sin_reparto_a_unidades: destinos.map(([m]) => m).filter((m) => !conUnidades.has(m)) }, error: null };
+  }
+
   window.supabase = {
     createClient() {
       return {
         auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 't@test.mx' } } } }) },
         from: constructor,
-        rpc: async (nombre, args) => (nombre === 'requi_asignar_lotes' ? rpcAsignarLotes(args) : { data: null, error: { message: 'rpc no simulada: ' + nombre } })
+        rpc: async (nombre, args) => (nombre === 'requi_asignar_lotes' ? rpcAsignarLotes(args) : nombre === 'requi_traer_reparto_influenza' ? rpcTraerInfluenza(args) : { data: null, error: { message: 'rpc no simulada: ' + nombre } })
       };
     }
   };

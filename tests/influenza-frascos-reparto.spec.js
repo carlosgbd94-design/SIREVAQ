@@ -22,6 +22,7 @@ const DATOS = `
   var updateFlaskCalculationMuni = function () {};
   var _adminCapturasArray = [];
   var _adminFrascosArray = [];
+  var _adminLotesEntregas = [];
   var _allUnidades = [
     { clues: 'Q1', unidad: 'UMQ UNO', municipio: 'QUERETARO' },
     { clues: 'Q2', unidad: 'UMQ DOS', municipio: 'QUERETARO' },
@@ -168,6 +169,37 @@ test('Municipal: lo guardado fuera de la meta se marca como editado y lo demás 
   await expect(page.locator('#mr_mark_Q2')).toHaveText('editado · por meta: 104');
   await expect(page.locator('#mr_mark_Q3')).toHaveText('editado · por meta: 52');
   await expect(page.locator('#mr_mark_Q1')).toHaveText('');
+});
+
+test('Municipal: el lote ya no se captura aquí, se muestra el que asignó Requisiciones (solo lectura)', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 458, asignacion: { QUERETARO: 312 }, manual: [] }];
+    renderFrascosDistribution();
+  });
+  // Sin campos de lote ni caducidad
+  await expect(page.locator('#frascoLoteInput')).toHaveCount(0);
+  await expect(page.locator('#frascoCaducidadInput')).toHaveCount(0);
+  // Aún no hay requisición: se explica dónde se asigna
+  await expect(page.locator('#frascosLotesEstado')).toContainText('Requisiciones');
+  await expect(page.locator('#frascosBatchTbody tr').first().locator('td').last()).toContainText('—');
+
+  // Requisiciones asignó lote a Q1 y dejó Q2 por definir
+  await page.evaluate(() => {
+    _adminLotesEntregas = [
+      { numero_entrega: 1, clues: 'Q1', lote: 'LF123A', caducidad: '2027-03-31', cantidad: 156 },
+      { numero_entrega: 1, clues: 'Q2', lote: 'POR DEFINIR', caducidad: null, cantidad: 104 }];
+    renderFrascosDistribution();
+  });
+  await expect(page.locator('#frascosBatchTbody tr').nth(0).locator('td').last()).toContainText('LF123A');
+  await expect(page.locator('#frascosBatchTbody tr').nth(0).locator('td').last()).toContainText('MAR-27');
+  await expect(page.locator('#frascosBatchTbody tr').nth(1).locator('td').last()).toContainText('Pendiente');
+  await expect(page.locator('#frascosLotesEstado')).toContainText('156 de 260');
+  // Guardar el reparto ya no manda lote ni caducidad
+  await page.click('#btnSaveFrascoEntrega');
+  const g = (await page.evaluate(() => window.__llamadas)).find((l) => l[0] === 'guardarinfluenza_reparto')[1];
+  expect(g.lote).toBeUndefined();
+  expect(g.caducidad).toBeUndefined();
 });
 
 test('Concentrado por entregas: columnas por destino y total entregado', async ({ page }) => {

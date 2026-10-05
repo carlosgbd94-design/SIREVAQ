@@ -1517,6 +1517,8 @@ function initInfluenzaSubtabs() {
 let _adminMetasArray = [];
 let _adminCapturasArray = [];
 let _adminFrascosArray = [];
+// Lotes reales por unidad y entrega: los asigna Requisiciones (solo lectura aquí).
+let _adminLotesEntregas = [];
 let _allUnidades = [];
 
 async function loadInfluenzaAdminData() {
@@ -1542,6 +1544,14 @@ async function loadInfluenzaAdminData() {
     // 5. Entregas (remesas) repartidas por Jurisdicción
     const resRemesas = await AppService.call("getinfluenza_remesas", { anio_campana: campana });
     _adminRemesasArray = resRemesas.data || [];
+
+    // 6. Lotes asignados en Requisiciones (si falla no impide repartir: solo no se muestran)
+    try {
+      const resLotes = await AppService.call("getinfluenza_lotes_entregas", { anio_campana: campana }, { silent: true });
+      _adminLotesEntregas = resLotes.data || [];
+    } catch (e) {
+      _adminLotesEntregas = [];
+    }
   } catch (err) {
     console.error("Error al cargar datos administrativos de Influenza:", err);
   }
@@ -4866,6 +4876,37 @@ function frascoPintarPctReal(el, frascos, total, metaPct) {
   el.innerHTML = `${real.toFixed(2)}%` + (desv ? `<small title="Diferencia contra el % de la meta">${dif > 0 ? "+" : ""}${dif.toFixed(2)} pts</small>` : "");
 }
 
+const FRASCO_MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
+function frascoMmmAa(fechaIso) {
+  const m = /^(\d{4})-(\d{2})/.exec(String(fechaIso || ""));
+  return m ? `${FRASCO_MESES[Number(m[2]) - 1]}-${m[1].slice(2)}` : "";
+}
+
+// Lotes de una unidad en una entrega, tal como están en Requisiciones.
+function frascoLotesDe(numero, clues) {
+  return _adminLotesEntregas.filter(l => Number(l.numero_entrega) === Number(numero) && l.clues === clues);
+}
+
+// Celda de lote (solo lectura): "Pendiente" si aún no llega, o lote(s) con caducidad.
+function frascoLoteHtml(numero, clues) {
+  const lotes = frascoLotesDe(numero, clues);
+  if (!lotes.length) return '<span class="frs-muted" title="Aún no está en Requisiciones">—</span>';
+  return lotes.map(l => l.lote === "POR DEFINIR"
+    ? '<span class="frs-lote frs-lote--pend" title="El lote se asigna en Requisiciones cuando llegue la entrega">Pendiente</span>'
+    : `<span class="frs-lote" title="${l.cantidad} frascos">${l.lote}${l.caducidad ? ` <small>${frascoMmmAa(l.caducidad)}</small>` : ""}</span>`).join(" ");
+}
+
+// Resumen para la barra de la entrega: cuántos frascos ya tienen lote real.
+function frascoEstadoLotes(numero, units) {
+  const claves = new Set(units.map(u => u.clues));
+  const filas = _adminLotesEntregas.filter(l => Number(l.numero_entrega) === Number(numero) && claves.has(l.clues));
+  if (!filas.length) return { tono: "info", html: '<span class="material-symbols-rounded">inventory_2</span> Los lotes se asignan en <b>Requisiciones</b> cuando llegue la entrega.' };
+  const total = filas.reduce((s, l) => s + Number(l.cantidad || 0), 0);
+  const conLote = filas.filter(l => l.lote !== "POR DEFINIR").reduce((s, l) => s + Number(l.cantidad || 0), 0);
+  if (conLote >= total) return { tono: "good", html: `<span class="material-symbols-rounded">check_circle</span> Lotes asignados en Requisiciones (${frascoFmt(conLote)} frascos).` };
+  return { tono: "warn", html: `<span class="material-symbols-rounded">pending</span> ${frascoFmt(conLote)} de ${frascoFmt(total)} frascos ya tienen lote en Requisiciones.` };
+}
+
 // Marca de un renglón editado a mano: dice cuánto le tocaría por meta, para que una edición
 // vieja (se conserva al guardar) no pase como un error del cálculo.
 function frascoMarcaEditado(editado, proporcional) {
@@ -5098,8 +5139,10 @@ function renderFrascosMunicipal(muni) {
   }
   document.getElementById("frascoFechaInput").value = previas[0]?.fecha_entrega
     || remesas.find(r => r.numero_entrega === numero)?.fecha || new Date().toISOString().split("T")[0];
-  document.getElementById("frascoLoteInput").value = previas.find(p => p.lote)?.lote || "";
-  document.getElementById("frascoCaducidadInput").value = previas.find(p => p.fecha_caducidad)?.fecha_caducidad || "";
+  const estadoLotes = frascoEstadoLotes(numero, units);
+  const cajaLotes = document.getElementById("frascosLotesEstado");
+  cajaLotes.className = `frs-lotesestado frs-lotesestado--${estadoLotes.tono}`;
+  cajaLotes.innerHTML = estadoLotes.html;
 
   tbody.innerHTML = "";
   units.forEach(u => {
@@ -5117,7 +5160,8 @@ function renderFrascosMunicipal(muni) {
         <input type="text" inputmode="numeric" autocomplete="off" id="batch_frascos_${u.clues}" class="frs-num">
         <div class="frs-mark" id="mr_mark_${u.clues}"></div>
       </td>
-      <td class="c frs-real" id="mr_real_${u.clues}"></td>`;
+      <td class="c frs-real" id="mr_real_${u.clues}"></td>
+      <td class="c">${frascoLoteHtml(numero, u.clues)}</td>`;
     tbody.appendChild(tr);
     tr.querySelector("input").addEventListener("input", (e) => {
       frascoSoltarCargados(_muniRepartoState);
@@ -5159,8 +5203,6 @@ async function saveFrascosDelivery() {
   const muni = document.getElementById("adminInfluenzaMuni").value;
   const numero = _muniRepartoState.numero;
   const fecha = document.getElementById("frascoFechaInput").value;
-  const lote = document.getElementById("frascoLoteInput").value.trim().toUpperCase();
-  const caducidad = document.getElementById("frascoCaducidadInput").value;
   if (!numero || !fecha) {
     showToast("Elige la entrega y la fecha.", false, "bad");
     return;
@@ -5186,7 +5228,7 @@ async function saveFrascosDelivery() {
     eventTitle: "Influenza",
     eventMsg: `Reparto municipal de la ${frascoOrdinal(numero)} de frascos`,
     action: async () => {
-      await AppService.call("guardarinfluenza_reparto", { anio_campana: campana, municipio: muni, numero_entrega: numero, fecha, lote, caducidad, rows });
+      await AppService.call("guardarinfluenza_reparto", { anio_campana: campana, municipio: muni, numero_entrega: numero, fecha, rows });
       await loadInfluenzaAdminData();
       renderFrascosDistribution();
       return { ok: true };
@@ -5445,8 +5487,7 @@ function renderFrascosDistribution() {
         row.innerHTML = `
           <td class="p-3 text-xs font-semibold text-slate-700">${unit ? unit.unidad : d.clues} <br><span class="text-[10px] text-slate-400 font-normal">${d.clues}</span></td>
           <td class="p-3 text-center text-xs">${d.numero_entrega}</td>
-          <td class="p-3 text-center text-xs font-mono text-slate-600">${d.lote || '<span class="text-slate-300">-</span>'}</td>
-          <td class="p-3 text-center text-xs">${d.fecha_caducidad || '<span class="text-slate-300">-</span>'}</td>
+          <td class="p-3 text-center text-xs font-mono text-slate-600" colspan="2">${frascoLoteHtml(d.numero_entrega, d.clues)}</td>
           <td class="p-3 text-center text-xs font-bold text-violet-900">${d.cantidad_frascos}</td>
           <td class="p-3 text-center text-xs font-bold text-slate-600">${d.cantidad_frascos * DOSIS_POR_FRASCO} dosis</td>
           <td class="p-3 text-center text-xs">${d.fecha_entrega}</td>

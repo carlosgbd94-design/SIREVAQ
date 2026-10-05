@@ -866,3 +866,55 @@ test('Requisiciones: la barra de abajo no encima el chip de guardado con los pas
   }
   expect(errores).toEqual([]);
 });
+
+test('Requisiciones: traer el reparto de influenza llena los pasos 1-3 con lote por definir y avisa lo que falta', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__FAKE_INFLUENZA__ = true;
+    window.__FAKE_INFLUENZA_UNI__ = [{ unidad_id: 'un-q1', cantidad: 40 }, { unidad_id: 'un-q2', cantidad: 20 }];
+  });
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.evaluate(() => { window.__AUTO_CONFIRMAR__ = false; });
+
+  await page.click('#btnTraerInfluenza');
+  await expect(page.locator('#modalInfluenza')).toBeVisible();
+  await expect(page.locator('#infEntrega option')).toHaveCount(1);
+  await expect(page.locator('#infDetalle')).toContainText('100 frascos recibidos');
+  await expect(page.locator('#infDetalle')).toContainText('Querétaro 60');
+  await expect(page.locator('#infTraer')).toBeEnabled();
+
+  await page.click('#infTraer');
+  // Corregidora tiene 40 asignados pero aún sin reparto a sus unidades: se avisa
+  await expect(page.locator('#modalConfirmar')).toBeVisible();
+  await expect(page.locator('#modalConfirmar')).toContainText('Se trajeron 100 frascos de influenza');
+  await expect(page.locator('#modalConfirmar')).toContainText('Corregidora');
+  await page.click('#confirmarAceptar');
+
+  expect(await db(page, "db.requi_items_jurisdiccion.filter((i) => i.requi_biologico_id === 'bio-flu').map((i) => i.cantidad_surtida)")).toEqual([100]);
+  expect(await db(page, "db.requi_lotes.filter((l) => l.requi_biologico_id === 'bio-flu').map((l) => l.numero_lote)")).toEqual(['POR DEFINIR']);
+  expect(await db(page, "db.requi_distribucion_municipio.filter((d) => d.requi_biologico_id === 'bio-flu').reduce((a, d) => a + d.cantidad, 0)")).toBe(100);
+  expect(await db(page, "db.requi_distribucion_unidad.filter((d) => d.requi_biologico_id === 'bio-flu').reduce((a, d) => a + d.cantidad, 0)")).toBe(60);
+  expect(await db(page, "db.requi_requisiciones.find((r) => r.id === 'req-hoy').influenza_entrega")).toBe(1);
+
+  // Con la entrega ya vinculada a esta requisición se puede volver a traer (reemplaza) y avisa el reemplazo
+  await page.click('#btnTraerInfluenza');
+  await expect(page.locator('#infDetalle')).toContainText('se reemplazan');
+  await page.click('#infCancelar');
+  await expect(page.locator('#modalInfluenza')).toBeHidden();
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: la entrega de influenza ya vinculada a otra requisición no se puede traer', async ({ page }) => {
+  await page.addInitScript(() => { window.__FAKE_INFLUENZA__ = true; });
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.evaluate(() => {
+    window.__FAKE_DB__.requi_requisiciones.push({ id: 'req-otra', anio: 2026, mes: 9, entrega: 1, etiqueta: 'Influenza', estado: 'BORRADOR', fue_corregido: false, creado_por: 'x', fecha_envio: null,
+      influenza_campana: 'Campaña Influenza 2026-2027', influenza_entrega: 1 });
+  });
+  await page.click('#btnTraerInfluenza');
+  await expect(page.locator('#infEntrega')).toContainText('ya vinculada');
+  await expect(page.locator('#infDetalle')).toContainText('ya está vinculada');
+  await expect(page.locator('#infTraer')).toBeDisabled();
+  expect(errores).toEqual([]);
+});
