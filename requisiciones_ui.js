@@ -599,8 +599,7 @@ function pillComparador(resultado) {
 // nivel/destino, NO por requisición: el mismo responsable firma mes tras
 // mes, así que se captura una sola vez y se reutiliza (caché) hasta que
 // cambie. Cada municipio tiene su propia tarjeta (entrega/recibe distinto
-// en cada uno). Los hospitales no aparecen aquí -- cuentan como unidad,
-// firman a mano y anotan su propio nombre en el papel.
+// en cada uno). Los hospitales no aparecen aquí: su firma de abajo-izquierda sale del renglón jurisdiccional.
 // ---------------------------------------------------------------------------
 
 async function cargarFirmasJurisdiccionales() {
@@ -627,7 +626,7 @@ async function guardarFirmasJurisdiccionales() {
   };
   const { error } = await estado.db.from('requi_firmas').upsert(payload, { onConflict: 'nivel,destino' });
   if (error) { toast('No se pudieron guardar: ' + error.message, true); return; }
-  toast('Responsables jurisdiccionales guardados.');
+  toast('Firmas de arriba y de la Jurisdicción guardadas.');
 }
 
 async function renderFirmasMunicipio() {
@@ -639,13 +638,21 @@ async function renderFirmasMunicipio() {
   cont.innerHTML = MUNICIPIOS_REALES.map((m) => {
     const d = porDestino[m.v] || {};
     return `
-      <div class="barra" data-firma-municipio="${m.v}" style="padding:10px 12px; background:var(--surface-container); border-radius:12px;">
-        <div class="campo" style="min-width:110px;"><label>Municipio</label><div style="font-weight:800; padding:9px 0;">${m.l}</div></div>
-        <div class="campo"><label>Entrega — Nombre</label><input type="text" class="inp-firma-entrega-n" aria-label="Entrega: nombre (${m.l})" value="${(d.entrega_nombre || '').replace(/"/g, '&quot;')}"></div>
-        <div class="campo"><label>Entrega — Cargo</label><input type="text" class="inp-firma-entrega-c" aria-label="Entrega: cargo (${m.l})" value="${(d.entrega_cargo || '').replace(/"/g, '&quot;')}"></div>
-        <div class="campo"><label>Recibe — Nombre</label><input type="text" class="inp-firma-recibe-n" aria-label="Recibe: nombre (${m.l})" value="${(d.recibe_nombre || '').replace(/"/g, '&quot;')}"></div>
-        <div class="campo"><label>Recibe — Cargo</label><input type="text" class="inp-firma-recibe-c" aria-label="Recibe: cargo (${m.l})" value="${(d.recibe_cargo || '').replace(/"/g, '&quot;')}"></div>
-        <button class="btn btn-primary btn-sm" data-guardar-firma-municipio="${m.v}"><span class="material-symbols-rounded" style="font-size:14px">save</span> Guardar</button>
+      <div class="firma-bloque" data-firma-municipio="${m.v}" style="margin-bottom:0; background:var(--surface);">
+        <div class="firma-bloque-titulo" style="color:inherit;">${m.l}</div>
+        <div class="firma-cuadro">
+          <div class="firma-celda">
+            <span class="firma-pos">Responsable municipal · abajo derecha del municipio / abajo izquierda de sus unidades</span>
+            <div class="campo"><label>Nombre</label><input type="text" class="inp-firma-recibe-n" aria-label="Responsable municipal: nombre (${m.l})" value="${(d.recibe_nombre || '').replace(/"/g, '&quot;')}"></div>
+            <div class="campo"><label>Cargo</label><input type="text" class="inp-firma-recibe-c" aria-label="Responsable municipal: cargo (${m.l})" value="${(d.recibe_cargo || '').replace(/"/g, '&quot;')}"></div>
+          </div>
+          <div class="firma-celda">
+            <span class="firma-pos">Quien entrega · abajo izquierda de la requisición del municipio</span>
+            <div class="campo"><label>Nombre</label><input type="text" class="inp-firma-entrega-n" aria-label="Entrega: nombre (${m.l})" value="${(d.entrega_nombre || '').replace(/"/g, '&quot;')}"></div>
+            <div class="campo"><label>Cargo</label><input type="text" class="inp-firma-entrega-c" aria-label="Entrega: cargo (${m.l})" value="${(d.entrega_cargo || '').replace(/"/g, '&quot;')}"></div>
+          </div>
+        </div>
+        <div style="margin-top:10px;"><button class="btn btn-primary btn-sm" data-guardar-firma-municipio="${m.v}"><span class="material-symbols-rounded" style="font-size:14px">save</span> Guardar ${m.l}</button></div>
       </div>
     `;
   }).join('');

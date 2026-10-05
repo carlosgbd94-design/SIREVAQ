@@ -92,10 +92,10 @@ on conflict (municipio, nombre) do update set clues = excluded.clues, activo = t
 -- ---------------------------------------------------------------------------
 
 insert into requi_firmas (nivel, destino, entrega_nombre, recibe_nombre) values
-  ('MUNICIPAL', 'CORREGIDORA', 'LIC. LESLIE LÓPEZ ENCISO', 'ENF. ALMA DELIA HERNÁNDEZ ESQUIVEL'),
-  ('MUNICIPAL', 'HUIMILPAN',   'LIC. LESLIE LÓPEZ ENCISO', 'ENF. ALMA DELIA HERNÁNDEZ ESQUIVEL'),
-  ('MUNICIPAL', 'MARQUES',     'LIC. LESLIE LÓPEZ ENCISO', 'L.E ANA JULIA MENDOZA HERNANDEZ'),
-  ('MUNICIPAL', 'QUERETARO',   'LIC. LESLIE LÓPEZ ENCISO', 'MTRA. ANA MARÍA RAMÍREZ MUNGUÍA')
+  ('MUNICIPAL', 'CORREGIDORA', 'MTRA. LESLIE LÓPEZ ENCISO', 'L.E. ALMA DELIA HERNÁNDEZ ESQUIVEL'),
+  ('MUNICIPAL', 'HUIMILPAN',   'MTRA. LESLIE LÓPEZ ENCISO', 'L.E. ALMA DELIA HERNÁNDEZ ESQUIVEL'),
+  ('MUNICIPAL', 'MARQUES',     'MTRA. LESLIE LÓPEZ ENCISO', 'L.E. ANA JULIA MENDOZA HERNÁNDEZ'),
+  ('MUNICIPAL', 'QUERETARO',   'MTRA. LESLIE LÓPEZ ENCISO', 'MTRA. ANA MARÍA RAMÍREZ MUNGUÍA')
 on conflict (nivel, destino) do nothing;
 
 -- Jurisdiccional: extraído de "Gran total Juris.xlsx" (hoja GRAN TOTAL
@@ -105,8 +105,8 @@ on conflict (nivel, destino) do nothing;
 insert into requi_firmas (nivel, destino, elaboro_nombre, elaboro_cargo, autorizo_nombre, autorizo_cargo, entrega_nombre, recibe_nombre)
 values (
   'JURISDICCIONAL', 'JURISDICCION',
-  'L.E LIZBETH URIBE PANTOJA', 'RESPONSABLE PVU',
-  'ING. ISRAEL RUIZ BARCENAS', 'ADMINISTRADOR DE JURISDICCION SANITARIA No. 1',
-  'ENF. JESÚS FERNANDO MOLINA REYES', 'LIC. LESLIE LÓPEZ ENCISO'
+  'MTRA. LIZBETH URIBE PANTOJA', 'RESPONSABLE DEL PVU',
+  'ING. ISRAEL RUIZ BARCENAS', 'ADMINISTRADOR DE LA JURISDICCIÓN SANITARIA No. 1',
+  'ENF. JESÚS FERNANDO MOLINA REYES', 'MTRA. LESLIE LÓPEZ ENCISO'
 )
 on conflict (nivel, destino) do nothing;
