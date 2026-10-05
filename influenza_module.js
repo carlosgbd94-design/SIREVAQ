@@ -647,13 +647,17 @@ async function loadInfluenzaUnitData() {
     _influenzaDistribucionCache = resFrascos.data || [];
 
     // 📈 4. CONEXIÓN AUTOMÁTICA: Pronóstico de Desabasto
-    if (window.StockPredictor) {
-      const totalStock = _influenzaDistribucionCache.reduce((acc, curr) => acc + (Number(curr.existencia_dosis) || Number(curr.dosis_restantes) || 0), 0) || 45;
-      const historyApplies = _influenzaCapturasCache.map(c => {
-        const totalSemana = Object.values(c.valores || {}).reduce((a, b) => a + Number(b || 0), 0);
-        return { fecha: c.fecha, dosis: totalSemana };
-      });
-      window.StockPredictor.renderPredictiveWidget("influenzaStockPredictorContainer", totalStock, historyApplies, USER?.clues);
+    // Existencia REAL: dosis repartidas a la unidad menos las que ella misma ha capturado cada semana.
+    // (Antes se leían campos que no existen y se usaba un valor fijo de 45 dosis.)
+    const balance = renderInfluenzaBalanceUnidad();
+    const contPred = document.getElementById("influenzaStockPredictorContainer");
+    if (window.StockPredictor && contPred) {
+      if (!balance.recibidos) {
+        contPred.innerHTML = "";   // sin reparto no hay existencia que pronosticar
+      } else {
+        const historyApplies = _influenzaCapturasCache.map(c => ({ fecha: c.fecha, dosis: frascoDosisDeCaptura(c) }));
+        window.StockPredictor.renderPredictiveWidget("influenzaStockPredictorContainer", Math.max(0, balance.existencia), historyApplies, USER?.clues);
+      }
     }
   } catch (err) {
     console.error("Error al cargar datos de Influenza:", err);
@@ -4765,10 +4769,10 @@ function updateFlaskCalculationMuni() {
       totalFrascosEntregados += FRASCO_DESTINOS.reduce((x, d) => x + Number((r.asignacion || {})[d.id] || 0), 0);
     });
   } else {
-    _adminFrascosArray.forEach(d => {
-      if (d.municipio.toUpperCase() === selectMuni.toUpperCase()) {
-        totalFrascosEntregados += Number(d.cantidad_frascos || 0);
-      }
+    // Lo que Jurisdicción asignó al municipio (existe desde que reparte la entrega, aunque el municipio
+    // todavía no lo baje a sus unidades); el detalle por unidad está en «Reparto vs. captura semanal».
+    _adminRemesasArray.forEach(r => {
+      totalFrascosEntregados += Number((r.asignacion || {})[selectMuni.toUpperCase()] || 0);
     });
   }
 
@@ -5525,16 +5529,126 @@ async function exportFrascosExcel() {
 
 // ─── Dosis aplicadas por destino (el hospital cuenta aparte de QUERETARO) ──
 
+// Destino (municipio u hospital) de una CLUES. Se deduce de la unidad, no del municipio guardado en la
+// captura, para comparar siempre contra el mismo reparto (que también va por CLUES).
+function frascoDestinoDeClues(clues, municipioCaptura) {
+  const hosp = FRASCO_DESTINOS.find(d => d.hospital && d.clues === clues);
+  if (hosp) return hosp.id;
+  const u = _allUnidades.find(x => x.clues === clues);
+  return String((u && u.municipio) || municipioCaptura || "").toUpperCase();
+}
+
+// Dosis de una captura semanal: la misma suma de todos los rubros que usa Meta-Logro como «logro».
+function frascoDosisDeCaptura(c) {
+  return Object.values((c && c.valores) || {}).reduce((s, v) => s + Number(v || 0), 0);
+}
+
 function frascoDosisAplicadas(destId) {
-  const dest = FRASCO_DESTINOS.find(d => d.id === destId);
   let total = 0;
   _adminCapturasArray.forEach(c => {
-    const esDelDestino = dest && dest.hospital
-      ? c.clues === dest.clues
-      : String(c.municipio).toUpperCase() === destId && !FRASCO_CLUES_HOSPITAL.has(c.clues);
-    if (esDelDestino) Object.values(c.valores || {}).forEach(v => { total += Number(v || 0); });
+    if (frascoDestinoDeClues(c.clues, c.municipio) === destId) total += frascoDosisDeCaptura(c);
   });
   return total;
+}
+
+// Compara lo REPARTIDO a una unidad con lo que captura cada semana en Meta-Logro (dosis aplicadas).
+// filasFrascos: sus renglones de reparto; capturas: sus capturas semanales de la campaña.
+function frascoBalance(filasFrascos, capturas) {
+  const recibidos = (filasFrascos || []).reduce((s, d) => s + Number(d.cantidad_frascos || 0), 0);
+  const dosisRecibidas = recibidos * DOSIS_POR_FRASCO;
+  let aplicadas = 0, ultima = "";
+  (capturas || []).forEach(c => {
+    aplicadas += frascoDosisDeCaptura(c);
+    if (c.fecha && c.fecha > ultima) ultima = c.fecha;
+  });
+  const existencia = dosisRecibidas - aplicadas;
+  let estado = "ok";
+  if (aplicadas > dosisRecibidas) estado = "excede";
+  else if (!recibidos && !aplicadas) estado = "vacio";
+  else if (recibidos && existencia === 0) estado = "agotado";
+  return { recibidos, dosisRecibidas, aplicadas, existencia, ultima, estado,
+    aprov: dosisRecibidas > 0 ? aplicadas * 100 / dosisRecibidas : null };
+}
+
+function frascoEstadoBalanceHtml(b) {
+  if (b.estado === "excede") {
+    const txt = b.recibidos ? `Aplicó ${frascoFmt(b.aplicadas - b.dosisRecibidas)} dosis de más` : "Aplicó sin reparto";
+    return `<span class="frs-estado frs-estado--excede" title="Capturó más dosis aplicadas de las que le repartieron">${txt}</span>`;
+  }
+  if (b.estado === "vacio") return '<span class="frs-estado frs-estado--vacio">Sin reparto ni captura</span>';
+  if (b.estado === "agotado") return '<span class="frs-estado frs-estado--agotado">Sin existencia</span>';
+  return '<span class="frs-estado frs-estado--ok">En orden</span>';
+}
+
+function frascoFechaCorta(f) {
+  const m = /^\d{4}-(\d{2})-(\d{2})/.exec(String(f || ""));
+  return m ? `${m[2]}/${m[1]}` : "—";
+}
+
+// Tabla «Reparto vs. captura semanal», por unidad. Municipal: las unidades de su municipio (todas);
+// Jurisdicción: toda unidad que ya tenga reparto o captura.
+function renderFrascosBalance() {
+  const tbody = document.getElementById("frascosBalanceTbody");
+  if (!tbody) return;
+  const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";
+  const muni = document.getElementById("adminInfluenzaMuni")?.value;
+  const unidades = esJuris ? _allUnidades.slice() : frascoUnidadesMunicipio(muni || "");
+  const orden = FRASCO_DESTINOS.map(d => d.id);
+  let filas = unidades.map(u => {
+    const destino = frascoDestinoDeClues(u.clues);
+    const b = frascoBalance(_adminFrascosArray.filter(d => d.clues === u.clues), _adminCapturasArray.filter(c => c.clues === u.clues));
+    return { u, destino, b };
+  });
+  if (esJuris) filas = filas.filter(f => f.b.recibidos || f.b.aplicadas);
+  filas.sort((a, b) => (orden.indexOf(a.destino) - orden.indexOf(b.destino)) || String(a.u.unidad).localeCompare(String(b.u.unidad), "es"));
+
+  const col = document.getElementById("frascosBalanceDestinoTh");
+  if (col) col.style.display = esJuris ? "" : "none";
+  tbody.innerHTML = filas.length ? filas.map(({ u, destino, b }) => {
+    const dest = FRASCO_DESTINOS.find(d => d.id === destino);
+    return `<tr class="frs-row" data-estado="${b.estado}">
+      <td><b>${u.unidad}</b><br><span class="frs-sub">${u.clues}</span></td>
+      <td class="c" style="${esJuris ? "" : "display:none"}">${dest ? dest.label : destino}</td>
+      <td class="c">${frascoFmt(b.recibidos)}</td>
+      <td class="c frs-muted">${frascoFmt(b.dosisRecibidas)}</td>
+      <td class="c"><b>${frascoFmt(b.aplicadas)}</b></td>
+      <td class="c ${b.existencia < 0 ? "frs-neg" : ""}">${frascoFmt(b.existencia)}</td>
+      <td class="c frs-muted">${b.aprov == null ? "—" : b.aprov.toFixed(1) + "%"}</td>
+      <td class="c frs-muted">${frascoFechaCorta(b.ultima)}</td>
+      <td class="c">${frascoEstadoBalanceHtml(b)}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="9" class="frs-muted" style="padding:18px;text-align:center">Todavía no hay frascos repartidos ni capturas semanales.</td></tr>`;
+
+  const t = filas.reduce((a, { b }) => ({
+    r: a.r + b.recibidos, dr: a.dr + b.dosisRecibidas, ap: a.ap + b.aplicadas }), { r: 0, dr: 0, ap: 0 });
+  const tb = frascoBalance([{ cantidad_frascos: t.r }], [{ valores: { t: t.ap } }]);
+  const pie = document.getElementById("frascosBalanceTfoot");
+  if (pie) pie.innerHTML = `<tr class="frs-total" data-estado="${tb.estado === "excede" ? "excede" : "ok"}">
+    <td>TOTAL</td><td class="c" style="${esJuris ? "" : "display:none"}"></td>
+    <td class="c">${frascoFmt(t.r)}</td><td class="c">${frascoFmt(t.dr)}</td><td class="c">${frascoFmt(t.ap)}</td>
+    <td class="c">${frascoFmt(t.dr - t.ap)}</td><td class="c">${tb.aprov == null ? "—" : tb.aprov.toFixed(1) + "%"}</td><td></td><td></td></tr>`;
+}
+
+// Vista de la UNIDAD: lo que le repartieron contra lo que ella misma ha capturado cada semana en Meta-Logro.
+// De aquí sale también la existencia que usa el pronóstico de abasto (antes se usaba un valor fijo de 45).
+function renderInfluenzaBalanceUnidad() {
+  const b = frascoBalance(_influenzaDistribucionCache, _influenzaCapturasCache);
+  const box = document.getElementById("influenzaBalanceUnidad");
+  if (box) {
+    if (!b.recibidos && !b.aplicadas) {
+      box.innerHTML = '<div class="frs-balance-nota">Aún no te han repartido frascos de esta campaña. Cuando tu municipio registre la entrega, aquí verás cuánto te tocó y cuánto llevas aplicado.</div>';
+    } else {
+      const alerta = b.estado === "excede"
+        ? `<div class="frs-balance-alerta">⚠️ Llevas <b>${frascoFmt(b.aplicadas)} dosis aplicadas</b> y solo te repartieron <b>${frascoFmt(b.dosisRecibidas)}</b>${b.recibidos ? "" : " (sin reparto registrado)"}. Avisa a tu municipio para revisar el reparto o la captura.</div>`
+        : "";
+      box.innerHTML = `<div class="frs-balance">
+        <div><span>Frascos que te repartieron</span><b>${frascoFmt(b.recibidos)}</b><small>${frascoFmt(b.dosisRecibidas)} dosis</small></div>
+        <div><span>Dosis aplicadas (tus capturas)</span><b>${frascoFmt(b.aplicadas)}</b><small>${b.aprov == null ? "" : b.aprov.toFixed(1) + "% de lo repartido"}</small></div>
+        <div data-estado="${b.estado}"><span>Existencia estimada</span><b>${frascoFmt(Math.max(0, b.existencia))}</b><small>dosis${b.ultima ? " · última captura " + frascoFechaCorta(b.ultima) : ""}</small></div>
+      </div>${alerta}`;
+    }
+  }
+  return b;
 }
 
 function renderFrascosDistribution() {
@@ -5632,6 +5746,7 @@ function renderFrascosDistribution() {
 
   const exp = document.getElementById("btnExportFrascosExcel");
   if (exp) exp.onclick = exportFrascosExcel;
+  renderFrascosBalance();
   updateFlaskCalculationMuni();
   iniciarDockFrascos(esJuris);
 }

@@ -12,7 +12,7 @@ const seccion = html.slice(
   html.indexOf('<div id="secInfluenzaFrascos"'),
   html.indexOf('<!-- SECCIÓN 4: CONFIGURACIÓN DE CAMPAÑA -->'));
 const bloque = modulo.slice(
-  modulo.indexOf('const DOSIS_POR_FRASCO'),
+  modulo.indexOf('function updateFlaskCalculationMuni'),
   modulo.indexOf('// --- ═══════════ INDICADORES'));
 
 const meta = (clues, municipio, n) => ({ clues, municipio, metas: { r1: n } });
@@ -23,6 +23,8 @@ const DATOS = `
   var _adminCapturasArray = [];
   var _adminFrascosArray = [];
   var _adminLotesEntregas = [];
+  var _influenzaDistribucionCache = [];
+  var _influenzaCapturasCache = [];
   var _allUnidades = [
     { clues: 'Q1', unidad: 'UMQ UNO', municipio: 'QUERETARO' },
     { clues: 'Q2', unidad: 'UMQ DOS', municipio: 'QUERETARO' },
@@ -387,6 +389,101 @@ test('Municipal: «Restablecer por meta» descarta lo que cambiaste', async ({ p
   await page.click('#btnMuniReset');
   expect(await page.evaluate(() => ['Q1', 'Q2', 'Q3'].map((c) => document.getElementById('batch_frascos_' + c).value))).toEqual(['50', '33', '17']);
   await expect(page.locator('#batch_frascos_Q1')).not.toHaveClass(/frs-num--(excede|falta)/);
+});
+
+test('Reparto vs. captura semanal (municipal): compara por unidad lo repartido con las dosis que capturan cada semana', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 458, asignacion: { QUERETARO: 312 }, manual: [] }];
+    // Reparto ya guardado por unidad: 156 / 104 / 52 frascos
+    _adminFrascosArray = [
+      { municipio: 'QUERETARO', clues: 'Q1', numero_entrega: 1, cantidad_frascos: 156, fecha_entrega: '2026-10-05' },
+      { municipio: 'QUERETARO', clues: 'Q2', numero_entrega: 1, cantidad_frascos: 104, fecha_entrega: '2026-10-05' },
+      { municipio: 'QUERETARO', clues: 'Q3', numero_entrega: 1, cantidad_frascos: 52, fecha_entrega: '2026-10-05' }];
+    // Capturas semanales de Meta-Logro (dosis por rubro). Q1: 2 semanas; Q2 aplicó de más; Q3 aún nada.
+    // La captura de Q1 trae un municipio mal escrito: se compara por CLUES, no por ese texto.
+    _adminCapturasArray = [
+      { clues: 'Q1', municipio: 'EL MARQUES', fecha: '2026-10-09', valores: { r1: 600, r2: 400 } },
+      { clues: 'Q1', municipio: 'QUERETARO', fecha: '2026-10-16', valores: { r1: 500 } },
+      { clues: 'Q2', municipio: 'QUERETARO', fecha: '2026-10-16', valores: { r1: 1100 } },
+      { clues: 'QTSSA001740', municipio: 'QUERETARO', fecha: '2026-10-16', valores: { r1: 9999 } }];   // hospital: otro destino
+    renderFrascosDistribution();
+  });
+  const fila = (clues) => page.locator('#frascosBalanceTbody tr', { hasText: clues });
+  // Q1: 156 frascos = 1,560 dosis; aplicó 1,500 -> en orden, 96.2%
+  await expect(fila('Q1')).toHaveAttribute('data-estado', 'ok');
+  await expect(fila('Q1')).toContainText('1,560');
+  await expect(fila('Q1')).toContainText('1,500');
+  await expect(fila('Q1')).toContainText('96.2%');
+  await expect(fila('Q1')).toContainText('16/10');                      // última captura
+  // Q2: 104 frascos = 1,040 dosis; aplicó 1,100 -> 60 de más, en rojo
+  await expect(fila('Q2')).toHaveAttribute('data-estado', 'excede');
+  await expect(fila('Q2')).toContainText('Aplicó 60 dosis de más');
+  await expect(fila('Q2').locator('.frs-neg')).toHaveText('-60');
+  // Q3: repartido pero sin captura
+  await expect(fila('Q3')).toContainText('520');
+  await expect(fila('Q3')).toContainText('0.0%');
+  // Total de la tabla: 312 frascos (3,120 dosis), 2,600 aplicadas (el hospital no cuenta aquí)
+  await expect(page.locator('#frascosBalanceTfoot')).toContainText('312');
+  await expect(page.locator('#frascosBalanceTfoot')).toContainText('3,120');
+  await expect(page.locator('#frascosBalanceTfoot')).toContainText('2,600');
+  // KPIs del resumen: entregado = lo que asignó Jurisdicción; aplicado = 260 frascos; resguardo 52
+  await expect(page.locator('#muniFrascosEntregados')).toHaveText('312');
+  await expect(page.locator('#muniFrascosReportados')).toContainText('260 frascos (2600 dosis)');
+  await expect(page.locator('#muniFrascosDiferencia')).toHaveText('52 frascos');
+});
+
+test('Reparto vs. captura semanal (Jurisdicción): solo unidades con reparto o captura, con su destino', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 100, asignacion: { QUERETARO: 60, HENM: 40 }, manual: [] }];
+    _adminFrascosArray = [
+      { municipio: 'QUERETARO', clues: 'Q1', numero_entrega: 1, cantidad_frascos: 60, fecha_entrega: '2026-10-05' },
+      { municipio: 'HENM', clues: 'QTSSA001740', numero_entrega: 1, cantidad_frascos: 40, fecha_entrega: '2026-10-05' }];
+    _adminCapturasArray = [
+      { clues: 'Q1', municipio: 'QUERETARO', fecha: '2026-10-09', valores: { r1: 300 } },
+      { clues: 'QTSSA001740', municipio: 'QUERETARO', fecha: '2026-10-09', valores: { r1: 500 } }];
+    renderFrascosDistribution();
+    frascoIrA('resumen');
+  });
+  await expect(page.locator('#frascosBalanceTbody tr')).toHaveCount(2);        // Q2 y Q3 no tienen nada: no aparecen
+  await expect(page.locator('#frascosBalanceDestinoTh')).toBeVisible();
+  await expect(page.locator('#frascosBalanceTbody tr', { hasText: 'QTSSA001740' })).toContainText('HENM');
+  // Concentrado por destino: el hospital cuenta aparte de Querétaro
+  const fQ = page.locator('#adminFrascosMunicipalTbody tr', { hasText: 'Querétaro' });
+  await expect(fQ).toContainText('300');
+  const fH = page.locator('#adminFrascosMunicipalTbody tr', { hasText: 'HENM' });
+  await expect(fH).toContainText('500');
+});
+
+test('Vista de la unidad: lo que le repartieron contra lo que ella captura (y existencia real para el pronóstico)', async ({ page }) => {
+  await montar(page, 'UNIDAD');
+  await page.evaluate(() => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="influenzaBalanceUnidad"></div>');
+    // Sin reparto todavía
+    window.__b0 = renderInfluenzaBalanceUnidad();
+  });
+  await expect(page.locator('#influenzaBalanceUnidad')).toContainText('Aún no te han repartido frascos');
+  expect(await page.evaluate(() => window.__b0.recibidos)).toBe(0);
+
+  // Le repartieron 5 frascos (50 dosis) y lleva 30 + 15 = 45 aplicadas: existencia 5, aprovechamiento 90%
+  await page.evaluate(() => {
+    _influenzaDistribucionCache = [{ clues: 'Q1', cantidad_frascos: 3 }, { clues: 'Q1', cantidad_frascos: 2 }];
+    _influenzaCapturasCache = [{ fecha: '2026-10-09', valores: { r1: 20, r2: 10 } }, { fecha: '2026-10-16', valores: { r1: 15 } }];
+    window.__b1 = renderInfluenzaBalanceUnidad();
+  });
+  expect(await page.evaluate(() => [window.__b1.recibidos, window.__b1.dosisRecibidas, window.__b1.aplicadas, window.__b1.existencia, window.__b1.estado])).toEqual([5, 50, 45, 5, 'ok']);
+  await expect(page.locator('#influenzaBalanceUnidad')).toContainText('90.0% de lo repartido');
+  await expect(page.locator('#influenzaBalanceUnidad .frs-balance-alerta')).toHaveCount(0);
+
+  // Aplica 8 dosis más: 53 > 50 -> alerta, y la existencia para el pronóstico nunca baja de 0
+  await page.evaluate(() => {
+    _influenzaCapturasCache.push({ fecha: '2026-10-23', valores: { r1: 8 } });
+    window.__b2 = renderInfluenzaBalanceUnidad();
+  });
+  expect(await page.evaluate(() => [window.__b2.existencia, window.__b2.estado])).toEqual([-3, 'excede']);
+  await expect(page.locator('#influenzaBalanceUnidad .frs-balance-alerta')).toContainText('53 dosis aplicadas');
+  await expect(page.locator('#influenzaBalanceUnidad .frs-balance-alerta')).toContainText('50');
 });
 
 test('Concentrado por entregas: columnas por destino y total entregado', async ({ page }) => {

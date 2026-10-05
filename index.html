@@ -94,7 +94,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=1">
-  <link rel="stylesheet" href="style.css?v=2026.105" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.106" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -348,7 +348,7 @@
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
   <script defer src="ayuda.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.88" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.89" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -1831,6 +1831,8 @@
               <!-- Formulario de Captura -->
               <div class="flex-1 flex flex-col gap-6 w-full">
                 <!-- 📈 Contenedor Widget Pronóstico de Desabasto -->
+                <!-- Lo repartido a la unidad contra lo que ella captura cada semana -->
+                <div id="influenzaBalanceUnidad" class="w-full"></div>
                 <div id="influenzaStockPredictorContainer" class="w-full"></div>
 
                 <!-- Contenedor Dinámico Agrupado de Captura -->
@@ -3629,6 +3631,33 @@
             </div>
           </div>
           <div id="muniFrascosWarningBox" class="hidden mb-4 p-4 rounded-xl border text-xs font-semibold"></div>
+
+          <!-- Reparto vs. captura semanal de Meta-Logro, por unidad -->
+          <div class="frs-balance-card" id="frascosBalanceBox">
+            <div class="frs-balance-cab">
+              <h4>Reparto vs. captura semanal</h4>
+              <p>Frascos repartidos a cada unidad contra las <b>dosis aplicadas</b> que la unidad captura cada semana en Meta-Logro (1 frasco = 10 dosis). En rojo, las unidades que ya aplicaron más de lo que les repartieron.</p>
+            </div>
+            <div class="frs-scroll" style="max-height:520px;overflow:auto">
+              <table class="frs-table" id="frascosBalanceTable">
+                <thead>
+                  <tr>
+                    <th>Unidad / CLUES</th>
+                    <th class="c" id="frascosBalanceDestinoTh">Destino</th>
+                    <th class="c">Frascos repartidos</th>
+                    <th class="c">Dosis repartidas</th>
+                    <th class="c">Dosis aplicadas</th>
+                    <th class="c" title="Dosis repartidas menos dosis aplicadas">Existencia (dosis)</th>
+                    <th class="c" title="Dosis aplicadas / dosis repartidas">Aprovechamiento</th>
+                    <th class="c">Última captura</th>
+                    <th class="c">Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="frascosBalanceTbody"></tbody>
+                <tfoot id="frascosBalanceTfoot"></tfoot>
+              </table>
+            </div>
+          </div>
 
           <!-- Resumen Municipal de Frascos (Solo para ADMIN y JURISDICCIONAL) -->
           <div id="adminFrascosMunicipalTableContainer"
