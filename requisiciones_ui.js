@@ -2516,14 +2516,33 @@ async function construirDatosDestino(nivel, destino) {
   // "entrega" SÍ debe llevar nombre: es el mismo responsable municipal que
   // entrega en las demás requisiciones de ese municipio, no alguien que
   // firme en el papel. Antes ambos quedaban en blanco para unidades.
+  // Requisición de UNIDAD / HOSPITAL (4 espacios): arriba-izq Elaboró (Lizbeth),
+  // arriba-der Autorizó (Israel), abajo-izq = responsable municipal de la unidad
+  // (en hospitales, Leslie López Enciso, quien entrega desde el almacén estatal),
+  // abajo-der VACÍO (ahí firma y sella la unidad).
+  const esDeUnidad = nivel === 'UNIDAD' || (nivel === 'MUNICIPAL' && esHospital(destino));
   let entregaRecibe = {};
   if (nivel === 'JURISDICCIONAL') entregaRecibe = firmasJuris || {};
   else if (nivel === 'MUNICIPAL' && !esHospital(destino)) {
     const { data } = await estado.db.from('requi_firmas').select('*').eq('nivel', 'MUNICIPAL').eq('destino', destino).maybeSingle();
     entregaRecibe = data || {};
-  } else if (nivel !== 'MUNICIPAL' && unidadDestino) {
-    const { data } = await estado.db.from('requi_firmas').select('*').eq('nivel', 'MUNICIPAL').eq('destino', unidadDestino.municipio).maybeSingle();
-    entregaRecibe = { entrega_nombre: data?.entrega_nombre, entrega_cargo: data?.entrega_cargo };
+  } else if (esDeUnidad) {
+    const muni = unidadDestino ? unidadDestino.municipio : destino;
+    const hospital = esHospital(muni) || esHospital(destino);
+    let responsable;
+    if (hospital) {
+      // Leslie: "recibe" del renglón jurisdiccional (también es "entrega" de los municipales).
+      responsable = { nombre: firmasJuris?.recibe_nombre, cargo: firmasJuris?.recibe_cargo };
+      if (!responsable.nombre) {
+        const { data } = await estado.db.from('requi_firmas').select('*').eq('nivel', 'MUNICIPAL').limit(1).maybeSingle();
+        responsable = { nombre: data?.entrega_nombre, cargo: data?.entrega_cargo };
+      }
+    } else {
+      // Responsable municipal = quien firma "recibe" en la requisición de su municipio.
+      const { data } = await estado.db.from('requi_firmas').select('*').eq('nivel', 'MUNICIPAL').eq('destino', muni).maybeSingle();
+      responsable = { nombre: data?.recibe_nombre, cargo: data?.recibe_cargo };
+    }
+    entregaRecibe = { entrega_nombre: responsable.nombre, entrega_cargo: responsable.cargo, recibe_nombre: null, recibe_cargo: null };
   }
   const firmas = {
     elaboro_nombre: firmasJuris?.elaboro_nombre, elaboro_cargo: firmasJuris?.elaboro_cargo,
