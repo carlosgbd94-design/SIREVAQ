@@ -8906,11 +8906,23 @@ body[data-role="UNIDAD"] .panelCaptureSummary {
   cursor: help;
 }
 
-.chip-medal-icon:hover {
-  transform: scale(1.35) rotate(5deg) !important;
+@media (hover: hover) and (pointer: fine) {
+  .chip-medal-icon:hover {
+    transform: scale(1.35) rotate(5deg) !important;
+  }
 }
 
-.tier-diamante { background-image: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%); animation: shimmer-medal 2s infinite linear; background-size: 200% auto; }
+.tier-diamante { background-image: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%); background-size: 200% auto; }
+/* El destello es continuo: solo la medalla más reciente lo lleva para no repintar 10 iconos por fotograma */
+.tier-diamante.is-latest { animation: shimmer-medal 2s infinite linear; }
+/* Ranking: puede haber decenas de diamantes; el destello solo corre al pasar el cursor sobre uno */
+@media (hover: hover) and (pointer: fine) {
+  .medal-icon.tier-diamante:hover { animation: shimmer-medal 2s infinite linear; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tier-diamante.is-latest,
+  .medal-icon.tier-diamante:hover { animation: none; }
+}
 .tier-oro { background-image: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
 .tier-plata { background-image: linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%); }
 .tier-bronze { background-image: linear-gradient(135deg, #d97706 0%, #b45309 100%); }

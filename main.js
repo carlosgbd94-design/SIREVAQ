@@ -11592,19 +11592,8 @@ function paintStatusChips(status) {
     container.title = tooltipText;
 
     // Load and paint yearly medals for the active user directly on dashboard load
-    const currentYear = new Date().getFullYear();
-    if (USER && USER.rol === "UNIDAD" && USER.clues) {
-      getYearlyMedals(currentYear, USER.clues).then(medals => {
-        renderUnitMedals(medals);
-      });
-    } else if (USER && (USER.rol === "MUNICIPAL" || (status.selectedMunicipio && status.selectedMunicipio !== "TODOS"))) {
-      const targetMuni = USER.rol === "MUNICIPAL" ? (USER.municipio || "").split(",")[0].trim() : status.selectedMunicipio;
-      if (targetMuni) {
-        getYearlyMuniMedals(currentYear, targetMuni).then(medals => {
-          renderUnitMedals(medals);
-        });
-      }
-    }
+    // unitStatus() no devuelve selectedMunicipio: se toma del mismo filtro que se le manda (admin/jurisdiccional con municipio elegido)
+    refreshComplianceMedals(new Date().getFullYear(), status.selectedMunicipio || $("histMunicipioFilter")?.value || "");
 
     // Update icon background for premium look if colored
     if (iconBg && ["good", "warn", "bad"].includes(tone) && !status.userRank) {
@@ -19233,6 +19222,84 @@ document.addEventListener("visibilitychange", () => {
 
 
 
+// --- PUNTAJE DE CUMPLIMIENTO (fuente única: historial y medallas) ---
+function complianceTierFromScore(score) {
+  if (score === 100) return "diamante";
+  if (score >= 90) return "oro";
+  if (score >= 80) return "plata";
+  if (score >= 70) return "bronce";
+  if (score >= 60) return "acero";
+  if (score >= 50) return "jade";
+  return "riesgo";
+}
+
+/** influenzaPct = null cuando la campaña no está activa en el mes. */
+function computeComplianceScore({ bio, cons, eBio, eCons, pedido, isRequired, influenzaPct = null }) {
+  const eb = eBio || 4;
+  const ec = eCons || 4;
+  const bPct = ((bio || 0) / eb) * 100;
+  const cPct = ((cons || 0) / ec) * 100;
+  const pPct = pedido ? 100 : 0;
+  let score;
+  if (influenzaPct != null) {
+    score = isRequired
+      ? Math.round((bPct * 0.3) + (cPct * 0.3) + (pPct * 0.15) + (influenzaPct * 0.25))
+      : Math.round((bPct * 0.35) + (cPct * 0.35) + (influenzaPct * 0.30));
+  } else {
+    score = isRequired
+      ? Math.round((bPct * 0.4) + (cPct * 0.4) + (pPct * 0.2))
+      : Math.round((bPct * 0.5) + (cPct * 0.5));
+  }
+  return Math.min(score, 100);
+}
+
+/** El pedido mensual solo se exige en meses cerrados o cuando ya abrió su ventana de captura. */
+function isPedidoRequiredForMonth(m) {
+  const [y, mn] = m.split("-").map(Number);
+  const windowForMonth = calculateBioIntelligentWindow(y, mn - 1);
+  const todayStr = todayYmdLocal();
+  return !todayStr.startsWith(m) || todayStr >= dateToLocalYmd(windowForMonth.start);
+}
+
+/** Reportes de influenza esperados en el mes: viernes dentro de la campaña + cortes de fin de mes. */
+function influenzaExpectedDatesForMonth(camp, m) {
+  const out = [];
+  const [y, mn] = m.split("-").map(Number);
+  const temp = new Date(y, mn - 1, 1, 12, 0, 0);
+  while (temp.getMonth() === mn - 1) {
+    if (temp.getDay() === 5) {
+      const ymd = dateToLocalYmd(temp);
+      if (ymd >= camp.fecha_inicio && ymd <= camp.fecha_fin) out.push(ymd);
+    }
+    temp.setDate(temp.getDate() + 1);
+  }
+  if (window.InfluenzaReglas) {
+    window.InfluenzaReglas.cortes(camp.fecha_inicio, camp.fecha_fin)
+      .filter(ymd => ymd.startsWith(m)).forEach(ymd => out.push(ymd));
+  }
+  // Un corte de fin de mes que cae en viernes es UN solo reporte esperado, no dos.
+  return [...new Set(out)].sort();
+}
+
+/**
+ * De las fechas esperadas, cuáles capturó cada unidad: Map<clues, Set<fecha>>.
+ * La base solo devuelve coincidencias exactas (un jsonb chico), no la tabla de capturas completa, y al ser
+ * SECURITY DEFINER el ranking ve las capturas de todas las unidades (con RLS un usuario de unidad solo veía las suyas).
+ */
+async function fetchInfluenzaCaptureDates(campName, fechas, cluesList = null) {
+  const byClues = new Map();
+  const unicas = [...new Set(fechas || [])];
+  if (!unicas.length) return byClues;
+  const { data, error } = await window.supabase.rpc('influenza_capture_hits_rpc', {
+    p_campana: campName,
+    p_fechas: unicas,
+    p_clues: cluesList && cluesList.length ? cluesList : null
+  });
+  if (error) throw error;
+  Object.entries(data || {}).forEach(([clues, dates]) => byClues.set(clues, new Set(dates)));
+  return byClues;
+}
+
 async function getHistoryMetrics(mes, _ignored, force = false) {
   if (!TOKEN) return null;
 
@@ -19247,95 +19314,44 @@ async function getHistoryMetrics(mes, _ignored, force = false) {
         return null;
       }
 
-      // Check if Influenza campaign is active in this month
+      // Campaña de influenza activa en el mes: solo se consulta qué unidades capturaron las fechas esperadas
       let expectedFridays = [];
       let isCampanaActiveInMonth = false;
-      let campName = "";
-      let allCampCaptures = [];
-      let allCampMetas = [];
+      let capturesByClues = new Map();
 
       try {
         const { data: activeCamp } = await getActiveCampaign();
         if (activeCamp) {
-          campName = activeCamp.nombre; // anio_campana se guarda con el nombre completo
-          const [y, mn] = m.split("-").map(Number);
-          const temp = new Date(y, mn - 1, 1, 12, 0, 0);
-          while (temp.getMonth() === mn - 1) {
-            if (temp.getDay() === 5) { // Friday
-              const ymd = dateToLocalYmd(temp);
-              if (ymd >= activeCamp.fecha_inicio && ymd <= activeCamp.fecha_fin) {
-                expectedFridays.push(ymd);
-              }
-            }
-            temp.setDate(temp.getDate() + 1);
-          }
-          // Además de los viernes, el corte de fin de mes entre semana (InfluenzaReglas.cortes) es un reporte esperado.
-          if (window.InfluenzaReglas) {
-            window.InfluenzaReglas.cortes(activeCamp.fecha_inicio, activeCamp.fecha_fin)
-              .filter(ymd => ymd.startsWith(m)).forEach(ymd => expectedFridays.push(ymd));
-          }
+          expectedFridays = influenzaExpectedDatesForMonth(activeCamp, m);
           if (expectedFridays.length > 0) {
             isCampanaActiveInMonth = true;
-            const lastDayOfMonthYmd = dateToLocalYmd(new Date(y, mn, 0, 12, 0, 0));
-            const [capturesRes, metasRes] = await Promise.all([
-              window.supabase.from('influenza_capturas').select('clues, fecha, valores').eq('anio_campana', campName).lte('fecha', lastDayOfMonthYmd),
-              window.supabase.from('influenza_metas').select('clues, metas').eq('anio_campana', campName)
-            ]);
-            allCampCaptures = capturesRes.data || [];
-            allCampMetas = metasRes.data || [];
+            capturesByClues = await fetchInfluenzaCaptureDates(activeCamp.nombre, expectedFridays);
           }
         }
       } catch (campErr) {
         console.error("Error loading Influenza campaign for metrics:", campErr);
+        isCampanaActiveInMonth = false;
       }
 
-      // Recalcular isPedidoRequired y el score para no depender de la lógica vieja del RPC
-      const targetYm = m.split("-");
-      const windowForMonth = calculateBioIntelligentWindow(parseInt(targetYm[0]), parseInt(targetYm[1]) - 1);
-      const isCurrentMonth = todayYmdLocal().startsWith(m);
-      const todayStr = todayYmdLocal();
-      const calculatedIsPedidoRequired = !isCurrentMonth || todayStr >= dateToLocalYmd(windowForMonth.start);
+      const isRequired = isPedidoRequiredForMonth(m);
 
       // Mapear campos devueltos por el RPC para coincidir con la nomenclatura del frontend camelCase
       const rows = (data || []).map(r => {
-        let isRequired = calculatedIsPedidoRequired;
-        
-        let expectedBio = r.ebio || 4;
-        let expectedCons = r.econs || 4;
-        let bPct = expectedBio > 0 ? (r.bio_semanas_ok / expectedBio) * 100 : 100;
-        let cPct = expectedCons > 0 ? (r.cons_semanas_ok / expectedCons) * 100 : 100;
-        let pPct = r.pedido_mensual ? 100 : 0;
-        
-        let score = 0;
+        const expectedBio = r.ebio || 4;
+        const expectedCons = r.econs || 4;
+
         let influenzaPct = null;
-
         if (isCampanaActiveInMonth) {
-          const unitCaptures = allCampCaptures.filter(c => c.clues === r.clues);
-          const capturedFridays = expectedFridays.filter(fri => unitCaptures.some(c => c.fecha === fri));
-          const capturePct = expectedFridays.length > 0 ? (capturedFridays.length / expectedFridays.length) * 100 : 100;
-
-          influenzaPct = capturePct;
-
-          if (isRequired) {
-            score = Math.round((bPct * 0.3) + (cPct * 0.3) + (pPct * 0.15) + (influenzaPct * 0.25));
-          } else {
-            score = Math.round((bPct * 0.35) + (cPct * 0.35) + (influenzaPct * 0.30));
-          }
-        } else {
-          score = isRequired ?
-            Math.round((bPct * 0.4) + (cPct * 0.4) + (pPct * 0.2)) :
-            Math.round((bPct * 0.5) + (cPct * 0.5));
+          const dates = capturesByClues.get(r.clues);
+          const hit = dates ? expectedFridays.filter(fri => dates.has(fri)).length : 0;
+          influenzaPct = (hit / expectedFridays.length) * 100;
         }
-        
-        if (score > 100) score = 100;
 
-        let tier = "riesgo";
-        if (score === 100) tier = "diamante";
-        else if (score >= 90) tier = "oro";
-        else if (score >= 80) tier = "plata";
-        else if (score >= 70) tier = "bronce";
-        else if (score >= 60) tier = "acero";
-        else if (score >= 50) tier = "jade";
+        const score = computeComplianceScore({
+          bio: r.bio_semanas_ok, cons: r.cons_semanas_ok, eBio: expectedBio, eCons: expectedCons,
+          pedido: r.pedido_mensual, isRequired, influenzaPct
+        });
+        const tier = complianceTierFromScore(score);
 
         return {
           clues: r.clues,
@@ -19372,265 +19388,142 @@ async function getHistoryMetrics(mes, _ignored, force = false) {
 }
 
 
-let YEARLY_MEDALS_CACHE = {};
+// --- MEDALLAS DE CUMPLIMIENTO ---
+// Una sola consulta por año (get_year_medal_inputs_rpc) trae únicamente la unidad (o las unidades del municipio),
+// en lugar de las métricas de TODO el estado por cada mes. El puntaje sale de computeComplianceScore, la misma
+// fórmula que usa el historial (incluye influenza cuando la campaña está activa en el mes).
+const MEDALS_CACHE_TTL = 600000;
+let _medalsRenderSeq = 0;
 
-async function getYearlyMedals(year, clues) {
-  console.log("[getYearlyMedals] Fetching medals for clues:", clues, "year:", year);
-  const cacheKey = year + "__" + clues;
-  if (YEARLY_MEDALS_CACHE[cacheKey]) {
-    console.log("[getYearlyMedals] Returning cached medals:", YEARLY_MEDALS_CACHE[cacheKey]);
-    return YEARLY_MEDALS_CACHE[cacheKey];
-  }
+async function getYearMedals(year, { clues = null, municipio = null } = {}) {
+  if (!TOKEN || !window.supabase) return [];
+  const y = Number(year);
+  const scopeKey = clues ? `U:${String(clues).trim().toUpperCase()}` : `M:${normalizeText(municipio || "")}`;
 
-  const months = [];
-  const currentYear = new Date().getFullYear();
-  const currentMonthNum = new Date().getMonth() + 1;
-  const limitMonth = (year == currentYear) ? currentMonthNum : 12;
+  return getCachedOrFetch({
+    key: buildCacheKey("YEAR_MEDALS", `${y}__${scopeKey}`),
+    ttl: MEDALS_CACHE_TTL,
+    shouldCache: (d) => Array.isArray(d),
+    fetcher: async () => {
+      try {
+        const { data, error } = await window.supabase.rpc("get_year_medal_inputs_rpc", {
+          p_anio: y,
+          p_clues: clues || null,
+          p_municipio: clues ? null : (municipio || null)
+        });
+        if (error) { console.error("RPC Error in getYearMedals:", error); return null; }
+        const rows = data || [];
+        if (!rows.length) return [];
 
-  for (let m = 1; m <= limitMonth; m++) {
-    const monthStr = year + "-" + String(m).padStart(2, '0');
-    months.push(monthStr);
-  }
-
-  const medals = [];
-  let hasError = false;
-  const promises = months.map(async (m) => {
-    try {
-      const data = await getHistoryMetrics(m, null, true);
-      if (!data || !data.rows) {
-        console.warn("[getYearlyMedals] No history metrics data for month", m);
-        hasError = true;
-        return;
-      }
-
-      const rows = [...data.rows];
-
-      rows.forEach(r => {
-        const expectedBio = r.eBio || 4;
-        const expectedCons = r.eCons || 4;
-        let bPct = expectedBio > 0 ? (r.bio_semanas_ok / expectedBio) * 100 : 100;
-        let cPct = expectedCons > 0 ? (r.cons_semanas_ok / expectedCons) * 100 : 100;
-        let pPct = 100;
-        if (r.isPedidoRequired) {
-          const hasPedido = r.pedido_mensual || r.has_pedido || r.pedido || r.pedido_capturado || r.is_pedido_done;
-          pPct = hasPedido ? 100 : 0;
+        // Influenza: una sola lectura (solo clues/fecha) de las capturas de las unidades involucradas.
+        const unitSet = [...new Set(rows.map(r => r.clues))];
+        let camp = null;
+        let capturesByClues = new Map();
+        try {
+          const { data: activeCamp } = await getActiveCampaign();
+          if (activeCamp && activeCamp.fecha_inicio <= `${y}-12-31` && activeCamp.fecha_fin >= `${y}-01-01`) {
+            camp = activeCamp;
+            const meses = [...new Set(rows.map(r => r.mes))];
+            const todas = meses.flatMap(mes => influenzaExpectedDatesForMonth(camp, mes));
+            capturesByClues = await fetchInfluenzaCaptureDates(camp.nombre, todas, unitSet);
+          }
+        } catch (campErr) {
+          console.error("Error loading Influenza campaign for medals:", campErr);
+          return null; // sin influenza el puntaje saldría distinto al del historial: no cachear ni pintar
         }
-        r.score = r.isPedidoRequired ?
-          Math.round((bPct * 0.4) + (cPct * 0.4) + (pPct * 0.2)) :
-          Math.round((bPct * 0.5) + (cPct * 0.5));
-        if (r.score > 100) r.score = 100;
-      });
 
-      rows.sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        const capA = (a.bio_semanas_ok || 0) + (a.cons_semanas_ok || 0);
-        const capB = (b.bio_semanas_ok || 0) + (b.cons_semanas_ok || 0);
-        if (capB !== capA) return capB - capA;
-        return (a.municipio || "").localeCompare(b.municipio || "");
-      });
-
-      const index = rows.findIndex(r => String(r.clues).trim().toUpperCase() === String(clues).trim().toUpperCase());
-      console.log(`[getYearlyMedals] Month: ${m}, Clues to find: ${clues}, index found: ${index}`);
-      if (index >= 0) {
-        const uRow = rows[index];
-        let tier = "riesgo";
-        if (uRow.score === 100) tier = "diamante";
-        else if (uRow.score >= 90) tier = "oro";
-        else if (uRow.score >= 80) tier = "plata";
-        else if (uRow.score >= 70) tier = "bronce";
-        else if (uRow.score >= 60) tier = "acero";
-        else if (uRow.score >= 50) tier = "jade";
-
-        console.log(`[getYearlyMedals] Clues: ${clues}, Month: ${m}, Score: ${uRow.score}, Tier: ${tier}`);
-        if (tier !== "riesgo") {
-          medals.push({
-            month: m,
-            rank: index + 1,
-            score: uRow.score,
-            tier: tier
+        const byMonth = new Map();
+        const monthsInfo = new Map();
+        rows.forEach(r => {
+          if (!monthsInfo.has(r.mes)) {
+            const expected = camp ? influenzaExpectedDatesForMonth(camp, r.mes) : [];
+            monthsInfo.set(r.mes, { expected, isRequired: isPedidoRequiredForMonth(r.mes) });
+          }
+          const info = monthsInfo.get(r.mes);
+          let influenzaPct = null;
+          if (info.expected.length > 0) {
+            const dates = capturesByClues.get(r.clues);
+            const hit = dates ? info.expected.filter(f => dates.has(f)).length : 0;
+            influenzaPct = (hit / info.expected.length) * 100;
+          }
+          const score = computeComplianceScore({
+            bio: r.bio_semanas_ok, cons: r.cons_semanas_ok, eBio: r.ebio, eCons: r.econs,
+            pedido: r.pedido_mensual, isRequired: info.isRequired, influenzaPct
           });
-        }
+          if (!byMonth.has(r.mes)) byMonth.set(r.mes, []);
+          byMonth.get(r.mes).push(score);
+        });
+
+        const medals = [];
+        [...byMonth.keys()].sort().forEach(mes => {
+          const scores = byMonth.get(mes);
+          const score = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+          const tier = complianceTierFromScore(score);
+          if (tier !== "riesgo") medals.push({ month: mes, score, tier });
+        });
+        return medals;
+      } catch (err) {
+        console.error("Error loading yearly medals:", err);
+        return null;
       }
-    } catch (err) {
-      console.error("Error loading medals for month " + m + ":", err);
-      hasError = true;
     }
   });
-
-  await Promise.all(promises);
-  medals.sort((a, b) => a.month.localeCompare(b.month));
-  if (!hasError && medals.length > 0) {
-    YEARLY_MEDALS_CACHE[cacheKey] = medals;
-  }
-  return medals;
 }
 
-let MUNI_MEDALS_CACHE = {};
+/**
+ * Pinta las medallas del usuario (unidad o municipio) según su rol; ignora respuestas viejas si hubo otra petición después.
+ * La tarjeta se refresca desde dos lugares: el tablero (status.selectedMunicipio) y el panel de historial. Solo el
+ * historial pasa clearIfNone=true para vaciarla cuando no aplica; el tablero NO debe borrar (ni cancelar) lo que el
+ * historial esté pintando para un admin/jurisdiccional con municipio elegido.
+ */
+function refreshComplianceMedals(year, selectedMuni, { clearIfNone = false } = {}) {
+  const container = $("bCumplimientoMedals");
+  if (!container) return;
+  const clear = () => { if (clearIfNone) { _medalsRenderSeq++; container.innerHTML = ""; } };
 
-async function getYearlyMuniMedals(year, municipio) {
-  console.log("[getYearlyMuniMedals] Fetching medals for muni:", municipio, "year:", year);
-  const cacheKey = year + "__" + municipio;
-  if (MUNI_MEDALS_CACHE[cacheKey]) {
-    return MUNI_MEDALS_CACHE[cacheKey];
+  let scope = null;
+  if (USER && USER.rol === "UNIDAD" && USER.clues) {
+    scope = { clues: USER.clues };
+  } else if (USER && (USER.rol === "MUNICIPAL" || (selectedMuni && selectedMuni !== "TODOS"))) {
+    const targetMuni = USER.rol === "MUNICIPAL" ? (USER.municipio || "").split(",")[0].trim() : selectedMuni;
+    if (targetMuni) scope = { municipio: targetMuni };
   }
+  if (!scope) { clear(); return; }
 
-  const months = [];
-  const currentYear = new Date().getFullYear();
-  const currentMonthNum = new Date().getMonth() + 1;
-  const limitMonth = (year == currentYear) ? currentMonthNum : 12;
-
-  for (let m = 1; m <= limitMonth; m++) {
-    const monthStr = year + "-" + String(m).padStart(2, '0');
-    months.push(monthStr);
-  }
-
-  const medals = [];
-  let hasError = false;
-  const promises = months.map(async (m) => {
-    try {
-      const data = await getHistoryMetrics(m, null, true);
-      if (!data || !data.rows) {
-        hasError = true;
-        return;
-      }
-
-      const rows = [...data.rows];
-
-      rows.forEach(r => {
-        const expectedBio = r.eBio || 4;
-        const expectedCons = r.eCons || 4;
-        let bPct = expectedBio > 0 ? (r.bio_semanas_ok / expectedBio) * 100 : 100;
-        let cPct = expectedCons > 0 ? (r.cons_semanas_ok / expectedCons) * 100 : 100;
-        let pPct = 100;
-        if (r.isPedidoRequired) {
-          const hasPedido = r.pedido_mensual || r.has_pedido || r.pedido || r.pedido_capturado || r.is_pedido_done;
-          pPct = hasPedido ? 100 : 0;
-        }
-        r.score = r.isPedidoRequired ?
-          Math.round((bPct * 0.4) + (cPct * 0.4) + (pPct * 0.2)) :
-          Math.round((bPct * 0.5) + (cPct * 0.5));
-        if (r.score > 100) r.score = 100;
-      });
-
-      // Group by municipality
-      const muniGroups = {};
-      rows.forEach(r => {
-        const mName = normalizeText(r.municipio || "");
-        if (!mName) return;
-        if (!muniGroups[mName]) {
-          muniGroups[mName] = { scoreSum: 0, count: 0 };
-        }
-        muniGroups[mName].scoreSum += r.score;
-        muniGroups[mName].count++;
-      });
-
-      // Calculate averages
-      const muniList = Object.keys(muniGroups).map(name => {
-        return {
-          municipio: name,
-          score: Math.round(muniGroups[name].scoreSum / muniGroups[name].count)
-        };
-      }).sort((a, b) => b.score - a.score);
-
-      const index = muniList.findIndex(x => normalizeText(x.municipio) === normalizeText(municipio));
-      if (index >= 0) {
-        const score = muniList[index].score;
-        let tier = "riesgo";
-        if (score === 100) tier = "diamante";
-        else if (score >= 90) tier = "oro";
-        else if (score >= 80) tier = "plata";
-        else if (score >= 70) tier = "bronce";
-        else if (score >= 60) tier = "acero";
-        else if (score >= 50) tier = "jade";
-
-        if (tier !== "riesgo") {
-          medals.push({
-            month: m,
-            rank: index + 1,
-            score: score,
-            tier: tier
-          });
-        }
-      }
-    } catch (err) {
-      console.error("Error loading medals for month " + m + ":", err);
-      hasError = true;
-    }
-  });
-
-  await Promise.all(promises);
-  medals.sort((a, b) => a.month.localeCompare(b.month));
-  if (!hasError && medals.length > 0) {
-    MUNI_MEDALS_CACHE[cacheKey] = medals;
-  }
-  return medals;
+  const seq = ++_medalsRenderSeq;
+  getYearMedals(year, scope).then(medals => { if (seq === _medalsRenderSeq) renderUnitMedals(medals); });
 }
+
+const MEDAL_TIER_UI = {
+  diamante: { icon: "diamond", cls: "tier-diamante", label: "Diamante" },
+  oro: { icon: "workspace_premium", cls: "tier-oro", label: "Oro" },
+  plata: { icon: "military_tech", cls: "tier-plata", label: "Plata" },
+  bronce: { icon: "military_tech", cls: "tier-bronze", label: "Bronce" },
+  acero: { icon: "workspace_premium", cls: "tier-steel", label: "Acero" },
+  jade: { icon: "military_tech", cls: "tier-emerald", label: "Jade" }
+};
+
+const MEDAL_MONTH_NAMES = {
+  "01": "Enero", "02": "Febrero", "03": "Marzo", "04": "Abril", "05": "Mayo", "06": "Junio",
+  "07": "Julio", "08": "Agosto", "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre"
+};
 
 function renderUnitMedals(medals) {
-  console.log("[renderUnitMedals] Rendering medals in UI:", medals);
   const container = $("bCumplimientoMedals");
-  if (!container) {
-    console.warn("[renderUnitMedals] Element #bCumplimientoMedals not found!");
-    return;
-  }
-  container.innerHTML = "";
-
+  if (!container) return;
   if (!medals || !medals.length) {
-    console.log("[renderUnitMedals] Empty medals array, rendering nothing.");
+    container.innerHTML = "";
     return;
   }
 
-  const monthNames = {
-    "01": "Ene", "02": "Feb", "03": "Mar", "04": "Abr", "05": "May", "06": "Jun",
-    "07": "Jul", "08": "Ago", "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dic"
-  };
-
-  const fullMonthNames = {
-    "01": "Enero", "02": "Febrero", "03": "Marzo", "04": "Abril", "05": "Mayo", "06": "Junio",
-    "07": "Julio", "08": "Agosto", "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre"
-  };
-
-  const iconNameMap = {
-    diamante: "diamond",
-    oro: "workspace_premium",
-    plata: "military_tech",
-    bronce: "military_tech",
-    acero: "workspace_premium",
-    jade: "military_tech"
-  };
-
-  const classMap = {
-    diamante: "tier-diamante",
-    oro: "tier-oro",
-    plata: "tier-plata",
-    bronce: "tier-bronze",
-    acero: "tier-steel",
-    jade: "tier-emerald"
-  };
-
-  const titleMap = {
-    diamante: "Diamante",
-    oro: "Oro",
-    plata: "Plata",
-    bronce: "Bronce",
-    acero: "Acero",
-    jade: "Jade"
-  };
-
-  medals.forEach(m => {
-    const monthParts = m.month.split("-");
-    const mm = monthParts[1];
-    const fullMonthLabel = fullMonthNames[mm] || mm;
-    const tierKey = String(m.tier || "").trim().toLowerCase();
-    const iconName = iconNameMap[tierKey] || "military_tech";
-    const tierClass = classMap[tierKey] || "tier-riesgo";
-    const label = titleMap[tierKey] || "Cumplimiento";
-    const title = `Medalla de cumplimiento ${label} - ${fullMonthLabel} (${m.score}%)`;
-
-    container.innerHTML += `
-      <span class="material-symbols-rounded chip-medal-icon ${tierClass}" title="${title}">${iconName}</span>
-    `;
-  });
+  const lastIdx = medals.length - 1;
+  // Un solo innerHTML; solo la medalla diamante más reciente lleva el destello animado (ver .chip-medal-icon.is-latest).
+  container.innerHTML = medals.map((m, i) => {
+    const ui = MEDAL_TIER_UI[String(m.tier || "").trim().toLowerCase()] || { icon: "military_tech", cls: "tier-riesgo", label: "Cumplimiento" };
+    const mm = String(m.month).split("-")[1];
+    const title = `Medalla de cumplimiento ${ui.label} - ${MEDAL_MONTH_NAMES[mm] || mm} (${m.score}%)`;
+    return `<span class="material-symbols-rounded chip-medal-icon ${ui.cls}${i === lastIdx ? " is-latest" : ""}" title="${title}">${ui.icon}</span>`;
+  }).join("");
 }
 
 function updateCumplimientoMedalTone(userRank, userTier = "") {
@@ -19749,19 +19642,7 @@ function renderHistoryMetrics(data) {
   const year = yearParts[0];
 
   // Fetch and render yearly medals on bCumplimientoMedals
-  if (USER && USER.rol === "UNIDAD" && USER.clues) {
-    getYearlyMedals(year, USER.clues).then(medals => {
-      renderUnitMedals(medals);
-    });
-  } else if (USER && (USER.rol === "MUNICIPAL" || selectedMuni !== "TODOS")) {
-    const targetMuni = USER.rol === "MUNICIPAL" ? (USER.municipio || "").split(",")[0].trim() : selectedMuni;
-    getYearlyMuniMedals(year, targetMuni).then(medals => {
-      renderUnitMedals(medals);
-    });
-  } else {
-    const medalsContainer = $("bCumplimientoMedals");
-    if (medalsContainer) medalsContainer.innerHTML = "";
-  }
+  refreshComplianceMedals(year, selectedMuni, { clearIfNone: true });
 
   // Update dynamic KPIs based on activeRows with smooth animated count
   if ($("histTotalUnidades")) animateKpiCounter($("histTotalUnidades"), activeRows.length);
