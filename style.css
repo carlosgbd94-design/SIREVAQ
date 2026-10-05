@@ -14206,3 +14206,6 @@ html.perf-lite .pinol-icon-pulse {
 html.tab-hidden *, html.tab-hidden *::before, html.tab-hidden *::after {
   animation-play-state: paused !important;
 }
+/* Configuración masiva (Admin > Catálogo): el gap global de 32px separaba demasiado las filas */
+#bioBulkVaccinesList { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px !important; align-content: start; }
+@media (max-width: 640px) { #bioBulkVaccinesList { grid-template-columns: minmax(0, 1fr); } }

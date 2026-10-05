@@ -18639,7 +18639,7 @@ function renderPinolCommandCenter() {
              <span class="material-symbols-rounded" style="font-size: 26px; animation: pinolWarningRotate 1.2s infinite alternate ease-in-out;">warning</span>
            </div>
            <div>
-             <div style="font-size: 14px; font-weight: 900; letter-spacing: -0.01em; color: #991b1b;">⚠️ ${criticos.length} UNIDADES EN STOCK CRÍTICO (0 EXISTENCIAS)</div>
+             <div style="font-size: 14px; font-weight: 900; letter-spacing: -0.01em; color: #991b1b;">⚠️ ${criticos.length} ${criticos.length === 1 ? "UNIDAD EN STOCK CRÍTICO" : "UNIDADES EN STOCK CRÍTICO"} (0 EXISTENCIAS)</div>
              <div style="font-size: 13px; font-weight: 700; opacity: 0.9; margin-top: 2px;">Atención prioritaria requerida para desinfección de red de frío. Hay <b>${pendientes.length}</b> solicitudes pendientes en total (${litrosRuta} Litros).</div>
            </div>
          </div>`
