@@ -18,7 +18,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
-<script defer src="requisiciones_ui.js?v=7"></script>
+<script defer src="requisiciones_ui.js?v=8"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -383,6 +383,23 @@
   table.vista-pegado td { padding: 6px 8px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
   table.vista-pegado tr.fila-error td { background: var(--error-bg); }
   table.vista-pegado select { padding: 4px 6px; font-size: 12px; max-width: 200px; }
+  /* Traer pedido de biológico: un recuadro por pedido del mes (ordinario / extraordinarios) */
+  .ped-grupo { border: 0; margin: 12px 0 0; padding: 0; min-width: 0; }
+  .ped-grupo legend { font-size: 10px; color: var(--primary); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; padding: 0; margin-bottom: 6px; }
+  .ped-opciones { display: flex; flex-direction: column; gap: 8px; }
+  .ped-op { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1.5px solid var(--outline-variant); border-radius: 14px; background: var(--surface); cursor: pointer; }
+  .ped-op:hover { border-color: var(--secondary); }
+  .ped-op:has(input:checked) { border-color: var(--secondary); background: rgba(14,165,233,.07); }
+  .ped-op:has(input:focus-visible) { outline: 3px solid rgba(14,165,233,.45); outline-offset: 2px; }
+  .ped-op.deshabilitado { opacity: .6; cursor: not-allowed; }
+  .ped-op input { margin-top: 3px; accent-color: var(--secondary); width: 18px; height: 18px; flex: none; }
+  .ped-op-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .ped-op-fecha { font-weight: 800; font-size: 14px; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ped-op-meta { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .ped-op-motivo { font-size: 12px; color: var(--muted); }
+  .ped-tag { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #166534; }
+  .ped-tag.extra { background: #fef3c7; color: #92400e; }
+  .ped-vacio { font-size: 13px; color: var(--muted); padding: 14px; border: 1.5px dashed var(--outline-variant); border-radius: 14px; text-align: center; }
   /* Lotes por definir / asignar lotes / transferencias */
   /* Entregas del mes, vista previa de caducidad, prellenado de cantidades */
   .barra-entregas { display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: 4px; padding-left: 12px; border-left: 1px solid var(--outline-variant); }
@@ -711,6 +728,7 @@
           <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSyncLotes" style="margin-left:auto;" title="Revisa que los lotes repartidos este mes estén dados de alta en el panel Lotes (nunca duplica ni borra)"><span class="material-symbols-rounded" style="font-size:15px">sync</span> Sincronizar lotes</button>
           <button type="button" class="btn btn-outline btn-sm" id="btnPrellenar" style="margin-left:8px;" title="Capturar solo cuánto llegó de cada biológico; los lotes se asignan después"><span class="material-symbols-rounded" style="font-size:15px">format_list_numbered</span> Prellenar cantidades</button>
           <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnTraerInfluenza" style="margin-left:8px;" title="Llenar la influenza con el reparto de frascos que ya hicieron Jurisdicción y los municipios"><span class="material-symbols-rounded" style="font-size:15px">vaccines</span> Traer reparto de influenza</button>
+          <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnTraerPedido" style="margin-left:8px;" title="Llenar las cantidades de esta requisición con el pedido de biológico que capturaron las unidades (ordinario o extraordinario)"><span class="material-symbols-rounded" style="font-size:15px">request_quote</span> Traer pedido de biológico</button>
           <button type="button" class="btn btn-outline btn-sm" id="btnPegarSurtido"><span class="material-symbols-rounded" style="font-size:15px">content_paste</span> Pegar desde Excel</button>
         </h2>
         <p class="hint" style="margin-top:8px;"><b>1.</b> Toca el biológico · <b>2.</b> escribe lote, caducidad y cantidad · <b>Enter</b> guarda y te deja listo para el siguiente lote del mismo biológico. <b>¿Aún no hay lotes?</b> Usa <b>Prellenar cantidades</b> (todos los biológicos de golpe) o deja el lote vacío; después los asignas con "Asignar lotes". La caducidad se teclea <b>DD-MM-AA</b> y se muestra MMM-AA.</p>
@@ -857,6 +875,30 @@
         <span id="infResumen" class="modal-resumen"></span>
         <button type="button" class="btn btn-outline" id="infCancelar">Cancelar</button>
         <button type="button" class="btn btn-primary" id="infTraer" disabled>Traer reparto</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Traer el pedido de biológico (ordinario o extraordinario) que capturaron las unidades -->
+  <div class="modal-fondo" id="modalPedido" style="display:none;">
+    <div class="modal-hoja" role="dialog" aria-modal="true" aria-labelledby="pedTitulo" aria-describedby="pedSub" style="max-width:600px;">
+      <div class="modal-cab">
+        <div><h3 id="pedTitulo">Traer pedido de biológico</h3><p id="pedSub">Llena esta requisición con las cantidades pedidas por cada unidad (pasos 1, 2 y 3). Los lotes se asignan después con "Asignar lotes". Influenza no se trae de aquí: usa "Traer reparto de influenza".</p></div>
+        <button type="button" class="icon-btn-pure" id="pedCerrar" title="Cerrar" aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="modal-cuerpo">
+        <div class="campo"><label for="pedMes">Mes en que se hizo el pedido</label><select id="pedMes"></select></div>
+        <fieldset class="ped-grupo" id="pedGrupo" aria-describedby="pedAviso">
+          <legend id="pedLeyenda">Pedido a traer</legend>
+          <div id="pedOpciones" class="ped-opciones"></div>
+        </fieldset>
+        <p class="hint" id="pedAviso" role="status" aria-live="polite" style="margin-top:10px;"></p>
+        <p class="hint" id="pedDetalle" role="status" aria-live="polite" style="margin-top:6px;"></p>
+      </div>
+      <div class="modal-pie">
+        <span id="pedResumen" class="modal-resumen"></span>
+        <button type="button" class="btn btn-outline" id="pedCancelar">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="pedTraer" disabled>Traer pedido</button>
       </div>
     </div>
   </div>

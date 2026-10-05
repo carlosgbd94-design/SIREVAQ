@@ -945,3 +945,114 @@ test('Requisiciones: la confirmación de reemplazar se ve por encima del modal d
   expect(arriba).toBe(true);
   expect(errores).toEqual([]);
 });
+
+// ---------------------------------------------------------------------------
+// Traer pedido de biológico (ordinario / extraordinarios). La requisición del mes en curso lleva el
+// pedido del mes anterior (el de octubre se hizo el 22 de septiembre).
+// ---------------------------------------------------------------------------
+function pedidosDelMesAnterior(extras) {
+  return () => {
+    const hoy = new Date();
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+    const pref = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    window.__FAKE_PEDIDOS__ = [{ fecha: pref + '-22', tipo: 'MENSUAL', unidades: 68, frascos: 13466 }];
+    if (window.__FAKE_PEDIDOS_EXTRA__) {
+      window.__FAKE_PEDIDOS__.push({ fecha: pref + '-28', tipo: 'EXTRAORDINARIO', unidades: 12, frascos: 340, motivo: 'Brote de sarampión' });
+    }
+    window.__PEDIDO_PREF__ = pref;
+  };
+}
+
+test('Requisiciones: Traer pedido de biológico propone el mes anterior y solo trae cuando se pide', async ({ page }) => {
+  await page.addInitScript(pedidosDelMesAnterior());
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  // Sin pulsar el botón no se trae nada
+  expect(await db(page, "db.requi_items_jurisdiccion.length")).toBe(0);
+
+  await page.click('#btnTraerPedido');
+  await expect(page.locator('#modalPedido')).toBeVisible();
+  await expect(page.locator('#pedMes option').first()).toContainText('el que corresponde');
+  const pref = await page.evaluate(() => window.__PEDIDO_PREF__);
+  await expect(page.locator('#pedMes')).toHaveValue(pref.replace(/-0?(\d+)$/, '-$1'));
+  await expect(page.locator('#pedOpciones input[type=radio]')).toHaveCount(1);
+  await expect(page.locator('#pedOpciones input[type=radio]')).toBeChecked();
+  await expect(page.locator('#pedOpciones')).toContainText('Ordinario');
+  await expect(page.locator('#pedAviso')).toContainText('Hay un solo pedido');
+  await expect(page.locator('#pedTraer')).toBeEnabled();
+  await expect(page.locator('#pedTraer')).toContainText('22');
+
+  await page.click('#pedTraer');
+  await expect(page.locator('#modalPedido')).toBeHidden();
+  expect(await db(page, "db.requi_items_jurisdiccion.map((i) => i.cantidad_surtida)")).toEqual([13466]);
+  expect(await db(page, "db.requi_lotes.map((l) => l.numero_lote)")).toEqual(['POR DEFINIR']);
+  expect(await db(page, "db.requi_requisiciones.find((r) => r.id === 'req-hoy').pedido_fecha")).toMatch(/-22$/);
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: con más de un pedido en el mes deja elegir y trae el elegido', async ({ page }) => {
+  await page.addInitScript(() => { window.__FAKE_PEDIDOS_EXTRA__ = true; });
+  await page.addInitScript(pedidosDelMesAnterior());
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+
+  await page.click('#btnTraerPedido');
+  await expect(page.locator('#pedOpciones input[type=radio]')).toHaveCount(2);
+  await expect(page.locator('#pedAviso')).toContainText('Se detectaron 2 pedidos');
+  await expect(page.locator('#pedAviso')).toContainText('1 ordinario y 1 extraordinario');
+  // Se propone el ordinario; el extraordinario se distingue y muestra su motivo
+  await expect(page.locator('#pedOpciones input[type=radio]').first()).toBeChecked();
+  await expect(page.locator('#pedOpciones .ped-tag.extra')).toHaveText('Extraordinario');
+  await expect(page.locator('#pedOpciones')).toContainText('Brote de sarampión');
+
+  await page.locator('#pedOpciones input[type=radio]').nth(1).check();
+  await expect(page.locator('#pedTraer')).toContainText('28');
+  await expect(page.locator('#pedResumen')).toContainText('340 frascos');
+  await page.click('#pedTraer');
+  await expect(page.locator('#modalPedido')).toBeHidden();
+  expect(await db(page, "db.requi_items_jurisdiccion.map((i) => i.cantidad_surtida)")).toEqual([340]);
+  expect(await db(page, "db.requi_requisiciones.find((r) => r.id === 'req-hoy').pedido_fecha")).toMatch(/-28$/);
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: un pedido ya vinculado a otra requisición no se puede traer', async ({ page }) => {
+  await page.addInitScript(pedidosDelMesAnterior());
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.evaluate(() => {
+    window.__FAKE_DB__.requi_requisiciones.push({ id: 'req-otra', anio: 2026, mes: 9, entrega: 1, etiqueta: null, estado: 'BORRADOR', fue_corregido: false, creado_por: 'x', fecha_envio: null,
+      pedido_fecha: window.__PEDIDO_PREF__ + '-22' });
+  });
+  await page.click('#btnTraerPedido');
+  await expect(page.locator('#pedOpciones')).toContainText('Ya vinculado');
+  await expect(page.locator('#pedOpciones input[type=radio]')).toBeDisabled();
+  await expect(page.locator('#pedTraer')).toBeDisabled();
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: Traer pedido es accesible (grupo con leyenda, Escape cierra y devuelve el foco, Tab no se escapa)', async ({ page }) => {
+  await page.addInitScript(() => { window.__FAKE_PEDIDOS_EXTRA__ = true; });
+  await page.addInitScript(pedidosDelMesAnterior());
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.focus('#btnTraerPedido');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#modalPedido')).toBeVisible();
+  await expect(page.locator('#modalPedido [role=dialog]')).toHaveAttribute('aria-modal', 'true');
+  await expect(page.locator('#pedGrupo legend')).toHaveText('Pedido a traer');
+  await expect(page.locator('#pedAviso')).toHaveAttribute('aria-live', 'polite');
+  // El foco entra al pedido propuesto
+  await expect(page.locator('#pedOpciones input[type=radio]').first()).toBeFocused();
+  // Flechas cambian de pedido (radio nativo)
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#pedOpciones input[type=radio]').nth(1)).toBeChecked();
+  // Tab cicla dentro del modal
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => !!document.activeElement.closest('#modalPedido'))).toBe(true);
+  }
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#modalPedido')).toBeHidden();
+  await expect(page.locator('#btnTraerPedido')).toBeFocused();
+  expect(errores).toEqual([]);
+});

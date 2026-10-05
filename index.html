@@ -348,7 +348,7 @@
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
   <script defer src="ayuda.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.89" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.92" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -605,8 +605,9 @@
               <button id="btnProfileToggle" data-tooltip="Mi Perfil / Ajustes" title="Perfil"
                 class="h-[42px] sm:h-[56px] px-1 sm:px-6 lg:px-8 text-primary rounded-[21px] sm:rounded-[28px] flex items-center justify-center gap-0 sm:gap-3 lg:gap-4 border-none cursor-pointer shadow-none transition-all duration-300">
                 <div
-                  class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center border border-primary/10 flex-none transition-all duration-300">
+                  class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center border border-primary/10 flex-none transition-all duration-300" style="position:relative;">
                   <span class="material-symbols-rounded text-[20px] sm:text-[24px] text-primary">account_circle</span>
+                  <span data-cal-cap-dot style="display:none; position:absolute; top:-2px; right:-2px; width:10px; height:10px; border-radius:50%; background:#d97706; border:2px solid #fff;"></span>
                 </div>
                 <div class="hidden md:flex flex-col items-start leading-none transition-all duration-300">
                   <span class="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-primary/60 mb-1">Mi
@@ -809,6 +810,20 @@
                   style="display: flex; width: 38px; min-width: 38px; max-width: 38px; height: 38px; min-height: 38px; max-height: 38px; border-radius: 12px; align-items: center; justify-content: center; border: 1.5px solid #cbd5e1; background: transparent; color: #475569; cursor: pointer; transition: all 0.2s; box-sizing: border-box; padding: 0; margin: 0;">
                   <span class="material-symbols-rounded" style="font-size: 20px;">qr_code_2</span>
                 </button>
+              </div>
+
+              <!-- 📅 CALENDARIO DE CAPACITACIONES -->
+              <div id="profileCalCapSection" class="flex flex-col gap-2 w-full" style="margin-top: 10px !important;">
+                <button type="button" id="btnProfileCalendarioCap" onclick="openCalendarioCapacitaciones()"
+                  style="display: flex; width: 100%; height: 38px; min-height: 38px; border-radius: 12px; font-weight: 700; font-size: 11px; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid #cbd5e1; background: transparent; color: #475569; cursor: pointer; transition: all 0.2s; box-sizing: border-box; padding: 0 10px; margin: 0;">
+                  <span class="material-symbols-rounded" style="font-size: 20px; color: #0b5cad;">event</span>
+                  <span class="uppercase tracking-wider">Calendario de capacitaciones</span>
+                  <span data-cal-cap-badge style="display:none; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#d97706; color:#fff; font-size:10.5px; font-weight:800; align-items:center; justify-content:center;"></span>
+                </button>
+                <div id="calCapBanner" style="display:none; align-items:flex-start; gap:8px; padding:8px 10px; border-radius:12px; background:rgba(245,158,11,.14); color:#92400e; font-size:11.5px; font-weight:700; line-height:1.35;">
+                  <span class="material-symbols-rounded" style="font-size:16px; flex:none; margin-top:1px;">notifications_active</span>
+                  <span data-cal-cap-text></span>
+                </div>
               </div>
             </div>
           </div>
@@ -1681,6 +1696,12 @@
               </div>
             </div>
 
+            <!-- Elegir qué pedido capturar cuando hay más de uno abierto hoy (ordinario / extraordinarios) -->
+            <fieldset id="bioModoBox" class="bioModoBox hidden">
+              <legend>¿Qué pedido vas a capturar?</legend>
+              <div id="bioModoOpciones" class="bioModoOpciones" role="radiogroup" aria-label="Pedido a capturar"></div>
+            </fieldset>
+
             <!-- FICHA LOGÍSTICA DETALLADA (Solo se muestra cuando hay errores/ventanas terminadas) -->
             <div id="bioDayAlert" class="IntegratedHint tone-bad mb-4 hidden">
               <div class="hint-icon-bg bioDayIcon">
@@ -2132,6 +2153,13 @@
             <span>Avisos</span>
           </button>
 
+          <button class="nav-tab" id="tabOPS_CALENDARIO" data-role-gate="ADMIN,JURISDICCIONAL,VISUALIZADOR_JURISDICCIONAL,MUNICIPAL,CARAVANAS"
+            onclick="activateOpsTab('CALENDARIO')">
+            <span class="material-symbols-rounded">event</span>
+            <span>Capacitaciones</span>
+            <span data-cal-cap-badge style="display:none; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#d97706; color:#fff; font-size:10.5px; font-weight:800; align-items:center; justify-content:center;"></span>
+          </button>
+
           <button class="nav-tab" id="tabOPS_PARAMS" data-role-gate="JURISDICCIONAL,MUNICIPAL"
             onclick="activateOpsTab('PARAMS')">
             <span class="material-symbols-rounded">tune</span>
@@ -2150,6 +2178,9 @@
           </button>
         </div>
       </div>
+
+      <!-- CALENDARIO ANUAL DE CAPACITACIONES (ADMIN/JURISDICCIONAL editan; resto consulta) -->
+      <div id="panelCALENDARIO" class="hidden mb-6" style="display:none"></div>
 
       <!-- NOTIFICACIONES -->
       <!-- NOTIFICACIONES -->
@@ -4443,6 +4474,73 @@
                 id="btnSaveBioOverride">
                 <span class="material-symbols-rounded text-[20px]">save</span> Guardar Calendario
               </button>
+            </div>
+
+            <!-- Pedidos extraordinarios (cada uno es un pedido aparte del ordinario del día 22) -->
+            <div id="pedidosExtraCard"
+              class="bg-surface rounded-[32px] p-8 border border-outline-variant/30 shadow-[0_12px_24px_rgba(0,51,102,0.05)] relative overflow-hidden group">
+              <div
+                class="absolute -right-10 -top-10 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl group-hover:bg-amber-500/10 transition-colors">
+              </div>
+
+              <div class="flex items-center gap-4 mb-4 relative z-10">
+                <div
+                  class="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 shadow-inner">
+                  <span class="material-symbols-rounded text-[24px]" aria-hidden="true">add_shopping_cart</span>
+                </div>
+                <div>
+                  <h4 class="text-[15px] font-black text-primary m-0 tracking-tight">Pedidos Extraordinarios</h4>
+                  <p class="text-[11px] font-bold text-primary/40 uppercase tracking-widest mt-0.5">Pedidos adicionales
+                    al del día 22</p>
+                </div>
+              </div>
+
+              <p class="pedExtraAyuda relative z-10">Cada pedido extraordinario es un pedido aparte: las unidades lo
+                capturan con su propia fecha y <b>no reemplaza</b> el pedido mensual. El sistema detecta solo cuál es el
+                ordinario (el del día 22) y marca los demás como extraordinarios, también al exportar y en Requisiciones.</p>
+
+              <div class="grid grid-cols-1 gap-4 relative z-10">
+                <div class="flex gap-4">
+                  <div class="flex-1 flex flex-col gap-1.5">
+                    <label for="pedExtraFecha"
+                      class="text-[10px] font-black text-primary/50 uppercase tracking-widest ml-1">Fecha del pedido</label>
+                    <div class="modern-input-group h-[48px]">
+                      <span class="input-icon material-symbols-rounded text-[18px]" aria-hidden="true">event</span>
+                      <input type="date" id="pedExtraFecha"
+                        class="text-[13px] font-bold w-full bg-transparent outline-none">
+                    </div>
+                  </div>
+                  <div class="flex-1 flex flex-col gap-1.5">
+                    <label for="pedExtraHasta"
+                      class="text-[10px] font-black text-primary/50 uppercase tracking-widest ml-1">Captura hasta</label>
+                    <div class="modern-input-group h-[48px]">
+                      <span class="input-icon material-symbols-rounded text-[18px]" aria-hidden="true">stop</span>
+                      <input type="date" id="pedExtraHasta"
+                        class="text-[13px] font-bold w-full bg-transparent outline-none">
+                    </div>
+                  </div>
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <label for="pedExtraMotivo"
+                    class="text-[10px] font-black text-primary/50 uppercase tracking-widest ml-1">Motivo (opcional)</label>
+                  <div class="modern-input-group h-[48px]">
+                    <span class="input-icon material-symbols-rounded text-[18px]" aria-hidden="true">edit_note</span>
+                    <input type="text" id="pedExtraMotivo" maxlength="120" placeholder="Ej. Brote de sarampión, faltante de BCG..."
+                      class="text-[13px] font-bold w-full bg-transparent outline-none">
+                  </div>
+                </div>
+              </div>
+
+              <button type="button"
+                class="w-full h-[52px] rounded-2xl bg-amber-500 text-primary-on font-black text-[13px] uppercase tracking-widest mt-6 shadow-lg shadow-amber-500/20 hover:bg-amber-600 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 relative z-10 border-none cursor-pointer"
+                style="background-color:#d97706;color:#fff;" id="btnSavePedidoExtra">
+                <span class="material-symbols-rounded text-[20px]" aria-hidden="true">add_circle</span> Abrir pedido extraordinario
+              </button>
+
+              <h5 class="pedExtraTitulo relative z-10" id="pedExtraListaTitulo">Pedidos extraordinarios recientes</h5>
+              <ul id="pedExtraLista" class="pedExtraLista relative z-10" aria-labelledby="pedExtraListaTitulo" aria-live="polite">
+                <li class="pedExtraVacio">Cargando…</li>
+              </ul>
             </div>
           </div>
         </div>
@@ -7867,6 +7965,7 @@
                 <option value="2024">2024</option>
                 <option value="2025">2025</option>
                 <option value="2026">2026</option>
+                <option value="2027">2027</option>
               </select>
             </div>
           </div>
@@ -7874,16 +7973,16 @@
 
         <div id="exportBioExactDateBox"
           style="display: none; background: var(--md-sys-color-surface-container); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 14px; padding: 14px; flex-direction: column; gap: 8px;">
-          <label
+          <label for="exportBioExactDate"
             style="font-size: 11px; font-weight: 800; color: var(--md-sys-color-on-surface); text-transform: uppercase; letter-spacing: 0.05em;">
-            Corte específico
+            Pedido a exportar
           </label>
           <div style="position: relative;">
             <select id="exportBioExactDate"
               style="width: 100%; height: 44px; appearance: none; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 10px; padding: 0 36px 0 14px; font-size: 14px; font-weight: 700; color: var(--md-sys-color-on-surface); cursor: pointer; outline: none;"></select>
           </div>
-          <p style="margin: 0; font-size: 11px; color: var(--md-sys-color-on-surface-variant); font-weight: 600;">Se
-            detectaron múltiples cortes este mes. Elige uno exacto.</p>
+          <p id="exportBioExactHint" role="status" aria-live="polite" style="margin: 0; font-size: 11px; color: var(--md-sys-color-on-surface-variant); font-weight: 600;">Se
+            detectaron varios pedidos este mes. Elige cuál exportar.</p>
         </div>
 
         <div id="exportFechaSingleBox" style="display:none; flex-direction: column; gap: 6px;">

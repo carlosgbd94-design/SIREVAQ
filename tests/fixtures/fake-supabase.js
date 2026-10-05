@@ -261,12 +261,40 @@
       destinos_sin_reparto_a_unidades: destinos.map(([m]) => m).filter((m) => !conUnidades.has(m)) }, error: null };
   }
 
+  // Pedido de biológico (opcional): window.__FAKE_PEDIDOS__ = [{ fecha, tipo, unidades, frascos, motivo }].
+  // bio_pedidos_clasificados devuelve los del mes pedido; requi_traer_pedido_biologico es una versión
+  // simplificada de supabase/pedidos_extraordinarios_y_traer_pedido.sql (SRP por unidad, un pedido por requisición).
+  function rpcPedidosClasificados({ p_anio, p_mes }) {
+    const pref = p_anio + '-' + String(p_mes).padStart(2, '0');
+    return { data: (window.__FAKE_PEDIDOS__ || []).filter((p) => p.fecha.startsWith(pref)).map((p) => ({ extra_abierto: false, ultima_captura: null, motivo: null, ...p })), error: null };
+  }
+  function rpcTraerPedido({ p_requisicion, p_fecha }) {
+    const req = db.requi_requisiciones.find((r) => r.id === p_requisicion);
+    if (!req || req.estado !== 'BORRADOR') return { data: null, error: { message: 'ERROR: La requisición está cerrada; no se puede traer el pedido' } };
+    const ped = (window.__FAKE_PEDIDOS__ || []).find((p) => p.fecha === p_fecha);
+    if (!ped) return { data: null, error: { message: 'ERROR: No hay capturas del pedido' } };
+    if (db.requi_requisiciones.some((r) => r.id !== p_requisicion && r.pedido_fecha === p_fecha)) return { data: null, error: { message: 'ERROR: El pedido ya está vinculado a otra requisición' } };
+    const bio = db.requi_catalogo_biologicos.find((b) => b.codigo_articulo === '3820');
+    let lote = db.requi_lotes.find((l) => l.requi_biologico_id === bio.id && l.numero_lote === 'POR DEFINIR');
+    if (!lote) { lote = { id: uid(), requi_biologico_id: bio.id, numero_lote: 'POR DEFINIR', caducidad: null }; db.requi_lotes.push(lote); }
+    const propio = (d) => d.requisicion_id === p_requisicion && d.requi_biologico_id === bio.id;
+    db.requi_distribucion_unidad = db.requi_distribucion_unidad.filter((d) => !propio(d));
+    db.requi_distribucion_municipio = db.requi_distribucion_municipio.filter((d) => !propio(d));
+    db.requi_items_jurisdiccion = db.requi_items_jurisdiccion.filter((d) => !propio(d));
+    db.requi_items_jurisdiccion.push({ id: uid(), requisicion_id: p_requisicion, requi_biologico_id: bio.id, lote_id: lote.id, cantidad_surtida: ped.frascos });
+    db.requi_distribucion_municipio.push({ id: uid(), requisicion_id: p_requisicion, municipio: 'QUERETARO', requi_biologico_id: bio.id, lote_id: lote.id, cantidad: ped.frascos });
+    db.requi_distribucion_unidad.push({ id: uid(), requisicion_id: p_requisicion, unidad_id: 'un-q1', requi_biologico_id: bio.id, lote_id: lote.id, cantidad: ped.frascos });
+    req.pedido_fecha = p_fecha;
+    return { data: { fecha: p_fecha, frascos: ped.frascos, unidades: 1, biologicos: [{ codigo: '3820', nombre: bio.nombre, frascos: ped.frascos, unidades: 1 }],
+      omitidos_con_lotes: [], clues_sin_unidad: [], sin_equivalencia: [], influenza_pedida: 0 }, error: null };
+  }
+
   window.supabase = {
     createClient() {
       return {
         auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 't@test.mx' } } } }) },
         from: constructor,
-        rpc: async (nombre, args) => (nombre === 'requi_asignar_lotes' ? rpcAsignarLotes(args) : nombre === 'requi_traer_reparto_influenza' ? rpcTraerInfluenza(args) : { data: null, error: { message: 'rpc no simulada: ' + nombre } })
+        rpc: async (nombre, args) => (nombre === 'requi_asignar_lotes' ? rpcAsignarLotes(args) : nombre === 'requi_traer_reparto_influenza' ? rpcTraerInfluenza(args) : nombre === 'bio_pedidos_clasificados' ? rpcPedidosClasificados(args) : nombre === 'requi_traer_pedido_biologico' ? rpcTraerPedido(args) : { data: null, error: { message: 'rpc no simulada: ' + nombre } })
       };
     }
   };

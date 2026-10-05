@@ -4999,6 +4999,29 @@ function refreshProfileContactUi(user) {
   if ($("userNameFull")) $("userNameFull").textContent = u.nombre || u.usuario || "Usuario";
 }
 
+// Calendario anual de capacitaciones (calendario_capacitaciones.js)
+function ensureCalendarioCap() {
+  if (!window.CalendarioCap) return false;
+  if (!window.__calendarioCapInit) {
+    window.CalendarioCap.init({
+      getClient: () => window.supabase,
+      getUser: () => USER,
+      toast: (msg, kind) => showToast(msg, kind !== "bad", kind === "bad" ? "bad" : "good")
+    });
+    window.__calendarioCapInit = true;
+  }
+  return true;
+}
+
+window.openCalendarioCapacitaciones = function () {
+  if (!ensureCalendarioCap()) {
+    showToast("No se pudo cargar el calendario. Recarga la página.", false, "bad");
+    return;
+  }
+  $("profileDropdown")?.classList.add("hidden");
+  window.CalendarioCap.openCalendar();
+};
+
 function ensurePerfilCuenta() {
   if (!window.PerfilCuenta) {
     showToast("No se pudo cargar el módulo de perfil. Recarga la página.", false, "bad");
@@ -5954,12 +5977,17 @@ async function supabaseRequest(action = "", payload, options = {}) {
           const canCaptureLocal = hoyYmd >= windowStartYmd && hoyYmd <= windowEndYmd;
           const isCaptureDayLocal = hoyYmd === windowTargetYmd;
 
+          // Pedido extraordinario: es un pedido aparte, se busca solo por su propia fecha (nunca el ordinario).
+          const fechaExtra = /^\d{4}-\d{2}-\d{2}$/.test(String(payload?.fechaPedidoExtra || "")) ? payload.fechaPedidoExtra : null;
+
           // Consulta de pedidos existentes (Robusta para legacy dentro de la misma ventana)
-          const resSaved = await supabase.from('biologicos_pedido')
+          let savedQuery = supabase.from('biologicos_pedido')
             .select('*')
-            .eq('clues', clues || 'NOT_FOUND')
-            .or(`fecha_pedido_programada.eq.${windowTargetYmd},and(fecha_captura.gte.${windowStartYmd},fecha_captura.lte.${windowEndYmd},tipo_pedido.in.(MENSUAL,null))`)
-            .order('timestamp', { ascending: false });
+            .eq('clues', clues || 'NOT_FOUND');
+          savedQuery = fechaExtra
+            ? savedQuery.eq('fecha_pedido_programada', fechaExtra)
+            : savedQuery.or(`fecha_pedido_programada.eq.${windowTargetYmd},and(fecha_captura.gte.${windowStartYmd},fecha_captura.lte.${windowEndYmd},tipo_pedido.in.(MENSUAL,null))`);
+          const resSaved = await savedQuery.order('timestamp', { ascending: false });
 
           if (resSaved.error) console.warn("[biogetform] saved warning:", resSaved.error);
 
@@ -5989,7 +6017,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
               rows: mappedRows,
               hasSavedBio: resSaved.data && resSaved.data.length > 0,
               isCaptureDay: isCaptureDayLocal,
-              fechaPedidoProgramada: windowTargetYmd,
+              fechaPedidoProgramada: fechaExtra || windowTargetYmd,
               captureWindowStart: windowStartYmd,
               captureWindowEnd: windowEndYmd,
               windowSource: windowSource
@@ -6441,6 +6469,17 @@ async function supabaseRequest(action = "", payload, options = {}) {
           .eq('activo', 'SI')
           .maybeSingle();
 
+        // 2.5 Pedidos extraordinarios abiertos por el Administrador (cada uno es un pedido aparte, con su fecha)
+        const { data: bioExtrasRaw, error: bioExtrasErr } = await supabase
+          .from('pedidos_extraordinarios')
+          .select('id, fecha_programada, habilitar_hasta, motivo')
+          .eq('activo', true)
+          .lte('habilitar_desde', today)
+          .gte('habilitar_hasta', today)
+          .order('fecha_programada', { ascending: true });
+        if (bioExtrasErr) console.warn("[Supabase] Fallo al consultar pedidos_extraordinarios:", bioExtrasErr);
+        const bioExtras = bioExtrasRaw || [];
+
         // 3. Lógica Inteligente (Días festivos / Fines de semana)
         const consIntelligent = await getConsumiblesStatus(today, clues);
 
@@ -6478,6 +6517,9 @@ async function supabaseRequest(action = "", payload, options = {}) {
         if (extOverride) {
           canBio = true;
           bioReason = extOverride.motivo || "Apertura semanal extraordinaria habilitada por Administrador";
+        } else if (bioExtras.length && !canBio) {
+          canBio = true;
+          bioReason = bioExtras[0].motivo || "Pedido extraordinario habilitado por Administrador";
         } else if (bioOverride) {
           const isTodayInBioWindow = today >= bioOverride.habilitar_desde && today <= bioOverride.habilitar_hasta;
           if (isTodayInBioWindow) {
@@ -6765,6 +6807,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
             consumiblesManualOverride: !!consOverride,
             canCaptureBio: canBio,
             bioReason: bioReason,
+            bioExtras: bioExtras,
             isExtraordinary: !!(consOverride || (bioOverride && today >= bioOverride.habilitar_desde && today <= bioOverride.habilitar_hasta)),
             compliance_pct,
             userRank,
@@ -11677,6 +11720,8 @@ let HAS_TODAY_SR = false;
 let HAS_TODAY_CONS = false;
 let HAS_SAVED_BIO = false;
 
+let BIO_MODO_ELEGIDO = null;   // pedido que se está capturando (ordinario o extraordinario) cuando hay más de uno abierto
+
 let BIO_STATE = {
   rows: [],
   isCaptureDay: false,
@@ -11850,27 +11895,41 @@ async function updateExportFechaHint() {
     const exactSelect = $("exportBioExactDate");
 
     if (exactBox && exactSelect) {
-      exactBox.style.display = "none";
-      exactSelect.innerHTML = "";
+      // Todos los pedidos con fecha en el mes. La base decide cuál es el ordinario (el del día 22) y marca
+      // los demás como extraordinarios, sin depender de lo que cada captura haya escrito.
+      const token = (updateExportFechaHint.token = (updateExportFechaHint.token || 0) + 1);
+      let pedidos = [];
+      try {
+        const rpc = await window.supabase.rpc("bio_pedidos_clasificados", { p_anio: Number(yy), p_mes: Number(mm) });
+        if (rpc.error) throw rpc.error;
+        pedidos = (rpc.data || []).filter(p => Number(p.unidades) > 0);
+      } catch (e) {
+        console.error("[export] No se pudieron leer los pedidos del mes:", e);
+      }
+      if (token !== updateExportFechaHint.token) return;   // el usuario cambió de mes mientras cargaba
 
-      const res = await apiCall({ action: "bioGetDatesForMonth", token: TOKEN, month: mm, year: yy });
-      if (res && res.ok && res.data && res.data.length > 0) {
-        res.data.forEach(d => {
+      window.EXPORT_BIO_PEDIDOS = pedidos;
+      exactSelect.innerHTML = "";
+      const hintEl = $("exportBioExactHint");
+      if (pedidos.length) {
+        pedidos.forEach(p => {
           const opt = document.createElement("option");
-          opt.value = d.date;
-          opt.textContent = `${d.date} (${d.type === "MENSUAL" ? "Pedido Mensual" : "Extraordinario"})`;
+          opt.value = p.fecha;
+          opt.textContent = `${pedExtraFechaCorta(p.fecha)} · ${p.tipo === "MENSUAL" ? "Ordinario" : "Extraordinario"} · ${p.unidades} ${Number(p.unidades) === 1 ? "unidad" : "unidades"}`;
           exactSelect.appendChild(opt);
         });
+        const ordinario = pedidos.find(p => p.tipo === "MENSUAL") || pedidos[0];
+        exactSelect.value = ordinario.fecha;
 
-        const hasMensual = res.data.some(d => d.type === "MENSUAL");
-        const hasExtra = res.data.some(d => d.type === "EXTRAORDINARIO");
-
-        if (hasMensual && hasExtra) {
+        if (pedidos.length > 1) {
+          const extras = pedidos.filter(p => p.tipo !== "MENSUAL").length;
           exactBox.style.display = "flex";
-          $("exportFechaHint").textContent = "Múltiples tipos de pedido detectados (Ordinario y Extraordinario). Selecciona el corte exacto.";
+          const detalle = extras ? ` (${pedidos.length - extras} ordinario y ${extras} extraordinario${extras === 1 ? "" : "s"})` : "";
+          $("exportFechaHint").textContent = `Se detectaron ${pedidos.length} pedidos este mes${detalle}.`;
+          if (hintEl) hintEl.textContent = "Elige cuál exportar; cada pedido se exporta por separado.";
         } else {
           exactBox.style.display = "none";
-          $("exportFechaHint").textContent = "Un solo tipo de pedido detectado para este mes.";
+          $("exportFechaHint").textContent = `Un solo pedido detectado para este mes (${pedidos[0].tipo === "MENSUAL" ? "ordinario" : "extraordinario"}, ${pedExtraFechaCorta(pedidos[0].fecha)}).`;
         }
       } else {
         exactBox.style.display = "none";
@@ -12744,6 +12803,30 @@ async function loadExportOptions() {
   }
 }
 
+// Selector accesible (radiogroup) para elegir qué pedido capturar cuando hay más de uno abierto hoy.
+function renderBioModoSelector(modos, modoActual) {
+  const box = $("bioModoBox");
+  const lista = $("bioModoOpciones");
+  if (!box || !lista) return;
+  if (!modos || modos.length < 2) { box.classList.add("hidden"); lista.innerHTML = ""; return; }
+  const teniaFoco = lista.contains(document.activeElement);
+  lista.innerHTML = modos.map((m, i) => `
+    <label class="bioModoOp${m.tipo === "EXTRAORDINARIO" ? " extra" : ""}">
+      <input type="radio" name="bioModo" value="${escapeAttr(m.clave)}" ${modoActual && m.clave === modoActual.clave ? "checked" : ""}>
+      <span class="bioModoTxt"><b>${escapeHtml(m.tipo === "MENSUAL" ? "Pedido ordinario" : "Pedido extraordinario")}</b><small>${escapeHtml(m.fechaFriendly)}${m.motivo ? " · " + escapeHtml(m.motivo) : ""}</small></span>
+    </label>`).join("");
+  box.classList.remove("hidden");
+  lista.onchange = async (ev) => {
+    const el = ev.target.closest('input[name="bioModo"]');
+    if (!el || el.value === BIO_MODO_ELEGIDO) return;
+    BIO_MODO_ELEGIDO = el.value;
+    await loadBioForm();
+    const r = lista.querySelector('input[name="bioModo"]:checked');
+    if (r) r.focus();
+  };
+  if (teniaFoco) { const r = lista.querySelector('input[name="bioModo"]:checked'); if (r) r.focus(); }
+}
+
 async function loadBioForm() {
   if (!TOKEN || !USER || USER.rol !== "UNIDAD") return;
 
@@ -12766,15 +12849,7 @@ async function loadBioForm() {
       .catch(err => console.warn("Error loading schemes:", err));
   }
 
-  const r = await apiCall({ action: "bioGetForm", token: TOKEN });
-  if (!r || !r.ok) {
-    if ($("bioTbody")) {
-      $("bioTbody").innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml((r && r.error) ? r.error : "No se pudo cargar")}</td></tr>`;
-    }
-    return;
-  }
-
-  // --- NUEVO ALGORITMO INTELIGENTE (FRONTEND OVERRIDE) ---
+  // --- Ventana ordinaria (algoritmo del día 22) y pedidos extraordinarios abiertos por el Administrador ---
   const now = (typeof STATUS !== "undefined" && STATUS && STATUS.today) ? new Date(STATUS.today + "T12:00:00") : new Date();
   const currentWindow = calculateBioIntelligentWindow(now.getFullYear(), now.getMonth());
 
@@ -12792,8 +12867,32 @@ async function loadBioForm() {
 
   const isInsideWindow = hoyYmd >= windowStartYmd && hoyYmd <= windowEndYmd;
   const isExtraordinary = !!(STATUS && STATUS.isExtraordinary);
-  const canCaptureLocal = isInsideWindow || isExtraordinary;
   const isCaptureDayLocal = hoyYmd === windowTargetYmd;
+
+  // Qué pedidos se pueden capturar hoy: el ordinario (ventana del día 22 o apertura del calendario) y
+  // cada pedido extraordinario abierto. Cada uno es un pedido aparte: se guarda con su propia fecha.
+  const modos = [];
+  if (isInsideWindow || isExtraordinary) {
+    modos.push({ clave: "MENSUAL", tipo: "MENSUAL", fecha: windowTargetYmd, etiqueta: `Pedido ordinario · ${windowTargetFriendly}`,
+      fechaFriendly: windowTargetFriendly, desdeFriendly: windowStartFriendly, hastaFriendly: windowEndFriendly });
+  }
+  ((STATUS && Array.isArray(STATUS.bioExtras)) ? STATUS.bioExtras : []).forEach(e => {
+    const f = formatDateMx(new Date(e.fecha_programada + "T12:00:00"));
+    modos.push({ clave: "EXTRA|" + e.fecha_programada, tipo: "EXTRAORDINARIO", fecha: e.fecha_programada, etiqueta: `Pedido extraordinario · ${f}`,
+      fechaFriendly: f, desdeFriendly: f, hastaFriendly: formatDateMx(new Date(e.habilitar_hasta + "T12:00:00")), motivo: e.motivo || "" });
+  });
+  const modo = modos.find(m => m.clave === BIO_MODO_ELEGIDO) || modos[0] || null;
+  BIO_MODO_ELEGIDO = modo ? modo.clave : null;
+  const canCaptureLocal = !!modo;
+  renderBioModoSelector(modos, modo);
+
+  const r = await apiCall({ action: "bioGetForm", token: TOKEN, fechaPedidoExtra: (modo && modo.tipo === "EXTRAORDINARIO") ? modo.fecha : null });
+  if (!r || !r.ok) {
+    if ($("bioTbody")) {
+      $("bioTbody").innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml((r && r.error) ? r.error : "No se pudo cargar")}</td></tr>`;
+    }
+    return;
+  }
 
   // Si la ventana está cerrada, limpiar el formulario y no permitir edición
   if (!canCaptureLocal) {
@@ -12814,10 +12913,12 @@ async function loadBioForm() {
     isCaptureDay: isCaptureDayLocal,
     isInsideWindow: isInsideWindow,
     canCapture: canCaptureLocal,
-    fechaPedidoProgramada: windowTargetYmd,
-    fechaPedidoFriendly: windowTargetFriendly,
-    captureWindowStart: windowStartFriendly,
-    captureWindowEnd: windowEndFriendly,
+    tipoPedido: modo ? modo.tipo : "MENSUAL",
+    modoMotivo: modo ? (modo.motivo || "") : "",
+    fechaPedidoProgramada: modo ? modo.fecha : windowTargetYmd,
+    fechaPedidoFriendly: modo ? modo.fechaFriendly : windowTargetFriendly,
+    captureWindowStart: (modo && modo.tipo === "EXTRAORDINARIO") ? modo.desdeFriendly : windowStartFriendly,
+    captureWindowEnd: (modo && modo.tipo === "EXTRAORDINARIO") ? modo.hastaFriendly : windowEndFriendly,
     captureWindowStartYmd: windowStartYmd,
     captureWindowEndYmd: windowEndYmd,
     captureWindowStatus: windowStatus,
@@ -12910,7 +13011,15 @@ async function loadBioForm() {
   const bioDayAlert = $("bioDayAlert");
 
   if (bioDayAlert) {
-    if (BIO_STATE.isInsideWindow) {
+    if (BIO_STATE.canCapture && BIO_STATE.tipoPedido === "EXTRAORDINARIO") {
+      if (bioHint) bioHint.textContent = "Pedido extraordinario abierto.";
+      bioDayAlert.className = "IntegratedHint tone-warn mb-4 hidden";
+      bioDayAlert.classList.remove("hidden");
+      const icon = bioDayAlert.querySelector(".bioDayIcon");
+      if (icon) icon.className = "hint-icon-bg bioDayIcon text-amber-700";
+      const msg = bioDayAlert.querySelector(".bioDayMsg");
+      if (msg) msg.innerHTML = `<b>PEDIDO EXTRAORDINARIO:</b> es un pedido aparte del mensual (no lo reemplaza). Captura habilitada hasta el ${escapeHtml(BIO_STATE.captureWindowEnd)}.${BIO_STATE.modoMotivo ? ` Motivo: ${escapeHtml(BIO_STATE.modoMotivo)}.` : ""}`;
+    } else if (BIO_STATE.isInsideWindow) {
       if (BIO_STATE.isCaptureDay) {
         if (bioHint) bioHint.textContent = "Día objetivo de pedido mensual.";
         bioDayAlert.className = "IntegratedHint tone-info mb-4 hidden";
@@ -13929,6 +14038,7 @@ function setLoggedInUI(user, status) {
 
   updateDynamicGreeting();
   applyRolePermissions(role);
+  if (ensureCalendarioCap()) window.CalendarioCap.checkReminders();
   populateHistoryMunicipioFilter(user);
 
 
@@ -14693,6 +14803,7 @@ window.activateOpsTab = function (tab) {
       "INFLUENZA": "tabOPS_INFLUENZA",
       "LOTES": "tabLOTES",
       "NOTIFICATIONS": "tabOPS_NOTIFS",
+      "CALENDARIO": "tabOPS_CALENDARIO",
       "SECURITY": "tabOPS_ADMIN",
       "PARAMS": "tabOPS_PARAMS",
       "JERINGAS": "tabOPS_JERINGAS"
@@ -14718,6 +14829,7 @@ window.activateOpsTab = function (tab) {
     "INFLUENZA": "panelINFLUENZAADMIN",
     "LOTES": "panelLOTES",
     "NOTIFICATIONS": "panelNOTIFS",
+    "CALENDARIO": "panelCALENDARIO",
     "SECURITY": "panelADMIN",
     "PARAMS": "panelADMIN",
     "JERINGAS": "panelADMIN"
@@ -14822,6 +14934,9 @@ window.activateOpsTab = function (tab) {
   }
   if (tab === "JERINGAS") {
     if (typeof activateAdminSubPanel === 'function') activateAdminSubPanel("jeringas");
+  }
+  if (tab === "CALENDARIO") {
+    if (ensureCalendarioCap()) window.CalendarioCap.mount(document.getElementById("panelCALENDARIO"));
   }
   if (tab === "NOTIFICATIONS") {
     if (AppState.rol !== "UNIDAD" && typeof initNotificationCenter === 'function') {
@@ -15574,12 +15689,13 @@ async function performSaveBIO() {
       const payload = {
         nombre,
         items,
-        tipo_pedido: BIO_STATE.isInsideWindow ? "MENSUAL" : "EXTRAORDINARIO",
+        tipo_pedido: BIO_STATE.tipoPedido || "MENSUAL",
         sin_pedido: $("chkNoPedido")?.checked || false,
         fecha: BIO_STATE.fechaPedidoProgramada,
         fechaPedidoProgramada: BIO_STATE.fechaPedidoProgramada,
-        windowStartYmd: BIO_STATE.captureWindowStartYmd,
-        windowEndYmd: BIO_STATE.captureWindowEndYmd
+        // La limpieza de capturas "legacy" por rango de fechas es solo del pedido ordinario: un extraordinario nunca toca otro pedido.
+        windowStartYmd: BIO_STATE.tipoPedido === "EXTRAORDINARIO" ? undefined : BIO_STATE.captureWindowStartYmd,
+        windowEndYmd: BIO_STATE.tipoPedido === "EXTRAORDINARIO" ? undefined : BIO_STATE.captureWindowEndYmd
       };
       const res = navigator.onLine
         ? await AppService.call("saveBio", payload)
@@ -15731,7 +15847,10 @@ if ($("btnDoExport")) $("btnDoExport").onclick = async () => {
       if (exactSelect && exactSelect.value) {
         fIni = exactSelect.value;
         fFin = fIni;
+        const elegido = (window.EXPORT_BIO_PEDIDOS || []).find(p => p.fecha === fIni);
+        window.EXPORT_BIO_ELEGIDO = elegido ? { fecha: elegido.fecha, tipo: elegido.tipo } : null;
       } else {
+        window.EXPORT_BIO_ELEGIDO = null;
         const mm = $("exportMonth") ? $("exportMonth").value : "01";
         const yy = $("exportYear") ? $("exportYear").value : "2024";
         fIni = `${yy}-${mm}-01`;
@@ -16438,7 +16557,8 @@ async function generateProfessionalXLSX(tipo, data, fIni, fFin, selectedMunicipi
   ws.mergeCells('A2:B2');
 
   const lastColIndex = 1 + arrClues.length + (tipo === "CONS" ? 0 : 1);
-  ws.getCell(2, Math.max(3, lastColIndex)).value = (tipo === 'BIO' ? 'FECHA PEDIDO: ' : 'FECHA REPORTE: ') + fIni;
+  const bioExtra = tipo === 'BIO' && window.EXPORT_BIO_ELEGIDO && window.EXPORT_BIO_ELEGIDO.fecha === fIni && window.EXPORT_BIO_ELEGIDO.tipo !== 'MENSUAL';
+  ws.getCell(2, Math.max(3, lastColIndex)).value = (tipo === 'BIO' ? 'FECHA PEDIDO: ' : 'FECHA REPORTE: ') + fIni + (bioExtra ? ' (EXTRAORDINARIO)' : '');
   ws.getCell(2, Math.max(3, lastColIndex)).font = { bold: true };
   ws.getCell(2, Math.max(3, lastColIndex)).alignment = { horizontal: 'right' };
 
@@ -16559,7 +16679,9 @@ async function generateProfessionalXLSX(tipo, data, fIni, fFin, selectedMunicipi
     const [yyyy, mm] = (fIni || "").split('-');
     const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
     const mesNombre = mm ? (months[parseInt(mm, 10) - 1] || mm) : "";
-    exportFileName = `Pedido de biologico ${mesNombre} ${yyyy}${muniSuffix} - Exportado ${todayStr}.xlsx`;
+    const elegido = window.EXPORT_BIO_ELEGIDO && window.EXPORT_BIO_ELEGIDO.fecha === fIni ? window.EXPORT_BIO_ELEGIDO : null;
+    const extraSufijo = elegido && elegido.tipo !== 'MENSUAL' ? ` EXTRAORDINARIO ${fIni.slice(8, 10)}` : '';
+    exportFileName = `Pedido de biologico ${mesNombre} ${yyyy}${extraSufijo}${muniSuffix} - Exportado ${todayStr}.xlsx`;
   } else if (tipo === "CONS") {
     exportFileName = (fIni !== fFin && fFin) ? `Reporte de consumibles ${fIni} al ${fFin}${muniSuffix}.xlsx` : `Reporte de consumibles ${fIni}${muniSuffix}.xlsx`;
   } else if (tipo === "SR") {
@@ -17472,6 +17594,7 @@ if ($("pinolFiltroEstatus")) {
 
 async function loadConsumiblesOverrideAdmin() {
   if (!USER || USER.rol !== "ADMIN") return;
+  loadPedidosExtraAdmin();
 
   try {
     const r = await apiCall({ action: "adminGetConsumiblesOverride" });
@@ -24174,6 +24297,139 @@ async function saveBioOverride() {
     hideOverlay();
   }
 }
+
+// === PEDIDOS EXTRAORDINARIOS (ADMIN) ===
+// Cada apertura es un pedido aparte con su propia fecha: las unidades lo capturan sin tocar el pedido del día 22.
+// El ordinario/extraordinario de cada fecha lo decide la base (bio_pedidos_clasificados), no esta lista.
+
+function pedExtraFechaCorta(ymd) {
+  const [a, m, d] = String(ymd).split("-").map(Number);
+  const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  return `${d} ${meses[m - 1]} ${a}`;
+}
+
+function pedExtraSumarDias(ymd, dias) {
+  const d = new Date(ymd + "T12:00:00");
+  d.setDate(d.getDate() + dias);
+  return dateToLocalYmd(d);
+}
+
+async function loadPedidosExtraAdmin() {
+  if (!USER || USER.rol !== "ADMIN" || !$("pedExtraLista")) return;
+  const hoy = (STATUS && STATUS.today) || todayYmdLocal();
+  if ($("pedExtraFecha") && !$("pedExtraFecha").value) $("pedExtraFecha").value = hoy;
+  if ($("pedExtraHasta") && !$("pedExtraHasta").value) $("pedExtraHasta").value = pedExtraSumarDias(hoy, 1);
+  const lista = $("pedExtraLista");
+  try {
+    const { data, error } = await window.supabase.from("pedidos_extraordinarios")
+      .select("id, fecha_programada, habilitar_desde, habilitar_hasta, motivo, activo")
+      .order("fecha_programada", { ascending: false }).limit(12);
+    if (error) throw error;
+    const filas = data || [];
+    if (!filas.length) {
+      lista.innerHTML = '<li class="pedExtraVacio">Todavía no has abierto pedidos extraordinarios.</li>';
+      return;
+    }
+    // Cuántas unidades ya lo capturaron (se lee por mes, lo clasifica la base).
+    const meses = [...new Set(filas.map(f => f.fecha_programada.slice(0, 7)))];
+    const capturas = {};
+    await Promise.all(meses.map(async (ym) => {
+      const [a, m] = ym.split("-").map(Number);
+      const r = await window.supabase.rpc("bio_pedidos_clasificados", { p_anio: a, p_mes: m });
+      (r.data || []).forEach(x => { capturas[x.fecha] = x; });
+    }));
+    lista.innerHTML = filas.map(f => {
+      let estado = "Cerrado"; let clase = "";
+      if (f.activo && hoy < f.habilitar_desde) { estado = "Programado"; clase = "programado"; }
+      else if (f.activo && hoy <= f.habilitar_hasta) { estado = "Abierto"; clase = "abierto"; }
+      else if (f.activo) { estado = "Venció"; }
+      const cap = capturas[f.fecha_programada];
+      const unidades = cap ? Number(cap.unidades) : 0;
+      const capTxt = unidades > 0 ? `${unidades} ${unidades === 1 ? "unidad lo capturó" : "unidades lo capturaron"} (${Number(cap.frascos).toLocaleString("es-MX")} frascos)` : "sin capturas todavía";
+      const meta = `Captura hasta ${pedExtraFechaCorta(f.habilitar_hasta)} · ${capTxt}${f.motivo ? " · " + f.motivo : ""}`;
+      const puedeReabrir = !f.activo || hoy > f.habilitar_hasta;
+      const nombre = pedExtraFechaCorta(f.fecha_programada);
+      return `<li class="pedExtraItem" data-id="${escapeAttr(f.id)}" data-fecha="${escapeAttr(f.fecha_programada)}" data-motivo="${escapeAttr(f.motivo || "")}">
+        <div class="pedExtraInfo">
+          <span class="pedExtraFecha">${escapeHtml(nombre)} <span class="pedExtraEstado ${clase}">${estado}</span></span>
+          <span class="pedExtraMeta">${escapeHtml(meta)}</span>
+        </div>
+        <div class="pedExtraAcciones">
+          ${f.activo && hoy <= f.habilitar_hasta ? `<button type="button" class="pedExtraBtn" data-accion="cerrar" aria-label="Cerrar el pedido extraordinario del ${escapeAttr(nombre)}">Cerrar</button>` : ""}
+          ${puedeReabrir ? `<button type="button" class="pedExtraBtn" data-accion="reabrir" aria-label="Reabrir el pedido extraordinario del ${escapeAttr(nombre)} con las fechas del formulario">Reabrir</button>` : ""}
+          ${unidades === 0 ? `<button type="button" class="pedExtraBtn peligro" data-accion="eliminar" aria-label="Eliminar el pedido extraordinario del ${escapeAttr(nombre)}">Eliminar</button>` : ""}
+        </div>
+      </li>`;
+    }).join("");
+  } catch (e) {
+    console.error("loadPedidosExtraAdmin error:", e);
+    lista.innerHTML = '<li class="pedExtraVacio">No se pudo leer la lista de pedidos extraordinarios.</li>';
+  }
+}
+
+async function pedExtraAbrir(fecha, hasta, motivo) {
+  const res = await window.supabase.rpc("pedido_extra_abrir", { p_fecha: fecha, p_hasta: hasta, p_motivo: motivo || null });
+  if (res.error) throw new Error(String(res.error.message || res.error).replace(/^.*?ERROR:\s*/, ""));
+  return res.data;
+}
+
+async function savePedidoExtra() {
+  if (isBtnBusy("btnSavePedidoExtra")) return;
+  const fecha = $("pedExtraFecha").value;
+  const hasta = $("pedExtraHasta").value;
+  const motivo = ($("pedExtraMotivo").value || "").trim();
+  if (!fecha || !hasta) { showToast("Indica la fecha del pedido y hasta cuándo se puede capturar", false, "warn"); return; }
+  if (hasta < fecha) { showToast("El último día de captura no puede ser anterior a la fecha del pedido", false, "warn"); return; }
+  const [anio, mes] = fecha.split("-").map(Number);
+  const ordinario = dateToLocalYmd(getBioCaptureWindow(anio, mes).target);
+  if (fecha === ordinario) { showToast(`El ${pedExtraFechaCorta(fecha)} es la fecha del pedido ordinario de ese mes; elige otro día`, false, "warn"); return; }
+  if (!confirm(`¿Abrir un pedido extraordinario con fecha ${pedExtraFechaCorta(fecha)}?\n\nLas unidades podrán capturarlo hasta el ${pedExtraFechaCorta(hasta)}. Es un pedido aparte: no reemplaza el pedido mensual.`)) return;
+
+  showOverlay("Abriendo pedido extraordinario...", "Calendario");
+  try {
+    await pedExtraAbrir(fecha, hasta, motivo);
+    showToast("Pedido extraordinario abierto", true);
+    $("pedExtraMotivo").value = "";
+    await Promise.all([loadPedidosExtraAdmin(), refreshConsumiblesStatusUi()]);
+  } catch (e) {
+    showToast("Error: " + e.message, false);
+  } finally {
+    hideOverlay();
+  }
+}
+
+async function accionPedidoExtra(ev) {
+  const btn = ev.target.closest("button[data-accion]");
+  if (!btn) return;
+  const item = btn.closest("li.pedExtraItem");
+  const nombre = pedExtraFechaCorta(item.dataset.fecha);
+  const accion = btn.dataset.accion;
+  try {
+    if (accion === "cerrar") {
+      if (!confirm(`¿Cerrar el pedido extraordinario del ${nombre}? Las unidades ya no podrán capturarlo; lo capturado se conserva.`)) return;
+      const r = await window.supabase.rpc("pedido_extra_estado", { p_id: item.dataset.id, p_activo: false });
+      if (r.error) throw r.error;
+      showToast("Pedido extraordinario cerrado", true);
+    } else if (accion === "reabrir") {
+      const hoy = (STATUS && STATUS.today) || todayYmdLocal();
+      const hasta = ($("pedExtraHasta").value && $("pedExtraHasta").value >= hoy) ? $("pedExtraHasta").value : pedExtraSumarDias(hoy, 1);
+      if (!confirm(`¿Reabrir el pedido extraordinario del ${nombre}? Se podrá capturar hasta el ${pedExtraFechaCorta(hasta)}.`)) return;
+      await pedExtraAbrir(item.dataset.fecha, hasta, item.dataset.motivo);
+      showToast("Pedido extraordinario reabierto", true);
+    } else if (accion === "eliminar") {
+      if (!confirm(`¿Eliminar el pedido extraordinario del ${nombre}? Aún no tiene capturas.`)) return;
+      const r = await window.supabase.rpc("pedido_extra_eliminar", { p_id: item.dataset.id });
+      if (r.error) throw r.error;
+      showToast("Pedido extraordinario eliminado", true);
+    }
+    await Promise.all([loadPedidosExtraAdmin(), refreshConsumiblesStatusUi()]);
+  } catch (e) {
+    showToast("Error: " + String(e.message || e).replace(/^.*?ERROR:\s*/, ""), false);
+  }
+}
+
+$("btnSavePedidoExtra")?.addEventListener("click", savePedidoExtra);
+$("pedExtraLista")?.addEventListener("click", accionPedidoExtra);
 
 // === GLOBAL UX ENHANCEMENTS ===
 

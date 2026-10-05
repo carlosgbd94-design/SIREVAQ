@@ -97,6 +97,10 @@ const estado = {
   guardado: { escribiendo: 0, ultimo: null, error: null, rafagaConError: false },   // estado de guardado (ver instrumentarEscrituras)
   asig: null,          // modal "Asignar lotes"
   transferencias: [],
+  pedidosMes: [],      // pedidos del mes elegido en "Traer pedido de biológico" (ver bio_pedidos_clasificados)
+  pedidoVinculos: [],
+  pedidoLlamada: 0,
+  pedidoOrigenFoco: null,
   guardandoRapido: false,
   cola: Promise.resolve()
 };
@@ -1927,6 +1931,167 @@ async function traerRepartoInfluenza() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Traer el pedido de biológico: lo que capturaron las unidades (Pedido de biológico) se trae a esta
+// requisición solo si se pide con el botón. El pedido se hace un mes antes (el de octubre se hizo
+// el 22 de septiembre), así que se propone el mes anterior. Si ese mes tiene más de un pedido, el
+// del calendario es el ordinario y los demás son extraordinarios (lo decide la base:
+// bio_pedidos_clasificados) y aquí se elige cuál traer. La base valida todo (rol, requisición
+// abierta, sin pisar lotes reales, un pedido por requisición).
+// ---------------------------------------------------------------------------
+
+function mesAnterior(anio, mes, atras) {
+  const d = new Date(anio, mes - 1 - atras, 1);
+  return { anio: d.getFullYear(), mes: d.getMonth() + 1 };
+}
+function nombreMesAnio(m) { const x = MESES.find((k) => k.v === m.mes); return `${x ? x.l : m.mes} ${m.anio}`; }
+function fechaCortaPedido(ymd) {
+  const [a, m, d] = String(ymd).split('-').map(Number);
+  return `${d} ${MESES_ABREV3[m - 1].toLowerCase()} ${a}`;
+}
+function nombrePedido(p) { return `${fechaCortaPedido(p.fecha)} (${p.tipo === 'MENSUAL' ? 'ordinario' : 'extraordinario'})`; }
+
+function pedidoSeleccionado() {
+  const r = $('pedOpciones').querySelector('input[name="pedFecha"]:checked');
+  return r ? (estado.pedidosMes || []).find((p) => p.fecha === r.value) || null : null;
+}
+
+function vinculoDePedido(fecha) {
+  return (estado.pedidoVinculos || []).find((v) => v.pedido_fecha === fecha && v.id !== estado.requisicion.id) || null;
+}
+
+function actualizarDetallePedido() {
+  const p = pedidoSeleccionado();
+  const mesSel = Number($('pedMes').value.split('-')[1]);
+  const anioSel = Number($('pedMes').value.split('-')[0]);
+  const corresponde = mesAnterior(estado.requisicion.anio, estado.requisicion.mes, 1);
+  const total = (estado.pedidosMes || []).length;
+  const extras = (estado.pedidosMes || []).filter((x) => x.tipo !== 'MENSUAL').length;
+  let aviso = '';
+  if (total > 1) aviso = `Se detectaron ${total} pedidos en ${nombreMesAnio({ anio: anioSel, mes: mesSel })}${extras ? ` (${plural(total - extras, 'ordinario', 'ordinarios')} y ${plural(extras, 'extraordinario', 'extraordinarios')})` : ''}. Elige cuál traer.`;
+  else if (total === 1) aviso = 'Hay un solo pedido en este mes.';
+  if (anioSel !== corresponde.anio || mesSel !== corresponde.mes) {
+    aviso += `${aviso ? ' ' : ''}Ojo: la requisición de ${nombreMesAnio(estado.requisicion)} lleva el pedido de ${nombreMesAnio(corresponde)}.`;
+  }
+  $('pedAviso').textContent = aviso;
+
+  if (!p) { $('pedDetalle').textContent = ''; $('pedTraer').disabled = true; $('pedTraer').textContent = 'Traer pedido'; return; }
+  const otra = vinculoDePedido(p.fecha);
+  const propios = estado.items.filter((i) => Number(i.cantidad_surtida) > 0);
+  const conLote = new Set(propios.filter((i) => !esPendiente(i)).map((i) => i.requi_biologico_id));
+  let detalle = '';
+  let bloquea = false;
+  if (otra) { detalle = `Este pedido ya está vinculado a la requisición de ${etiquetaMes(otra)} · Entrega ${otra.entrega}.`; bloquea = true; }
+  else if (!(p.unidades > 0)) { detalle = 'Este pedido está abierto pero ninguna unidad lo ha capturado todavía.'; bloquea = true; }
+  else {
+    detalle = 'Los biológicos que vengan en el pedido reemplazan lo que ya tengas de ellos; los demás no se tocan.';
+    if (conLote.size) detalle += ` ${plural(conLote.size, 'biológico ya tiene lotes asignados y se respeta', 'biológicos ya tienen lotes asignados y se respetan')}.`;
+  }
+  $('pedDetalle').textContent = detalle;
+  $('pedTraer').disabled = bloquea;
+  $('pedTraer').textContent = `Traer pedido del ${fechaCortaPedido(p.fecha)}`;
+  $('pedResumen').textContent = bloquea ? '' : `${Number(p.frascos).toLocaleString('es-MX')} frascos · ${plural(p.unidades, 'unidad', 'unidades')}`;
+}
+
+function renderOpcionesPedido() {
+  const lista = estado.pedidosMes || [];
+  if (!lista.length) {
+    $('pedOpciones').innerHTML = '<div class="ped-vacio">Ese mes no tiene pedidos capturados. Cambia el mes si el pedido se hizo en otra fecha.</div>';
+    actualizarDetallePedido();
+    return;
+  }
+  const vinculados = lista.map((p) => vinculoDePedido(p.fecha));
+  const elegido = lista.find((p, k) => !vinculados[k] && p.unidades > 0 && p.tipo === 'MENSUAL') || lista.find((p, k) => !vinculados[k] && p.unidades > 0) || lista[0];
+  $('pedOpciones').innerHTML = lista.map((p, k) => {
+    const otra = vinculados[k];
+    const sinCaptura = !(p.unidades > 0);
+    const meta = sinCaptura ? 'Abierto, sin capturas todavía' : `${plural(p.unidades, 'unidad', 'unidades')} · ${Number(p.frascos).toLocaleString('es-MX')} frascos`;
+    const vinculo = otra ? ` · Ya vinculado a ${etiquetaMes(otra)} (Entrega ${otra.entrega})` : '';
+    return `<label class="ped-op${otra || sinCaptura ? ' deshabilitado' : ''}">
+      <input type="radio" name="pedFecha" value="${esc(p.fecha)}" ${p.fecha === elegido.fecha ? 'checked' : ''} ${otra || sinCaptura ? 'disabled' : ''}>
+      <span class="ped-op-txt">
+        <span class="ped-op-fecha">${esc(fechaCortaPedido(p.fecha))} <span class="ped-tag${p.tipo === 'MENSUAL' ? '' : ' extra'}">${p.tipo === 'MENSUAL' ? 'Ordinario' : 'Extraordinario'}</span></span>
+        <span class="ped-op-meta">${esc(meta + vinculo)}</span>
+        ${p.motivo ? `<span class="ped-op-motivo">${esc(p.motivo)}</span>` : ''}
+      </span>
+    </label>`;
+  }).join('');
+  actualizarDetallePedido();
+}
+
+async function cargarPedidosMes() {
+  const [anio, mes] = $('pedMes').value.split('-').map(Number);
+  $('pedOpciones').innerHTML = '<div class="ped-vacio">Cargando…</div>';
+  $('pedAviso').textContent = '';
+  $('pedDetalle').textContent = '';
+  $('pedResumen').textContent = '';
+  $('pedTraer').disabled = true;
+  const llamada = ++estado.pedidoLlamada;
+  const { data, error } = await estado.db.rpc('bio_pedidos_clasificados', { p_anio: anio, p_mes: mes });
+  if (llamada !== estado.pedidoLlamada) return;   // se cambió de mes mientras cargaba
+  if (error) { $('pedOpciones').innerHTML = ''; toast('No se pudieron leer los pedidos: ' + error.message, true); return; }
+  estado.pedidosMes = data || [];
+  renderOpcionesPedido();
+}
+
+async function abrirTraerPedido() {
+  if (!estado.puedeEditar || !estado.requisicion) return;
+  estado.pedidoOrigenFoco = document.activeElement;
+  const req = estado.requisicion;
+  const corresponde = mesAnterior(req.anio, req.mes, 1);
+  // El del mes anterior (el que corresponde) primero; luego los demás meses recientes.
+  const meses = [corresponde, ...[0, 2, 3, 4, 5, 6].map((n) => mesAnterior(req.anio, req.mes, n))];
+  $('pedMes').innerHTML = meses.map((m, k) => `<option value="${m.anio}-${m.mes}">${esc(nombreMesAnio(m))}${k === 0 ? ' · el que corresponde' : ''}</option>`).join('');
+  $('pedMes').value = `${corresponde.anio}-${corresponde.mes}`;
+  $('modalPedido').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  estado.pedidosMes = [];
+  const vinc = await estado.db.from('requi_requisiciones').select('id, anio, mes, entrega, pedido_fecha').not('pedido_fecha', 'is', null);
+  if (vinc.error) { cerrarTraerPedido(); toast('No se pudo leer el pedido de biológico: ' + vinc.error.message, true); return; }
+  estado.pedidoVinculos = vinc.data || [];
+  await cargarPedidosMes();
+  const sel = $('pedOpciones').querySelector('input[type="radio"]:checked') || $('pedOpciones').querySelector('input[type="radio"]:not(:disabled)');
+  (sel || $('pedMes')).focus();
+}
+
+function cerrarTraerPedido() {
+  estado.pedidoLlamada++;
+  $('modalPedido').style.display = 'none';
+  document.body.style.overflow = '';
+  const o = estado.pedidoOrigenFoco;
+  estado.pedidoOrigenFoco = null;
+  if (o && o.isConnected && o.focus) o.focus();
+}
+
+async function traerPedidoBiologico() {
+  const p = pedidoSeleccionado();
+  if (!p || !estado.requisicion) return;
+  const capturados = new Set(estado.items.filter((i) => Number(i.cantidad_surtida) > 0).map((i) => i.requi_biologico_id)).size;
+  if (capturados > 0 && !(await confirmar({
+    titulo: 'Traer el pedido a esta requisición', tono: 'aviso', aceptar: 'Traer pedido',
+    mensaje: `Esta requisición ya tiene ${plural(capturados, 'biológico capturado', 'biológicos capturados')}. Los que vengan en el pedido ${nombrePedido(p)} se reemplazan por lo que pidieron las unidades; los demás no se tocan, y los que ya tienen lotes asignados se respetan.`
+  }))) return;
+  $('pedTraer').disabled = true;
+  try {
+    const { data, error } = await estado.db.rpc('requi_traer_pedido_biologico', { p_requisicion: estado.requisicion.id, p_fecha: p.fecha });
+    if (error) { toast(error.message.replace(/^.*?ERROR:\s*/, ''), true); return; }
+    estado.requisicion.pedido_fecha = p.fecha;
+    estado.lotesPorBiologico = {};
+    cerrarTraerPedido();
+    await cargarDatosRequisicion();
+    const base = `Se trajo el pedido ${nombrePedido(p)}: ${Number(data.frascos).toLocaleString('es-MX')} frascos de ${plural(data.biologicos.length, 'biológico', 'biológicos')}. Los lotes quedan por definir.`;
+    const avisos = [];
+    if ((data.omitidos_con_lotes || []).length) avisos.push(`no se tocaron por tener lotes asignados: ${data.omitidos_con_lotes.map((n) => n.replace(/^VACUNA\s+/i, '')).join(', ')}`);
+    if (Number(data.influenza_pedida) > 0) avisos.push(`el pedido incluye ${Number(data.influenza_pedida).toLocaleString('es-MX')} frascos de influenza que no se traen de aquí (usa "Traer reparto de influenza")`);
+    if ((data.sin_equivalencia || []).length) avisos.push(`sin equivalencia en Requisiciones, captúralos a mano: ${data.sin_equivalencia.map((x) => `${x.biologico} (${Number(x.frascos).toLocaleString('es-MX')})`).join(', ')}`);
+    if ((data.clues_sin_unidad || []).length) avisos.push(`CLUES sin unidad en Requisiciones: ${data.clues_sin_unidad.map((x) => x.clues).join(', ')}`);
+    if (avisos.length) await confirmar({ titulo: 'Pedido traído', tono: 'aviso', aceptar: 'Entendido', cancelar: 'Cerrar', mensaje: base + ' Ojo: ' + avisos.join('; ') + '.' });
+    else toast(base);
+  } finally {
+    $('pedTraer').disabled = false;
+  }
+}
+
 // Lo que sigue "por definir" sale así en el Excel: se avisa antes de exportar.
 async function confirmarExportarConPendientes() {
   const n = estado.items.filter((i) => esPendiente(i) && Number(i.cantidad_surtida) > 0).length;
@@ -3110,6 +3275,22 @@ function instalarEventos() {
   $('infTraer').addEventListener('click', traerRepartoInfluenza);
   $('infEntrega').addEventListener('change', actualizarDetalleInfluenza);
   $('modalInfluenza').addEventListener('click', (ev) => { if (ev.target === $('modalInfluenza')) cerrarTraerInfluenza(); });
+  $('btnTraerPedido').addEventListener('click', abrirTraerPedido);
+  $('pedCerrar').addEventListener('click', cerrarTraerPedido);
+  $('pedCancelar').addEventListener('click', cerrarTraerPedido);
+  $('pedTraer').addEventListener('click', traerPedidoBiologico);
+  $('pedMes').addEventListener('change', cargarPedidosMes);
+  $('pedOpciones').addEventListener('change', actualizarDetallePedido);
+  $('modalPedido').addEventListener('click', (ev) => { if (ev.target === $('modalPedido')) cerrarTraerPedido(); });
+  // El foco no se escapa del modal con Tab (accesibilidad de teclado).
+  $('modalPedido').addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Tab') return;
+    const f = [...$('modalPedido').querySelectorAll('button, select, input:not(:disabled)')].filter((e) => !e.disabled && e.offsetParent !== null);
+    if (!f.length) return;
+    const primero = f[0]; const ultimo = f[f.length - 1];
+    if (ev.shiftKey && document.activeElement === primero) { ev.preventDefault(); ultimo.focus(); }
+    else if (!ev.shiftKey && document.activeElement === ultimo) { ev.preventDefault(); primero.focus(); }
+  });
   $('cantCerrar').addEventListener('click', cerrarCantidades);
   $('cantCancelar').addEventListener('click', cerrarCantidades);
   $('cantGuardar').addEventListener('click', guardarCantidades);
@@ -3198,6 +3379,7 @@ function instalarEventos() {
     else if ($('modalAsignar').style.display !== 'none') cerrarAsignarLotes();
     else if ($('modalCantidades').style.display !== 'none') cerrarCantidades();
     else if ($('modalInfluenza').style.display !== 'none') cerrarTraerInfluenza();
+    else if ($('modalPedido').style.display !== 'none') cerrarTraerPedido();
     else if ($('modalTransferencias').style.display !== 'none') cerrarTransferencias();
     else if (estado.bioRapido) { seleccionarBioRapido(null); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
   });

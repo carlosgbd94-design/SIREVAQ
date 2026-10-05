@@ -14308,3 +14308,35 @@ html.tab-hidden *, html.tab-hidden *::before, html.tab-hidden *::after {
 /* Configuración masiva (Admin > Catálogo): el gap global de 32px separaba demasiado las filas */
 #bioBulkVaccinesList { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px !important; align-content: start; }
 @media (max-width: 640px) { #bioBulkVaccinesList { grid-template-columns: minmax(0, 1fr); } }
+
+/* Pedido de biológico: elegir ordinario / extraordinario cuando hay más de uno abierto */
+.bioModoBox { border: 0; margin: 0 0 16px; padding: 0; min-width: 0; }
+.bioModoBox legend { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--md-sys-color-on-surface-variant, #64748b); padding: 0 2px 8px; }
+.bioModoOpciones { display: flex; flex-wrap: wrap; gap: 10px; }
+.bioModoOp { display: flex; align-items: center; gap: 12px; flex: 1 1 240px; padding: 12px 16px; border: 2px solid var(--md-sys-color-outline-variant, #cbd5e1); border-radius: 16px; background: var(--md-sys-color-surface, #fff); cursor: pointer; }
+.bioModoOp:hover { border-color: var(--md-sys-color-primary, #003366); }
+.bioModoOp:has(input:checked) { border-color: var(--md-sys-color-primary, #003366); background: rgba(0, 51, 102, .06); }
+.bioModoOp.extra:has(input:checked) { border-color: #d97706; background: rgba(217, 119, 6, .09); }
+.bioModoOp:has(input:focus-visible) { outline: 3px solid rgba(14, 165, 233, .5); outline-offset: 2px; }
+.bioModoOp input { width: 18px; height: 18px; flex: none; accent-color: var(--md-sys-color-primary, #003366); }
+.bioModoTxt { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; }
+.bioModoTxt small { font-size: 12px; font-weight: 600; color: var(--md-sys-color-on-surface-variant, #64748b); }
+
+/* Admin: pedidos extraordinarios de biológico */
+.pedExtraAyuda { font-size: 12px; line-height: 1.5; font-weight: 600; color: var(--md-sys-color-on-surface-variant, #64748b); margin: 0 0 18px; }
+.pedExtraTitulo { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--md-sys-color-on-surface-variant, #64748b); margin: 26px 0 10px; }
+.pedExtraLista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pedExtraVacio { font-size: 13px; font-weight: 600; color: var(--md-sys-color-on-surface-variant, #64748b); padding: 14px; border: 1.5px dashed var(--md-sys-color-outline-variant, #cbd5e1); border-radius: 14px; text-align: center; }
+.pedExtraItem { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1.5px solid var(--md-sys-color-outline-variant, #cbd5e1); border-radius: 14px; background: var(--md-sys-color-surface, #fff); }
+.pedExtraInfo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pedExtraFecha { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; font-weight: 800; color: var(--md-sys-color-on-surface, #0f172a); }
+.pedExtraMeta { font-size: 12px; font-weight: 600; color: var(--md-sys-color-on-surface-variant, #64748b); }
+.pedExtraEstado { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: #e2e8f0; color: #475569; }
+.pedExtraEstado.abierto { background: #dcfce7; color: #166534; }
+.pedExtraEstado.programado { background: #e0f2fe; color: #075985; }
+.pedExtraAcciones { display: flex; gap: 8px; }
+.pedExtraBtn { height: 36px; min-height: 36px; padding: 0 14px; border-radius: 10px; border: 1.5px solid var(--md-sys-color-outline-variant, #cbd5e1); background: transparent; font-size: 12px; font-weight: 800; color: var(--md-sys-color-on-surface, #0f172a); cursor: pointer; }
+.pedExtraBtn:hover { border-color: var(--md-sys-color-primary, #003366); }
+.pedExtraBtn:focus-visible { outline: 3px solid rgba(14, 165, 233, .5); outline-offset: 2px; }
+.pedExtraBtn.peligro { color: #b91c1c; border-color: #fecaca; }
+.pedExtraBtn.peligro:hover { border-color: #b91c1c; }

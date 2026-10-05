@@ -26,6 +26,7 @@ const GROUP_HEAD = [
   'pinol_assets.js',
   'feedback_autoreply.js',
   'perfil_cuenta.js',
+  'calendario_capacitaciones.js',
   'desabasto_center.js', // antes que main.js: main.js usa window.DesabastoCenter al cargar
   'main.js',
   'dock_glass.js',
