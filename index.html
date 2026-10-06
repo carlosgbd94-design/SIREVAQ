@@ -423,9 +423,13 @@
           console.log('[PWA] Primera activación del Service Worker (sin recargar).');
           return;
         }
+        // NO recargar automaticamente: el SW usa skipWaiting+clients.claim, asi que cada
+        // despliegue disparaba este evento y la pagina se recargaba sola en plena captura
+        // (perdiendo formularios sin guardar). La estrategia es Network-First: la version
+        // nueva se toma sola en la siguiente carga manual o al volver a abrir la app.
         if (!refreshing) {
           refreshing = true;
-          window.location.reload();
+          console.log('[PWA] Nueva version disponible; se aplicara en la proxima recarga.');
         }
       });
     }
