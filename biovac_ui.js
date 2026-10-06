@@ -1581,7 +1581,7 @@ function render() {
   document.getElementById('infoFechaCorte').textContent = new Date(fechaCorte + 'T00:00:00')
     .toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
 
-  document.getElementById('btnCerrarMes').style.display = m.estado === 'BORRADOR' ? 'inline-block' : 'none';
+  document.getElementById('btnCerrarMes').style.display = (m.estado === 'BORRADOR' && !movimientoBloqueadoParaUnidad()) ? 'inline-block' : 'none';
   // La unidad no reabre un mes ya cerrado (el servidor tampoco lo permite): solo MUNICIPAL/JURISDICCIONAL/ADMIN.
   document.getElementById('btnAbrirCorreccion').style.display = (m.estado === 'CERRADO' && !(estado.perfil && estado.perfil.rol === 'UNIDAD')) ? 'inline-block' : 'none';
   document.getElementById('btnAplicarCorreccion').style.display = m.estado === 'EN_CORRECCION' ? 'inline-block' : 'none';

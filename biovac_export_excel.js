@@ -46,6 +46,74 @@
   const FILA_ESTILO_ARF = 16;
   const FILA_ESTILO_TOTAL = 18;
 
+  // El primer bloque (BCG) no mide lo mismo en todas las plantillas: la del
+  // SINBA (hoja MOV-DE-BIOLÓGICO de la unidad) trae 3 renglones normales, 2 de
+  // A.R.F. y el Total en la fila 18; la plantilla del municipio (biovac_plantilla.xlsx)
+  // trae 5 normales, 4 de A.R.F. y el Total en la fila 22. Con las filas de la
+  // primera clavadas, el municipio copiaba el estilo "A.R.F." de un renglón normal
+  // (sin rosa) y el del Total de un renglón A.R.F. (rosa): A.R.F. y Canje no se
+  // distinguían y los totales salían pintados de A.R.F. Aquí se LEEN de la propia
+  // plantilla: A.R.F. = primera fila cuyo rótulo empieza con "A.R.F.", Total = la
+  // primera "Total" después de ella.
+  function textoCelda(cell) {
+    const v = cell && cell.value;
+    if (v == null) return '';
+    if (typeof v === 'object') {
+      if (Array.isArray(v.richText)) return v.richText.map((t) => t.text).join('');
+      if (v.result != null) return String(v.result);
+      return '';
+    }
+    return String(v);
+  }
+
+  // Impresión: carta, horizontal, UN salto de página entre Anverso y Reverso y sin centrado
+  // vertical. La plantilla centraba cada hoja verticalmente y, como el anverso y el reverso
+  // no miden lo mismo, el encabezado del reverso se imprimía en otra posición que el del
+  // anverso: a doble cara no coincidían. La escala es fija (calculada con la cara más alta)
+  // porque el "ajustar a 1 página" de Excel ignora los saltos manuales. La doble cara se
+  // elige en la impresora (horizontal: voltear por el borde corto).
+  function configurarImpresionDosCaras(ws) {
+    let filaReverso = 0;
+    let ultimaFila = 0;
+    ws.eachRow({ includeEmpty: false }, (row, n) => {
+      if (!row.hasValues) return;
+      if (!filaReverso && textoCelda(row.getCell(1)).trim() === 'Reverso') filaReverso = n;
+      ultimaFila = n;
+    });
+    if (filaReverso < 2 || ultimaFila < filaReverso) return;
+    const colFin = 17; // A..Q
+    const m = ws.pageSetup.margins || { left: 0.2, right: 0.2, top: 0.2, bottom: 0.2 };
+    const dispAncho = 792 - (m.left + m.right) * 72;   // carta horizontal, en puntos
+    const dispAlto = 612 - (m.top + m.bottom) * 72;
+    let ancho = 0;
+    for (let c = 1; c <= colFin; c++) ancho += (ws.getColumn(c).width || 8.43) * 7 * 0.75;
+    const alto = (a, b) => { let h = 0; for (let r = a; r <= b; r++) h += ws.getRow(r).height || ws.properties.defaultRowHeight || 15; return h; };
+    const mayorCara = Math.max(alto(1, filaReverso - 1), alto(filaReverso, ultimaFila));
+    const escala = Math.max(10, Math.floor(Math.min(dispAncho / ancho, dispAlto / mayorCara) * 100 * 0.97)); // 3 % de holgura
+    ws.rowBreaks.length = 0;
+    ws.getRow(filaReverso - 1).addPageBreak();
+    Object.assign(ws.pageSetup, {
+      paperSize: 1, orientation: 'landscape', fitToPage: false, scale: escala,
+      horizontalCentered: true, verticalCentered: false,
+      printArea: 'A1:Q' + ultimaFila
+    });
+  }
+
+  function detectarFilasEstilo(ws) {
+    let arfIni = 0;
+    let total = 0;
+    const tope = Math.min(ws.rowCount, 60);
+    for (let r = FILA_ESTILO_NORMAL; r <= tope; r++) {
+      const t = textoCelda(ws.getRow(r).getCell(1)).trim();
+      if (!arfIni && /^A\.R\.F\./i.test(t)) arfIni = r;
+      else if (arfIni && /^Total$/i.test(t)) { total = r; break; }
+    }
+    if (!arfIni || !total || total - arfIni < 2 || arfIni - FILA_ESTILO_NORMAL < 3) {
+      return { normal: FILA_ESTILO_NORMAL, normalMedio: FILA_ESTILO_NORMAL + 1, normalUltimo: FILA_ESTILO_NORMAL + 2, arf: FILA_ESTILO_ARF, arfUltimo: FILA_ESTILO_ARF + 1, total: FILA_ESTILO_TOTAL };
+    }
+    return { normal: FILA_ESTILO_NORMAL, normalMedio: FILA_ESTILO_NORMAL + 1, normalUltimo: arfIni - 1, arf: arfIni, arfUltimo: total - 1, total };
+  }
+
   function colLetra(n) { return String.fromCharCode(64 + n); }
 
   function clonarEstiloCelda(cell) {
@@ -381,17 +449,22 @@
       }));
     ws._media = ws._media.filter((m) => !(m.type === 'image' && m.range.tl.nativeRow >= HEADER_FILAS));
 
+    // Los saltos de página de la plantilla apuntan a las filas de su bloque en blanco;
+    // el motor pone el suyo donde de verdad empieza el Reverso de este mes.
+    if (Array.isArray(ws.rowBreaks)) ws.rowBreaks.length = 0;
+
     const headerCapturado = capturarBloqueFilas(ws, 1, HEADER_FILAS);
-    const capturaNormal = capturarBloqueFilas(ws, FILA_ESTILO_NORMAL, 1);
-    const capturaArf = capturarBloqueFilas(ws, FILA_ESTILO_ARF, 1);
-    const capturaTotal = capturarBloqueFilas(ws, FILA_ESTILO_TOTAL, 1);
+    const pos = detectarFilasEstilo(ws);
+    const capturaNormal = capturarBloqueFilas(ws, pos.normal, 1);
+    const capturaArf = capturarBloqueFilas(ws, pos.arf, 1);
+    const capturaTotal = capturarBloqueFilas(ws, pos.total, 1);
     // La plantilla dibuja los bordes gruesos según la POSICIÓN del renglón en el
     // bloque: el primero lleva el grueso de arriba, el último de cada sección el
     // de abajo (el que separa A.R.F. de Total) y los de en medio solo líneas
     // finas. Se capturan renglón medio/último de Normal y último de A.R.F.
-    const capturaNormalMedio = capturarBloqueFilas(ws, FILA_ESTILO_NORMAL + 1, 1);
-    const capturaNormalUltimo = capturarBloqueFilas(ws, FILA_ESTILO_NORMAL + 2, 1);
-    const capturaArfUltimo = capturarBloqueFilas(ws, FILA_ESTILO_ARF + 1, 1);
+    const capturaNormalMedio = capturarBloqueFilas(ws, pos.normalMedio, 1);
+    const capturaNormalUltimo = capturarBloqueFilas(ws, pos.normalUltimo, 1);
+    const capturaArfUltimo = capturarBloqueFilas(ws, pos.arfUltimo, 1);
     const estilos = {
       normal: capturaNormal.filas[0], arf: capturaArf.filas[0], total: capturaTotal.filas[0],
       normalMedio: capturaNormalMedio.filas[0], normalUltimo: capturaNormalUltimo.filas[0], arfUltimo: capturaArfUltimo.filas[0],
@@ -486,6 +559,8 @@
         cell.style = {};
       }
     }
+
+    configurarImpresionDosCaras(ws);
 
     reconstruirFormatoCondicionalTotales(ws);
   }
