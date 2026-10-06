@@ -1056,3 +1056,63 @@ test('Requisiciones: Traer pedido es accesible (grupo con leyenda, Escape cierra
   await expect(page.locator('#btnTraerPedido')).toBeFocused();
   expect(errores).toEqual([]);
 });
+
+test('Requisiciones: el mes del pedido cruza el año (enero lleva el pedido de diciembre) y las fechas se muestran cortas', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  const r = await page.evaluate(() => ({
+    ene: mesAnterior(2027, 1, 1), mar6: mesAnterior(2026, 3, 6), igual: mesAnterior(2026, 10, 0),
+    f: fechaCortaPedido('2026-09-22'), n: nombrePedido({ fecha: '2026-09-28', tipo: 'EXTRAORDINARIO' })
+  }));
+  expect(r.ene).toEqual({ anio: 2026, mes: 12 });
+  expect(r.mar6).toEqual({ anio: 2025, mes: 9 });
+  expect(r.igual).toEqual({ anio: 2026, mes: 10 });
+  expect(r.f).toBe('22 sep 2026');
+  expect(r.n).toBe('28 sep 2026 (extraordinario)');
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: si la base rechaza traer el pedido (se cerró mientras tanto) se avisa, el modal sigue abierto y no cambia nada', async ({ page }) => {
+  await page.addInitScript(pedidosDelMesAnterior());
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#btnTraerPedido');
+  await expect(page.locator('#pedTraer')).toBeEnabled();
+  await page.evaluate(() => { window.__FAKE_DB__.requi_requisiciones.find((r) => r.id === 'req-hoy').estado = 'CERRADA'; });
+  await page.click('#pedTraer');
+  await expect(page.locator('#toast')).toContainText('cerrada');
+  await expect(page.locator('#modalPedido')).toBeVisible();
+  await expect(page.locator('#pedTraer')).toBeEnabled();
+  expect(await db(page, 'db.requi_items_jurisdiccion.length')).toBe(0);
+  expect(await db(page, "db.requi_requisiciones.find((r) => r.id === 'req-hoy').pedido_fecha || null")).toBeNull();
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: un perfil que no edita (visualizador) no ve el botón Traer pedido', async ({ page }) => {
+  await page.addInitScript(pedidosDelMesAnterior());
+  const errores = await preparar(page, { conReq: true, rol: 'VISUALIZADOR_JURISDICCIONAL' });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await expect(page.locator('#btnTraerPedido')).toBeHidden();
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: cambiar de mes en Traer pedido recarga la lista y avisa que no es el mes que corresponde', async ({ page }) => {
+  await page.addInitScript(pedidosDelMesAnterior());
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#btnTraerPedido');
+  await expect(page.locator('#pedOpciones input[type=radio]')).toHaveCount(1);
+  // El mes en curso no tiene pedidos en el simulador: lista vacía, botón apagado y aviso
+  await page.selectOption('#pedMes', { index: 1 });
+  await expect(page.locator('#pedOpciones')).toContainText('no tiene pedidos capturados');
+  await expect(page.locator('#pedTraer')).toBeDisabled();
+  await expect(page.locator('#pedAviso')).toContainText('lleva el pedido de');
+  // Volver al mes que corresponde restablece todo
+  await page.selectOption('#pedMes', { index: 0 });
+  await expect(page.locator('#pedOpciones input[type=radio]')).toHaveCount(1);
+  await expect(page.locator('#pedTraer')).toBeEnabled();
+  // Clic en el fondo cierra
+  await page.mouse.click(5, 5);
+  await expect(page.locator('#modalPedido')).toBeHidden();
+  expect(errores).toEqual([]);
+});

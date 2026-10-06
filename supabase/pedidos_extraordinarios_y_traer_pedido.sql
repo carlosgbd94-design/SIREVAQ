@@ -48,8 +48,8 @@ as $$
   select exists (select 1 from perfiles p
                   where p.id = (select auth.uid()) and p.activo = 'SI' and upper(p.rol) = 'ADMIN');
 $$;
-revoke all on function public._pedido_es_admin() from public, anon;
-grant execute on function public._pedido_es_admin() to authenticated;
+-- Solo la usan las funciones SECURITY DEFINER de abajo: nadie la llama directo.
+revoke all on function public._pedido_es_admin() from public, anon, authenticated;
 
 -- Abre (o reabre / actualiza) un pedido extraordinario. La fecha del pedido es también el día
 -- en que empieza a poder capturarse; p_hasta es el último día de captura.
@@ -140,7 +140,7 @@ grant execute on function public.pedido_extra_eliminar(uuid) to authenticated;
 
 -- 2) Clasificación automática de los pedidos de un mes -------------------------
 -- Ordinario = el pedido (no marcado como extra) cuya fecha coincide con el calendario del mes
--- o, si no coincide ninguno, el más cercano al día 22. Todos los demás: EXTRAORDINARIO.
+-- o, si no coincide ninguno, el más cercano a esa fecha (empates: el anterior). Todos los demás: EXTRAORDINARIO.
 -- Una fecha dada de alta en pedidos_extraordinarios (o capturada solo como EXTRAORDINARIO) es
 -- siempre extraordinaria, aunque sea la única del mes.
 -- 'MENSUAL' = ordinario (el mismo valor que ya guarda tipo_pedido).
@@ -153,7 +153,12 @@ as $$
   with rango as (
     select make_date(p_anio, p_mes, 1) d1, (make_date(p_anio, p_mes, 1) + interval '1 month')::date d2
   ), cal as (
-    select c.fecha_programada from calendario_pedidos c where c.anio_mes = to_char(make_date(p_anio, p_mes, 1), 'YYYY-MM')
+    -- Fecha del pedido ordinario: la del calendario del mes o, si no hay fila (meses sin calendario),
+    -- el día 22 corrido al viernes cuando cae en fin de semana (como hace la captura).
+    select coalesce(
+      (select c.fecha_programada from calendario_pedidos c where c.anio_mes = to_char(make_date(p_anio, p_mes, 1), 'YYYY-MM')),
+      make_date(p_anio, p_mes, 22) - case extract(dow from make_date(p_anio, p_mes, 22))::int when 6 then 1 when 0 then 2 else 0 end
+    ) as fecha_programada
   ), cap as (
     select b.fecha_pedido_programada f,
            count(distinct b.clues)::integer u,
@@ -175,8 +180,8 @@ as $$
      where c.f is not null or e.activo
   ), ord as (
     select f from base where not explicito
-     order by coalesce(f = (select fecha_programada from cal), false) desc,
-              abs(extract(day from f) - 22), f
+     order by (f = (select fecha_programada from cal)) desc,
+              abs(f - (select fecha_programada from cal)), f
      limit 1
   )
   select b.f, case when b.f = (select f from ord) then 'MENSUAL' else 'EXTRAORDINARIO' end,

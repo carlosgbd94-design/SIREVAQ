@@ -13085,6 +13085,7 @@ function setFormLocked(formId, locked) {
 
   form.querySelectorAll("input, select, textarea, button").forEach(el => {
     if (!el) return;
+    if (el.closest(".bioModoBox")) return; // el selector de pedido (ordinario/extra) nunca se bloquea: es justo para cambiar de pedido
     if (el.id === "aguja_0600403711") return; // ya es automático
     // No bloquear el botón de "Agregar otro lote" si es necesario, 
     // pero sí los de eliminar.
