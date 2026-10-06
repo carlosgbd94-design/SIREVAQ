@@ -150,7 +150,7 @@ async function llenarYGuardar(page) {
 }
 
 test.describe('Pedidos extraordinarios (móvil)', () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });   // mobile.html redirige a index.html si el dispositivo no es táctil
 
   test('solo ventana ordinaria: pedido MENSUAL del día 22 y sin selector', async ({ page }) => {
     const e = estadoMovil();
