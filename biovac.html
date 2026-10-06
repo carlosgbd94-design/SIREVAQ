@@ -36,17 +36,18 @@ window.onunhandledrejection = function (event) {
 <link rel="stylesheet" href="dock_glass.css?v=8">
 <link rel="stylesheet" href="ayuda.css?v=1">
 <link rel="stylesheet" href="municipal_guiado.css?v=2">
-<script defer src="ayuda.js?v=6"></script>
+<script defer src="ayuda.js?v=7"></script>
 <script defer src="dock_glass.js?v=4"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.3"></script>
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="biovac_ui.js?v=2026.54"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.40"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.42"></script>
 <script defer src="sis_csv.js?v=2"></script>
-<script defer src="sis06p_dashboard_module.js?v=2026.13"></script>
+<script defer src="sis06p_dashboard_module.js?v=2026.16"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.2"></script>
 <script defer src="municipal_guiado.js?v=3"></script>
 <style>
@@ -249,7 +250,11 @@ window.onunhandledrejection = function (event) {
      que se conserva oculto porque render() le fija el estado disabled). Si su
      grupo se queda sin botones visibles, la cajita gris desaparece también. */
   #btnGuardarCabecera { display: none !important; }
-  .fila-botones-cabecera .grupo-acciones:not(:has(button:not(#btnGuardarCabecera):not([style*="display: none"]):not([style*="display:none"]))) { display: none; }
+  /* Igual con Exportar Excel: la barra flotante ya tiene su Exportar (lo espeja
+     desde este botón oculto, que conserva el estado disabled/title). */
+  #btnExportarExcel, #btnVerPdf, #btnCerrarMes { display: none !important; }
+  /* PDF y Cerrar mes también viven en la barra flotante (botones espejo). */
+  .fila-botones-cabecera .grupo-acciones { display: none; }
   #toggleSeccionUnidad .grupo-acciones .btn-secundario { white-space: nowrap; }
   /* Contenedores desplegables de la hoja SIS-SS-CE-H (<details>): sin la
      flecha nativa; el chevron propio gira al abrir. */
@@ -1002,6 +1007,10 @@ window.onunhandledrejection = function (event) {
     <button type="button" class="dock-btn dock-enviar" id="btnEnviarSIS06P" aria-label="Enviar el SINBA-SIS para validación" style="display:none;" title="Enviar el SINBA-SIS para validación"><span class="material-symbols-rounded">send</span><span class="dock-etiqueta">Enviar</span></button>
     <button type="button" class="dock-btn dock-guardar en-reposo" id="btnGuardarSIS06P" title="Guardar concentrado SIS-06-P"><span class="material-symbols-rounded" id="iconoGuardarSIS">check</span><span class="dock-etiqueta" id="etiquetaGuardarSIS">Guardado</span></button>
     <button type="button" class="dock-btn" id="btnExportarSISCompleto" title="Exportar el Excel oficial del SINBA-SIS (SIS-06-P, Movimiento de Biológico, SIS-SS-CE-H e Influenza)"><span class="material-symbols-rounded">download</span><span class="dock-etiqueta">Exportar</span></button>
+    <!-- Solo en la hoja Movimiento: espejan (y disparan) los botones ocultos de la cabecera
+         btnVerPdf / btnCerrarMes, que conservan su lógica y su estado. Ver sincronizarDockMovimientoExtras. -->
+    <button type="button" class="dock-btn" id="btnVerPdfDock" style="display:none;" title="Ver / exportar PDF del Movimiento"><span class="material-symbols-rounded">picture_as_pdf</span><span class="dock-etiqueta">PDF</span></button>
+    <button type="button" class="dock-btn dock-enviar" id="btnCerrarMesDock" style="display:none;" title="Cerrar mes: bloquea la edición directa y arrastra la existencia al mes siguiente. Si necesitas corregir algo después, puedes reabrirlo."><span class="material-symbols-rounded">lock</span><span class="dock-etiqueta">Cerrar mes</span></button>
   </div>
 </nav>
 
@@ -1014,9 +1023,11 @@ window.onunhandledrejection = function (event) {
         <p class="subtitulo">Tu concentrado del mes por variable: el total y, dentro de él, afromexicanos, indígenas y migrantes. De aquí se arma SIS-SS-CE-H.</p>
       </div>
     </div>
+    <button type="button" class="btn-secundario btn-mini" id="btnHistorialSIS" title="Ver todos los meses de esta unidad (solo consulta)"><span class="material-symbols-rounded">history</span> Historial</button>
   </div>
 
   <div id="sis06pBannerVentana" style="display:none; margin-bottom:14px; padding:10px 14px; border-radius:12px; font-size:12px; font-weight:700;"></div>
+  <div id="sis06pBannerBorrador" style="display:none;"></div>
 
   <!-- Conciliación paloteo (SIS-06-P) vs. aplicado (Movimiento de Biológico),
        biológico por biológico -- misma fuente única (RPC sis06p_comparativo)
@@ -1072,7 +1083,7 @@ window.onunhandledrejection = function (event) {
       </div>
       <div>
         <h2>Influenza <span id="infBadgeEstado" class="estado-badge"></span><button type="button" class="ayuda-btn" data-ayuda="influenza" title="Cómo funciona Influenza en el SINBA-SIS" aria-label="Cómo funciona Influenza en el SINBA-SIS"><span class="material-symbols-rounded">help</span></button></h2>
-        <p class="subtitulo">Dosis de antiinfluenza del mes por semana, leídas de Meta-Logro. Solo lectura.</p>
+        <p class="subtitulo" id="infSubtitulo">Dosis de antiinfluenza del mes por semana, leídas de Meta-Logro. Solo lectura.</p>
       </div>
     </div>
   </div>
@@ -1245,6 +1256,7 @@ window.onunhandledrejection = function (event) {
 
 <div id="panelMovimiento">
   <div class="ayuda-franja"><span>Recibido, aplicadas y desechadas por lote. Lo aplicado debe cuadrar con tu paloteo de SIS-06-P.</span><button type="button" class="ayuda-btn" data-ayuda="movimiento" title="Cómo funciona Movimiento de Biológico" aria-label="Cómo funciona Movimiento de Biológico"><span class="material-symbols-rounded">help</span></button></div>
+  <div id="bannerPendientes"></div>
   <div id="bannerMovimiento"></div>
   <div id="panelCorreccionesJur"></div>
   <div id="guiaCaptura" class="guia-captura" style="display:none"></div>

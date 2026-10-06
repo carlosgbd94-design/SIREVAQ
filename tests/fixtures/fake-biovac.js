@@ -35,7 +35,7 @@
 
   const rpc = {
     sis06p_resumen_seguimiento: () => seg.map((f) => ({ ...f })),
-    sis06p_ventana_envio: () => [{ dentro_envio: true, inicio_envio: '2026-09-30', fin_envio: '2026-10-07' }],
+    sis06p_ventana_envio: () => [{ dentro_prellenado: true, dentro_envio: true, inicio_prellenado: '2026-09-23', inicio_envio: '2026-09-30', fin_envio: '2026-10-07' }],
     sis06p_comparativo: (a) => [
       { municipio: 'QUERETARO', clues: 'QTSSA000001', unidad: 'C.S. Alfa', etiqueta: 'SRP', paloteo: 10, aplicado: 10, coincide: true },
       { municipio: 'QUERETARO', clues: 'QTSSA000003', unidad: 'C.S. Gamma', etiqueta: 'HEXAVALENTE', paloteo: 30, aplicado: 25, coincide: false },

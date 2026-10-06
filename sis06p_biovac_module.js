@@ -47,10 +47,126 @@
   }
   document.addEventListener('input', (ev) => {
     const id = ev.target && ev.target.id;
-    if (id && id.indexOf('sisb_') === 0) marcarSinGuardar(true);
+    if (id && id.indexOf('sisb_') === 0) { marcarSinGuardar(true); draftProgramar(); }
   });
   window.addEventListener('beforeunload', (ev) => {
-    if (_sinGuardar) { ev.preventDefault(); ev.returnValue = ''; }
+    if (_sinGuardar) { draftEscribirYa(); ev.preventDefault(); ev.returnValue = ''; }
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && _sinGuardar) draftEscribirYa(); });
+
+  // ---------------------------------------------------------------------------
+  // Respaldo local del paloteo. Lo que se teclea se copia al navegador (por
+  // persona, CLUES y mes) y solo se borra cuando el servidor confirma el
+  // guardado: si se cae el internet, falla el guardado, se cierra la pestaña o
+  // se recarga, al volver a abrir el mes se repone lo tecleado y se avisa.
+  // ---------------------------------------------------------------------------
+  const DRAFT_PREFIJO = 'sis06p_draft_v1:';
+  let _draftTimer = null;
+  let _ultimoGuardadoFallo = false;
+
+  function esErrorDeRedSIS(err) {
+    if (typeof esErrorDeRed === 'function') return esErrorDeRed(err);
+    return (typeof navigator !== 'undefined' && navigator.onLine === false)
+      || /failed to fetch|networkerror|network request failed|load failed|timeout/i.test(String((err && err.message) || err || ''));
+  }
+
+  function draftClave() {
+    const activa = datosUnidadActiva();
+    const selMes = document.getElementById('selMes');
+    const selAnio = document.getElementById('selAnio');
+    if (!activa || !estado.perfil || !selMes || !selAnio) return null;
+    return DRAFT_PREFIJO + (estado.perfil.id || estado.perfil.usuario || 'anon') + ':' + activa.clues + ':' + selAnio.value + ':' + selMes.value;
+  }
+  function draftLeer() {
+    const k = draftClave();
+    if (!k) return null;
+    try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; }
+  }
+  function draftBorrar() {
+    clearTimeout(_draftTimer);
+    const k = draftClave();
+    if (!k) return;
+    try { localStorage.removeItem(k); } catch (e) { /* sin almacenamiento */ }
+  }
+  function draftCapturarDelDom() {
+    const valores = {};
+    _sisVariablesCache.forEach((v) => {
+      const g = (kind) => { const el = document.getElementById('sisb_' + v.fila_excel + '_' + kind); return el ? el.value : ''; };
+      valores[v.fila_excel] = [g('total'), g('afro'), g('indigena'), g('migrante')];
+    });
+    const ajustes = {};
+    AJUSTE_KEYS.forEach((k) => { const el = document.getElementById('sisb_ajuste_' + k); if (el && el.value !== '') ajustes[k] = el.value; });
+    return { valores, ajustes };
+  }
+  function draftEscribirYa() {
+    clearTimeout(_draftTimer);
+    const k = draftClave();
+    if (!k || !_sinGuardar || !document.getElementById('sisb_' + ((_sisVariablesCache[0] || {}).fila_excel) + '_total')) return;
+    const cap = capturaDelMesActual();
+    try {
+      localStorage.setItem(k, JSON.stringify(Object.assign(draftCapturarDelDom(), { base: cap ? cap.updated_at || null : null, ts: Date.now() })));
+    } catch (e) { /* sin almacenamiento: se sigue sin respaldo */ }
+  }
+  function draftProgramar() {
+    clearTimeout(_draftTimer);
+    _draftTimer = setTimeout(draftEscribirYa, 350);
+  }
+
+  // Repone en las casillas lo respaldado que difiere de lo guardado en el servidor.
+  function draftAplicar(currentReport, soloLectura) {
+    const banner = document.getElementById('sis06pBannerBorrador');
+    if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
+    const d = draftLeer();
+    if (!d) return;
+    if (soloLectura) { draftBorrar(); return; } // este mes ya no admite captura: nada viejo se aplica
+    const base = currentReport ? (currentReport.valores || {}) : {};
+    const kinds = ['total', 'afro', 'indigena', 'migrante'];
+    let cambios = 0;
+    const tocados = [];
+    _sisVariablesCache.forEach((v) => {
+      const arr = d.valores && d.valores[v.fila_excel];
+      if (!arr) return;
+      const guardado = base[String(v.fila_excel)] || {};
+      kinds.forEach((kind, idx) => {
+        const el = document.getElementById('sisb_' + v.fila_excel + '_' + kind);
+        if (!el) return;
+        if ((Number(arr[idx]) || 0) === (Number(guardado[kind]) || 0)) return;
+        el.value = arr[idx];
+        tocados.push(el);
+        cambios++;
+      });
+    });
+    const ajGuardados = (currentReport && currentReport.ajustes) || {};
+    AJUSTE_KEYS.forEach((k) => {
+      const el = document.getElementById('sisb_ajuste_' + k);
+      if (!el) return;
+      const nuevo = d.ajustes && d.ajustes[k] !== undefined ? d.ajustes[k] : '';
+      if ((parseFloat(nuevo) || 0) === (parseFloat(ajGuardados[k]) || 0)) return;
+      el.value = nuevo;
+      tocados.push(el);
+      cambios++;
+    });
+    if (!cambios) { draftBorrar(); return; }
+    tocados.forEach((el) => el.dispatchEvent(new Event('input', { bubbles: true })));
+    marcarSinGuardar(true);
+    const hora = d.ts ? new Date(d.ts).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '';
+    const viejo = (d.base || null) !== ((currentReport && currentReport.updated_at) || null);
+    if (banner) {
+      banner.style.cssText = 'display:block; margin-bottom:14px; padding:11px 14px; border-radius:12px; font-size:12px; font-weight:700; background:var(--warning-bg); color:var(--warning); border:1px solid var(--warning-border);';
+      banner.innerHTML = `<span class="material-symbols-rounded" style="font-size:15px; vertical-align:middle;">restore</span>
+        Recuperamos tu avance sin guardar${hora ? ' (' + hora + ')' : ''}: son ${cambios} casilla${cambios === 1 ? '' : 's'} distinta${cambios === 1 ? '' : 's'} de lo guardado. Revísalas y toca <b>Guardar</b>.
+        ${viejo ? '<br><span style="font-weight:600;">Ojo: este concentrado cambió en el servidor después de tu borrador. Revisa los números antes de guardar.</span>' : ''}
+        <button type="button" class="btn-mini btn-secundario" id="btnDescartarBorrador" style="margin-left:8px;"><span class="material-symbols-rounded">undo</span> Descartar y volver a lo guardado</button>`;
+      const btn = document.getElementById('btnDescartarBorrador');
+      if (btn) btn.addEventListener('click', () => { draftBorrar(); _sinGuardar = false; render(); });
+    }
+  }
+
+  window.addEventListener('online', () => {
+    if (_sinGuardar && _ultimoGuardadoFallo) {
+      toast('Regresó la conexión: guardando tu avance…', 'ok');
+      save();
+    }
   });
 
   // Catálogo de Influenza (hoja SIS-SS-IE): rubro (r1..r46, el mismo id que
@@ -210,7 +326,7 @@
       if (e2) throw e2;
       _sis06pCapturasCache = capturas || [];
 
-      const { data: capturasInf, error: e3 } = await estado.db.from('influenza_capturas').select('fecha, valores, sin_movimiento, capturado_por').eq('clues', activa.clues);
+      const { data: capturasInf, error: e3 } = await estado.db.from('influenza_capturas').select('id, fecha, valores, sin_movimiento, capturado_por, anio_campana, municipio, unidad').eq('clues', activa.clues);
       if (e3) throw e3;
       _influenzaCapturasCache = capturasInf || [];
 
@@ -226,7 +342,9 @@
       render();
     } catch (err) {
       console.error('[SIS-06-P] Error al cargar:', err);
-      toast('Error al cargar SIS-06-P: ' + err.message, 'error');
+      toast(esErrorDeRedSIS(err)
+        ? 'No se pudo cargar tu SIS: sin conexión o conexión inestable. Revisa tu internet y vuelve a intentar (lo que tengas respaldado en este dispositivo no se pierde).'
+        : 'Error al cargar SIS-06-P: ' + err.message, 'error');
     }
   }
 
@@ -530,6 +648,17 @@
   }
 
   function renderConciliacionBase(soloLectura, currentReport) {
+    renderConciliacionBase0(soloLectura, currentReport);
+    const cont = document.getElementById('sis06pConciliacion');
+    if (cont && currentReport && currentReport.excepcion_conciliacion) {
+      cont.style.display = 'block';
+      cont.insertAdjacentHTML('afterbegin', `<div style="margin-bottom:8px; padding:8px 12px; border-radius:10px; background:#eef2ff; color:#3730a3; font-size:11.5px; font-weight:700;">
+        <span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">gavel</span>
+        Validado con excepción de conciliación${currentReport.excepcion_por ? ' (' + _esc(currentReport.excepcion_por) + ')' : ''}: ${_esc(currentReport.excepcion_conciliacion)}</div>`);
+    }
+  }
+
+  function renderConciliacionBase0(soloLectura, currentReport) {
     const cont = document.getElementById('sis06pConciliacion');
     if (!cont) return;
     if (_conciliacionCache === null) { cont.style.display = 'none'; return; }
@@ -578,6 +707,23 @@
       ${htmlAjustes(soloLectura, currentReport)}`;
   }
 
+  // Solo lectura según quién mira y en qué momento: la unidad solo captura
+  // mientras el mes está en borrador Y dentro de la ventana de prellenado/envío
+  // (el servidor lo exige igual); los revisores solo editan un SIS ya enviado.
+  function fueraDeVentanaDeCaptura(captura) {
+    const est = captura ? captura.estado : 'BORRADOR';
+    return Boolean(esUnidadSesion() && est === 'BORRADOR' && _ventanaCache && _ventanaCache.dentro_prellenado === false);
+  }
+  function soloLecturaPara(captura) {
+    const est = captura ? captura.estado : 'BORRADOR';
+    if (esUnidadSesion()) return est !== 'BORRADOR' || fueraDeVentanaDeCaptura(captura);
+    return !captura || est === 'BORRADOR';
+  }
+  function fechaHoyIso() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
   function renderBannerVentana(estadoActual) {
     const banner = document.getElementById('sis06pBannerVentana');
     if (!banner) return;
@@ -586,6 +732,14 @@
       return;
     }
     banner.style.display = 'block';
+    if (_ventanaCache.dentro_prellenado === false) {
+      const aun = fechaHoyIso() < String(_ventanaCache.inicio_prellenado).slice(0, 10);
+      banner.style.cssText += 'background:#f1f5f9; color:#475569;';
+      banner.innerHTML = aun
+        ? `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">lock_clock</span> Este mes todavía no se abre para captura: podrás llenarlo desde el <strong>${fechaLargaMX(_ventanaCache.inicio_prellenado)}</strong> y enviarlo del ${fechaLargaMX(_ventanaCache.inicio_envio)} al ${fechaLargaMX(_ventanaCache.fin_envio)}.`
+        : `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">lock_clock</span> La captura de este mes cerró el <strong>${fechaLargaMX(_ventanaCache.fin_envio)}</strong>. Si no alcanzaste a enviarlo, pide al administrador que habilite el mes.`;
+      return;
+    }
     // Las fechas son el dato que de verdad importa en este aviso -- se
     // resaltan más grandes/oscuras que el resto del texto para que salten a
     // la vista sin tener que leer la frase completa.
@@ -624,7 +778,8 @@
     const estadoActual = currentReport ? currentReport.estado : 'BORRADOR';
 
     const esUnidad = estado.perfil.rol === 'UNIDAD';
-    const soloLectura = esUnidad ? (estadoActual !== 'BORRADOR') : (!currentReport || estadoActual === 'BORRADOR');
+    const fueraDeVentana = fueraDeVentanaDeCaptura(currentReport);
+    const soloLectura = soloLecturaPara(currentReport);
 
     // Badges y botones de acción
     const badge = document.getElementById('sis06pBadgeEstado');
@@ -656,13 +811,13 @@
     }
 
     if (esUnidad) {
-      if (btnGuardar) btnGuardar.style.display = estadoActual === 'BORRADOR' ? 'inline-flex' : 'none';
+      if (btnGuardar) btnGuardar.style.display = (estadoActual === 'BORRADOR' && !fueraDeVentana) ? 'inline-flex' : 'none';
       if (btnEnviar) {
         btnEnviar.style.display = estadoActual === 'BORRADOR' ? 'inline-flex' : 'none';
-        const fueraDeVentana = !(_ventanaCache && _ventanaCache.dentro_envio);
+        const fueraDeEnvio = !(_ventanaCache && _ventanaCache.dentro_envio);
         const noConcilia = hayDiferenciasConciliacion();
-        btnEnviar.disabled = fueraDeVentana || noConcilia;
-        btnEnviar.title = fueraDeVentana
+        btnEnviar.disabled = fueraDeEnvio || noConcilia;
+        btnEnviar.title = fueraDeEnvio
           ? 'Fuera de la ventana de envío'
           : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden -- revisa la conciliación' : '';
       }
@@ -850,6 +1005,8 @@
       card.appendChild(body);
       container.appendChild(card);
     });
+
+    draftAplicar(currentReport, soloLectura);
   }
 
   // Nivel UNIDAD, guardar el paloteo SIS-06-P con dosis reales ES la señal
@@ -889,6 +1046,16 @@
     const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
     if (esUnidad && currentReport && currentReport.estado !== 'BORRADOR') {
       toast('Este concentrado ya fue enviado -- no puedes editarlo directamente.', 'error');
+      return false;
+    }
+    if (fueraDeVentanaDeCaptura(currentReport)) {
+      toast('Este mes está fuera de su ventana de captura: ya no se puede guardar. Pide al administrador que lo habilite.', 'error');
+      return false;
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      draftEscribirYa();
+      _ultimoGuardadoFallo = true;
+      toast('Sin conexión: tu avance quedó protegido en este dispositivo y se guardará solo cuando regrese el internet.', 'error');
       return false;
     }
     if (!esUnidad && (!currentReport || currentReport.estado === 'BORRADOR')) {
@@ -958,18 +1125,34 @@
       const { error } = await estado.db.from('sis06p_capturas').upsert(record, { onConflict: 'clues,mes,anio' });
       if (error) throw error;
 
-      const { data: capturas } = await estado.db.from('sis06p_capturas').select('*').eq('clues', clues);
-      _sis06pCapturasCache = capturas || [];
-      await cargarConciliacion(clues);
-      render();
+      // Ya está en el servidor: el respaldo local deja de hacer falta.
+      draftBorrar();
+      _ultimoGuardadoFallo = false;
 
       const totalReportado = Object.values(valores).reduce((s, v) => s + Number(v.total || 0), 0);
-      if (esUnidad) await autoCrearMovimientoSiFalta(clues, mes, anio, totalReportado);
+      try {
+        const { data: capturas, error: errRel } = await estado.db.from('sis06p_capturas').select('*').eq('clues', clues);
+        if (errRel) throw errRel;
+        _sis06pCapturasCache = capturas || [];
+        await cargarConciliacion(clues);
+        render();
+        if (esUnidad) await autoCrearMovimientoSiFalta(clues, mes, anio, totalReportado);
+      } catch (errRefresco) {
+        console.warn('[SIS-06-P] Se guardó, pero no se pudo refrescar la pantalla:', errRefresco);
+        marcarSinGuardar(false);
+        toast('Se guardó, pero no se pudo actualizar la pantalla. Recarga la página para verlo.', 'ok');
+        return true;
+      }
       toast(`✅ ${esUnidad ? 'Concentrado' : 'Corrección'} guardado · ${totalReportado} dosis en ${Object.keys(valores).length} variables.`, 'ok');
+      if (!esUnidad) document.dispatchEvent(new CustomEvent('sis06p:corregido', { detail: { clues, mes, anio, origen: 'sis06p' } }));
       return true;
     } catch (err) {
       console.error('[SIS-06-P] Error al guardar:', err);
-      toast('Error al guardar: ' + err.message, 'error');
+      draftEscribirYa();
+      _ultimoGuardadoFallo = esErrorDeRedSIS(err);
+      toast(_ultimoGuardadoFallo
+        ? 'No se pudo guardar por la conexión. Tu avance quedó protegido en este dispositivo: se reintentará solo al volver el internet, o toca Guardar.'
+        : 'Error al guardar: ' + err.message + ' (tu avance sigue protegido en este dispositivo).', 'error');
       return false;
     } finally {
       ocultarCargando();
@@ -1073,6 +1256,17 @@
     }
   }
 
+  // Parte común de una validación exitosa (normal o con excepción).
+  async function finalizarValidacion(activa, mes, anio) {
+    const { data: capturas } = await estado.db.from('sis06p_capturas').select('*').eq('clues', activa.clues);
+    _sis06pCapturasCache = capturas || [];
+    await cargarConciliacion(activa.clues);
+    render();
+    toast('✅ Concentrado marcado como validado.', 'ok');
+    notificarUnidadValidacion(activa, mes, anio);
+    document.dispatchEvent(new CustomEvent('sis06p:validado', { detail: { clues: activa.clues, mes, anio } }));
+  }
+
   async function marcarValidado() {
     const activa = datosUnidadActiva();
     if (!activa) return;
@@ -1094,16 +1288,37 @@
         p_captura_id: currentReport.id, p_usuario: nombreCompletoDePerfil(estado.perfil)
       });
       if (error) throw error;
-      const { data: capturas } = await estado.db.from('sis06p_capturas').select('*').eq('clues', activa.clues);
-      _sis06pCapturasCache = capturas || [];
-      await cargarConciliacion(activa.clues);
-      render();
-      toast('✅ Concentrado marcado como validado.', 'ok');
-      notificarUnidadValidacion(activa, mes, anio);
-      document.dispatchEvent(new CustomEvent('sis06p:validado', { detail: { clues: activa.clues, mes, anio } }));
+      await finalizarValidacion(activa, mes, anio);
     } catch (err) {
       console.error('[SIS-06-P] Error al validar:', err);
       try { await cargarConciliacion(activa.clues); render(); } catch (_) { /* no-op */ }
+      const rolExcepcion = estado.perfil.rol === 'ADMIN' || estado.perfil.rol === 'JURISDICCIONAL';
+      if (rolExcepcion && /no coinciden/i.test(err.message || '')) {
+        // La diferencia entre paloteo y Movimiento bloquea la validación. La
+        // jurisdicción / administración puede autorizar una excepción, con motivo
+        // y auditada, para el caso legítimo en que no tienen por qué cuadrar.
+        ocultarCargando();
+        const resumen = String(err.message || '').replace(/^No se puede validar:\s*/i, '').slice(0, 320);
+        const motivo = await mostrarModal({
+          titulo: 'Validar con excepción',
+          mensaje: 'El paloteo y el Movimiento no coinciden (' + resumen + '). Si la diferencia es legítima, escribe el motivo: queda en la auditoría, la unidad lo verá y se podrá validar y publicar.',
+          pedirMotivo: true, placeholderMotivo: 'Ej. Se aplicó SRP por falta de SR; autorizado por la jurisdicción', textoAceptar: 'Validar con excepción', peligro: true
+        });
+        if (motivo) {
+          mostrarCargando('Validando con excepción...');
+          try {
+            const { error: errEx } = await estado.db.rpc('sis06p_validar_con_excepcion', {
+              p_captura_id: currentReport.id, p_usuario: nombreCompletoDePerfil(estado.perfil), p_justificacion: motivo
+            });
+            if (errEx) throw errEx;
+            await finalizarValidacion(activa, mes, anio);
+          } catch (errEx2) {
+            console.error('[SIS-06-P] Error al validar con excepción:', errEx2);
+            toast('No se pudo validar con excepción: ' + (errEx2.message || errEx2), 'error');
+          }
+        }
+        return;
+      }
       toast('No se pudo validar: ' + err.message, 'error');
     } finally {
       ocultarCargando();
@@ -1355,6 +1570,16 @@
     const fechaCorte = new Date(Date.UTC(movimiento.anio, movimiento.mes - 1, diaCorte));
     wsMov.getCell('I7').value = fechaCorte;
     wsMov.getCell('J7').value = fechaCorte;
+    // Lo mismo en el encabezado del Reverso (misma posición relativa: fila
+    // "Reverso" + 6), que si no se imprime como "1905".
+    let filaReverso = 0;
+    wsMov.eachRow({ includeEmpty: false }, (row, n) => {
+      if (!filaReverso && String(wsMov.getCell(n, 1).value || '').trim() === 'Reverso') filaReverso = n;
+    });
+    if (filaReverso) {
+      wsMov.getCell(filaReverso + 6, 9).value = fechaCorte;
+      wsMov.getCell(filaReverso + 6, 10).value = fechaCorte;
+    }
   }
 
   const MESES_NOMBRE_MAYUS = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
@@ -1425,14 +1650,30 @@
   // viernes), la(s) sobrante(s) se suman dentro de la 5ta en vez de
   // perderse, para que el TOTAL (columna G, fórmula de la propia plantilla)
   // siga siendo exacto.
+  // La plantilla oficial trae escrita la temporada 2025-2026 (A4 y A8 de
+  // SIS-SS-IE Mensual). La temporada arranca en septiembre: de septiembre en
+  // adelante es año-año+1; de enero a agosto, año-1-año.
+  function actualizarTemporadaInfluenza(wb, mes, anio) {
+    const ws = wb.getWorksheet('SIS-SS-IE Mensual');
+    if (!ws) return;
+    const ini = mes >= 9 ? anio : anio - 1;
+    ['A4', 'A8'].forEach((dir) => {
+      const cell = ws.getCell(dir);
+      if (typeof cell.value !== 'string') return;
+      cell.value = cell.value
+        .replace(/2025-2026/g, `${ini}-${ini + 1}`)
+        .replace(/2025 - 2026/g, `${ini} - ${ini + 1}`);
+    });
+  }
+
   const FILA_INFLUENZA_INICIO = 11;
   const COL_SEMANA_INICIO = 8; // H
 
-  function llenarInfluenzaOficial(wb, mes, anio) {
+  function llenarInfluenzaOficial(wb, mes, anio, capturasInfluenza) {
     const ws = wb.getWorksheet('SIS-SS-IE Mensual');
     if (!ws) return false;
 
-    const enMes = (_influenzaCapturasCache || [])
+    const enMes = (capturasInfluenza || _influenzaCapturasCache || [])
       .filter((c) => {
         if (!c.fecha) return false;
         const d = new Date(c.fecha + 'T12:00:00');
@@ -1464,6 +1705,242 @@
   // a RDA).
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // Configuración de impresión del libro oficial. La plantilla no fijaba el
+  // tamaño de papel de SINBA-SIS-06-P ni de MOV-DE-BIOLÓGICO (caían en el
+  // predeterminado de cada impresora) y las centraba verticalmente: como el
+  // anverso y el reverso tienen distinta altura de contenido, el encabezado
+  // del reverso se imprimía más abajo que el del anverso y a doble cara no
+  // coincidían. Aquí se fija:
+  //   - SINBA-SIS-06-P y MOV-DE-BIOLÓGICO: CARTA, SIN centrado vertical (cada
+  //     cara arranca arriba, con el mismo margen y la misma escala, así los
+  //     dos encabezados caen en la misma posición adelante y atrás) y un solo
+  //     salto manual entre anverso y reverso. La escala es fija y calculada
+  //     con la cara más alta (el ajuste "a 1 página" de Excel ignora los
+  //     saltos manuales, por eso no se usa aquí).
+  //   - SIS-SS-CE-H-2026 y SIS-SS-IE Mensual: OFICIO (Folio 8.5x13 in, código
+  //     estándar 14), horizontal, ajustadas a 1 página. La plantilla traía
+  //     paperSize=4636, un código propio del controlador de la impresora que
+  //     no es un tamaño estándar y que se pierde al guardar (ExcelJS descarta
+  //     el printerSettings .bin) -- en otra PC Excel no lo reconoce.
+  // La impresión a doble cara no se guarda en el .xlsx: es un ajuste de la
+  // impresora (SIS-06-P vertical: voltear por el borde largo; Movimiento
+  // horizontal: voltear por el borde corto).
+  // ---------------------------------------------------------------------------
+
+  const PAPEL_CARTA = 1;
+  const PAPEL_OFICIO = 14;
+
+  function calcularEscalaDosCaras(ws, orientation, colFin, filaCorte, ultimaFila) {
+    const m = ws.pageSetup.margins || { left: 0.2, right: 0.2, top: 0.2, bottom: 0.2 };
+    const [anchoPag, altoPag] = orientation === 'landscape' ? [792, 612] : [612, 792];
+    const dispAncho = anchoPag - (m.left + m.right) * 72;
+    const dispAlto = altoPag - (m.top + m.bottom) * 72;
+    let ancho = 0;
+    // Ancho real de columna en Excel: caracteres*7 px + 5 px de relleno por columna.
+    // Sin esos 5 px la escala salía demasiado grande y la última columna
+    // (Observaciones, en Movimiento) se pasaba a otra hoja al imprimir.
+    for (let c = 1; c <= colFin; c++) ancho += ((ws.getColumn(c).width || 8.43) * 7 + 5) * 0.75;
+    const alturaFilas = (desde, hasta) => {
+      let h = 0;
+      for (let r = desde; r <= hasta; r++) h += ws.getRow(r).height || ws.properties.defaultRowHeight || 15;
+      return h;
+    };
+    const mayorCara = Math.max(alturaFilas(1, filaCorte), alturaFilas(filaCorte + 1, ultimaFila));
+    // 3 % de holgura: el ancho real de columna en Excel/impresora varía un poco
+    return Math.max(10, Math.floor(Math.min(dispAncho / ancho, dispAlto / mayorCara) * 100 * 0.97));
+  }
+
+  function configurarHojaDosCaras(ws, { orientation, colFin, filaCorte, ultimaFila }) {
+    ws.rowBreaks.length = 0;
+    ws.getRow(filaCorte).addPageBreak();
+    Object.assign(ws.pageSetup, {
+      paperSize: PAPEL_CARTA,
+      orientation,
+      fitToPage: false,
+      scale: calcularEscalaDosCaras(ws, orientation, colFin, filaCorte, ultimaFila),
+      horizontalCentered: true,
+      verticalCentered: false,
+      printArea: `A1:${ws.getColumn(colFin).letter}${ultimaFila}`
+    });
+  }
+
+  function configurarImpresionOficial(wb) {
+    const wsPaloteo = wb.getWorksheet('SINBA-SIS-06-P');
+    if (wsPaloteo) {
+      // Anverso = filas 1-67, reverso = 68-124 (con su propio encabezado)
+      configurarHojaDosCaras(wsPaloteo, { orientation: 'portrait', colFin: 25, filaCorte: 67, ultimaFila: 124 });
+    }
+
+    const wsMov = wb.getWorksheet('MOV-DE-BIOLÓGICO');
+    if (wsMov) {
+      // El motor de Movimiento reconstruye los bloques: el reverso empieza
+      // donde dice "Reverso" (columna A), no en una fila fija de la plantilla.
+      let filaReverso = 0;
+      let ultimaFila = 0;
+      wsMov.eachRow({ includeEmpty: false }, (row, n) => {
+        if (!row.hasValues) return;
+        if (!filaReverso && String(wsMov.getCell(n, 1).value || '').trim() === 'Reverso') filaReverso = n;
+        ultimaFila = n;
+      });
+      if (filaReverso > 1 && ultimaFila >= filaReverso) {
+        configurarHojaDosCaras(wsMov, { orientation: 'landscape', colFin: 17, filaCorte: filaReverso - 1, ultimaFila });
+      } else {
+        Object.assign(wsMov.pageSetup, { paperSize: PAPEL_CARTA, orientation: 'landscape', verticalCentered: false });
+      }
+    }
+
+    ['SIS-SS-CE-H-2026', 'SIS-SS-IE Mensual'].forEach((nombre) => {
+      const ws = wb.getWorksheet(nombre);
+      if (!ws) return;
+      Object.assign(ws.pageSetup, { paperSize: PAPEL_OFICIO, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 });
+    });
+  }
+
+  async function asegurarVariablesSIS() {
+    if (_sisVariablesCache.length > 0) return;
+    const { data: vars, error } = await estado.db.from('sis_variables').select('*').eq('activo', true).order('orden');
+    if (error) throw error;
+    _sisVariablesCache = vars || [];
+  }
+
+  // Arma el libro oficial de UNA unidad a partir de datos ya leídos (no toca
+  // la pantalla): lo usan tanto la descarga individual como el ZIP municipal.
+  async function construirWorkbookSISOficial({ plantillaBuffer, activa, captura, unidadBiovac, movimiento, mes, anio, capturasInfluenza }) {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(plantillaBuffer);
+
+    // Las 4 tablas de Excel en DATOS (QUERÉTARO/MARQUÉS/CORREGIDORA/
+    // HUIMILPAN -- listas de unidades por municipio) solo alimentaban el
+    // selector desplegable de la hoja ÍNDICE (data validation
+    // INDIRECT($B$4)), que ya no existe -- aquí la unidad/CLUES se
+    // conocen directo de la app. Se quitan aquí (no se usan para nada
+    // más) porque ExcelJS reescribe mal su <autoFilter>/totalsRowShown al
+    // guardar (agrega un filterColumn que no traía la plantilla e invierte
+    // headerRowCount/totalsRowShown) -- verificado contra Excel real: el
+    // archivo generado quedaba "dañado" y Excel lo reparaba solo, quitando
+    // ese autoFilter de todas formas. Mejor quitar las tablas por
+    // completo que dejar que ExcelJS las corrompa.
+    const wsDatos = wb.getWorksheet('DATOS');
+    if (wsDatos && wsDatos.tables) {
+      Object.keys(wsDatos.tables).forEach((nombreTabla) => {
+        try { wsDatos.removeTable(nombreTabla); } catch (errTabla) { console.warn('[SIS-06-P] No se pudo quitar tabla', nombreTabla, errTabla); }
+      });
+    }
+
+    const ws = wb.getWorksheet('SINBA-SIS-06-P');
+    if (!ws) throw new Error('La plantilla no tiene la hoja "SINBA-SIS-06-P".');
+
+    const diaCorte = new Date(anio, mes, 0).getDate();
+    const responsableGeneral = captura.capturado_por || (movimiento && movimiento.responsable_elaboracion) || '';
+
+    // H6 (localidad, via VLOOKUP contra DATOS!E94:F168) se deja intacta --
+    // esa columna es la LOCALIDAD de la unidad (ej. "JURICA PUEBLO"), no
+    // el municipio, y no la capturamos en ningún lado -- verificado contra
+    // un ejemplo real (LOMAS.xlsx) antes de escribir esto, mejor dejarla
+    // en blanco (fórmula sin resolver) que meter un dato equivocado en un
+    // reporte oficial.
+    ws.getCell('A6').value = captura.unidad || activa.unidad || '';
+    ws.getCell('B6').value = captura.clues || activa.clues;
+    ws.getCell('L6').value = responsableGeneral;
+    // W3 = código de mes de 2 dígitos ("08" para agosto, NO el nombre) y
+    // V3 = días del mes (NO el año) -- también verificado contra
+    // LOMAS.xlsx: W3="08", V3=31 para un reporte de agosto.
+    ws.getCell('W3').value = String(mes).padStart(2, '0');
+    ws.getCell('V3').value = diaCorte;
+
+    const valores = captura.valores || {};
+    _sisVariablesCache.forEach((v) => {
+      const val = valores[String(v.fila_excel)];
+      if (!val) return;
+      const row = Number(v.fila_excel);
+      const total = Number(val.total || 0);
+      const afro = Number(val.afro || 0);
+      const indigena = Number(val.indigena || 0);
+      const migrante = Number(val.migrante || 0);
+      if (total > 0) ws.getCell(row, COL_TOTAL).value = total;
+      if (afro > 0) ws.getCell(row, COL_AFRO).value = afro;
+      if (indigena > 0) ws.getCell(row, COL_INDIGENA).value = indigena;
+      if (migrante > 0) ws.getCell(row, COL_MIGRANTE).value = migrante;
+    });
+
+    let movimientoIncluido = false;
+    let movimientoErrorMsg = null;
+    if (movimiento && unidadBiovac && window.BiovacExportExcel) {
+      try {
+        await llenarMovimientoOficial(wb, unidadBiovac, movimiento);
+        movimientoIncluido = true;
+      } catch (errMov) {
+        console.error('[SIS-06-P] No se pudo llenar Movimiento de Biológico en el Excel:', errMov);
+        movimientoErrorMsg = errMov.message;
+      }
+    }
+
+    // Ya se conocen unidad/clues/mes/año/responsable/fecha de corte --
+    // sustituye toda referencia restante a ÍNDICE (en las 4 hojas, no solo
+    // en las que este módulo llena) por su valor resuelto y quita la hoja,
+    // que ya quedó obsoleta. ANTES de llenar Influenza a propósito --
+    // probado contra Excel real (no solo openpyxl/XML): escribir en
+    // SIS-SS-IE Mensual ANTES de recorrer+quitar ÍNDICE deja el .xlsx
+    // marcado como dañado al abrirlo (Excel lo repara solo, pero igual
+    // asusta al usuario) -- invertido el orden, abre limpio. No se
+    // encontró la causa exacta dentro de ExcelJS, pero el orden importa.
+    resolverReferenciasIndiceYQuitarHoja(wb, {
+      unidad: captura.unidad || activa.unidad || (unidadBiovac && unidadBiovac.nombre) || '',
+      clues: captura.clues || activa.clues,
+      responsable: responsableGeneral,
+      mesNombre: MESES_NOMBRE_MAYUS[mes - 1],
+      mesCodigo: String(mes).padStart(2, '0'),
+      dia: diaCorte,
+      anio,
+      fechaCorte: new Date(Date.UTC(anio, mes - 1, diaCorte))
+    });
+
+    let influenzaIncluida = false;
+    try {
+      influenzaIncluida = llenarInfluenzaOficial(wb, mes, anio, capturasInfluenza);
+    } catch (errInf) {
+      console.error('[SIS-06-P] No se pudo llenar SIS-SS-IE Mensual (Influenza) en el Excel:', errInf);
+    }
+
+    actualizarTemporadaInfluenza(wb, mes, anio);
+    configurarImpresionOficial(wb);
+
+    // SIS-SS-CE-H-2026 trae fórmulas propias de la plantilla que leen en
+    // vivo de SINBA-SIS-06-P / MOV-DE-BIOLÓGICO (verificado celda por
+    // celda, ver sinba_dev/dependencies.js) -- nunca se tocan aquí, solo
+    // se le escriben valores a esas 2 hojas fuente. SIS-SS-IE Mensual, en
+    // cambio, SÍ se llena directo arriba (llenarInfluenzaOficial) -- sus
+    // fórmulas propias (G11:G56, fila 57-58) solo sirven para sumar lo que
+    // ya se escribió, no para traerlo de otra hoja. En ambos casos, Excel
+    // normalmente muestra el valor CACHEADO que traía la plantilla (casi
+    // siempre vacío/0) hasta que alguien presiona F9, porque no sabe que
+    // esas celdas cambiaron por fuera de sus propias fórmulas --
+    // fullCalcOnLoad fuerza el recálculo completo al abrir el archivo.
+    wb.calcProperties = wb.calcProperties || {};
+    wb.calcProperties.fullCalcOnLoad = true;
+
+    const buffer = await wb.xlsx.writeBuffer();
+    return { buffer, movimientoIncluido, movimientoErrorMsg, influenzaIncluida };
+  }
+
+  function descargarBlob(blob, nombre) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = nombre;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  async function cargarPlantillaOficial() {
+    const resp = await fetch('SINBA-VER_26_2026.xlsx');
+    if (!resp.ok) throw new Error('No se pudo cargar la plantilla oficial (SINBA-VER_26_2026.xlsx).');
+    return resp.arrayBuffer();
+  }
+
   async function exportarSISOficialCompleto() {
     const activa = datosUnidadActiva();
     if (!activa) { toast('Selecciona una unidad (CLUES) específica.', 'error'); return; }
@@ -1492,130 +1969,12 @@
         movimiento = mov || null;
       }
 
-      const resp = await fetch('SINBA-VER_26_2026.xlsx');
-      if (!resp.ok) throw new Error('No se pudo cargar la plantilla oficial (SINBA-VER_26_2026.xlsx).');
-      const buffer = await resp.arrayBuffer();
-
-      const wb = new ExcelJS.Workbook();
-      await wb.xlsx.load(buffer);
-
-      // Las 4 tablas de Excel en DATOS (QUERÉTARO/MARQUÉS/CORREGIDORA/
-      // HUIMILPAN -- listas de unidades por municipio) solo alimentaban el
-      // selector desplegable de la hoja ÍNDICE (data validation
-      // INDIRECT($B$4)), que ya no existe -- aquí la unidad/CLUES se
-      // conocen directo de la app. Se quitan aquí (no se usan para nada
-      // más) porque ExcelJS reescribe mal su <autoFilter>/totalsRowShown al
-      // guardar (agrega un filterColumn que no traía la plantilla e invierte
-      // headerRowCount/totalsRowShown) -- verificado contra Excel real: el
-      // archivo generado quedaba "dañado" y Excel lo reparaba solo, quitando
-      // ese autoFilter de todas formas. Mejor quitar las tablas por
-      // completo que dejar que ExcelJS las corrompa.
-      const wsDatos = wb.getWorksheet('DATOS');
-      if (wsDatos && wsDatos.tables) {
-        Object.keys(wsDatos.tables).forEach((nombreTabla) => {
-          try { wsDatos.removeTable(nombreTabla); } catch (errTabla) { console.warn('[SIS-06-P] No se pudo quitar tabla', nombreTabla, errTabla); }
-        });
-      }
-
-      const ws = wb.getWorksheet('SINBA-SIS-06-P');
-      if (!ws) throw new Error('La plantilla no tiene la hoja "SINBA-SIS-06-P".');
-
-      const diaCorte = new Date(anio, mes, 0).getDate();
-      const responsableGeneral = captura.capturado_por || (movimiento && movimiento.responsable_elaboracion) || '';
-
-      // H6 (localidad, via VLOOKUP contra DATOS!E94:F168) se deja intacta --
-      // esa columna es la LOCALIDAD de la unidad (ej. "JURICA PUEBLO"), no
-      // el municipio, y no la capturamos en ningún lado -- verificado contra
-      // un ejemplo real (LOMAS.xlsx) antes de escribir esto, mejor dejarla
-      // en blanco (fórmula sin resolver) que meter un dato equivocado en un
-      // reporte oficial.
-      ws.getCell('A6').value = captura.unidad || activa.unidad || '';
-      ws.getCell('B6').value = captura.clues || activa.clues;
-      ws.getCell('L6').value = responsableGeneral;
-      // W3 = código de mes de 2 dígitos ("08" para agosto, NO el nombre) y
-      // V3 = días del mes (NO el año) -- también verificado contra
-      // LOMAS.xlsx: W3="08", V3=31 para un reporte de agosto.
-      ws.getCell('W3').value = String(mes).padStart(2, '0');
-      ws.getCell('V3').value = diaCorte;
-
-      const valores = captura.valores || {};
-      _sisVariablesCache.forEach((v) => {
-        const val = valores[String(v.fila_excel)];
-        if (!val) return;
-        const row = Number(v.fila_excel);
-        const total = Number(val.total || 0);
-        const afro = Number(val.afro || 0);
-        const indigena = Number(val.indigena || 0);
-        const migrante = Number(val.migrante || 0);
-        if (total > 0) ws.getCell(row, COL_TOTAL).value = total;
-        if (afro > 0) ws.getCell(row, COL_AFRO).value = afro;
-        if (indigena > 0) ws.getCell(row, COL_INDIGENA).value = indigena;
-        if (migrante > 0) ws.getCell(row, COL_MIGRANTE).value = migrante;
+      const plantillaBuffer = await cargarPlantillaOficial();
+      const { buffer, movimientoIncluido, movimientoErrorMsg, influenzaIncluida } = await construirWorkbookSISOficial({
+        plantillaBuffer, activa, captura, unidadBiovac, movimiento, mes, anio, capturasInfluenza: _influenzaCapturasCache
       });
 
-      let movimientoIncluido = false;
-      let movimientoErrorMsg = null;
-      if (movimiento && unidadBiovac && window.BiovacExportExcel) {
-        try {
-          await llenarMovimientoOficial(wb, unidadBiovac, movimiento);
-          movimientoIncluido = true;
-        } catch (errMov) {
-          console.error('[SIS-06-P] No se pudo llenar Movimiento de Biológico en el Excel:', errMov);
-          movimientoErrorMsg = errMov.message;
-        }
-      }
-
-      // Ya se conocen unidad/clues/mes/año/responsable/fecha de corte --
-      // sustituye toda referencia restante a ÍNDICE (en las 4 hojas, no solo
-      // en las que este módulo llena) por su valor resuelto y quita la hoja,
-      // que ya quedó obsoleta. ANTES de llenar Influenza a propósito --
-      // probado contra Excel real (no solo openpyxl/XML): escribir en
-      // SIS-SS-IE Mensual ANTES de recorrer+quitar ÍNDICE deja el .xlsx
-      // marcado como dañado al abrirlo (Excel lo repara solo, pero igual
-      // asusta al usuario) -- invertido el orden, abre limpio. No se
-      // encontró la causa exacta dentro de ExcelJS, pero el orden importa.
-      resolverReferenciasIndiceYQuitarHoja(wb, {
-        unidad: captura.unidad || activa.unidad || (unidadBiovac && unidadBiovac.nombre) || '',
-        clues: captura.clues || activa.clues,
-        responsable: responsableGeneral,
-        mesNombre: MESES_NOMBRE_MAYUS[mes - 1],
-        mesCodigo: String(mes).padStart(2, '0'),
-        dia: diaCorte,
-        anio,
-        fechaCorte: new Date(Date.UTC(anio, mes - 1, diaCorte))
-      });
-
-      let influenzaIncluida = false;
-      try {
-        influenzaIncluida = llenarInfluenzaOficial(wb, mes, anio);
-      } catch (errInf) {
-        console.error('[SIS-06-P] No se pudo llenar SIS-SS-IE Mensual (Influenza) en el Excel:', errInf);
-      }
-
-      // SIS-SS-CE-H-2026 trae fórmulas propias de la plantilla que leen en
-      // vivo de SINBA-SIS-06-P / MOV-DE-BIOLÓGICO (verificado celda por
-      // celda, ver sinba_dev/dependencies.js) -- nunca se tocan aquí, solo
-      // se le escriben valores a esas 2 hojas fuente. SIS-SS-IE Mensual, en
-      // cambio, SÍ se llena directo arriba (llenarInfluenzaOficial) -- sus
-      // fórmulas propias (G11:G56, fila 57-58) solo sirven para sumar lo que
-      // ya se escribió, no para traerlo de otra hoja. En ambos casos, Excel
-      // normalmente muestra el valor CACHEADO que traía la plantilla (casi
-      // siempre vacío/0) hasta que alguien presiona F9, porque no sabe que
-      // esas celdas cambiaron por fuera de sus propias fórmulas --
-      // fullCalcOnLoad fuerza el recálculo completo al abrir el archivo.
-      wb.calcProperties = wb.calcProperties || {};
-      wb.calcProperties.fullCalcOnLoad = true;
-
-      const outBuffer = await wb.xlsx.writeBuffer();
-      const blob = new Blob([outBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `SIS_${activa.clues}_${mes}_${anio}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      descargarBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `SIS_${activa.clues}_${mes}_${anio}.xlsx`);
 
       const hojasExtra = 'SIS-SS-CE-H-2026' + (influenzaIncluida ? ' + SIS-SS-IE Mensual (Influenza)' : '');
       if (movimientoErrorMsg) {
@@ -1628,6 +1987,95 @@
     } catch (err) {
       console.error('[SIS-06-P] Error al exportar Excel oficial:', err);
       toast('Error al exportar: ' + err.message, 'error');
+    } finally {
+      ocultarCargando();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ZIP masivo del municipio: un .xlsx oficial por unidad (el mismo libro que
+  // descarga la propia unidad). Solo cuando TODAS las unidades del municipio
+  // ya están Validadas -- igual que el CSV oficial y la publicación. `filas` =
+  // renglones de Seguimiento (clues, unidad, estado) de ese municipio/mes.
+  // ---------------------------------------------------------------------------
+
+  async function exportarZipMunicipio(filas, municipio, mes, anio) {
+    if (typeof JSZip === 'undefined') { toast('No se cargó la librería de ZIP. Recarga la página e intenta de nuevo.', 'error'); return; }
+    const unidades = (filas || []).slice().sort((a, b) => String(a.clues).localeCompare(String(b.clues)));
+    if (unidades.length === 0) { toast('Este municipio no tiene unidades para exportar.', 'error'); return; }
+    if (!unidades.every((f) => f.estado === 'VALIDADO')) {
+      toast('Faltan unidades por validar: el ZIP solo se puede generar con todas validadas.', 'error');
+      return;
+    }
+
+    mostrarCargando('Preparando ZIP del municipio...');
+    try {
+      await asegurarVariablesSIS();
+      const lista = unidades.map((f) => f.clues);
+      const [{ data: capturas, error: e1 }, { data: influenza, error: e2 }] = await Promise.all([
+        estado.db.from('sis06p_capturas').select('*').in('clues', lista).eq('mes', mes).eq('anio', anio),
+        estado.db.from('influenza_capturas').select('clues, fecha, valores, sin_movimiento, capturado_por').in('clues', lista)
+      ]);
+      if (e1) throw e1;
+      if (e2) throw e2;
+
+      const catalogoUnidades = (estado.unidadesClues || []).concat(estado.unidades || []);
+      const unidadBiovacDe = (clues) => catalogoUnidades.find((u) => u.clues === clues) || null;
+      const idsBiovac = unidades.map((f) => unidadBiovacDe(f.clues)).filter(Boolean).map((u) => u.id);
+      let movimientos = [];
+      if (idsBiovac.length) {
+        const { data: movs, error: e3 } = await estado.db.from('biovac_movimientos')
+          .select('*').in('unidad_id', idsBiovac).eq('anio', anio).eq('mes', mes);
+        if (e3) throw e3;
+        movimientos = movs || [];
+      }
+
+      const plantillaBuffer = await cargarPlantillaOficial();
+      const zip = new JSZip();
+      const mm = String(mes).padStart(2, '0');
+      const fallos = [];
+      let sinMovimiento = 0;
+
+      for (let i = 0; i < unidades.length; i++) {
+        const f = unidades[i];
+        mostrarCargando(`Generando Excel ${i + 1} de ${unidades.length}: ${f.unidad || f.clues}...`);
+        const captura = (capturas || []).find((c) => c.clues === f.clues);
+        if (!captura || captura.estado !== 'VALIDADO') { fallos.push(`${f.clues} (sin captura validada)`); continue; }
+        try {
+          const unidadBiovac = unidadBiovacDe(f.clues);
+          const movimiento = unidadBiovac ? (movimientos.find((m) => m.unidad_id === unidadBiovac.id) || null) : null;
+          const res = await construirWorkbookSISOficial({
+            plantillaBuffer,
+            activa: { clues: f.clues, unidad: f.unidad, municipio: f.municipio || municipio },
+            captura, unidadBiovac, movimiento, mes, anio,
+            capturasInfluenza: (influenza || []).filter((c) => c.clues === f.clues)
+          });
+          if (!res.movimientoIncluido) sinMovimiento++;
+          const nombreSeguro = String(f.unidad || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+          zip.file(`SIS_${f.clues}${nombreSeguro ? '_' + nombreSeguro : ''}_${mm}_${anio}.xlsx`, res.buffer);
+        } catch (errUnidad) {
+          console.error('[SIS-06-P] Error generando el Excel de', f.clues, errUnidad);
+          fallos.push(`${f.clues} (${errUnidad.message})`);
+        }
+      }
+
+      const hechos = unidades.length - fallos.length;
+      if (hechos === 0) throw new Error('No se pudo generar ningún Excel.');
+
+      mostrarCargando('Comprimiendo ZIP...');
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      descargarBlob(blob, `SIS_${municipio}_${mm}_${anio}.zip`);
+
+      if (fallos.length) {
+        toast(`ZIP generado con ${hechos} de ${unidades.length} unidades. No se incluyeron: ${fallos.join('; ')}`, 'error');
+      } else if (sinMovimiento) {
+        toast(`✅ ZIP generado con ${hechos} unidades (${sinMovimiento} sin Movimiento de Biológico capturado).`, 'ok');
+      } else {
+        toast(`✅ ZIP generado con los ${hechos} Excel de las unidades.`, 'ok');
+      }
+    } catch (err) {
+      console.error('[SIS-06-P] Error al generar el ZIP municipal:', err);
+      toast('Error al generar el ZIP: ' + err.message, 'error');
     } finally {
       ocultarCargando();
     }
@@ -1667,10 +2115,10 @@
       ? estado.movimiento.responsable_elaboracion : null;
     const guardado = (captura && captura.capturado_por) || mov || null;
 
-    const bloqueado = Boolean(captura && captura.estado !== 'BORRADOR');
+    const bloqueado = Boolean((captura && captura.estado !== 'BORRADOR') || fueraDeVentanaDeCaptura(captura));
     inp.readOnly = bloqueado;
     inp.title = bloqueado
-      ? 'El SINBA-SIS ya fue enviado: el responsable quedó fijo. Si hay que cambiarlo, pídelo al municipal.'
+      ? 'El SINBA-SIS ya fue enviado (o este mes está fuera de su ventana de captura): el responsable quedó fijo. Si hay que cambiarlo, pídelo al municipal.'
       : 'Nombre de quien elabora la información: sale como responsable en todas las hojas del SINBA-SIS. Puedes cambiarlo.';
 
     if (document.activeElement === inp && !bloqueado) return; // no pisar lo que se está tecleando
@@ -1693,7 +2141,7 @@
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
     const captura = capturaDelMesActual();
-    if (captura && captura.estado !== 'BORRADOR') { aplicarResponsable(); return; }
+    if ((captura && captura.estado !== 'BORRADOR') || fueraDeVentanaDeCaptura(captura)) { aplicarResponsable(); return; }
 
     let guardadoAlgo = false;
     try {
@@ -2048,9 +2496,31 @@
       }
     }
 
+    const subInf = document.getElementById('infSubtitulo');
+    if (subInf) {
+      subInf.textContent = esRolRevisor()
+        ? 'Dosis de antiinfluenza del mes por semana, leídas de Meta-Logro. Con el SIS enviado, tú puedes corregirlas.'
+        : 'Dosis de antiinfluenza del mes por semana, leídas de Meta-Logro. Solo lectura.';
+    }
+    if (cta && esRolRevisor()) {
+      const puede = Boolean(captura) && estadoSIS !== 'BORRADOR';
+      cta.style.display = puede ? 'flex' : 'none';
+      cta.classList.remove('bloqueada');
+      document.getElementById('infCtaTitulo').textContent = 'Corregir Influenza de esta unidad';
+      document.getElementById('infCtaTexto').textContent = 'Puedes cambiar las dosis de cada semana o agregar una semana que falte. Cada cambio queda registrado y la unidad lo verá para aceptarlo.';
+      if (btnEditar) {
+        btnEditar.disabled = false;
+        btnEditar.title = 'Abrir el editor de semanas de Influenza de este mes';
+        btnEditar.innerHTML = '<span class="material-symbols-rounded">edit_note</span> Corregir semanas';
+      }
+    }
+
     if (aviso) {
       let msg = ''; let estilo = '';
-      if (estadoSIS !== 'BORRADOR') {
+      if (estadoSIS !== 'BORRADOR' && esRolRevisor()) {
+        msg = 'Este SINBA-SIS ya fue enviado. Como revisor puedes corregir Influenza con el botón de arriba; cada cambio queda auditado y la unidad lo ve.';
+        estilo = 'background:#eef2ff; color:#3730a3;';
+      } else if (estadoSIS !== 'BORRADOR') {
         msg = 'Corte congelado: este SINBA-SIS ya fue enviado, así que Influenza de este mes ya no cambia desde la unidad.';
         estilo = 'background:#f1f5f9; color:#64748b;';
       } else if (n === 0) {
@@ -2478,6 +2948,7 @@
     if (est === 'VALIDADO') detalle = 'Ya puedes exportar el Excel oficial e imprimir';
     else if (est === 'ENVIADO') detalle = esU ? 'Esperando al municipal' : 'Pendiente de tu validación';
     else if (_sinGuardar) detalle = 'Cambios sin guardar';
+    else if (fueraDeVentanaDeCaptura(captura)) detalle = 'Este mes está fuera de su ventana de captura';
     else if (!captura) detalle = 'Aún sin guardar este mes';
     else if (filas !== null && difs.length) detalle = `${difs.length} biológico${difs.length === 1 ? '' : 's'} no coincide${difs.length === 1 ? '' : 'n'} -- corrige antes de enviar`;
     else if (v && !v.dentro_envio) detalle = `Envío del ${fechaMesCorta(v.inicio_envio)} al ${fechaMesCorta(v.fin_envio)}`;
@@ -2500,8 +2971,7 @@
       try { await cargarConciliacion(activa.clues); } catch (err) { console.warn('[SINBA-SIS] No se pudo refrescar la conciliación:', err); return; }
       const captura = capturaDelMesActual();
       if (!_sinGuardar) {
-        const soloLectura = esUnidadSesion() ? (captura ? captura.estado !== 'BORRADOR' : false) : (!captura || captura.estado === 'BORRADOR');
-        renderConciliacion(soloLectura, captura);
+        renderConciliacion(soloLecturaPara(captura), captura);
       }
       const btnEnviar = document.getElementById('btnEnviarSIS06P');
       if (btnEnviar && esUnidadSesion() && btnEnviar.style.display !== 'none') {
@@ -2518,11 +2988,259 @@
     }, 350);
   }
 
+  // ---------------------------------------------------------------------------
+  // Editor de Influenza para revisores (MUNICIPAL / JURISDICCIONAL / ADMIN):
+  // corrige las semanas del mes de la unidad que se está revisando, o agrega una
+  // semana que falte. Escribe directo en influenza_capturas (la misma tabla que
+  // Meta-Logro); el servidor registra cada rubro cambiado en el control de
+  // cambios de la unidad (trigger influenza_trg_auditoria_sis).
+  // ---------------------------------------------------------------------------
+  let _edInf = null;
+
+  async function recargarInfluenzaCache(clues) {
+    const { data, error } = await estado.db.from('influenza_capturas')
+      .select('id, fecha, valores, sin_movimiento, capturado_por, anio_campana, municipio, unidad').eq('clues', clues);
+    if (error) throw error;
+    _influenzaCapturasCache = data || [];
+  }
+
+  function viernesDelMes(mes, anio) {
+    const out = [];
+    const dias = new Date(anio, mes, 0).getDate();
+    for (let d = 1; d <= dias; d++) {
+      if (new Date(anio, mes - 1, d).getDay() === 5) out.push(anio + '-' + String(mes).padStart(2, '0') + '-' + String(d).padStart(2, '0'));
+    }
+    return out;
+  }
+
+  function editorInfluenzaHtml() {
+    const semanas = _edInf.semanas;
+    const faltan = viernesDelMes(_edInf.mes, _edInf.anio).filter((f) => !semanas.some((w) => w.fecha === f));
+    const encabezado = semanas.map((w) => `<th style="${_TH}">${fechaCortaMX(w.fecha)}${w.nuevo ? '<br><span style="font-weight:600; font-size:9px; text-transform:none; color:var(--secondary);">nueva</span>' : ''}</th>`).join('');
+    let filas = '';
+    let cat = null; let grp = null;
+    INFLUENZA_FILAS.forEach((f) => {
+      if (f.categoria !== cat) {
+        cat = f.categoria; grp = null;
+        filas += `<tr><td colspan="${2 + semanas.length}" style="padding:6px 8px; background:#fdf2ee; color:#C26750; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em;">${_esc(cat)}</td></tr>`;
+      }
+      if (f.grupo !== grp) {
+        grp = f.grupo;
+        filas += `<tr><td colspan="${2 + semanas.length}" style="padding:5px 8px 1px; font-size:11px; font-weight:700; color:#334155;">${_esc(grp)}</td></tr>`;
+      }
+      const celdas = semanas.map((w) => {
+        const v = Number(w.valores[f.id]) || 0;
+        const cambiado = v !== (Number(w.orig[f.id]) || 0);
+        return `<td style="padding:2px 3px; text-align:center;"><input type="number" min="0" step="1" inputmode="numeric" class="ed-inf-in" data-f="${w.fecha}" data-r="${f.id}" value="${v || ''}" placeholder="0"
+          style="width:58px; text-align:center; font-weight:700; font-size:12px; border:1.5px solid ${cambiado ? '#d97706' : '#e2e8f0'}; background:${cambiado ? '#fffbeb' : '#fff'}; border-radius:8px; padding:5px 4px;"></td>`;
+      }).join('');
+      filas += `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 18px; font-size:11.5px; color:#475569;">${_esc(f.edad)}</td><td style="padding:2px 4px; text-align:center;">${_chipClave(f.clave)}</td>${celdas}</tr>`;
+    });
+    const agregar = faltan.length
+      ? `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          <label for="edInfNueva" style="font-size:11.5px; font-weight:700; color:var(--muted);">¿Falta una semana?</label>
+          <select id="edInfNueva" style="padding:6px 8px; border-radius:8px; border:1px solid var(--outline-variant);">${faltan.map((f) => `<option value="${f}">Viernes ${fechaCortaMX(f)}</option>`).join('')}</select>
+          <button type="button" class="btn-mini btn-secundario" id="edInfAgregar"><span class="material-symbols-rounded">add</span> Agregar semana</button>
+        </div>` : '';
+    return `${agregar}
+      <div style="overflow:auto; max-height:56vh;">
+        <table class="detalle-tabla" style="min-width:340px;">
+          <thead><tr><th style="text-align:left;">Variable</th><th>Clave</th>${encabezado}</tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>
+      <p style="font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0;">Se marcan en ámbar las casillas que cambiaste. Guarda para que el cambio llegue al servidor; la unidad verá cada corrección en su panel de cambios.</p>`;
+  }
+
+  function pintarEditorInfluenza() {
+    const cuerpo = document.getElementById('detalleSISCuerpo');
+    if (cuerpo) cuerpo.innerHTML = editorInfluenzaHtml();
+  }
+
+  async function abrirEditorInfluenza() {
+    const activa = datosUnidadActiva();
+    if (!activa) { toast('Selecciona una unidad (CLUES) específica.', 'error'); return; }
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const captura = capturaDelMesActual();
+    if (!captura || captura.estado === 'BORRADOR') { toast('Esta unidad todavía no envía su SIS: nada que corregir.', 'error'); return; }
+    try {
+      await recargarInfluenzaCache(activa.clues); // siempre se parte de lo que hay en el servidor
+    } catch (err) {
+      toast(esErrorDeRedSIS(err) ? 'Sin conexión: no se pudo abrir el editor. Intenta de nuevo cuando regrese el internet.' : 'No se pudo leer Influenza: ' + err.message, 'error');
+      return;
+    }
+    const corte = influenzaCorteDelMes(mes, anio);
+    _edInf = {
+      clues: activa.clues, unidad: activa.unidad, municipio: activa.municipio, mes, anio,
+      semanas: corte.semanas.map((c) => ({
+        fecha: c.fecha, nuevo: false, anio_campana: c.anio_campana, municipio: c.municipio, unidad: c.unidad, capturado_por: c.capturado_por,
+        sin_movimiento: Boolean(c.sin_movimiento), orig: Object.assign({}, c.valores || {}), valores: Object.assign({}, c.valores || {})
+      }))
+    };
+    abrirDetalleSIS({
+      titulo: 'Corregir Influenza · ' + mesNombre(mes) + ' ' + anio,
+      subtitulo: (activa.unidad || activa.clues) + ' · cada semana es un reporte de Meta-Logro',
+      cuerpo: editorInfluenzaHtml(),
+      acciones: [{ texto: 'Guardar cambios', icono: 'save', clase: 'btn-primario', onClick: guardarEditorInfluenza }]
+    });
+  }
+
+  async function guardarEditorInfluenza() {
+    if (!_edInf) return;
+    const cambios = _edInf.semanas.filter((w) => w.nuevo || INFLUENZA_FILAS.some((f) => (Number(w.valores[f.id]) || 0) !== (Number(w.orig[f.id]) || 0)));
+    if (!cambios.length) { toast('No hay cambios que guardar.', 'ok'); return; }
+    const nombre = nombreCompletoDePerfil(estado.perfil) || String(estado.perfil.usuario || '');
+    mostrarCargando('Guardando Influenza...');
+    try {
+      let campanas = null;
+      for (const w of cambios) {
+        let anioCampana = w.anio_campana;
+        if (w.nuevo) {
+          if (!campanas) {
+            const { data, error } = await estado.db.from('campanas').select('nombre, fecha_inicio, fecha_fin');
+            if (error) throw error;
+            campanas = (data || []).filter((c) => c.nombre && c.nombre.indexOf('Campaña Influenza') === 0);
+          }
+          const camp = campanas.find((c) => w.fecha >= String(c.fecha_inicio).slice(0, 10) && w.fecha <= String(c.fecha_fin).slice(0, 10));
+          if (!camp) throw new Error('El viernes ' + fechaCortaMX(w.fecha) + ' queda fuera de una campaña de Influenza: no se puede agregar.');
+          anioCampana = camp.nombre;
+        }
+        const valores = {};
+        let suma = 0;
+        INFLUENZA_FILAS.forEach((f) => {
+          const v = Math.max(0, Math.round(Number(w.valores[f.id]) || 0));
+          suma += v;
+          if (v > 0 || Object.prototype.hasOwnProperty.call(w.orig, f.id)) valores[f.id] = v;
+        });
+        const { data: previo, error: errPrevio } = await estado.db.from('influenza_capturas')
+          .select('historial_ediciones, valores').eq('clues', _edInf.clues).eq('fecha', w.fecha).maybeSingle();
+        if (errPrevio) throw errPrevio;
+        let hist = [];
+        if (previo && previo.historial_ediciones) {
+          hist = typeof previo.historial_ediciones === 'string' ? JSON.parse(previo.historial_ediciones) : previo.historial_ediciones;
+        }
+        hist.push({ fecha_edicion: new Date().toISOString(), editado_por: estado.perfil.rol, usuario: nombre, valores_anteriores: previo ? previo.valores : null });
+        const record = {
+          clues: _edInf.clues, unidad: w.unidad || _edInf.unidad, municipio: w.municipio || _edInf.municipio,
+          fecha: w.fecha, anio_campana: anioCampana, valores,
+          capturado_por: String(w.capturado_por || nombre).toUpperCase(), editado_por: estado.perfil.rol,
+          historial_ediciones: hist, sin_movimiento: suma === 0, updated_at: new Date().toISOString()
+        };
+        const { error } = await estado.db.from('influenza_capturas').upsert(record, { onConflict: 'clues,fecha' });
+        if (error) throw error;
+      }
+      await recargarInfluenzaCache(_edInf.clues);
+      const clues = _edInf.clues; const mes = _edInf.mes; const anio = _edInf.anio;
+      _edInf = null;
+      cerrarDetalleSIS();
+      renderInfluenza();
+      renderCEH();
+      refrescarConciliacion();
+      toast('✅ Influenza corregida. La unidad verá los cambios para aceptarlos.', 'ok');
+      document.dispatchEvent(new CustomEvent('sis06p:corregido', { detail: { clues, mes, anio, origen: 'influenza' } }));
+    } catch (err) {
+      console.error('[SINBA-SIS] Error al guardar Influenza:', err);
+      toast(esErrorDeRedSIS(err) ? 'Sin conexión: no se guardó. Lo que escribiste sigue en el editor; vuelve a tocar Guardar cuando regrese el internet.' : 'No se guardó Influenza: ' + (err.message || err), 'error');
+    } finally {
+      ocultarCargando();
+    }
+  }
+
+  // Un solo listener (delegado) para el editor: sigue funcionando aunque el cuerpo del modal se repinte.
+  document.addEventListener('input', (ev) => {
+    const el = ev.target;
+    if (!_edInf || !el || !el.classList || !el.classList.contains('ed-inf-in')) return;
+    const w = _edInf.semanas.find((x) => x.fecha === el.dataset.f);
+    if (!w) return;
+    w.valores[el.dataset.r] = Math.max(0, parseInt(el.value, 10) || 0);
+    const cambiado = (Number(w.valores[el.dataset.r]) || 0) !== (Number(w.orig[el.dataset.r]) || 0);
+    el.style.borderColor = cambiado ? '#d97706' : '#e2e8f0';
+    el.style.background = cambiado ? '#fffbeb' : '#fff';
+  });
+  document.addEventListener('click', (ev) => {
+    const b = ev.target && ev.target.closest ? ev.target.closest('#edInfAgregar') : null;
+    if (!b || !_edInf) return;
+    const sel = document.getElementById('edInfNueva');
+    if (!sel || !sel.value) return;
+    _edInf.semanas.push({ fecha: sel.value, nuevo: true, anio_campana: null, municipio: _edInf.municipio, unidad: _edInf.unidad, capturado_por: null, sin_movimiento: false, orig: {}, valores: {} });
+    _edInf.semanas.sort((a, c) => a.fecha.localeCompare(c.fecha));
+    pintarEditorInfluenza();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Historial de meses: lista de todos los SIS de la unidad con su estatus. Es
+  // SOLO consulta -- los meses enviados/validados no se pueden editar (el
+  // servidor lo exige), aquí se ve, se exporta a Excel o se imprime.
+  // ---------------------------------------------------------------------------
+  function irAMes(mes, anio) {
+    const selMes = document.getElementById('selMes');
+    const selAnio = document.getElementById('selAnio');
+    if (!Array.from(selAnio.options).some((o) => Number(o.value) === anio)) {
+      const o = document.createElement('option');
+      o.value = String(anio); o.textContent = String(anio);
+      selAnio.appendChild(o);
+    }
+    selMes.value = String(mes);
+    selAnio.value = String(anio);
+    selMes.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  let _histCablead = false;
+  async function abrirHistorial() {
+    const activa = datosUnidadActiva();
+    if (!activa) { toast('Selecciona una unidad (CLUES) específica.', 'error'); return; }
+    let filas = _sis06pCapturasCache.slice();
+    try {
+      const { data, error } = await estado.db.from('sis06p_capturas')
+        .select('id, mes, anio, estado, enviado_en, enviado_por, validado_en, validado_por, excepcion_conciliacion')
+        .eq('clues', activa.clues).order('anio', { ascending: false }).order('mes', { ascending: false });
+      if (!error && data) filas = data;
+    } catch (e) { /* se usa lo que ya hay en pantalla */ }
+    filas.sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
+    const fecha = (iso) => (iso ? new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+    const etiqueta = { BORRADOR: 'Borrador', ENVIADO: 'Enviado', VALIDADO: 'Validado' };
+    const cuerpo = filas.length
+      ? `<div style="overflow-x:auto;"><table class="detalle-tabla">
+          <thead><tr><th>Mes</th><th>Estatus</th><th>Enviado</th><th>Validado</th><th></th></tr></thead>
+          <tbody>${filas.map((f) => `<tr>
+            <td style="font-weight:700;">${mesNombre(f.mes)} ${f.anio}</td>
+            <td><span class="estado-badge estado-${f.estado}">${etiqueta[f.estado] || f.estado}</span></td>
+            <td>${fecha(f.enviado_en)}</td>
+            <td>${f.estado === 'VALIDADO' ? fecha(f.validado_en) + (f.validado_por ? '<br><span style="color:var(--muted); font-size:11px;">' + _esc(f.validado_por) + '</span>' : '') : '—'}</td>
+            <td style="text-align:right;"><div style="display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
+              <button type="button" class="btn-mini btn-secundario" data-hist-ver="${f.mes}|${f.anio}"><span class="material-symbols-rounded">visibility</span> Ver</button>
+              ${f.estado === 'VALIDADO' ? `<button type="button" class="btn-mini btn-secundario" data-hist-excel="${f.mes}|${f.anio}"><span class="material-symbols-rounded">download</span> Excel</button>` : ''}
+            </div></td></tr>`).join('')}</tbody></table></div>`
+      : '<p style="color:var(--muted); font-size:13px;">Todavía no hay meses guardados para esta unidad.</p>';
+    abrirDetalleSIS({
+      titulo: 'Historial de SIS',
+      subtitulo: (activa.unidad || activa.clues) + ' · solo consulta: los meses enviados ya no se pueden editar',
+      cuerpo: '<p style="font-size:12px; color:var(--muted); line-height:1.5; margin:0 0 12px;"><b>Solo consulta:</b> los meses enviados o validados no se pueden editar desde la unidad.</p>' + cuerpo + '<p style="font-size:11.5px; color:var(--muted); line-height:1.5; margin:12px 0 0;">«Ver» abre ese mes en las hojas del SINBA-SIS. Para imprimir, ábrelo y usa «Imprimir» (solo meses validados).</p>'
+    });
+    if (!_histCablead) {
+      _histCablead = true;
+      document.getElementById('detalleSISCuerpo').addEventListener('click', async (ev) => {
+        const ver = ev.target.closest('[data-hist-ver]');
+        const xls = ev.target.closest('[data-hist-excel]');
+        const b = ver || xls;
+        if (!b) return;
+        const [m, a] = (b.dataset.histVer || b.dataset.histExcel).split('|').map(Number);
+        cerrarDetalleSIS();
+        irAMes(m, a);
+        const btnSis = document.getElementById('btnSeccionSIS06P');
+        if (ver && btnSis && !btnSis.classList.contains('activo')) btnSis.click();
+        if (xls) await exportarSISOficialCompleto();
+      });
+    }
+  }
+
   // Guarda lo pendiente del paloteo SIS-06-P y abre el panel de Influenza
   // (Meta-Logro): es ahí donde se captura y se valida contra la meta, así que
   // no hay dos lugares para editar lo mismo. index.html abre directo en esa
   // pestaña con ?captura=INFLUENZA.
   async function irAMetaLogroInfluenza() {
+    if (esRolRevisor()) { await abrirEditorInfluenza(); return; }
     if (!esUnidadSesion()) return;
     const captura = capturaDelMesActual();
     if (captura && captura.estado !== 'BORRADOR') { toast('El SINBA-SIS de este mes ya fue enviado: Influenza quedó congelada.', 'error'); return; }
@@ -2534,6 +3252,8 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    const btnHist = document.getElementById('btnHistorialSIS');
+    if (btnHist) btnHist.addEventListener('click', abrirHistorial);
     const btnMeta = document.getElementById('btnEditarEnMetaLogro');
     const ovDetalle = document.getElementById('detalleSISOverlay');
     if (ovDetalle) ovDetalle.addEventListener('click', (ev) => { if (ev.target === ovDetalle) cerrarDetalleSIS(); });
@@ -2565,7 +3285,8 @@
   // vez dentro del propio biovac.html, donde ambos módulos sí conviven.
   window.SIS06PComodin = { PARES: AJUSTES_DEF, num2: _num2, diagnosticoPar };
   window.SIS06PBiovac = {
-    init, render, save, hayCambiosSinGuardar: () => _sinGuardar, renderCSVPreview, exportarSISOficialCompleto, INFLUENZA_SIS_MAPPING,
+    init, render, save, hayCambiosSinGuardar: () => _sinGuardar, renderCSVPreview, exportarSISOficialCompleto, exportarZipMunicipio, configurarImpresionOficial, INFLUENZA_SIS_MAPPING,
+    abrirHistorial, abrirEditorInfluenza,
     renderCEH, renderInfluenza, aplicarResponsable, guardarResponsable, marcarResponsableManual, refrescarConciliacion, actualizarDock
   };
 })();

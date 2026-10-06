@@ -184,13 +184,26 @@
     let fila = filaInicio;
     const inicioBloque = fila;
     const arfCombinado = [];
+    const filasBloque = []; // {fila, split} de todo renglón del bloque (para el Total)
 
     for (const { bio, normales, arf } of biosConRenglones) {
       const split = bio.regla_especial === 'SPLIT_DOSE';
-      const listaNormal = normales.length > 0 ? normales : [renglonVacio()];
+      // La plantilla reserva al menos 3 renglones por biológico (2 si el bloque
+      // junta varios, como COVID): así cabe su nombre, que va combinado en la
+      // columna A. Sin esto, con un solo lote el nombre se cortaba.
+      const listaNormal = normales.slice();
+      const minNormal = biosConRenglones.length > 1 ? 2 : 3;
+      while (listaNormal.length < minNormal) listaNormal.push(renglonVacio());
       const inicioNormalBio = fila;
+      const esUltimoBio = bio === biosConRenglones[biosConRenglones.length - 1].bio;
       for (let i = 0; i < listaNormal.length; i++) {
-        aplicarEstiloFila(ws, fila, estilos.normal, split, estilos.alturaNormal);
+        const primeroBloque = fila === inicioBloque;
+        const ultimoNormal = esUltimoBio && i === listaNormal.length - 1;
+        const [estiloN, alturaN] = primeroBloque ? [estilos.normal, estilos.alturaNormal]
+          : ultimoNormal ? [estilos.normalUltimo, estilos.alturaNormalUltimo]
+            : [estilos.normalMedio, estilos.alturaNormalMedio];
+        aplicarEstiloFila(ws, fila, estiloN, split, alturaN);
+        filasBloque.push({ fila, split });
         if (i === 0) ws.getCell(`A${fila}`).value = { richText: [{ text: bio.nombre_excel }] };
         escribirDatosRenglon(ws, fila, listaNormal[i], split);
         const dosis = listaNormal[i].dosisPorFrasco || bio.dosis_por_frasco || 1;
@@ -202,7 +215,9 @@
     }
 
     const inicioArf = fila;
-    const listaArf = arfCombinado.length > 0 ? arfCombinado : [{ bio: biosConRenglones[0].bio, renglon: renglonVacio() }];
+    // La plantilla reserva 2 renglones a la sección A.R.F. (su rótulo ocupa 3 líneas).
+    const listaArf = arfCombinado.slice();
+    while (listaArf.length < 2) listaArf.push({ bio: biosConRenglones[0].bio, renglon: renglonVacio() });
     for (let i = 0; i < listaArf.length; i++) {
       const { bio, renglon } = listaArf[i];
       const split = bio.regla_especial === 'SPLIT_DOSE';
@@ -211,7 +226,9 @@
       // distinguen por color: rojo (como la plantilla) para A.R.F., morado
       // para Canje (mismo criterio que ya usa el resto de BioVac).
       const esCanje = renglon.categoria === 'CANJE';
-      aplicarEstiloFila(ws, fila, estilos.arf, split, estilos.alturaArf, esCanje);
+      const ultimoArf = i === listaArf.length - 1;
+      aplicarEstiloFila(ws, fila, ultimoArf ? estilos.arfUltimo : estilos.arf, split, ultimoArf ? estilos.alturaArfUltimo : estilos.alturaArf, esCanje);
+      filasBloque.push({ fila, split });
       if (i === 0) {
         ws.getCell(`A${fila}`).value = {
           richText: [
@@ -248,11 +265,41 @@
     ws.getCell(`A${filaTotal}`).value = 'Total';
     ws.getCell(`B${filaTotal}`).value = { formula: formulaTotal('B', 'B', inicioBloque, finArf, filaTotal) };
     ws.getCell(`E${filaTotal}`).value = { formula: formulaTotal('E', 'E', inicioBloque, finArf, filaTotal) };
-    ws.getCell(`H${filaTotal}`).value = { formula: formulaTotal('H', 'J', inicioBloque, finArf, filaTotal) };
-    ws.getCell(`K${filaTotal}`).value = { formula: formulaTotal('K', 'M', inicioBloque, finArf, filaTotal) };
+    // Aplicadas / Desechadas: en un renglón SPLIT_DOSE (p. ej. Hepatitis B) las
+    // columnas son niño | adulto | equivalente en dosis de adulto (J = H/2 + I).
+    // Solo el equivalente (J / M) entra al total: sumar H:J contaba el niño dos
+    // veces (3 + 0 + 1.5 = 4.5 en vez de 1.5). Es lo que hace la plantilla oficial.
+    const argsH = argsTotalDosis(filasBloque, 'H', 'J');
+    const argsK = argsTotalDosis(filasBloque, 'K', 'M');
+    ws.getCell(`H${filaTotal}`).value = { formula: `IF(SUM(${argsH})=0," ",SUM(${argsH}))` };
+    ws.getCell(`K${filaTotal}`).value = { formula: `IF(SUM(${argsK})=0," ",SUM(${argsK}))` };
     ws.getCell(`N${filaTotal}`).value = { formula: formulaTotal('N', 'N', inicioBloque, finArf, filaTotal) };
 
+    // Misma comprobación de la plantilla (verde = cuadra, ámbar = no cuadra),
+    // pero en las filas reales de este bloque: las reglas originales apuntaban a
+    // las filas de la plantilla en blanco y, al moverse los bloques, pintaban
+    // celdas que no correspondían (p. ej. un recuadro verde en el encabezado).
+    ws._bioTotalesCF = ws._bioTotalesCF || [];
+    ws._bioTotalesCF.push({ filaTotal, argsH });
+
     return filaTotal + 1;
+  }
+
+  // Argumentos de SUM para el total de Aplicadas (H..J) o Desechadas (K..M):
+  // renglón partido -> solo la columna del equivalente; los demás -> el rango
+  // combinado. Agrupa renglones contiguos del mismo tipo.
+  function argsTotalDosis(filas, colIni, colEq) {
+    const partes = [];
+    let i = 0;
+    while (i < filas.length) {
+      let j = i;
+      while (j + 1 < filas.length && filas[j + 1].split === filas[i].split && filas[j + 1].fila === filas[j].fila + 1) j++;
+      partes.push(filas[i].split
+        ? `${colEq}${filas[i].fila}:${colEq}${filas[j].fila}`
+        : `${colIni}${filas[i].fila}:${colEq}${filas[j].fila}`);
+      i = j + 1;
+    }
+    return partes.join(',');
   }
 
   function escribirFormulasFila(ws, fila, bio, dosis, split) {
@@ -338,9 +385,18 @@
     const capturaNormal = capturarBloqueFilas(ws, FILA_ESTILO_NORMAL, 1);
     const capturaArf = capturarBloqueFilas(ws, FILA_ESTILO_ARF, 1);
     const capturaTotal = capturarBloqueFilas(ws, FILA_ESTILO_TOTAL, 1);
+    // La plantilla dibuja los bordes gruesos según la POSICIÓN del renglón en el
+    // bloque: el primero lleva el grueso de arriba, el último de cada sección el
+    // de abajo (el que separa A.R.F. de Total) y los de en medio solo líneas
+    // finas. Se capturan renglón medio/último de Normal y último de A.R.F.
+    const capturaNormalMedio = capturarBloqueFilas(ws, FILA_ESTILO_NORMAL + 1, 1);
+    const capturaNormalUltimo = capturarBloqueFilas(ws, FILA_ESTILO_NORMAL + 2, 1);
+    const capturaArfUltimo = capturarBloqueFilas(ws, FILA_ESTILO_ARF + 1, 1);
     const estilos = {
       normal: capturaNormal.filas[0], arf: capturaArf.filas[0], total: capturaTotal.filas[0],
-      alturaNormal: capturaNormal.alturas[0], alturaArf: capturaArf.alturas[0], alturaTotal: capturaTotal.alturas[0]
+      normalMedio: capturaNormalMedio.filas[0], normalUltimo: capturaNormalUltimo.filas[0], arfUltimo: capturaArfUltimo.filas[0],
+      alturaNormal: capturaNormal.alturas[0], alturaArf: capturaArf.alturas[0], alturaTotal: capturaTotal.alturas[0],
+      alturaNormalMedio: capturaNormalMedio.alturas[0], alturaNormalUltimo: capturaNormalUltimo.alturas[0], alturaArfUltimo: capturaArfUltimo.alturas[0]
     };
 
     const fechaRef = new Date(Date.UTC(anio, mes - 1, 1));
@@ -431,6 +487,30 @@
       }
     }
 
+    reconstruirFormatoCondicionalTotales(ws);
+  }
+
+  // Reglas de color del renglón Total de Aplicadas (verde = el total cuadra con
+  // los renglones, ámbar = no cuadra, beige = vacío). La plantilla las trae
+  // fijas a SUS filas; como los bloques se reconstruyen, se rehacen sobre las
+  // filas reales y se descartan las originales (que pintaban celdas ajenas).
+  function reconstruirFormatoCondicionalTotales(ws) {
+    const totales = ws._bioTotalesCF || [];
+    delete ws._bioTotalesCF;
+    const previa = (ws.conditionalFormattings || []).find((cf) => cf.rules && cf.rules.length >= 3 && /^H\d+:J\d+/.test(cf.ref));
+    const estilos = previa ? previa.rules.slice(0, 3).map((r) => r.style) : [
+      { font: { color: { argb: 'FF29411B' } }, fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFA9D08E' } } },
+      { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFE5D8BD' } } },
+      { font: { color: { argb: 'FF7F3F00' } }, fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC000' } } }
+    ];
+    ws.conditionalFormattings = totales.map(({ filaTotal, argsH }, i) => ({
+      ref: `H${filaTotal}:J${filaTotal}`,
+      rules: [
+        { type: 'expression', formulae: [`SUM(${argsH})=H${filaTotal}`], style: estilos[0], priority: i * 3 + 1 },
+        { type: 'expression', formulae: [`H${filaTotal}=" "`], style: estilos[1], priority: i * 3 + 2 },
+        { type: 'expression', formulae: [`SUM(${argsH})<>H${filaTotal}`], style: estilos[2], priority: i * 3 + 3 }
+      ]
+    }));
   }
 
   function mapRenglon(r) {

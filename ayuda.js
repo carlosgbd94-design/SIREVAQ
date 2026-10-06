@@ -55,10 +55,11 @@
         I('table_view', '#16a34a', 'SIS-SS-CE-H', 'La hoja de claves: se arma sola con SIS-06-P e Influenza. Aquí no se captura nada.'),
         I('vaccines', '#C26750', 'Influenza', 'Se lee del panel de Meta-Logro (ahí se valida contra tu meta). Aquí ves el corte del mes por semana; para cambiarlo vas a Meta-Logro.'),
         T('El mes en cuatro pasos'),
-        P(1, 'Captura', 'Puedes ir prellenando desde una semana antes de cerrar el mes. Guarda con el botón de la barra de abajo.'),
+        P(1, 'Captura', 'Se abre una semana antes de cerrar el mes. Guarda con el botón de la barra de abajo; lo que teclees también queda respaldado en tu dispositivo, así que un corte de internet no te hace perder el avance.'),
         P(2, 'Concilia', 'Las dosis aplicadas del paloteo y las del Movimiento deben coincidir, biológico por biológico. Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT) usa el comodín de sustitución.'),
         P(3, 'Envía', 'Solo del último día del mes a la semana siguiente. Al enviar, todo el archivo se bloquea, incluida Influenza.'),
-        P(4, 'Validación', 'El municipal revisa; si corrige algo, tú ves cada cambio y lo aceptas. Ya validado puedes exportar el Excel oficial e imprimir.')
+        P(4, 'Validación', 'El municipal revisa; si corrige algo, tú ves cada cambio y lo aceptas. Ya validado puedes exportar el Excel oficial e imprimir.'),
+        N('Una vez enviado, la unidad ya no puede cambiar nada (ni SIS-06-P, ni Movimiento, ni Influenza): solo el municipal. Con «Historial» consultas todos tus meses, siempre sin poder editarlos.')
       ]
     },
 
@@ -74,7 +75,7 @@
         P(1, 'Guarda', 'Cada biológico es un contenedor: ábrelo para capturar. El aviso "Cambios sin guardar" y el botón de la barra te dicen si falta guardar.'),
         P(2, 'Concilia', 'La tarjeta de conciliación muestra los biológicos cuyas dosis no coinciden con Movimiento de Biológico. Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT), captura cuántas en el comodín de sustitución.'),
         P(3, 'Envía', 'Cuando todo cuadra y estás en la ventana de envío, el botón Enviar se enciende.'),
-        N('Después de enviar esta hoja se bloquea. Si el municipal corrige algo, te aparece cada cambio para que lo aceptes.')
+        N('Si se va el internet o falla el guardado, lo que tecleaste se queda respaldado en este dispositivo: al volver a abrir el mes te avisamos y lo recuperas. Después de enviar esta hoja se bloquea; si el municipal corrige algo, te aparece cada cambio para que lo aceptes.')
       ]
     },
 
@@ -91,7 +92,7 @@
         T('Que cuadre con tu paloteo'),
         P(1, 'Compara', 'Bajo cada biológico ves cuántas dosis reportaste en SIS-06-P y cuántas suman tus lotes. En verde: coinciden.'),
         P(2, 'Corrige', 'Ajusta las "aplicadas" por lote aquí, o el paloteo en SIS-06-P, hasta que sean iguales. En Influenza, "Usar este total aquí" pasa el total del mes al lote.'),
-        N('Lo recibido puede llegar precargado desde la requisición de la Jurisdicción; puedes editarlo si algo cambió. Al enviar el SINBA-SIS, el Movimiento se cierra solo.')
+        N('Lo recibido puede llegar precargado desde la requisición de la Jurisdicción; puedes editarlo si algo cambió. Si falla el internet al guardar una casilla, el cambio queda respaldado y se guarda solo al volver la conexión. Al enviar el SINBA-SIS, el Movimiento se cierra solo y ya no se puede modificar desde la unidad.')
       ]
     },
 
@@ -123,7 +124,7 @@
         P(1, 'Revisa', 'En pantallas angostas elige una semana arriba para verla completa; toca una fila para ver su desglose semanal.'),
         P(2, 'Concilia', 'Lo aplicado de Antiinfluenza en Movimiento debe ser igual al total de aquí. Si no, "Ir a Movimiento" te lleva y "Usar este total aquí" lo pasa al lote.'),
         P(3, 'Corrige', '"Editar semanas en Meta-Logro" guarda tu SIS-06-P y te lleva al panel de Influenza.'),
-        N('Al enviar el SINBA-SIS, Influenza de ese mes queda congelada para la unidad; si hay que corregirla, lo hace el municipal.')
+        N('Al enviar el SINBA-SIS, Influenza de ese mes queda congelada para la unidad. Si hay que corregirla, el municipal usa «Corregir semanas» (puede cambiar cualquier semana o agregar una que falte); cada cambio queda registrado y la unidad lo ve para aceptarlo.')
       ]
     },
 
@@ -138,7 +139,8 @@
         T('Cómo se valida'),
         P(1, 'Revisa', 'Elige la unidad en "Unidad a revisar" para ver y, si hace falta, corregir sus hojas.'),
         P(2, 'Marca Validado', 'Con el botón de la barra. Cada corrección que hagas queda auditada y la unidad la ve para aceptarla.'),
-        N('Cuando todas las unidades de un municipio están validadas se habilita el CSV oficial de ese municipio.')
+        P(3, 'Si no cuadra', 'Corrige el lado que esté mal (SIS-06-P, Movimiento o Influenza). Solo la jurisdicción o la administración pueden validar con excepción cuando la diferencia es legítima: piden el motivo y queda auditado.'),
+        N('Cuando todas las unidades de un municipio están validadas (y paloteo y Movimiento siguen cuadrando) se habilitan el CSV oficial, el ZIP de Excel y la carga a indicadores. Si después corriges algo y ese municipio ya estaba en indicadores, se actualiza solo.')
       ]
     },
     csv: {

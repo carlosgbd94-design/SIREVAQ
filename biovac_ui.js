@@ -209,6 +209,127 @@ function responsableElaboracion() {
   return usuarioActual();
 }
 
+// ---------------------------------------------------------------------------
+// Candado de la unidad y respaldo local de lo tecleado en Movimiento
+// ---------------------------------------------------------------------------
+
+// SIS-06-P + Movimiento + Influenza son UN documento: una vez enviado, la
+// unidad ya no escribe nada (solo el municipal). El servidor lo exige con
+// triggers; esto solo evita ofrecerle casillas que de todos modos rechazaría.
+function movimientoBloqueadoParaUnidad() {
+  return Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD'
+    && estado.sis06pEstadoActual && estado.sis06pEstadoActual !== 'BORRADOR');
+}
+
+function esErrorDeRed(err) {
+  const msg = String((err && (err.message || err)) || '');
+  return (typeof navigator !== 'undefined' && navigator.onLine === false)
+    || /failed to fetch|networkerror|network request failed|load failed|timeout|timed out|fetch failed/i.test(msg);
+}
+
+// Cada casilla del Movimiento se guarda sola al salir del campo. Si en ese
+// momento falla el internet (o el servidor), lo tecleado se perdía al recargar.
+// Ahora cada tecla se respalda en este dispositivo (por usuario y movimiento) y
+// solo se borra cuando el servidor confirma el guardado: al volver a abrir el
+// mes, o al regresar la conexión, se recupera y se reintenta solo.
+const PEND_PREFIJO = 'biovac_pend_v1:';
+function pendClave() {
+  const m = estado.movimiento;
+  if (!m || !m.id) return null;
+  const quien = (estado.perfil && (estado.perfil.id || estado.perfil.usuario)) || 'anon';
+  return PEND_PREFIJO + quien + ':' + m.id;
+}
+function pendLeer() {
+  const k = pendClave();
+  if (!k) return {};
+  try { return JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch (e) { return {}; }
+}
+function pendGuardar(obj) {
+  const k = pendClave();
+  if (!k) return;
+  try {
+    if (Object.keys(obj).length) localStorage.setItem(k, JSON.stringify(obj));
+    else localStorage.removeItem(k);
+  } catch (e) { /* sin almacenamiento: se sigue sin respaldo */ }
+}
+function pendAnotar(renglonId, campo, valor) {
+  if (!pendClave()) return;
+  const o = pendLeer();
+  o[renglonId + '|' + campo] = { r: renglonId, c: campo, v: String(valor == null ? '' : valor), t: Date.now() };
+  pendGuardar(o);
+}
+function pendQuitar(renglonId, campo) {
+  if (!pendClave()) return;
+  const o = pendLeer();
+  if (o[renglonId + '|' + campo]) { delete o[renglonId + '|' + campo]; pendGuardar(o); }
+}
+function pendCuantos() { return Object.keys(pendLeer()).length; }
+
+let _pendReintentando = false;
+
+function pendActualizarBanner() {
+  const banner = document.getElementById('bannerPendientes');
+  if (!banner) return;
+  const n = pendCuantos();
+  if (!n) { banner.innerHTML = ''; return; }
+  const sinRed = typeof navigator !== 'undefined' && navigator.onLine === false;
+  banner.innerHTML = `<div class="banner-mov correccion"><span class="material-symbols-rounded">${sinRed ? 'wifi_off' : 'sync_problem'}</span>
+    <div class="texto"><b>${n} cambio${n === 1 ? '' : 's'} sin confirmar en el servidor</b>${sinRed
+      ? 'No hay conexión. Lo que tecleaste está protegido en este dispositivo y se guardará solo cuando regrese el internet.'
+      : 'Lo que tecleaste está protegido en este dispositivo. Reintenta para guardarlo; si lo que ves ya no es lo que querías, descártalo.'}</div>
+    <button type="button" class="btn-primario" data-pend="reintentar"><span class="material-symbols-rounded">sync</span> Guardar ahora</button>
+    <button type="button" class="btn-secundario" data-pend="descartar">Descartar</button></div>`;
+}
+
+// Repone en pantalla lo respaldado que el servidor no llegó a confirmar.
+function pendAplicar() {
+  const o = pendLeer();
+  const llaves = Object.keys(o);
+  if (!llaves.length) { pendActualizarBanner(); return; }
+  const m = estado.movimiento;
+  const editable = m && (m.estado === 'BORRADOR' || m.estado === 'EN_CORRECCION') && !movimientoBloqueadoParaUnidad();
+  if (!editable) { pendGuardar({}); pendActualizarBanner(); return; } // el mes ya no admite captura: nada viejo se aplica
+  let recuperados = 0;
+  llaves.forEach((k) => {
+    const p = o[k];
+    const r = estado.renglones.find((x) => x.id === p.r);
+    const input = document.querySelector(`input[data-renglon="${p.r}"][data-campo="${p.c}"]`);
+    if (!r || !input) { delete o[k]; return; }
+    const igual = p.c === 'observaciones'
+      ? ((String(p.v).trim() || null) === (r[p.c] || null))
+      : ((Number(p.v) || 0) === (Number(r[p.c]) || 0));
+    if (igual) { delete o[k]; return; }
+    input.value = p.v;
+    camposSinGuardar.add(input);
+    if (p.c !== 'observaciones') recalcularFilaEnVivo(p.r);
+    recuperados++;
+  });
+  pendGuardar(o);
+  pendActualizarBanner();
+  if (recuperados) {
+    toast(`Recuperamos ${recuperados} cambio${recuperados === 1 ? '' : 's'} que no se habían guardado.`, 'ok');
+    if (typeof navigator === 'undefined' || navigator.onLine !== false) pendReintentar();
+  }
+}
+
+async function pendReintentar() {
+  if (_pendReintentando) return;
+  _pendReintentando = true;
+  try {
+    const inputs = Array.from(document.querySelectorAll('input[data-renglon][data-campo]')).filter((i) => camposSinGuardar.has(i));
+    for (const input of inputs) await guardarCampoRenglon(input);
+  } finally {
+    _pendReintentando = false;
+    pendActualizarBanner();
+  }
+}
+
+window.addEventListener('online', () => {
+  if (pendCuantos() > 0) { toast('Regresó la conexión: guardando tus cambios pendientes…', 'ok'); pendReintentar(); }
+  pendActualizarBanner();
+});
+window.addEventListener('offline', () => { pendActualizarBanner(); });
+
 function toast(msg, tipo) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -558,6 +679,25 @@ function sincronizarDockMovimiento() {
   }
 }
 
+// PDF y Cerrar mes de la hoja Movimiento viven en la barra flotante. Los botones
+// de la cabecera siguen existiendo (ocultos): conservan su lógica y su
+// visibilidad por rol/estado, y estos botones los espejan y los disparan.
+const DOCK_EXTRAS_MOVIMIENTO = [['btnVerPdfDock', 'btnVerPdf'], ['btnCerrarMesDock', 'btnCerrarMes']];
+
+function sincronizarDockMovimientoExtras() {
+  const btnMov = document.getElementById('btnSeccionMovimiento');
+  const fila = document.getElementById('filaBotonesCabecera');
+  const enMovimiento = Boolean(btnMov && btnMov.classList.contains('activo') && estado.movimiento
+    && fila && fila.style.display !== 'none');
+  DOCK_EXTRAS_MOVIMIENTO.forEach(([dockId, hdrId]) => {
+    const d = document.getElementById(dockId);
+    const h = document.getElementById(hdrId);
+    if (!d || !h) return;
+    d.style.display = (enMovimiento && h.style.display !== 'none') ? 'inline-flex' : 'none';
+    d.disabled = h.disabled;
+  });
+}
+
 // La "tinta" de la barra de hojas (resaltado tonal que se desliza a la pestaña
 // activa) la maneja dock_glass.js, compartido con requisiciones.html.
 function instalarTintaHojas() {
@@ -631,6 +771,7 @@ function inicializarToggleSIS06P() {
     document.getElementById('filaBotonesCabecera').style.display = 'none';
     document.getElementById('panelImportador').style.display = 'none';
     document.getElementById('btnAbrirImportador').style.display = 'none';
+    sincronizarDockMovimientoExtras();
     const avisoDerivado = document.getElementById('avisoMovimientoDerivado');
     if (avisoDerivado) avisoDerivado.style.display = 'none';
   }
@@ -950,7 +1091,7 @@ async function cargarMovimiento() {
   }
   render();
   cargarCorreccionesJurisdiccion(false);
-  if (movimiento.estado === 'BORRADOR') {
+  if (movimiento.estado === 'BORRADOR' && !movimientoBloqueadoParaUnidad()) {
     // Pseudo-unidad (municipio/hospital, clues 'JS1-...') -> reparto a nivel
     // municipio (requi_distribucion_municipio); CLUES real -> reparto a
     // nivel unidad de salud (requi_distribucion_unidad). No depende del rol
@@ -1414,7 +1555,7 @@ function render() {
 
   document.getElementById('infoCorregido').textContent = m.fue_corregido ? '⚠ Corregido posteriormente' : '';
 
-  const editable = m.estado === 'BORRADOR' || m.estado === 'EN_CORRECCION';
+  const editable = (m.estado === 'BORRADOR' || m.estado === 'EN_CORRECCION') && !movimientoBloqueadoParaUnidad();
   // El renglón jurisdiccional (m.id === null) no es un movimiento real --
   // no hay nada que exportar/imprimir desde aquí (ya existe Concentrado
   // Biológico para eso, con su propio motor de exportación) ni histórico
@@ -1475,6 +1616,8 @@ function render() {
   renderBloques(editable);
   aplicarEtiquetasCorreccion();
   sincronizarDockMovimiento();
+  sincronizarDockMovimientoExtras();
+  pendAplicar();
 }
 
 function renderBloques(editable) {
@@ -1754,6 +1897,8 @@ function renderBiologico(bio, editable) {
   if (editable) {
     html += renderPanelAgregar(bio);
   }
+
+  html += htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, normales);
   html += `</div>`;
   return html;
 }
@@ -1897,8 +2042,6 @@ function renderPanelAgregar(bio) {
   <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
     <div class="campos">
       <div class="campo">
-
-  html += htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, normales);
         <label>1. Estatus</label>
         <select data-nuevo-categoria>
           <option value="">Selecciona el Estatus…</option>
@@ -2015,7 +2158,7 @@ function recalcularTotalBio(bioId) {
   // guardar cada celda y recargar el bloque completo.
   const panelExistente = document.querySelector(`[data-sis06p-compara="${bioId}"]`);
   if (panelExistente) {
-    const editable = estado.movimiento && (estado.movimiento.estado === 'BORRADOR' || estado.movimiento.estado === 'EN_CORRECCION');
+    const editable = estado.movimiento && (estado.movimiento.estado === 'BORRADOR' || estado.movimiento.estado === 'EN_CORRECCION') && !movimientoBloqueadoParaUnidad();
     const normalesLotes = renglonesBio.filter((r) => r.categoria === 'NORMAL');
     const nuevoHtml = htmlComparacionSIS06P(bio, totales.aplicadasA, totales.aplicadasB, editable, normalesLotes);
     if (nuevoHtml) panelExistente.outerHTML = nuevoHtml;
@@ -2075,6 +2218,12 @@ async function guardarCampoRenglon(input) {
   const valor = campo === 'observaciones' ? (input.value.trim() || null) : (Number(input.value) || 0);
 
   const r = estado.renglones.find((x) => x.id === renglonId);
+  if (movimientoBloqueadoParaUnidad()) {
+    pendQuitar(renglonId, campo);
+    camposSinGuardar.delete(input);
+    toast('El SINBA-SIS de este mes ya fue enviado: el Movimiento ya no se puede modificar.', 'error');
+    return;
+  }
   if (r && campo !== 'observaciones') {
     const bio = estado.biologicos.find((b) => b.id === r.biovac_lotes.biologico_id);
     const dosisProspectiva = BiovacEngine.calcExistenciaFinal({
@@ -2089,6 +2238,7 @@ async function guardarCampoRenglon(input) {
       toast(errorValidacion, 'error');
       input.value = r[campo] || '';
       camposSinGuardar.delete(input);
+      pendQuitar(renglonId, campo);
       recalcularFilaEnVivo(renglonId);
       return;
     }
@@ -2100,21 +2250,45 @@ async function guardarCampoRenglon(input) {
   // unidad reciba la misma alerta sin importar desde qué pantalla se hizo.
   const esCorreccionJurisdiccional = estado.correccionEsJurisdiccional && estado.movimiento.estado === 'EN_CORRECCION';
   let final;
-  if (esCorreccionJurisdiccional) {
-    const usuario = usuarioActual();
-    if (!usuario) return;
-    const { data, error } = await estado.db.rpc('biovac_guardar_campo_correccion_jurisdiccional', {
-      p_renglon_id: renglonId, p_campo: campo, p_valor: valor == null ? '' : String(valor),
-      p_usuario: usuario, p_rol: (estado.perfil ? estado.perfil.rol : 'JURISDICCIONAL'), p_cascade_batch_id: estado.correccionBatchId
-    });
-    if (error) { toast('Error al guardar: ' + error.message, 'error'); return; }
-    final = data;
-  } else {
-    const { data, error } = await estado.db.from('biovac_renglones').update({ [campo]: valor }).eq('id', renglonId)
-      .select('existencia_final_frascos').single();
-    if (error) { toast('Error al guardar: ' + error.message, 'error'); return; }
-    final = data.existencia_final_frascos;
+  // Un fallo de red conserva el respaldo local (se reintenta solo al volver el
+  // internet); cualquier otro rechazo del servidor (mes enviado, cerrado...) se
+  // muestra tal cual y se descarta el respaldo para no reintentarlo en bucle.
+  const falloGuardado = (error) => {
+    if (esErrorDeRed(error)) {
+      toast('Sin conexión o conexión inestable: tu cambio quedó protegido en este dispositivo y se guardará solo al volver el internet.', 'error');
+    } else {
+      pendQuitar(renglonId, campo);
+      camposSinGuardar.delete(input);
+      // la pantalla no debe mostrar como bueno algo que el servidor rechazó
+      if (r) {
+        input.value = r[campo] || '';
+        if (campo !== 'observaciones') recalcularFilaEnVivo(renglonId);
+      }
+      toast('No se guardó: ' + (error.message || error), 'error');
+    }
+    pendActualizarBanner();
+  };
+  try {
+    if (esCorreccionJurisdiccional) {
+      const usuario = usuarioActual();
+      if (!usuario) return;
+      const { data, error } = await estado.db.rpc('biovac_guardar_campo_correccion_jurisdiccional', {
+        p_renglon_id: renglonId, p_campo: campo, p_valor: valor == null ? '' : String(valor),
+        p_usuario: usuario, p_rol: (estado.perfil ? estado.perfil.rol : 'JURISDICCIONAL'), p_cascade_batch_id: estado.correccionBatchId
+      });
+      if (error) { falloGuardado(error); return; }
+      final = data;
+    } else {
+      const { data, error } = await estado.db.from('biovac_renglones').update({ [campo]: valor }).eq('id', renglonId)
+        .select('existencia_final_frascos').single();
+      if (error) { falloGuardado(error); return; }
+      final = data.existencia_final_frascos;
+    }
+  } catch (errRed) {
+    falloGuardado(errRed);
+    return;
   }
+  pendQuitar(renglonId, campo);
   camposSinGuardar.delete(input);
   destellarGuardado(input);
   if (r) {
@@ -2343,7 +2517,10 @@ function renderBannerMovimiento(m, esJurisdiccional) {
   if (!cont) return;
   const rol = estado.perfil ? estado.perfil.rol : null;
   if (esJurisdiccional || !rol) { cont.innerHTML = ''; return; }
-  if (m.estado === 'CERRADO' && rol !== 'UNIDAD') {
+  if (rol === 'UNIDAD' && movimientoBloqueadoParaUnidad()) {
+    cont.innerHTML = `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock</span>
+      <div class="texto"><b>Enviado: solo lectura</b>Ya enviaste el SINBA-SIS de este mes, así que el Movimiento de Biológico no se puede modificar. Si algo está mal, pide la corrección al municipal.</div></div>`;
+  } else if (m.estado === 'CERRADO' && rol !== 'UNIDAD') {
     cont.innerHTML = `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock</span>
       <div class="texto"><b>Movimiento cerrado por la unidad</b>Para corregir lotes, cantidades, la existencia anterior o eliminar renglones, ábrelo en modo corrección: queda registrado y los meses siguientes se recalculan solos (la existencia de cada mes arrastra la del anterior y tus ajustes manuales se conservan).</div>
       <button type="button" class="btn-primario" data-banner="corregir"><span class="material-symbols-rounded">edit_note</span> Corregir movimiento</button></div>`;
@@ -3146,6 +3323,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnAplicarCorreccion').addEventListener('click', aplicarCorreccion);
   document.getElementById('btnExportarExcel').addEventListener('click', exportarExcel);
   document.getElementById('btnVerPdf').addEventListener('click', verPdf);
+  DOCK_EXTRAS_MOVIMIENTO.forEach(([dockId, hdrId]) => {
+    const d = document.getElementById(dockId);
+    if (d) d.addEventListener('click', () => document.getElementById(hdrId).click());
+  });
   document.getElementById('btnAbrirImportador').addEventListener('click', abrirPanelImportador);
   document.getElementById('btnCerrarImportador').addEventListener('click', () => { document.getElementById('panelImportador').style.display = 'none'; });
   document.getElementById('btnAnalizarImportacion').addEventListener('click', analizarArchivoImportacion);
@@ -3157,6 +3338,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   cont.addEventListener('input', (ev) => {
     if (ev.target.matches('[data-renglon][data-campo]')) {
       marcarCampoSinGuardar(ev.target);
+      pendAnotar(ev.target.dataset.renglon, ev.target.dataset.campo, ev.target.value);
       if (ev.target.dataset.campo !== 'observaciones') recalcularFilaEnVivo(ev.target.dataset.renglon);
       return;
     }
@@ -3180,6 +3362,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       ev.preventDefault();
       ev.target.blur();
       alternarEdicionAnterior(ev.target.dataset.renglon);
+    }
+  });
+  const bannerPend = document.getElementById('bannerPendientes');
+  if (bannerPend) bannerPend.addEventListener('click', async (ev) => {
+    const b = ev.target.closest('[data-pend]');
+    if (!b) return;
+    if (b.dataset.pend === 'reintentar') { await pendReintentar(); return; }
+    if (b.dataset.pend === 'descartar') {
+      const ok = await mostrarModal({ titulo: 'Descartar cambios', mensaje: 'Se borrarán de este dispositivo los cambios que no se guardaron y se volverá a lo que está en el servidor. ¿Descartarlos?', textoAceptar: 'Descartar', peligro: true });
+      if (!ok) return;
+      pendGuardar({});
+      camposSinGuardar.clear();
+      await cargarMovimiento();
     }
   });
   const bannerMov = document.getElementById('bannerMovimiento');
@@ -3206,9 +3401,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (accion === 'toggle-agregar' || accion === 'cancelar-agregar' || accion === 'confirmar-agregar') {
       const panel = document.querySelector(`[data-panel-agregar="${btn.dataset.bio}"]`);
+      const disparador = document.querySelector(`[data-action="toggle-agregar"][data-bio="${btn.dataset.bio}"]`);
       if (accion === 'toggle-agregar') {
         const abriendo = !panel.classList.contains('abierto');
         panel.classList.toggle('abierto');
+        if (disparador) disparador.setAttribute('aria-expanded', String(abriendo));
         if (abriendo) poblarSelectLoteAgregar(panel);
       }
       if (accion === 'cancelar-agregar') {
@@ -3404,11 +3601,9 @@ document.addEventListener('DOMContentLoaded', () => {
     submitBtn.disabled = true;
 
     const userName = nombreCompletoDePerfil(estado.perfil) || document.getElementById('selUsuario')?.value.trim() || 'Usuario anónimo';
-      const disparador = document.querySelector(`[data-action="toggle-agregar"][data-bio="${btn.dataset.bio}"]`);
     const userRole = estado.perfil?.rol || 'N/A (sin sesión real)';
     const unidadSel = document.getElementById('selUnidad');
     const unidadTexto = unidadSel?.selectedOptions[0]?.textContent || 'N/A';
-        if (disparador) disparador.setAttribute('aria-expanded', String(abriendo));
     const periodo = estado.movimiento ? `${MESES.find((m) => m.v === estado.movimiento.mes)?.l || estado.movimiento.mes} ${estado.movimiento.anio} (${estado.movimiento.estado})` : 'N/A (sin movimiento cargado)';
 
     // Pestaña activa + unidad que un revisor (MUNICIPAL/JURISDICCIONAL/ADMIN)

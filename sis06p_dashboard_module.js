@@ -173,8 +173,72 @@
           ? `El envío de este mes se habilita del ${fecha(v.inicio_envio)} al ${fecha(v.fin_envio)}. Hasta entonces las unidades solo pueden prellenar -- todas aparecen como "Sin enviar".`
           : `La ventana de envío de este mes ya cerró (${fecha(v.inicio_envio)} al ${fecha(v.fin_envio)}).`;
       }
+      // Solo el administrador puede mover las fechas de un mes (p. ej. para que una
+      // unidad que no alcanzó a enviar pueda capturar y enviar).
+      if (estado.perfil && estado.perfil.rol === 'ADMIN') {
+        if (v.override_activo) banner.appendChild(document.createTextNode(' (fechas habilitadas por administración)'));
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-mini btn-secundario';
+        btn.style.marginLeft = '10px';
+        btn.innerHTML = '<span class="material-symbols-rounded">edit_calendar</span> ' + (v.override_activo ? 'Cambiar fechas' : 'Habilitar este mes');
+        btn.addEventListener('click', () => abrirCalendarioMes(mes, anio, v));
+        banner.appendChild(btn);
+        if (v.override_activo) {
+          const quitar = document.createElement('button');
+          quitar.type = 'button';
+          quitar.className = 'btn-mini btn-fantasma';
+          quitar.style.marginLeft = '6px';
+          quitar.textContent = 'Volver a las fechas normales';
+          quitar.addEventListener('click', () => quitarCalendarioMes(mes, anio));
+          banner.appendChild(quitar);
+        }
+      }
     } catch (err) {
       banner.style.display = 'none';
+    }
+  }
+
+  // Fechas especiales de un mes (tabla sis06p_calendario_override, solo ADMIN por RLS):
+  // abren la captura y el envío de ese mes para las unidades durante ese rango.
+  async function abrirCalendarioMes(mes, anio, v) {
+    const detalle = `
+      <label style="font-size:12px; font-weight:700; display:flex; flex-direction:column; gap:4px;">Habilitar desde
+        <input type="date" id="ovDesde" value="${String(v.inicio_envio).slice(0, 10)}" style="padding:8px; border:1px solid var(--outline-variant); border-radius:8px;"></label>
+      <label style="font-size:12px; font-weight:700; display:flex; flex-direction:column; gap:4px;">Hasta
+        <input type="date" id="ovHasta" value="${String(v.fin_envio).slice(0, 10)}" style="padding:8px; border:1px solid var(--outline-variant); border-radius:8px;"></label>`;
+    const motivo = await mostrarModal({
+      titulo: 'Habilitar captura y envío de este mes',
+      mensaje: 'Durante esas fechas las unidades podrán capturar y enviar su SIS de este mes aunque su ventana normal ya haya pasado. El motivo queda registrado.',
+      detalleHtml: detalle, pedirMotivo: true, placeholderMotivo: 'Ej. La unidad tuvo falla de internet y no alcanzó a enviar', textoAceptar: 'Habilitar'
+    });
+    if (!motivo) return;
+    const desde = (document.getElementById('ovDesde') || {}).value;
+    const hasta = (document.getElementById('ovHasta') || {}).value;
+    if (!desde || !hasta || desde > hasta) { toast('Revisa las fechas: "desde" no puede ser posterior a "hasta".', 'error'); return; }
+    try {
+      const { error } = await estado.db.from('sis06p_calendario_override').upsert({
+        anio, mes, habilitar_desde: desde, habilitar_hasta: hasta, motivo, activo: true,
+        creado_por: nombreCompletoDePerfil(estado.perfil)
+      }, { onConflict: 'anio,mes' });
+      if (error) throw error;
+      toast('Fechas habilitadas para este mes.', 'ok');
+      await renderBannerVentana(mes, anio);
+    } catch (err) {
+      toast('No se pudo habilitar el mes: ' + (err.message || err), 'error');
+    }
+  }
+
+  async function quitarCalendarioMes(mes, anio) {
+    const ok = await mostrarModal({ titulo: 'Volver a las fechas normales', mensaje: 'Se quitan las fechas especiales de este mes: las unidades vuelven a la ventana normal (lo ya capturado no se borra).', textoAceptar: 'Quitar' });
+    if (!ok) return;
+    try {
+      const { error } = await estado.db.from('sis06p_calendario_override').update({ activo: false }).eq('anio', anio).eq('mes', mes);
+      if (error) throw error;
+      toast('Fechas normales restablecidas.', 'ok');
+      await renderBannerVentana(mes, anio);
+    } catch (err) {
+      toast('No se pudo quitar: ' + (err.message || err), 'error');
     }
   }
 
@@ -398,8 +462,21 @@
         btnPub.disabled = false;
         if (hecho) pintarEstadoPublicacion(estadoPub, municipio, mes, anio);
       });
+      const btnZip = document.createElement('button');
+      btnZip.type = 'button';
+      btnZip.className = completo ? 'btn-primario btn-mini' : 'btn-fantasma btn-mini';
+      btnZip.disabled = !completo;
+      if (!completo) btnZip.style.opacity = '0.5';
+      btnZip.title = 'Un archivo Excel oficial (SINBA-SIS) por cada unidad del municipio, en un solo ZIP';
+      btnZip.innerHTML = '<span class="material-symbols-rounded">folder_zip</span> Descargar ZIP de Excel';
+      btnZip.addEventListener('click', async () => {
+        if (!window.SIS06PBiovac || !window.SIS06PBiovac.exportarZipMunicipio) { toast('El módulo de exportación aún no está listo. Intenta de nuevo.', 'error'); return; }
+        btnZip.disabled = true;
+        try { await window.SIS06PBiovac.exportarZipMunicipio(unidadesGrupo, municipio, mes, anio); } finally { btnZip.disabled = false; }
+      });
       const acciones = document.createElement('div');
       acciones.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap;';
+      acciones.appendChild(btnZip);
       acciones.appendChild(btn);
       acciones.appendChild(btnPub);
       barra.appendChild(acciones);
@@ -531,7 +608,9 @@
       const { data, error } = await estado.db.rpc('sis_publicar_registros_sis', { p_mes: mes, p_anio: anio, p_municipio: municipio, p_usuario: usuario });
       if (error) throw error;
       const omitidas = (data && data.clues_omitidas) || [];
-      const cuando = opciones.automatica ? `Con la última validación de ${etiqueta} se cargó solo a indicadores` : 'Publicado';
+      const cuando = opciones.actualizacion
+        ? `Con tu corrección, los indicadores de ${etiqueta} se actualizaron solos`
+        : (opciones.automatica ? `Con la última validación de ${etiqueta} se cargó solo a indicadores` : 'Publicado');
       toast(`✅ ${cuando}: ${data.insertadas} filas de ${(data.clues_publicadas || []).length} unidad(es)${data.reemplazadas ? ` (reemplazó ${data.reemplazadas} previas)` : ''}.${omitidas.length ? ' Sin catálogo SIS, omitidas: ' + omitidas.join(', ') + '.' : ''}`, 'ok');
       document.dispatchEvent(new CustomEvent('sis06p:publicado', { detail: { municipio, mes, anio } }));
       // Igual que la carga de CSV del panel RDA: datos nuevos en registros_sis => recalcular el motor de reabasto.
@@ -544,7 +623,11 @@
       return true;
     } catch (err) {
       console.error('[SIS-06-P] Error publicando a registros_sis:', err);
-      toast((opciones.automatica ? 'La validación quedó guardada, pero no se pudo cargar a indicadores: ' : '') + (err.message || 'Error al publicar.') + (opciones.automatica ? ' Usa «Cargar a indicadores» para reintentar.' : ''), 'error');
+      const sinRed = typeof esErrorDeRed === 'function' && esErrorDeRed(err);
+      const msgErr = sinRed ? 'Sin conexión o conexión inestable: no se tocó nada en indicadores.' : (err.message || 'Error al publicar.');
+      toast((opciones.actualizacion ? 'La corrección quedó guardada, pero indicadores no se actualizó: '
+        : (opciones.automatica ? 'La validación quedó guardada, pero no se pudo cargar a indicadores: ' : '')) + msgErr
+        + (opciones.automatica ? ' Usa «Publicar a indicadores» para reintentar.' : ''), 'error');
       return false;
     }
   }
@@ -590,6 +673,34 @@
     }
   }
   document.addEventListener('sis06p:validado', (ev) => { publicarSiMunicipioCompleto(ev.detail); });
+
+  // Si un revisor corrige SIS-06-P o Influenza de una unidad cuyo municipio YA se
+  // publicó a indicadores, la publicación quedaría desfasada: se vuelve a publicar
+  // sola (idempotente: reemplaza solo las mismas llaves CLUES x clave de ese mes).
+  // Si el municipio nunca se publicó no hace nada -- lo hará la última validación.
+  // El servidor vuelve a exigir todas validadas y paloteo = Movimiento: si algo no
+  // cuadra, indicadores NO se toca y se avisa el motivo.
+  let _republicando = false;
+  async function republicarSiYaPublicado(detalle) {
+    if (_republicando || !detalle) return;
+    _republicando = true;
+    try {
+      const { clues, mes, anio } = detalle;
+      const unidad = (estado.unidadesClues || estado.unidades || []).find((u) => u.clues === clues);
+      const municipio = unidad && unidad.municipio;
+      if (!municipio) return;
+      const { data, error } = await estado.db.rpc('sis_estado_publicacion', { p_mes: mes, p_anio: anio, p_municipio: municipio });
+      if (error) return;
+      const pub = Array.isArray(data) ? data[0] : null;
+      if (!pub) return;
+      await publicarMunicipio(municipio, mes, anio, MUNICIPIO_LABEL[municipio] || municipio, { automatica: true, actualizacion: true });
+    } catch (err) {
+      console.error('[SIS-06-P] Actualización de indicadores tras corregir:', err);
+    } finally {
+      _republicando = false;
+    }
+  }
+  document.addEventListener('sis06p:corregido', (ev) => { republicarSiYaPublicado(ev.detail); });
 
   // Saltar directo a modo revisión de una unidad desde la fila del
   // dashboard -- usa #selUnidadRevision (CLUES), no #selUnidad (ese es el
