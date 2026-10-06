@@ -14111,7 +14111,7 @@ function setLoggedInUI(user, status) {
   USER = user;
   document.body.setAttribute("data-role", USER.rol);
   STATUS = (status && status.data) ? status.data : (status || null);
-  scheduleDeferredFeatureLibraries();
+  loadDeferredFeatureLibraries();
 
   // Sincronizar enlace dinámico de Soporte por WhatsApp para pre-identificar al usuario
   const waLink = document.getElementById("whatsappSupportLink");
@@ -16193,24 +16193,6 @@ function loadDeferredFeatureLibraries() {
     });
     _deferredLibPromises[name].catch(() => {}); // evita "unhandled rejection"; quien espera lo maneja
   });
-}
-
-/**
- * Arranca la descarga de las librerias diferidas SIN competir con el pintado inicial:
- * espera a que el navegador este ocioso (maximo 1.2 s) o a la primera interaccion del
- * usuario, lo que ocurra primero. ensureLibsLoaded() sigue forzando la carga al instante
- * cuando alguna funcion las necesita.
- */
-function scheduleDeferredFeatureLibraries() {
-  if (_deferredLibsLoaded) return;
-  const events = ["pointerdown", "keydown"];
-  const go = () => {
-    events.forEach((ev) => window.removeEventListener(ev, go, true));
-    loadDeferredFeatureLibraries();
-  };
-  events.forEach((ev) => window.addEventListener(ev, go, { capture: true, passive: true }));
-  if (typeof requestIdleCallback === "function") requestIdleCallback(go, { timeout: 1200 });
-  else setTimeout(go, 1200);
 }
 
 /** Espera a que terminen (y ejecuten) las librerias diferidas indicadas. */

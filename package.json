@@ -6,6 +6,8 @@
   "scripts": {
     "test": "playwright test",
     "build:bundle": "node build-bundle.js",
+    "icons:check": "node scripts/icons-scan.js --check",
+    "icons:update": "node scripts/icons-scan.js",
     "serve": "serve . -p 3005"
   },
   "repository": {
