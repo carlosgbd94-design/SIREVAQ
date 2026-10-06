@@ -18,7 +18,8 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
-<script defer src="requisiciones_ui.js?v=9"></script>
+<script defer src="requisiciones_rutas_excel.js"></script>
+<script defer src="requisiciones_ui.js?v=10"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -165,6 +166,11 @@
   .chip-filtro:hover { border-color: var(--secondary); color: var(--secondary); }
   .btn-exportar-uno-destino { flex: none; }
   [data-solo-lectura="1"] .solo-edicion { display: none !important; }
+  /* Perfil municipal: solo ve y exporta lo de su municipio (reparto a unidades). Lo surtido por la
+     jurisdicción y el reparto entre municipios son de la jurisdicción. */
+  body.vista-municipal .stepper-tarjeta, body.vista-municipal #panelPaso1, body.vista-municipal #panelPaso2,
+  body.vista-municipal .paso-tab[data-paso="1"], body.vista-municipal .paso-tab[data-paso="2"],
+  body.vista-municipal #btnSiguiente, body.vista-municipal #seccionJuris, body.vista-municipal #dockEstado { display: none !important; }
   [data-solo-lectura="1"] .solo-lectura { display: inline-block !important; }
   .badge-role { font-size: 10.5px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--surface-container); color: var(--muted); }
 
@@ -213,9 +219,31 @@
   .btn-pill { background: var(--primary); color: #fff; border-radius: 999px; padding: 9px 18px; }
   .btn-pill:hover { background: #1e293b; }
   .panel-exportar {
-    position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: 420px;
-    background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 18px;
-    padding: 16px; box-shadow: var(--shadow-2);
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: min(440px, calc(100vw - 24px));
+    max-height: calc(100vh - 120px); display: flex; flex-direction: column;
+    background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 18px; box-shadow: var(--shadow-2);
+  }
+  .pe-cabecera { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px 18px; border-bottom: 1px solid var(--outline-variant); flex: none; }
+  .pe-cabecera h2 { margin: 0; font: 800 15px 'Poppins', sans-serif; color: var(--primary); }
+  .pe-cuerpo { overflow-y: auto; overscroll-behavior: contain; padding: 4px 18px 18px; }
+  .pe-seccion { padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--outline-variant); }
+  .pe-seccion.pe-primera { margin-top: 0; border-top: 0; }
+  .pe-seccion .pe-grupo .destinos-masivos { margin-left: 0; }
+  .pe-seccion h3 { display: flex; align-items: center; gap: 8px; margin: 0; font: 800 13px 'Poppins', sans-serif; color: var(--primary); }
+  .pe-num { width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--primary); color: #fff; font: 800 11px 'Poppins', sans-serif; display: inline-flex; align-items: center; justify-content: center; }
+  .pe-ayuda { margin: 4px 0 10px 28px; font-size: 12px; color: var(--muted); line-height: 1.4; }
+  .pe-boton { width: 100%; justify-content: center; margin-top: 12px; }
+  .pe-seccion .filtros-destino, .pe-seccion .destinos-masivos, .pe-opcion, .pe-grupo { margin-left: 28px; }
+  .pe-opcion { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; font-size: 12.5px; cursor: pointer; }
+  .pe-opcion input { margin-top: 3px; }
+  .pe-opcion small { display: block; color: var(--muted); font-size: 11.5px; font-weight: 500; }
+  .pe-grupo { border: none; padding: 0; margin-top: 10px; min-width: 0; }
+  .pe-grupo legend { padding: 0; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .pe-radio { display: flex; align-items: center; gap: 8px; padding: 6px 2px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .pe-cuerpo :focus-visible, .pe-cabecera :focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+  @media (max-width: 720px) {
+    .panel-exportar { position: fixed; left: 12px; right: 12px; top: 64px; width: auto; max-height: calc(100vh - 80px); }
+    .pe-ayuda, .pe-seccion .filtros-destino, .pe-seccion .destinos-masivos, .pe-opcion, .pe-grupo { margin-left: 0; }
   }
 
   /* Explorador de historial -- panel de ancho completo (no flotante como el
@@ -547,35 +575,55 @@
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
         <div class="pill-exportar-wrap">
-          <button class="btn btn-pill" id="btnAbrirExportar"><span class="material-symbols-rounded" style="font-size:16px">download</span> Exportar</button>
-          <div class="panel-exportar" id="panelExportar" style="display:none;">
-            <div class="exportar-seccion">
-              <div class="exportar-seccion-titulo">Jurisdiccional</div>
-              <button class="btn btn-outline btn-sm" id="btnPdfJurisdiccional" style="width:100%; justify-content:center;">
-                <span class="material-symbols-rounded" style="font-size:14px">summarize</span> Concentrado Jurisdiccional
-              </button>
+          <button class="btn btn-pill" id="btnAbrirExportar" aria-haspopup="dialog" aria-expanded="false" aria-controls="panelExportar"><span class="material-symbols-rounded" style="font-size:16px">download</span> Exportar</button>
+          <div class="panel-exportar" id="panelExportar" role="dialog" aria-labelledby="tituloPanelExportar" style="display:none;">
+            <div class="pe-cabecera">
+              <h2 id="tituloPanelExportar">Exportar</h2>
+              <button type="button" class="icon-btn-pure" id="btnCerrarExportar" aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
             </div>
+            <div class="pe-cuerpo">
+              <section class="pe-seccion" id="seccionJuris" aria-labelledby="peTituloJuris">
+                <h3 id="peTituloJuris"><span class="pe-num">1</span> Jurisdicción</h3>
+                <p class="pe-ayuda">Lo surtido completo del mes, para toda la jurisdicción.</p>
+                <button class="btn btn-outline btn-sm pe-boton" id="btnPdfJurisdiccional">
+                  <span class="material-symbols-rounded" style="font-size:16px">summarize</span> Concentrado jurisdiccional
+                </button>
+              </section>
 
-            <div class="exportar-seccion">
-              <div class="exportar-seccion-titulo">Municipios y Hospitales</div>
-              <p class="hint" style="margin-bottom:8px;">El ícono de cada renglón descarga solo ese destino. Para varios a la vez: marca, filtra y descarga el paquete.</p>
-              <div class="filtros-destino">
-                <button type="button" class="chip-filtro" data-filtro-destino="todos">Todos</button>
-                <button type="button" class="chip-filtro" data-filtro-destino="municipios">Solo municipios</button>
-                <button type="button" class="chip-filtro" data-filtro-destino="hospitales">Solo hospitales</button>
-              </div>
-              <div class="destinos-masivos" id="destinosMasivos"></div>
-              <label class="destino-masivo-chk" style="border:none; padding:4px 0 0;">
-                <input type="checkbox" id="chkIncluirUnidades" checked> Incluir unidades de los municipios marcados
-              </label>
-              <button class="btn btn-primary btn-sm" id="btnExportarMasivo" style="width:100%; justify-content:center; margin-top:10px;">
-                <span class="material-symbols-rounded" style="font-size:14px">folder_zip</span> Descargar seleccionados (.zip)
-              </button>
-            </div>
+              <section class="pe-seccion" aria-labelledby="tituloMunisHosp">
+                <h3 id="tituloMunisHosp"><span class="pe-num" id="peNumMunis">2</span> <span id="textoTituloMunis">Municipios y hospitales</span></h3>
+                <p class="pe-ayuda" id="ayudaMunis">Marca los destinos y descarga el paquete, o usa el ícono de un renglón para bajar solo ese.</p>
+                <div class="filtros-destino" role="group" aria-label="Filtrar destinos">
+                  <button type="button" class="chip-filtro" data-filtro-destino="todos">Todos</button>
+                  <button type="button" class="chip-filtro" data-filtro-destino="municipios">Municipios</button>
+                  <button type="button" class="chip-filtro" data-filtro-destino="hospitales">Hospitales</button>
+                </div>
+                <div class="destinos-masivos" id="destinosMasivos"></div>
+                <label class="pe-opcion">
+                  <input type="checkbox" id="chkIncluirUnidades" checked>
+                  <span><b>Incluir las unidades</b><small>Una pestaña por cada unidad del municipio, dentro del mismo archivo.</small></span>
+                </label>
+                <button class="btn btn-primary btn-sm pe-boton" id="btnExportarMasivo">
+                  <span class="material-symbols-rounded" style="font-size:16px">folder_zip</span> Descargar seleccionados (.zip)
+                </button>
+              </section>
 
-            <div class="exportar-seccion">
-              <div class="exportar-seccion-titulo">Unidades</div>
-              <p class="hint" style="margin:0;">Se exportan una por una desde el Paso 3 (Reparto a Unidades), o inclúyelas arriba junto con su municipio.</p>
+              <section class="pe-seccion" id="seccionRutas" style="display:none;" aria-labelledby="peTituloRutas">
+                <h3 id="peTituloRutas"><span class="pe-num" id="peNumRutas">3</span> Distribución de rutas</h3>
+                <p class="pe-ayuda">Querétaro: hojas GENERAL, RUTA 1, RUTA 2, RUTA 3 y CARAVANAS, tamaño carta.</p>
+                <fieldset class="pe-grupo">
+                  <legend>Entregas del mes</legend>
+                  <div class="destinos-masivos" id="rutasEntregas"></div>
+                </fieldset>
+                <fieldset class="pe-grupo" id="rutasModo">
+                  <legend>Cómo descargarlas</legend>
+                  <label class="pe-radio"><input type="radio" name="modoRutas" value="separado" checked> Un archivo por entrega</label>
+                  <label class="pe-radio"><input type="radio" name="modoRutas" value="unido"> Unificadas en un solo archivo</label>
+                </fieldset>
+                <button class="btn btn-primary btn-sm pe-boton" id="btnExportarRutas">
+                  <span class="material-symbols-rounded" style="font-size:16px">route</span> Descargar distribución de rutas
+                </button>
+              </section>
             </div>
           </div>
         </div>
@@ -595,7 +643,7 @@
         <select id="selMes" aria-label="Mes"></select>
       </div>
       <div class="grupo-acciones">
-        <button class="btn-icono" id="btnCargar" title="Cargar la requisición ya guardada de este año/mes"><span class="material-symbols-rounded">folder_open</span></button>
+        <button class="btn-icono solo-edicion" id="btnCargar" title="Cargar la requisición ya guardada de este año/mes"><span class="material-symbols-rounded">folder_open</span></button>
         <button class="btn-icono solo-edicion" id="btnGuardarCabecera" title="Guardar (crea la requisición del mes si no existe)"><span class="material-symbols-rounded">save</span></button>
       </div>
       <span id="badgesEstadoRequisicion" style="display:none; gap:6px; align-items:center;"></span>
@@ -778,7 +826,7 @@
         <h2><span class="material-symbols-rounded">local_hospital</span> Reparto a Unidades<button type="button" class="ayuda-btn" data-ayuda="requi3" title="Cómo funciona el paso 3" aria-label="Cómo funciona el paso 3"><span class="material-symbols-rounded">help</span></button>
           <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSugerir3" style="margin-left:auto;" title="Llena los lotes del municipio que aún no tienen reparto con la proporción del mes anterior"><span class="material-symbols-rounded" style="font-size:15px">auto_fix_high</span> Sugerir según el mes anterior</button>
         </h2>
-        <p class="hint">Elige el municipio u hospital (cada hospital es su propia unidad: lo que le asignas en el paso 2 se le pasa solo). Un renglón por unidad, una columna por lote (arriba ves cuánto le queda por repartir). <b>Tab</b> avanza al siguiente lote, <b>Enter</b> baja a la siguiente unidad. <b>Doble clic</b> en una celda vacía pone todo el saldo; también puedes <b>pegar desde Excel</b>.</p>
+        <p class="hint" id="hintPaso3">Elige el municipio u hospital (cada hospital es su propia unidad: lo que le asignas en el paso 2 se le pasa solo). Un renglón por unidad, una columna por lote (arriba ves cuánto le queda por repartir). <b>Tab</b> avanza al siguiente lote, <b>Enter</b> baja a la siguiente unidad. <b>Doble clic</b> en una celda vacía pone todo el saldo; también puedes <b>pegar desde Excel</b>.</p>
         <div class="chips-bio" id="chipsMunicipio"></div>
         <div class="tbl-scroll matriz-scroll"><table class="matriz" id="matrizUnidad"></table></div>
       </div>

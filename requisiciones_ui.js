@@ -36,6 +36,8 @@ const DESTINOS = [
   { v: 'HENM', l: 'HENM' }
 ];
 const MUNICIPIOS_REALES = DESTINOS.slice(0, 4); // solo estos tienen unidades (Paso 3) y firma cacheada
+// Destinos que este perfil puede ver/exportar (el municipal, solo los suyos).
+function destinosVisibles() { return estado.munisPermitidos ? DESTINOS.filter((d) => estado.munisPermitidos.includes(d.v)) : DESTINOS; }
 function esHospital(destino) { return destino === 'NHG' || destino === 'HENM'; }
 
 const NOMBRE_DESTINO_EXPORT = {
@@ -587,6 +589,24 @@ async function cargarSesionReal() {
   estado.perfil = perfil;
   const rol = String(perfil.rol || '').toUpperCase();
   estado.puedeEditar = rol === 'ADMIN' || rol === 'JURISDICCIONAL';
+  // Perfil municipal: solo sus municipios (los de su asignación), nada de jurisdicción ni de otros municipios.
+  estado.esMunicipal = rol === 'MUNICIPAL';
+  estado.munisPermitidos = estado.esMunicipal
+    ? String(perfil.municipio_asignado || '').split(',').map((x) => x.trim().toUpperCase()).filter(Boolean) : null;
+  document.body.classList.toggle('vista-municipal', estado.esMunicipal);
+  if (!estado.puedeEditar) $('hintPaso3').textContent = 'Aquí ves lo que le tocó a cada unidad, por lote. Con el ícono de descarga de cada renglón bajas el Excel de esa unidad.';
+  if (estado.esMunicipal) {
+    $('textoTituloMunis').textContent = 'Requisición de mi municipio';
+    $('ayudaMunis').textContent = 'Descarga la requisición de tu municipio; puedes incluir una pestaña por cada unidad.';
+  }
+  if (estado.esMunicipal) {
+    const primero = DESTINOS.find((d) => estado.munisPermitidos.includes(d.v) && !esHospital(d.v));
+    if (primero) estado.municipioPaso3 = primero.v;
+    estado.pasoActual = 3;
+  }
+  // Distribución de rutas: solo el perfil municipal de Querétaro.
+  estado.esMunicipalQueretaro = rol === 'MUNICIPAL'
+    && String(perfil.municipio_asignado || '').split(',').map((x) => x.trim().toUpperCase()).includes('QUERETARO');
   $('badgeRol').textContent = `${perfil.usuario} · ${perfil.rol}`;
   document.getElementById('pagina').setAttribute('data-solo-lectura', estado.puedeEditar ? '0' : '1');
 }
@@ -737,6 +757,7 @@ async function cargarEntregasMes(anio, mes) {
 }
 
 function renderEntregas() {
+  renderRutasEntregas();
   const barra = $('barraEntregas');
   const lista = estado.entregasMes;
   if (!lista.length) { barra.style.display = 'none'; return; }
@@ -885,8 +906,10 @@ function renderEstadoRequisicion() {
 
   const esCerrada = r.estado === 'CERRADA';
   badges.style.display = 'inline-flex';
+  // Borrador/Cerrada es el flujo interno de la jurisdicción: el municipal solo ve el aviso de corrección.
+  if (estado.esMunicipal && !r.fue_corregido) { badges.style.display = 'none'; badges.innerHTML = ''; btnCerrar.style.display = 'none'; return; }
   badges.innerHTML = `
-    <span class="pill ${esCerrada ? 'pill-ok' : 'pill-warn'}">${esCerrada ? 'Cerrada' : 'Borrador'}</span>
+    ${estado.esMunicipal ? '' : `<span class="pill ${esCerrada ? 'pill-ok' : 'pill-warn'}">${esCerrada ? 'Cerrada' : 'Borrador'}</span>`}
     ${r.fue_corregido ? '<span class="pill pill-err">Corregido posteriormente</span>' : ''}
   `;
   btnCerrar.style.display = estado.puedeEditar && !esCerrada ? 'inline-flex' : 'none';
@@ -979,11 +1002,19 @@ async function abrirDesdeHistorial(id, filas) {
   await cargarDatosRequisicion();
 }
 
+// Lo surtido se lee por la función de la base: jurisdicción recibe todo; municipal/unidad solo los lotes
+// que les repartieron (número y caducidad) y sin la cantidad total surtida.
+async function itemsDeRequisicion(reqId) {
+  const r = await estado.db.rpc('requi_items_de_requisicion', { p_requisicion: reqId });
+  if (r.error) return { data: null, error: r.error };
+  return { data: (r.data || []).map(({ numero_lote, caducidad, ...resto }) => ({ ...resto, requi_lotes: { numero_lote, caducidad } })), error: null };
+}
+
 async function cargarDatosRequisicion() {
   if (!estado.requisicion) return;
   const reqId = estado.requisicion.id;
   const [rItems, rDm, du] = await Promise.all([
-    estado.db.from('requi_items_jurisdiccion').select('*, requi_lotes(numero_lote, caducidad)').eq('requisicion_id', reqId).order('created_at'),
+    itemsDeRequisicion(reqId),
     estado.db.from('requi_distribucion_municipio').select('*').eq('requisicion_id', reqId),
     traerTodo(() => estado.db.from('requi_distribucion_unidad').select('*').eq('requisicion_id', reqId))
   ]);
@@ -993,7 +1024,7 @@ async function cargarDatosRequisicion() {
   const fallo = rItems.error || rDm.error || (du.incompleto ? { message: 'la lectura del reparto a unidades quedó incompleta' } : null);
   if (fallo) {
     toast(`No se pudo cargar la requisición: ${fallo.message}. Revisa tu conexión y vuelve a cargarla.`, true);
-    $('hintCabecera').textContent = 'La requisición no se pudo leer completa. Revisa tu conexión y toca "Cargar" (la carpeta) para reintentar; no captures nada hasta que cargue.';
+    $('hintCabecera').textContent = 'La requisición no se pudo leer completa. Revisa tu conexión y ' + (estado.puedeEditar ? 'toca "Cargar" (la carpeta)' : 'vuelve a elegir el mes o recarga la página') + ' para reintentar' + (estado.puedeEditar ? '; no captures nada hasta que cargue.' : '.');
     $('hintCabecera').style.display = 'block';
     return;
   }
@@ -1149,7 +1180,7 @@ function renderAvance() {
       texto: a.p2.length ? `${c2} de ${plural(a.p2.length, 'lote repartido', 'lotes repartidos')}` : 'Primero captura el paso 1' },
     { n: 3, titulo: 'Unidades', color: '#16a34a', hecho: a.p3.length > 0 && c3 === a.p3.length, iniciado: a.p3.some((x) => x.rep > 0),
       pill: a.p3.length ? `${c3}/${a.p3.length}` : '',
-      texto: a.p3.length ? `${c3} de ${plural(a.p3.length, 'asignación repartida', 'asignaciones repartidas')}` : 'Primero reparte el paso 2' }
+      texto: a.p3.length ? `${c3} de ${plural(a.p3.length, 'asignación repartida', 'asignaciones repartidas')}` : (estado.esMunicipal ? 'Aún no te asignan lotes en esta entrega' : 'Primero reparte el paso 2') }
   ];
   estado.pasos = pasos;
   setTimeout(actualizarEstadoGuardado, 0);   // el avance cambia lo "por completar" del chip
@@ -1191,7 +1222,7 @@ function renderAvance() {
     a.p2.length ? pct(c2, a.p2.length) : null, [['vacio', 'sin repartir'], ['parcial', 'con saldo'], ['completo', 'completo']]);
 
   $('avancePaso3').innerHTML = htmlAvance(
-    'Paso 3 de 3 · Unidades', esc(pasos[2].texto),
+    estado.esMunicipal ? 'Reparto a unidades' : 'Paso 3 de 3 · Unidades', esc(pasos[2].texto),
     a.p3.map((x) => ({ est: x.est, titulo: `${etiquetaMunicipio(x.muni)} · ${nombreCorto(estado.catalogo.find((b) => b.id === x.bio) || {})} lote ${numeroLoteDe(x.bio, x.lote)}: ${x.est === 'completo' ? 'repartido por completo' : x.est === 'vacio' ? 'sin repartir' : 'quedan ' + (x.disp - x.rep)}`, datos: `data-ir="p3" data-muni="${x.muni}" data-bio="${x.bio}" data-lote="${x.lote}"` })),
     a.p3.length ? pct(c3, a.p3.length) : null, [['vacio', 'sin repartir'], ['parcial', 'con saldo'], ['completo', 'completo']]);
 }
@@ -2712,7 +2743,7 @@ function columnasPaso3(muni) {
 
 function renderChipsMunicipio() {
   const p3 = (estado.avance && estado.avance.p3) || [];
-  $('chipsMunicipio').innerHTML = DESTINOS.filter((m) => tieneUnidades(m.v)).map((m) => {
+  $('chipsMunicipio').innerHTML = destinosVisibles().filter((m) => tieneUnidades(m.v)).map((m) => {
     const propios = p3.filter((x) => x.muni === m.v);
     const hechos = propios.filter((x) => x.est === 'completo').length;
     const est = !propios.length ? '' : hechos === propios.length ? 'completo' : 'parcial';
@@ -2727,7 +2758,7 @@ function renderPaso3() {
   const cols = columnasPaso3(muni);
   const unidades = estado.unidades.filter((u) => u.municipio === muni);
   if (!cols.length) {
-    tabla.innerHTML = `<tbody><tr><td class="vacio-matriz">${esc(etiquetaMunicipio(muni))} todavía no tiene lotes asignados. Repártelos primero en el paso 2.</td></tr></tbody>`;
+    tabla.innerHTML = `<tbody><tr><td class="vacio-matriz">${esc(etiquetaMunicipio(muni))} todavía no tiene lotes asignados.${estado.esMunicipal ? ' La jurisdicción aún no los asigna en esta entrega.' : ' Repártelos primero en el paso 2.'}</td></tr></tbody>`;
     return;
   }
   if (!unidades.length) {
@@ -2938,7 +2969,7 @@ async function exportarUno(nivel, destino) {
 
 function renderDestinosMasivos() {
   const cont = $('destinosMasivos');
-  cont.innerHTML = DESTINOS.map((m) => {
+  cont.innerHTML = destinosVisibles().map((m) => {
     const tieneDatos = estado.distMunicipio.some((d) => d.municipio === m.v && Number(d.cantidad) > 0);
     return `
       <div class="destino-masivo-fila" data-tipo-destino="${esHospital(m.v) ? 'hospitales' : 'municipios'}">
@@ -3122,10 +3153,89 @@ async function subirTransferencia() {
 // Navegación de pasos / arranque
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Distribución de rutas (solo municipal de Querétaro): GENERAL + RUTA 1/2/3 + CARAVANAS
+// por entrega del mes, en un archivo por entrega o unificadas (ver requisiciones_rutas_excel.js).
+// ---------------------------------------------------------------------------
+
+function renderRutasEntregas() {
+  const sec = $('seccionRutas');
+  if (!sec) return;
+  sec.style.display = estado.esMunicipalQueretaro && estado.entregasMes.length ? '' : 'none';
+  if (sec.style.display === 'none') return;
+  // Se conserva lo marcado; si cambió el mes (otras entregas) o es la primera vez, todas quedan marcadas.
+  const previas = new Set([...document.querySelectorAll('.chk-ruta-entrega:checked')].map((c) => c.value));
+  const primera = !estado.entregasMes.some((e) => document.querySelector(`.chk-ruta-entrega[value="${e.id}"]`));
+  $('rutasEntregas').innerHTML = estado.entregasMes.map((e) => `
+    <label class="destino-masivo-chk">
+      <input type="checkbox" class="chk-ruta-entrega" value="${e.id}" ${primera || previas.has(e.id) ? 'checked' : ''}>
+      ${etiquetaEntrega(e)}
+    </label>`).join('');
+  const varias = estado.entregasMes.length > 1;
+  $('rutasModo').style.display = varias ? '' : 'none';
+}
+
+async function exportarRutas() {
+  const ids = [...document.querySelectorAll('.chk-ruta-entrega:checked')].map((c) => c.value);
+  const elegidas = estado.entregasMes.filter((e) => ids.includes(e.id));
+  if (!elegidas.length) { toast('Elige al menos una entrega.', true); return; }
+  const modo = document.querySelector('input[name="modoRutas"]:checked');
+  const unificar = !!modo && modo.value === 'unido' && elegidas.length > 1;
+  const btn = $('btnExportarRutas');
+  btn.disabled = true;
+  toast('Generando distribución de rutas…');
+  try {
+    if (window.ensureLibsLoaded) await window.ensureLibsLoaded('exceljs', 'jszip');
+    const filas = await traerTodo(() => estado.db.from('requi_distribucion_unidad')
+      .select('id, requisicion_id, unidad_id, requi_biologico_id, cantidad').in('requisicion_id', elegidas.map((e) => e.id)));
+    if (filas.incompleto) return;
+    const unidades = estado.unidades.filter((u) => u.municipio === 'QUERETARO');
+    const mesInfo = MESES.find((x) => x.v === estado.requisicion.mes);
+    const grupos = unificar ? [elegidas] : elegidas.map((e) => [e]);
+    const archivos = [];
+    const avisos = new Set();
+    for (const g of grupos) {
+      const modelo = window.RequiRutasExcel.armarModelo({ unidades, catalogo: estado.catalogo, entregas: g, filas, unificar });
+      const { buffer, resumen } = await window.RequiRutasExcel.generar(modelo, { mesLabel: mesInfo ? mesInfo.l.toUpperCase() : '', anio: estado.requisicion.anio });
+      const sufijo = unificar ? `_E${g.map((e) => e.entrega).join('-')}` : (variasEntregas() ? `_E${g[0].entrega}` : '');
+      archivos.push({ nombre: `Distribucion_rutas_QUERETARO_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}${sufijo}.xlsx`, buffer });
+      resumen.sinRuta.forEach((n) => avisos.add(`${n} no está en ninguna ruta`));
+      Object.keys(resumen.ignorados).forEach((c) => {
+        const b = estado.catalogo.find((x) => String(x.codigo_articulo) === c);
+        avisos.add(`${b ? b.nombre : c} no tiene columna en el formato`);
+      });
+    }
+    if (archivos.length === 1) {
+      descargarBlob(new Blob([archivos[0].buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), archivos[0].nombre);
+    } else {
+      const zip = new JSZip();
+      archivos.forEach((a) => zip.file(a.nombre, a.buffer));
+      descargarBlob(await zip.generateAsync({ type: 'blob' }), `Distribucion_rutas_QUERETARO_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}.zip`);
+    }
+    toast(`Listo: ${plural(archivos.length, 'archivo', 'archivos')}.` + (avisos.size ? ' Ojo: ' + [...avisos].join('; ') + '.' : ''), !!avisos.size);
+  } catch (e) {
+    toast('No se pudo generar la distribución de rutas: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function togglePanelExportar(forzarCerrado) {
   const panel = $('panelExportar');
   const abierto = panel.style.display !== 'none';
-  panel.style.display = (forzarCerrado || abierto) ? 'none' : 'block';
+  const abrir = !forzarCerrado && !abierto;
+  panel.style.display = abrir ? 'flex' : 'none';
+  $('btnAbrirExportar').setAttribute('aria-expanded', abrir ? 'true' : 'false');
+  if (abrir) {
+    // Numeración por jerarquía según lo que ve este perfil (el municipal no tiene la sección de jurisdicción).
+    const visibles = [...panel.querySelectorAll('.pe-seccion')].filter((x) => getComputedStyle(x).display !== 'none');
+    visibles.forEach((x, i) => { const n = x.querySelector('.pe-num'); if (n) n.textContent = String(i + 1); x.classList.toggle('pe-primera', i === 0); });
+    // Que nunca se salga de la pantalla: alto disponible desde donde abre hasta el borde (menos la barra de abajo).
+    panel.style.maxHeight = Math.max(240, window.innerHeight - panel.getBoundingClientRect().top - 100) + 'px';
+    setTimeout(() => $('btnCerrarExportar').focus(), 0);
+  } else if (forzarCerrado === 'devolverFoco') {
+    $('btnAbrirExportar').focus();
+  }
 }
 
 function toggleResponsables() {
@@ -3139,7 +3249,7 @@ function toggleResponsables() {
 // Cada paso se dibuja al entrar (siempre desde lo guardado), así lo capturado
 // en un paso ya se ve en los demás sin tener que recargar.
 function activarPaso(n, opciones) {
-  n = Number(n);
+  n = estado.esMunicipal ? 3 : Number(n);
   estado.pasoActual = n;
   document.querySelectorAll('.paso-tab').forEach((t) => t.classList.toggle('activo', t.dataset.paso === String(n)));
   document.querySelectorAll('.paso-panel').forEach((p) => p.classList.remove('activo'));
@@ -3175,8 +3285,11 @@ function instalarEventos() {
   $('btnPdfJurisdiccional').addEventListener('click', () => exportarUno('JURISDICCIONAL', ''));
   $('btnGuardarFirmasJuris').addEventListener('click', guardarFirmasJurisdiccionales);
   $('btnExportarMasivo').addEventListener('click', exportarMasivo);
+  $('btnExportarRutas').addEventListener('click', exportarRutas);
   $('btnToggleResponsables').addEventListener('click', toggleResponsables);
   $('btnAbrirExportar').addEventListener('click', (ev) => { ev.stopPropagation(); togglePanelExportar(); });
+  $('btnCerrarExportar').addEventListener('click', () => togglePanelExportar('devolverFoco'));
+  $('panelExportar').addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); togglePanelExportar('devolverFoco'); } });
   $('panelExportar').addEventListener('click', (ev) => ev.stopPropagation());
   document.addEventListener('click', () => togglePanelExportar(true));
   $('btnAbrirExplorador').addEventListener('click', toggleExplorador);

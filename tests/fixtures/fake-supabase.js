@@ -12,7 +12,7 @@
   const unidad = (id, nombre, municipio) => ({ id, clues: 'C' + id, nombre, municipio, activo: true });
 
   const db = window.__FAKE_DB__ = {
-    perfiles: [{ id: 'u1', usuario: 'tester', rol: window.__FAKE_ROL__ || 'ADMIN', municipio_asignado: null, municipios_allowed: null }],
+    perfiles: [{ id: 'u1', usuario: 'tester', rol: window.__FAKE_ROL__ || 'ADMIN', municipio_asignado: window.__FAKE_MUNI__ || null, municipios_allowed: null }],
     requi_catalogo_biologicos: [
       bio('bio-srp', '3820', 'VACUNA TRIPLE VIRAL 1DS (SRP)', 'UNIDOSIS', 1),
       bio('bio-hexa', '6135', 'VACUNA HEXAVALENTE', 'UNIDOSIS', 2),
@@ -184,6 +184,19 @@
   // Versión simplificada de requi_asignar_lotes (supabase/requi_covid_lotes_pendientes_transferencias.sql):
   // reemplaza un renglón por 1 o más lotes y pasa el reparto llenando en orden (municipios en el orden
   // de la app y unidades por id); lo que no se reasigna se queda en el lote actual.
+  // requi_items_de_requisicion: jurisdicción lee todo; municipal/unidad solo los lotes que les repartieron y sin cantidad.
+  function rpcItemsDeRequisicion({ p_requisicion }) {
+    if ((window.__FAKE_FALLAR__ || []).includes('requi_items_jurisdiccion')) return { data: null, error: { message: 'Failed to fetch' } };
+    const rol = String(window.__FAKE_ROL__ || 'ADMIN').toUpperCase();
+    const privilegiado = ['ADMIN', 'JURISDICCIONAL', 'VISUALIZADOR_JURISDICCIONAL'].includes(rol);
+    const munis = String(window.__FAKE_MUNI__ || '').split(',').map((x) => x.trim()).filter(Boolean);
+    const filas = db.requi_items_jurisdiccion.filter((i) => i.requisicion_id === p_requisicion && (privilegiado
+      || db.requi_distribucion_municipio.some((d) => d.requisicion_id === i.requisicion_id && d.requi_biologico_id === i.requi_biologico_id && d.lote_id === i.lote_id && munis.includes(d.municipio))));
+    return { data: filas.map((i) => {
+      const l = db.requi_lotes.find((x) => x.id === i.lote_id) || { numero_lote: '?', caducidad: null };
+      return { ...clon(i), cantidad_surtida: privilegiado ? i.cantidad_surtida : null, numero_lote: l.numero_lote, caducidad: l.caducidad };
+    }), error: null };
+  }
   function rpcAsignarLotes({ p_item_id, p_lotes }) {
     const item = db.requi_items_jurisdiccion.find((i) => i.id === p_item_id);
     if (!item) return { data: null, error: { message: 'ERROR: No existe ese renglón de lo surtido.' } };
@@ -294,7 +307,7 @@
       return {
         auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 't@test.mx' } } } }) },
         from: constructor,
-        rpc: async (nombre, args) => (nombre === 'requi_asignar_lotes' ? rpcAsignarLotes(args) : nombre === 'requi_traer_reparto_influenza' ? rpcTraerInfluenza(args) : nombre === 'bio_pedidos_clasificados' ? rpcPedidosClasificados(args) : nombre === 'requi_traer_pedido_biologico' ? rpcTraerPedido(args) : { data: null, error: { message: 'rpc no simulada: ' + nombre } })
+        rpc: async (nombre, args) => (nombre === 'requi_items_de_requisicion' ? rpcItemsDeRequisicion(args) : nombre === 'requi_asignar_lotes' ? rpcAsignarLotes(args) : nombre === 'requi_traer_reparto_influenza' ? rpcTraerInfluenza(args) : nombre === 'bio_pedidos_clasificados' ? rpcPedidosClasificados(args) : nombre === 'requi_traer_pedido_biologico' ? rpcTraerPedido(args) : { data: null, error: { message: 'rpc no simulada: ' + nombre } })
       };
     }
   };

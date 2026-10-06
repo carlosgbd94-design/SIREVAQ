@@ -31,7 +31,7 @@ async function preparar(page, opciones = {}) {
     await page.route(/exceljs\.min\.js/, (r) => r.fulfill({ contentType: 'application/javascript', path: path.join(__dirname, '..', 'node_modules', 'exceljs', 'dist', 'exceljs.min.js') }));
     await page.route(/jszip\.min\.js/, (r) => r.fulfill({ contentType: 'application/javascript', path: path.join(__dirname, '..', 'node_modules', 'jszip', 'dist', 'jszip.min.js') }));
   }
-  await page.addInitScript((o) => { window.__FAKE_ROL__ = o.rol; window.__FAKE_CON_REQ__ = !!o.conReq; }, { rol: opciones.rol || 'ADMIN', conReq: opciones.conReq });
+  await page.addInitScript((o) => { window.__FAKE_ROL__ = o.rol; window.__FAKE_CON_REQ__ = !!o.conReq; window.__FAKE_MUNI__ = o.muni || null; }, { rol: opciones.rol || 'ADMIN', conReq: opciones.conReq, muni: opciones.muni });
   await page.goto('/requisiciones.html', { waitUntil: 'load' });
   return errores;
 }
@@ -221,6 +221,26 @@ test('Requisiciones: un rol de solo lectura ve los pasos pero sin captura', asyn
   expect(errores).toEqual([]);
 });
 
+
+test('Requisiciones: el perfil municipal solo ve lo de su municipio (sin jurisdicción, pasos 1-2 ni cargar)', async ({ page }) => {
+  const errores = await preparar(page, { rol: 'MUNICIPAL', conReq: true, muni: 'QUERETARO' });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await expect(page.locator('#panelPaso3')).toHaveClass(/activo/);
+  await expect(page.locator('#panelPaso1')).toBeHidden();
+  await expect(page.locator('#panelPaso2')).toBeHidden();
+  await expect(page.locator('.stepper-tarjeta')).toBeHidden();
+  await expect(page.locator('#btnCargar')).toBeHidden();
+  await page.click('#btnAbrirExportar');
+  await expect(page.locator('#seccionJuris')).toBeHidden();
+  await expect(page.locator('.destino-masivo-fila')).toHaveCount(1);
+  await expect(page.locator('.destino-masivo-fila')).toContainText('Querétaro');
+  await expect(page.locator('#chipsMunicipio .chip-bio')).toHaveCount(1);
+  await expect(page.locator('#badgesEstadoRequisicion')).toBeHidden();   // Borrador/Cerrada es de la jurisdicción
+  await expect(page.locator('#panelExportar')).toHaveCSS('display', 'flex');
+  const caja = await page.locator('#panelExportar').boundingBox();
+  expect(caja.y + caja.height).toBeLessThanOrEqual(page.viewportSize().height);   // no se sale de la pantalla
+  expect(errores).toEqual([]);
+});
 
 test('Requisiciones: prellenar cantidades sin lote y repartirlas', async ({ page }) => {
   const errores = await preparar(page, { conReq: true });
