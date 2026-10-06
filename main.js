@@ -5353,7 +5353,11 @@ async function requestMagicLinkFlow() {
     );
 
     if (!res.ok) {
-      showToast(res.message || "No se pudo enviar el enlace", false, "bad");
+      // Supabase responde en inglés "Signups not allowed for otp" cuando el correo no tiene cuenta
+      const msg = /signups? not allowed/i.test(res.message || "")
+        ? "No encontramos una cuenta con ese correo o usuario. Verifica el dato o solicita el alta a un administrador."
+        : (res.message || "No se pudo enviar el enlace");
+      showToast(msg, false, "bad");
       openMagicLinkModal();
       if ($("magicLinkUsuario")) $("magicLinkUsuario").value = emailOrUser;
       return;

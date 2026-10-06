@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=1">
-  <link rel="stylesheet" href="style.css?v=2026.107" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.108" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -1013,33 +1013,27 @@
             <span class="material-symbols-rounded ml-2" id="btnLoginIconMobile">login</span>
           </button>
 
-          <button type="button" id="btnMagicLink"
-            class="w-full text-center text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-slate-600 hover:text-primary transition-all bg-transparent border-none cursor-pointer mt-3">
-            Entrar con enlace mágico
-          </button>
+          <!-- OPCIONES ALTERNATIVAS: separador "o" + biométrico (si el dispositivo lo soporta) + enlace mágico.
+               Van en su propio bloque (order:4) para que ninguna se cuele entre los campos y el botón ENTRAR. -->
+          <div id="loginAltOptions">
+            <div class="login-alt-divider"><span>o</span></div>
 
-          <!-- BIOMETRIC LOGIN — Movido abajo del botón ENTRAR -->
-          <div id="btnBiometricLogin"
-            style="display: none; flex-direction: column; align-items: center; width: 100%; gap: 0; margin-top: 12px;">
-            <!-- Divider -->
-            <div
-              style="display: flex; align-items: center; gap: 16px; width: 100%; margin-bottom: 12px; margin-top: 4px;">
-              <div style="flex: 1; height: 1px; background: rgba(0,51,102,0.1);"></div>
-              <span
-                style="font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: rgba(0,51,102,0.3); text-transform: uppercase;">o</span>
-              <div style="flex: 1; height: 1px; background: rgba(0,51,102,0.1);"></div>
-            </div>
-
-            <!-- Premium pulse button -->
-            <button type="button" id="btnBiometricLoginTrigger" class="biometric-pulse-btn btn-parallax-tilt">
-              <span class="btn-parallax-tilt-inner">
+            <div id="btnBiometricLogin" style="display: none;">
+              <button type="button" id="btnBiometricLoginTrigger" class="biometric-pulse-btn">
                 <span class="biometric-scanner-ring">
                   <span class="biometric-pulse-wave wave1"></span>
                   <span class="biometric-pulse-wave wave2"></span>
                   <span class="material-symbols-rounded fingerprint-icon">fingerprint</span>
                 </span>
                 <span>Acceso Biométrico</span>
+              </button>
+            </div>
+
+            <button type="button" id="btnMagicLink" class="biometric-pulse-btn">
+              <span class="biometric-scanner-ring">
+                <span class="material-symbols-rounded fingerprint-icon">bolt</span>
               </span>
+              <span>Entrar con enlace mágico</span>
             </button>
           </div>
 

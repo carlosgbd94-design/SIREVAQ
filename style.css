@@ -3530,8 +3530,6 @@ input[disabled] {
   position: fixed;
   inset: 0;
   background-color: rgba(10, 14, 24, 0.6);
-  backdrop-
-  -webkit-backdrop-
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9836,9 +9834,9 @@ background: linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(219, 39, 11
 
   #btnLogin { order: 3 !important; }
 
-  #btnBiometricLogin { 
-    order: 4 !important; 
-    margin-top: 0.75rem !important;
+  #loginAltOptions {
+    order: 4 !important;
+    margin-top: 1rem !important;
   }
 
   /* Botón "Olvidé mi contraseña" en desktop */
@@ -10023,12 +10021,13 @@ background: linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(219, 39, 11
     height: 48px !important;
   }
 
-  #btnBiometricLoginTrigger {
+  #btnBiometricLoginTrigger,
+  #btnMagicLink {
     height: 48px !important;
   }
 
-  #btnBiometricLogin {
-    margin-top: 0.5rem !important;
+  #loginAltOptions {
+    margin-top: 1rem !important;
   }
 }
 
@@ -14352,3 +14351,65 @@ html.tab-hidden *, html.tab-hidden *::before, html.tab-hidden *::after {
 .pedExtraBtn:focus-visible { outline: 3px solid rgba(14, 165, 233, .5); outline-offset: 2px; }
 .pedExtraBtn.peligro { color: #b91c1c; border-color: #fecaca; }
 .pedExtraBtn.peligro:hover { border-color: #b91c1c; }
+
+/* Login: opciones alternativas (biométrico + enlace mágico) en una sola columna ordenada,
+   debajo de ENTRAR. Ambos botones comparten la clase .biometric-pulse-btn => mismo tamaño y estilo. */
+#loginAltOptions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  margin-top: 16px;
+}
+#loginAltOptions #btnBiometricLogin {
+  width: 100%;
+  flex-direction: column;
+}
+#loginAltOptions .biometric-pulse-btn {
+  height: 48px;
+  margin: 0;
+}
+.login-alt-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+.login-alt-divider::before,
+.login-alt-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(0, 51, 102, 0.1);
+}
+.login-alt-divider span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: rgba(0, 51, 102, 0.35);
+  text-transform: uppercase;
+}
+
+/* Input box homologado: los campos SIN etiqueta flotante (login, enlace mágico, etc.) centran
+   el texto en vertical. El motor de floating labels reserva 24px arriba para la etiqueta; si no
+   hay etiqueta, ese hueco empujaba el texto hacia abajo, por debajo del ícono. Mismo (o mayor)
+   nivel de especificidad que el reset de arriba para ganarle sin tocar a los campos con etiqueta. */
+html body .modern-input-group:not(:has(> label)) :is(input, select):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not(.notifSearchInput):not(.spm-input-num-clean):not(.evd-search-input):not(.evd-date) {
+  height: 100% !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: normal !important;
+}
+
+
+/* Modales de acceso (olvidé contraseña / enlace mágico): el campo ya dibuja su propio anillo de
+   foco; la .fieldCard que lo envuelve no debe dibujar un segundo anillo alrededor (doble contorno). */
+#magicLinkOverlay .fieldCard,
+#magicLinkOverlay .fieldCard:focus-within,
+#forgotOverlay .fieldCard,
+#forgotOverlay .fieldCard:focus-within {
+  box-shadow: none !important;
+  border-color: transparent !important;
+  background: transparent !important;
+}
