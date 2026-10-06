@@ -109,9 +109,9 @@
       else if (arfIni && /^Total$/i.test(t)) { total = r; break; }
     }
     if (!arfIni || !total || total - arfIni < 2 || arfIni - FILA_ESTILO_NORMAL < 3) {
-      return { normal: FILA_ESTILO_NORMAL, normalMedio: FILA_ESTILO_NORMAL + 1, normalUltimo: FILA_ESTILO_NORMAL + 2, arf: FILA_ESTILO_ARF, arfUltimo: FILA_ESTILO_ARF + 1, total: FILA_ESTILO_TOTAL };
+      return { normal: FILA_ESTILO_NORMAL, normalMedio: FILA_ESTILO_NORMAL + 1, normalUltimo: FILA_ESTILO_NORMAL + 2, arf: FILA_ESTILO_ARF, arfUltimo: FILA_ESTILO_ARF + 1, total: FILA_ESTILO_TOTAL, renglonesArf: 2 };
     }
-    return { normal: FILA_ESTILO_NORMAL, normalMedio: FILA_ESTILO_NORMAL + 1, normalUltimo: arfIni - 1, arf: arfIni, arfUltimo: total - 1, total };
+    return { normal: FILA_ESTILO_NORMAL, normalMedio: FILA_ESTILO_NORMAL + 1, normalUltimo: arfIni - 1, arf: arfIni, arfUltimo: total - 1, total, renglonesArf: total - arfIni };
   }
 
   function colLetra(n) { return String.fromCharCode(64 + n); }
@@ -151,6 +151,15 @@
   // "A.R.F.\nEn dictamen o canje" queda comprimido si aterriza en una fila
   // que en la plantilla era de una sola línea.
   function escribirBloqueCapturado(ws, filaDestino, capturado, overrides) {
+    // Fusionar PRIMERO y pintar después: ExcelJS iguala el borde de las celdas no-ancla al de
+    // la ancla si el estilo se aplica antes de fusionar, y el encabezado del Reverso perdía
+    // sus bordes (Observaciones sin recuadro, líneas gruesas faltantes).
+    capturado.merges.forEach((m) => {
+      const offset = filaDestino - capturado.filaInicio;
+      try {
+        ws.mergeCells(`${m.c1}${m.r1 + offset}:${m.c2}${m.r2 + offset}`);
+      } catch (e) { /* rango ya fusionado, ignorar */ }
+    });
     capturado.filas.forEach((celdas, i) => {
       const filaDestinoAbs = filaDestino + i;
       const row = ws.getRow(filaDestinoAbs);
@@ -161,12 +170,6 @@
       });
       if (capturado.alturas[i] != null) row.height = capturado.alturas[i];
       row.commit && row.commit();
-    });
-    capturado.merges.forEach((m) => {
-      const offset = filaDestino - capturado.filaInicio;
-      try {
-        ws.mergeCells(`${m.c1}${m.r1 + offset}:${m.c2}${m.r2 + offset}`);
-      } catch (e) { /* rango ya fusionado, ignorar */ }
     });
     if (overrides) {
       overrides.forEach(({ filaRel, col, valor }) => {
@@ -285,7 +288,7 @@
     const inicioArf = fila;
     // La plantilla reserva 2 renglones a la sección A.R.F. (su rótulo ocupa 3 líneas).
     const listaArf = arfCombinado.slice();
-    while (listaArf.length < 2) listaArf.push({ bio: biosConRenglones[0].bio, renglon: renglonVacio() });
+    while (listaArf.length < (estilos.minArf || 2)) listaArf.push({ bio: biosConRenglones[0].bio, renglon: renglonVacio() });
     for (let i = 0; i < listaArf.length; i++) {
       const { bio, renglon } = listaArf[i];
       const split = bio.regla_especial === 'SPLIT_DOSE';
@@ -466,6 +469,9 @@
     const capturaNormalUltimo = capturarBloqueFilas(ws, pos.normalUltimo, 1);
     const capturaArfUltimo = capturarBloqueFilas(ws, pos.arfUltimo, 1);
     const estilos = {
+      // la plantilla del municipio reserva 4 renglones A.R.F. y su rótulo ("A.R.F. / En dictamen o canje")
+      // ocupa 3 líneas: con 2 renglones se cortaba. La del SINBA (unidad) reserva 2 y su letra es menor.
+      minArf: Math.max(2, Math.min(3, pos.renglonesArf)),
       normal: capturaNormal.filas[0], arf: capturaArf.filas[0], total: capturaTotal.filas[0],
       normalMedio: capturaNormalMedio.filas[0], normalUltimo: capturaNormalUltimo.filas[0], arfUltimo: capturaArfUltimo.filas[0],
       alturaNormal: capturaNormal.alturas[0], alturaArf: capturaArf.alturas[0], alturaTotal: capturaTotal.alturas[0],
