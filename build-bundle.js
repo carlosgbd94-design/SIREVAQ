@@ -69,6 +69,9 @@ async function buildGroup(name, files) {
     sourcefile: name,
     sourcemap: 'external',
     legalComments: 'none',
+    // Quita solo console.log/debug/info de produccion (ruido y fuga de datos en la
+    // consola del usuario); warn/error se conservan para diagnostico y Sentry.
+    pure: ['console.log', 'console.debug', 'console.info'],
   });
 
   fs.writeFileSync(path.join(DIST_DIR, `${name}.js`), `${result.code}\n//# sourceMappingURL=${name}.js.map`);

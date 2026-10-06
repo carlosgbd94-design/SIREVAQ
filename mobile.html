@@ -8,7 +8,7 @@
   
   <!-- Content Security Policy (CSP) -->
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://fastly.jsdelivr.net https://cdnjs.cloudflare.com https://js.sentry-cdn.com https://browser.sentry-cdn.com https://us-assets.i.posthog.com https://us.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://raw.githubusercontent.com https://images.unsplash.com https://api.qrserver.com; connect-src 'self' https: wss:; frame-src 'self';">
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://fastly.jsdelivr.net https://cdnjs.cloudflare.com https://js.sentry-cdn.com https://browser.sentry-cdn.com https://us-assets.i.posthog.com https://us.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://images.unsplash.com https://api.qrserver.com; connect-src 'self' https: wss:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
 
   <!-- Smart Redirect: Redirigir a versión desktop si no es táctil o si la pantalla es grande -->
   <script>
@@ -39,7 +39,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1" rel="stylesheet">
 
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="mobile_style.css?v=2026.27c">
+  <link rel="stylesheet" href="mobile_style.css?v=2026.27d">
 </head>
 <body class="bg-[#f1f4f8] text-slate-800 min-h-[100dvh] flex flex-col relative overflow-x-hidden">
 
@@ -86,7 +86,7 @@
         <div class="orbit-guide orbit-guide-b"></div>
         <div class="orbit-guide orbit-guide-a"></div>
         <div class="orbit-plane orbit-plane-b"><div class="orbit-spin orbit-spin-b"><span class="orbit-mote orbit-mote-b"></span></div></div>
-        <img src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png" alt="Cargando..." class="bounce-logo-mobile">
+        <img src="assets/logo_nuevo.png" alt="Cargando..." class="bounce-logo-mobile">
         <div class="orbit-plane orbit-plane-a"><div class="orbit-spin orbit-spin-a"><span class="orbit-mote orbit-mote-a"></span></div></div>
       </div>
       <div class="loading-text-container">
@@ -127,7 +127,7 @@
     <div class="w-full max-w-sm rounded-[32px] border border-slate-200 bg-white/70 backdrop-blur-2xl p-8 shadow-xl relative text-center">
       <!-- Logo Oficial JS1 -->
       <div class="w-20 h-20 mx-auto mb-6 bg-white rounded-3xl flex items-center justify-center shadow-md border border-slate-200/80 backdrop-blur-md">
-        <img src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png" class="h-12 w-auto" alt="Logo JS1">
+        <img src="assets/logo_nuevo.png" class="h-12 w-auto" alt="Logo JS1">
       </div>
       
       <h1 class="text-2xl font-black tracking-tight text-slate-900">
@@ -181,7 +181,7 @@
     <div class="w-full px-6 pt-6 flex items-center justify-between z-[100] gap-3">
       <!-- Title Badge (independent) -->
       <div class="flex items-center gap-3 px-4 py-2.5 rounded-2xl liquid-glass flex-1 max-w-[220px]">
-        <img src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png" class="h-8 w-auto" alt="Logo JS1">
+        <img src="assets/logo_nuevo.png" class="h-8 w-auto" alt="Logo JS1">
         <div class="min-w-0">
           <span class="text-xs font-black tracking-tight text-slate-900 block leading-tight truncate">JS1 SIREVAQ</span>
           <span class="text-[8px] font-bold text-slate-500 uppercase tracking-widest leading-none block">Móvil</span>

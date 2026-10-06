@@ -892,6 +892,87 @@ function updateOverlayProgress(current, total, detailMsg = "", title = "Procesan
   if (pOverlay) pOverlay.classList.add("show");
 }
 
+// Accesibilidad: muchos controles (sobre todo los de las filas de las tablas de captura)
+// no tienen <label> asociado, asi que un lector de pantalla los anuncia sin nombre. Se les
+// deduce un aria-label del encabezado de su columna o del texto de su etiqueta visual
+// vecina, y las <img> sin alt se marcan decorativas. No cambia nada visualmente.
+(function initA11yLabels() {
+  const SKIP_TYPES = new Set(["hidden", "button", "submit", "reset", "image"]);
+  const clean = (t) => String(t || "").replace(/\s+/g, " ").trim().slice(0, 80);
+
+  function deriveName(el) {
+    const td = el.closest("td");
+    if (td) {
+      const table = td.closest("table");
+      const idx = td.cellIndex;
+      const th = table && table.tHead && table.tHead.rows[0] && table.tHead.rows[0].cells[idx];
+      const t = clean(th && th.textContent);
+      if (t) return t;
+    }
+    const wrapLabel = el.closest("label");
+    if (wrapLabel) {
+      const t = clean(wrapLabel.textContent);
+      if (t) return t;
+    }
+    for (let n = el, i = 0; n && i < 3; n = n.parentElement, i++) {
+      let s = n.previousElementSibling;
+      while (s) {
+        if (/^(LABEL|SPAN|P|H[1-6]|DIV)$/.test(s.tagName) && !s.querySelector("input,select,textarea,button")) {
+          const t = clean(s.textContent);
+          if (t && t.length <= 60) return t;
+        }
+        s = null;
+      }
+      const lab = n.parentElement && n.parentElement.querySelector(":scope > label");
+      if (lab && !lab.contains(el)) {
+        const t = clean(lab.textContent);
+        if (t) return t;
+      }
+    }
+    return "";
+  }
+
+  function label(el) {
+    if (el.tagName === "IMG") {
+      if (!el.hasAttribute("alt")) el.setAttribute("alt", "");
+      return;
+    }
+    if (!/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return;
+    if (SKIP_TYPES.has((el.getAttribute("type") || "").toLowerCase())) return;
+    if (el.getAttribute("aria-label") || el.getAttribute("aria-labelledby") || el.title || el.placeholder) return;
+    if (el.labels && el.labels.length) return;
+    const name = deriveName(el);
+    if (name) el.setAttribute("aria-label", name);
+  }
+
+  function sweep(root) {
+    if (!root || root.nodeType !== 1) return;
+    label(root);
+    root.querySelectorAll && root.querySelectorAll("input, select, textarea, img").forEach(label);
+  }
+
+  let queue = new Set();
+  let scheduled = false;
+  const flush = () => {
+    scheduled = false;
+    const nodes = queue;
+    queue = new Set();
+    nodes.forEach((n) => { if (n.isConnected) sweep(n); });
+  };
+  function start() {
+    sweep(document.body);
+    new MutationObserver((muts) => {
+      for (const m of muts) m.addedNodes.forEach((n) => { if (n.nodeType === 1) queue.add(n); });
+      if (!scheduled && queue.size) {
+        scheduled = true;
+        (window.requestIdleCallback || ((cb) => setTimeout(cb, 150)))(flush, { timeout: 500 });
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
+  else start();
+})();
+
 // Libera la guardia de arranque de index.html (ver clases boot-hold/auth-*): se llama
 // cuando whoami() ya decidió si hay sesión, para que no se vea la app a medias.
 function finishBootGuard() {
@@ -8857,8 +8938,8 @@ function initStaticAssets() {
   const assetA = String(`<?= LOGO_A ?>` || "").trim();
   const assetB = String(`<?= LOGO_B ?>` || "").trim();
 
-  const fallbackA = "https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/Seseq_vertical_2025.png";
-  const fallbackB = "https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png";
+  const fallbackA = "assets/Seseq_vertical_2025.png";
+  const fallbackB = "assets/logo_nuevo.png";
 
   const safeA = assetA.startsWith("data:image/") ? assetA : fallbackA;
   const safeB = assetB.startsWith("data:image/") ? assetB : fallbackB;
@@ -14030,7 +14111,7 @@ function setLoggedInUI(user, status) {
   USER = user;
   document.body.setAttribute("data-role", USER.rol);
   STATUS = (status && status.data) ? status.data : (status || null);
-  loadDeferredFeatureLibraries();
+  scheduleDeferredFeatureLibraries();
 
   // Sincronizar enlace dinámico de Soporte por WhatsApp para pre-identificar al usuario
   const waLink = document.getElementById("whatsappSupportLink");
@@ -16112,6 +16193,24 @@ function loadDeferredFeatureLibraries() {
     });
     _deferredLibPromises[name].catch(() => {}); // evita "unhandled rejection"; quien espera lo maneja
   });
+}
+
+/**
+ * Arranca la descarga de las librerias diferidas SIN competir con el pintado inicial:
+ * espera a que el navegador este ocioso (maximo 1.2 s) o a la primera interaccion del
+ * usuario, lo que ocurra primero. ensureLibsLoaded() sigue forzando la carga al instante
+ * cuando alguna funcion las necesita.
+ */
+function scheduleDeferredFeatureLibraries() {
+  if (_deferredLibsLoaded) return;
+  const events = ["pointerdown", "keydown"];
+  const go = () => {
+    events.forEach((ev) => window.removeEventListener(ev, go, true));
+    loadDeferredFeatureLibraries();
+  };
+  events.forEach((ev) => window.addEventListener(ev, go, { capture: true, passive: true }));
+  if (typeof requestIdleCallback === "function") requestIdleCallback(go, { timeout: 1200 });
+  else setTimeout(go, 1200);
 }
 
 /** Espera a que terminen (y ejecuten) las librerias diferidas indicadas. */
@@ -25596,7 +25695,7 @@ function updateSearchableSelectOptions(selectEl) {
 
 // ===== CELEBRACIÓN CON CONFETTI PREMIUM (OPCIÓN 3 - CON PARCHADO DE CSP) =====
 const confettiLogoImg = new Image();
-fetch("https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png")
+fetch("assets/logo_nuevo.png")
   .then(res => {
     if (!res.ok) throw new Error("Network response was not ok");
     return res.blob();
@@ -26802,7 +26901,7 @@ function drawCenterDriveLogo(ctx, size) {
   logoImg.onload = () => {
     ctx.drawImage(logoImg, cx - (centerSize * 0.7) / 2, cy - (centerSize * 0.7) / 2, centerSize * 0.7, centerSize * 0.7);
   };
-  logoImg.src = "https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/Google-Drive-New-Icon-2026-PNG.png";
+  logoImg.src = "assets/Google-Drive-New-Icon-2026-PNG.png";
 
   ctx.restore();
 }

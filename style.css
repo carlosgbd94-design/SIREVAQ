@@ -10177,7 +10177,7 @@ html body .modern-input-group input[type="date"]:focus,
 .particle-logo {
   position: absolute;
   bottom: -150px;
-  background-image: url('https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png');
+  background-image: url('assets/logo_nuevo.png');
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;

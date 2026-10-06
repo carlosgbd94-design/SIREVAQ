@@ -2209,8 +2209,8 @@ async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob =
             };
             
             const [logoData, watermarkData] = await Promise.all([
-                loadImgBase64('https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/Seseq_vertical_2025.png'),
-                loadImgBase64('https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png')
+                loadImgBase64('assets/Seseq_vertical_2025.png'),
+                loadImgBase64('assets/logo_nuevo.png')
             ]);
 
             // 4. Inicializar jsPDF en formato Carta Horizontal
@@ -3028,7 +3028,7 @@ async function exportMasivoZIP(mode = 'pdf') {
                             <circle cx="50" cy="50" r="45" fill="none" stroke="#f1f5f9" stroke-width="7"></circle>
                             <circle id="rdaOverlayRing" cx="50" cy="50" r="45" fill="none" stroke="#0284c7" stroke-width="7" stroke-dasharray="283" stroke-dashoffset="283" stroke-linecap="round" style="transition: stroke-dashoffset 0.3s cubic-bezier(0.4, 0, 0.2, 1);"></circle>
                         </svg>
-                        <img src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png" alt="Exportando SIREVAQ..." class="bounce-logo" style="position: absolute; width: 52px; height: auto;">
+                        <img src="assets/logo_nuevo.png" alt="Exportando SIREVAQ..." class="bounce-logo" style="position: absolute; width: 52px; height: auto;">
                     </div>
 
                     <!-- BADGE (OPCIÓN 1) -->

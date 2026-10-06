@@ -4,7 +4,7 @@
  * Versión: 2026.4
  */
 
-const CACHE_NAME = 'js1-reportes-v2026-134';
+const CACHE_NAME = 'js1-reportes-v2026-135';
 
 // IMPORTANTE: index.html YA NO carga main.js/rda_ui.js/etc. sueltos -- desde que existe
 // build-bundle.js carga dist/bundle-head.js y dist/bundle-body.js (empaquetados). Antes
@@ -31,6 +31,9 @@ const STATIC_ASSETS = [
   './calendario_capacitaciones.js',
   './site.webmanifest',
   './favicon.svg',
+  './assets/logo_nuevo.png',
+  './assets/Seseq_vertical_2025.png',
+  './assets/Google-Drive-New-Icon-2026-PNG.png',
   './favicon.ico',
   './favicon-96x96.png',
   './apple-touch-icon.png',

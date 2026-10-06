@@ -70,13 +70,14 @@
       window.location.replace('mobile.html');
     }
   </script>
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="description"
     content="Sistema de Reportes y Evaluación en Vacunación de Querétaro de la Jurisdicción Sanitaria 1">
   <meta name="theme-color" content="var(--md-sys-color-on-surface)">
 
   <!-- Content Security Policy (CSP) -->
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://fastly.jsdelivr.net https://cdnjs.cloudflare.com https://js.sentry-cdn.com https://browser.sentry-cdn.com https://us-assets.i.posthog.com https://us.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://raw.githubusercontent.com https://images.unsplash.com https://api.qrserver.com; connect-src 'self' https: wss:; frame-src 'self';">
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://fastly.jsdelivr.net https://cdnjs.cloudflare.com https://js.sentry-cdn.com https://browser.sentry-cdn.com https://us-assets.i.posthog.com https://us.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://images.unsplash.com https://api.qrserver.com; connect-src 'self' https: wss:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
 
   <!-- Sentry Error Monitoring -->
   <script src="https://js.sentry-cdn.com/ad5eb763bc0b321edddbb0ce59e2c0f0.min.js" crossorigin="anonymous"></script>
@@ -132,7 +133,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=1">
-  <link rel="stylesheet" href="style.css?v=2026.106" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.107" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -386,7 +387,7 @@
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
   <script defer src="ayuda.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.98" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.99" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -432,7 +433,7 @@
 
     <!-- Light Mode Background Pattern -->
     <div class="light-bg-pattern"
-      style="position: absolute; inset: -50%; background-image: url('https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png'); background-size: 150px; background-repeat: repeat; opacity: 0.02; transform: rotate(-25deg); transition: opacity 0.4s ease;">
+      style="position: absolute; inset: -50%; background-image: url('assets/logo_nuevo.png'); background-size: 150px; background-repeat: repeat; opacity: 0.02; transform: rotate(-25deg); transition: opacity 0.4s ease;">
     </div>
     <div class="light-bg-gradient"
       style="position: absolute; inset: 0; background: radial-gradient(circle at 15% 50%, rgba(14, 165, 233, 0.04) 0%, transparent 40%), radial-gradient(circle at 85% 30%, rgba(15, 23, 42, 0.03) 0%, transparent 40%); transition: opacity 0.4s ease;">
@@ -440,7 +441,7 @@
 
     <!-- Dark Mode Background Pattern (Escondido por defecto) -->
     <div class="dark-bg-pattern"
-      style="position: absolute; inset: -50%; background-image: url('https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png'); background-size: 150px; background-repeat: repeat; opacity: 0; transform: rotate(-25deg); filter: invert(1); transition: opacity 0.4s ease;">
+      style="position: absolute; inset: -50%; background-image: url('assets/logo_nuevo.png'); background-size: 150px; background-repeat: repeat; opacity: 0; transform: rotate(-25deg); filter: invert(1); transition: opacity 0.4s ease;">
     </div>
     <div class="dark-bg-gradient"
       style="position: absolute; inset: 0; background: radial-gradient(circle at 15% 50%, rgba(56, 189, 248, 0.1) 0%, transparent 50%), radial-gradient(circle at 85% 30%, rgba(125, 211, 252, 0.05) 0%, transparent 50%); opacity: 0; transition: opacity 0.4s ease;">
@@ -465,7 +466,7 @@
     <style>
       .tech-node-light {
         position: absolute;
-        background-image: url('https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png');
+        background-image: url('assets/logo_nuevo.png');
         background-size: contain;
         background-repeat: no-repeat;
         background-position: center;
@@ -530,7 +531,7 @@
           <!-- Logo Q -->
           <img id="logoB" class="object-contain flex-none transition-all duration-300"
             style="height: 40px !important; width: auto !important;"
-            src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png"
+            src="assets/logo_nuevo.png"
             alt="Gobierno de Querétaro">
 
           <div class="hidden sm:block w-[1px] h-8 bg-primary/20 flex-none mx-2"></div>
@@ -839,7 +840,7 @@
                   target="_blank" rel="noopener noreferrer" class="flex-1 no-underline"
                   style="display: flex; height: 38px; min-height: 38px; max-height: 38px; border-radius: 12px; font-weight: 700; font-size: 11px; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid #cbd5e1; background: transparent; color: #475569; cursor: pointer; transition: all 0.2s; min-width: 0; box-sizing: border-box; padding: 0 10px; margin: 0;">
                   <img
-                    src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/Google-Drive-New-Icon-2026-PNG.png"
+                    src="assets/Google-Drive-New-Icon-2026-PNG.png"
                     alt="Google Drive" class="w-5 h-5 object-contain flex-none">
                   <span id="profileDriveTitle" class="truncate uppercase tracking-wider">REPOSITORIO VACUNAS 2026</span>
                 </a>
@@ -932,7 +933,7 @@
         <!-- LOGO MÓVIL ORIGINAL -->
         <div id="mobileLogo"
           class="w-16 h-16 sm:w-20 sm:h-20 bg-surface/20 rounded-3xl flex items-center justify-center mb-4 sm:mb-8 shadow-xl border border-white/30 backdrop-blur-md">
-          <img src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png"
+          <img src="assets/logo_nuevo.png"
             class="h-10 sm:h-12 w-auto" alt="Logo JS1">
         </div>
 
@@ -945,7 +946,7 @@
 
         <!-- LOGO DESKTOP (Nuevo diseño Bicolor) -->
         <div id="desktopLogo" style="display: none; align-items: center; gap: 12px; margin-bottom: 2rem;">
-          <img src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png"
+          <img src="assets/logo_nuevo.png"
             alt="JS1 Logo" style="width: 50px; height: auto;">
           <div style="font-size: 1.8rem; font-weight: 700; letter-spacing: -0.5px;">
             <span style="color: var(--md-sys-color-on-surface);">JS1</span><span
@@ -6429,7 +6430,7 @@
             style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px; margin-bottom: 32px;">
             <div style="display: flex; gap: 20px; align-items: center;">
               <img
-                src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/Seseq_vertical_2025.png"
+                src="assets/Seseq_vertical_2025.png"
                 alt="Seseq Logo" style="height: 60px;">
               <div>
                 <h1
@@ -6512,7 +6513,7 @@
         <div class="orbit-guide orbit-guide-b"></div>
         <div class="orbit-guide orbit-guide-a"></div>
         <div class="orbit-plane orbit-plane-b"><div class="orbit-spin orbit-spin-b"><span class="orbit-mote orbit-mote-b"></span></div></div>
-        <img src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png"
+        <img src="assets/logo_nuevo.png"
           alt="Cargando..." class="bounce-logo">
         <div class="orbit-plane orbit-plane-a"><div class="orbit-spin orbit-spin-a"><span class="orbit-mote orbit-mote-a"></span></div></div>
       </div>
@@ -6536,7 +6537,7 @@
           <circle cx="50" cy="50" r="45" fill="none" stroke="#f1f5f9" stroke-width="7"></circle>
           <circle id="globalOverlayRing" cx="50" cy="50" r="45" fill="none" stroke="#0284c7" stroke-width="7" stroke-dasharray="283" stroke-dashoffset="283" stroke-linecap="round" style="transition: stroke-dashoffset 0.3s cubic-bezier(0.4, 0, 0.2, 1);"></circle>
         </svg>
-        <img src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png" alt="SIREVAQ" class="bounce-logo" style="position: absolute; width: 52px; height: auto;">
+        <img src="assets/logo_nuevo.png" alt="SIREVAQ" class="bounce-logo" style="position: absolute; width: 52px; height: auto;">
       </div>
 
       <!-- BADGE -->
@@ -7845,7 +7846,7 @@
       </div>
 
       <div class="elastic-bounce-container" style="margin:4px 0;">
-        <img src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png"
+        <img src="assets/logo_nuevo.png"
           alt="Comprimiendo..." class="bounce-logo">
       </div>
 
@@ -7884,7 +7885,7 @@
       </div>
 
       <div id="uploadProgressSpinner" class="elastic-bounce-container" style="margin-bottom: 8px;">
-        <img src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/logo_nuevo.png"
+        <img src="assets/logo_nuevo.png"
           alt="Cargando..." class="bounce-logo">
       </div>
 
@@ -9940,7 +9941,7 @@
       <div
         class="w-14 h-14 rounded-2xl bg-sky-50 border border-sky-100 flex items-center justify-center mb-3 text-sky-600 shadow-inner">
         <img
-          src="https://raw.githubusercontent.com/carlosgbd94-design/Logos/refs/heads/main/Google-Drive-New-Icon-2026-PNG.png"
+          src="assets/Google-Drive-New-Icon-2026-PNG.png"
           alt="Google Drive" class="w-8 h-8 object-contain">
       </div>
 
