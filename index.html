@@ -406,7 +406,11 @@
         navigator.serviceWorker.register('./sw.js')
           .then(reg => {
             console.log('[PWA] Service Worker registrado:', reg.scope);
-            reg.update(); // Buscar actualizaciones
+            // update() devuelve una promesa que RECHAZA si la instalacion del SW falla
+            // (almacenamiento lleno, modo privado, red cortada a media instalacion);
+            // sin catch llegaba a Sentry como "ServiceWorker script ... encountered an
+            // error during installation" aunque la app funciona sin el SW.
+            reg.update().catch(err => console.warn('[PWA] No se pudo actualizar el Service Worker:', err));
           })
           .catch(err => console.warn('[PWA] Error al registrar Service Worker:', err));
       });

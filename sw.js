@@ -54,6 +54,10 @@ self.addEventListener('install', (event) => {
           })
         )
       );
+    }).catch((err) => {
+      // caches.open puede rechazar (cuota llena, modo privado, almacenamiento bloqueado).
+      // El precacheo es solo un respaldo offline: nunca debe hacer fallar la instalación.
+      console.warn('[SW] Precacheo omitido:', err);
     }).then(() => {
       console.log('[SW] Instalación completa. Activando inmediatamente...');
       return self.skipWaiting();
