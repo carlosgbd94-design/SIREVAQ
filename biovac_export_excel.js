@@ -266,18 +266,23 @@
     const caducidad = fechaExcel(r.caducidad);
     // Los ceros no se exportan: celda vacía (las fórmulas tratan vacío como 0).
     const sinCero = (v) => (v === '' || v === 0 || v === null || v === undefined || Number.isNaN(v) ? null : v);
+    // El lote y su caducidad solo se anotan donde ese lote TIENE cantidad: un lote nuevo (sin
+    // existencia anterior) no aparece en "Existencia anterior", y uno que no recibió nada este mes
+    // no aparece en "Recibidos". La existencia al corte (O/P) se decide con una fórmula, ver abajo.
+    const conAnterior = Number(r.existenciaAnterior) > 0;
+    const conRecibido = Number(r.recibido) > 0;
     row.getCell(2).value = sinCero(r.existenciaAnterior);
-    row.getCell(3).value = r.numeroLote || null;
-    row.getCell(4).value = caducidad;
+    row.getCell(3).value = conAnterior ? (r.numeroLote || null) : null;
+    row.getCell(4).value = conAnterior ? caducidad : null;
     row.getCell(5).value = sinCero(r.recibido);
-    row.getCell(6).value = r.numeroLote || null;
-    row.getCell(7).value = caducidad;
+    row.getCell(6).value = conRecibido ? (r.numeroLote || null) : null;
+    row.getCell(7).value = conRecibido ? caducidad : null;
     row.getCell(8).value = sinCero(r.aplicadasA);
     if (split) row.getCell(9).value = sinCero(r.aplicadasB);
     row.getCell(11).value = sinCero(r.desechadasA);
     if (split) row.getCell(12).value = sinCero(r.desechadasB);
-    row.getCell(15).value = r.numeroLote || null;
-    row.getCell(16).value = caducidad;
+    row.getCell(15).value = null;
+    row.getCell(16).value = null;
   }
 
   // Colores capturados de la plantilla real para el bloque A.R.F. (texto
@@ -322,7 +327,7 @@
         if (i === 0) ws.getCell(`A${fila}`).value = { richText: [{ text: bio.nombre_excel }] };
         escribirDatosRenglon(ws, fila, listaNormal[i], split);
         const dosis = listaNormal[i].dosisPorFrasco || bio.dosis_por_frasco || 1;
-        escribirFormulasFila(ws, fila, bio, dosis, split);
+        escribirFormulasFila(ws, fila, bio, dosis, split, listaNormal[i]);
         fila++;
       }
       ws.mergeCells(`A${inicioNormalBio}:A${fila - 1}`);
@@ -358,7 +363,7 @@
       }
       escribirDatosRenglon(ws, fila, renglon, split);
       const dosis = renglon.dosisPorFrasco || bio.dosis_por_frasco || 1;
-      escribirFormulasFila(ws, fila, bio, dosis, split);
+      escribirFormulasFila(ws, fila, bio, dosis, split, renglon);
       fila++;
     }
     const finArf = fila - 1;
@@ -421,14 +426,27 @@
     return partes.join(',');
   }
 
-  function escribirFormulasFila(ws, fila, bio, dosis, split) {
+  function escribirFormulasFila(ws, fila, bio, dosis, split, r) {
     if (split) {
       ws.getCell(`J${fila}`).value = { formula: `(((H${fila}/2)+(I${fila})))` };
       ws.getCell(`M${fila}`).value = { formula: `(((K${fila}/2)+(L${fila})))` };
     }
     ws.getCell(`N${fila}`).value = { formula: formulaExistenciaFinal(fila, bio.presentacion, dosis, bio.regla_especial) };
-    ws.getCell(`O${fila}`).value = { formula: `IF(F${fila}=0," ",F${fila})` };
-    ws.getCell(`P${fila}`).value = { formula: `IF(G${fila}=0," ",G${fila})` };
+    // Lote y caducidad al corte: solo mientras el lote siga teniendo existencia final (un lote que
+    // se terminó ya no aparece). Es fórmula, así que si se corrige una cantidad en Excel se ajusta sola.
+    const lote = r && r.numeroLote ? String(r.numeroLote) : '';
+    if (lote) {
+      // N vale " " (texto) cuando ya no queda nada: ROUND de un texto da #VALOR!, por eso IF anidado y no AND
+      const cond = (v) => `IF(ISNUMBER(N${fila}),IF(ROUND(N${fila},4)>0,${v}," ")," ")`;
+      const fecha = r.caducidad ? String(r.caducidad).slice(0, 10).split('-').map(Number) : null;
+      ws.getCell(`O${fila}`).value = { formula: cond('"' + lote.replace(/"/g, '""') + '"') };
+      ws.getCell(`P${fila}`).value = fecha && fecha.length === 3 && !fecha.some(Number.isNaN)
+        ? { formula: cond(`DATE(${fecha[0]},${fecha[1]},${fecha[2]})`) }
+        : null;
+    } else {
+      ws.getCell(`O${fila}`).value = null;
+      ws.getCell(`P${fila}`).value = null;
+    }
   }
 
   // El alto de fila se fija explícitamente al alto de la plantilla para

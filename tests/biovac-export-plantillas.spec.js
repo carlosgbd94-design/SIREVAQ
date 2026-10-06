@@ -14,7 +14,7 @@ const bios = [
   { id: 'bio3', bloque_id: 'b3', nombre_excel: 'Td', orden_en_bloque: 1, presentacion: 'MULTIDOSIS', dosis_por_frasco: 10, regla_especial: null, vigente_desde: '2020-01-01', vigente_hasta: null }
 ];
 const r = (cat, lote, bio, ant, rec, apl) => ({ categoria: cat, existencia_anterior_frascos: ant, recibido_frascos: rec, aplicadas_a: apl, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, observaciones: null, biovac_lotes: { numero_lote: lote, caducidad: '2027-03-31', dosis_por_frasco_override: null, biologico_id: bio } });
-const filas = [r('NORMAL', 'L1', 'bio1', 2, 3, 10), r('ARF', 'LA1', 'bio1', 0, 4, 0), r('CANJE', 'LC1', 'bio1', 0, 0, 0), r('NORMAL', 'R1', 'bio2', 1, 1, 1), r('CANJE', 'RC1', 'bio2', 0, 0, 0), r('NORMAL', 'T1', 'bio3', 3, 0, 5)];
+const filas = [r('NORMAL', 'L1', 'bio1', 2, 3, 10), r('ARF', 'LA1', 'bio1', 0, 4, 0), r('CANJE', 'LC1', 'bio1', 1, 0, 0), r('NORMAL', 'R1', 'bio2', 1, 1, 1), r('CANJE', 'RC1', 'bio2', 1, 0, 0), r('NORMAL', 'T1', 'bio3', 3, 0, 5)];
 
 const relleno = (c) => ((c.fill && c.fill.fgColor && c.fill.fgColor.argb) || '').slice(2);
 const texto = (c) => { const v = c.value; return v && v.richText ? v.richText.map((t) => t.text).join('') : String(v == null ? '' : v); };
@@ -28,7 +28,7 @@ for (const [nombre, archivo, hoja] of [['municipio', 'biovac_plantilla.xlsx', 'S
 
     // por número de lote, no por fila fija: cada renglón debe tener el color de su categoría
     const porLote = {};
-    ws.eachRow((row) => { const lote = row.getCell(3).value; if (lote) porLote[lote] = { fondo: relleno(row.getCell(2)), fuente: ((row.getCell(3).font && row.getCell(3).font.color && row.getCell(3).font.color.argb) || '').slice(2) }; });
+    ws.eachRow((row) => { const lote = row.getCell(3).value || row.getCell(6).value; if (lote) porLote[lote] = { fondo: relleno(row.getCell(2)), fuente: ((row.getCell(3).font && row.getCell(3).font.color && row.getCell(3).font.color.argb) || '').slice(2) }; });
     expect(porLote.L1.fondo).toBe('');            // normal: sin relleno
     expect(porLote.R1.fondo).toBe('');
     expect(porLote.LA1.fondo).toBe('FFCDCD');     // A.R.F.: rosa con letra roja
