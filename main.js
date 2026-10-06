@@ -217,6 +217,7 @@ async function handleLoginFlow(email, password) {
       mustChangePassword: mustChange
     });
 
+    if (window.__JS1_RELOADING) return;
     if (USER?.rol && ["ADMIN", "MUNICIPAL", "JURISDICCIONAL", "VISUALIZADOR_JURISDICCIONAL", "CARAVANAS"].includes(USER.rol)) {
       apiCall("silentAdminReminders").catch(() => { });
     }
@@ -715,6 +716,7 @@ document.addEventListener("DOMContentLoaded", () => {
       setLoggedOutUI();
     } finally {
       hideOverlay();
+      finishBootGuard();
       startFactsRotation();
       initWeather();
       checkPasskeySupport();
@@ -890,7 +892,55 @@ function updateOverlayProgress(current, total, detailMsg = "", title = "Procesan
   if (pOverlay) pOverlay.classList.add("show");
 }
 
+// Libera la guardia de arranque de index.html (ver clases boot-hold/auth-*): se llama
+// cuando whoami() ya decidió si hay sesión, para que no se vea la app a medias.
+function finishBootGuard() {
+  document.documentElement.classList.remove("boot-hold", "auth-pending", "auth-none");
+}
+
+// Anti-autocompletado: Chrome rellena con el correo/contraseña guardados cualquier
+// campo de texto que quede "antes" de un <input type=password> (los de cambio de
+// contraseña están en la misma página) y los que parecen usuario/correo. Solo el
+// formulario de login debe conservar el autocompletado de credenciales; todo lo demás
+// (incluidos los campos que se crean dinámicamente) se marca como no-autocompletable.
+(function initAutofillGuard() {
+  const SKIP_TYPES = new Set(["checkbox", "radio", "button", "submit", "reset", "file", "hidden", "range", "color", "image"]);
+  const CREDENTIAL_TOKENS = new Set(["on", "username", "email", "current-password"]);
+
+  function harden(el) {
+    if (!el || (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA")) return;
+    if (el.closest("#loginForm")) return;
+    const type = (el.getAttribute("type") || "text").toLowerCase();
+    if (SKIP_TYPES.has(type)) return;
+    const cur = (el.getAttribute("autocomplete") || "").trim().toLowerCase();
+    if (type === "password") {
+      if (cur !== "new-password") el.setAttribute("autocomplete", "new-password");
+    } else if (!cur || CREDENTIAL_TOKENS.has(cur)) {
+      el.setAttribute("autocomplete", "off");
+    }
+    el.setAttribute("data-lpignore", "true");
+    el.setAttribute("data-1p-ignore", "");
+  }
+
+  function sweep(root) {
+    if (root.nodeType !== 1) return;
+    harden(root);
+    root.querySelectorAll?.("input, textarea").forEach(harden);
+  }
+
+  function start() {
+    sweep(document.body);
+    new MutationObserver((muts) => {
+      for (const m of muts) m.addedNodes.forEach(sweep);
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
+  else start();
+})();
+
 function hideOverlay() {
+  if (window.__JS1_RELOADING) return; // recarga limpia en curso: mantener el velo hasta que cargue
   const mainOverlay = $("overlay");
   if (mainOverlay) mainOverlay.classList.remove("show");
   const pOverlay = $("progressOverlay");
@@ -8920,7 +8970,19 @@ function bindNavigationUiEvents() {
     USER = null;
     TOKEN = null;
     clearSession();
-    window.location.reload();
+    window.__JS1_DIRTY = true;
+
+    // Cierre en sitio: antes se hacía location.reload(), que volvía a descargar y
+    // ejecutar toda la app (la página "se trababa" y recargaba). Basta con volver a
+    // la pantalla de login con el mismo estado limpio que usa una sesión vencida.
+    document.querySelectorAll(".modalOverlay.show, .overlay.show").forEach((el) => {
+      if (el.id !== "overlay") el.classList.remove("show");
+    });
+    document.body.removeAttribute("data-role");
+    setLoggedOutUI();
+    window.scrollTo(0, 0);
+    hideOverlay();
+    setTimeout(() => document.getElementById("usuario")?.focus({ preventScroll: true }), 650);
   });
 }
 function bindSummaryUiEvents() {
@@ -9141,6 +9203,16 @@ function deferPostLoginTask(task, delay = 0) {
 
 
 async function hydrateSessionUi(user, status, opts = {}) {
+  // Si en esta misma carga de página ya hubo una sesión que se cerró, el DOM conserva
+  // estilos/paneles del rol anterior (ej. entrar a ADMIN, salir y entrar a UNIDAD
+  // mezclaba los paneles). Una sola recarga limpia lo evita; la sesión ya quedó
+  // guardada y el arranque la recoge con el velo de carga puesto.
+  if (window.__JS1_DIRTY && user) {
+    window.__JS1_RELOADING = true;
+    showOverlay("Cargando tu sesión…", "Iniciando");
+    window.location.reload();
+    return;
+  }
   exposeAppFns();
   assertCriticalFns();
 
@@ -11356,6 +11428,10 @@ function showRightColumn(show) {
 
   // 2. Login Overlay transition with GSAP
   if (loginWrap) {
+    // Cancela una animación previa pendiente: su onComplete añade "hidden" al login y,
+    // si llega tarde (pestaña en segundo plano o cierre de sesión inmediato), lo
+    // ocultaría justo después de volver a mostrarlo.
+    if (typeof gsap !== 'undefined' && cardLogin) gsap.killTweensOf(cardLogin);
     if (show) {
       // Exit: Premium fade out and slide up for login card
       if (typeof gsap !== 'undefined') {
@@ -11385,7 +11461,12 @@ function showRightColumn(show) {
     } else {
       // Entry: Show premium overlay
       loginWrap.classList.remove("hidden");
-      if (typeof gsap !== 'undefined' && cardLogin) {
+      // Arranque sin sesión: la tarjeta ya se pintó visible desde el primer frame
+      // (index.html); repetir el fade-in la haría parpadear.
+      const loginAlreadyShown = document.documentElement.classList.contains("auth-none");
+      if (loginAlreadyShown) {
+        if (cardLogin) { cardLogin.style.opacity = ""; cardLogin.style.transform = ""; }
+      } else if (typeof gsap !== 'undefined' && cardLogin) {
         gsap.fromTo(cardLogin, 
           { y: 30, scale: 0.95, opacity: 0 }, 
           { y: 0, scale: 1, opacity: 1, duration: 0.6, ease: "power3.out" }
@@ -14304,6 +14385,8 @@ function resetApplicationState() {
 }
 
 function setLoggedOutUI() {
+  // Hubo una sesión en esta carga: el DOM quedó "sucio" (ver hydrateSessionUi).
+  if (USER || AppState.user) window.__JS1_DIRTY = true;
   resetApplicationState();
   stopRealtimeUX();
 

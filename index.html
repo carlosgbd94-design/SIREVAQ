@@ -20,6 +20,44 @@
       } catch (e) { }
     })();
   </script>
+  <script>
+    // Arranque sin parpadeo: ANTES del primer pintado se decide, solo con lo que hay en
+    // localStorage, qué mostrar. Sin sesión guardada -> la tarjeta de login aparece de
+    // inmediato (sin cortina ni cabecera/pie de la app). Con sesión guardada -> se
+    // oculta la app hasta que whoami() confirme (o descarte) la sesión. main.js quita
+    // estas clases al terminar el arranque (finishBootGuard).
+    (function () {
+      var de = document.documentElement;
+      var has = false;
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf('sb-') === 0 && /-auth-token$/.test(k)) { has = true; break; }
+        }
+      } catch (e) { has = true; }
+      var hash = location.hash || '';
+      if (/[#&](access_token|refresh_token)=/.test(hash)) has = true;
+      de.classList.add('boot-hold', has ? 'auth-pending' : 'auth-none');
+      // Red de seguridad: jamás dejar la página oculta si el arranque se cuelga.
+      setTimeout(function () { de.classList.remove('boot-hold', 'auth-pending', 'auth-none'); }, 20000);
+    })();
+  </script>
+  <style>
+    html.boot-hold body > *:not(#loginWrapper):not(#overlay):not(#mainAppBackground):not(script):not(style):not(link) {
+      visibility: hidden !important;
+    }
+    html.boot-hold.auth-none #loginWrapper.hidden {
+      display: flex !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+    }
+    html.boot-hold.auth-none #overlay {
+      opacity: 0 !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+  </style>
   <title>SIREVAQ</title>
   <script>
     // Un enlace de recuperación de contraseña debe ir siempre a reset.html (página
@@ -348,7 +386,7 @@
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
   <script defer src="ayuda.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.95" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.98" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -7390,7 +7428,7 @@
               ACTUAL</label>
             <div class="modern-input-group">
               <span class="input-icon material-symbols-rounded">lock_open</span>
-              <input id="pwdCurrent" type="password" placeholder="Contraseña actual">
+              <input id="pwdCurrent" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="Contraseña actual">
               <button type="button" class="pwdToggle material-symbols-rounded"
                 data-target="pwdCurrent">visibility</button>
             </div>
@@ -7402,7 +7440,7 @@
               CONTRASEÑA</label>
             <div class="modern-input-group">
               <span class="input-icon material-symbols-rounded">lock</span>
-              <input id="pwdNew" type="password" placeholder="Mínimo 6 caracteres">
+              <input id="pwdNew" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="Mínimo 6 caracteres">
               <button type="button" class="pwdToggle material-symbols-rounded" data-target="pwdNew">visibility</button>
             </div>
           </div>
@@ -7413,7 +7451,7 @@
               NUEVA</label>
             <div class="modern-input-group">
               <span class="input-icon material-symbols-rounded">gpp_maybe</span>
-              <input id="pwdConfirm" type="password" placeholder="Repite la nueva contraseña">
+              <input id="pwdConfirm" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="Repite la nueva contraseña">
               <button type="button" class="pwdToggle material-symbols-rounded"
                 data-target="pwdConfirm">visibility</button>
             </div>
