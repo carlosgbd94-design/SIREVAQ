@@ -96,6 +96,8 @@
     let isEditingCONS = false;
     let isEditingBIO = false;
     let targetPedidoDate = "";
+    let tipoPedidoActual = "MENSUAL";     // MENSUAL (ordinario) o EXTRAORDINARIO: cada uno es un pedido aparte con su fecha
+    let modoPedidoElegido = null;         // pedido elegido cuando hay más de uno abierto hoy
     let canCaptureBioGlobal = true;
     let canCaptureConsGlobal = true;
     let canCaptureSRGlobal = true;
@@ -835,8 +837,28 @@
         const windowEndYmd = dateToLocalYmd(end);
         const hoyYmd = dateToLocalYmd(now);
 
-        canCaptureBioGlobal = hoyYmd >= windowStartYmd && hoyYmd <= windowEndYmd;
-        targetPedidoDate = windowTargetYmd;
+        // Pedidos extraordinarios abiertos hoy por el Administrador (cada uno es un pedido aparte)
+        let extrasAbiertos = [];
+        try {
+            const rx = await supabaseClient.from('pedidos_extraordinarios')
+                .select('id, fecha_programada, habilitar_hasta, motivo')
+                .eq('activo', true).lte('habilitar_desde', hoyYmd).gte('habilitar_hasta', hoyYmd)
+                .order('fecha_programada', { ascending: true });
+            extrasAbiertos = rx.data || [];
+        } catch (e) {
+            console.warn("fetchTargetDate: no se pudieron leer los extraordinarios", e);
+        }
+        const ordinariaAbierta = hoyYmd >= windowStartYmd && hoyYmd <= windowEndYmd;
+        const modos = [];
+        if (ordinariaAbierta) modos.push({ clave: "MENSUAL", tipo: "MENSUAL", fecha: windowTargetYmd });
+        extrasAbiertos.forEach(e => modos.push({ clave: "EXTRA|" + e.fecha_programada, tipo: "EXTRAORDINARIO", fecha: e.fecha_programada, hasta: e.habilitar_hasta, motivo: e.motivo || "" }));
+        const modo = modos.find(m => m.clave === modoPedidoElegido) || modos[0] || null;
+        modoPedidoElegido = modo ? modo.clave : null;
+
+        renderSelectorPedido(modos, modo);
+        canCaptureBioGlobal = !!modo;
+        tipoPedidoActual = modo ? modo.tipo : "MENSUAL";
+        targetPedidoDate = (modo && modo.tipo === "EXTRAORDINARIO") ? modo.fecha : windowTargetYmd;
 
         const bioBox = document.getElementById('fechaPedidoBIOBox');
         if (bioBox) {
@@ -846,7 +868,17 @@
             const endLabel = window.dayjs ? window.dayjs(end).format('DD/MM') : windowEndYmd.substring(5);
             const targetLabelStr = window.dayjs ? window.dayjs(target).format('DD/MM/YYYY') : windowTargetYmd;
 
-            if (canCaptureBioGlobal) {
+            if (modo && modo.tipo === "EXTRAORDINARIO") {
+                const f = window.dayjs ? window.dayjs(modo.fecha).format('DD/MM/YYYY') : modo.fecha;
+                const h = window.dayjs ? window.dayjs(modo.hasta).format('DD/MM') : String(modo.hasta).substring(5);
+                bioBox.style.background = "linear-gradient(135deg, #d97706 0%, #b45309 100%)";
+                bioBox.style.color = "#ffffff";
+                bioBox.innerHTML = `
+                    <span class="text-[10px] font-black uppercase tracking-widest block opacity-90 mb-1">🟠 Pedido Extraordinario</span>
+                    <span class="text-lg font-black block mb-1">${f}</span>
+                    <span class="text-[9px] font-bold opacity-85 block">Es un pedido aparte del mensual. Captura hasta el ${h}${modo.motivo ? " · " + String(modo.motivo).replace(/[<>&]/g, "") : ""}</span>
+                `;
+            } else if (canCaptureBioGlobal) {
                 bioBox.style.background = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
                 bioBox.style.color = "#ffffff";
                 bioBox.innerHTML = `
@@ -874,6 +906,42 @@
                 `;
             }
         }
+    };
+
+    // Selector accesible de pedido (ordinario / extraordinario) cuando hay más de uno abierto hoy
+    const renderSelectorPedido = (modos, modoActual) => {
+        const bioBox = document.getElementById('fechaPedidoBIOBox');
+        if (!bioBox) return;
+        let cont = document.getElementById('bioModoMobile');
+        if (!modos || modos.length < 2) { if (cont) cont.remove(); return; }
+        if (!cont) {
+            cont = document.createElement('fieldset');
+            cont.id = 'bioModoMobile';
+            cont.className = 'mb-6 border-0 p-0 m-0';
+            bioBox.insertAdjacentElement('afterend', cont);
+        }
+        const fmt = (ymd) => String(ymd).split('-').reverse().join('/');
+        cont.innerHTML = `<legend class="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">¿Qué pedido vas a capturar?</legend>` + modos.map(m => `
+            <label class="flex items-center gap-3 p-4 mb-2 rounded-2xl border-2 ${modoActual && m.clave === modoActual.clave ? 'border-slate-900 bg-slate-50' : 'border-slate-200 bg-white'}">
+                <input type="radio" name="bioModoMobile" value="${m.clave}" ${modoActual && m.clave === modoActual.clave ? 'checked' : ''} style="width:20px;height:20px;accent-color:#0f172a">
+                <span class="text-sm font-black text-slate-900">${m.tipo === 'MENSUAL' ? 'Pedido ordinario' : 'Pedido extraordinario'}<span class="block text-xs font-semibold text-slate-500">${fmt(m.fecha)}${m.motivo ? ' · ' + String(m.motivo).replace(/[<>&]/g, '') : ''}</span></span>
+            </label>`).join('');
+        cont.onchange = async (ev) => {
+            const el = ev.target.closest('input[name="bioModoMobile"]');
+            if (!el || el.value === modoPedidoElegido) return;
+            modoPedidoElegido = el.value;
+            await fetchTargetDate();
+            // Se recarga el formulario con el pedido elegido (vacío si aún no se captura)
+            hasTodayBIO = false;
+            isEditingBIO = false;
+            renderPedidosCards();
+            const nb = document.getElementById('nombreBIO'); if (nb) nb.value = '';
+            const chk = document.getElementById('chkNoPedido'); if (chk) { chk.checked = false; chk.dispatchEvent(new Event('change')); }
+            await prefillBIOReport();
+            await checkCapturesState();
+            syncCommandHub();
+            const marcado = document.querySelector('#bioModoMobile input:checked'); if (marcado) marcado.focus();
+        };
     };
 
     // --- Dynamic Card Management in Existencia de Biológico (SR) ---
@@ -3374,7 +3442,7 @@
                                 clues: cluesFilter,
                                 biologico: bioName,
                                 capturado_por: nombreBIO.toUpperCase(),
-                                tipo_pedido: "MENSUAL",
+                                tipo_pedido: tipoPedidoActual,
                                 sin_pedido: document.getElementById('chkNoPedido').checked,
                                 existencia_actual_frascos: 0,
                                 pedido_frascos: 0

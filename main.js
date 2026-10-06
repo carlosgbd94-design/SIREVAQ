@@ -6168,7 +6168,9 @@ async function supabaseRequest(action = "", payload, options = {}) {
         });
 
         const capturadas = allUnits.filter(u => capturedClues.includes(String(u.clues || u.CLUES || "").trim().toUpperCase()));
-        const faltantes = allUnits.filter(u => !capturedClues.includes(String(u.clues || u.CLUES || "").trim().toUpperCase()));
+        // Un pedido extraordinario no lo hacen todas las unidades: no hay "faltantes" y no cuenta para el cumplimiento.
+        const esExtraordinario = tipo === "BIO" && !!activeWindow && activeWindow.tipo_pedido === "EXTRAORDINARIO";
+        const faltantes = esExtraordinario ? [] : allUnits.filter(u => !capturedClues.includes(String(u.clues || u.CLUES || "").trim().toUpperCase()));
 
         return {
           ok: true,
@@ -6177,9 +6179,10 @@ async function supabaseRequest(action = "", payload, options = {}) {
             fIniStr,
             fFinStr,
             tipo,
-            total_unidades: allUnits.length,
+            total_unidades: esExtraordinario ? capturadas.length : allUnits.length,
             total_capturadas: capturadas.length,
             total_faltantes: faltantes.length,
+            es_extraordinario: esExtraordinario,
             calendar_override: resCalendar.data || null,
             available_windows: availableWindows,
             active_window: activeWindow,
@@ -13627,6 +13630,11 @@ function renderCaptureSummary(data) {
     windowSelectorContainer.innerHTML = "";
     windowSelectorContainer.style.display = "none";
   }
+  // Un pedido extraordinario no lo hacen todas las unidades: se avisa que no cuenta para el cumplimiento
+  if (data.es_extraordinario) {
+    windowSelectorContainer.style.display = "block";
+    windowSelectorContainer.insertAdjacentHTML("beforeend", `<p role="note" class="mt-2 text-[12px] font-bold" style="color:#92400e; background:#fef3c7; border-radius:12px; padding:8px 12px;">Pedido extraordinario: no todas las unidades lo piden, por eso no hay pendientes y no cuenta para el cumplimiento.</p>`);
+  }
 
   // Lógica de Ventana Inteligente para Pedido
   let extraInfo = "";
@@ -13648,7 +13656,9 @@ function renderCaptureSummary(data) {
     }
 
     const isInside = (fecha >= windowStart && fecha <= windowEnd);
-    if (isInside) {
+    if (data.es_extraordinario) {
+      extraInfo = `<span class="statusWarn" style="background:#fff3e0; color:#92400e; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; border:1px solid #ffe0b2;">Pedido extraordinario: no todas las unidades lo piden, no cuenta para el cumplimiento</span>`;
+    } else if (isInside) {
       extraInfo = `<span class="statusOk" style="background:#e8f5e9; color:#2e7d32; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; border:1px solid #c8e6c9;">✅ Ventana oficial: ${windowStart} al ${windowEnd}</span>`;
     } else {
       extraInfo = `<span class="statusWarn" style="background:#fff3e0; color:#ef6c00; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; border:1px solid #ffe0b2;">⚠️ Pedido extraordinario (Fuera de ventana)</span>`;
@@ -13698,9 +13708,9 @@ function renderCaptureSummary(data) {
   const pct = total > 0 ? ((capCount / total) * 100).toFixed(1) : "0";
 
   const pctEl = $("sumPorcentaje");
-  if (pctEl) pctEl.textContent = `${pct}%`;
+  if (pctEl) pctEl.textContent = data.es_extraordinario ? "N/A" : `${pct}%`;
   const barEl = $("sumProgressBar");
-  if (barEl) barEl.style.width = `${pct}%`;
+  if (barEl) barEl.style.width = data.es_extraordinario ? "0%" : `${pct}%`;
 
   const capLabel = $("capturadasCountLabel");
   if (capLabel) capLabel.textContent = `(${capCount})`;
@@ -13779,7 +13789,7 @@ function renderCaptureSummary(data) {
   function renderFaltantesOnly(list) {
     const tbodyFal = $("faltantesTbody");
     if (!list.length) {
-      const msg = "No hay pendientes";
+      const msg = data.es_extraordinario ? "No aplica: un pedido extraordinario no lo hacen todas las unidades" : "No hay pendientes";
       tbodyFal.innerHTML = `<tr><td colspan="3" class="muted text-center py-4">${msg}</td></tr>`;
       return;
     }
@@ -16422,6 +16432,10 @@ async function generarPDFResguardoSR(municipios, fIni, fFin, isUnitExport = fals
  * Generador de Excel Profesional (Cliente)
  */
 async function generateProfessionalXLSX(tipo, data, fIni, fFin, selectedMunicipios = [], returnBuffer = false) {
+  // Si se exporta apenas se entra, la librería puede seguir cargando en segundo plano: se espera en vez de fallar.
+  if (!window.ExcelJS) {
+    try { await ensureLibsLoaded("exceljs"); } catch (e) { console.warn("[export] exceljs no cargó:", e); }
+  }
   if (!window.ExcelJS) {
     showToast("Librería de exportación no cargada", false);
     return;

@@ -1116,3 +1116,26 @@ test('Requisiciones: cambiar de mes en Traer pedido recarga la lista y avisa que
   await expect(page.locator('#modalPedido')).toBeHidden();
   expect(errores).toEqual([]);
 });
+
+test('Requisiciones: los extraordinarios hechos en el mes de la requisición se ofrecen junto al pedido del mes anterior', async ({ page }) => {
+  await page.addInitScript(pedidosDelMesAnterior());
+  await page.addInitScript(() => {
+    const hoy = new Date();
+    const pref = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+    window.__FAKE_PEDIDOS__.push({ fecha: pref + '-03', tipo: 'EXTRAORDINARIO', unidades: 4, frascos: 77, motivo: 'Faltante a inicio de mes' });
+    window.__FAKE_PEDIDOS__.push({ fecha: pref + '-22', tipo: 'MENSUAL', unidades: 60, frascos: 999 });   // ordinario del propio mes: es para la requisición siguiente
+  });
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#btnTraerPedido');
+  await expect(page.locator('#pedOpciones input[type=radio]')).toHaveCount(2);
+  await expect(page.locator('#pedOpciones')).toContainText('Hecho en');
+  await expect(page.locator('#pedOpciones')).not.toContainText('999 frascos');
+  await expect(page.locator('#pedAviso')).toContainText('Se agrega 1 extraordinario hecho en');
+  await page.locator('#pedOpciones input[type=radio]').nth(1).check();
+  await expect(page.locator('#pedTraer')).toContainText('3');
+  await page.click('#pedTraer');
+  await expect(page.locator('#modalPedido')).toBeHidden();
+  expect(await db(page, "db.requi_items_jurisdiccion.map((i) => i.cantidad_surtida)")).toEqual([77]);
+  expect(errores).toEqual([]);
+});

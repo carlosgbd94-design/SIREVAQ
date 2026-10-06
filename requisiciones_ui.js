@@ -1965,11 +1965,14 @@ function actualizarDetallePedido() {
   const mesSel = Number($('pedMes').value.split('-')[1]);
   const anioSel = Number($('pedMes').value.split('-')[0]);
   const corresponde = mesAnterior(estado.requisicion.anio, estado.requisicion.mes, 1);
-  const total = (estado.pedidosMes || []).length;
-  const extras = (estado.pedidosMes || []).filter((x) => x.tipo !== 'MENSUAL').length;
+  const delMes = (estado.pedidosMes || []).filter((x) => !x.mesActual);
+  const delMesActual = (estado.pedidosMes || []).length - delMes.length;
+  const total = delMes.length;
+  const extras = delMes.filter((x) => x.tipo !== 'MENSUAL').length;
   let aviso = '';
   if (total > 1) aviso = `Se detectaron ${total} pedidos en ${nombreMesAnio({ anio: anioSel, mes: mesSel })}${extras ? ` (${plural(total - extras, 'ordinario', 'ordinarios')} y ${plural(extras, 'extraordinario', 'extraordinarios')})` : ''}. Elige cuál traer.`;
   else if (total === 1) aviso = 'Hay un solo pedido en este mes.';
+  if (delMesActual) aviso += `${aviso ? ' ' : ''}Se ${delMesActual === 1 ? 'agrega' : 'agregan'} ${plural(delMesActual, 'extraordinario hecho', 'extraordinarios hechos')} en ${nombreMesAnio(estado.requisicion)}, que llegan con esta requisición.`;
   if (anioSel !== corresponde.anio || mesSel !== corresponde.mes) {
     aviso += `${aviso ? ' ' : ''}Ojo: la requisición de ${nombreMesAnio(estado.requisicion)} lleva el pedido de ${nombreMesAnio(corresponde)}.`;
   }
@@ -2005,7 +2008,8 @@ function renderOpcionesPedido() {
   $('pedOpciones').innerHTML = lista.map((p, k) => {
     const otra = vinculados[k];
     const sinCaptura = !(p.unidades > 0);
-    const meta = sinCaptura ? 'Abierto, sin capturas todavía' : `${plural(p.unidades, 'unidad', 'unidades')} · ${Number(p.frascos).toLocaleString('es-MX')} frascos`;
+    const meta = (sinCaptura ? 'Abierto, sin capturas todavía' : `${plural(p.unidades, 'unidad', 'unidades')} · ${Number(p.frascos).toLocaleString('es-MX')} frascos`)
+      + (p.mesActual ? ` · Hecho en ${nombreMesAnio(estado.requisicion)}` : '');
     const vinculo = otra ? ` · Ya vinculado a ${etiquetaMes(otra)} (Entrega ${otra.entrega})` : '';
     return `<label class="ped-op${otra || sinCaptura ? ' deshabilitado' : ''}">
       <input type="radio" name="pedFecha" value="${esc(p.fecha)}" ${p.fecha === elegido.fecha ? 'checked' : ''} ${otra || sinCaptura ? 'disabled' : ''}>
@@ -2031,6 +2035,14 @@ async function cargarPedidosMes() {
   if (llamada !== estado.pedidoLlamada) return;   // se cambió de mes mientras cargaba
   if (error) { $('pedOpciones').innerHTML = ''; toast('No se pudieron leer los pedidos: ' + error.message, true); return; }
   estado.pedidosMes = data || [];
+  // Los extraordinarios hechos durante el mes de la requisición llegan con ella: se ofrecen junto al pedido
+  // del mes anterior (el ordinario del propio mes es para la requisición siguiente, por eso no se listan).
+  const corresponde = mesAnterior(estado.requisicion.anio, estado.requisicion.mes, 1);
+  if (anio === corresponde.anio && mes === corresponde.mes) {
+    const propio = await estado.db.rpc('bio_pedidos_clasificados', { p_anio: estado.requisicion.anio, p_mes: estado.requisicion.mes });
+    if (llamada !== estado.pedidoLlamada) return;
+    if (!propio.error) estado.pedidosMes = estado.pedidosMes.concat((propio.data || []).filter((x) => x.tipo !== 'MENSUAL').map((x) => ({ ...x, mesActual: true })));
+  }
   renderOpcionesPedido();
 }
 

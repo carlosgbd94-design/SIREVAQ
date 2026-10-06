@@ -444,4 +444,48 @@ test.describe('Pedidos extraordinarios', () => {
     expect(t2.some((t) => /EXTRAORDINARIO/.test(t))).toBe(false);
     expect(errores).toEqual([]);
   });
+
+  test('resumen de captura: un pedido extraordinario no tiene faltantes ni porcentaje (no cuenta para el cumplimiento)', async ({ page }) => {
+    const e = estadoBase('2026-10-22');
+    e.db.unidades = [
+      { clues: 'C1', unidad: 'Uno', municipio: 'CORREGIDORA', activo: 'SI' }, { clues: 'C2', unidad: 'Dos', municipio: 'CORREGIDORA', activo: 'SI' },
+      { clues: 'C3', unidad: 'Tres', municipio: 'MARQUES', activo: 'SI' }, { clues: 'C4', unidad: 'Cuatro', municipio: 'HUIMILPAN', activo: 'SI' }
+    ];
+    e.rpc.get_captures_bio_range_bypass = () => [
+      { clues: 'C1', fecha: '2026-10-22', capturado_por: 'A', tipo_pedido: 'MENSUAL', sin_pedido: false },
+      { clues: 'C2', fecha: '2026-10-22', capturado_por: 'B', tipo_pedido: 'MENSUAL', sin_pedido: false },
+      { clues: 'C1', fecha: '2026-10-26', capturado_por: 'A', tipo_pedido: 'EXTRAORDINARIO', sin_pedido: false }
+    ];
+    e.rpc.get_captures_sr_range_bypass = () => []; e.rpc.get_captures_cons_range_bypass = () => [];
+    const { errores } = await preparar(page, e, { rol: 'ADMIN' });
+    const pedir = (targetWindow) => page.evaluate(async (tw) => (await supabaseRequest('admincaptureoverview', { action: 'admincaptureoverview', fecha: '2026-10-22', tipo: 'BIO', targetWindow: tw })).data, targetWindow);
+    // Ordinario (por omisión): 4 unidades, 2 capturaron, 2 faltan
+    const ord = await pedir(null);
+    expect(ord.es_extraordinario).toBe(false);
+    expect([ord.total_unidades, ord.total_capturadas, ord.total_faltantes]).toEqual([4, 2, 2]);
+    // Extraordinario: solo cuenta quien lo hizo, nadie "falta" y se marca como tal
+    const ext = await pedir({ fecha: '2026-10-26', tipo_pedido: 'EXTRAORDINARIO' });
+    expect(ext.es_extraordinario).toBe(true);
+    expect([ext.total_unidades, ext.total_capturadas, ext.total_faltantes]).toEqual([1, 1, 0]);
+    expect(ext.faltantes).toEqual([]);
+    // La pantalla lo refleja
+    await page.evaluate((d) => {
+      for (const id of ['panelCaptureSummary', 'sumPorcentaje', 'faltantesTbody']) for (let el = document.getElementById(id); el && el !== document.body; el = el.parentElement) { el.classList.remove('hidden', 'hide'); if (getComputedStyle(el).display === 'none') el.style.display = 'block'; }
+      renderCaptureSummary(d);
+    }, ext);
+    await expect(page.locator('#sumPorcentaje')).toHaveText('N/A');
+    await expect(page.locator('#faltantesTbody')).toContainText('No aplica');
+    await expect(page.locator('#captureSummaryWindowContainer')).toContainText('no cuenta para el cumplimiento');
+    expect(errores).toEqual([]);
+  });
+
+  test('la base guarda como EXTRAORDINARIO lo capturado en la fecha de un extra (aunque el cliente diga MENSUAL): cumplimiento intacto', async ({ page }) => {
+    // Regla verificada en SQL (trigger trg_pedido_tipo_extraordinario) y aquí la contraparte del cliente: el extra viaja como EXTRAORDINARIO
+    const e = estadoBase('2026-10-27');
+    e.db.pedidos_extraordinarios = [{ id: 'x1', fecha_programada: '2026-10-26', habilitar_desde: '2026-10-26', habilitar_hasta: '2026-10-28', activo: true }];
+    const { errores } = await preparar(page, e);
+    await abrirPedido(page);
+    expect(await page.evaluate(() => BIO_STATE.tipoPedido)).toBe('EXTRAORDINARIO');
+    expect(errores).toEqual([]);
+  });
 });

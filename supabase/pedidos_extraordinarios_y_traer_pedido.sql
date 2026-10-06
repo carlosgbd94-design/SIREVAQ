@@ -345,3 +345,26 @@ $$;
 
 revoke all on function public.requi_traer_pedido_biologico(uuid, date) from public, anon;
 grant execute on function public.requi_traer_pedido_biologico(uuid, date) to authenticated;
+
+-- 4) Garantía: lo capturado en la fecha de un pedido extraordinario SIEMPRE se guarda como EXTRAORDINARIO,
+-- venga del cliente que venga (web, móvil, caché vieja). Así nunca cuenta para el cumplimiento, que solo
+-- mira tipo_pedido = 'MENSUAL' (no todas las unidades piden en un extraordinario).
+create or replace function public._trg_pedido_tipo_extraordinario()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if exists (select 1 from pedidos_extraordinarios e where e.fecha_programada = new.fecha_pedido_programada) then
+    new.tipo_pedido := 'EXTRAORDINARIO';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public._trg_pedido_tipo_extraordinario() from public, anon, authenticated;
+
+drop trigger if exists trg_pedido_tipo_extraordinario on public.biologicos_pedido;
+create trigger trg_pedido_tipo_extraordinario
+  before insert or update of fecha_pedido_programada, tipo_pedido on public.biologicos_pedido
+  for each row execute function public._trg_pedido_tipo_extraordinario();
