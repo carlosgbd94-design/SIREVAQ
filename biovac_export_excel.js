@@ -99,19 +99,62 @@
     });
   }
 
-  function detectarFilasEstilo(ws) {
+  // Con `desde` = fila donde empieza OTRO bloque de la plantilla (p. ej. Hepatitis B) devuelve sus
+  // filas de estilo, o null si no se pudo leer. Sin `desde`, las del primer bloque (BCG).
+  function detectarFilasEstilo(ws, desde) {
+    const ini = desde || FILA_ESTILO_NORMAL;
     let arfIni = 0;
     let total = 0;
-    const tope = Math.min(ws.rowCount, 60);
-    for (let r = FILA_ESTILO_NORMAL; r <= tope; r++) {
+    const tope = Math.min(ws.rowCount, 90);
+    for (let r = ini; r <= tope; r++) {
       const t = textoCelda(ws.getRow(r).getCell(1)).trim();
       if (!arfIni && /^A\.R\.F\./i.test(t)) arfIni = r;
       else if (arfIni && /^Total$/i.test(t)) { total = r; break; }
     }
-    if (!arfIni || !total || total - arfIni < 2 || arfIni - FILA_ESTILO_NORMAL < 3) {
-      return { normal: FILA_ESTILO_NORMAL, normalMedio: FILA_ESTILO_NORMAL + 1, normalUltimo: FILA_ESTILO_NORMAL + 2, arf: FILA_ESTILO_ARF, arfUltimo: FILA_ESTILO_ARF + 1, total: FILA_ESTILO_TOTAL, renglonesArf: 2 };
+    if (!arfIni || !total || total - arfIni < 2 || arfIni - ini < 3) {
+      if (desde) return null;
+      return { normal: FILA_ESTILO_NORMAL, normalMedio: FILA_ESTILO_NORMAL + 1, normalUltimo: FILA_ESTILO_NORMAL + 2, arf: FILA_ESTILO_ARF, arfMedio: null, arfUltimo: FILA_ESTILO_ARF + 1, total: FILA_ESTILO_TOTAL, renglonesArf: 2 };
     }
-    return { normal: FILA_ESTILO_NORMAL, normalMedio: FILA_ESTILO_NORMAL + 1, normalUltimo: arfIni - 1, arf: arfIni, arfUltimo: total - 1, total, renglonesArf: total - arfIni };
+    return { normal: ini, normalMedio: ini + 1, normalUltimo: arfIni - 1, arf: arfIni, arfMedio: total - arfIni >= 3 ? arfIni + 1 : null, arfUltimo: total - 1, total, renglonesArf: total - arfIni };
+  }
+
+  // Fila donde empieza el bloque de Hepatitis B en la plantilla (su estilo de dosis partida
+  // -- columnas niño | adulto | equivalente con sus bordes -- es distinto al de un biológico normal).
+  function filaBloqueHepB(ws) {
+    const tope = Math.min(ws.rowCount, 90);
+    for (let r = FILA_ESTILO_NORMAL + 3; r <= tope; r++) {
+      if (/hepatitis\s*"?B"?/i.test(textoCelda(ws.getRow(r).getCell(1)))) return r;
+    }
+    return 0;
+  }
+
+  // Renglón A.R.F. "de en medio": el de arriba lleva el borde grueso superior de la sección; los de
+  // en medio solo líneas finas. Si la plantilla no trae uno (2 renglones A.R.F.), se deriva del primero
+  // cambiándole el borde superior por el del último (fino).
+  function derivarArfMedio(arf, ultimo) {
+    return arf.map(({ col, style }) => {
+      const st = JSON.parse(JSON.stringify(style));
+      const ult = ultimo.find((u) => u.col === col);
+      const topUlt = ult && ult.style && ult.style.border && ult.style.border.top;
+      st.border = Object.assign({}, st.border || {});
+      if (topUlt) st.border.top = JSON.parse(JSON.stringify(topUlt)); else delete st.border.top;
+      return { col, style: st };
+    });
+  }
+
+  function capturarJuegoEstilos(ws, pos) {
+    const n = capturarBloqueFilas(ws, pos.normal, 1);
+    const nm = capturarBloqueFilas(ws, pos.normalMedio, 1);
+    const nu = capturarBloqueFilas(ws, pos.normalUltimo, 1);
+    const a = capturarBloqueFilas(ws, pos.arf, 1);
+    const au = capturarBloqueFilas(ws, pos.arfUltimo, 1);
+    const am = pos.arfMedio ? capturarBloqueFilas(ws, pos.arfMedio, 1) : null;
+    return {
+      normal: n.filas[0], normalMedio: nm.filas[0], normalUltimo: nu.filas[0],
+      arf: a.filas[0], arfUltimo: au.filas[0], arfMedio: am ? am.filas[0] : derivarArfMedio(a.filas[0], au.filas[0]),
+      alturaNormal: n.alturas[0], alturaNormalMedio: nm.alturas[0], alturaNormalUltimo: nu.alturas[0],
+      alturaArf: a.alturas[0], alturaArfUltimo: au.alturas[0], alturaArfMedio: am ? am.alturas[0] : a.alturas[0]
+    };
   }
 
   function colLetra(n) { return String.fromCharCode(64 + n); }
@@ -270,9 +313,10 @@
       for (let i = 0; i < listaNormal.length; i++) {
         const primeroBloque = fila === inicioBloque;
         const ultimoNormal = esUltimoBio && i === listaNormal.length - 1;
-        const [estiloN, alturaN] = primeroBloque ? [estilos.normal, estilos.alturaNormal]
-          : ultimoNormal ? [estilos.normalUltimo, estilos.alturaNormalUltimo]
-            : [estilos.normalMedio, estilos.alturaNormalMedio];
+        const S = (split && estilos.split) || estilos;
+        const [estiloN, alturaN] = primeroBloque ? [S.normal, S.alturaNormal]
+          : ultimoNormal ? [S.normalUltimo, S.alturaNormalUltimo]
+            : [S.normalMedio, S.alturaNormalMedio];
         aplicarEstiloFila(ws, fila, estiloN, split, alturaN);
         filasBloque.push({ fila, split });
         if (i === 0) ws.getCell(`A${fila}`).value = { richText: [{ text: bio.nombre_excel }] };
@@ -287,7 +331,8 @@
 
     const inicioArf = fila;
     // La plantilla reserva 2 renglones a la sección A.R.F. (su rótulo ocupa 3 líneas).
-    const listaArf = arfCombinado.slice();
+    // A.R.F. primero y Canje después (cada grupo conserva su orden), no mezclados.
+    const listaArf = arfCombinado.slice().sort((a, b) => (a.renglon.categoria === 'CANJE') - (b.renglon.categoria === 'CANJE'));
     while (listaArf.length < (estilos.minArf || 2)) listaArf.push({ bio: biosConRenglones[0].bio, renglon: renglonVacio() });
     for (let i = 0; i < listaArf.length; i++) {
       const { bio, renglon } = listaArf[i];
@@ -298,7 +343,10 @@
       // para Canje (mismo criterio que ya usa el resto de BioVac).
       const esCanje = renglon.categoria === 'CANJE';
       const ultimoArf = i === listaArf.length - 1;
-      aplicarEstiloFila(ws, fila, ultimoArf ? estilos.arfUltimo : estilos.arf, split, ultimoArf ? estilos.alturaArfUltimo : estilos.alturaArf, esCanje);
+      const SA = (split && estilos.split) || estilos;
+      const [estiloA, alturaA] = ultimoArf ? [SA.arfUltimo, SA.alturaArfUltimo]
+        : i === 0 ? [SA.arf, SA.alturaArf] : [SA.arfMedio, SA.alturaArfMedio];
+      aplicarEstiloFila(ws, fila, estiloA, split, alturaA, esCanje);
       filasBloque.push({ fila, split });
       if (i === 0) {
         ws.getCell(`A${fila}`).value = {
@@ -458,25 +506,22 @@
 
     const headerCapturado = capturarBloqueFilas(ws, 1, HEADER_FILAS);
     const pos = detectarFilasEstilo(ws);
-    const capturaNormal = capturarBloqueFilas(ws, pos.normal, 1);
-    const capturaArf = capturarBloqueFilas(ws, pos.arf, 1);
     const capturaTotal = capturarBloqueFilas(ws, pos.total, 1);
-    // La plantilla dibuja los bordes gruesos según la POSICIÓN del renglón en el
-    // bloque: el primero lleva el grueso de arriba, el último de cada sección el
-    // de abajo (el que separa A.R.F. de Total) y los de en medio solo líneas
-    // finas. Se capturan renglón medio/último de Normal y último de A.R.F.
-    const capturaNormalMedio = capturarBloqueFilas(ws, pos.normalMedio, 1);
-    const capturaNormalUltimo = capturarBloqueFilas(ws, pos.normalUltimo, 1);
-    const capturaArfUltimo = capturarBloqueFilas(ws, pos.arfUltimo, 1);
-    const estilos = {
+    // La plantilla dibuja los bordes gruesos según la POSICIÓN del renglón en el bloque: el primero
+    // lleva el grueso de arriba, el último de cada sección el de abajo y los de en medio solo líneas
+    // finas (tanto en Normal como en A.R.F.). Se captura un juego de estilos por posición.
+    const estilos = Object.assign(capturarJuegoEstilos(ws, pos), {
       // la plantilla del municipio reserva 4 renglones A.R.F. y su rótulo ("A.R.F. / En dictamen o canje")
       // ocupa 3 líneas: con 2 renglones se cortaba. La del SINBA (unidad) reserva 2 y su letra es menor.
       minArf: Math.max(2, Math.min(3, pos.renglonesArf)),
-      normal: capturaNormal.filas[0], arf: capturaArf.filas[0], total: capturaTotal.filas[0],
-      normalMedio: capturaNormalMedio.filas[0], normalUltimo: capturaNormalUltimo.filas[0], arfUltimo: capturaArfUltimo.filas[0],
-      alturaNormal: capturaNormal.alturas[0], alturaArf: capturaArf.alturas[0], alturaTotal: capturaTotal.alturas[0],
-      alturaNormalMedio: capturaNormalMedio.alturas[0], alturaNormalUltimo: capturaNormalUltimo.alturas[0], alturaArfUltimo: capturaArfUltimo.alturas[0]
-    };
+      total: capturaTotal.filas[0], alturaTotal: capturaTotal.alturas[0]
+    });
+    // Biológicos de dosis partida (Hepatitis B, COVID Moderna): las columnas niño | adulto | equivalente
+    // llevan sus propios bordes en la plantilla (en el bloque de Hepatitis B); copiarles el estilo de
+    // BCG (cuyas celdas H:J van fusionadas) dejaba esas divisiones rotas.
+    const filaHepB = filaBloqueHepB(ws);
+    const posSplit = filaHepB ? detectarFilasEstilo(ws, filaHepB) : null;
+    estilos.split = posSplit ? capturarJuegoEstilos(ws, posSplit) : null;
 
     const fechaRef = new Date(Date.UTC(anio, mes - 1, 1));
     const bioVigente = (b) => {
