@@ -460,11 +460,16 @@
   /* Columnas con color e icono, como en Movimiento de Biológico */
   table.concentrado thead th .th-con-icono, table.jur-drill thead th .th-con-icono { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.15; }
   table.concentrado thead th .th-con-icono .material-symbols-rounded, table.jur-drill thead th .th-con-icono .material-symbols-rounded { font-size: 18px; }
-  table.concentrado thead th.c-ant, table.jur-drill thead th.c-ant { background: rgba(14,165,233,.14); color: #0369a1; border-top: 3px solid #0ea5e9; }
-  table.concentrado thead th.c-rec, table.jur-drill thead th.c-rec { background: rgba(16,185,129,.15); color: #047857; border-top: 3px solid #10b981; }
-  table.concentrado thead th.c-apl, table.jur-drill thead th.c-apl { background: rgba(245,158,11,.15); color: #b45309; border-top: 3px solid #f59e0b; }
-  table.concentrado thead th.c-des, table.jur-drill thead th.c-des { background: rgba(239,68,68,.12); color: #b91c1c; border-top: 3px solid #ef4444; }
-  table.concentrado thead th.c-fin, table.jur-drill thead th.c-fin { background: rgba(15,23,42,.08); color: var(--primary); border-top: 3px solid var(--primary); }
+  /* Encabezados planos (igual que Movimiento de Biológico): tinte que se desvanece hacia arriba + barrita de color */
+  table.concentrado thead th.c-ant, table.concentrado thead th.c-rec, table.concentrado thead th.c-apl, table.concentrado thead th.c-des, table.concentrado thead th.c-fin,
+  table.jur-drill thead th.c-ant, table.jur-drill thead th.c-rec, table.jur-drill thead th.c-apl, table.jur-drill thead th.c-des, table.jur-drill thead th.c-fin { padding: 6px 4px; background: none; border-top: 0; vertical-align: middle; }
+  table.concentrado thead th .th-con-icono, table.jur-drill thead th .th-con-icono { display: flex; width: 100%; min-height: 52px; box-sizing: border-box; justify-content: center; padding: 6px 10px 10px;
+    background: linear-gradient(rgba(var(--c), .9), rgba(var(--c), .9)) bottom center / 44% 3px no-repeat, linear-gradient(0deg, rgba(var(--c), .13), rgba(var(--c), 0) 90%); }
+  table.concentrado thead th.c-ant, table.jur-drill thead th.c-ant { --c: 14,165,233; color: #0369a1; }
+  table.concentrado thead th.c-rec, table.jur-drill thead th.c-rec { --c: 16,185,129; color: #047857; }
+  table.concentrado thead th.c-apl, table.jur-drill thead th.c-apl { --c: 245,158,11; color: #b45309; }
+  table.concentrado thead th.c-des, table.jur-drill thead th.c-des { --c: 239,68,68; color: #b91c1c; }
+  table.concentrado thead th.c-fin, table.jur-drill thead th.c-fin { --c: 15,23,42; color: var(--primary); }
   table.concentrado tbody td.c-ant { background-color: rgba(14,165,233,.05); }
   table.concentrado tbody td.c-rec { background-color: rgba(16,185,129,.06); }
   table.concentrado tbody td.c-apl { background-color: rgba(245,158,11,.05); }

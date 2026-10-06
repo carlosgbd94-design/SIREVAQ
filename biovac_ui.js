@@ -1749,8 +1749,8 @@ function renderBiologico(bio, editable) {
   </tr></tfoot>`;
   html += `</table></div>`;
 
-  html += htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, normales);
-
+  // El botón va pegado a la tabla (como su última fila), antes de la comparación SIS-06P,
+  // para que no quede fuera de la vista debajo del total.
   if (editable) {
     html += renderPanelAgregar(bio);
   }
@@ -1893,10 +1893,12 @@ function renderPanelAgregar(bio) {
   const bioId = bio.id;
   const antOk = anteriorEditablePorRol();
   return `
-  <button class="btn-mini btn-secundario" style="margin-top:14px" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add</span> Agregar lote</button>
+  <button type="button" class="btn-agregar-lote" aria-expanded="false" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add_circle</span> Agregar lote a ${bio.nombre_excel.replace(/\n/g, ' ')}</button>
   <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
     <div class="campos">
       <div class="campo">
+
+  html += htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, normales);
         <label>1. Estatus</label>
         <select data-nuevo-categoria>
           <option value="">Selecciona el Estatus…</option>
@@ -1915,14 +1917,14 @@ function renderPanelAgregar(bio) {
         <input type="text" data-nuevo-caducidad placeholder="Se completa al elegir el lote" readonly>
       </div>
       <div class="campo campo-tipo">
-        <label>3. ¿Qué cantidad es?</label>
-        <div class="tipo-cantidad">
-          <label class="t-ant"${antOk ? ' title="Lo que ya tenía del mes pasado"' : ' style="opacity:.45; cursor:not-allowed" title="La existencia anterior solo se captura el primer mes: después viene sola del cierre del mes pasado."'}><input type="radio" name="tipo-cant-${bioId}" value="ANTERIOR" data-nuevo-tipo-cantidad ${antOk ? 'checked' : 'disabled'}><b>Existencia anterior</b></label>
-          <label class="t-rec" title="Una entrada nueva de un lote que NO tenía"><input type="radio" name="tipo-cant-${bioId}" value="RECIBIDO" data-nuevo-tipo-cantidad ${antOk ? '' : 'checked'}><b>Recibido este mes</b></label>
+        <span class="etiqueta-grupo" id="tipo-cant-lbl-${bioId}">3. Tipo de cantidad</span>
+        <div class="tipo-cantidad" role="radiogroup" aria-labelledby="tipo-cant-lbl-${bioId}">
+          <label class="t-ant${antOk ? '' : ' deshabilitado'}"${antOk ? ' title="Lo que ya tenía del mes pasado"' : ' title="La existencia anterior solo se captura el primer mes: después viene sola del cierre del mes pasado."'}><input type="radio" name="tipo-cant-${bioId}" value="ANTERIOR" data-nuevo-tipo-cantidad ${antOk ? 'checked' : 'disabled'}><span class="material-symbols-rounded t-off" aria-hidden="true">radio_button_unchecked</span><span class="material-symbols-rounded t-on" aria-hidden="true">check_circle</span><b>Existencia anterior</b></label>
+          <label class="t-rec" title="Una entrada nueva de un lote que NO tenía"><input type="radio" name="tipo-cant-${bioId}" value="RECIBIDO" data-nuevo-tipo-cantidad ${antOk ? '' : 'checked'}><span class="material-symbols-rounded t-off" aria-hidden="true">radio_button_unchecked</span><span class="material-symbols-rounded t-on" aria-hidden="true">check_circle</span><b>Recibido este mes</b></label>
         </div>
       </div>
       <div class="campo">
-        <label>4. Cantidad (frascos)</label>
+        <label>4. Cuántos frascos</label>
         <input type="number" step="any" data-nuevo-cantidad placeholder="0">
       </div>
       <div class="alerta-lote-repetido" data-alerta-repetido>
@@ -3209,7 +3211,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         panel.classList.toggle('abierto');
         if (abriendo) poblarSelectLoteAgregar(panel);
       }
-      if (accion === 'cancelar-agregar') panel.classList.remove('abierto');
+      if (accion === 'cancelar-agregar') {
+        panel.classList.remove('abierto');
+        if (disparador) { disparador.setAttribute('aria-expanded', 'false'); disparador.focus(); }
+      }
       if (accion === 'confirmar-agregar') agregarLote(btn.dataset.bio, panel);
       return;
     }
@@ -3399,9 +3404,11 @@ document.addEventListener('DOMContentLoaded', () => {
     submitBtn.disabled = true;
 
     const userName = nombreCompletoDePerfil(estado.perfil) || document.getElementById('selUsuario')?.value.trim() || 'Usuario anónimo';
+      const disparador = document.querySelector(`[data-action="toggle-agregar"][data-bio="${btn.dataset.bio}"]`);
     const userRole = estado.perfil?.rol || 'N/A (sin sesión real)';
     const unidadSel = document.getElementById('selUnidad');
     const unidadTexto = unidadSel?.selectedOptions[0]?.textContent || 'N/A';
+        if (disparador) disparador.setAttribute('aria-expanded', String(abriendo));
     const periodo = estado.movimiento ? `${MESES.find((m) => m.v === estado.movimiento.mes)?.l || estado.movimiento.mes} ${estado.movimiento.anio} (${estado.movimiento.estado})` : 'N/A (sin movimiento cargado)';
 
     // Pestaña activa + unidad que un revisor (MUNICIPAL/JURISDICCIONAL/ADMIN)

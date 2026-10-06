@@ -43,7 +43,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_export_excel.js?v=2026.3"></script>
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
-<script defer src="biovac_ui.js?v=2026.53"></script>
+<script defer src="biovac_ui.js?v=2026.54"></script>
 <script defer src="sis06p_biovac_module.js?v=2026.40"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.13"></script>
@@ -438,7 +438,7 @@ window.onunhandledrejection = function (event) {
   table.renglones col.col-obs { width: 16%; }
   table.renglones col.col-accion { width: 8%; }
   table.renglones tfoot td {
-    padding: 11px 6px; border-top: 2px solid var(--primary); background: var(--surface-container);
+    padding: 11px 6px; border-top: 1px solid var(--outline-variant); background: var(--surface-container);
     font-weight: 800; text-align: center;
   }
   table.renglones tfoot td:first-child {
@@ -562,13 +562,19 @@ window.onunhandledrejection = function (event) {
      costosas), en vez de bloques cuadrados con raya arriba. */
   table.renglones thead th.c-ant, table.renglones thead th.c-rec, table.renglones thead th.c-apl,
   table.renglones thead th.c-des, table.renglones thead th.c-fin { padding: 8px 4px 6px; vertical-align: top; }
-  table.renglones thead th .th-con-icono { display: flex; width: 100%; height: 62px; box-sizing: border-box; justify-content: center; padding: 6px; border-radius: 14px; border: 1px solid rgba(var(--c), .22); background: linear-gradient(180deg, rgba(var(--c), .20), rgba(var(--c), .07)); }
+  table.renglones thead th .th-con-icono { display: flex; width: 100%; height: 62px; box-sizing: border-box; justify-content: center; padding: 6px 14px; border: 0; border-radius: 0;
+    /* Plano y sin forma de botón: un tinte que nace abajo y se desvanece hacia arriba (sin bordes visibles)
+       y una barrita redondeada del color de la columna como ancla. */
+    height: 62px; padding: 6px 6px 10px;
+    background:
+      linear-gradient(rgba(var(--c), .9), rgba(var(--c), .9)) bottom center / 44% 3px no-repeat,
+      linear-gradient(0deg, rgba(var(--c), .13), rgba(var(--c), 0) 90%); }
+  table.renglones thead th .th-con-icono { position: relative; }
   table.renglones thead th.c-ant { --c: 14,165,233; color: #0369a1; }
   table.renglones thead th.c-rec { --c: 16,185,129; color: #047857; }
   table.renglones thead th.c-apl { --c: 245,158,11; color: #b45309; }
   table.renglones thead th.c-des { --c: 239,68,68; color: #b91c1c; }
   table.renglones thead th.c-fin { --c: 15,23,42; color: var(--primary); }
-  table.renglones thead th.c-fin .th-con-icono { background: linear-gradient(180deg, rgba(15,23,42,.12), rgba(15,23,42,.04)); border-color: rgba(15,23,42,.14); }
   table.renglones tbody td.c-ant { background-color: rgba(14,165,233,.06); }
   table.renglones tbody td.c-rec { background-color: rgba(16,185,129,.07); }
   table.renglones tbody td.c-apl:not(.col-dosis-05):not(.col-dosis-1) { background-color: rgba(245,158,11,.06); }
@@ -605,13 +611,28 @@ window.onunhandledrejection = function (event) {
   .guia-captura .paso.fin { --c: 15,23,42; } .guia-captura .paso.fin b { color: var(--primary); }
 
   /* ── Agregar lote: tipo de cantidad y aviso de lote repetido ───────────── */
-  .tipo-cantidad { display: flex; gap: 8px; flex-wrap: wrap; }
-  .tipo-cantidad label { display: inline-flex; align-items: center; height: 44px; box-sizing: border-box; padding: 0 16px; border: 1.5px solid var(--outline-variant); border-radius: 999px; cursor: pointer; font-size: 12.5px; text-transform: none; letter-spacing: 0; color: var(--muted); background: #fff; transition: border-color .15s, background-color .15s; }
-  .tipo-cantidad label b { font-size: 12.5px; white-space: nowrap; }
-  .tipo-cantidad input { display: none; }
-  .tipo-cantidad label.t-ant b { color: #0369a1; } .tipo-cantidad label.t-rec b { color: #047857; }
-  .tipo-cantidad label.t-ant:has(input:checked) { border-color: #0ea5e9; background: #e0f2fe; }
-  .tipo-cantidad label.t-rec:has(input:checked) { border-color: #10b981; background: #d1fae5; }
+  .panel-agregar .etiqueta-grupo { display: block; margin-bottom: 4px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  /* Selector segmentado: una sola pista con dos opciones; la elegida se rellena de color y lleva palomita,
+     la otra queda con círculo vacío. Los radios siguen siendo reales (teclado y lectores de pantalla). */
+  .tipo-cantidad { position: relative; display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: #e2e8f0; max-width: 100%; flex-wrap: wrap; }
+  .tipo-cantidad label { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 36px; box-sizing: border-box; padding: 0 16px 0 12px; border-radius: 999px; cursor: pointer; text-transform: none; letter-spacing: 0; color: var(--muted); background: transparent; transition: background-color .15s, color .15s; }
+  .tipo-cantidad label b { font-size: 12.5px; white-space: nowrap; color: inherit; }
+  .tipo-cantidad input { position: absolute; opacity: 0; width: 100%; height: 100%; inset: 0; margin: 0; cursor: inherit; }
+  .tipo-cantidad label .material-symbols-rounded { font-size: 19px; }
+  .tipo-cantidad label .t-on, .tipo-cantidad label:has(input:checked) .t-off { display: none; }
+  .tipo-cantidad label:has(input:checked) .t-on { display: inline-block; }
+  .tipo-cantidad label:not(.deshabilitado):hover { background: rgba(255,255,255,.7); }
+  .tipo-cantidad label.t-ant:has(input:checked) { background: #0369a1; color: #fff; }
+  .tipo-cantidad label.t-rec:has(input:checked) { background: #047857; color: #fff; }
+  .tipo-cantidad label:has(input:focus-visible) { outline: 3px solid #0f172a; outline-offset: 2px; }
+  .tipo-cantidad label.deshabilitado { opacity: .5; cursor: not-allowed; }
+  /* Agregar lote: banda a todo el ancho pegada a la tabla, para que se vea como parte del biológico */
+  .btn-agregar-lote { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 44px; margin-top: 10px; padding: 0 16px; box-sizing: border-box;
+    border: 1.5px dashed #94a3b8; border-radius: 14px; background: transparent; color: var(--primary); font: 700 13px 'Poppins', sans-serif; cursor: pointer; transition: background-color .15s, border-color .15s; }
+  .btn-agregar-lote .material-symbols-rounded { font-size: 20px; }
+  .btn-agregar-lote:hover { background: #f1f5f9; border-color: var(--primary); }
+  .btn-agregar-lote:focus-visible { outline: 3px solid #0f172a; outline-offset: 2px; }
+  .btn-agregar-lote[aria-expanded="true"] { border-style: solid; background: #f1f5f9; }
   .alerta-lote-repetido { grid-column: 1 / -1; display: none; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 14px; border-radius: 14px; background: var(--warning-bg); border: 1.5px solid var(--warning-border); color: #78350f; font-size: 12.5px; line-height: 1.4; }
   .alerta-lote-repetido.visible { display: flex; }
   .alerta-lote-repetido .material-symbols-rounded { font-size: 26px; color: var(--warning); flex: none; }
