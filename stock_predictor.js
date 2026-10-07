@@ -168,7 +168,7 @@
     // Texto limpio de autonomía sin infinito
     const autonomyText = diag.autonomyWeeks === null 
       ? 'Sin consumo previo' 
-      : `${diag.autonomyWeeks} sem. <span style="font-size: 11px; font-weight: 600; color: #64748b;">(~${diag.autonomyDays} d. opert.)</span>`;
+      : `${diag.autonomyWeeks} sem. <span style="font-size: 12px; font-weight: 600; color: #64748b;">(~${diag.autonomyDays} d. opert.)</span>`;
 
     container.innerHTML = `
       <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 20px; padding: 14px 20px; box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 2px 4px rgba(15,23,42,0.02); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;" class="w-full">
@@ -180,19 +180,19 @@
           </div>
           <div>
             <h4 style="font-size: 13px; font-weight: 800; color: #0f172a; margin: 0; line-height: 1.2;">Pronóstico de Abasto & Autonomía</h4>
-            <span style="font-size: 11px; font-weight: 600; color: #64748b;">${diag.recommendation} • <strong style="color: #0369a1;">Jornada: ${opDays} días/sem</strong></span>
+            <span style="font-size: 12px; font-weight: 600; color: #64748b;">${diag.recommendation} • <strong style="color: #0369a1;">Jornada: ${opDays} días/sem</strong></span>
           </div>
         </div>
 
         <!-- Métrica 1: Ritmo Semanal -->
         <div style="display: flex; align-items: center; gap: 8px; padding: 0 16px; border-left: 1px solid #f1f5f9;">
-          <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em;">Ritmo Semanal:</span>
-          <span style="font-size: 14px; font-weight: 800; color: #0f172a;">${weeklyBurnRate} <span style="font-size: 11px; font-weight: 600; color: #94a3b8;">dosis/sem</span></span>
+          <span style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em;">Ritmo Semanal:</span>
+          <span style="font-size: 14px; font-weight: 800; color: #0f172a;">${weeklyBurnRate} <span style="font-size: 12px; font-weight: 600; color: #94a3b8;">dosis/sem</span></span>
         </div>
 
         <!-- Métrica 2: Tendencia -->
         <div style="display: flex; align-items: center; gap: 6px; padding: 0 16px; border-left: 1px solid #f1f5f9;">
-          <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em;">Tendencia:</span>
+          <span style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em;">Tendencia:</span>
           <span style="font-size: 13px; font-weight: 800; color: #0369a1; display: flex; align-items: center; gap: 4px;">
             <span class="material-symbols-rounded" style="font-size: 18px;">${trendIcon}</span>
             ${trend === 'increasing' ? 'Acelerada' : trend === 'decreasing' ? 'Baja' : 'Estable'}
@@ -201,12 +201,12 @@
 
         <!-- Métrica 3: Autonomía -->
         <div style="display: flex; align-items: center; gap: 6px; padding: 0 16px; border-left: 1px solid #f1f5f9;">
-          <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em;">Autonomía:</span>
+          <span style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em;">Autonomía:</span>
           <span class="${riskColorClass}" style="font-size: 14px; font-weight: 900;">${autonomyText}</span>
         </div>
 
         <!-- Insignia Estado -->
-        <div style="${badgeStyle} border-radius: 12px; padding: 6px 12px; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; white-space: nowrap;">
+        <div style="${badgeStyle} border-radius: 12px; padding: 6px 12px; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; white-space: nowrap;">
           <span class="material-symbols-rounded" style="font-size: 16px;">${diag.icon}</span>
           <span>${diag.statusLabel}</span>
         </div>

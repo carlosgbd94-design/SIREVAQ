@@ -146,3 +146,48 @@ test('más de 20 unidades en un municipio: continúan en una hoja (2) sin perder
   expect(jer.getCell('B24').value).toBe('U22');
   expect(jer.getCell('G24').value.formula).toBe("SUM('METAS UNIDADES (2)'!I11:I24)");
 });
+
+test.describe('Archivo de una sola unidad (lo baja la propia unidad)', () => {
+  const unidades = [unidad('QTSSA001793', 'JURICA', 'QUERETARO'), unidad('QTSSA001904', 'JOFRITO', 'QUERETARO')];
+  const metas = [meta('QTSSA001793', 'QUERETARO', 10), meta('QTSSA001904', 'QUERETARO', 7), meta(null, 'QUERETARO', 500)];
+  const solo = (clues, muni, m, u) => X.construirLibroMetas({ ExcelJS, plantilla, muni, campana: '2026-2027', metas: m, unidades: u, rubroIds: IDS, soloClues: clues });
+  const nombres = (wb) => wb.worksheets.map((w) => w.name);
+
+  test('unidad rural de Querétaro: solo su hoja, sin «Comparación» y con su columna y sus metas', async () => {
+    const wb = await solo('QTSSA001904', 'QUERETARO', metas, unidades);
+    expect(nombres(wb)).toEqual(['METAS UNIDADES RURALES', 'DISTRIBUCIÓN DE JERINGA']);
+    const ws = wb.getWorksheet('METAS UNIDADES RURALES');
+    expect(norm(ws.getCell(10, 7).value)).toBe('jofrito');
+    expect(ws.getCell(10, 8).value == null).toBe(true);                 // ninguna otra unidad
+    expect(ws.getCell(11, 7).value).toBe(7);                            // meta del rubro r1
+    expect(ws.getCell(11 + 45, 7).value).toBe(7 + 45);                  // y del r46
+    const jer = wb.getWorksheet('DISTRIBUCIÓN DE JERINGA');
+    expect(jer.getCell(2, 1).value).toBe('QTSSA001904');
+    expect(jer.getCell(3, 2).value).toBe('TOTAL');                      // una sola unidad + total
+  });
+
+  test('unidad urbana de Querétaro: solo la hoja de urbanas', async () => {
+    const wb = await solo('QTSSA001793', 'QUERETARO', metas, unidades);
+    expect(nombres(wb)).toEqual(['METAS UNIDADES URBANAS', 'DISTRIBUCIÓN DE JERINGA']);
+    expect(norm(wb.getWorksheet('METAS UNIDADES URBANAS').getCell(10, 7).value)).toBe('jurica');
+  });
+
+  test('hospital: usa la meta de su destino y su propia hoja', async () => {
+    const hosp = [meta(null, 'HENM', 40)];
+    const wb = await solo('QTSSA001740', 'HOSPITALES', hosp, []);
+    expect(nombres(wb)).toEqual(['METAS UNIDADES', 'DISTRIBUCIÓN DE JERINGA']);
+    const ws = wb.getWorksheet('METAS UNIDADES');
+    expect(norm(ws.getCell(10, 7).value)).toBe('henm');
+    expect(ws.getCell(11, 7).value).toBe(40);
+  });
+
+  test('unidad sin meta: no genera archivo vacío', async () => {
+    await expect(solo('QTSSA001793', 'QUERETARO', [meta('QTSSA001904', 'QUERETARO', 7)], unidades)).rejects.toThrow(/no tiene metas/);
+  });
+
+  test('nombre del archivo de la unidad', () => {
+    expect(X.nombreArchivoUnidad('PIE DE GALLO', '2026-2027')).toBe('Metas Influenza PIE DE GALLO 2026-2027.xlsx');
+    expect(X.nombreArchivoUnidad('A/B: "C"', '2026-2027')).toBe('Metas Influenza A B C 2026-2027.xlsx');
+  });
+});
+

@@ -457,13 +457,13 @@ function updateInfluenzaSinMovimientoUI() {
     }
     if (labelText) labelText.style.color = "var(--md-sys-color-primary)";
   } else {
-    cardINF.style.borderColor = "#cbd5e1";
-    cardINF.style.background = "#ffffff";
+    cardINF.style.borderColor = "";
+    cardINF.style.background = "";
     if (iconBg) {
-      iconBg.style.background = "#f1f5f9";
-      iconBg.style.color = "#64748b";
+      iconBg.style.background = "";
+      iconBg.style.color = "";
     }
-    if (labelText) labelText.style.color = "#475569";
+    if (labelText) labelText.style.color = "";
   }
 
   // Bloquear selectores principales (Semana y Campaña)
@@ -517,7 +517,7 @@ async function initInfluenzaCaptureFlow() {
   }
   
   // Enlazar pestañas de Unidad
-  const unitTabs = ["subtabUnitCaptura", "subtabUnitHistorico"];
+  const unitTabs = ["subtabUnitCaptura", "subtabUnitResumen", "subtabUnitHistorico"];
   unitTabs.forEach(t => {
     const el = document.getElementById(t);
     if (el) {
@@ -528,10 +528,12 @@ async function initInfluenzaCaptureFlow() {
         el.classList.add("active");
 
         document.getElementById("secUnitCaptura").style.setProperty("display", "none", "important");
+        document.getElementById("secUnitResumen").style.setProperty("display", "none", "important");
         document.getElementById("secUnitHistorico").style.setProperty("display", "none", "important");
 
         const targetSec = t.replace("subtabUnit", "secUnit");
-        document.getElementById(targetSec).style.setProperty("display", targetSec === "secUnitCaptura" ? "flex" : "block", "important");
+        document.getElementById(targetSec).style.setProperty("display", targetSec === "secUnitHistorico" ? "block" : "flex", "important");
+        if (targetSec === "secUnitResumen") renderInfluenzaResumenUnidad();
 
         if (typeof syncTabGroupIndicator === 'function') {
           syncTabGroupIndicator('#influenzaUnitTabsContainer');
@@ -578,6 +580,7 @@ async function initInfluenzaCaptureFlow() {
         weekDropdown.classList.add("hidden");
         weekDropdown.style.display = "none";
       }
+      weekBtn.setAttribute("aria-expanded", isHidden ? "true" : "false");
     };
 
     // Cerrar al dar click fuera
@@ -585,6 +588,7 @@ async function initInfluenzaCaptureFlow() {
       if (!weekBtn.contains(e.target) && !weekDropdown.contains(e.target)) {
         weekDropdown.classList.add("hidden");
         weekDropdown.style.display = "none";
+        weekBtn.setAttribute("aria-expanded", "false");
       }
     });
 
@@ -650,6 +654,7 @@ async function loadInfluenzaUnitData() {
     // Existencia REAL: dosis repartidas a la unidad menos las que ella misma ha capturado cada semana.
     // (Antes se leían campos que no existen y se usaba un valor fijo de 45 dosis.)
     const balance = renderInfluenzaBalanceUnidad();
+    renderInfluenzaResumenUnidad();
     const contPred = document.getElementById("influenzaStockPredictorContainer");
     if (window.StockPredictor && contPred) {
       if (!balance.recibidos) {
@@ -5650,6 +5655,167 @@ function renderInfluenzaBalanceUnidad() {
   }
   return b;
 }
+
+// ─── Resumen de meta de la UNIDAD (pestaña «Resumen de meta» del panel de Influenza) ───────────────────────
+// Todo se calcula con lo que ya se cargó (metas, capturas semanales, reparto de frascos): sin consultas nuevas.
+function influenzaResumenCalcular() {
+  const metas = _influenzaMetasCache || {};
+  const hoy = (typeof todayYmdLocal === "function") ? todayYmdLocal() : new Date().toISOString().slice(0, 10);
+  const logroPorRubro = {};
+  INFLUENZA_RUBROS.forEach(r => { logroPorRubro[r.id] = 0; });
+  const porSemana = {};
+  _influenzaCapturasCache.forEach(c => {
+    let dosis = 0;
+    INFLUENZA_RUBROS.forEach(r => {
+      const v = Number((c.valores || {})[r.id] || 0);
+      logroPorRubro[r.id] += v;
+      dosis += v;
+    });
+    porSemana[c.fecha] = (porSemana[c.fecha] || 0) + dosis;
+  });
+  const metaDe = (r) => Number(metas[r.id] || 0);
+  const metaTotal = INFLUENZA_RUBROS.reduce((s, r) => s + metaDe(r), 0);
+  const logro = INFLUENZA_RUBROS.reduce((s, r) => s + logroPorRubro[r.id], 0);
+  const pendiente = Math.max(0, metaTotal - logro);
+  const conMeta = INFLUENZA_RUBROS.filter(r => metaDe(r) > 0);
+  const cumplidos = conMeta.filter(r => logroPorRubro[r.id] >= metaDe(r)).length;
+
+  const semanas = generateCampaignWeeks();
+  const reportadas = new Set(_influenzaCapturasCache.map(c => c.fecha));
+  const reportadasN = semanas.filter(w => reportadas.has(w.fecha)).length;
+  const atrasadas = semanas.filter(w => w.fecha < hoy && !reportadas.has(w.fecha)).length;
+  const restantes = semanas.filter(w => w.fecha >= hoy && !reportadas.has(w.fecha)).length;
+
+  const t0 = Date.parse((_campaignConfig.fecha_inicio || "") + "T12:00:00");
+  const t1 = Date.parse((_campaignConfig.fecha_fin || "") + "T12:00:00");
+  const t = Date.parse(hoy + "T12:00:00");
+  const esperadoPct = (t1 > t0) ? Math.max(0, Math.min(100, (t - t0) * 100 / (t1 - t0))) : 0;
+  const avancePct = metaTotal > 0 ? logro * 100 / metaTotal : 0;
+
+  let mejor = null;
+  Object.keys(porSemana).forEach(f => { if (!mejor || porSemana[f] > mejor.dosis) mejor = { fecha: f, dosis: porSemana[f] }; });
+  const ultima = _influenzaCapturasCache.reduce((u, c) => (c.fecha > u ? c.fecha : u), "");
+
+  return {
+    metas, logroPorRubro, metaTotal, logro, pendiente, conMeta: conMeta.length, cumplidos,
+    totalSemanas: semanas.length, reportadasN, atrasadas, restantes,
+    esperadoPct, avancePct, mejor, ultima, hoy,
+    ritmoProm: reportadasN ? Math.round(logro / reportadasN) : 0,
+    ritmoNecesario: (pendiente > 0 && restantes > 0) ? Math.ceil(pendiente / restantes) : null
+  };
+}
+
+function renderInfluenzaResumenUnidad() {
+  const kpis = document.getElementById("influenzaResumenKpis");
+  const grupos = document.getElementById("influenzaResumenGrupos");
+  if (!kpis || !grupos) return;
+  const sub = document.getElementById("influenzaResumenSub");
+  const c = influenzaResumenCalcular();
+  const pct = (n) => (Math.round(n * 10) / 10).toFixed(1) + "%";
+
+  if (sub) sub.textContent = `Campaña ${campaignSeasonLabel()} · corte al ${influenzaFechaCorta(c.hoy)} · ${USER?.unidad || ""}`;
+
+  if (!c.metaTotal) {
+    kpis.innerHTML = '<div class="frs-balance-nota">Tu unidad aún no tiene meta asignada para esta campaña. Cuando tu municipio la registre, aquí verás tu avance, tu ritmo y el detalle por grupo.</div>';
+    grupos.innerHTML = "";
+    return;
+  }
+
+  const diff = c.avancePct - c.esperadoPct;
+  const tono = diff >= -5 ? "good" : (diff >= -15 ? "warn" : "bad");
+  const kpi = (label, valor, nota, data) => `<div class="ip-kpi"${data ? ` data-tone="${data}"` : ""}><span class="ip-kpi-l">${label}</span><b>${valor}</b><small>${nota || "&nbsp;"}</small></div>`;
+  const semNota = c.atrasadas ? `${c.atrasadas} ${c.atrasadas === 1 ? "semana sin reporte" : "semanas sin reporte"}` : "Al corriente";
+  const ritmoNota = c.ritmoNecesario != null
+    ? `Para cumplir necesitas ${frascoFmt(c.ritmoNecesario)} dosis/sem`
+    : (c.pendiente > 0 ? "La campaña ya no tiene semanas por reportar" : "Meta cumplida");
+
+  kpis.innerHTML = `
+    <div class="ip-kpis">
+      ${kpi("Meta de la campaña", frascoFmt(c.metaTotal), `${c.conMeta} grupos con meta · ≈ ${frascoFmt(Math.ceil(c.metaTotal / DOSIS_POR_FRASCO))} frascos`)}
+      ${kpi("Dosis aplicadas", frascoFmt(c.logro), c.ultima ? "Última captura " + influenzaFechaCorta(c.ultima) : "Aún sin capturas")}
+      ${kpi("Avance de tu meta", pct(c.avancePct), `Esperado a hoy: ${pct(c.esperadoPct)}`, tono)}
+      ${kpi("Meta pendiente", frascoFmt(c.pendiente), `≈ ${frascoFmt(Math.ceil(c.pendiente / DOSIS_POR_FRASCO))} frascos por aplicar`)}
+      ${kpi("Semanas reportadas", `${c.reportadasN} de ${c.totalSemanas}`, semNota, c.atrasadas ? "warn" : "good")}
+      ${kpi("Ritmo promedio", `${frascoFmt(c.ritmoProm)} <small class="ip-unit-inline">dosis/sem</small>`, ritmoNota)}
+      ${kpi("Mejor semana", c.mejor ? frascoFmt(c.mejor.dosis) : "—", c.mejor ? "Semana del " + influenzaFechaCorta(c.mejor.fecha) : "Aún sin capturas")}
+      ${kpi("Grupos con meta cumplida", `${c.cumplidos} de ${c.conMeta}`, c.cumplidos === c.conMeta && c.conMeta ? "Todos cumplidos" : "Grupos que ya alcanzaron su meta")}
+    </div>
+    <div class="ip-progress-wrap">
+      <div class="ip-progress-top"><span>Avance real <b>${pct(c.avancePct)}</b></span><span>Esperado a hoy <b>${pct(c.esperadoPct)}</b></span></div>
+      <div class="ip-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(Math.min(100, c.avancePct))}" aria-label="Avance de tu meta">
+        <div class="ip-progress-fill" data-tone="${tono}" style="width:${Math.min(100, c.avancePct).toFixed(1)}%"></div>
+        <div class="ip-progress-mark" style="left:${Math.min(100, c.esperadoPct).toFixed(1)}%" title="Avance esperado a hoy"></div>
+      </div>
+    </div>`;
+
+  // Avance por grupo (se suman las edades de cada grupo, en el orden de la plantilla oficial)
+  const orden = [];
+  const porGrupo = {};
+  INFLUENZA_RUBROS.forEach(r => {
+    if (!porGrupo[r.grupo]) { porGrupo[r.grupo] = { grupo: r.grupo, categoria: r.categoria, meta: 0, logro: 0 }; orden.push(r.grupo); }
+    porGrupo[r.grupo].meta += Number(c.metas[r.id] || 0);
+    porGrupo[r.grupo].logro += c.logroPorRubro[r.id];
+  });
+  const filas = orden.map(g => porGrupo[g]).filter(g => g.meta > 0 || g.logro > 0);
+  const filaHtml = (g) => {
+    const p = g.meta > 0 ? g.logro * 100 / g.meta : null;
+    const tonoG = p == null ? "" : (p >= 100 ? "good" : (p >= c.esperadoPct - 5 ? "good" : (p >= c.esperadoPct - 15 ? "warn" : "bad")));
+    return `<tr>
+      <th scope="row"><span class="ip-g-n">${escapeHtml(g.grupo)}</span><span class="ip-g-c">${escapeHtml(g.categoria)}</span></th>
+      <td class="c">${frascoFmt(g.meta)}</td>
+      <td class="c"><b>${frascoFmt(g.logro)}</b></td>
+      <td class="ip-g-bar"><div class="ip-bar-mini" aria-hidden="true"><i data-tone="${tonoG}" style="width:${p == null ? 0 : Math.min(100, p).toFixed(1)}%"></i></div><span>${p == null ? "Sin meta" : pct(p)}</span></td>
+    </tr>`;
+  };
+  grupos.innerHTML = `<table class="ip-table">
+    <caption class="sr-only">Meta y dosis aplicadas por grupo de población</caption>
+    <thead><tr><th scope="col">Grupo</th><th scope="col" class="c">Meta</th><th scope="col" class="c">Aplicadas</th><th scope="col">Avance</th></tr></thead>
+    <tbody>${filas.map(filaHtml).join("")}</tbody>
+    <tfoot><tr><th scope="row">Total</th><td class="c">${frascoFmt(c.metaTotal)}</td><td class="c"><b>${frascoFmt(c.logro)}</b></td><td class="ip-g-bar"><span>${pct(c.avancePct)}</span></td></tr></tfoot>
+  </table>`;
+}
+
+// Excel de la META de la unidad con el formato oficial («Metas Influenza …»): solo su columna y su jeringa.
+async function exportInfluenzaMetaUnidadExcel() {
+  const btn = document.getElementById("btnExportMetaUnidad");
+  const X = window.InfluenzaMetasExport;
+  if (!X) { showToast("No se cargó el exportador de metas. Recarga la página.", false, "bad"); return; }
+  const metas = _influenzaMetasCache || {};
+  if (!INFLUENZA_RUBROS.some(r => Number(metas[r.id] || 0) > 0)) {
+    showToast("Tu unidad aún no tiene meta asignada para esta campaña.", false, "warn");
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    await window.ensureLibsLoaded("exceljs", "jszip");
+    const resp = await fetch(encodeURI(METAS_EXPORT_PLANTILLA));
+    if (!resp.ok) throw new Error(`No se pudo leer la plantilla (${resp.status})`);
+    const plantilla = await resp.arrayBuffer();
+    const campana = campaignSeasonLabel();
+
+    const hospital = Object.keys(X.CLUES_HOSPITALES).find(k => X.CLUES_HOSPITALES[k] === USER.clues);
+    const muni = hospital ? "HOSPITALES" : String(USER.municipio || "").trim().toUpperCase();
+    if (!X.MUNICIPIOS[muni]) throw new Error(`Municipio sin formato de metas: ${USER.municipio}`);
+    // Los hospitales toman la meta de su destino; las demás unidades, la de su CLUES.
+    const registros = [{ clues: USER.clues, municipio: USER.municipio, metas }];
+    if (hospital) registros.push({ clues: null, municipio: hospital, metas });
+
+    const wb = await X.construirLibroMetas({
+      ExcelJS, plantilla, muni, campana, metas: registros,
+      unidades: [{ clues: USER.clues, unidad: USER.unidad, municipio: USER.municipio }],
+      rubroIds: INFLUENZA_RUBROS.map(r => r.id), soloClues: USER.clues
+    });
+    const datos = await X.escribirLibro(wb, window.JSZip);
+    metaDescargar(datos, X.nombreArchivoUnidad(USER.unidad, campana), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    showToast("Meta de tu unidad descargada.", true, "good");
+  } catch (err) {
+    console.error("Error al exportar la meta de la unidad:", err);
+    showToast("No se pudo generar el Excel de tu meta.", false, "bad");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+window.exportInfluenzaMetaUnidadExcel = exportInfluenzaMetaUnidadExcel;
 
 function renderFrascosDistribution() {
   const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";

@@ -320,6 +320,14 @@
     porIndice.slice(4).forEach((h) => wb.removeWorksheet(h.id));
 
     const cols = columnasDelMunicipio(muni, ctx.unidades, base.metas, rubroIds);
+    // Archivo de UNA sola unidad (lo baja la propia unidad): solo su columna, sin la hoja «Comparación»
+    // (que mide a todo el municipio) y sin las hojas de unidades que quedan vacías.
+    const soloClues = ctx.soloClues ? String(ctx.soloClues) : "";
+    if (soloClues) {
+      cols.urbanas = cols.urbanas.filter((c) => c.clues === soloClues);
+      cols.rurales = cols.rurales.filter((c) => c.clues === soloClues);
+      if (!cols.urbanas.length && !cols.rurales.length) throw new Error("La unidad no tiene metas en esta campaña.");
+    }
     const hojas = [];      // { ws, nombre, columnas }
     const nombreBase = muni === "QUERETARO" ? ["METAS UNIDADES URBANAS", "METAS UNIDADES RURALES"] : ["METAS UNIDADES"];
 
@@ -331,8 +339,9 @@
         hojas.push({ ws, nombre, columnas: grupo });
       });
     };
-    colocar(hojaUrb, hojaUrb.name, nombreBase[0], cols.urbanas);
-    if (muni === "QUERETARO") colocar(hojaRur, hojaRur.name, nombreBase[1], cols.rurales);
+    if (soloClues && !cols.urbanas.length) wb.removeWorksheet(hojaUrb.id);
+    else colocar(hojaUrb, hojaUrb.name, nombreBase[0], cols.urbanas);
+    if (muni === "QUERETARO" && !(soloClues && !cols.rurales.length)) colocar(hojaRur, hojaRur.name, nombreBase[1], cols.rurales);
     else wb.removeWorksheet(hojaRur.id);
 
     const unidadesHoja = [];
@@ -340,7 +349,8 @@
       llenarHojaUnidades(ws, columnas, base);
       columnas.forEach((u, i) => unidadesHoja.push({ clues: u.clues, nombre: u.nombre, hoja: nombre, col: letra(COL_PRIMERA_UNIDAD + i) }));
     });
-    llenarComparacion(hojaComp, hojas.map((h) => h.nombre), base);
+    if (soloClues) wb.removeWorksheet(hojaComp.id);
+    else llenarComparacion(hojaComp, hojas.map((h) => h.nombre), base);
     llenarHojaJeringa(hojaJer, unidadesHoja);
     quitarVinculosHeredados(wb);
     return wb;
@@ -365,8 +375,14 @@
     return `Metas Influenza ${MUNICIPIOS[mayus(muni)].archivo} ${campana || "2025-2026"}.xlsx`;
   }
 
+  /** Nombre del archivo de una sola unidad: «Metas Influenza <unidad> <campaña>.xlsx». */
+  function nombreArchivoUnidad(unidad, campana) {
+    const limpio = String(unidad || "Unidad").replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim();
+    return `Metas Influenza ${limpio} ${campana || "2025-2026"}.xlsx`;
+  }
+
   const api = {
-    construirLibroMetas, escribirLibro, nombreArchivo, columnasDelMunicipio, claveJeringa, MUNICIPIOS,
+    construirLibroMetas, escribirLibro, nombreArchivo, nombreArchivoUnidad, columnasDelMunicipio, claveJeringa, MUNICIPIOS,
     CLAVES_JERINGA_23X25, CLAVES_JERINGA_22X32, URBANAS_QRO, RURALES_QRO, HOSPITALES, CLUES_HOSPITALES
   };
   root.InfluenzaMetasExport = api;
