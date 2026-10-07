@@ -460,8 +460,11 @@ async function cargarCatalogo() {
   // Primer mes en que TODO se captura por unidad (sis_config) -- desde ahí el
   // Movimiento del municipio/hospital pseudo ya no se captura, se concentra.
   try {
-    const { data: cfg } = await estado.db.from('sis_config').select('valor').eq('clave', 'inicio_captura_por_unidad').maybeSingle();
-    if (cfg && cfg.valor) estado.inicioPorUnidad = cfg.valor;
+    const { data: cfg } = await estado.db.from('sis_config').select('clave, valor').in('clave', ['inicio_captura_por_unidad', 'inicio_captura_hospitales']);
+    (cfg || []).forEach((c) => {
+      if (c.clave === 'inicio_captura_por_unidad' && c.valor) estado.inicioPorUnidad = c.valor;
+      if (c.clave === 'inicio_captura_hospitales' && c.valor) estado.inicioHospitales = c.valor;
+    });
   } catch (e) { /* se queda el valor por omisión */ }
   // RLS ya filtra qué unidades puede ver este perfil (MUNICIPAL solo las
   // suyas); si no hay sesión real (uso standalone), unidades trae las 4.
@@ -1000,8 +1003,13 @@ function movimientoEsDerivado(unidadId, anio, mes) {
   if (rol === 'ADMIN' || rol === 'UNIDAD') return false;
   const u = (estado.unidades || []).find((x) => x.id === unidadId);
   if (!u || !u.clues || !u.clues.startsWith('JS1-')) return false;
-  const inicio = estado.inicioPorUnidad || '2026-10-01';
   const primerDiaMes = `${anio}-${String(mes).padStart(2, '0')}-01`;
+  // Los hospitales (HENM, NHG) capturan en su propia cuenta desde antes (sis_config.inicio_captura_hospitales): desde
+  // ese mes su fila JS1- ya no se captura ni se suma (mismo criterio que biovac_cuenta_para_jurisdiccion).
+  const esHospital = MUNICIPIOS_HOSPITAL.indexOf(u.municipio) >= 0;
+  const inicio = esHospital
+    ? (estado.inicioHospitales || '2026-09-01')
+    : (estado.inicioPorUnidad || '2026-10-01');
   if (primerDiaMes < inicio) return false;
   return (estado.unidadesClues || []).some((x) => x.municipio === u.municipio);
 }

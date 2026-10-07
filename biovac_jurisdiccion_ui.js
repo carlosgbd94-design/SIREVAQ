@@ -89,6 +89,7 @@ const estado = {
   informes: [],
   sisFilas: [],
   inicioPorUnidad: '2026-10-01',
+  inicioHospitales: '2026-09-01',   // desde este mes los hospitales (NHG, HENM) capturan en su propia cuenta
   filtroBio: '',
   soloAlertas: false,
   munisAbiertas: new Set(),
@@ -277,6 +278,8 @@ function desdeArranquePorUnidad() {
 function cuentaParaJurisdiccion(u, anio, mes, todas) {
   const primerDia = `${anio}-${String(mes).padStart(2, '0')}-01`;
   const esPseudo = (x) => Boolean(x.clues && x.clues.startsWith('JS1-'));
+  // Hospitales con cuenta propia: desde su mes de arranque solo cuenta su fila real (la JS1- queda guardada, sin sumar)
+  if (ES_HOSPITAL_JUR[u.municipio] && primerDia >= (estado.inicioHospitales || '2026-09-01')) return !esPseudo(u);
   if (primerDia < (estado.inicioPorUnidad || '2026-10-01')) return esPseudo(u);
   return !esPseudo(u) || !todas.some((r) => r.municipio === u.municipio && !esPseudo(r) && r.activo);
 }
@@ -350,11 +353,14 @@ async function cargarConcentrado(opciones) {
     estado.db.rpc('biovac_validar_concentrado', { p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes }),
     estado.db.rpc('biovac_concentrado_jurisdiccion', { p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes, p_incluir_borrador: true }),
     estado.db.from('biovac_informes_jurisdiccionales').select('*').eq('jurisdiccion_id', jurisdiccionId).eq('anio', anio).eq('mes', mes).order('generado_en', { ascending: false }),
-    estado.db.from('sis_config').select('valor').eq('clave', 'inicio_captura_por_unidad').maybeSingle()
+    estado.db.from('sis_config').select('clave, valor').in('clave', ['inicio_captura_por_unidad', 'inicio_captura_hospitales'])
   ]);
   estado.cargando = false;
   if (eU || eV || eC || eI) { toast('Error: ' + (eU || eV || eC || eI).message, 'error'); return; }
-  if (cfg && cfg.valor) estado.inicioPorUnidad = cfg.valor;
+  (cfg || []).forEach((c) => {
+    if (c.clave === 'inicio_captura_por_unidad' && c.valor) estado.inicioPorUnidad = c.valor;
+    if (c.clave === 'inicio_captura_hospitales' && c.valor) estado.inicioHospitales = c.valor;
+  });
 
   const cuentan = (unidades || []).filter((u) => cuentaParaJurisdiccion(u, anio, mes, unidades));
   const { data: movimientos } = await estado.db.from('biovac_movimientos')
@@ -498,7 +504,8 @@ function renderCierre() {
     const n = g.unidades.length;
     const pctM = n ? Math.round((g.cerradas / n) * 100) : 0;
     const esHosp = Boolean(ES_HOSPITAL_JUR[g.muni]);
-    const txt = conUnidades
+    const porUnidad = g.unidades.some((u) => !String(u.clues || '').startsWith('JS1-'));
+    const txt = porUnidad
       ? (g.completo
         ? (n === 1 ? 'La unidad cerró su Movimiento' : `Las ${n} unidades cerraron su Movimiento`)
         : (n === 1 ? 'La unidad aún no cierra su Movimiento' : `${g.cerradas} de ${n} unidades cerraron su Movimiento`))

@@ -243,8 +243,16 @@ body.mun-guiado button.pt:focus-visible,
   .mun-siguiente .btn-primario { justify-content: center; }
 }
 
-/* Regreso al concentrado jurisdiccional (solo perfil jurisdiccional) */
-.mun-volver { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 7px 14px; border-radius: 999px; background: #fff; border: 1.5px solid rgba(15, 23, 42, .16); color: #0369a1; font-size: 12.5px; font-weight: 800; text-decoration: none; transition: background .15s ease, border-color .15s ease; }
-.mun-volver .material-symbols-rounded { font-size: 18px; }
-.mun-volver:hover { background: #f0f9ff; border-color: #0ea5e9; }
-.mun-volver:focus-visible { outline: 3px solid #bae6fd; outline-offset: 2px; }
+/* Regreso al concentrado jurisdiccional (solo perfil jurisdiccional): barra fija arriba, botón grande y de alto contraste */
+.mun-ubicacion { position: sticky; top: 0; z-index: 60; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; padding: 10px 0; background: linear-gradient(#f1f5f9 70%, rgba(241, 245, 249, 0)); }
+.mun-volver { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 20px; border-radius: 999px; background: linear-gradient(135deg, #0ea5e9, #0369a1); color: #fff; font-size: 14px; font-weight: 800; line-height: 1.2; text-decoration: none; box-shadow: 0 4px 14px rgba(3, 105, 161, .35); transition: transform .15s ease, box-shadow .15s ease, filter .15s ease; }
+.mun-volver .material-symbols-rounded { font-size: 22px; }
+.mun-volver:hover { filter: brightness(1.07); box-shadow: 0 6px 18px rgba(3, 105, 161, .45); transform: translateY(-1px); color: #fff; }
+.mun-volver:focus-visible { outline: 3px solid #0f172a; outline-offset: 3px; }
+.mun-ubicacion-sep { color: #64748b; font-size: 20px; font-weight: 700; }
+.mun-ubicacion-aqui { color: #0f172a; font-size: 14px; font-weight: 800; }
+/* Al validar el último hospital el regreso pulsa suave para que se note que es el siguiente paso */
+@media (prefers-reduced-motion: no-preference) {
+  .mun-volver-listo { animation: mun-volver-pulso 1.6s ease-in-out 3; }
+  @keyframes mun-volver-pulso { 0%, 100% { box-shadow: 0 4px 14px rgba(3, 105, 161, .35); } 50% { box-shadow: 0 0 0 8px rgba(14, 165, 233, .28), 0 4px 14px rgba(3, 105, 161, .35); } }
+}

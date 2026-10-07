@@ -134,6 +134,14 @@ test('Jurisdicción en Movimiento: el cierre guiado trabaja con los hospitales',
   await expect(page.locator('#munVolverJuris')).toBeVisible();
   await expect(page.locator('#munVolverJuris')).toHaveAttribute('href', 'biovac_jurisdiccion.html');
   await expect(page.locator('#munVolverJuris')).toContainText('Volver al concentrado jurisdiccional');
+  // accesibilidad: navegación con nombre, ubicación actual marcada, objetivo táctil de 44 px y orden lógico (debajo de "Volver a SIREVAQ")
+  await expect(page.locator('nav#munUbicacion')).toHaveAttribute('aria-label', 'Ubicación en el SINBA-SIS');
+  await expect(page.locator('nav#munUbicacion [aria-current="page"]')).toHaveText('Cierre de hospitales');
+  expect((await page.locator('#munVolverJuris').boundingBox()).height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.querySelector('a.volver').nextElementSibling.id)).toBe('munUbicacion');
+  expect(await page.evaluate(() => getComputedStyle(document.getElementById('munUbicacion')).position)).toBe('sticky');
+  await page.locator('#munVolverJuris').focus();
+  await expect(page.locator('#munVolverJuris')).toBeFocused();
   await expect(page.locator('#munEnvios .mun-unidad')).toHaveCount(2);            // NHGQ y HENM
   await expect(page.locator('#pildoraMun1')).toHaveText('1/2');
   await expect(page.locator('#munCtaSiguiente')).toContainText('(1)');

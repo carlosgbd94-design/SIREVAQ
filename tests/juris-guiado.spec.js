@@ -51,7 +51,12 @@ test('Jurisdicción: concentrado guiado por municipio en 4 pasos', async ({ page
 
   // Antes del arranque por unidad, cuentan las filas de cada municipio y hospital (aquí 4 pseudo)
   await page.selectOption('#selMes', '9');
-  await expect(page.locator('#pildoraJ1')).toHaveText('0/4');
+  // Septiembre: Querétaro y Corregidora cuentan por su fila JS1- (sin cerrar), pero los hospitales ya capturan en su cuenta
+  // propia: su Movimiento real (cerrado) es el que cuenta y la fila JS1- del hospital no se suma.
+  await expect(page.locator('#pildoraJ1')).toHaveText('2/4');
+  await expect(page.locator('#estadoUnidades .jur-muni', { hasText: 'Nuevo Hospital General' })).toContainText('La unidad cerró su Movimiento');
+  await expect(page.locator('#estadoUnidades .jur-muni', { hasText: 'Hospital del Niño y la Mujer' })).toContainText('La unidad cerró su Movimiento');
+  await expect(page.locator('#estadoUnidades .jur-muni', { hasText: 'Querétaro' })).toContainText('Movimiento');
   // ...pero el SINBA-SIS de los hospitales se valida desde el primer mes, también en septiembre
   await expect(nhg.locator('a[href="biovac.html"]')).toContainText('Revisar y validar el SINBA-SIS');
   await page.selectOption('#selMes', '10');

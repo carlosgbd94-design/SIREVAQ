@@ -12,13 +12,15 @@
       pseudo('ps-q', 'QUERETARO'), real('q-a', 'Q001', 'C.S. Alfa', 'QUERETARO'), real('q-b', 'Q002', 'C.S. Beta', 'QUERETARO'), real('q-c', 'Q003', 'C.S. Gamma', 'QUERETARO'),
       pseudo('ps-c', 'CORREGIDORA'), real('c-1', 'C001', 'C.S. Uno', 'CORREGIDORA'), real('c-2', 'C002', 'C.S. Dos', 'CORREGIDORA'),
       pseudo('ps-n', 'NHG'), real('n-1', 'N001', 'NHGQ', 'NHG'),
-      pseudo('ps-h', 'HENM')
+      pseudo('ps-h', 'HENM'), real('h-1', 'H001', 'HENM', 'HENM')
     ],
     biovac_movimientos: [],
     biovac_informes_jurisdiccionales: []
   };
   const mov = (unidad_id, estadoM, fue_corregido) => tables.biovac_movimientos.push({ unidad_id, anio: 2026, mes: 10, estado: estadoM, fue_corregido: !!fue_corregido });
-  mov('q-a', 'CERRADO'); mov('q-b', 'BORRADOR'); mov('c-1', 'CERRADO'); mov('c-2', 'EN_CORRECCION', true); mov('n-1', 'CERRADO'); mov('ps-h', 'CERRADO');
+  mov('q-a', 'CERRADO'); mov('q-b', 'BORRADOR'); mov('c-1', 'CERRADO'); mov('c-2', 'EN_CORRECCION', true); mov('n-1', 'CERRADO'); mov('h-1', 'CERRADO');
+  // Septiembre: los hospitales ya capturan en su propia cuenta (la fila JS1- queda sin sumar)
+  tables.biovac_movimientos.push({ unidad_id: 'n-1', anio: 2026, mes: 9, estado: 'CERRADO' }, { unidad_id: 'h-1', anio: 2026, mes: 9, estado: 'CERRADO' }, { unidad_id: 'ps-n', anio: 2026, mes: 9, estado: 'BORRADOR' });
 
   const fila = (o) => ({ pagina: 'PAGINA 1', bloque_id: 'b1', regla_especial: null, categoria: 'NORMAL', caducidad: '2027-02-28', existencia_anterior_frascos: 10, recibido_frascos: 20, aplicadas_a: 15, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, existencia_final_frascos: 15, unidades_cerradas: 2, unidades_reportando: 2, es_provisional: false, ...o });
   const concentrado = [

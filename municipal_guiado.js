@@ -456,8 +456,15 @@
       toast(`Validada. Sigue ${sig.unidad || sig.clues}.`, 'ok');
       cambiarUnidad(sig.clues);
     } else {
-      toast('Ya no quedan unidades por validar.', 'ok');
+      toast(st.modo === 'juris' ? 'Ya no quedan hospitales por validar. Puedes volver al concentrado jurisdiccional.' : 'Ya no quedan unidades por validar.', 'ok');
       pintarBarraRevision();
+      // Se avisa también a los lectores de pantalla y el foco queda en el regreso: es lo siguiente que la jurisdicción hace.
+      if (st.modo === 'juris') {
+        const vivo = $('munVivo');
+        if (vivo) vivo.textContent = 'Ya no quedan hospitales por validar. El botón Volver al concentrado jurisdiccional está disponible arriba.';
+        const volver = $('munVolverJuris');
+        if (volver) volver.classList.add('mun-volver-listo');
+      }
     }
   }
 
@@ -865,9 +872,19 @@
     $('tituloPagina').textContent = st.modo === 'juris' ? 'SINBA-SIS · Cierre de hospitales' : 'SINBA-SIS · Cierre del municipio';
     $('subtituloPagina').style.display = 'none';
     // La jurisdicción llega aquí desde el Concentrado jurisdiccional (tarjeta del hospital): siempre debe poder regresar.
-    if (st.modo === 'juris' && !$('munVolverJuris')) {
-      const titulo = $('tituloPagina').closest('h1');
-      if (titulo) titulo.insertAdjacentHTML('beforebegin', '<a id="munVolverJuris" class="mun-volver" href="biovac_jurisdiccion.html"><span class="material-symbols-rounded" aria-hidden="true">arrow_back</span> Volver al concentrado jurisdiccional</a>');
+    // Barra de ubicación fija arriba (se queda visible al bajar), con el botón grande y la miga de pan.
+    if (st.modo === 'juris' && !$('munUbicacion')) {
+      // A nivel de página (debajo de "Volver a SIREVAQ"), no dentro del encabezado con el logo: así se ve grande y se queda fija.
+      const refUbicacion = document.querySelector('a.volver') || $('tituloPagina').closest('h1');
+      const donde = document.querySelector('a.volver') ? 'afterend' : 'beforebegin';
+      if (refUbicacion) refUbicacion.insertAdjacentHTML(donde, `
+        <nav id="munUbicacion" class="mun-ubicacion" aria-label="Ubicación en el SINBA-SIS">
+          <a id="munVolverJuris" class="mun-volver" href="biovac_jurisdiccion.html" aria-label="Volver al concentrado jurisdiccional, donde están los municipios y los hospitales">
+            <span class="material-symbols-rounded" aria-hidden="true">arrow_back</span><span>Volver al concentrado jurisdiccional</span>
+          </a>
+          <span class="mun-ubicacion-sep" aria-hidden="true">›</span>
+          <span class="mun-ubicacion-aqui" aria-current="page">Cierre de hospitales</span>
+        </nav>`);
     }
     $('rutaMes').style.display = 'flex';
     document.title = 'SINBA-SIS municipal — SIREVAQ';
