@@ -446,4 +446,19 @@ test.describe('Pinol: candado y avisos (móvil)', () => {
     expect(outline).not.toBe('none');
     expect(errores).toEqual([]);
   });
+  test('Consumibles móvil: la aguja es igual a la jeringa 5.0 (no depende de SRP ni SR)', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-08T12:00:00'));   // jueves: Consumibles habilitado
+    const { errores } = await abrirMovil(page, [fila('c1', 'RECIBIDO')]);
+    await page.click('.dock-item[data-panel="CONS"]');
+    await page.waitForTimeout(400);
+    const aguja = page.locator('#aguja_0600403711');
+    await page.locator('#srp_dosis').fill('5');
+    await page.locator('#sr_dosis').fill('4');
+    await expect(aguja).toHaveValue(/^(0|)$/);
+    await page.locator('#jeringa_reconst_5ml_0605500438').fill('7');
+    await expect(aguja).toHaveValue('7');
+    await page.locator('#jeringa_reconst_5ml_0605500438').fill('2');
+    await expect(aguja).toHaveValue('2');
+    expect(errores).toEqual([]);
+  });
 });

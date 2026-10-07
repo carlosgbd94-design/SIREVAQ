@@ -3502,7 +3502,7 @@
                 dataObject.sr_dosis = sr;
                 dataObject.jeringa_aplic_05ml_0605502657 = j05;
                 dataObject.jeringa_reconst_5ml_0605500438 = j50;
-                dataObject.aguja_0600403711 = srp + sr;
+                dataObject.aguja_0600403711 = j50; // igual a la jeringa 5.0 (misma regla que en escritorio)
                 dataObject.fecha = new Date().toISOString().split('T')[0];
 
             } else if (activePanel === 'BIO') {
@@ -3946,16 +3946,15 @@
             }
         }, { passive: true });
 
+        // La aguja es igual a la jeringa 5.0 (misma regla que en escritorio)
         const syncNeedles = () => {
-            const srp = parseInt(document.getElementById('srp_dosis')?.value) || 0;
-            const sr = parseInt(document.getElementById('sr_dosis')?.value) || 0;
+            const j50 = parseInt(document.getElementById('jeringa_reconst_5ml_0605500438')?.value) || 0;
             const agujaInput = document.getElementById('aguja_0600403711');
             if (agujaInput) {
-                agujaInput.value = srp + sr;
+                agujaInput.value = j50;
             }
         };
-        document.getElementById('srp_dosis')?.addEventListener('input', syncNeedles);
-        document.getElementById('sr_dosis')?.addEventListener('input', syncNeedles);
+        document.getElementById('jeringa_reconst_5ml_0605500438')?.addEventListener('input', syncNeedles);
 
         document.getElementById('hubEditBtn')?.addEventListener('click', () => {
             if (activePanel === 'SR') isEditingSR = true;

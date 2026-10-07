@@ -52,7 +52,7 @@
         T('Cómo se captura'),
         P(1, 'Escribe tu nombre', 'Queda registrado como responsable de la captura.'),
         P(2, 'Captura las cantidades', 'SRP y SR en dosis; jeringa 0.5 y jeringa 5.0 en piezas. Captura 0 donde no tengas.'),
-        P(3, 'Revisa la aguja', 'Se calcula sola y no se captura; solo verifica que corresponda a lo que tienes.'),
+        P(3, 'Revisa la aguja', 'Se llena sola y siempre es igual a la cantidad de jeringas 5.0; no se captura.'),
         P(4, 'Guarda', 'Con el botón Guardar de la barra flotante. Después, «Editar» permite corregir mientras el reporte siga habilitado.'),
         T('Si no hubo cambios'),
         I('pause_circle', '#64748b', 'Sin movimiento', 'Cuando ya existe un reporte anterior puedes replicar sus valores con la fecha de hoy. Úsalo solo si realmente no hubo cambios en la semana.'),
