@@ -17,7 +17,7 @@
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.8"></script>
-<script defer src="biovac_jurisdiccion_ui.js?v=2026.7"></script>
+<script defer src="biovac_jurisdiccion_ui.js?v=2026.9"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -411,7 +411,11 @@
   .jur-estado .material-symbols-rounded { font-size: 15px; }
   .jur-barra-fina { height: 5px; margin: 12px 0 0; }
   .jur-sis { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); font-weight: 600; }
-  .jur-muni-accion { margin-top: 10px; }
+  .jur-muni-accion { margin-top: 12px; }
+  .jur-sis-pendiente { color: #b45309; background: #fef3c7; padding: 1px 8px; border-radius: 999px; font-weight: 800; }
+  /* Botón principal de la tarjeta: es lo que la jurisdicción tiene que hacer en el hospital */
+  .jur-btn-validar { display: flex; width: 100%; justify-content: center; align-items: center; gap: 8px; padding: 11px 16px; font-size: 13.5px; font-weight: 800; text-decoration: none; box-sizing: border-box; }
+  .jur-btn-validar .material-symbols-rounded { font-size: 20px; }
   .jur-val-detalle { margin: 10px 0 0; display: flex; flex-direction: column; gap: 6px; }
   .jur-val-detalle > div { display: grid; grid-template-columns: 130px 1fr; gap: 10px; background: #fff; border-radius: 12px; padding: 8px 12px; }
   .jur-val-detalle dt { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding-top: 2px; }

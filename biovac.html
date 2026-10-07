@@ -45,7 +45,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="biovac_ui.js?v=2026.56"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.43"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.44"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.17"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
@@ -324,6 +324,19 @@ window.onunhandledrejection = function (event) {
   /* La barra flotante de hojas (.dock-sis, .hoja-tab, .dock-btn ...) vive en dock_glass.css, compartida con requisiciones.html. */
 
   /* ===== Ruta del mes (cómo funciona el SINBA-SIS, con el paso actual) ===== */
+  /* Aviso permanente cuando el paloteo SIS-06-P y el Movimiento no coinciden (visible en cualquier hoja) */
+  #sisAlertaDiferencias { display: none; position: sticky; top: 8px; z-index: 40; margin-top: 12px; padding: 14px 16px; border-radius: 14px; background: #fef2f2; border: 2px solid #f87171; color: #7f1d1d; box-shadow: 0 6px 20px rgba(220, 38, 38, .18); }
+  .sis-dif-cab { display: flex; gap: 12px; align-items: flex-start; }
+  .sis-dif-cab > .material-symbols-rounded { font-size: 28px; color: #dc2626; flex-shrink: 0; }
+  .sis-dif-cab b { display: block; font-size: 15px; font-weight: 800; color: #991b1b; }
+  .sis-dif-cab p { margin: 3px 0 0; font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+  .sis-dif-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .sis-dif-chip { background: #fff; border: 1px solid #fca5a5; color: #991b1b; border-radius: 999px; padding: 4px 11px; font-size: 12px; font-weight: 600; }
+  .sis-dif-chip em { font-style: normal; font-weight: 800; color: #dc2626; }
+  .sis-dif-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  /* El botón Enviar no se apaga con diferencias: se queda a la vista, en rojo, y al pulsarlo explica en qué */
+  .dock-btn.dock-enviar.con-diferencias { background: #dc2626; color: #fff; }
+  .dock-btn.dock-enviar.con-diferencias::after { content: ' ≠'; font-weight: 900; }
   .ruta-mes { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; }
   .ruta-pasos { flex: 1; display: flex; margin: 0; padding: 0; list-style: none; min-width: 0; }
   .ruta-paso { position: relative; flex: 1 1 0; min-width: 0; padding-right: 10px; display: flex; gap: 0; align-items: flex-start; }

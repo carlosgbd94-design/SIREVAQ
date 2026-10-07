@@ -479,7 +479,6 @@ function renderCierre() {
   const { anio, mes } = seleccion();
   const r = resumenJur();
   const conUnidades = desdeArranquePorUnidad();
-  const sisPorClues = new Map((estado.sisFilas || []).map((f) => [f.clues, f]));
   const todos = r.munis > 0 && r.munisCerrados === r.munis;
 
   const cta = todos
@@ -504,15 +503,18 @@ function renderCierre() {
         ? (n === 1 ? 'La unidad cerró su Movimiento' : `Las ${n} unidades cerraron su Movimiento`)
         : (n === 1 ? 'La unidad aún no cierra su Movimiento' : `${g.cerradas} de ${n} unidades cerraron su Movimiento`))
       : (g.completo ? 'Movimiento cerrado' : `Movimiento ${String(TEXTO_MOV[g.est(g.unidades[0])]).toLowerCase()}`);
+    // El SINBA-SIS lo capturan las unidades desde el primer mes (aunque el Movimiento de ese mes todavía se cierre
+    // por municipio/hospital), así que su avance y el acceso para validar a los hospitales salen siempre,
+    // por el municipio de cada concentrado y no por las unidades del Movimiento.
     let sis = '', accion = '';
-    if (conUnidades) {
-      const filas = g.unidades.map((u) => sisPorClues.get(u.clues)).filter(Boolean);
-      if (filas.length) {
-        const v = filas.filter((f) => f.estado === 'VALIDADO').length;
-        const e = filas.filter((f) => f.estado === 'ENVIADO').length;
-        sis = `SINBA-SIS (consulta): ${v} validados · ${e} por validar · ${filas.length - v - e} sin enviar`;
-        if (esHosp && e > 0 && puedeEditar()) accion = `<a class="btn-secundario btn-mini" href="biovac.html" style="text-decoration:none;"><span class="material-symbols-rounded">fact_check</span> Revisar y validar su SINBA-SIS (${e})</a>`;
-      }
+    const filas = (estado.sisFilas || []).filter((f) => f.municipio === g.muni);
+    if (filas.length) {
+      const v = filas.filter((f) => f.estado === 'VALIDADO').length;
+      const e = filas.filter((f) => f.estado === 'ENVIADO').length;
+      const sinEnviar = filas.length - v - e;
+      // "Por validar" resalta cuando hay algo que hacer; el número solo se dice una vez, aquí.
+      sis = `SINBA-SIS (consulta): ${v} validados · ${e > 0 ? `<b class="jur-sis-pendiente">${e} por validar</b>` : '0 por validar'} · ${sinEnviar} sin enviar`;
+      if (esHosp && e > 0 && puedeEditar()) accion = `<a class="btn-primario jur-btn-validar" href="biovac.html"><span class="material-symbols-rounded">fact_check</span> Revisar y validar el SINBA-SIS</a>`;
     }
     return `<div class="jur-muni ${g.completo ? 'completo' : ''}">
       <div class="jur-muni-cab">
@@ -521,7 +523,7 @@ function renderCierre() {
         <span class="jur-estado ${g.completo ? 'ok' : ''}">${g.completo ? '<span class="material-symbols-rounded">check_circle</span> Cerrado' : 'En proceso'}</span>
       </div>
       <div class="jur-barra jur-barra-fina"><i style="width:${pctM}%"></i></div>
-      ${sis ? `<p class="jur-sis">${escJ(sis)}</p>` : ''}
+      ${sis ? `<p class="jur-sis">${sis}</p>` : ''}
       ${accion ? `<div class="jur-muni-accion">${accion}</div>` : ''}
       ${n > 1 || !g.completo ? `<details class="jur-detalle">
         <summary>Ver unidades (consulta)</summary>

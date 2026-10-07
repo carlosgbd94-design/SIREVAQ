@@ -43,12 +43,17 @@ test('Jurisdicción: concentrado guiado por municipio en 4 pasos', async ({ page
   await expect(qro).toContainText('SINBA-SIS (consulta): 1 validados · 1 por validar · 1 sin enviar');
   await expect(page.locator('#estadoUnidades .jur-estado.ok')).toHaveCount(2);
   await expect(page.locator('#dockJTitulo')).toContainText('Paso 1 de 4');
-  // Los hospitales tienen su SINBA-SIS en biovac.html; los municipios no llevan ese botón
-  await expect(page.locator('#estadoUnidades a[href="biovac.html"]')).toHaveCount(0);
+  // Los hospitales tienen su SINBA-SIS en biovac.html (solo el que tiene concentrados por validar); los municipios no llevan ese botón
+  await expect(page.locator('#estadoUnidades a[href="biovac.html"]')).toHaveCount(1);
+  const nhg = page.locator('#estadoUnidades .jur-muni', { hasText: 'Nuevo Hospital General' });
+  await expect(nhg).toContainText('SINBA-SIS (consulta): 0 validados · 1 por validar · 0 sin enviar');
+  await expect(nhg.locator('a[href="biovac.html"]')).toContainText('Revisar y validar el SINBA-SIS');
 
   // Antes del arranque por unidad, cuentan las filas de cada municipio y hospital (aquí 4 pseudo)
   await page.selectOption('#selMes', '9');
   await expect(page.locator('#pildoraJ1')).toHaveText('0/4');
+  // ...pero el SINBA-SIS de los hospitales se valida desde el primer mes, también en septiembre
+  await expect(nhg.locator('a[href="biovac.html"]')).toContainText('Revisar y validar el SINBA-SIS');
   await page.selectOption('#selMes', '10');
   await expect(page.locator('#pildoraJ1')).toHaveText('2/4');
 

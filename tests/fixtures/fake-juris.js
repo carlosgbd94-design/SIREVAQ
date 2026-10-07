@@ -33,7 +33,8 @@
     { severidad: 'ADVERTENCIA', codigo: 'MOVIMIENTO_NO_CERRADO', mensaje: 'x', unidad: 'C.S. Dos', biologico: null, lote: null }
   ];
   const sis = [
-    { clues: 'Q001', municipio: 'QUERETARO', estado: 'VALIDADO' }, { clues: 'Q002', municipio: 'QUERETARO', estado: 'ENVIADO' }, { clues: 'Q003', municipio: 'QUERETARO', estado: 'BORRADOR' }
+    { clues: 'Q001', municipio: 'QUERETARO', estado: 'VALIDADO' }, { clues: 'Q002', municipio: 'QUERETARO', estado: 'ENVIADO' }, { clues: 'Q003', municipio: 'QUERETARO', estado: 'BORRADOR' },
+    { clues: 'N001', municipio: 'NHG', estado: 'ENVIADO' }
   ];
   const rpc = {
     biovac_validar_concentrado: () => validaciones,

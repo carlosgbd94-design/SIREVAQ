@@ -46,8 +46,20 @@
     renderRutaMes();
   }
   document.addEventListener('input', (ev) => {
-    const id = ev.target && ev.target.id;
-    if (id && id.indexOf('sisb_') === 0) { marcarSinGuardar(true); draftProgramar(); }
+    const el = ev.target;
+    const id = el && el.id;
+    if (id && id.indexOf('sisb_') === 0) {
+      // Sin ceros a la izquierda: un "5" tecleado sobre un 0 no debe quedar como "05".
+      if (el.type === 'number' && /^0\d/.test(el.value)) el.value = el.value.replace(/^0+(?=\d)/, '');
+      marcarSinGuardar(true); draftProgramar();
+    }
+  });
+  // Al entrar a una casilla se selecciona lo que tiene (y un 0 suelto se vacía): lo que se teclea reemplaza, no se pega al 0.
+  document.addEventListener('focusin', (ev) => {
+    const el = ev.target;
+    if (!el || !el.id || el.id.indexOf('sisb_') !== 0 || el.type !== 'number' || el.disabled || el.readOnly) return;
+    if (el.value === '0') el.value = '';
+    else if (typeof el.select === 'function') { try { el.select(); } catch (e) { /* algunos navegadores no seleccionan number */ } }
   });
   window.addEventListener('beforeunload', (ev) => {
     if (_sinGuardar) { draftEscribirYa(); ev.preventDefault(); ev.returnValue = ''; }
@@ -697,9 +709,9 @@
       return;
     }
     const esUnidad = estado.perfil && estado.perfil.rol === 'UNIDAD';
-    cont.style.cssText = 'display:block; margin-bottom:14px; padding:12px 14px; border-radius:12px; font-size:12px; font-weight:700; background:var(--warning-bg); color:var(--warning); border:1px solid var(--warning-border);';
+    cont.style.cssText = 'display:block; margin-bottom:14px; padding:14px 16px; border-radius:12px; font-size:13px; font-weight:700; background:#fef2f2; color:#991b1b; border:2px solid #f87171; box-shadow:0 2px 10px rgba(220,38,38,.15);';
     cont.innerHTML = `
-      <div><span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">compare_arrows</span>
+      <div style="font-size:14px; font-weight:800;"><span class="material-symbols-rounded" style="font-size:20px; vertical-align:middle;">error</span>
         ${dif.length} biológico(s) NO coinciden entre el paloteo SIS-06-P y el Movimiento de Biológico.
         ${esUnidad ? 'No podrás enviar el SIS hasta que las dosis aplicadas sean iguales -- corrige el paloteo aquí o las "aplicadas" por lote en Movimiento de Biológico.' : 'No se puede validar hasta que coincidan -- corrige el lado que esté mal (modo revisión).'}
       </div>
@@ -816,10 +828,11 @@
         btnEnviar.style.display = estadoActual === 'BORRADOR' ? 'inline-flex' : 'none';
         const fueraDeEnvio = !(_ventanaCache && _ventanaCache.dentro_envio);
         const noConcilia = hayDiferenciasConciliacion();
-        btnEnviar.disabled = fueraDeEnvio || noConcilia;
+        btnEnviar.disabled = fueraDeEnvio;
+        btnEnviar.classList.toggle('con-diferencias', !fueraDeEnvio && noConcilia);
         btnEnviar.title = fueraDeEnvio
           ? 'Fuera de la ventana de envío'
-          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden -- revisa la conciliación' : '';
+          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden -- púlsalo para ver en qué' : '';
       }
       if (btnValidar) btnValidar.style.display = 'none';
       if (btnImprimir) btnImprimir.style.display = estadoActual === 'VALIDADO' ? 'inline-flex' : 'none';
@@ -915,12 +928,12 @@
           <input type="number" min="0" step="1" id="sisb_${v.fila_excel}_total" data-fila="${v.fila_excel}" data-kind="total" ${dis}
             style="width:88px; max-width:100%; text-align:center; font-weight:800; font-size:13px; color:${accent.hex};
               background:${soloLectura ? '#f1f5f9' : accent.tintSoft}; border:1.5px solid ${accent.hex}; border-radius:9px; padding:6px 8px; outline:none;"
-            value="${val !== undefined && val !== null ? val : ''}" placeholder="0">`;
+            value="${val !== undefined && val !== null && Number(val) !== 0 ? val : ''}" placeholder="0">`;
         const mkSub = (kind, val) => `
           <input type="number" min="0" step="1" id="sisb_${v.fila_excel}_${kind}" data-fila="${v.fila_excel}" data-kind="${kind}" ${dis}
             style="width:66px; max-width:100%; text-align:center; font-weight:500; font-size:11px; color:#94a3b8;
               background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:5px 6px; outline:none;"
-            value="${val !== undefined && val !== null ? val : ''}" placeholder="0">`;
+            value="${val !== undefined && val !== null && Number(val) !== 0 ? val : ''}" placeholder="0">`;
 
         // Clave vive en su propia columna, no ya metida dentro del texto de
         // la descripción -- antes el badge quedaba "esclavo" de qué tan
@@ -1176,6 +1189,20 @@
     const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
     if (!currentReport) { toast('Guarda tu concentrado antes de enviarlo.', 'error'); return; }
     if (_sinGuardar) { toast('Tienes cambios sin guardar en el paloteo -- guárdalos antes de enviar.', 'error'); return; }
+
+    // Con diferencias el servidor no deja enviar: se explica aquí, con la lista, en vez de un aviso que se pierde.
+    try { await cargarConciliacion(activa.clues); } catch (_) { /* si falla, el servidor decide */ }
+    if (hayDiferenciasConciliacion()) {
+      const dif = _conciliacionCache.filter((f) => !f.coincide);
+      renderAlertaDiferencias();
+      await mostrarModal({
+        titulo: 'Tu SINBA-SIS NO se envió',
+        mensaje: 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden, y mientras no cuadren el sistema no lo envía: el municipal no recibe nada. Corrige el lado que esté mal (el paloteo o las "aplicadas" del Movimiento) y vuelve a enviar.',
+        detalleHtml: `<div class="sis-dif-lista" style="flex-direction:column; align-items:stretch;">${listaDiferenciasHtml(dif)}</div>`,
+        textoAceptar: 'Entendido, voy a corregir', sinCancelar: true
+      });
+      return;
+    }
 
     const unidadBiovac = (estado.unidades || []).find((u) => u.clues === activa.clues);
 
@@ -2926,7 +2953,58 @@
   }
 
   // Línea de estatus + botón Guardar de la barra de hojas.
+
+  // Aviso permanente (visible en cualquier hoja del SINBA-SIS) cuando el paloteo y el Movimiento no coinciden:
+  // el servidor NO deja enviar ni validar así, y antes solo había una tarjeta dentro de la 06-P y un botón apagado.
+  function listaDiferenciasHtml(dif) {
+    return dif.map((f) => {
+      const d = Number(f.paloteo) - Number(f.aplicado);
+      return `<span class="sis-dif-chip"><b>${_esc(f.etiqueta)}</b>: paloteo ${Number(f.paloteo)} · Movimiento ${Number(f.aplicado)} <em>(${d > 0 ? '+' : ''}${d})</em></span>`;
+    }).join('');
+  }
+  function renderAlertaDiferencias() {
+    let el = document.getElementById('sisAlertaDiferencias');
+    const captura = capturaDelMesActual();
+    const dif = Array.isArray(_conciliacionCache) ? _conciliacionCache.filter((f) => !f.coincide) : [];
+    const sinEnviar = !captura || captura.estado === 'BORRADOR';
+    const porValidar = Boolean(captura) && captura.estado === 'ENVIADO';
+    const mostrar = Boolean(datosUnidadActiva()) && dif.length > 0 && (sinEnviar || porValidar);
+    if (!mostrar) { if (el) el.style.display = 'none'; return; }
+    if (!el) {
+      const ref = document.getElementById('rutaMes') || document.getElementById('sis06pConciliacion');
+      if (!ref) return;
+      el = document.createElement('div');
+      el.id = 'sisAlertaDiferencias';
+      el.setAttribute('role', 'alert');
+      ref.insertAdjacentElement('afterend', el);
+      el.addEventListener('click', (ev) => {
+        const b = ev.target.closest('[data-dif-ir]');
+        if (!b) return;
+        const dest = b.getAttribute('data-dif-ir');
+        const btn = document.getElementById(dest === 'mov' ? 'btnSeccionMovimiento' : 'btnSeccionSIS06P');
+        if (btn) btn.click();
+        if (dest !== 'mov') setTimeout(() => { const c = document.getElementById('sis06pConciliacion'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
+      });
+    }
+    const esU = esUnidadSesion();
+    const titulo = sinEnviar
+      ? (esU ? 'Tu SINBA-SIS NO se puede enviar todavía' : 'Este SINBA-SIS no se puede enviar todavía')
+      : 'Este SINBA-SIS no se puede validar todavía';
+    const texto = sinEnviar
+      ? `El paloteo SIS-06-P y el Movimiento de Biológico no coinciden en ${dif.length} biológico${dif.length === 1 ? '' : 's'}. Mientras no cuadren el sistema no lo envía, y el municipal no recibe nada.`
+      : 'El paloteo y el Movimiento ya no coinciden. Corrige el lado que esté mal para poder validarlo.';
+    el.innerHTML = `
+      <div class="sis-dif-cab"><span class="material-symbols-rounded">error</span><div><b>${titulo}</b><p>${texto}</p></div></div>
+      <div class="sis-dif-lista">${listaDiferenciasHtml(dif)}</div>
+      <div class="sis-dif-acciones">
+        <button type="button" class="btn-primario btn-mini" data-dif-ir="paloteo"><span class="material-symbols-rounded">fact_check</span> Ver y corregir el paloteo</button>
+        <button type="button" class="btn-secundario btn-mini" data-dif-ir="mov"><span class="material-symbols-rounded">medication_liquid</span> Ir al Movimiento</button>
+      </div>`;
+    el.style.display = 'block';
+  }
+
   function actualizarDock() {
+    renderAlertaDiferencias();
     actualizarPildoras();
     // En la pestaña Movimiento de un rol revisor, Guardar/Exportar de la barra
     // pertenecen al Movimiento (ver sincronizarDockMovimiento en biovac_ui.js).
@@ -2968,7 +3046,12 @@
     caja.style.display = 'flex';
     document.getElementById('dockEstadoTitulo').textContent = est === 'BORRADOR' ? 'Borrador' : est === 'ENVIADO' ? 'Enviado' : 'Validado';
     document.getElementById('dockPunto').className = 'dock-punto ' + (est === 'ENVIADO' ? 'enviado' : est === 'VALIDADO' ? 'validado' : '');
-    document.getElementById('dockEstadoDetalle').textContent = detalle;
+    const hayDif = est === 'BORRADOR' && filas !== null && difs.length > 0;
+    document.getElementById('dockPunto').style.background = hayDif ? '#dc2626' : '';
+    const detEl = document.getElementById('dockEstadoDetalle');
+    detEl.textContent = detalle;
+    detEl.style.color = hayDif ? '#dc2626' : '';
+    detEl.style.fontWeight = hayDif ? '800' : '';
   }
 
   // Vuelve a pedir la conciliación al servidor (p. ej. tras guardar una celda
@@ -2989,10 +3072,11 @@
       if (btnEnviar && esUnidadSesion() && btnEnviar.style.display !== 'none') {
         const fueraDeVentana = !(_ventanaCache && _ventanaCache.dentro_envio);
         const noConcilia = hayDiferenciasConciliacion();
-        btnEnviar.disabled = fueraDeVentana || noConcilia;
+        btnEnviar.disabled = fueraDeVentana;
+        btnEnviar.classList.toggle('con-diferencias', !fueraDeVentana && noConcilia);
         btnEnviar.title = fueraDeVentana
           ? 'Fuera de la ventana de envío'
-          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden -- revisa la conciliación' : 'Enviar el SINBA-SIS para validación';
+          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden -- púlsalo para ver en qué' : 'Enviar el SINBA-SIS para validación';
       }
       renderInfluenza();
       renderRutaMes();
