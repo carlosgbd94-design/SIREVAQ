@@ -414,7 +414,10 @@
   .jur-muni-accion { margin-top: 12px; }
   .jur-sis-pendiente { color: #b45309; background: #fef3c7; padding: 1px 8px; border-radius: 999px; font-weight: 800; }
   /* Botón principal de la tarjeta: es lo que la jurisdicción tiene que hacer en el hospital */
-  .jur-btn-validar { display: flex; width: 100%; justify-content: center; align-items: center; gap: 8px; padding: 11px 16px; font-size: 13.5px; font-weight: 800; text-decoration: none; box-sizing: border-box; }
+  .jur-btn-validar { display: flex; width: 100%; justify-content: center; align-items: center; gap: 8px; padding: 12px 20px; font-size: 13.5px; font-weight: 800; text-decoration: none; box-sizing: border-box;
+    border-radius: 999px; color: #fff; background: linear-gradient(135deg, #0ea5e9, #0369a1); box-shadow: 0 4px 14px rgba(3, 105, 161, .35); transition: transform .15s ease, box-shadow .15s ease, filter .15s ease; }
+  .jur-btn-validar:hover { background: linear-gradient(135deg, #0ea5e9, #0369a1); filter: brightness(1.06); box-shadow: 0 6px 18px rgba(3, 105, 161, .45); transform: translateY(-1px); }
+  .jur-btn-validar:focus-visible { outline: 3px solid #bae6fd; outline-offset: 2px; }
   .jur-btn-validar .material-symbols-rounded { font-size: 20px; }
   .jur-val-detalle { margin: 10px 0 0; display: flex; flex-direction: column; gap: 6px; }
   .jur-val-detalle > div { display: grid; grid-template-columns: 130px 1fr; gap: 10px; background: #fff; border-radius: 12px; padding: 8px 12px; }

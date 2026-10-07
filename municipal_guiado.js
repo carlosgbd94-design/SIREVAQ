@@ -864,6 +864,11 @@
     document.body.classList.add('mun-guiado');
     $('tituloPagina').textContent = st.modo === 'juris' ? 'SINBA-SIS · Cierre de hospitales' : 'SINBA-SIS · Cierre del municipio';
     $('subtituloPagina').style.display = 'none';
+    // La jurisdicción llega aquí desde el Concentrado jurisdiccional (tarjeta del hospital): siempre debe poder regresar.
+    if (st.modo === 'juris' && !$('munVolverJuris')) {
+      const titulo = $('tituloPagina').closest('h1');
+      if (titulo) titulo.insertAdjacentHTML('beforebegin', '<a id="munVolverJuris" class="mun-volver" href="biovac_jurisdiccion.html"><span class="material-symbols-rounded" aria-hidden="true">arrow_back</span> Volver al concentrado jurisdiccional</a>');
+    }
     $('rutaMes').style.display = 'flex';
     document.title = 'SINBA-SIS municipal — SIREVAQ';
     // "Usuario" es solo la sesión (queda oculto pero se sigue usando para la auditoría) y

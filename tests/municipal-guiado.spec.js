@@ -130,6 +130,10 @@ test('Jurisdicción en Movimiento: el cierre guiado trabaja con los hospitales',
   await expect(page.locator('#tituloPagina')).toHaveText('SINBA-SIS · Cierre de hospitales');
   await expect(page.locator('#munEnvios .mun-otro')).toHaveCount(0);              // los municipios ya no se listan aquí
   await expect(page.locator('#munEnvios .mun-aviso a[href="biovac_jurisdiccion.html"]')).toBeVisible();   // van al concentrado
+  // y siempre hay un regreso visible al concentrado jurisdiccional (de donde llega la jurisdicción)
+  await expect(page.locator('#munVolverJuris')).toBeVisible();
+  await expect(page.locator('#munVolverJuris')).toHaveAttribute('href', 'biovac_jurisdiccion.html');
+  await expect(page.locator('#munVolverJuris')).toContainText('Volver al concentrado jurisdiccional');
   await expect(page.locator('#munEnvios .mun-unidad')).toHaveCount(2);            // NHGQ y HENM
   await expect(page.locator('#pildoraMun1')).toHaveText('1/2');
   await expect(page.locator('#munCtaSiguiente')).toContainText('(1)');

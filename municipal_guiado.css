@@ -242,3 +242,9 @@ body.mun-guiado button.pt:focus-visible,
   .mun-siguiente { flex-direction: column; align-items: stretch; }
   .mun-siguiente .btn-primario { justify-content: center; }
 }
+
+/* Regreso al concentrado jurisdiccional (solo perfil jurisdiccional) */
+.mun-volver { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 7px 14px; border-radius: 999px; background: #fff; border: 1.5px solid rgba(15, 23, 42, .16); color: #0369a1; font-size: 12.5px; font-weight: 800; text-decoration: none; transition: background .15s ease, border-color .15s ease; }
+.mun-volver .material-symbols-rounded { font-size: 18px; }
+.mun-volver:hover { background: #f0f9ff; border-color: #0ea5e9; }
+.mun-volver:focus-visible { outline: 3px solid #bae6fd; outline-offset: 2px; }
