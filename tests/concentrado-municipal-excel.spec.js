@@ -16,6 +16,7 @@ const EXCELJS = fs.readFileSync(path.join(raiz, 'node_modules', 'exceljs', 'dist
 const MES = 9; const ANIO = 2026;
 
 const QRO = 'QTSSA001764:UMME MÓVIL QUERETARO|QTSSA001793:JURICA|QTSSA001810:MENCHACA|QTSSA001822:SAN ANTONIO DE LA PUNTA|QTSSA001834:SAN PABLO|QTSSA001846:FELIPE CARRILLO PUERTO|QTSSA001851:LOMA BONITA|QTSSA001863:PEDRO ESCOBEDO|QTSSA001904:JOFRITO|QTSSA001916:MONTENEGRO|QTSSA001921:PIE DE GALLO|QTSSA001945:SAN JOSÉ BUENAVISTA|QTSSA001962:SAN MIGUELITO|QTSSA001974:SANTA MARÍA MAGDALENA|QTSSA002003:LA SOLANA|QTSSA002015:TINAJA DE LA ESTANCIA|QTSSA002522:LÁZARO CÁRDENAS|QTSSA002534:SAN PEDRITO PEÑUELAS|QTSSA002703:MENCHACA NORTE|QTSSA003553:UMME CERRO DE LA CRUZ|QTSSA003562:UMME LA LUZ|QTSSA003595:UMME SAN PEDRITO|QTSSA003604:UMME RANCHO LARGO|QTSSA003715:LA GOTERA|QTSSA012240:SAN JOSÉ EL ALTO|QTSSA012276:FAM SAN JOSE BUENAVISTA|QTSSA012281:FAM PEDRO ESCOBEDO|QTSSA012544:FAM PALO ALTO|QTSSA012556:UMME MF1|QTSSA012561:UMME AMBULANCIA 1|QTSSA012631:UMME MEDICO DENTAL|QTSSA012655:SANTA ROSA JAUREGUI|QTSSA012923:SATELITE|QTSSA012976:SAN PEDRO MARTIR|QTSSA012982:LOMAS DE CASA BLANCA|QTSSA013034:TLACOTE EL BAJO'.split('|').map((x) => { const [clues, nombre] = x.split(':'); return { clues, nombre }; });
+const MARQUES = 'QTSSA001315:LA CAÑADA|QTSSA001332:AMAZCALA|QTSSA001344:ATONGO|QTSSA001356:SAN MIGUEL LÁZARO CÁRDENAS|QTSSA001390:LA GRIEGA|QTSSA001402:JESÚS MARÍA|QTSSA001426:PALO ALTO|QTSSA001431:EL PARAISO|QTSSA001933:SAN ISIDRO MIRANDA|QTSSA003571:CHICHIMEQUILLAS|QTSSA003580:NAVAJAS|QTSSA012264:FAM CHICHIMEQUILLAS|QTSSA012643:ALFAJAYUCAN|QTSSA012940:LA PIEDAD'.split('|').map((x) => { const [clues, nombre] = x.split(':'); return { clues, nombre }; });
 const CLAVES_BIO = ['BCG', 'HEPB', 'HEXAVALENTE', 'DPT', 'ROTAVIRUS', 'NEUMO_13V', 'NEUMO_20V', 'SRP', 'ANTIINFLUENZA', 'SR', 'VPH', 'TD', 'TDPA', 'COVID_MODERNA', 'COVID_PFIZER', 'VARICELA', 'HEPA', 'VSR'];
 
 function variablesDelCatalogo() {
@@ -27,14 +28,15 @@ function variablesDelCatalogo() {
 
 function generarDatos(n, opciones = {}) {
   let s = 4242 + n; const rnd = () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296; const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
-  const unidades = QRO.slice(0, Math.min(n, QRO.length)).map((u, i) => ({ id: 'u' + i, clues: u.clues, nombre: u.nombre }));
+  const base = opciones.municipio === 'MARQUES' ? MARQUES : QRO;
+  const unidades = base.slice(0, Math.min(n, base.length)).map((u, i) => ({ id: 'u' + i, clues: u.clues, nombre: u.nombre }));
   for (let i = unidades.length; i < n; i++) unidades.push({ id: 'u' + i, clues: 'QTSSA9' + String(90000 + i), nombre: 'UNIDAD EXTRA ' + i });
-  if (n < QRO.length) unidades.forEach((u, i) => { u.clues = n === 4 ? ['QTSSA990001', 'QTSSA990002', 'QTSSA990003', 'QTSSA990004'][i] : u.clues; if (n === 4) u.nombre = ['C.S. UNO', 'C.S. DOS', 'C.S. TRES', 'C.S. CUATRO'][i]; });
+  if (n < QRO.length && !opciones.municipio) unidades.forEach((u, i) => { u.clues = n === 4 ? ['QTSSA990001', 'QTSSA990002', 'QTSSA990003', 'QTSSA990004'][i] : u.clues; if (n === 4) u.nombre = ['C.S. UNO', 'C.S. DOS', 'C.S. TRES', 'C.S. CUATRO'][i]; });
   const variables = variablesDelCatalogo();
   const capturas = unidades.map((u, i) => {
     const valores = {};
     variables.forEach((v) => { if (rnd() < 0.55) valores[String(v.fila_excel)] = { total: ri(1, 90), afro: rnd() < 0.2 ? ri(1, 4) : 0, indigena: rnd() < 0.2 ? ri(1, 4) : 0, migrante: rnd() < 0.15 ? ri(1, 3) : 0 }; });
-    return { clues: u.clues, estado: i % 5 === 4 ? 'ENVIADO' : 'VALIDADO', valores, municipio: 'QUERETARO', mes: MES, anio: ANIO };
+    return { clues: u.clues, estado: i % 5 === 4 ? 'ENVIADO' : 'VALIDADO', valores, municipio: opciones.municipio || 'QUERETARO', mes: MES, anio: ANIO };
   });
   const seg = [];
   unidades.forEach((u, i) => CLAVES_BIO.forEach((c, j) => {
@@ -42,7 +44,7 @@ function generarDatos(n, opciones = {}) {
   }));
   const influenza = [];
   unidades.forEach((u) => ['2026-09-04', '2026-09-11', '2026-10-02'].forEach((fecha) => { const v = {}; for (let k = 1; k <= 46; k++) if (rnd() < 0.25) v['r' + k] = ri(1, 9); influenza.push({ clues: u.clues, fecha, valores: v }); }));
-  return { unidades, variables, capturas, seg, influenza: opciones.sinInfluenza ? [] : influenza };
+  return { unidades, variables, capturas, seg, influenza: opciones.sinInfluenza ? [] : influenza, municipio: opciones.municipio || 'QUERETARO' };
 }
 
 async function abrir(page) {
@@ -60,7 +62,7 @@ async function descargar(page, datos) {
   const espera = page.waitForEvent('download', { timeout: 60000 });
   const info = await page.evaluate(async ([D, mes, anio]) => {
     const tablas = {
-      biovac_unidades: D.unidades.map((u) => ({ ...u, municipio: 'QUERETARO', activo: true })),
+      biovac_unidades: D.unidades.map((u) => ({ ...u, municipio: D.municipio, activo: true })),
       sis_variables: D.variables, sis06p_capturas: D.capturas, influenza_capturas: D.influenza
     };
     const from = (t) => {
@@ -77,15 +79,15 @@ async function descargar(page, datos) {
     estado.biologicos = ['BCG', 'HEPB', 'HEXAVALENTE', 'DPT', 'ROTAVIRUS', 'NEUMO_13V', 'NEUMO_20V', 'SRP', 'ANTIINFLUENZA', 'SR', 'VPH', 'TD', 'TDPA', 'COVID_MODERNA', 'COVID_PFIZER', 'VARICELA', 'HEPA', 'VSR'].map((c) => ({ clave: c, nombre_excel: c }));
     window.__toasts = []; const t0 = window.toast; window.toast = (m, k) => { window.__toasts.push(String(m)); return t0(m, k); };
     const cont = document.createElement('div'); document.body.appendChild(cont);
-    await SIS06PConcentradoMunicipal.render(cont, 'QUERETARO', mes, anio);
+    await SIS06PConcentradoMunicipal.render(cont, D.municipio, mes, anio);
     cont.querySelector('[data-accion="excel"]').click();
     return { mapeoInfluenza: window.SIS06PBiovac.INFLUENZA_SIS_MAPPING };
   }, [datos, MES, ANIO]);
   const d = await espera;
-  const destino = path.join(test.info().outputDir, `concentrado_${datos.unidades.length}.xlsx`);
+  const destino = path.join(test.info().outputDir, `concentrado_${datos.municipio}_${datos.unidades.length}.xlsx`);
   fs.mkdirSync(path.dirname(destino), { recursive: true });
   await d.saveAs(destino);
-  if (process.env.GUARDAR_PRUEBAS) fs.copyFileSync(destino, path.join(raiz, 'PRUEBAS_EXPORTACION', `CONCENTRADO_${datos.unidades.length}_unidades${datos.influenza.length ? '' : '_sin_influenza'}.xlsx`));
+  if (process.env.GUARDAR_PRUEBAS) fs.copyFileSync(destino, path.join(raiz, 'PRUEBAS_EXPORTACION', `CONCENTRADO_${datos.municipio === 'MARQUES' ? 'MARQUES' : datos.unidades.length + '_unidades'}${datos.influenza.length ? '' : '_sin_influenza'}.xlsx`));
   await page.waitForFunction(() => window.__toasts.length > 0, null, { timeout: 15000 });
   const toasts = await page.evaluate(() => window.__toasts);
   return { archivo: destino, info, toasts };
@@ -95,10 +97,11 @@ const num = (v) => { if (v && typeof v === 'object') v = v.result; const x = Num
 const letra = (n) => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
 const redondear = (v) => Math.round(v * 100) / 100;
 
-for (const [n, sinInfluenza] of [[36, false], [4, false], [40, false], [1, false], [2, false], [4, true]]) {
-  test(`Excel del concentrado con ${n} unidades${sinInfluenza ? ' sin Influenza' : ''}: PALOTEO y SEGUIMIENTO DE BIOLOGICO sobre la plantilla real`, async ({ page }) => {
-    test.setTimeout(90000);
-    const D = generarDatos(n, { sinInfluenza });
+for (const [n, sinInfluenza, municipio] of [[36, false], [4, false], [40, false], [1, false], [2, false], [4, true], [14, false, 'MARQUES']]) {
+  test(`Excel del concentrado ${municipio || 'QUERETARO'} con ${n} unidades${sinInfluenza ? ' sin Influenza' : ''}: PALOTEO, SEGUIMIENTO y CSV sobre la plantilla real`, async ({ page }) => {
+    test.setTimeout(120000);
+    const D = generarDatos(n, { sinInfluenza, municipio });
+    const oficial = municipio === 'MARQUES' ? 'EL MARQUÉS' : 'QUERÉTARO';
     await abrir(page);
     const { archivo, info, toasts } = await descargar(page, D);
     expect(toasts.join(' | ')).toContain('Excel del concentrado municipal generado');
@@ -113,13 +116,15 @@ for (const [n, sinInfluenza] of [[36, false], [4, false], [40, false], [1, false
 
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(archivo);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(['PALOTEO', 'SEGUIMIENTO DE BIOLOGICO', 'RECIBIDO VS REQUISICION']);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['PALOTEO', 'SEGUIMIENTO DE BIOLOGICO', 'CSV', 'RECIBIDO VS REQUISICION']);
     const wp = wb.getWorksheet('PALOTEO'); const ws = wb.getWorksheet('SEGUIMIENTO DE BIOLOGICO');
     const cIni = 9; const cFin = cIni + n - 1; const cTot = cFin + 1;
 
     // ---------------- PALOTEO ----------------
     expect(wp.getCell('A1').value).toBe('SEPTIEMBRE');
-    expect(wp.getCell('A3').value).toBe('MUNICIPIO QUERETARO');
+    expect(wp.getCell('A3').value).toBe(`MUNICIPIO ${oficial}`);
+    // la banda oscura del título no debe tener huecos blancos
+    for (let c = 1; c <= cTot; c++) { const f = wp.getCell(1, c).fill; expect(f && f.fgColor && f.fgColor.argb, `relleno fila 1 col ${c}`).toBe('FF2B2F36'); }
     D.unidades.forEach((u, i) => expect(wp.getCell(4, cIni + i).value).toBe(u.clues));
     expect(wp.getCell(3, cTot).value).toBe('Total Municipal');
     expect(wp.model.merges).toContain(`${letra(cTot)}3:${letra(cTot)}4`);
@@ -166,22 +171,25 @@ for (const [n, sinInfluenza] of [[36, false], [4, false], [40, false], [1, false
       else if (clave) filaDeClave.set(clave, r);
     }
     expect(filaDeClave.size).toBeGreaterThan(300);
-    let comprobadas = 0;
+    let comprobadas = 0; const errPal = [];
     esperado.forEach((x, k) => {
       const [clues, clave] = k.split('|');
       const i = D.unidades.findIndex((u) => u.clues === clues); const r = filaDeClave.get(clave);
-      expect(r, `la clave ${clave} no existe en la plantilla`).toBeTruthy();
-      expect(num(wp.getCell(r, cIni + i).value), `${clues} ${clave}`).toBe(x);
+      if (!r) { errPal.push(`la clave ${clave} no existe en la plantilla`); return; }
+      if (num(wp.getCell(r, cIni + i).value) !== x) errPal.push(`${clues} ${clave}`);
       comprobadas++;
     });
+    expect(errPal.slice(0, 10)).toEqual([]);
     expect(comprobadas).toBeGreaterThan(n * 30);
 
     // Total Municipal = suma de la fila, y subtotales por biológico = suma de sus renglones TOTAL
+    const errTot = [];
     for (let r = 5; r <= 442; r++) {
-      let s = 0; for (let c = cIni; c <= cFin; c++) s += num(wp.getCell(r, c).value);
-      expect(num(wp.getCell(r, cTot).value), `total fila ${r}`).toBe(s);
-      const f = wp.getCell(r, cTot).value; expect(f.formula).toBe(`SUM(I${r}:${letra(cFin)}${r})`);
+      let sum = 0; for (let c = cIni; c <= cFin; c++) sum += num(wp.getCell(r, c).value);
+      if (num(wp.getCell(r, cTot).value) !== sum) errTot.push(`total fila ${r}`);
+      if (wp.getCell(r, cTot).value.formula !== `SUM(I${r}:${letra(cFin)}${r})`) errTot.push(`fórmula fila ${r}`);
     }
+    expect(errTot.slice(0, 10)).toEqual([]);
     expect(subtotales.length).toBe(16);
     const filaBCG = filaDeClave.get('VBC01');
     const sumaBCG = (i) => [0, 1, 2, 3, 4].reduce((a, k) => a + num(wp.getCell(filaBCG + k, cIni + i).value), 0);
@@ -191,9 +199,45 @@ for (const [n, sinInfluenza] of [[36, false], [4, false], [40, false], [1, false
     if (n > 1) expect(wp.getCell(filaSubBCG, cIni + 1).value.formula).toBe('SUM(J5:J9)');
     expect(wp.getCell(443, cTot).value.formula).toBe(`SUM(${letra(cTot)}397:${letra(cTot)}442)`);
 
+    // ---------------- CSV (mismo formato que la hoja CSV del Excel oficial) ----------------
+    const wc = wb.getWorksheet('CSV');
+    expect(['CLUES', 'VARIABLE', 'VALOR', 'MES', 'AÑO', 'MUNICIPIO'].map((h, i) => wc.getCell(1, i + 1).value)).toEqual(['CLUES', 'VARIABLE', 'VALOR', 'MES', 'AÑO', 'MUNICIPIO']);
+    const clavesPaloteo = []; // renglones de datos del PALOTEO, en su orden
+    for (let r = 5; r <= 442; r++) { const cl = String(wp.getCell(r, 3).value || '').trim(); if (cl && !subtotales.includes(r)) clavesPaloteo.push({ r, cl }); }
+    expect(clavesPaloteo.length).toBe(422);
+    expect(wc.rowCount).toBe(1 + n * 422);
+    expect(wc.autoFilter).toBeTruthy();
+    // letra de la hoja CSV: Arial Nova 11 en el encabezado, en el primer renglón y en el último
+    [wc.getCell('A1'), wc.getCell('A2'), wc.getCell('C2'), wc.getCell('F2'), wc.getCell(`A${wc.rowCount}`), wc.getCell(`C${wc.rowCount}`)].forEach((c) => { expect(c.font.name, c.address).toBe('Arial Nova'); expect(c.font.size).toBe(11); });
+    let fila = 2; const vistos = new Set(); const errCsv = [];
+    D.unidades.forEach((u, i) => {
+      const L = letra(cIni + i);
+      clavesPaloteo.forEach(({ r, cl }) => {
+        const c = wc.getRow(fila);
+        if (c.getCell(1).value.formula !== `PALOTEO!$${L}$4`) errCsv.push(`CLUES fila ${fila}`);
+        if (c.getCell(2).value !== cl) errCsv.push(`VARIABLE fila ${fila}: ${c.getCell(2).value} != ${cl}`);
+        if (c.getCell(3).value.formula !== `PALOTEO!$${L}$${r}`) errCsv.push(`VALOR fila ${fila}`);
+        // el valor guardado coincide con la celda del PALOTEO a la que apunta
+        if (num(c.getCell(3).value) !== num(wp.getCell(r, cIni + i).value)) errCsv.push(`${u.clues} ${cl}: CSV ${num(c.getCell(3).value)} vs PALOTEO ${num(wp.getCell(r, cIni + i).value)}`);
+        if (c.getCell(4).value !== MES || c.getCell(5).value !== ANIO || c.getCell(6).value !== oficial) errCsv.push(`MES/AÑO/MUNICIPIO fila ${fila}`);
+        const llave = `${u.clues}|${cl}`; if (vistos.has(llave)) errCsv.push(`duplicado ${llave}`); vistos.add(llave);
+        fila++;
+      });
+    });
+    expect(errCsv.slice(0, 10)).toEqual([]);
+    // y contra lo capturado: cada valor esperado aparece en su renglón del CSV
+    const idxClave = new Map(clavesPaloteo.map((q, k) => [q.cl, k]));
+    const errEsp = [];
+    esperado.forEach((x, k) => {
+      const [clues, clave] = k.split('|'); const i = D.unidades.findIndex((u) => u.clues === clues);
+      const got = num(wc.getRow(2 + i * 422 + idxClave.get(clave)).getCell(3).value);
+      if (got !== x) errEsp.push(`CSV ${clues} ${clave}: ${got} != ${x}`);
+    });
+    expect(errEsp.slice(0, 10)).toEqual([]);
+
     // ---------------- SEGUIMIENTO ----------------
     const sIni = 2; const sFin = sIni + n - 1; const sTot = sFin + 1; const sVal = sTot + 1;
-    expect(ws.getCell('A1').value).toBe('MUNICIPIO QUERETARO');
+    expect(ws.getCell('A1').value).toBe(`MUNICIPIO ${oficial}`);
     D.unidades.forEach((u, i) => expect(typeof ws.getCell(2, sIni + i).value).toBe('string'));
     expect(ws.getCell(2, sTot).value).toBe('Total');
     expect(ws.getCell(2, sVal).value).toBe('VALIDACIÓN');

@@ -45,6 +45,10 @@
     { tipo: 'INDÍGENAS', campo: 'clave_indigena', sub: 'indigena' }
   ];
 
+  // Nombre como lo escribe el Excel oficial del municipio (QUERÉTARO con acento, EL MARQUÉS)
+  const NOMBRE_OFICIAL = { QUERETARO: 'QUERÉTARO', MARQUES: 'EL MARQUÉS' };
+  const nombreOficial = (m) => NOMBRE_OFICIAL[m] || m;
+
   const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const limpiar = (t) => String(t || '').replace(/\s+/g, ' ').trim();
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -342,7 +346,7 @@
 
     ws.getCell(1, 1).value = MESES_MAYUS[Number(d.mes) - 1] || String(d.mes);
     ws.getCell(1, 8).value = new Date(Date.UTC(Number(d.anio), Number(d.mes), 0));
-    ws.getCell(3, 1).value = `MUNICIPIO ${d.municipio}`;
+    ws.getCell(3, 1).value = `MUNICIPIO ${nombreOficial(d.municipio)}`;
     d.unidades.forEach((u, i) => {
       ws.getCell(PAL.filaNombre, cIni + i).value = nombresPlantilla.get(u.clues) || limpiar(u.nombre).toUpperCase();
       ws.getCell(PAL.filaClues, cIni + i).value = u.clues;
@@ -358,9 +362,11 @@
     const valores = new Map(); // `${col}|${fila}` -> número (para los resultados de las fórmulas)
     const leer = (L, r) => valores.get(`${L}|${r}`) || 0;
     const usadas = new Set();
+    const filasClave = []; // renglones de datos del PALOTEO en su orden (alimentan la hoja CSV)
     const escribirFilaDatos = (r) => {
       const clave = textoCelda(ws.getCell(r, 3).value);
       if (!clave) return;
+      filasClave.push({ r, clave });
       const dato = porClave.get(clave);
       const rubro = rubroDeClave.get(clave);
       if (dato) usadas.add(clave);
@@ -405,7 +411,7 @@
       paperSize: 14, orientation: 'portrait', fitToPage: false, scale: escalaPaloteo(ws, cTot),
       printArea: `A1:${LT}${ultimaImpresion}`, printTitlesRow: `${PAL.filaNombre}:${PAL.filaClues}`
     });
-    return { cTot, valores, hayInfluenza, nombres: nombresPlantilla, sinFila: Array.from(porClave.keys()).filter((k) => !usadas.has(k)) };
+    return { cTot, cIni, valores, filasClave, hayInfluenza, nombres: nombresPlantilla, sinFila: Array.from(porClave.keys()).filter((k) => !usadas.has(k)) };
   }
 
   function llenarSeguimiento(ws, d, pal) {
@@ -425,14 +431,20 @@
     ws.getColumn(cTot).width = 11;
 
     // Fila 1: título, mes y año (se vuelven a combinar según el ancho real)
-    const t1 = Math.max(2, Math.floor(ultima * 0.5));
-    const m1 = Math.min(ultima - 1, t1 + Math.max(2, Math.floor(ultima * 0.12)));
-    const a1 = Math.min(ultima, m1 + Math.max(2, Math.floor(ultima * 0.07)));
+    // Los tres rótulos ocupan las columnas que necesiten según su ancho real (título, mes y año); si no caben
+    // (municipio de 1 o 2 unidades) se reducen para ajustarse. El resto de la banda queda libre.
+    const ancho = (c) => ws.getColumn(c).width || 8.43;
+    const abarcar = (desde, necesita) => { let c = desde; let acc = 0; while (c <= ultima && acc < necesita) { acc += ancho(c); c++; } return Math.max(desde, Math.min(ultima, c - 1)); };
+    const textoTitulo = `MUNICIPIO ${nombreOficial(d.municipio)}`;
+    const t1 = abarcar(1, textoTitulo.length * 2.3 + 2);
+    const m1 = Math.min(Math.max(t1 + 1, ultima - 1), abarcar(t1 + 1, 26));
+    const a1 = Math.min(ultima, Math.max(m1 + 1, abarcar(m1 + 1, 11)));
     ws.getCell(1, 1).style = clonarEstilo(estilo.a1); ws.getCell(1, t1 + 1).style = clonarEstilo(estilo.v1); ws.getCell(1, m1 + 1).style = clonarEstilo(estilo.z1);
-    ws.getCell(1, 1).value = `MUNICIPIO ${d.municipio}`;
+    ws.getCell(1, 1).value = textoTitulo;
     ws.getCell(1, t1 + 1).value = MESES_MAYUS[Number(d.mes) - 1] || String(d.mes);
     ws.getCell(1, m1 + 1).value = new Date(Date.UTC(Number(d.anio), Number(d.mes), 0));
     [[1, t1], [t1 + 1, m1], [m1 + 1, a1], [a1 + 1, ultima]].forEach(([c1, c2]) => { if (c2 > c1) ws.mergeCellsWithoutStyle(1, c1, 1, c2); });
+    [1, t1 + 1, m1 + 1].forEach((c) => { ws.getCell(1, c).alignment = Object.assign({}, ws.getCell(1, c).alignment, { shrinkToFit: true }); });
 
     d.unidades.forEach((u, i) => {
       // nombre corto de la plantilla cuando la CLUES es una de las que ya traía (el mismo que en PALOTEO)
@@ -494,6 +506,31 @@
     Object.assign(ws.pageSetup, { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 1, printArea: `A1:${colLetra(ultima)}${SEG.ultimaFila}` });
   }
 
+  // Hoja CSV del Excel oficial: CLUES | VARIABLE | VALOR | MES | AÑO | MUNICIPIO, un renglón por unidad y por clave
+  // del PALOTEO (mismo orden que sus renglones de datos). CLUES y VALOR son fórmulas que apuntan a la propia
+  // celda del PALOTEO (=PALOTEO!$I$4, =PALOTEO!$I$5...), así la clave de cada renglón y su valor nunca se separan.
+  function agregarHojaCSV(wb, d, pal) {
+    const ws = wb.addWorksheet('CSV');
+    const encabezado = ['CLUES', 'VARIABLE', 'VALOR', 'MES', 'AÑO', 'MUNICIPIO'];
+    // Misma letra que la hoja CSV del Excel oficial: Arial Nova 11; encabezado en negritas sobre fondo oscuro
+    const fuente = { name: 'Arial Nova', size: 11 };
+    for (let c = 1; c <= 6; c++) ws.getColumn(c).font = fuente;
+    ws.addRow(encabezado);
+    ws.getRow(1).eachCell((c) => { c.font = { name: 'Arial Nova', size: 11, bold: true, color: { argb: 'FFE5E7EB' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } }; c.alignment = { horizontal: 'left' }; });
+    const muni = nombreOficial(d.municipio);
+    d.unidades.forEach((u, i) => {
+      const L = colLetra(pal.cIni + i);
+      pal.filasClave.forEach(({ r, clave }) => {
+        const valor = pal.valores.get(`${L}|${r}`) || 0;
+        ws.addRow([{ formula: `PALOTEO!$${L}$4`, result: u.clues }, clave, { formula: `PALOTEO!$${L}$${r}`, result: valor }, Number(d.mes), Number(d.anio), muni]);
+      });
+    });
+    ws.autoFilter = { from: 'A1', to: `F${ws.rowCount}` };
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    [16, 12, 10, 8, 8, 18].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    return ws;
+  }
+
   async function descargarExcel(d) {
     const resp = await fetch(PLANTILLA_URL);
     if (!resp.ok) throw new Error('No se pudo cargar la plantilla del concentrado (Formatos/concentrado_municipal_plantilla.xlsx).');
@@ -508,6 +545,7 @@
 
     const pal = llenarPaloteo(wp, d);
     llenarSeguimiento(ws, d, pal);
+    agregarHojaCSV(wb, d, pal);
 
     // RECIBIDO VS REQUISICIÓN (hoja propia de la app: la plantilla de agosto no la trae)
     const negrita = { bold: true };

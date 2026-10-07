@@ -51,6 +51,13 @@ const SEGUIMIENTO = { nombre: 'SEGUIMIENTO DE BIOLOGICO', colIni: 2, colFin: 39,
     if (CORRECCIONES_CLAVE[k]) { console.log(`PALOTEO C${r}: ${k} -> ${CORRECCIONES_CLAVE[k]}`); c.value = CORRECCIONES_CLAVE[k]; }
   }
 
+  // Al deshacer las combinaciones de la fila 1 las celdas esclavas quedaron sin relleno (huecos blancos en la banda
+  // oscura del título): se les da el estilo de una celda normal de la banda.
+  for (let c = PALOTEO.colIni; c <= PALOTEO.colFin; c++) {
+    const cell = wp.getCell(1, c); const f = cell.fill;
+    if (!(f && f.fgColor && (f.fgColor.argb || f.fgColor.theme !== undefined))) cell.style = JSON.parse(JSON.stringify(wp.getCell(1, PALOTEO.colIni).style));
+  }
+
   // Quitar datos de agosto (las celdas con fórmula se conservan)
   const limpiar = (ws, r, c) => { const cell = ws.getCell(r, c); const v = cell.value; if (v === null || v === undefined) return; if (typeof v === 'object' && (v.formula !== undefined || v.sharedFormula !== undefined)) return; cell.value = null; };
   for (let r = PALOTEO.filaIni; r <= PALOTEO.filaFin; r++) for (let c = PALOTEO.colIni; c <= PALOTEO.colFin; c++) limpiar(wp, r, c);
