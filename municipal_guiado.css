@@ -90,7 +90,6 @@ button.pt { cursor: pointer; }
 /* --- Pasos 3 y 4 --- */
 .mun-cab { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
 .mun-cab-icono { width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--outline-variant); display: flex; align-items: center; justify-content: center; flex: none; }
-.mun-mov-barra { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); font-weight: 600; padding: 12px 18px; }
 
 .mun-check { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .mun-check li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface-container); border: 1px solid transparent; }
@@ -132,3 +131,114 @@ button.pt { cursor: pointer; }
 .mun-aviso { display: flex; align-items: flex-start; gap: 10px; background: #f0f9ff; border: 1px solid #bae6fd; color: #075985; border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; font-size: 12.5px; line-height: 1.5; }
 .mun-aviso a { color: #075985; font-weight: 800; }
 .mun-aviso .material-symbols-rounded { font-size: 20px; flex: none; }
+
+/* ===========================================================================
+   Paso 3 -- Concentrado en tres fases numeradas, y barra del Movimiento (BIOVAC)
+   =========================================================================== */
+.mun-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+/* Foco visible y consistente para quien navega con teclado */
+body.mun-guiado .mun-ruta-paso:focus-visible,
+body.mun-guiado .mun-chip:focus-visible,
+body.mun-guiado .mun-unidad:focus-visible,
+body.mun-guiado .mun-hoja:focus-visible,
+body.mun-guiado .mun-nav:focus-visible,
+body.mun-guiado button.pt:focus-visible,
+.mun-fase button:focus-visible, .mun-fase a:focus-visible, .mun-siguiente button:focus-visible, .mun-mov-barra button:focus-visible,
+.mun-det > summary:focus-visible { outline: 3px solid var(--secondary); outline-offset: 2px; border-radius: 12px; }
+#panelMunConcentrado h2:focus, #panelMunEntrega h2:focus, #seguimientoTitulo:focus, .mun-mov-tit:focus, #munBarraRevision .mun-rev-unidad b:focus { outline: none; }
+.mun-ruta-paso { cursor: pointer; }
+
+.mun-fases { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 12px; position: relative; }
+.mun-fase { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 20px; padding: 16px 18px; position: relative; }
+.mun-fase-cab { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+.mun-fase-num {
+  width: 32px; height: 32px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  font: 800 14px 'Poppins', sans-serif; color: var(--primary); background: var(--surface-container); border: 1.5px solid var(--outline-variant);
+}
+.mun-fase-tit { flex: 1; min-width: 220px; }
+.mun-fase-tit h3 { margin: 0; font: 800 15px 'Poppins', sans-serif; color: var(--primary); }
+.mun-fase-tit p { margin: 3px 0 0; font-size: 12px; color: var(--muted); font-weight: 600; line-height: 1.45; }
+.mun-fase-cuerpo { margin: 12px 0 0 46px; }
+.mun-fase-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.mun-ayuda-mov { margin: 0; font-size: 12.5px; color: #475569; line-height: 1.5; max-width: 640px; }
+.mun-ayuda-mov b { color: var(--primary); }
+
+.mun-estado { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; padding: 4px 11px; border-radius: 999px; white-space: nowrap; background: #f1f5f9; color: #64748b; }
+.mun-estado .material-symbols-rounded { font-size: 15px; }
+.mun-estado.ok { background: var(--success-bg); color: var(--success); }
+.mun-estado.aviso { background: var(--warning-bg); color: var(--warning); }
+.mun-estado.pend { background: #eff6ff; color: #1d4ed8; }
+.mun-estado.carga .material-symbols-rounded { animation: munGira 1.4s linear infinite; }
+.mun-mini-pill { font-size: 10px; font-weight: 800; padding: 2px 9px; border-radius: 20px; margin-left: 8px; }
+.mun-mini-pill.aviso { background: var(--warning-bg); color: var(--warning); }
+
+.mun-nota { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 8px; padding: 9px 12px; border-radius: 12px; background: #f0f9ff; border: 1px solid #bae6fd; color: #075985; font-size: 12px; line-height: 1.5; font-weight: 600; }
+.mun-nota .material-symbols-rounded { font-size: 18px; flex: none; }
+.mun-nota b { font-weight: 800; }
+
+/* Acordeones del detalle: sin flecha nativa, chevron propio que gira */
+.mun-det { border: 1px solid var(--outline-variant); border-radius: 14px; background: #fff; margin-top: 8px; }
+.mun-det > summary { cursor: pointer; padding: 10px 14px; font-size: 12.5px; font-weight: 800; color: var(--primary); list-style: none; display: flex; align-items: center; gap: 6px; }
+.mun-det > summary::-webkit-details-marker { display: none; }
+.mun-det > summary::after { content: 'expand_more'; font-family: 'Material Symbols Rounded'; font-size: 20px; margin-left: auto; color: var(--muted); transition: transform .25s ease; }
+.mun-det[open] > summary::after { transform: rotate(180deg); }
+.mun-det-cuerpo { padding: 2px 14px 14px; }
+.mun-det-grande { margin-top: 14px; }
+
+/* Archivos a descargar */
+.mun-archivos { list-style: none; margin: 12px 0 0 46px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mun-archivo { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--surface-container); border: 1px solid transparent; flex-wrap: wrap; }
+.mun-archivo-ico { width: 38px; height: 38px; border-radius: 12px; flex: none; display: inline-flex; align-items: center; justify-content: center; background: #fff; border: 1px solid var(--outline-variant); }
+.mun-archivo-ico .material-symbols-rounded { color: var(--c); font-size: 22px; font-variation-settings: 'FILL' 1; }
+.mun-archivo-txt { flex: 1; min-width: 200px; }
+.mun-archivo-txt b { display: block; font-size: 13px; color: var(--primary); }
+.mun-archivo-txt small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; font-weight: 600; line-height: 1.4; max-width: 560px; }
+.mun-archivo .btn-mini { flex: none; }
+
+.mun-siguiente { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--outline-variant); font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.mun-siguiente .btn-primario { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Barra del Movimiento (BIOVAC) del municipio: estado, descarga y los tres pasos para cerrarlo */
+.mun-mov-barra { padding: 14px 18px; }
+.mun-mov-fila { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mun-mov-tit { flex: 1; min-width: 200px; margin: 0; font: 800 15px 'Poppins', sans-serif; color: var(--primary); }
+.mun-guia { list-style: none; margin: 12px 0 0; padding: 12px 0 0; border-top: 1px solid var(--outline-variant); display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.mun-guia li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; background: var(--surface-container); font-size: 12px; }
+.mun-guia li i { font: 800 11px 'Poppins', sans-serif; font-style: normal; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 1.5px solid var(--outline-variant); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; flex: none; transition: background .3s ease, color .3s ease, border-color .3s ease; }
+.mun-guia li.hecho i { background: var(--success); border-color: var(--success); color: #fff; }
+.mun-guia li b { display: block; color: var(--primary); font-size: 12.5px; }
+.mun-guia li small { display: block; color: var(--muted); font-weight: 600; margin-top: 2px; line-height: 1.4; }
+
+/* Entrada y detalles con vida: solo si la persona no pidió reducir el movimiento */
+@keyframes munGira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes munEntra { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes munPop { 0% { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes munDespliega { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .mun-entra { animation: munEntra .38s cubic-bezier(.2,.8,.2,1) both; }
+  .mun-entra .mun-fase, .mun-entra .mun-archivo, .mun-entra .mun-siguiente, .mun-entra .mun-guia li { animation: munEntra .42s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--i, 0) * 70ms + 80ms); }
+  .mun-entra .mun-siguiente { animation-delay: 380ms; }
+  .mun-estado.ok .material-symbols-rounded, .mun-check li.ok > .material-symbols-rounded { animation: munPop .45s cubic-bezier(.2,.9,.3,1.3) both; }
+  .ruta-paso.hecho .ruta-num { animation: munPop .5s cubic-bezier(.2,.9,.3,1.3) both; }
+  .mun-det[open] > .mun-det-cuerpo { animation: munDespliega .28s ease both; }
+  .mun-fase, .mun-archivo, .mun-unidad { transition: border-color .2s ease, background-color .2s ease, transform .2s ease; }
+  .mun-barra i { transition: width .6s cubic-bezier(.2,.8,.2,1); }
+  .mun-cargando .material-symbols-rounded { animation: munGira 1s linear infinite; }
+  button.btn-primario:active, button.btn-secundario:active, .mun-chip:active { transform: scale(.97); }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .mun-archivo:hover { border-color: var(--secondary); transform: translateY(-1px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mun-estado.carga .material-symbols-rounded, .mun-cargando .material-symbols-rounded { animation: none; }
+}
+
+@media (max-width: 760px) {
+  .mun-fase { padding: 14px; }
+  .mun-fase-cuerpo, .mun-archivos { margin-left: 0; }
+  .mun-archivo .btn-mini { width: 100%; justify-content: center; }
+  .mun-guia { grid-template-columns: 1fr; }
+  .mun-siguiente { flex-direction: column; align-items: stretch; }
+  .mun-siguiente .btn-primario { justify-content: center; }
+}

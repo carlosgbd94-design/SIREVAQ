@@ -547,12 +547,15 @@
     llenarSeguimiento(ws, d, pal);
     agregarHojaCSV(wb, d, pal);
 
-    // RECIBIDO VS REQUISICIÓN (hoja propia de la app: la plantilla de agosto no la trae)
-    const negrita = { bold: true };
-    const relleno = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    // RECIBIDO VS REQUISICIÓN (hoja propia de la app: la plantilla de agosto no la trae); misma letra que el resto: Arial Nova 11
+    const fuenteRec = { name: 'Arial Nova', size: 11 };
     const wr = wb.addWorksheet('RECIBIDO VS REQUISICION');
+    for (let c = 1; c <= 7; c++) wr.getColumn(c).font = fuenteRec;
     ['Biológico', 'Lote', 'Caducidad requisición', 'Caducidad unidades', 'Requisición (frascos)', 'Suma unidades (frascos)', 'Coincide'].forEach((t, i) => {
-      const c = wr.getCell(1, i + 1); c.value = t; c.font = negrita; c.fill = relleno;
+      const c = wr.getCell(1, i + 1); c.value = t;
+      c.font = { name: 'Arial Nova', size: 11, bold: true, color: { argb: 'FFE5E7EB' } };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+      c.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
     });
     d.requisicion.forEach((f, i) => {
       const r = i + 2;
@@ -560,8 +563,10 @@
       wr.getCell(r, 3).value = f.caducidad_requisicion || ''; wr.getCell(r, 4).value = f.caducidad_unidades || '';
       wr.getCell(r, 5).value = num(f.requisicion); wr.getCell(r, 6).value = num(f.unidades);
       wr.getCell(r, 7).value = f.coincide ? 'SÍ' : 'NO';
+      for (let c = 1; c <= 7; c++) wr.getCell(r, c).font = fuenteRec;
     });
     [40, 16, 20, 20, 20, 22, 10].forEach((w, i) => { wr.getColumn(i + 1).width = w; });
+    wr.views = [{ state: 'frozen', ySplit: 1 }];
 
     wb.calcProperties = wb.calcProperties || {};
     wb.calcProperties.fullCalcOnLoad = true;
@@ -578,7 +583,21 @@
 
   // ---- Tarjeta ---------------------------------------------------------------
 
-  async function render(cont, municipio, mes, anio) {
+  // Genera el Excel y avisa (toast) con lo mismo desde cualquier botón.
+  async function descargarConAviso(d) {
+    try {
+      const r = await descargarExcel(d);
+      if (r && r.variablesSinFila && r.variablesSinFila.length) toast(`Excel generado, pero ${r.variablesSinFila.length} variable(s) del catálogo no existen en la plantilla y no se incluyeron: ${r.variablesSinFila.slice(0, 6).join(', ')}.`, 'error');
+      else toast('Excel del concentrado municipal generado.', 'ok');
+      return true;
+    } catch (err) { console.error('[SIS-06-P] Error generando el Excel del concentrado:', err); toast('No se pudo generar el Excel: ' + (err.message || err), 'error'); return false; }
+  }
+
+  // opciones.sinBoton: no pinta el botón de descarga (lo pone quien llama con la API devuelta).
+  // opciones.sinRecibido: omite la sección de recibido (quien llama la pinta aparte con api.htmlRecibido()).
+  // Devuelve { d, nDifRecibido, htmlRecibido(), descargar() } o null si no se pudo cargar.
+  async function render(cont, municipio, mes, anio, opciones) {
+    const op = opciones || {};
     cont.innerHTML = '<div style="font-size:11.5px; color:var(--muted); padding:6px 0;">Cargando concentrado municipal…</div>';
     let d;
     try {
@@ -586,7 +605,7 @@
     } catch (err) {
       console.error('[SIS-06-P] Error cargando el concentrado municipal:', err);
       cont.innerHTML = `<div style="font-size:11.5px; color:var(--error);">Error al cargar el concentrado municipal: ${esc(err.message || err)}</div>`;
-      return;
+      return null;
     }
 
     const nDifRecibido = d.requisicion.filter((f) => !f.coincide).length;
@@ -602,23 +621,17 @@
       : '<span style="font-size:10px; font-weight:800; background:var(--success-bg); color:var(--success); padding:2px 9px; border-radius:20px;">Coincide</span>');
 
     cont.innerHTML = `
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:10px;">
+      ${op.sinBoton ? '' : `<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:10px;">
         <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.03em; color:var(--muted);">Concentrado municipal -- se arma solo con lo que capturan las unidades</div>
         <button type="button" class="btn-fantasma btn-mini" data-accion="excel"><span class="material-symbols-rounded">download</span> Descargar Excel del concentrado</button>
-      </div>
-      ${seccion('Recibido: requisición vs. unidades', htmlRecibido(d), nDifRecibido > 0, insigniaRecibido)}
+      </div>`}
+      ${op.sinRecibido ? '' : seccion('Recibido: requisición vs. unidades', htmlRecibido(d), nDifRecibido > 0, insigniaRecibido)}
       ${seccion('Paloteo municipal (SIS-06-P)', htmlPaloteo(d), false)}
       ${seccion('Seguimiento de biológico', htmlSeguimiento(d), false)}
     `;
     const btn = cont.querySelector('[data-accion="excel"]');
-    if (btn) btn.addEventListener('click', async () => {
-      try {
-        const r = await descargarExcel(d);
-        if (r && r.variablesSinFila && r.variablesSinFila.length) toast(`Excel generado, pero ${r.variablesSinFila.length} variable(s) del catálogo no existen en la plantilla y no se incluyeron: ${r.variablesSinFila.slice(0, 6).join(', ')}.`, 'error');
-        else toast('Excel del concentrado municipal generado.', 'ok');
-      }
-      catch (err) { console.error('[SIS-06-P] Error generando el Excel del concentrado:', err); toast('No se pudo generar el Excel: ' + (err.message || err), 'error'); }
-    });
+    if (btn) btn.addEventListener('click', () => descargarConAviso(d));
+    return { d, nDifRecibido, htmlRecibido: () => htmlRecibido(d), descargar: () => descargarConAviso(d) };
   }
 
   window.SIS06PConcentradoMunicipal = { render, ORDEN_BIOLOGICOS };

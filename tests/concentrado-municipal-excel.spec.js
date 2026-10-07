@@ -17,6 +17,7 @@ const MES = 9; const ANIO = 2026;
 
 const QRO = 'QTSSA001764:UMME MÓVIL QUERETARO|QTSSA001793:JURICA|QTSSA001810:MENCHACA|QTSSA001822:SAN ANTONIO DE LA PUNTA|QTSSA001834:SAN PABLO|QTSSA001846:FELIPE CARRILLO PUERTO|QTSSA001851:LOMA BONITA|QTSSA001863:PEDRO ESCOBEDO|QTSSA001904:JOFRITO|QTSSA001916:MONTENEGRO|QTSSA001921:PIE DE GALLO|QTSSA001945:SAN JOSÉ BUENAVISTA|QTSSA001962:SAN MIGUELITO|QTSSA001974:SANTA MARÍA MAGDALENA|QTSSA002003:LA SOLANA|QTSSA002015:TINAJA DE LA ESTANCIA|QTSSA002522:LÁZARO CÁRDENAS|QTSSA002534:SAN PEDRITO PEÑUELAS|QTSSA002703:MENCHACA NORTE|QTSSA003553:UMME CERRO DE LA CRUZ|QTSSA003562:UMME LA LUZ|QTSSA003595:UMME SAN PEDRITO|QTSSA003604:UMME RANCHO LARGO|QTSSA003715:LA GOTERA|QTSSA012240:SAN JOSÉ EL ALTO|QTSSA012276:FAM SAN JOSE BUENAVISTA|QTSSA012281:FAM PEDRO ESCOBEDO|QTSSA012544:FAM PALO ALTO|QTSSA012556:UMME MF1|QTSSA012561:UMME AMBULANCIA 1|QTSSA012631:UMME MEDICO DENTAL|QTSSA012655:SANTA ROSA JAUREGUI|QTSSA012923:SATELITE|QTSSA012976:SAN PEDRO MARTIR|QTSSA012982:LOMAS DE CASA BLANCA|QTSSA013034:TLACOTE EL BAJO'.split('|').map((x) => { const [clues, nombre] = x.split(':'); return { clues, nombre }; });
 const MARQUES = 'QTSSA001315:LA CAÑADA|QTSSA001332:AMAZCALA|QTSSA001344:ATONGO|QTSSA001356:SAN MIGUEL LÁZARO CÁRDENAS|QTSSA001390:LA GRIEGA|QTSSA001402:JESÚS MARÍA|QTSSA001426:PALO ALTO|QTSSA001431:EL PARAISO|QTSSA001933:SAN ISIDRO MIRANDA|QTSSA003571:CHICHIMEQUILLAS|QTSSA003580:NAVAJAS|QTSSA012264:FAM CHICHIMEQUILLAS|QTSSA012643:ALFAJAYUCAN|QTSSA012940:LA PIEDAD'.split('|').map((x) => { const [clues, nombre] = x.split(':'); return { clues, nombre }; });
+const CORREGIDORA = 'QTSSA000830:SANTA BARBARA|QTSSA000842:LOS ÁNGELES|QTSSA000854:JOAQUIN HERRERA ( LA CUEVA )|QTSSA000866:LOS OLVERA|QTSSA000883:SAN JOSÉ DE LOS OLVERA|QTSSA003640:PRESA DE BRAVO|QTSSA012252:LA NEGRETA|QTSSA012532:FAM CORREGIDORA|QTSSA012602:EMILIANO ZAPATA'.split('|').map((x) => { const [clues, nombre] = x.split(':'); return { clues, nombre }; });
 const CLAVES_BIO = ['BCG', 'HEPB', 'HEXAVALENTE', 'DPT', 'ROTAVIRUS', 'NEUMO_13V', 'NEUMO_20V', 'SRP', 'ANTIINFLUENZA', 'SR', 'VPH', 'TD', 'TDPA', 'COVID_MODERNA', 'COVID_PFIZER', 'VARICELA', 'HEPA', 'VSR'];
 
 function variablesDelCatalogo() {
@@ -28,7 +29,7 @@ function variablesDelCatalogo() {
 
 function generarDatos(n, opciones = {}) {
   let s = 4242 + n; const rnd = () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296; const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
-  const base = opciones.municipio === 'MARQUES' ? MARQUES : QRO;
+  const base = opciones.municipio === 'MARQUES' ? MARQUES : opciones.municipio === 'CORREGIDORA' ? CORREGIDORA : QRO;
   const unidades = base.slice(0, Math.min(n, base.length)).map((u, i) => ({ id: 'u' + i, clues: u.clues, nombre: u.nombre }));
   for (let i = unidades.length; i < n; i++) unidades.push({ id: 'u' + i, clues: 'QTSSA9' + String(90000 + i), nombre: 'UNIDAD EXTRA ' + i });
   if (n < QRO.length && !opciones.municipio) unidades.forEach((u, i) => { u.clues = n === 4 ? ['QTSSA990001', 'QTSSA990002', 'QTSSA990003', 'QTSSA990004'][i] : u.clues; if (n === 4) u.nombre = ['C.S. UNO', 'C.S. DOS', 'C.S. TRES', 'C.S. CUATRO'][i]; });
@@ -74,7 +75,7 @@ async function descargar(page, datos) {
       };
       return api;
     };
-    const rpcs = { sis06p_seguimiento_biologico: D.seg, sis06p_recibido_vs_requisicion: [] };
+    const rpcs = { sis06p_seguimiento_biologico: D.seg, sis06p_recibido_vs_requisicion: [{ biologico: 'B.C.G. frasco multidosis', numero_lote: 'L1', caducidad_requisicion: '2027-03-31', caducidad_unidades: '2027-03-31', requisicion: 10, unidades: 10, coincide: true }, { biologico: 'Td frasco multidosis', numero_lote: 'T9', caducidad_requisicion: '2027-01-31', caducidad_unidades: '2027-02-28', requisicion: 8, unidades: 6, coincide: false }] };
     estado.db = { from, rpc: async (n) => ({ data: rpcs[n] || [], error: null }) };
     estado.biologicos = ['BCG', 'HEPB', 'HEXAVALENTE', 'DPT', 'ROTAVIRUS', 'NEUMO_13V', 'NEUMO_20V', 'SRP', 'ANTIINFLUENZA', 'SR', 'VPH', 'TD', 'TDPA', 'COVID_MODERNA', 'COVID_PFIZER', 'VARICELA', 'HEPA', 'VSR'].map((c) => ({ clave: c, nombre_excel: c }));
     window.__toasts = []; const t0 = window.toast; window.toast = (m, k) => { window.__toasts.push(String(m)); return t0(m, k); };
@@ -87,7 +88,7 @@ async function descargar(page, datos) {
   const destino = path.join(test.info().outputDir, `concentrado_${datos.municipio}_${datos.unidades.length}.xlsx`);
   fs.mkdirSync(path.dirname(destino), { recursive: true });
   await d.saveAs(destino);
-  if (process.env.GUARDAR_PRUEBAS) fs.copyFileSync(destino, path.join(raiz, 'PRUEBAS_EXPORTACION', `CONCENTRADO_${datos.municipio === 'MARQUES' ? 'MARQUES' : datos.unidades.length + '_unidades'}${datos.influenza.length ? '' : '_sin_influenza'}.xlsx`));
+  if (process.env.GUARDAR_PRUEBAS) fs.copyFileSync(destino, path.join(raiz, 'PRUEBAS_EXPORTACION', `CONCENTRADO_${['MARQUES', 'CORREGIDORA'].includes(datos.municipio) ? datos.municipio : datos.unidades.length + '_unidades'}${datos.influenza.length ? '' : '_sin_influenza'}.xlsx`));
   await page.waitForFunction(() => window.__toasts.length > 0, null, { timeout: 15000 });
   const toasts = await page.evaluate(() => window.__toasts);
   return { archivo: destino, info, toasts };
@@ -97,11 +98,11 @@ const num = (v) => { if (v && typeof v === 'object') v = v.result; const x = Num
 const letra = (n) => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
 const redondear = (v) => Math.round(v * 100) / 100;
 
-for (const [n, sinInfluenza, municipio] of [[36, false], [4, false], [40, false], [1, false], [2, false], [4, true], [14, false, 'MARQUES']]) {
+for (const [n, sinInfluenza, municipio] of [[36, false], [4, false], [40, false], [1, false], [2, false], [4, true], [14, false, 'MARQUES'], [9, false, 'CORREGIDORA']]) {
   test(`Excel del concentrado ${municipio || 'QUERETARO'} con ${n} unidades${sinInfluenza ? ' sin Influenza' : ''}: PALOTEO, SEGUIMIENTO y CSV sobre la plantilla real`, async ({ page }) => {
     test.setTimeout(120000);
     const D = generarDatos(n, { sinInfluenza, municipio });
-    const oficial = municipio === 'MARQUES' ? 'EL MARQUÉS' : 'QUERÉTARO';
+    const oficial = municipio === 'MARQUES' ? 'EL MARQUÉS' : municipio || 'QUERÉTARO';
     await abrir(page);
     const { archivo, info, toasts } = await descargar(page, D);
     expect(toasts.join(' | ')).toContain('Excel del concentrado municipal generado');
@@ -198,6 +199,11 @@ for (const [n, sinInfluenza, municipio] of [[36, false], [4, false], [40, false]
     expect(wp.getCell(filaSubBCG, cIni).value.formula).toBe('SUM(I5:I9)');
     if (n > 1) expect(wp.getCell(filaSubBCG, cIni + 1).value.formula).toBe('SUM(J5:J9)');
     expect(wp.getCell(443, cTot).value.formula).toBe(`SUM(${letra(cTot)}397:${letra(cTot)}442)`);
+
+    // ---------------- RECIBIDO VS REQUISICION: Arial Nova 11 ----------------
+    const wrq = wb.getWorksheet('RECIBIDO VS REQUISICION');
+    expect(wrq.rowCount).toBe(3);
+    ['A1', 'G1', 'A2', 'B2', 'E3', 'G3'].forEach((a) => { expect(wrq.getCell(a).font.name, a).toBe('Arial Nova'); expect(wrq.getCell(a).font.size, a).toBe(11); });
 
     // ---------------- CSV (mismo formato que la hoja CSV del Excel oficial) ----------------
     const wc = wb.getWorksheet('CSV');

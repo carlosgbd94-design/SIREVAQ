@@ -531,11 +531,11 @@
 
       if (porUnidad.size === 0) {
         cont.innerHTML = '<div style="font-size:11.5px; color:var(--muted); font-style:italic; padding:6px 0;">Ninguna unidad tiene paloteo ni movimiento capturado todavía para conciliar.</div>';
-        return;
+        return { total: 0, conDiferencia: 0 };
       }
       if (conDiferencia.length === 0) {
         cont.innerHTML = `<div style="font-size:11.5px; font-weight:700; color:var(--success); padding:6px 0;">✅ Conciliación paloteo vs. movimiento: las ${porUnidad.size} unidad(es) con captura coinciden en todos sus biológicos.</div>`;
-        return;
+        return { total: porUnidad.size, conDiferencia: 0 };
       }
       cont.innerHTML = `
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); margin:4px 0 8px;">
@@ -569,9 +569,11 @@
           </div>`;
         }).join('')}
       `;
+      return { total: porUnidad.size, conDiferencia: conDiferencia.length };
     } catch (err) {
       console.error('[SIS-06-P] Error cargando la conciliación paloteo vs aplicado:', err);
       cont.innerHTML = `<div style="font-size:11.5px; color:var(--error);">Error al cargar la conciliación: ${err.message || err}</div>`;
+      return null;
     }
   }
 

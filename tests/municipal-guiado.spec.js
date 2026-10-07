@@ -78,10 +78,30 @@ test('Municipal: cierre guiado en 4 pasos', async ({ page }) => {
   await expect(page.locator('#munBarraRevision')).toBeHidden();
   await expect(page.locator('#panelSIS06P')).toBeHidden();
   await expect(page.locator('#munConcComparativo')).toContainText('C.S. Gamma');   // la única que aún tiene diferencia
+  // Tres fases en orden, cada archivo con su botón de descarga en la misma pantalla
+  await expect(page.locator('#panelMunConcentrado .mun-fase')).toHaveCount(3);
+  await expect(page.locator('#munVerifEstado')).toContainText('por revisar');
+  await expect(page.locator('#panelMunConcentrado [data-descarga]')).toHaveCount(3);
+  await expect(page.locator('#panelMunConcentrado [data-descarga="conc"]')).toBeEnabled();
+  await expect(page.locator('#panelMunConcentrado [data-descarga="csv"]')).toBeDisabled();   // faltan unidades por validar
+  await expect(page.locator('#munMovEstadoFase')).toContainText('Sin iniciar');
+  await expect(page.locator('#rutaMes .ruta-paso[aria-current="step"]')).toContainText('Concentrado');
+  if (process.env.GUARDAR_CAPTURAS) { await page.waitForTimeout(1200); await page.screenshot({ path: path.join(process.env.GUARDAR_CAPTURAS, 'paso3.png'), fullPage: true }); }
   await page.click('#munVerMovimiento');
   await expect(page.locator('#munMovBarra')).toBeVisible();
+  await expect(page.locator('#munMovBarra .mun-guia li')).toHaveCount(3);
+  await expect(page.locator('#munMovExcel')).toBeVisible();
+  if (process.env.GUARDAR_CAPTURAS) await page.screenshot({ path: path.join(process.env.GUARDAR_CAPTURAS, 'movimiento.png') });
   await page.click('#munVolverConcentrado');
   await expect(page.locator('#panelMunConcentrado')).toBeVisible();
+  // Teclado: los pasos de arriba responden a Enter
+  await page.locator('#rutaMes .ruta-paso[data-mpaso="1"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#munEnvios')).toBeVisible();
+  await page.locator('#rutaMes .ruta-paso[data-mpaso="3"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#panelMunConcentrado')).toBeVisible();
+  await expect(page.locator('#panelMunConcentrado h2')).toBeFocused();
 
   // --- Paso 4: entrega --------------------------------------------------------
   await page.click('#dockPasosMun .hoja-tab[data-mpaso="4"]');

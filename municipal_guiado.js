@@ -10,9 +10,12 @@
  *   2. Revisión     -- unidad por unidad: las 4 hojas de la unidad (SIS-06-P,
  *                      Movimiento, SIS-SS-CE-H, Influenza) con navegación
  *                      anterior/siguiente y "siguiente por validar".
- *   3. Concentrado  -- lo que se arma solo con las unidades (paloteo municipal,
- *                      seguimiento de biológico, recibido vs. requisición) y el
- *                      Movimiento del propio municipio.
+ *   3. Concentrado  -- tres tarjetas en orden: (1) verificar que cuadre
+ *                      (conciliación y recibido vs. requisición), (2) Movimiento
+ *                      de Biológico del propio municipio (BIOVAC: se captura a mano
+ *                      hasta septiembre 2026, desde octubre es la suma de las
+ *                      unidades) y (3) los archivos a descargar: Excel del concentrado
+ *                      (PALOTEO + SEGUIMIENTO + CSV), Excel BIOVAC y CSV oficial.
  *   4. Entrega      -- lista de verificación y CSV oficial para estadística.
  *
  * Las hojas viejas siguen siendo las de siempre (sus botones quedan ocultos y
@@ -40,7 +43,7 @@
   const ORDEN_EST = { ENVIADO: 0, SIN: 1, VALIDADO: 2 };
 
   const ES_HOSPITAL = { NHG: true, HENM: true };
-  const st = { activo: false, modo: 'municipal', todas: [], paso: 1, filas: [], filtro: 'todas', clues: null, muni: null, vista3: 'concentrado', hojaActual: 'btnSeccionSIS06P' };
+  const st = { activo: false, modo: 'municipal', todas: [], paso: 1, filas: [], filtro: 'todas', clues: null, muni: null, vista3: 'concentrado', hojaActual: 'btnSeccionSIS06P', tokenConc: 0, conc: null };
 
   function activo() { return st.activo; }
   function periodo() { return { mes: Number($('selMes').value), anio: Number($('selAnio').value) }; }
@@ -99,12 +102,13 @@
     if (!cont || !st.activo) return;
     const ps = estadoPasos();
     cont.innerHTML = `
-      <ol class="ruta-pasos">
+      <ol class="ruta-pasos" aria-label="Pasos del cierre del mes">
         ${PASOS.map((p, i) => {
           const e = ps[i];
           const cls = e.hecho ? 'hecho' : (e.alerta ? 'alerta' : (st.paso === p.n ? 'actual' : ''));
-          return `<li class="ruta-paso ${cls} mun-ruta-paso" data-mpaso="${p.n}" title="Ir al paso ${p.n}">
-            <span class="ruta-num">${e.hecho ? '<span class="material-symbols-rounded">check</span>' : (e.alerta ? '<span class="material-symbols-rounded">priority_high</span>' : p.n)}</span>
+          const estadoTxt = e.hecho ? 'completo' : (e.alerta ? 'requiere atención' : (st.paso === p.n ? 'paso actual' : 'pendiente'));
+          return `<li class="ruta-paso ${cls} mun-ruta-paso" data-mpaso="${p.n}" role="button" tabindex="0" ${st.paso === p.n ? 'aria-current="step"' : ''} aria-label="Paso ${p.n}, ${p.t}: ${esc(e.texto)} (${estadoTxt})" title="Ir al paso ${p.n}">
+            <span class="ruta-num" aria-hidden="true">${e.hecho ? '<span class="material-symbols-rounded">check</span>' : (e.alerta ? '<span class="material-symbols-rounded">priority_high</span>' : p.n)}</span>
             <span class="ruta-txt"><b>${p.t}</b><small>${esc(e.texto)}</small></span>
           </li>`;
         }).join('')}
@@ -159,6 +163,13 @@
     ent.style.display = 'none';
     antesDe.parentNode.insertBefore(ent, antesDe);
 
+    const vivo = document.createElement('div');
+    vivo.id = 'munVivo';
+    vivo.className = 'mun-sr';
+    vivo.setAttribute('role', 'status');
+    vivo.setAttribute('aria-live', 'polite');
+    document.body.appendChild(vivo);
+
     const env = document.createElement('div');
     env.id = 'munEnvios';
     $('seguimientoVentana').parentNode.insertBefore(env, $('seguimientoVentana').nextSibling);
@@ -171,6 +182,7 @@
     cont.className = 'dock-hojas';
     cont.id = 'dockPasosMun';
     cont.setAttribute('role', 'tablist');
+    cont.setAttribute('aria-label', 'Pasos del cierre del mes');
     cont.innerHTML = '<span class="hoja-tinta" aria-hidden="true"></span>' + PASOS.map((p) => `
       <button type="button" class="hoja-tab" data-mpaso="${p.n}" role="tab" style="--hoja:${p.color};" title="${p.titulo}">
         <span class="material-symbols-rounded">${p.icono}</span><span class="hoja-nombre">${p.n} · ${p.t}</span><span class="hoja-pildora" id="pildoraMun${p.n}"></span>
@@ -181,7 +193,11 @@
   }
 
   function marcarTabs() {
-    document.querySelectorAll('#dockPasosMun .hoja-tab').forEach((b) => b.classList.toggle('activo', Number(b.dataset.mpaso) === st.paso));
+    document.querySelectorAll('#dockPasosMun .hoja-tab').forEach((b) => {
+      const activo = Number(b.dataset.mpaso) === st.paso;
+      b.classList.toggle('activo', activo);
+      b.setAttribute('aria-selected', activo ? 'true' : 'false');
+    });
   }
 
   const ID_PANELES_PROPIOS = ['munBarraRevision', 'panelMunConcentrado', 'panelMunEntrega', 'munMovBarra'];
@@ -213,10 +229,12 @@
       ocultarHojasViejas();
       fijarUnidadLegacy('');
       $('panelMunConcentrado').style.display = 'block';
+      animarEntrada($('panelMunConcentrado'));
       pintarConcentrado();
     } else {
       ocultarHojasViejas();
       $('panelMunEntrega').style.display = 'block';
+      animarEntrada($('panelMunEntrega'));
       // La vista previa del CSV de la hoja vieja necesita una unidad del municipio elegido.
       const u = (estado.unidadesClues || []).find((x) => x.municipio === st.muni);
       if (u) $('selUnidadRevision').value = u.id;
@@ -226,7 +244,30 @@
     marcarTabs();
     pintarRuta();
     if (n !== 2) { despertarDock(); pintarDock(); }
-    if (!(opciones && opciones.sinScroll)) window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!(opciones && opciones.sinScroll)) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      anunciarPaso(n);
+    }
+  }
+
+  // Quien navega con teclado o lector de pantalla: el foco pasa al título del paso y se anuncia dónde quedó.
+  function anunciarPaso(n) {
+    const p = PASOS[n - 1];
+    const vivo = $('munVivo');
+    if (vivo) vivo.textContent = `Paso ${p.n} de ${PASOS.length}: ${p.t}`;
+    const destino = { 1: '#seguimientoTitulo', 2: '#munBarraRevision .mun-rev-unidad b', 3: '#panelMunConcentrado h2', 4: '#panelMunEntrega h2' }[n];
+    const el = destino && document.querySelector(destino);
+    if (!el) return;
+    el.setAttribute('tabindex', '-1');
+    el.focus({ preventScroll: true });
+  }
+
+  // Reinicia la animación de entrada de un panel (se omite con "reducir movimiento").
+  function animarEntrada(panel) {
+    if (!panel) return;
+    panel.classList.remove('mun-entra');
+    void panel.offsetWidth;
+    panel.classList.add('mun-entra');
   }
 
   // ------------------------------------------------------------ paso 1
@@ -281,10 +322,14 @@
     const chip = (k, txt) => `<button type="button" class="mun-chip ${st.filtro === k ? 'activo' : ''}" data-filtro="${k}">${txt}<b>${conteos[k]}</b></button>`;
 
     // Jurisdicción: aquí solo se revisan los hospitales; los municipios se consultan en el concentrado.
-    const otros = st.modo !== 'juris' ? '' : `
+    const otros = st.modo === 'juris' ? `
       <div class="mun-aviso"><span class="material-symbols-rounded">info</span>
-        <span>Aquí revisas y validas el SINBA-SIS de los <b>hospitales</b>. El Movimiento de los municipios y el de la jurisdicción están en el
-        <a href="biovac_jurisdiccion.html">Concentrado jurisdiccional</a>.</span></div>`;
+        <span><b>Tú validas a los hospitales</b> (Nuevo Hospital General y Hospital del Niño y la Mujer): ellos envían su SINBA-SIS y aquí lo revisas y lo validas.
+        Cada municipio valida a sus propias unidades. El Movimiento de los municipios y el de la jurisdicción están en el
+        <a href="biovac_jurisdiccion.html">Concentrado jurisdiccional</a>.</span></div>`
+      : `
+      <div class="mun-aviso"><span class="material-symbols-rounded">info</span>
+        <span><b>Tú validas a las unidades de tu municipio.</b> Los hospitales (NHG y HENM) no aparecen aquí: los valida la Jurisdicción.</span></div>`;
 
     cont.innerHTML = `${otros}
       <div class="mun-avance">
@@ -420,29 +465,232 @@
   function chipsMunicipio(accion) {
     const ms = municipios();
     if (ms.length < 2) return '';
-    return `<div class="mun-chips" style="margin:0 0 12px;">${ms.map((m) => `<button type="button" class="mun-chip ${st.muni === m ? 'activo' : ''}" data-${accion}="${esc(m)}">${esc(etiquetaMuni(m))}</button>`).join('')}</div>`;
+    return `<div class="mun-chips" style="margin:0 0 12px;" role="group" aria-label="Municipio">${ms.map((m) => `<button type="button" class="mun-chip ${st.muni === m ? 'activo' : ''}" aria-pressed="${st.muni === m}" data-${accion}="${esc(m)}">${esc(etiquetaMuni(m))}</button>`).join('')}</div>`;
+  }
+
+  // Unidad "pseudo" (JS1-...) que guarda el Movimiento del propio municipio.
+  function pseudoDe(muni) { return (estado.unidadesPseudo || []).find((u) => u.municipio === muni) || null; }
+  function esDerivado(u, mes, anio) { return typeof movimientoEsDerivado === 'function' && movimientoEsDerivado(u.id, anio, mes); }
+
+  // Estado del Movimiento (BIOVAC) del municipio: { u, derivado, mov }. Desde octubre 2026 es la suma de las unidades.
+  async function leerMovimientoMuni(muni, mes, anio) {
+    const u = pseudoDe(muni);
+    if (!u) return { u: null, derivado: false, mov: null };
+    if (esDerivado(u, mes, anio)) return { u, derivado: true, mov: null };
+    const { data, error } = await estado.db.from('biovac_movimientos').select('*').eq('unidad_id', u.id).eq('anio', anio).eq('mes', mes).maybeSingle();
+    if (error) throw error;
+    return { u, derivado: false, mov: data };
+  }
+
+  function bajarArchivo(blob, nombre) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // Excel BIOVAC (formato oficial de Movimiento de Biológico) del municipio, sin abrir la hoja.
+  async function descargarMovimientoBiovac(muni, mes, anio) {
+    try {
+      const info = await leerMovimientoMuni(muni, mes, anio);
+      if (info.derivado) { toast('Desde octubre el Movimiento del municipio se arma de sus unidades: cada unidad exporta el suyo.', 'error'); return false; }
+      if (!info.mov) { toast('Este mes todavía no tiene Movimiento del municipio: ábrelo y captúralo primero.', 'error'); return false; }
+      const resp = await fetch('./Formatos/biovac_plantilla.xlsx');
+      if (!resp.ok) throw new Error('No se pudo cargar la plantilla de Movimiento de Biológico.');
+      const unidad = (estado.unidades || []).find((x) => x.id === info.u.id) || info.u;
+      const buffer = await BiovacExportExcel.exportarExcel({ db: estado.db, unidad, movimiento: info.mov, plantillaBuffer: await resp.arrayBuffer() });
+      bajarArchivo(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `Movimiento_Biologico_${unidad.nombre}_${anio}-${String(mes).padStart(2, '0')}.xlsx`);
+      toast('Excel de Movimiento de Biológico (BIOVAC) generado.', 'ok');
+      return true;
+    } catch (err) { toast('No se pudo exportar el Movimiento: ' + (err.message || err), 'error'); return false; }
+  }
+
+  // Botón con "cargando": se bloquea, cambia el ícono por uno que gira y avisa al lector de pantalla.
+  async function conCarga(btn, tarea) {
+    if (!btn || btn.disabled) return;
+    const ico = btn.querySelector('.material-symbols-rounded');
+    const icoOriginal = ico && ico.textContent;
+    btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.classList.add('mun-cargando');
+    if (ico) ico.textContent = 'progress_activity';
+    try { return await tarea(); }
+    finally {
+      btn.disabled = false; btn.removeAttribute('aria-busy'); btn.classList.remove('mun-cargando');
+      if (ico) ico.textContent = icoOriginal;
+    }
+  }
+
+  const ESTADO_MOV = {
+    BORRADOR: { cls: 'pend', txt: 'Abierto · se guarda solo', icono: 'edit_note' },
+    EN_CORRECCION: { cls: 'aviso', txt: 'En corrección', icono: 'edit_note' },
+    CERRADO: { cls: 'ok', txt: 'Mes cerrado', icono: 'lock' }
+  };
+
+  function chipEstado(cls, txt, icono) {
+    return `<span class="mun-estado ${cls}"><span class="material-symbols-rounded" aria-hidden="true">${icono}</span>${esc(txt)}</span>`;
+  }
+
+  function filaArchivo(i, icono, color, titulo, detalle, boton) {
+    return `<li class="mun-archivo" style="--i:${i}">
+      <span class="mun-archivo-ico" style="--c:${color};" aria-hidden="true"><span class="material-symbols-rounded">${icono}</span></span>
+      <div class="mun-archivo-txt"><b>${titulo}</b><small>${detalle}</small></div>
+      ${boton}
+    </li>`;
   }
 
   function pintarConcentrado() {
     const panel = $('panelMunConcentrado');
     const { mes, anio } = periodo();
     const muni = st.muni;
+    const juris = st.modo === 'juris';
+    const nombre = etiquetaMuni(muni) || 'tu municipio';
+    const resu = resumen(filasDe(muni));
+    const listoCSV = resu.total > 0 && resu.validado === resu.total;
+    const token = ++st.tokenConc;
+    st.conc = null;
+    const pseudo = pseudoDe(muni);
+    const esManual = !juris && !!pseudo && !esDerivado(pseudo, mes, anio);
+
     panel.innerHTML = `
       <div class="mun-cab">
         <div class="mun-cab-icono" style="background:#f0fdf4; border-color:#bbf7d0;"><span class="material-symbols-rounded" style="color:#16a34a;">table_chart</span></div>
         <div style="flex:1; min-width:220px;">
-          <h2>Concentrado de ${esc(etiquetaMuni(muni) || 'tu municipio')}<button type="button" class="ayuda-btn" data-ayuda="mun_concentrado" title="Cómo leer el concentrado" aria-label="Cómo leer el concentrado"><span class="material-symbols-rounded">help</span></button></h2>
-          <p class="subtitulo">Lo que arman solas tus unidades, sin capturar nada aquí: revisa que todo cuadre antes de entregar.</p>
+          <h2>Concentrado de ${esc(nombre)} · ${nombreMes(mes)} ${anio}<button type="button" class="ayuda-btn" data-ayuda="mun_concentrado" title="Cómo leer el concentrado" aria-label="Cómo leer el concentrado"><span class="material-symbols-rounded">help</span></button></h2>
+          <p class="subtitulo">Tres cosas, en este orden: verifica que cuadre, deja listo el Movimiento del municipio y descarga tus archivos.</p>
         </div>
-        ${st.modo === 'juris'
-          ? '<a class="btn-secundario btn-mini" href="biovac_jurisdiccion.html" style="text-decoration:none;"><span class="material-symbols-rounded">query_stats</span> Concentrado jurisdiccional</a>'
-          : '<button type="button" class="btn-secundario btn-mini" id="munVerMovimiento"><span class="material-symbols-rounded">inventory_2</span> Movimiento del municipio</button>'}
       </div>
       ${chipsMunicipio('conc')}
-      <div id="munConcComparativo"></div>
-      <div id="munConcTablas"></div>`;
-    if (muni && window.SIS06PDashboard) window.SIS06PDashboard.renderComparativoAplicado($('munConcComparativo'), muni, mes, anio);
-    if (muni && window.SIS06PConcentradoMunicipal) window.SIS06PConcentradoMunicipal.render($('munConcTablas'), muni, mes, anio);
+      <ol class="mun-fases">
+        <li class="mun-fase" style="--i:0" id="munFaseVerif">
+          <div class="mun-fase-cab">
+            <span class="mun-fase-num" aria-hidden="true">1</span>
+            <div class="mun-fase-tit"><h3>Verifica que cuadre</h3><p>El paloteo de cada unidad contra lo que aplicó en su Movimiento, y lo recibido contra la requisición.</p></div>
+            <span id="munVerifEstado" aria-live="polite">${chipEstado('carga', 'Revisando…', 'hourglass_top')}</span>
+          </div>
+          <div class="mun-fase-cuerpo">
+            ${esManual ? `<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">info</span><span>${nombreMes(mes)}: las unidades todavía no capturan su propio Movimiento, así que cualquier diferencia que aparezca aquí puede venir de capturas de prueba. Revísalo antes de entregar.</span></p>` : ''}
+            <details class="mun-det" id="munDetConciliacion"><summary id="munSumConciliacion">Paloteo contra Movimiento, unidad por unidad</summary><div id="munConcComparativo" class="mun-det-cuerpo"></div></details>
+            <details class="mun-det" id="munDetRecibido"><summary>Recibido contra requisición</summary><div id="munConcRecibido" class="mun-det-cuerpo"></div></details>
+          </div>
+        </li>
+        <li class="mun-fase" style="--i:1" id="munFaseMov">
+          <div class="mun-fase-cab">
+            <span class="mun-fase-num" aria-hidden="true">2</span>
+            <div class="mun-fase-tit"><h3>Movimiento de Biológico del municipio (BIOVAC)</h3><p>Entradas, recibidos, aplicados, desechos y existencia final, por lote y caducidad, con ARF y canjes.</p></div>
+            <span id="munMovEstadoFase" aria-live="polite">${juris ? '' : chipEstado('carga', 'Consultando…', 'hourglass_top')}</span>
+          </div>
+          <div class="mun-fase-cuerpo" id="munMovCuerpo">
+            ${juris ? '<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">info</span><span>El Movimiento de los municipios y el de la jurisdicción se concentran en otra pantalla.</span></p><div class="mun-fase-acciones"><a class="btn-secundario btn-mini" href="biovac_jurisdiccion.html" style="text-decoration:none;"><span class="material-symbols-rounded">query_stats</span> Concentrado jurisdiccional</a></div>' : ''}
+          </div>
+        </li>
+        <li class="mun-fase" style="--i:2" id="munFaseArchivos">
+          <div class="mun-fase-cab">
+            <span class="mun-fase-num" aria-hidden="true">3</span>
+            <div class="mun-fase-tit"><h3>Descarga tus archivos</h3><p>Cada archivo se baja desde aquí; no hay que buscar el botón dentro de otra pantalla.</p></div>
+          </div>
+          <ul class="mun-archivos">
+            ${filaArchivo(0, 'table_chart', '#16a34a', 'Excel del concentrado municipal', 'Cuatro hojas: PALOTEO, SEGUIMIENTO DE BIOLÓGICO (acumulado por biológico, sin lotes, ARF ni canjes), CSV y Recibido vs. requisición.',
+              '<button type="button" class="btn-secundario btn-mini" data-descarga="conc" disabled aria-label="Descargar Excel del concentrado municipal"><span class="material-symbols-rounded">download</span> Descargar Excel</button>')}
+            ${juris ? '' : filaArchivo(1, 'inventory_2', '#d97706', 'Excel de Movimiento de Biológico (BIOVAC)', 'El formato por lote y caducidad, con entradas, recibidos, aplicados, desechos, existencia final, ARF y canjes.',
+              '<button type="button" class="btn-secundario btn-mini" data-descarga="mov" disabled aria-label="Descargar Excel de Movimiento de Biológico"><span class="material-symbols-rounded">download</span> Descargar Excel</button>')}
+            ${filaArchivo(2, 'description', '#7c3aed', 'CSV oficial para estadística', listoCSV ? 'Una fila por clave SIS de cada unidad validada.' : `Se habilita cuando todas las unidades estén validadas (${resu.validado} de ${resu.total}).`,
+              `<button type="button" class="btn-secundario btn-mini" data-descarga="csv" ${listoCSV ? '' : 'disabled'} aria-label="Descargar CSV oficial"><span class="material-symbols-rounded">download</span> Descargar CSV</button>`)}
+          </ul>
+        </li>
+      </ol>
+      <details class="mun-det mun-det-grande"><summary>Ver el concentrado en pantalla (paloteo y seguimiento de biológico)</summary><div id="munConcTablas" class="mun-det-cuerpo"></div></details>
+      <div class="mun-siguiente">
+        <span>Cuando todo cuadre y tengas tus archivos, sigue con la entrega.</span>
+        <button type="button" class="btn-primario" id="munIrEntrega">Continuar a Entrega <span class="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
+      </div>`;
+
+    const vigente = () => token === st.tokenConc && st.activo && st.paso === 3 && st.vista3 === 'concentrado';
+    const verif = { cmp: undefined, rec: undefined, recTotal: 0 };
+    const cerrarVerif = () => {
+      if (verif.cmp === undefined || verif.rec === undefined || !vigente()) return;
+      const dif = (verif.cmp ? verif.cmp.conDiferencia : 0) + verif.rec;
+      const nada = (!verif.cmp || verif.cmp.total === 0) && verif.recTotal === 0;
+      const caja = $('munVerifEstado'); if (!caja) return;
+      caja.innerHTML = nada ? chipEstado('info', 'Sin datos todavía', 'info')
+        : dif === 0 ? chipEstado('ok', 'Todo cuadra', 'check_circle')
+        : chipEstado('aviso', plural(dif, 'cosa por revisar', 'cosas por revisar'), 'error');
+    };
+
+    if (muni && window.SIS06PDashboard) {
+      Promise.resolve(window.SIS06PDashboard.renderComparativoAplicado($('munConcComparativo'), muni, mes, anio)).then((r) => {
+        if (!vigente()) return;
+        verif.cmp = r || { total: 0, conDiferencia: 0 };
+        const sum = $('munSumConciliacion');
+        if (sum && verif.cmp.conDiferencia) { sum.innerHTML = `Paloteo contra Movimiento, unidad por unidad <span class="mun-mini-pill aviso">${verif.cmp.conDiferencia} con diferencia</span>`; $('munDetConciliacion').open = true; }
+        cerrarVerif();
+      });
+    } else { verif.cmp = null; }
+
+    if (muni && window.SIS06PConcentradoMunicipal) {
+      window.SIS06PConcentradoMunicipal.render($('munConcTablas'), muni, mes, anio, { sinBoton: true, sinRecibido: true }).then((api) => {
+        if (!vigente()) return;
+        st.conc = api;
+        const rec = $('munConcRecibido');
+        if (rec) rec.innerHTML = api ? api.htmlRecibido() : '<div class="mun-vacio">No se pudo cargar.</div>';
+        verif.rec = api ? api.nDifRecibido : 0;
+        verif.recTotal = api ? api.d.requisicion.length : 0;
+        if (api && api.nDifRecibido > 0) $('munDetRecibido').open = true;
+        const b = panel.querySelector('[data-descarga="conc"]');
+        if (b && api) b.disabled = false;
+        cerrarVerif();
+      });
+    } else { verif.rec = 0; }
+
+    if (!juris) pintarFaseMovimiento(muni, mes, anio, esManual, vigente);
+  }
+
+  async function pintarFaseMovimiento(muni, mes, anio, esManual, vigente) {
+    let info;
+    try { info = await leerMovimientoMuni(muni, mes, anio); }
+    catch (err) {
+      if (vigente() && $('munMovEstadoFase')) $('munMovEstadoFase').innerHTML = chipEstado('aviso', 'No se pudo consultar', 'error');
+      return;
+    }
+    if (!vigente()) return;
+    const caja = $('munMovEstadoFase'), cuerpo = $('munMovCuerpo');
+    if (!caja || !cuerpo) return;
+    const abrir = (txt, primario) => `<button type="button" class="${primario ? 'btn-primario' : 'btn-secundario'} btn-mini" id="munVerMovimiento"><span class="material-symbols-rounded" aria-hidden="true">inventory_2</span> ${txt}</button>`;
+    if (!info.u) {
+      caja.innerHTML = chipEstado('info', 'Sin Movimiento propio', 'info');
+      cuerpo.innerHTML = '<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">info</span><span>Este municipio no tiene Movimiento propio: lo concentra la Jurisdicción.</span></p>';
+      return;
+    }
+    if (info.derivado) {
+      caja.innerHTML = chipEstado('ok', 'Se arma solo', 'auto_awesome');
+      cuerpo.innerHTML = '<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">auto_awesome</span><span>Desde octubre 2026 el Movimiento del municipio es la suma de sus unidades: no se captura ni se cierra aquí. Cada unidad exporta el suyo.</span></p>';
+      return;
+    }
+    const intro = esManual ? `<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span><span><b>${nombreMes(mes)} se captura a mano en el municipio</b>, porque las unidades todavía no capturan el suyo. Desde octubre se arma solo.</span></p>` : '';
+    if (!info.mov) {
+      caja.innerHTML = chipEstado('pend', 'Sin iniciar', 'radio_button_unchecked');
+      cuerpo.innerHTML = `${intro}<div class="mun-fase-acciones">${abrir('Iniciar y capturar', true)}</div>`;
+      return;
+    }
+    const e = ESTADO_MOV[info.mov.estado] || ESTADO_MOV.BORRADOR;
+    caja.innerHTML = chipEstado(e.cls, e.txt, e.icono);
+    const cerrado = info.mov.estado === 'CERRADO';
+    const ayuda = cerrado
+      ? 'El mes ya está cerrado: la existencia final pasó al mes siguiente. Para cambiar algo, ábrelo y usa «Corregir movimiento» (queda registrado).'
+      : 'Lo que captures se guarda solo al salir de cada celda. Cuando todo cuadre, usa <b>Cerrar mes</b> en la barra de abajo: termina el mes, lo bloquea y pasa la existencia final al mes siguiente.';
+    cuerpo.innerHTML = `${intro}<p class="mun-ayuda-mov">${ayuda}</p><div class="mun-fase-acciones">${abrir(cerrado ? 'Ver Movimiento' : 'Abrir y capturar', !cerrado)}</div>`;
+    const btn = document.querySelector('#panelMunConcentrado [data-descarga="mov"]');
+    if (btn) btn.disabled = false;
+  }
+
+  // Estado vivo del Movimiento dentro de su barra (cambia al cerrar, reabrir o corregir).
+  function estadoMovEnBarra() {
+    const chip = $('munMovEstado');
+    if (!chip) return;
+    const m = estado.movimiento;
+    if (!m) { chip.innerHTML = ''; return; }
+    const e = ESTADO_MOV[m.estado] || ESTADO_MOV.BORRADOR;
+    chip.innerHTML = chipEstado(e.cls, e.txt, e.icono);
+    document.querySelectorAll('#munMovBarra .mun-guia li').forEach((li) => li.classList.toggle('hecho', m.estado === 'CERRADO'));
   }
 
   async function verMovimiento() {
@@ -450,6 +698,9 @@
     st.vista3 = 'movimiento';
     ocultarPropios();
     fijarUnidadLegacy('');
+    // El Movimiento del municipio vive en la unidad "pseudo" de ESTE municipio (no en la que haya quedado elegida).
+    const pseudo = pseudoDe(st.muni);
+    if (pseudo && $('selUnidad')) $('selUnidad').value = pseudo.id;
     const barra = $('munMovBarra') || (() => {
       const b = document.createElement('div');
       b.id = 'munMovBarra';
@@ -457,9 +708,24 @@
       $('panelMunConcentrado').parentNode.insertBefore(b, $('panelMunConcentrado'));
       return b;
     })();
-    barra.innerHTML = '<button type="button" class="btn-secundario btn-mini" id="munVolverConcentrado"><span class="material-symbols-rounded">arrow_back</span> Volver al concentrado</button><span>Movimiento de Biológico del municipio: se concentra de lo que capturan tus unidades.</span>';
-    barra.style.display = 'flex';
+    barra.innerHTML = `
+      <div class="mun-mov-fila">
+        <button type="button" class="btn-secundario btn-mini" id="munVolverConcentrado"><span class="material-symbols-rounded" aria-hidden="true">arrow_back</span> Volver al concentrado</button>
+        <h2 class="mun-mov-tit" tabindex="-1">Movimiento de Biológico (BIOVAC) · ${esc(etiquetaMuni(st.muni) || '')}</h2>
+        <span id="munMovEstado" aria-live="polite"></span>
+        <button type="button" class="btn-secundario btn-mini" id="munMovExcel"><span class="material-symbols-rounded" aria-hidden="true">download</span> Descargar Excel</button>
+      </div>
+      <ol class="mun-guia">
+        <li><i aria-hidden="true">1</i><div><b>Captura</b><small>Cada celda se guarda sola al salir de ella. El botón Guardar de la barra de abajo es solo para confirmarlo.</small></div></li>
+        <li><i aria-hidden="true">2</i><div><b>Revisa</b><small>La existencia final debe cuadrar con el paloteo del concentrado.</small></div></li>
+        <li><i aria-hidden="true">3</i><div><b>Cerrar mes</b><small>Da el mes por terminado: lo bloquea y pasa la existencia final al mes siguiente. Se puede reabrir con un motivo.</small></div></li>
+      </ol>`;
+    barra.style.display = 'block';
+    animarEntrada(barra);
     $('btnSeccionMovimiento').click();
+    estadoMovEnBarra();
+    const foco = barra.querySelector('.mun-mov-tit'); if (foco) foco.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   // ------------------------------------------------------------ paso 4
@@ -511,12 +777,28 @@
   }
 
   // -------------------------------------------------------------- eventos
+  function descargar(btn) {
+    const { mes, anio } = periodo();
+    const tipo = btn.dataset.descarga;
+    if (tipo === 'conc') return conCarga(btn, () => (st.conc ? st.conc.descargar() : null));
+    if (tipo === 'mov') return conCarga(btn, () => descargarMovimientoBiovac(st.muni, mes, anio));
+    if (tipo === 'csv') return conCarga(btn, async () => window.SIS06PDashboard.exportarCSVOficialMunicipio(st.muni, mes, anio));
+  }
+
   function cablear() {
+    // Los pasos de arriba son botones: también responden a Enter y Espacio.
+    document.addEventListener('keydown', (ev) => {
+      if (!st.activo || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+      const paso = ev.target.closest && ev.target.closest('.mun-ruta-paso');
+      if (paso) { ev.preventDefault(); irAPaso(Number(paso.dataset.mpaso)); }
+    });
     document.addEventListener('click', (ev) => {
       if (!st.activo) return;
       const t = ev.target;
       const tab = t.closest('[data-mpaso]');
       if (tab) { irAPaso(Number(tab.dataset.mpaso)); return; }
+      const dl = t.closest('[data-descarga]');
+      if (dl) { descargar(dl); return; }
       const punto = t.closest('.pt[data-clues]');
       if (punto) { revisar(punto.dataset.clues); return; }
       const unidad = t.closest('.mun-unidad');
@@ -536,6 +818,8 @@
       else if (t.closest('#munCtaConcentrado')) irAPaso(3);
       else if (t.closest('#munVerMovimiento')) verMovimiento();
       else if (t.closest('#munVolverConcentrado')) irAPaso(3);
+      else if (t.closest('#munIrEntrega')) irAPaso(4);
+      else if (t.closest('#munMovExcel')) { const { mes, anio } = periodo(); conCarga(t.closest('#munMovExcel'), () => descargarMovimientoBiovac(st.muni, mes, anio)); }
       else if (t.closest('#munIrPendientes')) { st.filtro = 'ENVIADO'; irAPaso(1); }
       else if (t.closest('#munDescargarCSV')) window.SIS06PDashboard.exportarCSVOficialMunicipio(st.muni, periodo().mes, periodo().anio);
       else if (t.closest('#munPublicar')) {
@@ -553,6 +837,10 @@
       const b = $(h.id); if (b) observador.observe(b, { attributes: true, attributeFilter: ['class'] });
       const p = $(h.pildora); if (p) observador.observe(p, { attributes: true, childList: true, characterData: true, subtree: true });
     });
+    // El estado del Movimiento (abierto / cerrado / en corrección) se refleja en su barra cuando la hoja lo cambia.
+    const obsMov = new MutationObserver(() => { if (st.activo && st.vista3 === 'movimiento') estadoMovEnBarra(); });
+    ['btnCerrarMes', 'btnAbrirCorreccion', 'btnAplicarCorreccion'].forEach((id) => { const b = $(id); if (b) obsMov.observe(b, { attributes: true, attributeFilter: ['style'] }); });
+    const bannerMov = $('bannerMovimiento'); if (bannerMov) obsMov.observe(bannerMov, { childList: true });
     document.addEventListener('sis06p:validado', () => { if (st.activo) alValidar(); });
     // La publicación automática termina después de la validación: repinta el estado en el paso de entrega.
     document.addEventListener('sis06p:publicado', (ev) => {

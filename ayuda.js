@@ -325,13 +325,15 @@
     },
     mun_concentrado: {
       titulo: 'Paso 3 · Concentrado del municipio',
-      subtitulo: 'Se arma solo con lo que capturan las unidades: aquí no se captura nada.',
+      subtitulo: 'Tres cosas, en orden: verificar, dejar listo el Movimiento del municipio y descargar tus archivos.',
       bloques: [
-        T('Qué encuentras'),
-        I('compare_arrows', '#d97706', 'Conciliación', 'Solo aparecen las unidades donde el paloteo y el Movimiento no coinciden, con los biológicos que difieren.'),
-        I('local_shipping', '#0284c7', 'Recibido: requisición vs. unidades', 'Lo que la Jurisdicción repartió al municipio debe ser igual a lo que las unidades capturaron como recibido. Es informativo: no bloquea.'),
-        I('table_chart', '#16a34a', 'Paloteo y seguimiento de biológico', 'Una columna por unidad y el total del municipio. Puedes descargar todo en un Excel.'),
-        I('inventory_2', '#7c3aed', 'Movimiento del municipio', 'El botón de arriba abre el Movimiento del propio municipio; desde octubre ya no se captura, es la suma de las unidades.'),
+        T('Las tres tarjetas'),
+        P(1, 'Verifica que cuadre', 'Paloteo contra Movimiento, unidad por unidad (solo aparecen las que difieren), y lo recibido contra la requisición. La requisición es informativa: no bloquea.'),
+        P(2, 'Movimiento de Biológico (BIOVAC)', 'El Movimiento del propio municipio, por lote y caducidad. Hasta septiembre 2026 se captura a mano aquí; desde octubre es la suma de las unidades y se arma solo.'),
+        P(3, 'Descarga tus archivos', 'Excel del concentrado (PALOTEO, SEGUIMIENTO DE BIOLÓGICO, CSV y recibido vs. requisición), Excel BIOVAC y CSV oficial: cada uno con su botón en la misma tarjeta.'),
+        T('Guardar y cerrar el mes (Movimiento)'),
+        I('save', '#0284c7', 'Guardar', 'Cada celda se guarda sola al salir de ella. El botón Guardar solo lo confirma.'),
+        I('lock', '#7c3aed', 'Cerrar mes', 'Da el mes por terminado: lo bloquea y pasa la existencia final al mes siguiente. Si hay que cambiar algo, se reabre con un motivo y el cambio se recalcula en los meses siguientes.'),
         N('El municipio nunca se queda con vacuna: si algo no coincide con la requisición, revisa el recibido de la unidad.')
       ]
     },
