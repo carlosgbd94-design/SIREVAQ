@@ -2967,7 +2967,7 @@ async function exportarExcel() {
   btn.disabled = true; btn.title = 'Generando…'; btn.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span>';
   try {
     const unidad = estado.unidades.find((u) => u.id === estado.movimiento.unidad_id);
-    const resp = await fetch('biovac_plantilla.xlsx');
+    const resp = await fetch('./Formatos/biovac_plantilla.xlsx');
     const plantillaBuffer = await resp.arrayBuffer();
     const buffer = await BiovacExportExcel.exportarExcel({ db: estado.db, unidad, movimiento: estado.movimiento, plantillaBuffer });
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

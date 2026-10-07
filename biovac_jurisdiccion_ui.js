@@ -1136,7 +1136,7 @@ async function exportarExcelJurisdiccional() {
   const htmlOriginal = btn.innerHTML;
   btn.disabled = true; btn.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span>';
   try {
-    const resp = await fetch('biovac_plantilla.xlsx');
+    const resp = await fetch('./Formatos/biovac_plantilla.xlsx');
     const plantillaBuffer = await resp.arrayBuffer();
     const buffer = await BiovacExportExcel.exportarExcelJurisdiccional({
       db: estado.db, jurisdiccion, anio, mes, responsable: usuario, plantillaBuffer

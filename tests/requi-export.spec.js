@@ -11,7 +11,7 @@ const { generar } = require('../requisiciones_export_excel.js');
 const CODIGOS = ['6508', '148', '150', '6135', '2526', '6187', '3800', '3801', '3805', '3808', '3810',
   '6056', '3820', '3821', '6317', '3832', '6501', '2', '6502', '6506', '6509'];
 const catalogo = CODIGOS.map((c, i) => ({ id: 'b' + c, orden: i + 1, nombre: 'V' + c, clave_articulo: 'CL-' + c, codigo_articulo: c }));
-const plantillaBuffer = fs.readFileSync(path.join(__dirname, '..', 'requisiciones_plantilla.xlsx'));
+const plantillaBuffer = fs.readFileSync(path.join(__dirname, '..', 'Formatos', 'requisiciones_plantilla.xlsx'));
 const base = {
   plantillaBuffer, catalogo,
   encabezado: { destinoNombre: 'C.S JURICA', destinoDireccion: 'Privada Lirios S/N', mesLabel: 'OCTUBRE' },

@@ -2787,7 +2787,7 @@ function renderPaso3() {
 
 async function obtenerPlantillaBuffer() {
   if (!estado.plantillaBuffer) {
-    const resp = await fetch('requisiciones_plantilla.xlsx', { cache: 'no-cache' });
+    const resp = await fetch('./Formatos/requisiciones_plantilla.xlsx', { cache: 'no-cache' });
     estado.plantillaBuffer = await resp.arrayBuffer();
   }
   return estado.plantillaBuffer;

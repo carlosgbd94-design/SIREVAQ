@@ -72,6 +72,22 @@
     ]);
     [uRes, vRes, cRes, sRes, rRes].forEach((r) => { if (r.error) throw r.error; });
 
+    // Influenza (renglones BIE.. del PALOTEO): suma de las semanas cuyo viernes cae en el mes, como en el CSV municipal
+    const influenza = new Map();
+    const lista = (uRes.data || []).map((u) => u.clues);
+    if (lista.length) {
+      const iniMes = `${anio}-${String(mes).padStart(2, '0')}-01`;
+      const sigMes = Number(mes) === 12 ? 1 : Number(mes) + 1;
+      const finMes = `${Number(mes) === 12 ? Number(anio) + 1 : Number(anio)}-${String(sigMes).padStart(2, '0')}-01`;
+      const iRes = await estado.db.from('influenza_capturas').select('clues, fecha, valores').in('clues', lista).gte('fecha', iniMes).lt('fecha', finMes);
+      if (iRes.error) console.error('[SIS-06-P] No se pudo cargar Influenza para el concentrado municipal:', iRes.error);
+      (iRes.data || []).forEach((c) => {
+        const acum = influenza.get(c.clues) || {};
+        Object.entries(c.valores || {}).forEach(([rubro, val]) => { acum[rubro] = (acum[rubro] || 0) + num(val); });
+        influenza.set(c.clues, acum);
+      });
+    }
+
     const capturaPorClues = new Map((cRes.data || []).map((c) => [c.clues, c]));
     const segPorClave = new Map(); // `${clues}|${biovac_clave}` -> fila
     const movEstado = new Map();
@@ -84,7 +100,7 @@
     catalogo.forEach((b) => { if (!ordenados.includes(b)) ordenados.push(b); });
 
     return {
-      unidades: uRes.data || [], variables: vRes.data || [], capturaPorClues, segPorClave, movEstado,
+      unidades: uRes.data || [], variables: vRes.data || [], capturaPorClues, segPorClave, movEstado, influenza,
       biologicos: ordenados, requisicion: rRes.data || [], municipio, mes, anio
     };
   }
@@ -207,110 +223,295 @@
   }
 
   // ---- Excel ----------------------------------------------------------------
+  //
+  // El Excel se arma SOBRE la plantilla real del municipio ("SIS QUERETARO <MES>.xlsx", hojas PALOTEO y
+  // SEGUIMIENTO DE BIOLOGICO), recortada por build-concentrado-municipal-plantilla.js en
+  // Formatos/concentrado_municipal_plantilla.xlsx. Mapeo (verificado celda por celda contra agosto 2026):
+  //
+  //  PALOTEO (A1:AU443)
+  //    - A1:G1 mes, H1 año (formato aaaa), A3:H3 "MUNICIPIO <X>"; fila 3 nombre de la unidad (vertical) y fila 4 CLUES.
+  //    - Columnas I..AT = 38 unidades en orden de CLUES; AU = "Total Municipal" (=SUM de la fila).
+  //    - Cada renglón de datos (5..442) se identifica por la CLAVE de la columna C (VBC01, VBF51, VBI51, BIE01...):
+  //      TOTAL = clave_general, MIGRANTES = clave_migrante, AFROMEXICANOS = clave_afro, INDÍGENAS = clave_indigena
+  //      del catálogo sis_variables; las BIE.. (filas 397-442) son Influenza (suma de las semanas del mes).
+  //    - Las filas "TOTAL <biológico>" son fórmulas: suma de los renglones TOTAL de su bloque.
+  //    - Fila 443: suma de Influenza (no entra al área de impresión, que termina en la 396).
+  //  SEGUIMIENTO DE BIOLOGICO (A1:AP97)
+  //    - Fila 2 nombre de la unidad; B..AM = 38 unidades, AN = Total, AO:AP = VALIDACIÓN (Seguimiento vs PALOTEO).
+  //    - 5 bloques de 18 biológicos (mismo orden que ORDEN_BIOLOGICOS): existencia anterior (4-21), recibido (23-40),
+  //      aplicado (42-59), desperdicio (61-78) y existencia al corte (80-97, FÓRMULA: ((ant+rec)*dosis-(apl+des))/dosis).
+  //    - VALIDACIÓN (AO42:AO59) = total del PALOTEO de ese biológico; verde si coincide con el aplicado, rojo si no.
+  // Con menos (o más) de 38 unidades se quitan (o se agregan) columnas de unidades y se corren Total/VALIDACIÓN.
 
-  async function descargarExcel(d) {
-    const mesNombre = (typeof MESES !== 'undefined' ? (MESES.find((m) => m.v === Number(d.mes)) || {}).l : '') || String(d.mes);
-    const wb = new ExcelJS.Workbook();
-    const negrita = { bold: true };
-    const relleno = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-    const colLetra = (n) => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+  const PLANTILLA_URL = './Formatos/concentrado_municipal_plantilla.xlsx';
+  const MESES_MAYUS = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+  const PAL = { hoja: 'PALOTEO', colIni: 9, colFin: 46, filaNombre: 3, filaClues: 4, filaIni: 5, filaFin: 442, filaTotal: 443, ultimaFila: 443, filaImpresion: 396 };
+  const SEG = { hoja: 'SEGUIMIENTO DE BIOLOGICO', colIni: 2, colFin: 39, ultimaFila: 97, nBios: 18, ant: 4, rec: 23, apl: 42, des: 61, corte: 80, validacion: [42, 59] };
 
-    // PALOTEO
-    const wp = wb.addWorksheet('PALOTEO');
-    wp.getCell('A1').value = `MUNICIPIO ${d.municipio} -- ${mesNombre.toUpperCase()} ${d.anio}`;
-    wp.getCell('A1').font = { bold: true, size: 13 };
-    const cabP = ['Biológico', 'Clave', 'Variable', 'Grupo / dosis'];
-    const cIni = cabP.length + 1;
-    const cFin = cIni + d.unidades.length - 1;
-    cabP.forEach((t, i) => { const c = wp.getCell(4, i + 1); c.value = t; c.font = negrita; c.fill = relleno; });
-    d.unidades.forEach((u, i) => {
-      wp.getCell(3, cIni + i).value = u.nombre;
-      const c = wp.getCell(4, cIni + i); c.value = u.clues; c.font = negrita; c.fill = relleno;
-      wp.getCell(3, cIni + i).font = negrita;
+  const colLetra = (n) => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+  const colNumero = (L) => L.split('').reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0);
+  const redondear = (v) => Math.round(num(v) * 100) / 100;
+  const clonarEstilo = (st) => JSON.parse(JSON.stringify(st || {}));
+  const textoCelda = (v) => (v && v.richText ? v.richText.map((t) => t.text).join('') : (v == null ? '' : String(v))).replace(/\s+/g, ' ').trim();
+  // Cambia las referencias de columna `desde` por `hacia` en una fórmula (SUM(I5:I9) -> SUM(J5:J9))
+  const trasladarFormula = (f, desde, hacia) => String(f).replace(new RegExp(`\\b${desde}(\\d+)\\b`, 'g'), `${hacia}$1`);
+
+  // Quita (o agrega) columnas de unidades dejando intactos el primer y el último estilo de la tabla, y
+  // rehace las combinaciones de celdas que cruzan o quedan a la derecha de lo que se mueve.
+  function ajustarColumnas(ws, colIni, colFin, n) {
+    const cap = colFin - colIni + 1;
+    if (n === cap) return;
+    const re = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/;
+    const pendientes = [];
+    ws.model.merges.slice().forEach((m) => {
+      const x = re.exec(m); if (!x) return;
+      let c1 = colNumero(x[1]); let c2 = colNumero(x[3]);
+      const r1 = x[2]; const r2 = x[4];
+      let cambia = false;
+      if (n < cap) {
+        const quitadas = cap - n; const finQuitadas = colIni + quitadas;
+        if (c1 > finQuitadas) { c1 -= quitadas; c2 -= quitadas; cambia = true; } else if (c2 > finQuitadas) { c2 -= quitadas; cambia = true; }
+      } else {
+        const extra = n - cap;
+        if (c1 >= colFin) { c1 += extra; c2 += extra; cambia = true; } else if (c2 >= colFin) { c2 += extra; cambia = true; }
+      }
+      if (cambia) { ws.unMergeCells(m); pendientes.push(`${colLetra(c1)}${r1}:${colLetra(c2)}${r2}`); }
     });
-    const cTot = cFin + 1;
-    wp.getCell(3, cTot).value = 'Total Municipal'; wp.getCell(3, cTot).font = negrita;
-    const ct = wp.getCell(4, cTot); ct.value = 'Total Municipal'; ct.font = negrita; ct.fill = relleno;
+    if (n < cap) {
+      ws.spliceColumns(colIni + 1, cap - n);
+    } else {
+      const extra = n - cap;
+      const molde = colFin - 1; // una columna intermedia de la plantilla
+      const ancho = ws.getColumn(molde).width;
+      const filas = [];
+      ws.eachRow({ includeEmpty: true }, (row, r) => filas.push(r));
+      ws.spliceColumns(colFin, 0, ...Array.from({ length: extra }, () => []));
+      for (let k = 0; k < extra; k++) {
+        const c = colFin + k;
+        filas.forEach((r) => { ws.getCell(r, c).style = clonarEstilo(ws.getCell(r, molde).style); });
+        ws.getColumn(c).width = ancho;
+      }
+    }
+    pendientes.forEach((rango) => ws.mergeCellsWithoutStyle(rango));
+  }
 
-    let fila = 5;
-    const biologicosVar = [];
-    d.variables.forEach((v) => { if (!biologicosVar.includes(v.biologico)) biologicosVar.push(v.biologico); });
-    biologicosVar.forEach((bio) => {
-      const vars = d.variables.filter((v) => v.biologico === bio);
-      const filasTotales = [];
-      TIPOS_CLAVE.forEach((tc) => {
-        vars.forEach((v) => {
-          if (!v[tc.campo]) return;
-          wp.getCell(fila, 1).value = limpiar(bio);
-          wp.getCell(fila, 2).value = v[tc.campo];
-          wp.getCell(fila, 3).value = tc.tipo;
-          wp.getCell(fila, 4).value = limpiar([v.grupo_poblacional, v.dosis !== v.grupo_poblacional ? v.dosis : '', v.edad].filter(Boolean).join(' · '));
-          let suma = 0;
-          d.unidades.forEach((u, i) => {
-            const x = valorPaloteo(d, u.clues, v, tc.sub);
-            if (x === null) return;
-            suma += x;
-            if (tc.sub === 'total' || x > 0) wp.getCell(fila, cIni + i).value = x;
-          });
-          wp.getCell(fila, cTot).value = d.unidades.length
-            ? { formula: `SUM(${colLetra(cIni)}${fila}:${colLetra(cFin)}${fila})`, result: suma } : suma;
-          if (tc.sub === 'total') filasTotales.push({ fila, suma });
-          fila += 1;
-        });
+  // Resultado de una fórmula simple de la plantilla (SUM de un rango, suma/resta de celdas, / y *) para dejar
+  // el valor ya calculado en el archivo; Excel igual recalcula todo al abrirlo (fullCalcOnLoad).
+  function evaluar(formula, leer) {
+    try {
+      let f = String(formula).replace(/\$/g, '');
+      f = f.replace(/SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (_, c1, r1, c2, r2) => {
+        let s = 0;
+        for (let c = colNumero(c1); c <= colNumero(c2); c++) for (let r = Number(r1); r <= Number(r2); r++) s += leer(colLetra(c), r);
+        return `(${s})`;
       });
-      if (filasTotales.length) {
-        wp.getCell(fila, 1).value = `TOTAL ${limpiar(bio)}`;
-        wp.getCell(fila, 1).font = negrita;
-        d.unidades.forEach((u, i) => {
-          const col = colLetra(cIni + i);
-          const res = filasTotales.reduce((a, f) => a + num(wp.getCell(f.fila, cIni + i).value), 0);
-          wp.getCell(fila, cIni + i).value = { formula: filasTotales.map((f) => `${col}${f.fila}`).join('+'), result: res };
-          wp.getCell(fila, cIni + i).font = negrita;
-        });
-        const sumaBio = filasTotales.reduce((a, f) => a + f.suma, 0);
-        wp.getCell(fila, cTot).value = { formula: `SUM(${colLetra(cIni)}${fila}:${colLetra(cFin)}${fila})`, result: sumaBio };
-        wp.getCell(fila, cTot).font = negrita;
-        fila += 1;
+      f = f.replace(/\b([A-Z]{1,3})(\d+)\b/g, (_, c, r) => `(${leer(c, Number(r))})`);
+      if (!/^[\d.+\-*/() eE]+$/.test(f)) return undefined;
+      const v = Function(`"use strict"; return (${f});`)();
+      return Number.isFinite(v) ? redondear(v) : undefined;
+    } catch (e) { return undefined; }
+  }
+
+  // Escala de impresión del PALOTEO: que las filas visibles (las TOTAL; las de afro/indígena/migrante van
+  // agrupadas y ocultas) quepan en UNA hoja de alto y las columnas en 3 de ancho como máximo.
+  function escalaPaloteo(ws, cTot) {
+    const m = ws.pageSetup.margins || { left: 0.24, right: 0.24, top: 0.16, bottom: 0.16 };
+    const ancho = 612 - (m.left + m.right) * 72; const alto = 936 - (m.top + m.bottom) * 72; // oficio 8.5x13 in
+    let tw = 0; for (let c = 1; c <= cTot; c++) tw += ((ws.getColumn(c).width || 8.43) * 7 + 5) * 0.75;
+    let th = 0; for (let r = 1; r <= PAL.filaImpresion; r++) { const f = ws.getRow(r); if (!f.hidden) th += f.height || 15; }
+    return Math.max(10, Math.floor(Math.min(1, 3 * ancho / tw, alto / th) * 100 * 0.94));
+  }
+
+  function llenarPaloteo(ws, d) {
+    const n = d.unidades.length;
+    // Lo que trae la plantilla antes de moverla
+    const nombresPlantilla = new Map();
+    for (let c = PAL.colIni; c <= PAL.colFin; c++) {
+      const clues = textoCelda(ws.getCell(PAL.filaClues, c).value);
+      if (clues) nombresPlantilla.set(clues, textoCelda(ws.getCell(PAL.filaNombre, c).value));
+    }
+    const formulasFila = new Map(); // fila -> fórmula de la columna I (subtotales por biológico y suma de Influenza)
+    for (let r = PAL.filaIni; r <= PAL.filaTotal; r++) {
+      const v = ws.getCell(r, PAL.colIni).value;
+      if (v && typeof v === 'object' && v.formula) formulasFila.set(r, v.formula);
+    }
+
+    ajustarColumnas(ws, PAL.colIni, PAL.colFin, n);
+    const cIni = PAL.colIni; const cFin = cIni + n - 1; const cTot = cFin + 1;
+    const LT = colLetra(cTot); const LF = colLetra(cFin);
+
+    ws.getCell(1, 1).value = MESES_MAYUS[Number(d.mes) - 1] || String(d.mes);
+    ws.getCell(1, 8).value = new Date(Date.UTC(Number(d.anio), Number(d.mes), 0));
+    ws.getCell(3, 1).value = `MUNICIPIO ${d.municipio}`;
+    d.unidades.forEach((u, i) => {
+      ws.getCell(PAL.filaNombre, cIni + i).value = nombresPlantilla.get(u.clues) || limpiar(u.nombre).toUpperCase();
+      ws.getCell(PAL.filaClues, cIni + i).value = u.clues;
+    });
+    ws.getCell(PAL.filaNombre, cTot).value = 'Total Municipal';
+
+    // clave -> { v, sub } del catálogo y clave -> rubro de Influenza
+    const porClave = new Map();
+    d.variables.forEach((v) => TIPOS_CLAVE.forEach((tc) => { if (v[tc.campo]) porClave.set(String(v[tc.campo]).trim(), { v, sub: tc.sub }); }));
+    const inf = window.SIS06PBiovac && window.SIS06PBiovac.INFLUENZA_SIS_MAPPING ? window.SIS06PBiovac.INFLUENZA_SIS_MAPPING : {};
+    const rubroDeClave = new Map(Object.entries(inf).map(([rubro, clave]) => [String(clave), rubro]));
+
+    const valores = new Map(); // `${col}|${fila}` -> número (para los resultados de las fórmulas)
+    const leer = (L, r) => valores.get(`${L}|${r}`) || 0;
+    const usadas = new Set();
+    const escribirFilaDatos = (r) => {
+      const clave = textoCelda(ws.getCell(r, 3).value);
+      if (!clave) return;
+      const dato = porClave.get(clave);
+      const rubro = rubroDeClave.get(clave);
+      if (dato) usadas.add(clave);
+      d.unidades.forEach((u, i) => {
+        let x = 0;
+        if (dato) { const val = valorPaloteo(d, u.clues, dato.v, dato.sub); x = val === null ? 0 : val; }
+        else if (rubro) { x = num((d.influenza.get(u.clues) || {})[rubro]); }
+        if (!x) return;
+        ws.getCell(r, cIni + i).value = x;
+        valores.set(`${colLetra(cIni + i)}|${r}`, x);
+      });
+    };
+    for (let r = PAL.filaIni; r <= PAL.filaFin; r++) if (!formulasFila.has(r)) escribirFilaDatos(r);
+
+    // Subtotales por biológico (fórmula de la plantilla, trasladada a cada unidad)
+    formulasFila.forEach((f, r) => {
+      for (let c = cIni; c <= cFin; c++) {
+        const L = colLetra(c);
+        const fx = trasladarFormula(f, 'I', L);
+        const res = evaluar(fx, leer);
+        ws.getCell(r, c).value = res === undefined ? { formula: fx } : { formula: fx, result: res };
+        if (res !== undefined) valores.set(`${L}|${r}`, res);
       }
     });
-    wp.getColumn(1).width = 34; wp.getColumn(2).width = 10; wp.getColumn(3).width = 15; wp.getColumn(4).width = 42;
-    for (let c = cIni; c <= cTot; c++) wp.getColumn(c).width = 13;
-    wp.views = [{ state: 'frozen', xSplit: 4, ySplit: 4 }];
+    // Total Municipal: suma de la fila; en la 443 la suma de Influenza
+    for (let r = PAL.filaIni; r <= PAL.filaFin; r++) {
+      let suma = 0; for (let c = cIni; c <= cFin; c++) suma += leer(colLetra(c), r);
+      ws.getCell(r, cTot).value = { formula: `SUM(I${r}:${LF}${r})`, result: redondear(suma) };
+      valores.set(`${LT}|${r}`, redondear(suma));
+    }
+    { let s = 0; for (let r = 397; r <= 442; r++) s += leer(LT, r); ws.getCell(PAL.filaTotal, cTot).value = { formula: `SUM(${LT}397:${LT}442)`, result: redondear(s) }; valores.set(`${LT}|${PAL.filaTotal}`, redondear(s)); }
 
-    // SEGUIMIENTO DE BIOLOGICO
-    const ws = wb.addWorksheet('SEGUIMIENTO DE BIOLOGICO');
-    ws.getCell('A1').value = `MUNICIPIO ${d.municipio} -- ${mesNombre.toUpperCase()} ${d.anio}`;
-    ws.getCell('A1').font = { bold: true, size: 13 };
-    const bios = biologicosConMovimiento(d);
-    let fs = 3;
-    BLOQUES.forEach((bl) => {
-      const t = ws.getCell(fs, 1); t.value = bl.titulo.toUpperCase(); t.font = negrita; t.fill = relleno;
-      d.unidades.forEach((u, i) => { const c = ws.getCell(fs, 2 + i); c.value = u.nombre; c.font = negrita; c.fill = relleno; });
-      const ctt = ws.getCell(fs, 2 + d.unidades.length); ctt.value = 'Total'; ctt.font = negrita; ctt.fill = relleno;
-      fs += 1;
-      bios.forEach((b) => {
-        ws.getCell(fs, 1).value = limpiar(b.nombre_excel || b.clave);
+    // Impresión: hasta 3 hojas de ancho y 1 de alto (escala calculada, como la plantilla de agosto). Cuando hay
+    // Influenza capturada, sus renglones (397-443) se imprimen APARTE: salto de página después de la 396 y los
+    // encabezados de unidad (filas 3:4) repetidos arriba. Sin Influenza el área de impresión termina en la 396.
+    let hayInfluenza = false;
+    valores.forEach((x, k) => { const f = Number(k.split('|')[1]); if (f >= 397 && f <= 442 && x > 0) hayInfluenza = true; });
+    ws.rowBreaks.length = 0;
+    if (hayInfluenza) ws.getRow(PAL.filaImpresion).addPageBreak();
+    const ultimaImpresion = hayInfluenza ? PAL.filaTotal : PAL.filaImpresion;
+    Object.assign(ws.pageSetup, {
+      paperSize: 14, orientation: 'portrait', fitToPage: false, scale: escalaPaloteo(ws, cTot),
+      printArea: `A1:${LT}${ultimaImpresion}`, printTitlesRow: `${PAL.filaNombre}:${PAL.filaClues}`
+    });
+    return { cTot, valores, hayInfluenza, nombres: nombresPlantilla, sinFila: Array.from(porClave.keys()).filter((k) => !usadas.has(k)) };
+  }
+
+  function llenarSeguimiento(ws, d, pal) {
+    const n = d.unidades.length;
+    const bios = d.biologicosOrden; // 18, mismo orden que la plantilla
+    const estilo = { a1: clonarEstilo(ws.getCell(1, 1).style), v1: clonarEstilo(ws.getCell(1, 22).style), z1: clonarEstilo(ws.getCell(1, 26).style) };
+    const corteF = []; for (let b = 0; b < SEG.nBios; b++) corteF.push(ws.getCell(SEG.corte + b, SEG.colIni).value.formula); // con columna B
+    const validF = []; for (let r = SEG.validacion[0]; r <= SEG.validacion[1]; r++) { const v = ws.getCell(r, SEG.colFin + 2).value; validF.push(v && v.formula ? v.formula : null); }
+
+    ajustarColumnas(ws, SEG.colIni, SEG.colFin, n);
+    const cIni = SEG.colIni; const cFin = cIni + n - 1; const cTot = cFin + 1; const cVal = cTot + 1; const ultima = cVal + 1;
+    const LF = colLetra(cFin);
+
+    // Columnas más anchas cuando hay pocas unidades (la plantilla las angosta para que quepan 38 en una hoja)
+    const anchoUnidad = n <= 12 ? 11 : (n <= 24 ? 7.5 : null);
+    if (anchoUnidad) for (let c = cIni; c <= cFin; c++) ws.getColumn(c).width = anchoUnidad;
+    ws.getColumn(cTot).width = 11;
+
+    // Fila 1: título, mes y año (se vuelven a combinar según el ancho real)
+    const t1 = Math.max(2, Math.floor(ultima * 0.5));
+    const m1 = Math.min(ultima - 1, t1 + Math.max(2, Math.floor(ultima * 0.12)));
+    const a1 = Math.min(ultima, m1 + Math.max(2, Math.floor(ultima * 0.07)));
+    ws.getCell(1, 1).style = clonarEstilo(estilo.a1); ws.getCell(1, t1 + 1).style = clonarEstilo(estilo.v1); ws.getCell(1, m1 + 1).style = clonarEstilo(estilo.z1);
+    ws.getCell(1, 1).value = `MUNICIPIO ${d.municipio}`;
+    ws.getCell(1, t1 + 1).value = MESES_MAYUS[Number(d.mes) - 1] || String(d.mes);
+    ws.getCell(1, m1 + 1).value = new Date(Date.UTC(Number(d.anio), Number(d.mes), 0));
+    [[1, t1], [t1 + 1, m1], [m1 + 1, a1], [a1 + 1, ultima]].forEach(([c1, c2]) => { if (c2 > c1) ws.mergeCellsWithoutStyle(1, c1, 1, c2); });
+
+    d.unidades.forEach((u, i) => {
+      // nombre corto de la plantilla cuando la CLUES es una de las que ya traía (el mismo que en PALOTEO)
+      ws.getCell(2, cIni + i).value = pal.nombres.get(u.clues) || limpiar(u.nombre).toUpperCase();
+    });
+    ws.getCell(2, cTot).value = 'Total';
+
+    const bloque = (base, campo, ceros) => {
+      bios.forEach((b, k) => {
+        const r = base + k;
         let suma = 0;
         d.unidades.forEach((u, i) => {
           const f = d.segPorClave.get(`${u.clues}|${b.clave}`);
-          if (!f) return;
-          const x = Math.round(num(f[bl.key]) * 100) / 100;
+          const x = f ? redondear(f[campo]) : 0;
           suma += x;
-          if (x !== 0) ws.getCell(fs, 2 + i).value = x;
+          if (x || ceros) ws.getCell(r, cIni + i).value = x;
         });
-        const sumaR = Math.round(suma * 100) / 100;
-        if (sumaR !== 0) ws.getCell(fs, 2 + d.unidades.length).value = d.unidades.length
-          ? { formula: `SUM(B${fs}:${colLetra(1 + d.unidades.length)}${fs})`, result: sumaR } : 0;
-        ws.getCell(fs, 2 + d.unidades.length).font = negrita;
-        fs += 1;
+        ws.getCell(r, cTot).value = { formula: `SUM(B${r}:${LF}${r})`, result: redondear(suma) };
       });
-      fs += 1;
-    });
-    ws.getColumn(1).width = 34;
-    for (let c = 2; c <= 2 + d.unidades.length; c++) ws.getColumn(c).width = 14;
-    ws.views = [{ state: 'frozen', xSplit: 1, ySplit: 0 }];
+    };
+    bloque(SEG.ant, 'existencia_anterior', true);
+    bloque(SEG.rec, 'recibido', false);
+    bloque(SEG.apl, 'aplicado', false);
+    bloque(SEG.des, 'desperdicio', false);
 
-    // RECIBIDO VS REQUISICIÓN
+    // Existencia al corte: fórmula de la plantilla por columna (incluida la de Total)
+    const valor = (L, r) => { const v = ws.getCell(r, colNumero(L)).value; return v && typeof v === 'object' ? num(v.result) : num(v); };
+    for (let k = 0; k < SEG.nBios; k++) {
+      const r = SEG.corte + k;
+      for (let c = cIni; c <= cTot; c++) {
+        const fx = trasladarFormula(corteF[k], 'B', colLetra(c));
+        const res = evaluar(fx, valor);
+        ws.getCell(r, c).value = res === undefined ? { formula: fx } : { formula: fx, result: res };
+      }
+    }
+
+    // VALIDACIÓN: total del PALOTEO de cada biológico (columna Total del PALOTEO)
+    const LTP = colLetra(pal.cTot);
+    validF.forEach((f, k) => {
+      if (!f) return;
+      const r = SEG.validacion[0] + k;
+      const fx = f.replace(/AU(\d+)/g, `${LTP}$1`);
+      const res = evaluar(fx.replace(/PALOTEO!/g, ''), (L, rr) => num(pal.valores.get(`${L}|${rr}`)));
+      ws.getCell(r, cVal).value = res === undefined ? { formula: fx } : { formula: fx, result: res };
+    });
+
+    // Formatos condicionales de la plantilla (rehechos con las columnas reales)
+    ws.conditionalFormattings = [];
+    const rojo = { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFA3A3' } };
+    ws.addConditionalFormatting({ ref: `B${SEG.corte}:${LF}${SEG.corte + 17}`, rules: [{ type: 'cellIs', operator: 'lessThan', formulae: ['0'], priority: 1, style: { fill: rojo, font: { bold: true, italic: true, color: { argb: 'FFC00000' } } } }] });
+    const fracc = { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFF2CC' } };
+    [SEG.corte, SEG.corte + 9, SEG.corte + 13].forEach((r, i) => ws.addConditionalFormatting({ ref: `B${r}:${LF}${r}`, rules: [{ type: 'expression', formulae: [`MOD(B${r},1)<>0`], priority: 2 + i, style: { fill: fracc, font: { bold: true, italic: true, color: { argb: 'FFC00000' } } } }] }));
+    const LV = colLetra(cVal); const LN = colLetra(cTot); const v0 = SEG.validacion[0];
+    ws.addConditionalFormatting({ ref: `${LV}${v0}:${LV}${SEG.validacion[1]}`, rules: [
+      { type: 'expression', formulae: [`${LN}${v0}=${LV}${v0}`], priority: 5, style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFE2EFDA' } }, font: { bold: true, italic: true, color: { argb: 'FF375623' } } } },
+      { type: 'expression', formulae: [`${LN}${v0}<>${LV}${v0}`], priority: 6, style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFE5E5' } }, font: { bold: true, italic: true, color: { argb: 'FFAC2F36' } } } }
+    ] });
+
+    Object.assign(ws.pageSetup, { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 1, printArea: `A1:${colLetra(ultima)}${SEG.ultimaFila}` });
+  }
+
+  async function descargarExcel(d) {
+    const resp = await fetch(PLANTILLA_URL);
+    if (!resp.ok) throw new Error('No se pudo cargar la plantilla del concentrado (Formatos/concentrado_municipal_plantilla.xlsx).');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await resp.arrayBuffer());
+    const wp = wb.getWorksheet(PAL.hoja); const ws = wb.getWorksheet(SEG.hoja);
+    if (!wp || !ws) throw new Error('La plantilla del concentrado no tiene las hojas PALOTEO y SEGUIMIENTO DE BIOLOGICO.');
+    if (d.unidades.length === 0) throw new Error('Este municipio no tiene unidades activas.');
+
+    // Biológicos en el orden de la plantilla (18 renglones fijos); los que no existan en el catálogo quedan en cero
+    d.biologicosOrden = ORDEN_BIOLOGICOS.map((clave) => d.biologicos.find((b) => b.clave === clave) || { clave });
+
+    const pal = llenarPaloteo(wp, d);
+    llenarSeguimiento(ws, d, pal);
+
+    // RECIBIDO VS REQUISICIÓN (hoja propia de la app: la plantilla de agosto no la trae)
+    const negrita = { bold: true };
+    const relleno = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
     const wr = wb.addWorksheet('RECIBIDO VS REQUISICION');
     ['Biológico', 'Lote', 'Caducidad requisición', 'Caducidad unidades', 'Requisición (frascos)', 'Suma unidades (frascos)', 'Coincide'].forEach((t, i) => {
       const c = wr.getCell(1, i + 1); c.value = t; c.font = negrita; c.fill = relleno;
@@ -324,6 +525,9 @@
     });
     [40, 16, 20, 20, 20, 22, 10].forEach((w, i) => { wr.getColumn(i + 1).width = w; });
 
+    wb.calcProperties = wb.calcProperties || {};
+    wb.calcProperties.fullCalcOnLoad = true;
+
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
@@ -331,6 +535,7 @@
     a.href = url; a.download = `Concentrado_SIS_${d.municipio}_${d.mes}_${d.anio}.xlsx`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    return { variablesSinFila: pal.sinFila };
   }
 
   // ---- Tarjeta ---------------------------------------------------------------
@@ -369,7 +574,11 @@
     `;
     const btn = cont.querySelector('[data-accion="excel"]');
     if (btn) btn.addEventListener('click', async () => {
-      try { await descargarExcel(d); toast('Excel del concentrado municipal generado.', 'ok'); }
+      try {
+        const r = await descargarExcel(d);
+        if (r && r.variablesSinFila && r.variablesSinFila.length) toast(`Excel generado, pero ${r.variablesSinFila.length} variable(s) del catálogo no existen en la plantilla y no se incluyeron: ${r.variablesSinFila.slice(0, 6).join(', ')}.`, 'error');
+        else toast('Excel del concentrado municipal generado.', 'ok');
+      }
       catch (err) { console.error('[SIS-06-P] Error generando el Excel del concentrado:', err); toast('No se pudo generar el Excel: ' + (err.message || err), 'error'); }
     });
   }

@@ -59,7 +59,7 @@ on conflict (pagina, orden) do nothing;
 --   * SPLIT_DOSE       -> aplicadas = aplicadas_a/2 + aplicadas_b (idem desechadas)
 --     antes de aplicar la fórmula de arriba. Verificado en Hepatitis B (x10)
 --     y COVID-19 Moderna (x5).
---   * COVID-19 Pfizer usa x10 en las filas normales; un lote de ARF/canje
+--   * COVID-19 Pfizer usa x6 (corregido 2026-10-07; antes x10); un lote de ARF/canje
 --     observado en el Excel usa x6 (probablemente presentación pediátrica)
 --     — por eso dosis_por_frasco es también override-able por LOTE
 --     (biovac_lotes.dosis_por_frasco_override), no solo por catálogo.
@@ -85,7 +85,7 @@ join (values
   ('REVERSO', 4, 'TD',             E'Td                   frasco                  multidosis', 1, 'MULTIDOSIS', 10, null, '2000-01-01', null),
   ('REVERSO', 5, 'TDPA',           E'TDPa\nfrasco unidosis',                            1, 'UNIDOSIS',    1, null,         '2000-01-01', null),
   ('REVERSO', 6, 'COVID_MODERNA',  E'COVID-19\nMODERNA',                                1, 'MULTIDOSIS',  5, 'SPLIT_DOSE', '2000-01-01', null),
-  ('REVERSO', 6, 'COVID_PFIZER',   E'COVID-19\nPFIZER',                                 2, 'MULTIDOSIS', 10, null,         '2000-01-01', null),
+  ('REVERSO', 6, 'COVID_PFIZER',   E'COVID-19\nPFIZER',                                 2, 'MULTIDOSIS', 6,  null,         '2000-01-01', null),
   ('REVERSO', 7, 'VARICELA',       'Varicela',                                          1, 'UNIDOSIS',    1, null,         '2000-01-01', null),
   ('REVERSO', 8, 'HEPA',           E'Hepatitis "A"',                                    1, 'UNIDOSIS',    1, null,         '2000-01-01', null),
   ('REVERSO', 9, 'VSR',            'VSR',                                               1, 'UNIDOSIS',    1, null,         '2026-05-01', null)

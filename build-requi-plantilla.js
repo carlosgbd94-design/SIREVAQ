@@ -8,8 +8,8 @@
 // los renglones quedan sin fórmulas 3D).
 const ExcelJS = require('exceljs');
 
-const ORIGEN = process.argv[2] || 'Municipio Querétaro (1).xlsx';
-const DESTINO = 'requisiciones_plantilla.xlsx';
+const ORIGEN = process.argv[2] || 'Formatos/Municipio Querétaro (1).xlsx';
+const DESTINO = 'Formatos/requisiciones_plantilla.xlsx';
 const PRIMERA = 14;          // primera fila de biológicos
 const DESPLAZA = 2;          // filas que baja el pie (21 biológicos en lugar de 20)
 const FIN_VIEJO = 87;        // última fila del formato anterior

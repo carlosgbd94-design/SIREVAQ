@@ -1849,6 +1849,18 @@
     ws.getCell('W3').value = String(mes).padStart(2, '0');
     ws.getCell('V3').value = diaCorte;
 
+    // El encabezado del reverso (fila 74) viene en la plantilla solo con "MIGRANTES" en la
+    // primera de las tres columnas, aunque los datos van en afro/indígena/migrante igual que
+    // en el anverso: se rotulan las tres con el estilo de la celda original.
+    const base74 = ws.getCell(74, COL_AFRO);
+    [[COL_AFRO, 'AFRO\nAMERICANOS'], [COL_INDIGENA, 'INDÍGENAS'], [COL_MIGRANTE, 'MIGRANTES']].forEach(([col, texto]) => {
+      const c = ws.getCell(74, col);
+      if (col !== COL_AFRO) c.style = JSON.parse(JSON.stringify(base74.style));
+      c.value = texto;
+      c.alignment = Object.assign({}, c.alignment, { horizontal: 'center', vertical: 'middle', wrapText: true });
+    });
+    if ((ws.getRow(74).height || 0) < 24) ws.getRow(74).height = 24;
+
     const valores = captura.valores || {};
     _sisVariablesCache.forEach((v) => {
       const val = valores[String(v.fila_excel)];
@@ -1936,7 +1948,7 @@
   }
 
   async function cargarPlantillaOficial() {
-    const resp = await fetch('SINBA-VER_26_2026.xlsx');
+    const resp = await fetch('./Formatos/SINBA-VER_26_2026.xlsx');
     if (!resp.ok) throw new Error('No se pudo cargar la plantilla oficial (SINBA-VER_26_2026.xlsx).');
     return resp.arrayBuffer();
   }

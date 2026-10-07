@@ -22,7 +22,7 @@ const texto = (c) => { const v = c.value; return v && v.richText ? v.richText.ma
 for (const [nombre, archivo, hoja] of [['municipio', 'biovac_plantilla.xlsx', 'SEP'], ['unidad (SINBA)', 'SINBA-VER_26_2026.xlsx', 'MOV-DE-BIOLÓGICO']]) {
   test(`Exportar Movimiento con la plantilla del ${nombre}: A.R.F. rosa, Canje morado, Total beige`, async () => {
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.readFile(path.join(raiz, archivo));
+    await wb.xlsx.readFile(path.join(raiz, 'Formatos', archivo));
     const ws = wb.getWorksheet(hoja);
     await E.construirWorkbookDesdeDatos({ ws, bloques, biologicos: bios, renglonesDb: filas, anio: 2026, mes: 9, datosHeader: { mesNombre: 'SEPTIEMBRE', dia: 30, anio: 2026, municipio: 'CORREGIDORA', responsable: 'X' } });
 

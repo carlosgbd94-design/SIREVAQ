@@ -77,7 +77,7 @@ create index if not exists idx_biovac_catalogo_bloque on biovac_catalogo_biologi
 --
 -- dosis_por_frasco_override: en la práctica, dentro de un mismo bloque
 -- (ej. COVID-19) distintos lotes pueden tener distinta dosis/frasco según
--- fabricante/presentación real (Moderna 5, Pfizer adulto 10, Pfizer
+-- fabricante/presentación real (Moderna 5, Pfizer 6; antes se creía Pfizer adulto 10 y Pfizer
 -- pediátrico 6 — verificado en el Excel real). Si es NULL se usa el
 -- default del catálogo.
 -- ---------------------------------------------------------------------------
