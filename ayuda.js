@@ -23,6 +23,80 @@
   const N = (texto) => ({ tipo: 'nota', texto });
 
   const CONTENIDO = {
+    // ----------------------------------------- Paneles de captura de la unidad (escritorio y móvil)
+    cap_sr: {
+      titulo: 'Existencia de biológicos',
+      subtitulo: 'Reporte semanal de lo que hay físicamente en tu unidad refrigerante.',
+      bloques: [
+        T('Cuándo y qué se reporta'),
+        I('event_available', '#1d4ed8', 'Una captura por semana', 'Se captura el jueves o el viernes. Una vez guardada, solo puedes modificarla con «Editar» mientras la ventana siga abierta.'),
+        I('ac_unit', '#0284c7', 'Solo lo que está en tu unidad refrigerante', 'Reporta existencias físicas. No incluyas biológicos en A.R.F. (en dictamen) ni canjes.'),
+        T('Cómo se captura'),
+        P(1, 'Escribe tu nombre', 'Queda registrado como responsable del conteo.'),
+        P(2, 'Agrega un renglón por lote', 'Elige el biológico y el lote (la caducidad aparece sola), la fecha de recepción, el origen (requisición, préstamo por desabasto o préstamo por A.R.F.) y la cantidad en frascos.'),
+        P(3, 'Agrega más lotes si hace falta', 'Con «Agregar otro lote o biológico». El ícono de documento con «+» duplica ese renglón para añadir otra fecha de recepción del mismo lote, y el bote de basura lo elimina.'),
+        P(4, 'Guarda', 'Con el botón Guardar de la barra flotante; el estatus junto a él te indica si el reporte ya quedó guardado.'),
+        T('Detalles que conviene conocer'),
+        I('science', '#d97706', 'Frascos con decimales', 'Si capturas un decimal en TD, DPT, Influenza o Hepatitis B, el sistema te pide la fecha de apertura del frasco: una vez abierto dura 28 días. BCG y SR quedan excluidas por el manual.'),
+        I('traffic', '#b45309', 'Semaforización de permanencia', 'Compara la fecha de recepción con hoy: ámbar cuando el lote lleva más de 2 meses en tu unidad y rojo cuando pasa de 3.'),
+        I('pause_circle', '#64748b', 'Sin movimiento', 'Aparece cuando ya tienes un reporte anterior. Al activarlo se replican los valores del último reporte con la fecha de hoy y la captura queda bloqueada. Úsalo solo si realmente no hubo cambios en la semana.'),
+        N('Si el panel aparece cerrado, el aviso superior te explica el motivo: día no habilitado o reporte ya guardado.')
+      ]
+    },
+    cap_cons: {
+      titulo: 'Insumos y consumibles',
+      subtitulo: 'Reporte semanal para el control de inventario de jeringas.',
+      bloques: [
+        T('Cuándo se reporta'),
+        I('event_available', '#0f766e', 'Cada jueves', 'El reporte se habilita los jueves. Si ese día no es laborable, o si administración abre una captura extraordinaria, el aviso superior lo indica.'),
+        T('Cómo se captura'),
+        P(1, 'Escribe tu nombre', 'Queda registrado como responsable de la captura.'),
+        P(2, 'Captura las cantidades', 'SRP y SR en dosis; jeringa 0.5 y jeringa 5.0 en piezas. Captura 0 donde no tengas.'),
+        P(3, 'Revisa la aguja', 'Se calcula sola y no se captura; solo verifica que corresponda a lo que tienes.'),
+        P(4, 'Guarda', 'Con el botón Guardar de la barra flotante. Después, «Editar» permite corregir mientras el reporte siga habilitado.'),
+        T('Si no hubo cambios'),
+        I('pause_circle', '#64748b', 'Sin movimiento', 'Cuando ya existe un reporte anterior puedes replicar sus valores con la fecha de hoy. Úsalo solo si realmente no hubo cambios en la semana.'),
+        N('El reporte es semanal y obligatorio: de él depende el control de inventario de jeringas de tu unidad.')
+      ]
+    },
+    cap_bio: {
+      titulo: 'Pedido de biológico',
+      subtitulo: 'Existencia actual y pedido por biológico, validados contra el promedio de tu unidad.',
+      bloques: [
+        T('Cuándo se captura'),
+        I('event_upcoming', '#4338ca', 'Pedido mensual', 'Se captura dentro de la ventana operativa del mes. La tarjeta superior muestra la fecha objetivo y el aviso de estatus indica el periodo exacto; fuera de él el panel queda cerrado.'),
+        I('add_alert', '#d97706', 'Pedido extraordinario', 'Si administración abre uno, es un pedido aparte del mensual (no lo reemplaza). Cuando hay más de uno abierto aparece un selector para elegir cuál capturas.'),
+        T('Cómo se captura'),
+        P(1, 'Escribe tu nombre', 'Queda registrado como quien captura el pedido.'),
+        P(2, 'Captura por biológico', 'Existencia: frascos que tienes hoy. Pedido: frascos que solicitas. Junto a cada uno ves el promedio mensual (en frascos) y el mínimo y máximo (en dosis).'),
+        P(3, 'Revisa los avisos', 'Cada biológico muestra Correcto, Error o Pendiente. Mientras haya errores el pedido no se puede guardar.'),
+        P(4, 'Guarda', 'Con el botón Guardar de la barra flotante. Después, «Editar» permite corregir mientras la ventana siga abierta.'),
+        T('Reglas de validación'),
+        I('functions', '#4338ca', 'Existencia + pedido ≥ promedio', 'Lo que tienes más lo que pides debe alcanzar el promedio mensual del biológico. Si no, el aviso indica cuántos frascos faltan.'),
+        I('format_list_numbered', '#4338ca', 'Múltiplos', 'Hexavalente se pide de 10 en 10; Rotavirus, Neumocócica 13, Neumocócica 20 y SRP, de 5 en 5.'),
+        I('campaign', '#7c3aed', 'Biológicos de campaña', 'Influenza, COVID-19, VPH y Varicela se capturan sin validar contra el promedio y aparecen como «Campaña».'),
+        T('Opción «Solo existencias» (sin pedido)'),
+        I('inventory', '#16a34a', 'Qué hace', 'Actívala cuando este mes no necesitas pedir: los pedidos quedan en 0 y solo reportas tu existencia. El sistema te pide confirmar antes de activarla.'),
+        I('rule', '#dc2626', 'Cuándo se permite', 'Solo si la existencia de cada biológico es mayor o igual a su promedio. Si alguno queda por debajo, no se puede enviar el pedido en ceros: el aviso indica cuántos frascos faltan. Captura el pedido que corresponde o corrige la existencia.'),
+        N('Si dejas todos los pedidos en cero sin activar «Solo existencias», el sistema te pedirá autorizarlo y aplicará la misma regla.')
+      ]
+    },
+    cap_pinol: {
+      titulo: 'Solicitud de Pinol',
+      subtitulo: 'Una solicitud a la vez, hasta que confirmes que recibiste el insumo.',
+      bloques: [
+        T('El ciclo de una solicitud'),
+        P(1, 'Solicitas', 'Escribes tu nombre, cuántas botellas tienes (existencia) y cuántas necesitas (pedido, mínimo 1). Las observaciones son opcionales.'),
+        P(2, 'El municipio surte', 'Recibes una notificación cuando el Pinol se marca como enviado.'),
+        P(3, 'Confirmas la recepción', 'Cuando lo tengas en tu unidad, pulsa «Ya lo recibí, confirmar recepción» en este panel (o confírmalo desde la notificación).'),
+        P(4, 'Puedes pedir de nuevo', 'Hasta confirmar, el formulario permanece bloqueado y no se admite otra solicitud.'),
+        T('Por qué se bloquea'),
+        I('lock_clock', '#b45309', 'Una solicitud activa a la vez', 'Mientras una solicitud esté en curso o enviada sin confirmar, no se admite otra. El servidor también aplica el bloqueo, aunque uses otro dispositivo.'),
+        I('water_drop', '#15803d', 'Uso y presentación', 'Multilimpiador desinfectante Pinol® de 828 mL por botella, de uso exclusivo para refrigeradores de vacunas y farmacia.'),
+        N('El aviso del panel muestra en qué paso va tu solicitud, con las fechas de solicitud y de envío.')
+      ]
+    },
+
     // ------------------------------------------------- Influenza: captura semanal
     influenza_captura: {
       titulo: 'Cómo funciona la captura de Influenza',

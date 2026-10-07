@@ -8311,7 +8311,8 @@ html.sirevaq-scroll-locked .btn-save-animate {
   transform: scale(0.95);
 }
 
-.save-chip-premium:disabled {
+.save-chip-premium:disabled,
+.save-chip-premium[aria-disabled="true"] {
   background: rgba(148, 163, 184, 0.2) !important;
   color: rgba(71, 85, 105, 0.6) !important;
   border: 1px dashed rgba(100, 116, 139, 0.3) !important;
@@ -8331,7 +8332,8 @@ html.sirevaq-scroll-locked .btn-save-animate {
   background-color: #1e293b !important;
 }
 
-.hub-action-btn-primary:disabled {
+.hub-action-btn-primary:disabled,
+.hub-action-btn-primary[aria-disabled="true"] {
   background: rgba(148, 163, 184, 0.2) !important;
   color: rgba(71, 85, 105, 0.6) !important;
   border: 1px dashed rgba(100, 116, 139, 0.3) !important;
@@ -8792,7 +8794,7 @@ body[data-role="UNIDAD"] .panelCaptureSummary {
   display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr 1.5fr; align-items: center; gap: 8px;
   position: sticky; top: -1px; z-index: 20;
   background: rgba(255, 255, 255, 0.98);  padding: 16px 24px; border-bottom: 2px solid #e2e8f0;
-  font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;
+  font-size: 12px; font-weight: 800; color: #64748b; text-transform: uppercase;
   margin: -4px -4px 12px -4px;
   border-radius: 12px 12px 0 0;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
@@ -8834,7 +8836,7 @@ body[data-role="UNIDAD"] .panelCaptureSummary {
   padding: 6px 12px;
   margin: 0 auto;
   border-radius: 12px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   display: inline-flex;
   align-items: center;
@@ -11970,44 +11972,7 @@ html.dark #munTxt {
   -webkit-text-fill-color: #f8fafc !important;
 }
 
-/* =========================================
-   INFO CARDS DARK MODE FIXES (Consumibles, Pinol)
-   ========================================= */
-/* Consumibles Card (was light blue) */
-html.dark #formCONS > div:first-child {
-  background-color: var(--md-sys-color-surface-variant) !important;
-  border-color: var(--md-sys-color-outline-variant) !important;
-}
-html.dark #formCONS > div:first-child .bg-surface {
-  background-color: var(--md-sys-color-surface-container) !important;
-  border-color: var(--md-sys-color-outline-variant) !important;
-}
-
-/* Pinol Card (was light green) */
-html.dark #formPINOL > div:first-child {
-  background-color: var(--md-sys-color-surface-variant) !important;
-  border-color: var(--md-sys-color-outline-variant) !important;
-}
-html.dark #formPINOL > div:first-child .bg-surface {
-  background-color: var(--md-sys-color-surface-container) !important;
-  border-color: var(--md-sys-color-outline-variant) !important;
-}
-
-/* Insumos, Pinol & SR card texts */
-html.dark #formCONS > div:first-child .text-primary,
-html.dark #formPINOL > div:first-child .text-primary,
-html.dark #formSR > div:first-child .text-primary,
-html.dark #formCONS > div:first-child .text-surface-onVariant\/60,
-html.dark #formPINOL > div:first-child .text-surface-onVariant\/60,
-html.dark #formSR > div:first-child .text-surface-onVariant\/60 {
-  color: #f8fafc !important;
-}
-
-html.dark #formCONS > div:first-child .text-primary\/40,
-html.dark #formPINOL > div:first-child .text-primary\/40,
-html.dark #formSR > div:first-child .text-primary\/40 {
-  color: #38bdf8 !important;
-}
+/* (Reglas oscuras de los encabezados de Consumibles/Pinol/SR retiradas: los paneles usan ahora .cp-* con variables.) */
 
 /* Fix main background pure black */
 html.dark body::before {
@@ -14413,3 +14378,255 @@ html body .modern-input-group:not(:has(> label)) :is(input, select):not([type="b
   border-color: transparent !important;
   background: transparent !important;
 }
+
+/* ==========================================================================
+   PANELES DE CAPTURA (UNIDAD): Existencia, Consumibles, Pedido de biológico, Pinol
+   Componentes .cp-* con alcance propio (no reutilizan .modern-input-group ni las
+   reglas globales de input/button). Diseño plano: borde de 1px, sin biseles ni
+   sombras internas. Texto mínimo 12px, objetivos táctiles >= 44px, foco visible,
+   modo oscuro vía variables y animaciones apagadas con prefers-reduced-motion.
+   ========================================================================== */
+:root {
+  --cp-card: #ffffff;
+  --cp-soft: #f8fafc;
+  --cp-border: #e2e8f0;
+  --cp-text: #0f172a;
+  --cp-muted: #475569;
+  --cp-on-accent: #ffffff;
+}
+html.dark {
+  --cp-card: #0a0a0a;
+  --cp-soft: #09090b;
+  --cp-border: #27272a;
+  --cp-text: #f8fafc;
+  --cp-muted: #a1a1aa;
+  --cp-on-accent: #000000;
+}
+#formSR    { --cp-accent: #1d4ed8; --cp-tint: #eff6ff; --cp-line: #bfdbfe; }
+#formCONS  { --cp-accent: #0f766e; --cp-tint: #f0fdfa; --cp-line: #99f6e4; }
+#formBIO   { --cp-accent: #4338ca; --cp-tint: #eef2ff; --cp-line: #c7d2fe; }
+#formPINOL { --cp-accent: #15803d; --cp-tint: #f0fdf4; --cp-line: #bbf7d0; }
+html.dark #formSR    { --cp-accent: #93c5fd; --cp-tint: #0a0a0a; --cp-line: #1e3a8a; }
+html.dark #formCONS  { --cp-accent: #5eead4; --cp-tint: #0a0a0a; --cp-line: #115e59; }
+html.dark #formBIO   { --cp-accent: #a5b4fc; --cp-tint: #0a0a0a; --cp-line: #3730a3; }
+html.dark #formPINOL { --cp-accent: #86efac; --cp-tint: #0a0a0a; --cp-line: #166534; }
+
+/* Separación vertical entre bloques de cada panel. El JS fija display (block, o flex en
+   Consumibles), así que la separación va en márgenes y no en gap para que valga en ambos. */
+:is(#formSR, #formCONS, #formBIO, #formPINOL) { flex-direction: column; }
+:is(#formSR, #formCONS, #formBIO, #formPINOL) > * + * { margin-top: 16px; }
+
+/* --- Encabezado del panel --- */
+.cp-top { display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch; }
+.cp-hero {
+  flex: 3 1 420px; min-width: 0;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 18px 20px; border-radius: 20px;
+  background: var(--cp-tint); border: 1px solid var(--cp-line);
+  color: var(--cp-text);
+}
+.cp-hero-ico {
+  width: 48px; height: 48px; flex: none; border-radius: 14px;
+  display: grid; place-items: center;
+  background: var(--cp-card); border: 1px solid var(--cp-line); color: var(--cp-accent);
+}
+.cp-hero-ico .material-symbols-rounded { font-size: 26px; }
+.cp-hero-body { flex: 1 1 260px; min-width: 0; }
+.cp-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--cp-accent); line-height: 1.2; }
+.cp-title { margin: 2px 0 0; font-size: 18px; font-weight: 800; line-height: 1.25; color: var(--cp-text); letter-spacing: -0.01em; }
+.cp-sub { margin: 4px 0 0; font-size: 13px; font-weight: 500; line-height: 1.45; color: var(--cp-muted); }
+.cp-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.cp-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.3;
+  background: var(--cp-card); border: 1px solid var(--cp-line); color: var(--cp-text);
+}
+.cp-chip .material-symbols-rounded { font-size: 16px; color: var(--cp-accent); }
+.cp-chip.is-warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.cp-chip.is-warn .material-symbols-rounded { color: #b45309; }
+html.dark .cp-chip.is-warn { background: #1c1204; border-color: #78350f; color: #fcd34d; }
+html.dark .cp-chip.is-warn .material-symbols-rounded { color: #fbbf24; }
+
+/* Ficha de fecha objetivo (Pedido de biológico) */
+.cp-date {
+  flex: 0 1 auto; min-width: 200px; padding: 10px 14px; border-radius: 14px;
+  background: var(--cp-card); border: 1px solid var(--cp-line);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.cp-date-label { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--cp-muted); }
+.cp-date-value { font-size: 18px; font-weight: 800; color: var(--cp-accent); line-height: 1.25; }
+.cp-date-hint { font-size: 12px; font-weight: 500; color: var(--cp-muted); }
+
+/* --- Tarjeta de sección con número de paso --- */
+.cp-card {
+  background: var(--cp-card); border: 1px solid var(--cp-border); border-radius: 20px;
+  padding: 20px 24px; color: var(--cp-text);
+}
+.cp-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.cp-step-n {
+  width: 26px; height: 26px; flex: none; border-radius: 50%;
+  display: grid; place-items: center; font-size: 13px; font-weight: 700;
+  background: var(--cp-accent); color: var(--cp-on-accent);
+}
+.cp-card-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--cp-text); }
+.cp-card-desc { font-size: 12px; font-weight: 500; color: var(--cp-muted); flex: 1 1 200px; }
+.cp-card.cp-flush { padding: 0; overflow: hidden; }
+.cp-card.cp-flush .cp-card-head { padding: 16px 20px 0; }
+
+/* Dos columnas (responsable + opción) */
+.cp-grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+@media (max-width: 860px) { .cp-grid2 { grid-template-columns: minmax(0, 1fr); } }
+
+/* --- Campos numéricos con etiqueta y unidad --- */
+.cp-groups { display: flex; flex-wrap: wrap; gap: 20px 28px; }
+.cp-group { flex: 1 1 260px; min-width: 0; }
+.cp-group-title { margin: 0 0 10px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--cp-muted); }
+.cp-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px; }
+.cp-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cp-label { margin: 0; letter-spacing: 0; font-size: 13px; font-weight: 700; color: var(--cp-text); line-height: 1.3; }
+.cp-unit { font-size: 12px; font-weight: 500; color: var(--cp-muted); line-height: 1.3; }
+.cp-field.is-auto .cp-label { color: var(--cp-muted); }
+
+/* --- Avisos (hints) --- */
+.cp-note {
+  display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 14px;
+  font-size: 13px; font-weight: 500; line-height: 1.5; border: 1px solid transparent;
+}
+.cp-note .material-symbols-rounded { font-size: 20px; flex: none; margin-top: 1px; }
+.cp-note b, .cp-note strong { font-weight: 700; }
+.cp-note.is-info { background: #eff6ff; border-color: #bfdbfe; color: #1e3a8a; }
+.cp-note.is-warn { background: #fffbeb; border-color: #fde68a; color: #78350f; }
+.cp-note.is-ok   { background: #f0fdf4; border-color: #bbf7d0; color: #14532d; }
+html.dark .cp-note.is-info { background: #0a1220; border-color: #1e3a8a; color: #bfdbfe; }
+html.dark .cp-note.is-warn { background: #1c1204; border-color: #78350f; color: #fde68a; }
+html.dark .cp-note.is-ok   { background: #04140a; border-color: #166534; color: #bbf7d0; }
+
+/* --- Interruptor tipo "Sin movimiento" / "Solo existencias" --- */
+.cp-toggle {
+  flex: 1 1 170px; min-width: 150px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px 16px; border-radius: 20px; text-align: center;
+  background: var(--cp-card); border: 1px solid var(--cp-border);
+  transition: background-color .2s ease, border-color .2s ease;
+}
+.cp-toggle-ico { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: var(--cp-soft); color: var(--cp-muted); flex: none; transition: background-color .2s ease, color .2s ease; }
+.cp-toggle-ico .material-symbols-rounded { font-size: 20px; }
+.cp-toggle-label { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--cp-text); line-height: 1.25; }
+.cp-toggle-hint { font-size: 12px; font-weight: 500; color: var(--cp-muted); line-height: 1.4; }
+.cp-toggle.cp-toggle-row { flex-direction: row; text-align: left; align-items: center; justify-content: space-between; gap: 14px; }
+.cp-toggle-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cp-toggle-top { display: flex; align-items: center; gap: 10px; }
+
+/* --- Tabla de lotes (existencia) --- */
+.cp-tablewrap { overflow-x: auto; border-top: 1px solid var(--cp-border); }
+.cp-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 10px 20px 14px; font-size: 12px; font-weight: 600; color: var(--cp-muted); }
+.cp-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+#formSR .cp-add-btn {
+  display: flex !important; align-items: center !important; justify-content: center !important; gap: 8px !important;
+  width: 100% !important; min-height: 48px !important; padding: 0 20px !important; border-radius: 14px !important;
+  font-family: inherit !important; font-size: 14px !important; font-weight: 700 !important;
+  background: transparent !important; color: var(--cp-accent) !important;
+  border: 1.5px dashed var(--cp-accent) !important; box-shadow: none !important; cursor: pointer;
+  transition: background-color .2s ease, transform .2s ease;
+}
+#formSR .cp-add-btn:disabled { opacity: .5; cursor: not-allowed; }
+@media (hover: hover) and (pointer: fine) {
+  #formSR .cp-add-btn:not(:disabled):hover { background: var(--cp-tint) !important; transform: translateY(-1px); }
+}
+
+/* --- Pedido de biológico: lista --- */
+.cp-listwrap { border: 1px solid var(--cp-border); border-radius: 20px; background: var(--cp-card); overflow: hidden; }
+.cp-listwrap .cp-card-head { padding: 16px 20px 0; margin-bottom: 12px; }
+.cp-scroll { max-height: 560px; overflow-y: auto; padding: 16px; scrollbar-width: thin; background: var(--md-sys-color-surface-container); }
+
+/* --- Pinol: aviso de flujo + pasos --- */
+.cp-flow {
+  border-radius: 20px; padding: 18px 20px; border: 1px solid; animation: cpFadeIn .3s ease;
+}
+.cp-flow.pending   { background: #fffbeb; border-color: #fcd34d; color: #78350f; }
+.cp-flow.delivered { background: #eff6ff; border-color: #93c5fd; color: #1e3a8a; }
+html.dark .cp-flow.pending   { background: #1c1204; border-color: #92400e; color: #fde68a; }
+html.dark .cp-flow.delivered { background: #0a1220; border-color: #1d4ed8; color: #bfdbfe; }
+.cp-flow-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.cp-flow-ico { font-size: 28px; flex: none; }
+.cp-flow-body { flex: 1 1 280px; min-width: 0; }
+.cp-flow-title { font-size: 16px; font-weight: 800; line-height: 1.3; }
+.cp-flow-text { margin: 4px 0 0; font-size: 13px; font-weight: 500; line-height: 1.5; }
+#formPINOL .cp-flow-btn {
+  display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 8px !important;
+  min-height: 48px !important; padding: 0 20px !important; border-radius: 14px !important;
+  font-family: inherit !important; font-size: 14px !important; font-weight: 700 !important;
+  background: #1d4ed8 !important; color: #ffffff !important; border: 0 !important; box-shadow: none !important;
+  cursor: pointer; flex: none; transition: background-color .2s ease;
+}
+#formPINOL .cp-flow-btn:disabled { opacity: .6; cursor: not-allowed; }
+@media (hover: hover) and (pointer: fine) { #formPINOL .cp-flow-btn:not(:disabled):hover { background: #1e40af !important; } }
+html.dark #formPINOL .cp-flow-btn { background: #93c5fd !important; color: #0a1220 !important; }
+.cp-steps { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.cp-step { display: flex; align-items: flex-start; gap: 10px; font-size: 12px; font-weight: 600; line-height: 1.35; }
+.cp-step.todo { opacity: .75; }
+.cp-step-dot {
+  width: 24px; height: 24px; flex: none; border-radius: 50%; display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; border: 1.5px solid currentColor; background: transparent; color: inherit;
+}
+.cp-step-dot .material-symbols-rounded { font-size: 16px; }
+.cp-step.done .cp-step-dot, .cp-step.current .cp-step-dot { color: #ffffff; border-color: transparent; }
+.cp-flow.pending .cp-step.done .cp-step-dot, .cp-flow.pending .cp-step.current .cp-step-dot { background: #b45309; }
+.cp-flow.delivered .cp-step.done .cp-step-dot, .cp-flow.delivered .cp-step.current .cp-step-dot { background: #1d4ed8; }
+html.dark .cp-step.done .cp-step-dot, html.dark .cp-step.current .cp-step-dot { color: #000000; }
+html.dark .cp-flow.pending .cp-step.done .cp-step-dot, html.dark .cp-flow.pending .cp-step.current .cp-step-dot { background: #fbbf24; }
+html.dark .cp-flow.delivered .cp-step.done .cp-step-dot, html.dark .cp-flow.delivered .cp-step.current .cp-step-dot { background: #93c5fd; }
+.cp-step.current .cp-step-label { font-weight: 800; }
+.cp-step-label small { display: block; font-weight: 500; opacity: .85; margin-top: 1px; }
+@media (max-width: 700px) { .cp-steps { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+
+@keyframes cpFadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* --- Foco visible y movimiento reducido --- */
+:is(#formSR, #formCONS, #formBIO, #formPINOL) :is(input, select, textarea, button, [tabindex]):focus-visible {
+  outline: 3px solid rgba(14, 165, 233, .6); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cp-flow, .cp-toggle, .cp-toggle-ico, #formSR .cp-add-btn, #formPINOL .cp-flow-btn { animation: none !important; transition: none !important; }
+  .status-chip-v5.pending, .status-chip-v5.pinol-pending, .status-chip-v5.pinol-delivered { animation: none !important; }
+}
+@media (max-width: 640px) {
+  .cp-card { padding: 16px; border-radius: 16px; }
+  .cp-hero { padding: 14px 16px; }
+}
+
+/* Avisos que el JS agrega con mb-4: el espaciado ya lo da la regla de bloques del panel. */
+#formBIO > .IntegratedHint { margin-bottom: 0; }
+/* Encabezado fijo de la lista de pedido en modo oscuro (antes quedaba blanco). */
+html.dark .bio-card-sticky-header { background: #09090b; border-bottom-color: #27272a; color: #a1a1aa; }
+
+/* Pedido de biológico en modo oscuro: tarjetas de estado y campos legibles (antes quedaban
+   textos claros sobre verde/amarillo claros y cifras casi invisibles en los campos negros). */
+html.dark #formBIO .bioInput { color: #f8fafc !important; background: #000000 !important; border-color: #3f3f46 !important; }
+html.dark #formBIO .bio-card.card-good  { background: #052e16 !important; border-color: #16a34a !important; }
+html.dark #formBIO .bio-card.card-warn  { background: #2a1f04 !important; border-color: #ca8a04 !important; }
+html.dark #formBIO .bio-card.card-extra { background: #2a0a0a !important; border-color: #dc2626 !important; }
+html.dark #formBIO .bio-card.card-camp  { background: #14123a !important; border-color: #6366f1 !important; }
+html.dark #formBIO .bio-metric-pill { background: #18181b; color: #d4d4d8; }
+html.dark #formBIO .bio-card { border-color: #27272a; }
+
+/* Botón "¿Cómo funciona?" de cada panel de captura (abre ayuda.js con data-ayuda). */
+:is(#formSR, #formCONS, #formBIO, #formPINOL) .cp-help-btn {
+  display: inline-flex !important; align-items: center !important; gap: 6px !important;
+  min-height: 32px !important; padding: 0 12px !important; margin: 0 !important; border-radius: 999px !important;
+  font-family: inherit !important; font-size: 12px !important; font-weight: 700 !important; line-height: 1.2 !important;
+  background: transparent !important; color: var(--cp-accent) !important;
+  border: 1.5px solid var(--cp-accent) !important; box-shadow: none !important; cursor: pointer;
+  transition: background-color .2s ease;
+}
+:is(#formSR, #formCONS, #formBIO, #formPINOL) .cp-help-btn .material-symbols-rounded { font-size: 18px; }
+@media (hover: hover) and (pointer: fine) {
+  :is(#formSR, #formCONS, #formBIO, #formPINOL) .cp-help-btn:hover { background: var(--cp-tint) !important; }
+}
+@media (prefers-reduced-motion: reduce) { :is(#formSR, #formCONS, #formBIO, #formPINOL) .cp-help-btn { transition: none !important; } }
+
+/* La nota explicativa dentro de una tarjeta va separada del bloque anterior (antes se encimaba con el interruptor). */
+.cp-card > .cp-note { margin-top: 16px; }
+.cp-grid2 { margin-bottom: 0; }
+.cp-grid2 > .cp-toggle { margin: 0; align-self: stretch; }
+.cp-toggle label.premium-switch { margin: 0; }

@@ -90,6 +90,7 @@
     let hasActivePinol = false;
     let pinolFlowStatus = "NONE"; // NONE | PENDING | DELIVERED
     let pinolCacheLoaded = false; // true tras la primera respuesta real de checkCapturesState
+    let pinolActiveRowMobile = null; // solicitud que hoy bloquea a la unidad (ENTREGADO manda sobre PENDIENTE)
     let PINOL_SOLICITUDES_CHANNEL_MOBILE = null;
 
     let isEditingSR = false;
@@ -237,8 +238,9 @@
 
         const toast = document.createElement('div');
         toast.className = `toast-msg ${type}`;
+        toast.setAttribute('role', type === 'success' ? 'status' : 'alert');
         toast.innerHTML = `
-            <span class="material-symbols-rounded text-lg">${type === 'success' ? 'check_circle' : 'error'}</span>
+            <span class="material-symbols-rounded text-lg" aria-hidden="true">${type === 'success' ? 'check_circle' : 'error'}</span>
             <span>${message}</span>
         `;
         container.appendChild(toast);
@@ -266,7 +268,7 @@
             toast.style.opacity = '0';
             toast.style.transform = 'translateY(-10px)';
             setTimeout(() => toast.remove(), 300);
-        }, 3000);
+        }, type === 'success' ? 3000 : 7000);
     };
 
     // --- Expiration Utilities ---
@@ -871,38 +873,38 @@
             if (modo && modo.tipo === "EXTRAORDINARIO") {
                 const f = window.dayjs ? window.dayjs(modo.fecha).format('DD/MM/YYYY') : modo.fecha;
                 const h = window.dayjs ? window.dayjs(modo.hasta).format('DD/MM') : String(modo.hasta).substring(5);
-                bioBox.style.background = "linear-gradient(135deg, #d97706 0%, #b45309 100%)";
+                bioBox.style.background = "linear-gradient(135deg, #b45309 0%, #92400e 100%)";
                 bioBox.style.color = "#ffffff";
                 bioBox.innerHTML = `
-                    <span class="text-[10px] font-black uppercase tracking-widest block opacity-90 mb-1">🟠 Pedido Extraordinario</span>
+                    <span class="text-xs font-black uppercase tracking-widest block opacity-100 mb-1">🟠 Pedido Extraordinario</span>
                     <span class="text-lg font-black block mb-1">${f}</span>
-                    <span class="text-[9px] font-bold opacity-85 block">Es un pedido aparte del mensual. Captura hasta el ${h}${modo.motivo ? " · " + String(modo.motivo).replace(/[<>&]/g, "") : ""}</span>
+                    <span class="text-xs font-bold opacity-100 block">Es un pedido aparte del mensual. Captura hasta el ${h}${modo.motivo ? " · " + String(modo.motivo).replace(/[<>&]/g, "") : ""}</span>
                 `;
             } else if (canCaptureBioGlobal) {
-                bioBox.style.background = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
+                bioBox.style.background = "linear-gradient(135deg, #047857 0%, #065f46 100%)";
                 bioBox.style.color = "#ffffff";
                 bioBox.innerHTML = `
-                    <span class="text-[10px] font-black uppercase tracking-widest block opacity-90 mb-1">🟢 Ventana de Captura Activa</span>
+                    <span class="text-xs font-black uppercase tracking-widest block opacity-100 mb-1">🟢 Ventana de Captura Activa</span>
                     <span class="text-lg font-black block mb-1">${targetLabelStr}</span>
-                    <span class="text-[9px] font-bold opacity-85 block">Disponible del ${startLabel} al ${endLabel}</span>
+                    <span class="text-xs font-bold opacity-100 block">Disponible del ${startLabel} al ${endLabel}</span>
                 `;
             } else if (hoyYmd < windowStartYmd) {
                 // Future capture window
-                bioBox.style.background = "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)";
+                bioBox.style.background = "linear-gradient(135deg, #2563eb 0%, #1e40af 100%)";
                 bioBox.style.color = "#ffffff";
                 bioBox.innerHTML = `
-                    <span class="text-[10px] font-black uppercase tracking-widest block opacity-90 mb-1">🔵 Ventana de Captura Próxima</span>
+                    <span class="text-xs font-black uppercase tracking-widest block opacity-100 mb-1">🔵 Ventana de Captura Próxima</span>
                     <span class="text-lg font-black block mb-1">${targetLabelStr}</span>
-                    <span class="text-[9px] font-bold opacity-85 block">Estará disponible del ${startLabel} al ${endLabel}</span>
+                    <span class="text-xs font-bold opacity-100 block">Estará disponible del ${startLabel} al ${endLabel}</span>
                 `;
             } else {
                 // Past capture window
-                bioBox.style.background = "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)";
+                bioBox.style.background = "linear-gradient(135deg, #b91c1c 0%, #991b1b 100%)";
                 bioBox.style.color = "#ffffff";
                 bioBox.innerHTML = `
-                    <span class="text-[10px] font-black uppercase tracking-widest block opacity-90 mb-1">🔴 Ventana de Captura Cerrada</span>
+                    <span class="text-xs font-black uppercase tracking-widest block opacity-100 mb-1">🔴 Ventana de Captura Cerrada</span>
                     <span class="text-lg font-black block mb-1">${targetLabelStr}</span>
-                    <span class="text-[9px] font-bold opacity-85 block">Estuvo disponible del ${startLabel} al ${endLabel}</span>
+                    <span class="text-xs font-bold opacity-100 block">Estuvo disponible del ${startLabel} al ${endLabel}</span>
                 `;
             }
         }
@@ -921,7 +923,7 @@
             bioBox.insertAdjacentElement('afterend', cont);
         }
         const fmt = (ymd) => String(ymd).split('-').reverse().join('/');
-        cont.innerHTML = `<legend class="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">¿Qué pedido vas a capturar?</legend>` + modos.map(m => `
+        cont.innerHTML = `<legend class="text-xs font-black uppercase tracking-widest text-slate-600 mb-2">¿Qué pedido vas a capturar?</legend>` + modos.map(m => `
             <label class="flex items-center gap-3 p-4 mb-2 rounded-2xl border-2 ${modoActual && m.clave === modoActual.clave ? 'border-slate-900 bg-slate-50' : 'border-slate-200 bg-white'}">
                 <input type="radio" name="bioModoMobile" value="${m.clave}" ${modoActual && m.clave === modoActual.clave ? 'checked' : ''} style="width:20px;height:20px;accent-color:#0f172a">
                 <span class="text-sm font-black text-slate-900">${m.tipo === 'MENSUAL' ? 'Pedido ordinario' : 'Pedido extraordinario'}<span class="block text-xs font-semibold text-slate-500">${fmt(m.fecha)}${m.motivo ? ' · ' + String(m.motivo).replace(/[<>&]/g, '') : ''}</span></span>
@@ -965,54 +967,54 @@
             <div class="card-header flex justify-between items-center pb-2 border-b border-slate-100">
                 <span class="text-xs font-black text-slate-800 uppercase tracking-widest">Existencia de Biológico</span>
                 <div class="flex items-center gap-2 ml-auto">
-                    <button type="button" class="btn-clone-card" title="Duplicar">
-                        <span class="material-symbols-rounded">post_add</span>
+                    <button type="button" class="btn-clone-card" title="Duplicar este lote para otra fecha de recepción" aria-label="Duplicar este lote para otra fecha de recepción">
+                        <span class="material-symbols-rounded" aria-hidden="true">post_add</span>
                     </button>
-                    <button type="button" class="btn-delete-card" title="Eliminar">
-                        <span class="material-symbols-rounded">delete</span>
+                    <button type="button" class="btn-delete-card" title="Eliminar este lote" aria-label="Eliminar este lote">
+                        <span class="material-symbols-rounded" aria-hidden="true">delete</span>
                     </button>
                 </div>
             </div>
             <div class="cascade-inputs pt-3">
                 <div class="cascade-field">
-                    <label>Biológico</label>
-                    <select class="sr-bio-select w-full" data-field="biologico">
+                    <label for="${cardId}_bio">Biológico</label>
+                    <select id="${cardId}_bio" class="sr-bio-select w-full" data-field="biologico">
                         <option value="">Selecciona...</option>
                         ${bioOptions}
                     </select>
                 </div>
                 <div class="cascade-field">
-                    <label>Lote</label>
-                    <select class="sr-lote-select w-full" data-field="lote" disabled>
+                    <label for="${cardId}_lote">Lote</label>
+                    <select id="${cardId}_lote" class="sr-lote-select w-full" data-field="lote" disabled>
                         <option value="">Selecciona lote...</option>
                     </select>
                 </div>
                 <div class="cascade-field">
-                    <label>Caducidad</label>
-                    <span class="text-xs font-black text-slate-400 sr-cad-badge">—</span>
+                    <label id="${cardId}_cadl">Caducidad</label>
+                    <span class="text-xs font-black text-slate-500 sr-cad-badge" role="status" aria-labelledby="${cardId}_cadl">—</span>
                 </div>
                 <div class="cascade-field">
-                    <label>Recepción</label>
-                    <input type="date" data-field="recepcion" class="w-full" value="${data?.fecha_recepcion || ''}">
+                    <label for="${cardId}_rec">Recepción</label>
+                    <input id="${cardId}_rec" type="date" data-field="recepcion" class="w-full" value="${data?.fecha_recepcion || ''}">
                 </div>
                 <div class="cascade-field">
-                    <label>Tipo de Biológico</label>
-                    <select class="sr-tipo-select w-full" data-field="tipo">
+                    <label for="${cardId}_tipo">Tipo de Biológico</label>
+                    <select id="${cardId}_tipo" class="sr-tipo-select w-full" data-field="tipo">
                         <option value="REQUISICION" ${(!data || data.tipo === 'REQUISICION' || data.tipo === 'Recibido con requisición') ? 'selected' : ''}>Recibido con requisición</option>
                         <option value="PRESTAMO_DESABASTO" ${(data?.tipo === 'PRESTAMO_DESABASTO' || data?.tipo === 'Préstamo por desabasto') ? 'selected' : ''}>Préstamo por desabasto</option>
                         <option value="PRESTAMO_ARF" ${(data?.tipo === 'PRESTAMO_ARF' || data?.tipo === 'Préstamo por ARF') ? 'selected' : ''}>Préstamo por ARF</option>
                     </select>
                 </div>
                 <div class="cascade-field">
-                    <label>Cantidad
-                        <span class="material-symbols-rounded" style="font-size:13px; color:#d97706; cursor:help; vertical-align:middle;" title="Si capturas un decimal en TD, DPT, Influenza o Hepatitis B, te pediremos la fecha de apertura del frasco (vigencia de 28 días una vez abierto). BCG y SR quedan excluidas por el manual.">info</span>
+                    <label for="${cardId}_qty">Cantidad (frascos)
+                        <span class="material-symbols-rounded" style="font-size:14px; color:#b45309; vertical-align:middle;" role="img" aria-label="Si capturas un decimal en TD, DPT, Influenza o Hepatitis B, te pediremos la fecha de apertura del frasco (vigencia de 28 días una vez abierto). BCG y SR quedan excluidas por el manual." title="Si capturas un decimal en TD, DPT, Influenza o Hepatitis B, te pediremos la fecha de apertura del frasco (vigencia de 28 días una vez abierto). BCG y SR quedan excluidas por el manual.">info</span>
                     </label>
                     <div class="touch-stepper-wrap flex items-center gap-2">
-                        <button type="button" class="stepper-btn" onclick="const inp=this.nextElementSibling; inp.value=Math.max(0, (parseInt(inp.value)||0)-1);">-</button>
-                        <input type="number" data-field="cantidad" value="${data?.cantidad || 0}" min="0" class="w-full text-center font-black sr-qty-input">
-                        <button type="button" class="stepper-btn" onclick="const inp=this.previousElementSibling; inp.value=(parseInt(inp.value)||0)+1;">+</button>
+                        <button type="button" class="stepper-btn" aria-label="Disminuir cantidad" onclick="const inp=this.nextElementSibling; inp.value=Math.max(0, (parseInt(inp.value)||0)-1);">-</button>
+                        <input id="${cardId}_qty" type="number" inputmode="decimal" data-field="cantidad" value="${data?.cantidad || 0}" min="0" class="w-full text-center font-black sr-qty-input">
+                        <button type="button" class="stepper-btn" aria-label="Aumentar cantidad" onclick="const inp=this.previousElementSibling; inp.value=(parseInt(inp.value)||0)+1;">+</button>
                     </div>
-                    <div class="sr-apertura-badge" style="display:none; justify-content:center; margin-top:6px; cursor:pointer;"></div>
+                    <div class="sr-apertura-badge" role="button" tabindex="0" style="display:none; justify-content:center; margin-top:6px; cursor:pointer;"></div>
                 </div>
             </div>
         `;
@@ -1048,13 +1050,16 @@
         qtyInput.addEventListener('blur', () => updateAperturaState(card));
         bioSelect.addEventListener('change', () => updateAperturaState(card));
         // Clic directo en el badge = revisar/capturar esa tarjeta puntual, sin esperar al guardado.
-        if (aperturaBadge) aperturaBadge.addEventListener('click', () => handleAperturaCheck(card, { prompt: true, force: true }));
+        if (aperturaBadge) {
+            aperturaBadge.addEventListener('click', () => handleAperturaCheck(card, { prompt: true, force: true }));
+            aperturaBadge.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleAperturaCheck(card, { prompt: true, force: true }); } });
+        }
 
         const updateLoteDropdown = (selectedBio, preselectedLote = null) => {
             if (!selectedBio) {
                 loteSelect.innerHTML = '<option value="">Selecciona lote...</option>';
                 loteSelect.disabled = true;
-                cadBadge.className = 'text-xs font-black text-slate-400 sr-cad-badge';
+                cadBadge.className = 'text-xs font-black text-slate-500 sr-cad-badge';
                 cadBadge.textContent = '—';
                 return;
             }
@@ -1114,7 +1119,7 @@
                 cadBadge.className = `text-xs font-black sr-cad-badge ${lifeClass}`;
                 cadBadge.textContent = formatted;
             } else {
-                cadBadge.className = 'text-xs font-black text-slate-400 sr-cad-badge';
+                cadBadge.className = 'text-xs font-black text-slate-500 sr-cad-badge';
                 cadBadge.textContent = '—';
             }
         });
@@ -1246,28 +1251,130 @@
     };
 
     // --- Pinol Flow Banner (paridad con el banner de escritorio) ---
+    const pinolFechaCortaMobile = (raw) => {
+        const txt = String(raw || "");
+        if (!txt) return "";
+        const d = txt.includes("T") ? new Date(txt) : new Date(txt.slice(0, 10) + "T12:00:00");
+        if (isNaN(d)) return "";
+        const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+        return `${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}`;
+    };
+
+    const pinolLockMessageMobile = () => pinolFlowStatus === "DELIVERED"
+        ? "Aún no confirmas la recepción de tu Pinol anterior. Confírmala para poder pedir más."
+        : (pinolFlowStatus === "PENDING"
+            ? "Ya tienes una solicitud de Pinol en curso. Podrás pedir más cuando el municipio la surta y tú confirmes la recepción."
+            : "Estamos verificando si tienes una solicitud de Pinol activa. Intenta de nuevo en un momento.");
+
     const updatePinolFlowBanner = (status) => {
         const banner = document.getElementById('pinolFlowBanner');
         if (!banner) return;
 
-        if (status === "PENDING") {
-            banner.style.display = "flex";
-            banner.className = "flex gap-3 items-center p-4 rounded-2xl mb-6 border text-xs font-bold leading-relaxed bg-amber-50 border-amber-200 text-amber-800";
-            banner.innerHTML = `
-                <span class="material-symbols-rounded text-xl">hourglass_empty</span>
-                <span>Tu solicitud está en curso. El área municipal aún no ha surtido el insumo.</span>
-            `;
-        } else if (status === "DELIVERED") {
-            banner.style.display = "flex";
-            banner.className = "flex gap-3 items-center p-4 rounded-2xl mb-6 border text-xs font-bold leading-relaxed bg-blue-50 border-blue-200 text-blue-800";
-            banner.innerHTML = `
-                <span class="material-symbols-rounded text-xl">local_shipping</span>
-                <span>El insumo fue enviado. Revisa tus notificaciones y marca como recibido para habilitar una nueva solicitud.</span>
-            `;
-        } else {
+        // La regla "confirma antes de pedir más" solo se muestra con el formulario habilitado.
+        const ruleNote = document.getElementById('pinolRuleNote');
+        if (ruleNote) ruleNote.style.display = (status === "PENDING" || status === "DELIVERED") ? "none" : "";
+
+        if (status !== "PENDING" && status !== "DELIVERED") {
             banner.style.display = "none";
             banner.className = "";
             banner.innerHTML = "";
+            banner.removeAttribute("role");
+            return;
+        }
+
+        const row = pinolActiveRowMobile;
+        const botellas = row && Number(row.solicitud_botellas) > 0 ? Number(row.solicitud_botellas) : 0;
+        const fSol = row ? pinolFechaCortaMobile(row.timestamp_solicitud) : "";
+        const fEnt = row ? pinolFechaCortaMobile(row.fecha_entrega) : "";
+        const current = status === "DELIVERED" ? 3 : 2;
+        const steps = [
+            { label: "Solicitud enviada", sub: fSol },
+            { label: "Municipio surte el Pinol", sub: status === "DELIVERED" ? fEnt : "" },
+            { label: "Tú confirmas la recepción", sub: "" },
+            { label: "Nueva solicitud habilitada", sub: "" }
+        ];
+        const stepsHtml = steps.map((st, i) => {
+            const n = i + 1;
+            const state = n < current ? "done" : (n === current ? "current" : "todo");
+            return `<li class="cp-step ${state}"${state === "current" ? ' aria-current="step"' : ""}>
+                <span class="cp-step-dot" aria-hidden="true">${state === "done" ? '<span class="material-symbols-rounded">check</span>' : n}</span>
+                <span class="cp-step-label">${st.label}${st.sub ? `<small>${st.sub}</small>` : ""}</span>
+            </li>`;
+        }).join("");
+
+        const delivered = status === "DELIVERED";
+        const title = delivered ? "Confirma que recibiste tu Pinol para poder pedir más" : "Tu solicitud de Pinol está en curso";
+        const text = delivered
+            ? "El municipio ya marcó tu Pinol como enviado. Cuando lo tengas en tu unidad, confirma la recepción: si no lo haces, el formulario seguirá bloqueado y no podrás solicitar más."
+            : `${botellas ? `Pediste ${botellas} ${botellas === 1 ? "botella" : "botellas"}. ` : ""}El municipio aún no la surte. Mientras tanto no puedes enviar otra solicitud.`;
+
+        banner.style.display = "block";
+        banner.className = `cp-flow ${delivered ? "delivered" : "pending"}`;
+        banner.setAttribute("role", "status");
+        banner.innerHTML = `
+            <div class="cp-flow-head">
+                <span class="cp-flow-ico material-symbols-rounded" aria-hidden="true">${delivered ? "local_shipping" : "hourglass_top"}</span>
+                <div class="cp-flow-body">
+                    <div class="cp-flow-title">${title}</div>
+                    <p class="cp-flow-text">${text}</p>
+                </div>
+            </div>
+            ${delivered ? `<button type="button" class="cp-flow-btn" id="btnPinolConfirmarRecepcionMobile">
+                <span class="material-symbols-rounded" aria-hidden="true">task_alt</span>Ya lo recibí, confirmar recepción
+            </button>` : ""}
+            <ol class="cp-steps" aria-label="Avance de tu solicitud de Pinol">${stepsHtml}</ol>
+        `;
+
+        const btnConfirm = document.getElementById('btnPinolConfirmarRecepcionMobile');
+        if (btnConfirm) btnConfirm.addEventListener('click', () => confirmPinolFromBannerMobile(btnConfirm));
+    };
+
+    // Confirmación directa desde el formulario (no depende de que la notificación siga en la bandeja).
+    const confirmPinolFromBannerMobile = async (btn) => {
+        const row = pinolActiveRowMobile;
+        if (!row || String(row.estatus || "").toUpperCase() !== "ENTREGADO") {
+            showToast("No hay un Pinol enviado pendiente de confirmar.", "error");
+            return;
+        }
+        if (!window.confirm("¿Confirmas que ya recibiste físicamente el Pinol en tu unidad? Al confirmar se habilitará una nueva solicitud.")) return;
+
+        if (btn) btn.disabled = true;
+        try {
+            const { data: updated, error } = await supabaseClient
+                .from('pinol_solicitudes')
+                .update({ estatus: 'RECIBIDO', recibido_ts: new Date().toISOString() })
+                .eq('id', row.id)
+                .eq('clues', currentProfile.clues)
+                .eq('estatus', 'ENTREGADO')
+                .select('id');
+            if (error) throw error;
+            if (!updated || !updated.length) throw new Error("Esta solicitud ya no está pendiente de confirmar. Actualiza la pantalla.");
+
+            // Mejor esfuerzo: deja la notificación de entrega como confirmada y leída.
+            try {
+                const entregaNotifId = 'NOTIF:PINOL_ENTREGA:' + row.id;
+                const { data: notif } = await supabaseClient.from('notificaciones').select('id, meta_json').eq('id', entregaNotifId).maybeSingle();
+                if (notif) {
+                    const meta = typeof notif.meta_json === 'string' ? JSON.parse(notif.meta_json || "{}") : (notif.meta_json || {});
+                    meta.confirmed_by_unit = "SI";
+                    meta.confirmation_ts = new Date().toISOString();
+                    await supabaseClient.from('notificaciones').update({ meta_json: JSON.stringify(meta) }).eq('id', entregaNotifId);
+                    await supabaseClient.from('notificaciones_perfil')
+                        .update({ status: 'READ', read_ts: new Date().toISOString() })
+                        .eq('notificacion_id', entregaNotifId)
+                        .eq('usuario', currentProfile.usuario);
+                }
+            } catch (notifErr) {
+                console.warn("No se pudo marcar la notificación de entrega como confirmada:", notifErr);
+            }
+
+            showToast("Recepción confirmada. Ya puedes hacer una nueva solicitud de Pinol.", "success");
+            await checkCapturesState();
+            await loadNotifications();
+        } catch (err) {
+            console.error("Error confirmando recepción de Pinol:", err);
+            showToast(err.message || "No se pudo confirmar la recepción", "error");
+            if (btn) btn.disabled = false;
         }
     };
 
@@ -1442,7 +1549,7 @@
                 supabaseClient.from('biologicos_existencia').select('id').eq('clues', cluesFilter).in('fecha', srDateFilter).limit(1),
                 supabaseClient.from('consumibles').select('id').eq('clues', cluesFilter).eq('fecha', today).maybeSingle(),
                 supabaseClient.from('biologicos_pedido').select('id').eq('clues', cluesFilter).eq('fecha_pedido_programada', targetPedidoDate).limit(1),
-                supabaseClient.from('pinol_solicitudes').select('id, estatus').eq('clues', cluesFilter).in('estatus', ['PENDIENTE', 'ENTREGADO'])
+                supabaseClient.from('pinol_solicitudes').select('id, estatus, solicitud_botellas, timestamp_solicitud, fecha_entrega').eq('clues', cluesFilter).in('estatus', ['PENDIENTE', 'ENTREGADO'])
             ]);
 
             hasTodaySR = resSR.data && resSR.data.length > 0;
@@ -1451,6 +1558,9 @@
 
             const pinolRows = resPinol.data || [];
             hasActivePinol = pinolRows.length > 0;
+            const pinolByRecent = (x, y) => String(y.timestamp_solicitud || "").localeCompare(String(x.timestamp_solicitud || ""));
+            pinolActiveRowMobile = pinolRows.filter(r => String(r.estatus || "").toUpperCase() === "ENTREGADO").sort(pinolByRecent)[0]
+                || [...pinolRows].sort(pinolByRecent)[0] || null;
             pinolFlowStatus = pinolRows.length === 0
                 ? "NONE"
                 : (pinolRows.some(r => String(r.estatus || "").toUpperCase() === "ENTREGADO") ? "DELIVERED" : "PENDING");
@@ -1653,34 +1763,35 @@
             const requires5 = ["BCG", "HEXAVALENTE", "ROTAVIRUS", "NEUMOCOCICA 13", "NEUMOCOCICA 20", "SRP"].includes(bioKey);
             const multiple = requires5 ? 5 : 1;
 
+            const bioDomId = 'bio_' + String(bio.id).replace(/[^a-zA-Z0-9_-]/g, '');
             card.innerHTML = `
                 <div class="card-header">
                     <span class="card-title">${bio.biologico}</span>
-                    <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">${bio.tipo_esquema || 'Dosis'}</span>
+                    <span class="text-xs font-black text-slate-600 uppercase tracking-widest">${bio.tipo_esquema || 'Dosis'}</span>
                 </div>
                 <div class="cascade-inputs">
-                    <div class="flex justify-between text-[10px] font-black text-slate-400 pb-2 border-b border-slate-100">
+                    <div class="flex justify-between text-xs font-black text-slate-600 pb-2 border-b border-slate-100">
                         <span>Promedio: <strong class="text-slate-700 dark:text-slate-200">${promedio} fr.</strong></span>
                         <span>Mín/Máx: <strong class="text-slate-700 dark:text-slate-200">${minDosis}/${maxDosis} d.</strong></span>
                     </div>
                     <div class="cascade-field">
-                        <label>Existencia</label>
+                        <label for="${bioDomId}_ex">Existencia</label>
                         <div class="touch-stepper-wrap flex items-center gap-2">
-                            <button type="button" class="stepper-btn" onclick="const inp=this.nextElementSibling; inp.value=Math.max(0, (parseInt(inp.value)||0)-1); inp.dispatchEvent(new Event('input'));">-</button>
-                            <input type="number" data-bio-id="${bio.id}" data-bio-name="${bio.biologico}" data-field="existencia" value="0" min="0" class="w-full text-center font-black bio-exist-input">
-                            <button type="button" class="stepper-btn" onclick="const inp=this.previousElementSibling; inp.value=(parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input'));">+</button>
+                            <button type="button" class="stepper-btn" aria-label="Disminuir existencia de ${bio.biologico}" onclick="const inp=this.nextElementSibling; inp.value=Math.max(0, (parseInt(inp.value)||0)-1); inp.dispatchEvent(new Event('input'));">-</button>
+                            <input id="${bioDomId}_ex" type="number" inputmode="numeric" aria-describedby="${bioDomId}_st" data-bio-id="${bio.id}" data-bio-name="${bio.biologico}" data-field="existencia" value="0" min="0" class="w-full text-center font-black bio-exist-input">
+                            <button type="button" class="stepper-btn" aria-label="Aumentar existencia de ${bio.biologico}" onclick="const inp=this.previousElementSibling; inp.value=(parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input'));">+</button>
                         </div>
                     </div>
                     <div class="cascade-field">
-                        <label>Pedido</label>
+                        <label for="${bioDomId}_pe">Pedido</label>
                         <div class="touch-stepper-wrap flex items-center gap-2">
-                            <button type="button" class="stepper-btn" onclick="const inp=this.nextElementSibling; inp.value=Math.max(0, (parseInt(inp.value)||0)-1); inp.dispatchEvent(new Event('input'));">-</button>
-                            <input type="number" data-bio-id="${bio.id}" data-bio-name="${bio.biologico}" data-field="pedido" value="0" min="0" class="w-full text-center font-black bio-ped-input">
-                            <button type="button" class="stepper-btn" onclick="const inp=this.previousElementSibling; inp.value=(parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input'));">+</button>
+                            <button type="button" class="stepper-btn" aria-label="Disminuir pedido de ${bio.biologico}" onclick="const inp=this.nextElementSibling; inp.value=Math.max(0, (parseInt(inp.value)||0)-1); inp.dispatchEvent(new Event('input'));">-</button>
+                            <input id="${bioDomId}_pe" type="number" inputmode="numeric" aria-describedby="${bioDomId}_st" data-bio-id="${bio.id}" data-bio-name="${bio.biologico}" data-field="pedido" value="0" min="0" class="w-full text-center font-black bio-ped-input">
+                            <button type="button" class="stepper-btn" aria-label="Aumentar pedido de ${bio.biologico}" onclick="const inp=this.previousElementSibling; inp.value=(parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input'));">+</button>
                         </div>
                     </div>
                     <div class="text-center pt-2">
-                        <span class="text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-wider stock-val-badge bg-slate-100 text-slate-500">
+                        <span id="${bioDomId}_st" class="text-xs font-black px-3 py-1.5 rounded-full uppercase tracking-wider stock-val-badge bg-slate-100 text-slate-600">
                             Sin Captura
                         </span>
                     </div>
@@ -1715,7 +1826,8 @@
                     badgeClass = "bg-red-100 text-red-700 border border-red-200";
                 }
                 else if (promedio > 0 && total < promedio) {
-                    message = `⚠️ Faltan ${promedio - total} fr.`;
+                    const sinPed = !!document.getElementById('chkNoPedido')?.checked;
+                    message = sinPed ? `⚠️ Sin pedido: faltan ${promedio - total} fr. de existencia` : `⚠️ Faltan ${promedio - total} fr.`;
                     badgeClass = "bg-amber-100 text-amber-700 border border-amber-200";
                 } else if (promedio > 0) {
                     message = "✓ Correcto";
@@ -1725,7 +1837,7 @@
                     badgeClass = "bg-slate-100 text-slate-500";
                 }
 
-                valBadge.className = `text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-wider stock-val-badge ${badgeClass}`;
+                valBadge.className = `text-xs font-black px-3 py-1.5 rounded-full uppercase tracking-wider stock-val-badge ${badgeClass}`;
                 valBadge.textContent = message;
                 
                 if (isError) {
@@ -2582,13 +2694,15 @@
         
         document.querySelectorAll('.panel-section').forEach(sec => sec.classList.add('hidden'));
         document.getElementById(`panel${panelId}`)?.classList.remove('hidden');
+        const mpAnnounce = document.getElementById('mpAnnounce');
+        if (mpAnnounce) mpAnnounce.textContent = 'Panel: ' + (document.getElementById(`panel${panelId}`)?.getAttribute('aria-label') || panelId);
 
         const items = document.querySelectorAll('.dock-item');
         let activeBtn = null;
         items.forEach(item => {
             const isActive = item.dataset.panel === panelId;
             item.classList.toggle('active', isActive);
-            if (isActive) activeBtn = item;
+            if (isActive) { item.setAttribute('aria-current', 'page'); activeBtn = item; } else { item.removeAttribute('aria-current'); }
         });
 
         if (activeBtn) {
@@ -3493,7 +3607,7 @@
 
             } else if (activePanel === 'PINOL') {
                 if (hasActivePinol) {
-                    showToast("Ya tienes una solicitud de Pinol activa.", "error");
+                    showToast(pinolLockMessageMobile(), "error");
                     throw new Error("Múltiples pedidos de Pinol no permitidos");
                 }
                 tableName = "pinol_solicitudes";

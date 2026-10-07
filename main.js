@@ -7177,7 +7177,15 @@ async function supabaseRequest(action = "", payload, options = {}) {
           capturado_por: payload.nombre || USER.nombre || USER.usuario
         };
         const { error } = await supabase.from('pinol_solicitudes').insert(record);
-        if (error) throw error;
+        if (error) {
+          // Candado del servidor (trg_pinol_reject_duplicate_active): ya hay una solicitud sin confirmar.
+          if (error.code === '23505' && /pinol/i.test(String(error.message || ""))) {
+            invalidatePinolCache();
+            listPinol(true).then(() => { applyPinolFormLock(); syncCommandHub(); }).catch(() => { });
+            throw new Error("Aún tienes una solicitud de Pinol sin confirmar. Confirma la recepción del Pinol que ya se te envió para poder pedir más.");
+          }
+          throw error;
+        }
 
         // La notificación se genera automáticamente en Supabase mediante Trigger (notify_admin_on_pinol)
         // Hacemos el fan-out de la notificación en tiempo real
@@ -7234,6 +7242,46 @@ async function supabaseRequest(action = "", payload, options = {}) {
             })
             .eq('id', pinolId);
           if (pinolError) throw pinolError;
+        }
+
+        return { ok: true };
+      }
+
+      case "confirmpinolbyid": {
+        // Confirmación directa por id de solicitud (desde el formulario de Pinol): no depende de
+        // que la notificación de entrega siga en la bandeja. Solo la unidad dueña, solo ENTREGADO.
+        if (USER.rol !== "UNIDAD") throw new Error("Solo la unidad puede confirmar la recepción");
+        const pinolId = String(payload.pinol_id || "");
+        if (!pinolId) throw new Error("Solicitud no indicada");
+
+        const { data: updated, error: updErr } = await supabase
+          .from('pinol_solicitudes')
+          .update({ estatus: 'RECIBIDO', recibido_ts: new Date().toISOString() })
+          .eq('id', pinolId)
+          .eq('clues', USER.clues)
+          .eq('estatus', 'ENTREGADO')
+          .select('id');
+        if (updErr) throw updErr;
+        if (!updated || !updated.length) {
+          throw new Error("Esta solicitud ya no está pendiente de confirmar. Actualiza la pantalla.");
+        }
+
+        // Mejor esfuerzo: deja la notificación de entrega como confirmada y leída.
+        try {
+          const entregaNotifId = 'NOTIF:PINOL_ENTREGA:' + pinolId;
+          const { data: notif } = await supabase.from('notificaciones').select('id, meta_json').eq('id', entregaNotifId).maybeSingle();
+          if (notif) {
+            const meta = typeof notif.meta_json === 'string' ? JSON.parse(notif.meta_json || "{}") : (notif.meta_json || {});
+            meta.confirmed_by_unit = "SI";
+            meta.confirmation_ts = new Date().toISOString();
+            await supabase.from('notificaciones').update({ meta_json: JSON.stringify(meta) }).eq('id', entregaNotifId);
+            await supabase.from('notificaciones_perfil')
+              .update({ status: 'READ', read_ts: new Date().toISOString() })
+              .eq('notificacion_id', entregaNotifId)
+              .eq('usuario', USER.usuario);
+          }
+        } catch (notifErr) {
+          console.warn("[Pinol] No se pudo marcar la notificación de entrega como confirmada:", notifErr);
         }
 
         return { ok: true };
@@ -8615,42 +8663,151 @@ function getPinolFlowStatus() {
   return "PENDING";
 }
 
+// Solicitud de Pinol que hoy bloquea a la unidad (la más reciente sin confirmar):
+// una ENTREGADO manda sobre una PENDIENTE porque es la que la unidad debe confirmar.
+function getPinolActiveRow() {
+  if (!USER || USER.rol !== "UNIDAD") return null;
+  const mine = (window._pinolCache || []).filter(x =>
+    String(x?.clues || "") === String(USER.clues) &&
+    ["PENDIENTE", "ENTREGADO"].includes(String(x?.estatus || "").toUpperCase())
+  );
+  if (!mine.length) return null;
+  const byRecent = (a, b) => String(b?.fecha_solicitud || "").localeCompare(String(a?.fecha_solicitud || ""));
+  const delivered = mine.filter(x => String(x.estatus).toUpperCase() === "ENTREGADO").sort(byRecent);
+  return delivered[0] || mine.sort(byRecent)[0];
+}
+
+function pinolFechaCorta_(raw) {
+  const txt = String(raw || "");
+  if (!txt) return "";
+  // Un timestamp ISO (UTC) se pasa a fecha local; una fecha "YYYY-MM-DD" ya es el día correcto.
+  let ymd = txt.slice(0, 10);
+  if (txt.includes("T")) {
+    const d = new Date(txt);
+    if (isNaN(d)) return "";
+    ymd = dateToLocalYmd(d);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "";
+  return pedExtraFechaCorta(ymd);
+}
+
+// Aviso que se muestra al pulsar un botón de guardar bloqueado por el candado de Pinol.
+function pinolLockMessage_(status) {
+  if (status === "DELIVERED") return "Aún no confirmas la recepción de tu Pinol anterior. Confírmala para poder pedir más.";
+  if (status === "PENDING") return "Ya tienes una solicitud de Pinol en curso. Podrás pedir más cuando el municipio la surta y tú confirmes la recepción.";
+  return "Estamos verificando si tienes una solicitud de Pinol activa. Intenta de nuevo en un momento.";
+}
+
 function updatePinolFormBanner(status) {
   const banner = document.getElementById("pinolFlowBanner");
   if (!banner) return;
+
+  // La regla "confirma antes de pedir más" se muestra solo mientras el formulario está habilitado;
+  // con una solicitud activa la reemplaza el aviso del flujo (más específico).
+  const ruleNote = document.getElementById("pinolRuleNote");
+  if (ruleNote) ruleNote.style.display = (status === "NONE") ? "" : "none";
+
   if (status === "NONE") {
     banner.style.display = "none";
     banner.className = "";
     banner.innerHTML = "";
+    banner.removeAttribute("role");
+    return;
+  }
+
+  const row = getPinolActiveRow();
+  const fSol = row ? pinolFechaCorta_(row.fecha_solicitud) : "";
+  const fEnt = row ? pinolFechaCorta_(row.fecha_entrega) : "";
+  const botellas = row && Number(row.solicitud_botellas) > 0 ? Number(row.solicitud_botellas) : 0;
+
+  // Cuatro pasos del ciclo; "current" marca dónde está la unidad ahora.
+  const current = status === "DELIVERED" ? 3 : (status === "PENDING" ? 2 : 1);
+  const steps = [
+    { label: "Solicitud enviada", sub: fSol },
+    { label: "Municipio surte el Pinol", sub: status === "DELIVERED" ? fEnt : "" },
+    { label: "Tú confirmas la recepción", sub: "" },
+    { label: "Nueva solicitud habilitada", sub: "" }
+  ];
+  const stepsHtml = steps.map((s, i) => {
+    const n = i + 1;
+    const state = (status === "LOADING") ? "todo" : (n < current ? "done" : (n === current ? "current" : "todo"));
+    return `<li class="cp-step ${state}"${state === "current" ? ' aria-current="step"' : ""}>
+      <span class="cp-step-dot" aria-hidden="true">${state === "done" ? '<span class="material-symbols-rounded">check</span>' : n}</span>
+      <span class="cp-step-label">${escapeHtml(s.label)}${s.sub ? `<small>${escapeHtml(s.sub)}</small>` : ""}</span>
+    </li>`;
+  }).join("");
+
+  let tone = "pending", icon = "hourglass_top", title = "", text = "", actions = "";
+  if (status === "LOADING") {
+    title = "Verificando tu solicitud…";
+    text = "Estamos comprobando si tienes una solicitud de Pinol activa antes de habilitar el formulario.";
   } else if (status === "PENDING") {
-    banner.style.display = "flex";
-    banner.className = "pinol-flow-banner pending";
-    banner.innerHTML = `
-      <span class="material-symbols-rounded" style="font-size: 20px;">hourglass_empty</span>
-      <div>
-        Tu solicitud está en curso. El área municipal aún no ha surtido el insumo.
-      </div>
-    `;
+    tone = "pending"; icon = "hourglass_top";
+    title = "Tu solicitud de Pinol está en curso";
+    text = `${botellas ? `Pediste ${botellas} ${botellas === 1 ? "botella" : "botellas"}. ` : ""}El municipio aún no la surte. Mientras tanto no puedes enviar otra solicitud.`;
   } else if (status === "DELIVERED") {
-    banner.style.display = "flex";
-    banner.className = "pinol-flow-banner delivered";
-    banner.innerHTML = `
-      <span class="material-symbols-rounded" style="font-size: 20px;">local_shipping</span>
-      <div>
-        El insumo fue enviado. Revisa tus notificaciones y marca como recibido para habilitar una nueva solicitud.
+    tone = "delivered"; icon = "local_shipping";
+    title = "Confirma que recibiste tu Pinol para poder pedir más";
+    text = "El municipio ya marcó tu Pinol como enviado. Cuando lo tengas en tu unidad, confirma la recepción: si no lo haces, el formulario seguirá bloqueado y no podrás solicitar más.";
+    actions = `<button type="button" class="cp-flow-btn" id="btnPinolConfirmarRecepcion" onclick="confirmPinolReceiptFromBanner()">
+      <span class="material-symbols-rounded" aria-hidden="true">task_alt</span>Ya lo recibí, confirmar recepción
+    </button>`;
+  }
+
+  banner.style.display = "block";
+  banner.className = `cp-flow ${tone}`;
+  banner.setAttribute("role", "status");
+  banner.innerHTML = `
+    <div class="cp-flow-head">
+      <span class="cp-flow-ico material-symbols-rounded" aria-hidden="true">${icon}</span>
+      <div class="cp-flow-body">
+        <div class="cp-flow-title">${escapeHtml(title)}</div>
+        <p class="cp-flow-text">${escapeHtml(text)}</p>
       </div>
-    `;
-  } else if (status === "LOADING") {
-    banner.style.display = "flex";
-    banner.className = "pinol-flow-banner pending";
-    banner.innerHTML = `
-      <span class="material-symbols-rounded" style="font-size: 20px;">hourglass_top</span>
-      <div>
-        Verificando si ya tienes una solicitud activa antes de habilitar el formulario…
-      </div>
-    `;
+      ${actions}
+    </div>
+    <ol class="cp-steps" aria-label="Avance de tu solicitud de Pinol">${stepsHtml}</ol>
+  `;
+}
+
+// Confirmación directa desde el formulario (no depende de que la notificación siga en la bandeja).
+async function confirmPinolReceiptFromBanner() {
+  const row = getPinolActiveRow();
+  if (!row || String(row.estatus).toUpperCase() !== "ENTREGADO") {
+    showToast("No hay un Pinol enviado pendiente de confirmar.", false, "warn");
+    return;
+  }
+  const ok = await window.showConfirmDialog(
+    "Confirmar recepción de Pinol",
+    "¿Confirmas que ya recibiste físicamente el Pinol en tu unidad? Al confirmar se habilitará una nueva solicitud."
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById("btnPinolConfirmarRecepcion");
+  if (btn) btn.disabled = true;
+  try {
+    showOverlay("Confirmando recepción del pinol…", "Pinol");
+    const r = await apiCall("confirmPinolById", { pinol_id: row.id }, { silent: true });
+    if (!r || !r.ok) throw new Error((r && r.error) || "No se pudo confirmar la recepción");
+
+    // Deja la notificación de entrega (si sigue en la bandeja) también como confirmada.
+    const notif = (Array.isArray(LIVE_STATE.notifications) ? LIVE_STATE.notifications : []).find(n => {
+      const meta = parseNotifMeta(n?.meta_json);
+      return meta && String(meta.pinol_id || "") === String(row.id) && canConfirmPinolReceipt(n);
+    });
+    if (notif) applyLocalPinolReceiptConfirm(notif.id);
+
+    await refreshAfterMutation({ touchPinol: true });
+    showToast("Recepción confirmada. Ya puedes hacer una nueva solicitud de Pinol.", true, "good");
+  } catch (e) {
+    console.error("confirmPinolReceiptFromBanner error:", e);
+    showToast(e.message || "No se pudo confirmar la recepción", false, "bad");
+    if (btn) btn.disabled = false;
+  } finally {
+    hideOverlay();
   }
 }
+window.confirmPinolReceiptFromBanner = confirmPinolReceiptFromBanner;
 
 function applyPinolFormLock() {
   const status = getPinolFlowStatus();
@@ -12753,7 +12910,7 @@ function refreshBioAlerts(force = false) {
     const threshold = sinPedido ? existencia : totalDisponible;
     if (!omitirAdvertenciaPorCaravana && promedio > 0 && threshold < promedio) {
       const diff = promedio - threshold;
-      msgs.push(`Faltan ${diff} fr.`);
+      msgs.push(sinPedido ? `Sin pedido: la existencia debe ser de al menos ${promedio} fr. (faltan ${diff}).` : `Faltan ${diff} fr.`);
       level = "bad"; // Cambiado de 'warn' a 'bad' para bloquear guardado
       hasStrongAlert = true;
       hasBlockingError = true;
@@ -13115,10 +13272,10 @@ async function loadBioForm() {
           card.style.borderColor = "#bbf7d0";
           if (iconBg) { iconBg.style.backgroundColor = "#dcfce7"; iconBg.style.color = "#16a34a"; }
           if (label) label.style.color = "#15803d";
-          if (hint) { hint.innerHTML = "Modo: <b>Reportando solo existencias</b> (pedido en ceros)."; hint.style.color = "#166534"; }
+          if (hint) { hint.innerHTML = "Modo: <b>solo existencias</b> (pedido en ceros). La existencia de cada biológico debe ser <b>mayor o igual a su promedio</b>."; hint.style.color = "#166534"; }
         } else {
-          card.style.backgroundColor = "#ffffff";
-          card.style.borderColor = "#e2e8f0";
+          card.style.backgroundColor = "";
+          card.style.borderColor = "";
           if (iconBg) { iconBg.style.backgroundColor = ""; iconBg.style.color = ""; }
           if (label) label.style.color = "";
           if (hint) { hint.innerHTML = "Activa esta opción si <b>NO</b> necesitas realizar pedido este mes."; hint.style.color = ""; }
@@ -15766,10 +15923,10 @@ async function performSaveBIO() {
               card.style.borderColor = "#bbf7d0";
               if (iconBg) { iconBg.style.backgroundColor = "#dcfce7"; iconBg.style.color = "#16a34a"; }
               if (label) label.style.color = "#15803d";
-              if (hint) { hint.innerHTML = "Modo: <b>Reportando solo existencias</b> (pedido en ceros)."; hint.style.color = "#166534"; }
+              if (hint) { hint.innerHTML = "Modo: <b>solo existencias</b> (pedido en ceros). La existencia de cada biológico debe ser <b>mayor o igual a su promedio</b>."; hint.style.color = "#166534"; }
             } else {
-              card.style.backgroundColor = "#ffffff";
-              card.style.borderColor = "#e2e8f0";
+              card.style.backgroundColor = "";
+              card.style.borderColor = "";
               if (iconBg) { iconBg.style.backgroundColor = ""; iconBg.style.color = ""; }
               if (label) label.style.color = "";
               if (hint) { hint.innerHTML = "Activa esta opción si <b>NO</b> necesitas realizar pedido este mes."; hint.style.color = ""; }
@@ -15896,6 +16053,12 @@ document.addEventListener("keydown", (e) => {
 });
 
 $("btnSavePINOL").onclick = async () => {
+  // Candado también aquí: este botón se dispara desde el hub y desde la cola offline,
+  // así que no se confía solo en que el botón del hub esté deshabilitado.
+  const lockStatus = getPinolFlowStatus();
+  if (lockStatus !== "NONE") {
+    return showToast(pinolLockMessage_(lockStatus), false, "warn", { title: "Primero confirma tu Pinol anterior" });
+  }
   const nombre = $("nombrePINOL")?.value.trim() || "";
   if (!nombre) return showToast("Ingresa el nombre del responsable", false, "warn");
 
@@ -24757,7 +24920,7 @@ function syncCommandHub() {
             hubStatusText.textContent = "Solicitud enviada";
           } else if (flowStatus === "DELIVERED") {
             hubStatus.className = "status-chip-v5 pinol-delivered";
-            hubStatusText.textContent = "Insumo enviado";
+            hubStatusText.textContent = "Confirma recepción";
           } else if (flowStatus === "LOADING") {
             hubStatus.className = "status-chip-v5";
             hubStatusText.textContent = "Verificando…";
@@ -24814,7 +24977,14 @@ function syncCommandHub() {
   }
 
   if (hubSave) {
-    hubSave.disabled = isSaveDisabled;
+    // aria-disabled (no `disabled`): un botón realmente deshabilitado no dispara click, así que el
+    // aviso de "por qué no puedo guardar" nunca se veía. Se ve igual (CSS) pero sigue siendo clicable.
+    hubSave.disabled = false;
+    hubSave.setAttribute("aria-disabled", isSaveDisabled ? "true" : "false");
+    hubSave.title = isSaveDisabled
+      ? (captureTab === "PINOL" ? "Bloqueado: confirma primero la recepción de tu Pinol anterior" : "Guardado no disponible por ahora")
+      : (isEditing ? "Actualizar" : "Guardar cambios");
+    hubSave.setAttribute("aria-label", hubSave.title);
 
     // Remove legacy Tailwind classes and ensure base class
     hubSave.classList.remove("bg-primary", "hover:bg-primary-action", "text-white", "shadow-lg", "shadow-primary/20", "text-slate-600", "opacity-60");
@@ -24824,7 +24994,15 @@ function syncCommandHub() {
 
     if (isSaveDisabled) {
       hubSave.onclick = () => {
-        const alertMsg = (hubSave.getAttribute("data-alert")) ? "Corrige las alertas antes de guardar" : "No es posible guardar en este momento";
+        if (captureTab === "PINOL") {
+          showToast(pinolLockMessage_(getPinolFlowStatus()), false, "warn", { title: "Primero confirma tu Pinol anterior" });
+          return;
+        }
+        const alertMsg = (hubSave.getAttribute("data-alert"))
+          ? "Corrige las alertas antes de guardar"
+          : (reasonInvalid || (isSaved && !isEditing
+            ? "Este reporte ya está guardado. Usa Editar si necesitas modificarlo."
+            : "No es posible guardar en este momento"));
         showToast(alertMsg, false, "warn");
       };
     } else {

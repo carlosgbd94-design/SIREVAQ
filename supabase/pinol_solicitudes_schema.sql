@@ -222,6 +222,30 @@ CREATE TRIGGER trg_pinol_autoclean_recibido
   AFTER INSERT ON public.pinol_solicitudes
   FOR EACH ROW EXECUTE FUNCTION public.fn_pinol_autoclean_recibido();
 
+-- 9. Al confirmar una recepción, cierra también las entregas anteriores sin confirmar (NUEVO) --
+-- Aplicado en prod 2026-10-07. Cubre web y móvil (ambos solo actualizan la fila de su notificación).
+-- Se limpiaron además a mano las filas ENTREGADO/PENDIENTE duplicadas heredadas de antes del
+-- candado de la sección 7, dejando activa solo la más reciente por CLUES.
+CREATE OR REPLACE FUNCTION public.fn_pinol_cerrar_entregas_previas()
+RETURNS TRIGGER AS $function$
+BEGIN
+  IF NEW.estatus = 'RECIBIDO' AND OLD.estatus IS DISTINCT FROM 'RECIBIDO' THEN
+    UPDATE pinol_solicitudes
+       SET estatus = 'RECIBIDO', recibido_ts = coalesce(recibido_ts, NEW.recibido_ts, now())
+     WHERE clues = NEW.clues
+       AND id <> NEW.id
+       AND estatus = 'ENTREGADO'
+       AND timestamp_solicitud <= NEW.timestamp_solicitud;
+  END IF;
+  RETURN NEW;
+END;
+$function$ LANGUAGE plpgsql SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_pinol_cerrar_entregas_previas ON public.pinol_solicitudes;
+CREATE TRIGGER trg_pinol_cerrar_entregas_previas
+  AFTER UPDATE OF estatus ON public.pinol_solicitudes
+  FOR EACH ROW EXECUTE FUNCTION public.fn_pinol_cerrar_entregas_previas();
+
 -- ======================================================================================
 -- NOTA (get_advisors, verificado tras aplicar esta migración el 2026-08-20):
 -- pinol_solicitudes ya tenía, ANTES de esta migración, políticas RLS permisivas

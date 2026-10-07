@@ -39,7 +39,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1" rel="stylesheet">
 
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="mobile_style.css?v=2026.27d">
+  <link rel="stylesheet" href="mobile_style.css?v=2026.34">
+  <link rel="stylesheet" href="ayuda.css?v=1">
 </head>
 <body class="bg-[#f1f4f8] text-slate-800 min-h-[100dvh] flex flex-col relative overflow-x-hidden">
 
@@ -230,22 +231,22 @@
     <main id="captureContentArea" class="flex-1 p-6 pb-32 space-y-8 max-w-md mx-auto w-full">
 
       <!-- ==================== BIOLÓGICOS (SR) ==================== -->
-      <section id="panelSR" class="panel-section hidden">
+      <section id="panelSR" class="panel-section hidden" role="region" aria-label="Existencia de biológicos">
         <!-- ℹ️ Info Card for SR -->
         <div class="biologic-card liquid-glass flex gap-3.5 items-start mb-6">
           <span class="material-symbols-rounded text-xl text-sky-600 mt-0.5">ac_unit</span>
           <div class="min-w-0">
             <h4 class="text-xs font-black uppercase tracking-wider mb-1">Cadena de Frío</h4>
-            <p class="text-[11px] text-slate-500 leading-relaxed font-semibold">Mantén siempre la temperatura estrictamente entre +2°C y +8°C para evitar la inactivación de los biológicos.</p>
+            <p class="text-xs text-slate-600 leading-relaxed font-semibold">Mantén siempre la temperatura estrictamente entre +2°C y +8°C para evitar la inactivación de los biológicos.</p>
           </div>
         </div>
 
         <div class="flex items-center justify-between mb-6">
-          <h2 class="text-xl font-black text-slate-900">Biológicos</h2>
+          <h2 class="text-xl font-black text-slate-900">Biológicos<button type="button" class="ayuda-btn" data-ayuda="cap_sr" title="¿Cómo funciona?" aria-label="Cómo funciona el panel de existencia de biológicos" style="padding:6px;margin-left:6px"><span class="material-symbols-rounded" style="font-size:22px">help</span></button></h2>
           <div class="flex items-center gap-3">
-            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Sin Movimiento</span>
+            <span class="text-xs font-bold text-slate-600 uppercase tracking-wider">Sin Movimiento</span>
             <label class="premium-switch">
-              <input type="checkbox" id="chkSinMovimientoSR">
+              <input type="checkbox" id="chkSinMovimientoSR" aria-label="Sin movimiento: no hubo cambios en la existencia esta semana">
               <span class="premium-switch-track">
                 <span class="premium-switch-thumb">
                   <span class="material-symbols-rounded premium-switch-icon">done</span>
@@ -255,12 +256,12 @@
           </div>
         </div>
         <div class="mb-4">
-          <input type="text" id="nombreSR" placeholder="Nombre del responsable"
+          <input type="text" id="nombreSR" placeholder="Nombre del responsable" aria-label="Nombre del responsable de la existencia" autocomplete="name"
             class="w-full h-14 bg-white border border-slate-200 rounded-2xl px-4 text-sm font-semibold text-slate-900 outline-none focus:border-slate-900/40">
         </div>
         <!-- Controles dinámicos de filas -->
         <div class="flex justify-between items-center mb-4">
-          <span class="text-xs font-black text-slate-500 uppercase tracking-widest">Registros de Biológicos</span>
+          <span class="text-xs font-black text-slate-600 uppercase tracking-widest">Registros de Biológicos</span>
           <button type="button" id="btnAddSRCard" class="h-9 px-4 bg-slate-900 text-white text-xs font-black rounded-xl uppercase tracking-widest flex items-center gap-1 shadow-md active:scale-95 transition-transform">
             <span class="material-symbols-rounded text-sm">add</span>
             <span>Agregar</span>
@@ -268,27 +269,27 @@
         </div>
         <!-- Card Container de los Biológicos -->
         <div id="srCardsContainer" class="space-y-4">
-          <div class="p-8 text-center text-slate-400 font-bold">Cargando biológicos...</div>
+          <div class="p-8 text-center text-slate-500 font-bold">Cargando biológicos...</div>
         </div>
       </section>
 
       <!-- ==================== CONSUMIBLES (CONS) ==================== -->
-      <section id="panelCONS" class="panel-section hidden">
+      <section id="panelCONS" class="panel-section hidden" role="region" aria-label="Insumos y consumibles">
         <!-- ℹ️ Info Card for CONS -->
         <div class="biologic-card liquid-glass flex gap-3.5 items-start mb-6">
           <span class="material-symbols-rounded text-xl text-amber-600 mt-0.5">warning</span>
           <div class="min-w-0">
             <h4 class="text-xs font-black uppercase tracking-wider mb-1">Desecho Seguro</h4>
-            <p class="text-[11px] text-slate-500 leading-relaxed font-semibold">Toda jeringa utilizada debe ser descartada inmediatamente en contenedores rígidos de RPBI para evitar accidentes punzocortantes.</p>
+            <p class="text-xs text-slate-600 leading-relaxed font-semibold">Toda jeringa utilizada debe ser descartada inmediatamente en contenedores rígidos de RPBI para evitar accidentes punzocortantes.</p>
           </div>
         </div>
 
         <div class="flex items-center justify-between mb-6">
-          <h2 class="text-xl font-black text-slate-900">Consumibles</h2>
+          <h2 class="text-xl font-black text-slate-900">Consumibles<button type="button" class="ayuda-btn" data-ayuda="cap_cons" title="¿Cómo funciona?" aria-label="Cómo funciona el panel de insumos y consumibles" style="padding:6px;margin-left:6px"><span class="material-symbols-rounded" style="font-size:22px">help</span></button></h2>
           <div class="flex items-center gap-3">
-            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Sin Movimiento</span>
+            <span class="text-xs font-bold text-slate-600 uppercase tracking-wider">Sin Movimiento</span>
             <label class="premium-switch">
-              <input type="checkbox" id="chkSinMovimientoCONS">
+              <input type="checkbox" id="chkSinMovimientoCONS" aria-label="Sin movimiento: no hubo cambios en los consumibles esta semana">
               <span class="premium-switch-track">
                 <span class="premium-switch-thumb">
                   <span class="material-symbols-rounded premium-switch-icon">done</span>
@@ -298,51 +299,51 @@
           </div>
         </div>
         <div class="space-y-6">
-          <input type="text" id="nombreCONS" placeholder="Responsable de captura"
+          <input type="text" id="nombreCONS" placeholder="Responsable de captura" aria-label="Responsable de captura" autocomplete="name"
             class="w-full h-14 bg-white border border-slate-200 rounded-2xl px-4 text-sm font-semibold text-slate-900 outline-none focus:border-slate-900/40">
           
           <div class="grid grid-cols-2 gap-4">
             <div class="bg-white border border-slate-200 p-4 rounded-2xl">
-              <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 text-center">SRP (Dosis)</label>
-              <input type="number" id="srp_dosis" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
+              <label for="srp_dosis" class="text-xs font-black text-slate-600 uppercase tracking-widest block mb-2 text-center">SRP (Dosis)</label>
+              <input type="number" id="srp_dosis" inputmode="numeric" min="0" autocomplete="off" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
             </div>
             <div class="bg-white border border-slate-200 p-4 rounded-2xl">
-              <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 text-center">SR (Dosis)</label>
-              <input type="number" id="sr_dosis" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
+              <label for="sr_dosis" class="text-xs font-black text-slate-600 uppercase tracking-widest block mb-2 text-center">SR (Dosis)</label>
+              <input type="number" id="sr_dosis" inputmode="numeric" min="0" autocomplete="off" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
             </div>
             <div class="bg-white border border-slate-200 p-4 rounded-2xl">
-              <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 text-center">Jeringa 0.5</label>
-              <input type="number" id="jeringa_aplic_05ml_0605502657" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
+              <label for="jeringa_aplic_05ml_0605502657" class="text-xs font-black text-slate-600 uppercase tracking-widest block mb-2 text-center">Jeringa 0.5</label>
+              <input type="number" id="jeringa_aplic_05ml_0605502657" inputmode="numeric" min="0" autocomplete="off" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
             </div>
             <div class="bg-white border border-slate-200 p-4 rounded-2xl">
-              <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 text-center">Jeringa 5.0</label>
-              <input type="number" id="jeringa_reconst_5ml_0605500438" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
+              <label for="jeringa_reconst_5ml_0605500438" class="text-xs font-black text-slate-600 uppercase tracking-widest block mb-2 text-center">Jeringa 5.0</label>
+              <input type="number" id="jeringa_reconst_5ml_0605500438" inputmode="numeric" min="0" autocomplete="off" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
             </div>
           </div>
           <div class="bg-white border border-slate-200 p-4 rounded-2xl">
-            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Aguja (Auto)</label>
-            <input type="text" id="aguja_0600403711" placeholder="Calculado automáticamente" disabled class="w-full h-12 bg-slate-50 text-center font-bold text-slate-400 border border-slate-100 rounded-xl cursor-not-allowed">
+            <label for="aguja_0600403711" class="text-xs font-black text-slate-500 uppercase tracking-widest block mb-1">Aguja (Auto)</label>
+            <input type="text" id="aguja_0600403711" placeholder="Calculado automáticamente" disabled class="w-full h-12 bg-slate-50 text-center font-bold text-slate-500 border border-slate-100 rounded-xl cursor-not-allowed">
           </div>
         </div>
       </section>
 
       <!-- ==================== PEDIDO (BIO) ==================== -->
-      <section id="panelBIO" class="panel-section hidden">
+      <section id="panelBIO" class="panel-section hidden" role="region" aria-label="Pedido de biológico">
         <!-- ℹ️ Info Card for BIO -->
         <div class="biologic-card liquid-glass flex gap-3.5 items-start mb-6">
           <span class="material-symbols-rounded text-xl text-purple-600 mt-0.5">calculate</span>
           <div class="min-w-0">
             <h4 class="text-xs font-black uppercase tracking-wider mb-1">Pedido Inteligente</h4>
-            <p class="text-[11px] text-slate-500 leading-relaxed font-semibold">El pedido se evalúa automáticamente contra el promedio histórico de consumo para evitar pérdidas por caducidad.</p>
+            <p class="text-xs text-slate-600 leading-relaxed font-semibold">El pedido se evalúa automáticamente contra el promedio histórico de consumo para evitar pérdidas por caducidad.</p>
           </div>
         </div>
 
         <div class="flex items-center justify-between mb-6">
-          <h2 class="text-xl font-black text-slate-900">Pedido Mensual</h2>
+          <h2 class="text-xl font-black text-slate-900">Pedido Mensual<button type="button" class="ayuda-btn" data-ayuda="cap_bio" title="¿Cómo funciona?" aria-label="Cómo funciona el panel de pedido de biológico" style="padding:6px;margin-left:6px"><span class="material-symbols-rounded" style="font-size:22px">help</span></button></h2>
           <div class="flex items-center gap-3">
-            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Solo Existencias</span>
+            <span class="text-xs font-bold text-slate-600 uppercase tracking-wider">Solo Existencias</span>
             <label class="premium-switch">
-              <input type="checkbox" id="chkNoPedido">
+              <input type="checkbox" id="chkNoPedido" aria-label="Solo existencias: no hacer pedido este mes" aria-describedby="bioSinPedidoNote">
               <span class="premium-switch-track">
                 <span class="premium-switch-thumb">
                   <span class="material-symbols-rounded premium-switch-icon">done</span>
@@ -351,50 +352,60 @@
             </label>
           </div>
         </div>
+        <div class="mp-note mp-note-info" role="note" id="bioSinPedidoNote">
+          <span class="material-symbols-rounded" aria-hidden="true">rule</span>
+          <div><b>«Solo existencias»:</b> solo se permite si la existencia de cada biológico es <b>mayor o igual a su promedio</b>. Si alguno queda por debajo, no se puede enviar el pedido en ceros.</div>
+        </div>
         <div class="mb-4">
-          <input type="text" id="nombreBIO" placeholder="Nombre de quien captura"
+          <input type="text" id="nombreBIO" placeholder="Nombre de quien captura" aria-label="Nombre de quien captura el pedido" autocomplete="name"
             class="w-full h-14 bg-white border border-slate-200 rounded-2xl px-4 text-sm font-semibold text-slate-900 outline-none focus:border-slate-900/40">
         </div>
         <div id="fechaPedidoBIOBox" class="bg-white border border-slate-200 p-4 rounded-2xl mb-6 text-center">
-          <span class="text-xs font-bold text-slate-500 block mb-1">Fecha Objetivo</span>
+          <span class="text-xs font-bold text-slate-600 block mb-1">Fecha Objetivo</span>
           <span class="text-lg font-black text-slate-900" id="lblFechaPedido">—</span>
         </div>
         <div id="bioCardsContainer" class="space-y-4">
-          <div class="p-8 text-center text-slate-400 font-bold">Cargando pedidos...</div>
+          <div class="p-8 text-center text-slate-500 font-bold">Cargando pedidos...</div>
         </div>
       </section>
 
       <!-- ==================== PINOL (PINOL) ==================== -->
-      <section id="panelPINOL" class="panel-section hidden">
+      <section id="panelPINOL" class="panel-section hidden" role="region" aria-label="Solicitud de Pinol">
         <!-- ℹ️ Info Card for PINOL -->
         <div class="biologic-card liquid-glass flex gap-3.5 items-start mb-6">
           <span class="material-symbols-rounded text-xl text-emerald-600 mt-0.5">clean_hands</span>
           <div class="min-w-0">
             <h4 class="text-xs font-black uppercase tracking-wider mb-1">Higiene de Unidades</h4>
-            <p class="text-[11px] text-slate-500 leading-relaxed font-semibold">Asegura la limpieza diaria con Pinol diluido para mantener altos estándares de bioseguridad en el área de inmunizaciones.</p>
+            <p class="text-xs text-slate-600 leading-relaxed font-semibold">Asegura la limpieza diaria con Pinol diluido para mantener altos estándares de bioseguridad en el área de inmunizaciones.</p>
           </div>
         </div>
 
-        <div id="pinolFlowBanner" style="display:none"></div>
+        <div id="pinolFlowBanner" style="display:none" aria-live="polite"></div>
 
-        <h2 class="text-xl font-black text-slate-900 mb-6">Solicitud de Pinol</h2>
+        <!-- Regla del flujo: visible mientras el formulario está habilitado -->
+        <div id="pinolRuleNote" class="mp-note" role="note">
+          <span class="material-symbols-rounded" aria-hidden="true">lock_clock</span>
+          <div><b>Antes de pedir más:</b> cuando te llegue el Pinol, confirma la recepción aquí o en tus notificaciones. Si no la confirmas, no podrás hacer otra solicitud.</div>
+        </div>
+
+        <h2 class="text-xl font-black text-slate-900 mb-6">Solicitud de Pinol<button type="button" class="ayuda-btn" data-ayuda="cap_pinol" title="¿Cómo funciona?" aria-label="Cómo funciona el panel de solicitud de Pinol" style="padding:6px;margin-left:6px"><span class="material-symbols-rounded" style="font-size:22px">help</span></button></h2>
         <div class="space-y-6">
-          <input type="text" id="nombrePINOL" placeholder="Nombre de quien solicita"
+          <input type="text" id="nombrePINOL" placeholder="Nombre de quien solicita" aria-label="Nombre de quien solicita" autocomplete="name"
             class="w-full h-14 bg-white border border-slate-200 rounded-2xl px-4 text-sm font-semibold text-slate-900 outline-none focus:border-slate-900/40">
           
           <div class="grid grid-cols-2 gap-4">
             <div class="bg-white border border-slate-200 p-4 rounded-2xl">
-              <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 text-center">Existencia</label>
-              <input type="number" id="pinol_existencia" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
+              <label for="pinol_existencia" class="text-xs font-black text-slate-600 uppercase tracking-widest block mb-2 text-center">Existencia</label>
+              <input type="number" id="pinol_existencia" inputmode="numeric" min="0" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
             </div>
             <div class="bg-white border border-slate-200 p-4 rounded-2xl">
-              <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 text-center">Pedido</label>
-              <input type="number" id="pinol_solicitud" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
+              <label for="pinol_solicitud" class="text-xs font-black text-slate-600 uppercase tracking-widest block mb-2 text-center">Pedido</label>
+              <input type="number" id="pinol_solicitud" inputmode="numeric" min="1" placeholder="0" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-black text-slate-900 outline-none">
             </div>
           </div>
 
           <div class="bg-white border border-slate-200 p-4 rounded-2xl">
-            <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Observaciones</label>
+            <label for="pinol_observaciones" class="text-xs font-black text-slate-600 uppercase tracking-widest block mb-2">Observaciones (opcional)</label>
             <textarea id="pinol_observaciones" placeholder="Detalles de la solicitud..." class="w-full h-24 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium text-slate-900 outline-none focus:border-slate-900/40 resize-none"></textarea>
           </div>
         </div>
@@ -404,24 +415,24 @@
 
     <!-- 🛸 GLOBAL COMMAND HUB (FLOATING HUB SYSTEM) -->
     <div id="globalCommandHub" class="command-hub">
-      <div id="hubStatusChip" class="status-chip-v5 flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-wider">
+      <div id="hubStatusChip" role="status" aria-live="polite" class="status-chip-v5 flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-wider">
         <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
         <span id="hubStatusText">Listo</span>
       </div>
-      <button id="hubSaveBtn" class="w-14 h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
+      <button id="hubSaveBtn" type="button" aria-label="Guardar" title="Guardar" class="w-14 h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
         <span class="material-symbols-rounded text-2xl">save</span>
       </button>
-      <button id="hubEditBtn" style="display: none;" class="w-14 h-14 bg-sky-600 hover:bg-sky-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
+      <button id="hubEditBtn" type="button" aria-label="Editar reporte" title="Editar reporte" style="display: none;" class="w-14 h-14 bg-sky-600 hover:bg-sky-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
         <span class="material-symbols-rounded text-2xl">edit_document</span>
       </button>
-      <button id="hubCancelBtn" style="display: none;" class="w-14 h-14 bg-rose-600 hover:bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
+      <button id="hubCancelBtn" type="button" aria-label="Cancelar edición" title="Cancelar edición" style="display: none;" class="w-14 h-14 bg-rose-600 hover:bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
         <span class="material-symbols-rounded text-2xl">close</span>
       </button>
     </div>
 
     <!-- 📱 DOCK DE SELECCIÓN DE MÓDULOS -->
     <div id="mobileCaptureDockWrapper" class="dock-wrapper-v5">
-      <div id="mobileCaptureDock" class="dock-container">
+      <div id="mobileCaptureDock" class="dock-container" role="navigation" aria-label="Módulos de captura">
         <!-- Liquid Glass indicator (below buttons at z-index 1) -->
         <!-- Structure mirrors reference.html dock-bubble exactly:
              dockBubbleClone = receives filter:url(#dockGlassFilter) in non-backdrop-filter mode
@@ -433,20 +444,20 @@
           </div>
           <div class="dock-indicator-inner" id="dockIndicatorInner"></div>
         </div>
-        <button class="dock-item" data-panel="SR">
-          <span class="material-symbols-rounded">vaccines</span>
+        <button class="dock-item" data-panel="SR" type="button">
+          <span class="material-symbols-rounded" aria-hidden="true">vaccines</span>
           <label>BIOLÓGICOS</label>
         </button>
-        <button class="dock-item" data-panel="CONS">
-          <span class="material-symbols-rounded">add_business</span>
+        <button class="dock-item" data-panel="CONS" type="button">
+          <span class="material-symbols-rounded" aria-hidden="true">add_business</span>
           <label>CONSUMIBLES</label>
         </button>
-        <button class="dock-item" data-panel="BIO">
-          <span class="material-symbols-rounded">science</span>
+        <button class="dock-item" data-panel="BIO" type="button">
+          <span class="material-symbols-rounded" aria-hidden="true">science</span>
           <label>PEDIDO</label>
         </button>
-        <button class="dock-item" data-panel="PINOL">
-          <span class="material-symbols-rounded">inventory_2</span>
+        <button class="dock-item" data-panel="PINOL" type="button">
+          <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
           <label>PINOL</label>
         </button>
       </div>
@@ -491,7 +502,7 @@
             <div class="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
               <span class="text-xs font-bold text-slate-600">Biometría FaceID/TouchID</span>
               <label class="premium-switch">
-                <input type="checkbox" id="chkBiometria">
+                <input type="checkbox" id="chkBiometria" aria-label="Biometría FaceID o TouchID">
                 <span class="premium-switch-track">
                   <span class="premium-switch-thumb">
                     <span class="material-symbols-rounded premium-switch-icon">fingerprint</span>
@@ -573,7 +584,8 @@
   </div>
 
   <!-- 🧼 Toast Container -->
-  <div id="toastContainer" class="fixed top-6 right-6 left-6 z-[9999] flex flex-col gap-3 pointer-events-none"></div>
+  <div id="toastContainer" role="status" aria-live="polite" class="fixed top-6 right-6 left-6 z-[9999] flex flex-col gap-3 pointer-events-none"></div>
+  <div id="mpAnnounce" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <!-- 🛡️ MODAL ESTABLECER APERTURA BCG -->
   <div class="dropdown-overlay hidden" id="bcgAperturaOverlay">
@@ -794,6 +806,7 @@
   <script src="feedback_autoreply.js?v=2026.2" defer></script>
   <script src="perfil_cuenta.js?v=2026.2" defer></script>
   <script src="calendario_capacitaciones.js?v=2026.4" defer></script>
+  <script src="ayuda.js?v=8" defer></script>
   <script src="mobile_main.js" defer></script>
 </body>
 </html>
