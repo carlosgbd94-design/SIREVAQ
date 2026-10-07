@@ -2766,7 +2766,10 @@ function buildNotificationsHtml(items = []) {
         ? `<button type="button" class="notifIconPureBtn notifIconPureBtn-success" title="Leída" onclick="markNotificationReadFlow('${escapeAttr(item.id || "")}')"><span class="material-symbols-rounded">done</span></button>`
         : ``
       }
-              <button type="button" class="notifIconPureBtn notifIconPureBtn-danger" title="Borrar" onclick="deleteNotificationFlow('${escapeAttr(item.id || "")}')"><span class="material-symbols-rounded">delete</span></button>
+              ${showConfirmPinol
+        ? ``
+        : `<button type="button" class="notifIconPureBtn notifIconPureBtn-danger" title="Borrar" onclick="deleteNotificationFlow('${escapeAttr(item.id || "")}')"><span class="material-symbols-rounded">delete</span></button>`
+      }
             </div>
           </div>
           
@@ -3353,6 +3356,12 @@ async function deleteNotificationFlow(id) {
       return;
     }
 
+    const target = (Array.isArray(LIVE_STATE.notifications) ? LIVE_STATE.notifications : []).find(n => String(n?.id) === String(id));
+    if (target && canConfirmPinolReceipt(target)) {
+      showToast("Primero confirma la recepción del Pinol; después podrás eliminar esta notificación.", false, "warn");
+      return;
+    }
+
     const isDesabastoDigest = id === DESAB_DIGEST_ID;
     const ok = await window.showConfirmDialog(
       "Eliminar Notificación",
@@ -3388,15 +3397,18 @@ async function clearAllNotificationsFlow() {
 
     showOverlay("Limpiando tu buzón…", "Notificaciones");
 
-    const r = await apiCall("clearAllNotifications", {});
+    // Las entregas de Pinol sin confirmar se conservan hasta que la unidad confirme.
+    const keep = (Array.isArray(LIVE_STATE.notifications) ? LIVE_STATE.notifications : [])
+      .filter(n => canConfirmPinolReceipt(n));
+    const r = await apiCall("clearAllNotifications", { keep_ids: keep.map(n => String(n.id)) });
     if (!r || !r.ok) {
       showToast((r && r.error) ? r.error : "No se pudieron borrar las notificaciones", false);
       return;
     }
 
-    LIVE_STATE.notifications = [];
+    LIVE_STATE.notifications = keep;
     rerenderNotificationsFromState();
-    showToast("Tu buzón ha sido limpiado");
+    showToast(keep.length ? "Buzón limpiado; se conservó el aviso de Pinol por confirmar" : "Tu buzón ha sido limpiado");
   } catch (e) {
     console.error("clearAllNotificationsFlow error:", e);
     showToast(e.message || "No se pudo limpiar el buzón", false);
@@ -7413,11 +7425,14 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
       case "clearallnotifications": {
         // Per-profile: soft-delete TODAS mis copias sin afectar a otros usuarios
-        const { error: clearError } = await supabase
+        const keepIds = Array.isArray(payload.keep_ids) ? payload.keep_ids.filter(Boolean) : [];
+        let clearQuery = supabase
           .from('notificaciones_perfil')
           .update({ deleted: true, deleted_ts: new Date().toISOString() })
           .eq('usuario', USER.usuario)
           .eq('deleted', false);
+        if (keepIds.length) clearQuery = clearQuery.not('notificacion_id', 'in', `(${keepIds.map(i => `"${String(i).replace(/"/g, '')}"`).join(',')})`);
+        const { error: clearError } = await clearQuery;
         if (clearError) throw clearError;
         return { ok: true };
       }
@@ -8814,6 +8829,18 @@ function applyPinolFormLock() {
   const form = document.getElementById("formPINOL");
   const btn = document.getElementById("btnSavePINOL");
   if (!form) return;
+
+  // Si aún no se sabe nada de la lista (nadie la ha pedido en esta sesión), se pide aquí:
+  // sin esto el formulario se quedaba en "Verificando…" para siempre.
+  if (status === "LOADING" && !window._pinolLoadInFlight) {
+    window._pinolLoadInFlight = true;
+    listPinol(true)
+      .catch((e) => console.warn("[Pinol] No se pudo cargar la lista para el candado:", e))
+      .finally(() => {
+        window._pinolLoadInFlight = false;
+        if (window._pinolCacheLoaded) { applyPinolFormLock(); syncCommandHub(); }
+      });
+  }
 
   const locked = (status !== "NONE");
 
@@ -18655,7 +18682,7 @@ function imprimirAcusePinol(solicitudOrId) {
   <style>
     @page {
       size: letter portrait;
-      margin: 12mm 15mm;
+      margin: 14mm 16mm;
     }
     * {
       box-sizing: border-box;
@@ -18671,8 +18698,12 @@ function imprimirAcusePinol(solicitudOrId) {
     }
     .memo-page {
       width: 100%;
-      min-height: 98vh;
-      padding: 10px 5px;
+      /* Carta 279.4 mm - márgenes 28 mm = 251.4 mm útiles; 244 mm deja holgura para que
+         el pie y los bordes no se recorten ni se genere una hoja extra. */
+      height: 244mm;
+      overflow: hidden;
+      break-inside: avoid;
+      padding: 0;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
