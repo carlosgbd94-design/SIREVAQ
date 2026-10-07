@@ -18682,7 +18682,7 @@ function imprimirAcusePinol(solicitudOrId) {
   <style>
     @page {
       size: letter portrait;
-      margin: 14mm 16mm;
+      margin: 0;
     }
     * {
       box-sizing: border-box;
@@ -18697,13 +18697,14 @@ function imprimirAcusePinol(solicitudOrId) {
       padding: 0;
     }
     .memo-page {
-      width: 100%;
-      /* Carta 279.4 mm - márgenes 28 mm = 251.4 mm útiles; 244 mm deja holgura para que
-         el pie y los bordes no se recorten ni se genere una hoja extra. */
-      height: 244mm;
+      /* Hoja carta (215.9 x 279.4 mm) con el margen propio dentro de la hoja: asi no depende
+         de los margenes del dialogo de impresion (con "Ninguno" se recortaba todo el borde).
+         18 mm arriba/abajo y 22 mm a los lados absorben el area no imprimible de la impresora. */
+      width: 215.9mm;
+      height: 277mm;
       overflow: hidden;
       break-inside: avoid;
-      padding: 0;
+      padding: 18mm 22mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -19110,7 +19111,7 @@ function renderPinolCommandCenter() {
   const recibidas = safeItems.filter(x => String(x?.estatus_visual || x?.estatus || "").toUpperCase() === "RECIBIDO");
 
   // Litros totales de ruta (pendientes de entregar, máximo 4 botellas por unidad)
-  const botellasRuta = pendientes.reduce((acc, x) => acc + Math.min(Number(x?.solicitud_botellas || 4), 4), 0);
+  const botellasRuta = pendientes.reduce((acc, x) => acc + Number(x?.solicitud_botellas || 4), 0);
   const litrosRuta = (botellasRuta * 0.828).toFixed(1);
 
   if ($("pinolTotal")) animateCounter("pinolTotal", parseInt($("pinolTotal").textContent) || 0, total);
@@ -19202,7 +19203,7 @@ function renderPinolCommandCenter() {
     const id = String(x?.id || "");
     const estatus = String(x?.estatus_visual || x?.estatus || "").toUpperCase();
     const existencia = Number(x?.existencia_actual_botellas || 0);
-    const solicitado = Math.min(Number(x?.solicitud_botellas || 4), 4);
+    const solicitado = Number(x?.solicitud_botellas || 4);
     const isChecked = window._pinolSelectedIds.has(id);
     const isCritical = existencia === 0 && estatus === "PENDIENTE";
 
@@ -19369,7 +19370,7 @@ function openPinolBatchModal() {
   if (!selectedItems.length) return;
 
   const count = selectedItems.length;
-  const totalBotellas = selectedItems.reduce((acc, x) => acc + Math.min(Number(x?.solicitud_botellas || 4), 4), 0);
+  const totalBotellas = selectedItems.reduce((acc, x) => acc + Number(x?.solicitud_botellas || 4), 0);
   const totalLitros = (totalBotellas * 0.828).toFixed(1);
 
   if ($("pinolBatchCountSummary")) $("pinolBatchCountSummary").textContent = `${count} Unidad(es)`;
@@ -19510,7 +19511,7 @@ function imprimirGuiaEmbarquePinol(items) {
   const logo2 = logos.logo2 || "";
 
   const totalUnidades = items.length;
-  const totalBotellas = items.reduce((acc, x) => acc + Math.min(Number(x?.solicitud_botellas || 4), 4), 0);
+  const totalBotellas = items.reduce((acc, x) => acc + Number(x?.solicitud_botellas || 4), 0);
   const totalLitros = (totalBotellas * 0.828).toFixed(2);
   const municipio = (items[0]?.municipio || "MULTIPLE").toUpperCase();
 
@@ -19547,7 +19548,7 @@ function imprimirGuiaEmbarquePinol(items) {
         </thead>
         <tbody>
           ${items.map((x, idx) => {
-            const bot = Math.min(Number(x?.solicitud_botellas || 4), 4);
+            const bot = Number(x?.solicitud_botellas || 4);
             return `
               <tr>
                 <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: 800;">${idx + 1}</td>
