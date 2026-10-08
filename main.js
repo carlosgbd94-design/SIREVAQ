@@ -17737,7 +17737,7 @@ window.openEditUserModal = async function openEditUserModal(u) {
   if ($("createUserModalIcon")) $("createUserModalIcon").textContent = "edit_location_alt";
   if ($("createUserModalTitle")) $("createUserModalTitle").textContent = "Editar Usuario";
   if ($("createUserModalSub")) $("createUserModalSub").textContent = "Puedes reasignar rol, municipio, unidad o CLUES, y corregir correo y nombre, sin borrar la cuenta ni afectar sus reportes históricos.";
-  if ($("createUsuarioIDLabel")) $("createUsuarioIDLabel").textContent = "ID de usuario (no editable)";
+  if ($("createUsuarioIDLabel")) $("createUsuarioIDLabel").textContent = "ID de usuario (se actualiza solo al mover)";
   if ($("createUserModalBtnIcon")) $("createUserModalBtnIcon").textContent = "save";
   if ($("createUserModalBtnTxt")) $("createUserModalBtnTxt").textContent = "Guardar cambios";
 

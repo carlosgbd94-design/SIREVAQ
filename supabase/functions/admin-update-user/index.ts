@@ -11,6 +11,7 @@ const CLUES_JURISDICCION = 'QTSSA012154';
 const UNIDAD_JURISDICCION = 'OFICINAS DE LA JURISDICCIÓN SANITARIA 1';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const escLike = (s: string) => s.replace(/[\\%_]/g, (c) => "\\" + c);
 const norm = (s: unknown) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
 
 // Edición de un usuario por un ADMIN: rol, CLUES / unidad / municipio, correo y nombre.
@@ -22,7 +23,9 @@ const norm = (s: unknown) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g
 //    cuenta con ese texto, se rechaza en vez de adivinar).
 //  * Para UNIDAD la unidad y el municipio se toman del catálogo `unidades` según la CLUES elegida: el
 //    navegador ya no puede dejar una CLUES con el nombre/municipio de otra.
-//  * Mover a alguien de CLUES NO toca sus reportes históricos (guardan su propia CLUES) ni su ID.
+//  * Mover a alguien de CLUES NO toca sus reportes históricos (guardan su propia CLUES).
+//  * El ID interno se renombra al mover de CLUES/rol SOLO si seguía el formato automático (CLUES_NOMBRE);
+//    un ID personalizado se respeta. Se actualiza en perfiles, usuarios_legacy, notificaciones_perfil y Auth.
 //  * Un ADMIN no puede quitarse a sí mismo el rol ni dejar el sistema sin administradores.
 // municipios_allowed según rol: ADMIN todos; MUNICIPAL/JURISDICCIONAL la lista del campo municipio
 function municipiosAllowedDe(rol: string, municipio: string): string[] {
@@ -86,12 +89,12 @@ serve(async (req) => {
     }
 
     // 5. Localizar al usuario: por id; respaldo por ID interno EXACTO
-    let target: { id: string; usuario: string; email: string | null; rol: string; municipio: string | null } | null = null;
+    let target: { id: string; usuario: string; email: string | null; rol: string; municipio: string | null; clues: string | null } | null = null;
     if (targetId) {
-      const { data } = await supabaseAdmin.from('perfiles').select('id, usuario, email, rol, municipio').eq('id', targetId).maybeSingle();
+      const { data } = await supabaseAdmin.from('perfiles').select('id, usuario, email, rol, municipio, clues').eq('id', targetId).maybeSingle();
       target = data;
     } else if (internalID) {
-      const { data, error } = await supabaseAdmin.from('perfiles').select('id, usuario, email, rol, municipio').eq('usuario', String(internalID).trim());
+      const { data, error } = await supabaseAdmin.from('perfiles').select('id, usuario, email, rol, municipio, clues').eq('usuario', String(internalID).trim());
       if (error) throw error;
       if ((data || []).length > 1) {
         throw new Error(`Hay ${(data || []).length} cuentas con el ID interno '${internalID}'. Edita desde la lista de usuarios (se identifica por cuenta, no por texto).`);
@@ -171,17 +174,51 @@ serve(async (req) => {
       updateData.nombre = n;
     }
 
-    // 9. Aplicar en perfiles (por id) y reflejar en usuarios_legacy (por ID interno exacto)
+    // 9. ID interno. Si seguía el formato automático de la ubicación anterior (CLUES_...) y la persona
+    // cambió de CLUES o de rol, se regenera para que no conserve el nombre de la unidad/caravana anterior.
+    const cluesAnterior = String(target.clues || '').trim().toUpperCase();
+    const ubicacionCambio = cluesAnterior !== nuevaClues || target.rol !== nuevoRol;
+    const eraAutomatico = !!cluesAnterior && String(target.usuario || '').toUpperCase().startsWith(`${cluesAnterior}_`);
+    let nuevoUsuarioID = target.usuario;
+    if (ubicacionCambio && eraAutomatico) {
+      const base = nuevoRol === 'UNIDAD' ? `${nuevaClues}_${norm(nuevaUnidad).replace(/\s+/g, '_')}`
+        : nuevoRol === 'JURISDICCIONAL' ? `${CLUES_JURISDICCION}_JURISDICCIONAL`
+        : nuevoRol === 'VISUALIZADOR_JURISDICCIONAL' ? `${CLUES_JURISDICCION}_VIZ_JUR`
+        : nuevoRol === 'CARAVANAS' ? `${CLUES_JURISDICCION}_CARAVANAS`
+        : `${nuevaClues}_${nuevoRol}`;
+      let candidato = base;
+      for (let n = 2; n < 100; n++) {
+        if (candidato.toUpperCase() === String(target.usuario).toUpperCase()) break;
+        const esc = escLike(candidato);
+        const { count } = await supabaseAdmin.from('perfiles').select('id', { count: 'exact', head: true }).ilike('usuario', esc).neq('id', target.id);
+        const { count: enLegacy } = await supabaseAdmin.from('usuarios_legacy').select('usuario', { count: 'exact', head: true }).ilike('usuario', esc).neq('usuario', target.usuario);
+        if (!count && !enLegacy) break;
+        candidato = `${base}_${n}`;
+      }
+      nuevoUsuarioID = candidato;
+      if (nuevoUsuarioID !== target.usuario) updateData.usuario = nuevoUsuarioID;
+    }
+
+    // 10. Aplicar en perfiles (por id) y reflejar en usuarios_legacy (por ID interno exacto)
     const { error: perfilError } = await supabaseAdmin.from('perfiles').update(updateData).eq('id', target.id);
     if (perfilError) throw new Error(`No se pudo actualizar el perfil: ${perfilError.message}`);
 
     const legacyData: Record<string, unknown> = { rol: nuevoRol, municipio: nuevoMunicipio, clues: nuevaClues, unidad: nuevaUnidad };
+    if (nuevoUsuarioID !== target.usuario) legacyData.usuario = nuevoUsuarioID;
     if (updateData.email) legacyData.email = updateData.email;
     const { error: legacyError } = await supabaseAdmin.from('usuarios_legacy').update(legacyData).eq('usuario', target.usuario);
     if (legacyError) console.error("Error al actualizar legacy:", legacyError);
 
+    if (nuevoUsuarioID !== target.usuario) {
+      const { error: nErr } = await supabaseAdmin.from('notificaciones_perfil').update({ usuario: nuevoUsuarioID }).eq('usuario', target.usuario);
+      if (nErr) console.error("Error al migrar notificaciones_perfil:", nErr);
+      const { data: authU } = await supabaseAdmin.auth.admin.getUserById(target.id);
+      const { error: metaErr } = await supabaseAdmin.auth.admin.updateUserById(target.id, { user_metadata: { ...(authU?.user?.user_metadata || {}), usuario_id: nuevoUsuarioID } });
+      if (metaErr) console.error("Error al actualizar metadata de Auth:", metaErr);
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, message: 'Usuario actualizado exitosamente' }),
+      JSON.stringify({ ok: true, message: nuevoUsuarioID !== target.usuario ? `Usuario actualizado. Nuevo ID: ${nuevoUsuarioID}` : 'Usuario actualizado exitosamente', usuario: nuevoUsuarioID }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 
