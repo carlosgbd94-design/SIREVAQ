@@ -103,6 +103,13 @@ async function cargarSesionReal() {
   if (!session) return;
   const { data: perfil } = await estado.db.from('perfiles').select('id, usuario, rol').eq('id', session.user.id).maybeSingle();
   if (!perfil) return;
+  if (String(perfil.rol || '').toUpperCase() === 'VISUALIZADOR_JURISDICCIONAL') {
+    // Este perfil no tiene acceso a esta pantalla: se oculta todo y se regresa al inicio.
+    document.documentElement.style.display = 'none';
+    window.location.replace('index.html');
+    estado.accesoDenegado = true;
+    return;
+  }
   estado.perfil = perfil;
   const inp = document.getElementById('selUsuario');
   inp.value = nombreCompletoDePerfil(perfil);
@@ -1180,6 +1187,7 @@ function verPdfJurisdiccional() {
 document.addEventListener('DOMContentLoaded', async () => {
   initDb();
   await cargarSesionReal();
+  if (estado.accesoDenegado) return;
   await cargarInicial();
   // Sin jurisdicciones que elegir ni usuario que teclear, esos campos solo estorban.
   const ocultarCampo = (id) => { const c = document.getElementById(id).closest('.campo'); if (c) c.style.display = 'none'; };

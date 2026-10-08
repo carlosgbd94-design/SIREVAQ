@@ -586,6 +586,13 @@ async function cargarSesionReal() {
     .select('id, usuario, rol, municipio_asignado, municipios_allowed')
     .eq('id', session.user.id).maybeSingle();
   if (!perfil) { toast('No se encontró el perfil del usuario.', true); return; }
+  if (String(perfil.rol || '').toUpperCase() === 'VISUALIZADOR_JURISDICCIONAL') {
+    // Este perfil no tiene acceso a esta pantalla: se oculta todo y se regresa al inicio.
+    document.documentElement.style.display = 'none';
+    window.location.replace('index.html');
+    estado.accesoDenegado = true;
+    return;
+  }
   estado.perfil = perfil;
   const rol = String(perfil.rol || '').toUpperCase();
   estado.puedeEditar = rol === 'ADMIN' || rol === 'JURISDICCIONAL';
@@ -3540,6 +3547,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   poblarSelectoresCabecera();
   instalarEventos();
   await cargarSesionReal();
+  if (estado.accesoDenegado) return;
   await cargarCatalogoYUnidades();
   await cargarFirmasJurisdiccionales();
   await renderFirmasMunicipio();
