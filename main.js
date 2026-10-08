@@ -10927,7 +10927,16 @@ function activateDefaultMainForRole() {
         try { window.history.replaceState(null, "", window.location.pathname + window.location.hash); } catch (_) { /* cosmético */ }
       }
     }
-    if (_deepLinkCaptura === "INFLUENZA" && Date.now() < _deepLinkCapturaHasta) capturaInicial = "INFLUENZA";
+    if (_deepLinkCaptura === "INFLUENZA" && Date.now() < _deepLinkCapturaHasta) {
+      capturaInicial = "INFLUENZA";
+      // Si se llegó desde el SINBA-SIS, se ofrece el camino de regreso.
+      try {
+        if (sessionStorage.getItem("sirevaq_desde_sis") === "1") {
+          const volver = document.getElementById("influenzaVolverSIS");
+          if (volver) volver.style.display = "inline-flex";
+        }
+      } catch (_) { /* sin almacenamiento */ }
+    }
     activateCapture(capturaInicial);
   } else {
     activateMain("CAP");
@@ -16551,6 +16560,22 @@ async function generarPDFResguardoSR(municipios, fIni, fFin, isUnitExport = fals
         return String(a.lote || "").localeCompare(String(b.lote || ""));
       });
 
+      // El resguardo no distingue fecha de entrada: se acumulan los frascos por biológico + lote.
+      const acumulados = new Map();
+      g.items.forEach(it => {
+        const k = `${String(it.biologico || "").toLowerCase().trim()}|${String(it.lote || "").toUpperCase().trim()}`;
+        const prev = acumulados.get(k);
+        if (prev) prev.cantidad = Number(prev.cantidad || 0) + Number(it.cantidad || 0);
+        else acumulados.set(k, { ...it, cantidad: Number(it.cantidad || 0) });
+      });
+      const itemsAcum = Array.from(acumulados.values()).filter(it => Number(it.cantidad) > 0);
+      // Si no caben en una hoja (18 filas) se genera otro formato con los faltantes.
+      const FILAS_POR_HOJA = 18;
+      const hojasItems = [];
+      for (let i = 0; i < itemsAcum.length; i += FILAS_POR_HOJA) hojasItems.push(itemsAcum.slice(i, i + FILAS_POR_HOJA));
+      if (!hojasItems.length) hojasItems.push([]);
+
+      for (const pageItems of hojasItems)
       for (const cop of ["ORIGINAL", "COPIA"]) {
         if (!isFirstPage) {
           doc.addPage();
@@ -16600,8 +16625,8 @@ async function generarPDFResguardoSR(municipios, fIni, fFin, isUnitExport = fals
 
         const tableRows = [];
         for (let i = 0; i < 18; i++) {
-          if (i < g.items.length) {
-            const it = g.items[i];
+          if (i < pageItems.length) {
+            const it = pageItems[i];
             const frascos = Number(it.cantidad || 0);
             const dosis = Math.round(frascos * getDosesPerVial(it.biologico));
             tableRows.push([
