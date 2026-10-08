@@ -679,11 +679,9 @@ test('Requisiciones: el chip de guardado muestra qué está guardado y qué falt
   expect(errores).toEqual([]);
 });
 
-test('Requisiciones: sin permiso de edición no hay chip de guardado ni botón Guardar', async ({ page }) => {
+test('Requisiciones: el visualizador jurisdiccional no tiene acceso y regresa al inicio', async ({ page }) => {
   await preparar(page, { rol: 'VISUALIZADOR_JURISDICCIONAL', conReq: true });
-  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
-  await expect(page.locator('#dockGuardado')).toBeHidden();
-  await expect(page.locator('#btnGuardarTodo')).toBeHidden();
+  await expect(page).toHaveURL(/index\.html/, { timeout: 15000 });
 });
 
 
@@ -1105,14 +1103,6 @@ test('Requisiciones: si la base rechaza traer el pedido (se cerró mientras tant
   await expect(page.locator('#pedTraer')).toBeEnabled();
   expect(await db(page, 'db.requi_items_jurisdiccion.length')).toBe(0);
   expect(await db(page, "db.requi_requisiciones.find((r) => r.id === 'req-hoy').pedido_fecha || null")).toBeNull();
-  expect(errores).toEqual([]);
-});
-
-test('Requisiciones: un perfil que no edita (visualizador) no ve el botón Traer pedido', async ({ page }) => {
-  await page.addInitScript(pedidosDelMesAnterior());
-  const errores = await preparar(page, { conReq: true, rol: 'VISUALIZADOR_JURISDICCIONAL' });
-  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
-  await expect(page.locator('#btnTraerPedido')).toBeHidden();
   expect(errores).toEqual([]);
 });
 

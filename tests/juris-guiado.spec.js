@@ -124,13 +124,10 @@ test('Jurisdicción: concentrado guiado por municipio en 4 pasos', async ({ page
   expect(errores).toEqual([]);
 });
 
-test('Jurisdicción: el visualizador consulta pero no genera ni corrige', async ({ page }) => {
-  const errores = await abrir(page, 'VISUALIZADOR_JURISDICCIONAL');
-  await page.click('#dockJTabs .hoja-tab[data-jpaso="4"]');
-  await expect(page.locator('#btnGenerarInforme')).toBeHidden();
-  await page.click('#dockJTabs .hoja-tab[data-jpaso="3"]');
-  await page.locator('table.concentrado [data-action="drilldown"]').first().click();
-  await expect(page.locator('#drilldownContenido')).toContainText('Querétaro');
-  await expect(page.locator('[data-action="abrir-correccion-mov"]')).toHaveCount(0);
-  expect(errores).toEqual([]);
+test('Jurisdicción: el visualizador no tiene acceso a esta pantalla y regresa al inicio', async ({ page }) => {
+  await page.route(/unpkg\.com\/@supabase\/supabase-js/, (r) => r.fulfill({ contentType: 'application/javascript', body: FAKE }));
+  await page.route(/fonts\.(googleapis|gstatic)\.com|cdnjs\.cloudflare\.com|raw\.githubusercontent\.com/, (r) => r.abort());
+  await page.addInitScript(() => { window.__FAKE_ROL__ = 'VISUALIZADOR_JURISDICCIONAL'; });
+  await page.goto('/biovac_jurisdiccion.html', { waitUntil: 'load' });
+  await expect(page).toHaveURL(/index\.html/, { timeout: 15000 });
 });
