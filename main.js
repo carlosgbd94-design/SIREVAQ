@@ -118,7 +118,11 @@ if (!window.supabase || typeof window.supabase.createClient !== 'function') {
   // en el arranque (DOMContentLoaded) ya debería cubrir este caso, pero este listener es
   // una red de seguridad ante condiciones de carrera del SDK al procesar el hash de la URL.
   const JS1_LANDED_WITH_AUTH_HASH = /[#&](access_token|refresh_token)=/.test(window.location.hash);
-  window.supabase.auth.onAuthStateChange((event, session) => {
+  // Defensa: si el SDK (cargado desde CDN sin version fija) llega incompleto o cambia de API, que este
+  // listener opcional no tumbe el arranque de la app.
+  const _js1OnAuth = window.supabase.auth && window.supabase.auth.onAuthStateChange;
+  if (typeof _js1OnAuth !== 'function') console.error('[INIT] supabase.auth.onAuthStateChange no disponible; SDK:', Object.keys(window.supabase.auth || {}).slice(0, 12));
+  else window.supabase.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_IN" && session && JS1_LANDED_WITH_AUTH_HASH && typeof USER !== "undefined" && !USER) {
       (async () => {
         const u = await whoami();
@@ -5661,26 +5665,19 @@ async function supabaseRequest(action = "", payload, options = {}) {
         // 4. Ejecutar Inserción Dual (Renglones de detalle primero, luego resumen global)
         console.log("[Capture Logic] Preparando guardado de SR para:", { clues, fecha, tiene_ceros: summaryRecord.tiene_ceros });
 
-        // PURGAR PREVIAMENTE PARA EVITAR DUPLICADOS AL EDITAR
-        await Promise.all([
-          supabase.from('biologicos_existencia').delete().eq('clues', clues).eq('fecha', fecha),
-          supabase.from('existencia_detalle').delete().eq('clues', clues).eq('fecha', fecha)
-        ]);
-
-        // Insertar primero el detalle si existen partidas
-        if (detailRecords && detailRecords.length > 0) {
-          const resDetail = await supabase.from('existencia_detalle').insert(detailRecords);
-          if (resDetail.error) {
-            console.error("[Capture Logic] Error insertando existencia_detalle:", resDetail.error);
-            throw resDetail.error;
-          }
-        }
-
-        // Insertar el resumen global solo tras confirmar que el detalle se insertó con éxito
-        const resSummary = await supabase.from('biologicos_existencia').insert(summaryRecord);
-        if (resSummary.error) {
-          console.error("[Capture Logic] Error insertando biologicos_existencia:", resSummary.error);
-          throw resSummary.error;
+        // Guardado atomico en el servidor: reemplaza el dia de la CLUES en una sola transaccion
+        // (serializado por CLUES+fecha). Si dos cuentas de la misma unidad guardan a la vez no quedan
+        // duplicados, y cuando se sobrescribe una captura previa se registra editado_por / editado_ts.
+        const { error: rpcErr } = await supabase.rpc('guardar_existencia', {
+          p_clues: clues,
+          p_fecha: fecha,
+          p_resumen: summaryRecord,
+          p_detalle: detailRecords,
+          p_editor: String(USER?.usuario || nombreResp || '')
+        });
+        if (rpcErr) {
+          console.error("[Capture Logic] Error guardando existencia:", rpcErr);
+          throw rpcErr;
         }
 
         console.log("[Capture Logic] SR Guardado correctamente.");
