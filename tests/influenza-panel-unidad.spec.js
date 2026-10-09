@@ -36,7 +36,7 @@ function servidor(db) {
   };
 }
 
-async function abrirPanel(page, { metas = true } = {}) {
+async function abrirPanel(page, { metas = true, fecha = '2026-10-20T12:00:00' } = {}) {
   const meta = Object.fromEntries(Array.from({ length: 46 }, (_, k) => [`r${k + 1}`, 0]));
   Object.assign(meta, { r1: 100, r2: 60, r3: 40 });
   const db = {
@@ -55,7 +55,7 @@ async function abrirPanel(page, { metas = true } = {}) {
   await page.route(/\.supabase\.co\//, servidor(db));
   await page.route(/exceljs\.min\.js/, (r) => r.fulfill({ contentType: 'application/javascript', path: path.join(__dirname, '..', 'node_modules', 'exceljs', 'dist', 'exceljs.min.js') }));
   await page.route(/jszip\.min\.js/, (r) => r.fulfill({ contentType: 'application/javascript', path: path.join(__dirname, '..', 'node_modules', 'jszip', 'dist', 'jszip.min.js') }));
-  await page.clock.setFixedTime(new Date('2026-10-20T12:00:00'));
+  await page.clock.setFixedTime(new Date(fecha));
   await page.goto('/index.html', { waitUntil: 'load' });
   await page.waitForFunction(() => typeof window.supabaseRequest === 'function' || typeof supabaseRequest === 'function', null, { timeout: 20000 });
   await page.evaluate(async () => {
@@ -92,6 +92,51 @@ test.describe('Panel de Influenza (unidad)', () => {
     await expect(page.locator('#influenza_semana_btn')).toHaveAttribute('aria-expanded', 'false');
     await page.locator('#influenza_semana_btn').click();
     await expect(page.locator('#influenza_semana_btn')).toHaveAttribute('aria-expanded', 'true');
+    expect(errores).toEqual([]);
+  });
+
+  test('captura abierta: casillas con nombre, sin controles mudos y la pestaña activa se anuncia', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-22T12:00:00' });   // jueves: la captura de la semana está abierta
+    await page.waitForTimeout(400);   // el saneador de accesibilidad corre un instante después de pintar
+    const scan = await page.evaluate(() => {
+      const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+      const f = document.getElementById('formINFLUENZA');
+      const casillas = [...f.querySelectorAll('input[id^="input_inf_"]')].filter(vis);
+      const habilitadas = casillas.filter((i) => !i.disabled);
+      const sinNombre = casillas.filter((i) => !(i.getAttribute('aria-label') || '').trim()).length;
+      const ctr = [...f.querySelectorAll('button, a[href], input:not([type=hidden]), select')].filter(vis);
+      const mudos = ctr.filter((e) => {
+        const c = e.cloneNode(true); c.querySelectorAll('.material-symbols-rounded').forEach((n) => n.remove());
+        return !((e.getAttribute('aria-label') || '').trim() || (e.labels && e.labels.length) || (e.title || '').trim() || (c.textContent || '').trim() || (e.placeholder || '').trim());
+      }).map((e) => e.id || e.className);
+      const iconos = [...f.querySelectorAll('.material-symbols-rounded')].filter((e) => !e.closest('[aria-hidden="true"]') && !e.hasAttribute('aria-hidden')).length;
+      const barras = [...f.querySelectorAll('[id^="bar_inf_"]')].filter((b) => b.getAttribute('role') === 'progressbar' && b.hasAttribute('aria-valuenow')).length;
+      const ths = [...f.querySelectorAll('th')].filter((t) => !t.getAttribute('scope')).length;
+      const activa = f.querySelector('#subtabUnitCaptura').getAttribute('aria-current');
+      return { total: casillas.length, habilitadas: habilitadas.length, sinNombre, mudos, iconos, barras, ths, activa, ejemplo: habilitadas[0] ? habilitadas[0].getAttribute('aria-label') : null };
+    });
+    expect(scan.total).toBeGreaterThan(0);
+    expect(scan.habilitadas).toBeGreaterThan(0);          // hay metas: se puede capturar
+    expect(scan.sinNombre).toBe(0);
+    expect(scan.mudos).toEqual([]);
+    expect(scan.iconos).toBe(0);
+    expect(scan.barras).toBeGreaterThan(0);
+    expect(scan.ths).toBe(0);
+    expect(scan.activa).toBe('true');
+    expect(scan.ejemplo).toContain('dosis aplicadas esta semana');
+    // teclear sobre la meta: la casilla se marca inválida (no solo en rojo) y explica por qué
+    const primera = page.locator('#formINFLUENZA input[id^="input_inf_"]:not([disabled])').first();
+    await primera.fill('999999');
+    await expect(primera).toHaveAttribute('aria-invalid', 'true');
+    await expect(primera).toHaveAttribute('title', /superas la meta/);
+    await primera.fill('1');
+    await expect(primera).not.toHaveAttribute('aria-invalid', 'true');
+    // la pestaña activa cambia con el teclado/clic y se anuncia
+    await page.locator('#subtabUnitHistorico').click();
+    await expect(page.locator('#subtabUnitHistorico')).toHaveAttribute('aria-current', 'true');
+    await expect(page.locator('#subtabUnitCaptura')).not.toHaveAttribute('aria-current', 'true');
+    await page.locator('#subtabUnitCaptura').click();
+    if (process.env.GUARDAR_CAPTURAS) await page.screenshot({ path: path.join(process.env.GUARDAR_CAPTURAS, 'influenza_captura_abierta.png'), fullPage: false });
     expect(errores).toEqual([]);
   });
 
