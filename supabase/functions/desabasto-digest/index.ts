@@ -14,6 +14,21 @@ import nodemailer from "npm:nodemailer@6.9.13"
 // Payload opcional: { "dry_run": true } -> devuelve qué se enviaría sin mandar
 // nada ni marcar las alertas como enviadas.
 
+// Solo se mandan reportes y resúmenes a correos de proveedores reconocidos (Gmail, Hotmail/Outlook, Yahoo, iCloud...)
+// o institucionales (.gob.mx): las cuentas de prueba con dominios inventados no reciben nada.
+const DOMINIOS_RECONOCIDOS = new Set([
+  'gmail.com', 'googlemail.com',
+  'hotmail.com', 'hotmail.es', 'hotmail.com.mx', 'outlook.com', 'outlook.es', 'outlook.com.mx', 'live.com', 'live.com.mx', 'msn.com',
+  'yahoo.com', 'yahoo.com.mx', 'yahoo.es', 'ymail.com', 'icloud.com', 'me.com', 'proton.me', 'protonmail.com', 'aol.com',
+])
+const correoReconocido = (email: unknown): boolean => {
+  const e = String(email ?? '').trim().toLowerCase()
+  const m = /^[^@\s]+@([^@\s]+\.[^@\s]+)$/.exec(e)
+  if (!m) return false
+  const d = m[1]
+  return DOMINIOS_RECONOCIDOS.has(d) || /(^|\.)gob\.mx$/.test(d)
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -180,7 +195,7 @@ serve(async (req) => {
     const plans: { email: string; units: Alerta[] }[] = []
     for (const p of profiles || []) {
       const email = String(p.email || '').trim().toLowerCase()
-      if (!email || seenEmails.has(email)) continue
+      if (!email || !correoReconocido(email) || seenEmails.has(email)) continue
       let scoped: Alerta[]
       if (p.rol === 'ADMIN' || p.rol === 'JURISDICCIONAL') {
         scoped = units

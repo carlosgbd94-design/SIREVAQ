@@ -3,6 +3,21 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.0"
 import nodemailer from "npm:nodemailer@6.9.13"
 import { adminSummaryEmail, reminderEmail, scopeSummaryEmail, type UnitStatus } from "./templates.ts"
 
+// Solo se mandan reportes y resúmenes a correos de proveedores reconocidos (Gmail, Hotmail/Outlook, Yahoo, iCloud...)
+// o institucionales (.gob.mx): las cuentas de prueba con dominios inventados no reciben nada.
+const DOMINIOS_RECONOCIDOS = new Set([
+  'gmail.com', 'googlemail.com',
+  'hotmail.com', 'hotmail.es', 'hotmail.com.mx', 'outlook.com', 'outlook.es', 'outlook.com.mx', 'live.com', 'live.com.mx', 'msn.com',
+  'yahoo.com', 'yahoo.com.mx', 'yahoo.es', 'ymail.com', 'icloud.com', 'me.com', 'proton.me', 'protonmail.com', 'aol.com',
+])
+const correoReconocido = (email: unknown): boolean => {
+  const e = String(email ?? '').trim().toLowerCase()
+  const m = /^[^@\s]+@([^@\s]+\.[^@\s]+)$/.exec(e)
+  if (!m) return false
+  const d = m[1]
+  return DOMINIOS_RECONOCIDOS.has(d) || /(^|\.)gob\.mx$/.test(d)
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -119,7 +134,7 @@ serve(async (req) => {
 
       for (const unit of activeUnits) {
         const unitClues = String(unit.clues).trim().toUpperCase()
-        const userForUnit = (userProfiles || []).find(p => String(p.clues_asignado).trim().toUpperCase() === unitClues)
+        const userForUnit = (userProfiles || []).find(p => String(p.clues_asignado).trim().toUpperCase() === unitClues && correoReconocido(p.email))
 
         if (!userForUnit?.email) continue
 
@@ -237,7 +252,7 @@ serve(async (req) => {
 
       // Enviar a perfiles MUNICIPALES (solo sus unidades correspondientes)
       const summarySends: Promise<void>[] = []
-      const municipalProfiles = (profiles || []).filter(p => p.rol === 'MUNICIPAL' && p.email)
+      const municipalProfiles = (profiles || []).filter(p => p.rol === 'MUNICIPAL' && correoReconocido(p.email))
       for (const supervisor of municipalProfiles) {
         let allowedMunis: string[] = []
         if (Array.isArray(supervisor.municipios_allowed) && supervisor.municipios_allowed.length > 0) {
@@ -273,7 +288,7 @@ serve(async (req) => {
       }
 
       // Enviar a perfiles CARAVANAS (solo unidades UMME y FAM)
-      const caravanasProfiles = (profiles || []).filter(p => p.rol === 'CARAVANAS' && p.email)
+      const caravanasProfiles = (profiles || []).filter(p => p.rol === 'CARAVANAS' && correoReconocido(p.email))
       for (const supervisor of caravanasProfiles) {
         const caravanaUnits = activeUnits.filter(u => {
           const name = String(u.unidad || '').trim().toUpperCase()
@@ -302,7 +317,7 @@ serve(async (req) => {
       }
 
       // Enviar a perfiles JURISDICCIONALES Y ADMIN (Resumen general de todas las unidades, separado por municipio)
-      const adminProfiles = (profiles || []).filter(p => (p.rol === 'ADMIN' || p.rol === 'JURISDICCIONAL') && p.email)
+      const adminProfiles = (profiles || []).filter(p => (p.rol === 'ADMIN' || p.rol === 'JURISDICCIONAL') && correoReconocido(p.email))
 
       if (adminProfiles.length > 0) {
         const byMuni: Record<string, UnitStatus[]> = {}
