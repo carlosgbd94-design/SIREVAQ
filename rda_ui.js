@@ -684,6 +684,7 @@ function populateUnidadFilter() {
 
 // Renderización Principal del Tablero
 async function renderDashboard() {
+    _rdaState.lastRenderAt = Date.now();
     if (window.updateTemporalidadOptions) window.updateTemporalidadOptions();
     const { unidades, maxMes } = _rdaCache;
     if (!unidades) return;
@@ -1003,6 +1004,9 @@ function renderKPIs(agg, esquema) {
         list.splice(3, 0, { label: 'Niños de 6 Años (6)', icon: 'school', bg: '#fff1f2', fg: '#e11d48', key: 'seis' });
     }
     
+    // Esquemas de solo dosis: la barra muestra qué parte del total del esquema es cada biológico
+    const totalEsq = list.filter(x => x.key !== 'pob').reduce((a, x) => a + (Number(agg[x.key]) || 0), 0);
+    container.style.gridTemplateColumns = (esquema === 'basico' && list.length > 4) ? 'repeat(4, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(200px, 1fr))';
     list.forEach(k => {
         let valText = '';
         let subText = '';
@@ -1017,6 +1021,7 @@ function renderKPIs(agg, esquema) {
         let barGrad = 'linear-gradient(90deg, #0284c7 0%, #0369a1 100%)';
         let barShadow = '0 0 10px rgba(2, 132, 199, 0.3)';
         let calc = null;
+        let share = null;
 
         if (esquema === 'basico') {
             const _mm = _rdaCache.maxMes || 12;
@@ -1083,7 +1088,8 @@ function renderKPIs(agg, esquema) {
             } else {
                 valNum = agg[k.key] || 0;
                 valText = valNum.toLocaleString('es-MX');
-                subText = 'dosis aplicadas en el periodo';
+                share = totalEsq > 0 ? Math.round(valNum / totalEsq * 1000) / 10 : 0;
+                subText = `${share}% de las dosis de este esquema`;
                 statusLabel = 'DOSIS APLICADAS';
                 statusColor = '#0369a1';
                 barGrad = 'linear-gradient(90deg, #0284c7 0%, #0369a1 100%)';
@@ -1094,6 +1100,9 @@ function renderKPIs(agg, esquema) {
         const card = document.createElement('div');
         card.className = 'rda-kpi-card';
         card.style.background = cardBg;
+        // Con 5 tarjetas (año 2025, trae niños de 6 años) las cuatro de avance conservan su ancho y la de
+        // población ocupa su propia fila; antes las cinco se apretaban y el texto se partía y se cortaba.
+        if (esquema === 'basico' && list.length > 4 && isPobCard) card.style.gridColumn = '1 / -1';
 
         if (isPobCard && esquema === 'basico') {
             const has6A = (_rdaCache.anio === 2025);
@@ -1147,6 +1156,10 @@ function renderKPIs(agg, esquema) {
                         <div style="font-size: 11px; font-weight: 900; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${(agg.pob_6_anos || 0).toLocaleString('es-MX')}</div>
                     </div>` : ''}
                 </div>
+                <div style="border-top: 1px solid #f1f5f9; margin-top: 10px; padding-top: 6px;">
+                    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:5px 0;"><span style="font-size:11px; font-weight:700; color:#64748b;">Meta al corte total (ene–${(MONTH_NAMES[(_rdaCache.maxMes || 12) - 1] || '').slice(0, 3).toLowerCase()})</span><span style="font-size:13.5px; font-weight:900; color:#0f172a;">${Math.round(pTot * 0.0833 * (_rdaCache.maxMes || 12)).toLocaleString('es-MX')}</span></div>
+                    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:5px 0;"><span style="font-size:11px; font-weight:700; color:#64748b;">Unidades médicas</span><span style="font-size:13.5px; font-weight:900; color:#0f172a;">${(agg.total_unidades || 0).toLocaleString('es-MX')}</span></div>
+                </div>
             `;
         } else if (calc && esquema === 'basico') {
             const fmt = n => Math.round(n).toLocaleString('es-MX');
@@ -1181,7 +1194,13 @@ function renderKPIs(agg, esquema) {
                 </div>
             `;
         } else {
-            const barPct = Math.min(100, Math.max(8, valNum));
+            const barPct = share === null ? 0 : Math.max(share > 0 ? 2 : 0, Math.min(100, share));
+            const barraHtml = share === null ? '' : `
+                <div style="margin: 10px 0 8px 0;">
+                    <div role="progressbar" aria-label="Proporción de ${k.label} dentro del esquema" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${share}" aria-valuetext="${share} por ciento de las dosis del esquema" style="width: 100%; height: 7px; background: rgba(15, 23, 42, 0.06); border-radius: 999px; overflow: hidden; position: relative;">
+                        <div style="height: 100%; width: ${barPct}%; background: ${barGrad}; box-shadow: ${barShadow}; border-radius: 999px; transition: width 0.8s ease;"></div>
+                    </div>
+                </div>`;
             card.innerHTML = `
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
                     <div class="rda-icon-box" style="background: ${k.bg}; color: ${k.fg}; width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
@@ -1192,12 +1211,7 @@ function renderKPIs(agg, esquema) {
                 <div style="font-size: 28px; font-weight: 900; color: #0f172a; letter-spacing: -0.03em; line-height: 1.25; padding-bottom: 4px;">${valText}</div>
                 <div style="font-size: 11px; font-weight: 900; color: ${statusColor}; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 2px;">${statusLabel}</div>
                 
-                <!-- BARRA DE AVANCE MODERNA PREMIUM -->
-                <div style="margin: 10px 0 8px 0;">
-                    <div style="width: 100%; height: 7px; background: rgba(15, 23, 42, 0.06); border-radius: 999px; overflow: hidden; position: relative;">
-                        <div style="height: 100%; width: ${barPct}%; background: ${barGrad}; box-shadow: ${barShadow}; border-radius: 999px; transition: width 0.8s ease;"></div>
-                    </div>
-                </div>
+                ${barraHtml || '<div style="height: 10px;"></div>'}
 
                 <div style="font-size: 11.5px; font-weight: 600; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 8px; margin-top: 4px;">${subText}</div>
             `;
@@ -1205,7 +1219,7 @@ function renderKPIs(agg, esquema) {
         card.setAttribute('role', 'group');
         card.setAttribute('aria-label', calc && esquema === 'basico'
             ? `${k.label}: avance ${valNum} por ciento de la meta al corte, ${statusLabel.toLowerCase()}. Meta al corte ${Math.round(calc.meta).toLocaleString('es-MX')}, aplicadas equivalentes ${Math.round(calc.eq).toLocaleString('es-MX')}, población anual ${Math.round(calc.pob).toLocaleString('es-MX')}.`
-            : `${k.label}: ${valText}. ${subText}`);
+            : `${isPobCard ? 'Población meta total' : k.label}: ${valText}. ${subText}`);
         container.appendChild(card);
     });
     container.setAttribute('role', 'group');
@@ -1236,7 +1250,7 @@ function renderDoughnut(agg, esquema) {
         const validCovs = data.filter(d => d > 0);
         const avg = validCovs.length ? Math.round(validCovs.reduce((a,b)=>a+b,0) / validCovs.length) : 0;
         centerValue = avg + '%';
-        centerLabel = 'Promedio';
+        centerLabel = 'Promedio simple';
     } else if (esquema === 'adultos') {
         labels = ['HepB', 'SR', 'VPH', 'Td', 'Tdpa'];
         data = [agg.adol_hb, agg.adol_sr, agg.adol_vph, agg.adol_td, agg.adol_tdpa];
@@ -1264,6 +1278,12 @@ function renderDoughnut(agg, esquema) {
         centerValue = sum.toLocaleString();
         centerLabel = 'Total Dosis';
     }
+    const pie = document.querySelector('#chartDoughnutContainer p');
+    if (pie) {
+        pie.textContent = esquema === 'basico'
+            ? 'Cada arco es el avance (%) de un grupo de edad frente a su meta al corte. El centro es el promedio simple de los grupos; no es un indicador oficial del RDA.'
+            : 'Cada arco es la cantidad de dosis aplicadas de un biológico; el centro es el total del esquema.';
+    }
 
     if (typeof echarts === 'undefined') {
         console.warn('[RDA] ECharts aún no está disponible (CDN pendiente). Reintentando en 500ms...');
@@ -1280,7 +1300,8 @@ function renderDoughnut(agg, esquema) {
     }
 
     _rdaCharts.d.setOption({
-        animationDuration: 1000,
+        animationDuration: window._isBatchExporting ? 0 : 1000,
+        animationDurationUpdate: window._isBatchExporting ? 0 : 300,
         animationEasing: 'cubicOut',
         title: {
             text: centerValue,
@@ -1342,8 +1363,8 @@ function renderBarChart(fUnits, muniFilter, esquema) {
     if (totalContainer) totalContainer.style.display = 'none';
 
     if (isSingleUnit) {
-        const currentYear = new Date().getFullYear();
-        titleText = `Avance Anual ${currentYear}`;
+        const mesCorte = (MONTH_NAMES[maxMes - 1] || '').slice(0, 3).toLowerCase();
+        titleText = `Avance ${_rdaCache.anio || new Date().getFullYear()} (ene–${mesCorte})`;
         const u = fUnits[0];
 
         if (esquema === 'basico') {
@@ -1836,7 +1857,8 @@ function renderBarChart(fUnits, muniFilter, esquema) {
             });
             _rdaCharts.total.resize();
             _rdaCharts.total.setOption({
-                animationDuration: 1000,
+                animationDuration: window._isBatchExporting ? 0 : 1000,
+                animationDurationUpdate: window._isBatchExporting ? 0 : 300,
                 animationEasing: 'cubicOut',
                 tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: 'rgba(15, 23, 42, 0.9)', textStyle: { color: '#fff', fontFamily: 'Inter, sans-serif' }, borderWidth: 0, borderRadius: 12 },
                 legend: { bottom: 0, icon: 'circle', textStyle: { fontFamily: 'Inter, sans-serif', color: '#64748b', fontWeight: 'bold' } },
@@ -1884,7 +1906,8 @@ function renderBarChart(fUnits, muniFilter, esquema) {
     });
 
     let eOptions = {
-        animationDuration: 1000,
+        animationDuration: window._isBatchExporting ? 0 : 1000,
+        animationDurationUpdate: window._isBatchExporting ? 0 : 300,
         animationEasing: 'cubicOut',
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: 'rgba(15, 23, 42, 0.9)', textStyle: { color: '#fff', fontFamily: 'Inter, sans-serif' }, borderWidth: 0, borderRadius: 12 },
         legend: { bottom: 0, icon: 'circle', show: isSingleUnit || isHorizontal, textStyle: { fontFamily: 'Inter, sans-serif', color: '#64748b', fontWeight: 'bold' } },
@@ -1998,8 +2021,9 @@ function renderTable(fUnits, esquema, agg) {
             const col = th.dataset.sort;
             if (_rdaState.sortCol === col) _rdaState.sortAsc = !_rdaState.sortAsc;
             else { _rdaState.sortCol = col; _rdaState.sortAsc = false; }
-            await renderDashboard();
-            // renderDashboard reconstruye la cabecera: devolver el foco a la misma columna
+            // Ordenar solo vuelve a dibujar la tabla (antes se recalculaban tarjetas y gráficas completas)
+            renderTable(fUnits, esquema, agg);
+            // La cabecera se reconstruye: devolver el foco a la misma columna
             const nuevo = document.querySelector(`#rdaDetailTable th[data-sort="${col}"]`);
             if (nuevo) nuevo.focus();
         };
@@ -2426,10 +2450,10 @@ async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob =
             const isMuniFilter = muni && muni !== 'JURISDICCIÓN SANITARIA 1' && muni.trim() !== '';
 
             if (isSingleUnit) {
-                const currentYear = new Date().getFullYear();
+                const currentYear = _rdaCache.anio || new Date().getFullYear();
                 imgChart1Base64 = _rdaCharts.d ? _rdaCharts.d.getDataURL({ type: 'png', backgroundColor: '#fff', pixelRatio: 2 }) : '';
                 titleChart1 = "DISTRIBUCIÓN DE AVANCE";
-                titleChart2 = `AVANCE ANUAL ${currentYear}`;
+                titleChart2 = `AVANCE ${currentYear} (ENE–${(MONTH_NAMES[(_rdaCache.maxMes || 12) - 1] || '').slice(0, 3).toUpperCase()})`;
             } else {
                 imgChart1Base64 = _rdaCharts.total ? _rdaCharts.total.getDataURL({ type: 'png', backgroundColor: '#fff', pixelRatio: 2 }) : '';
                 titleChart1 = isMuniFilter ? "AVANCE MUNICIPAL TOTAL" : "AVANCE JURISDICCIONAL TOTAL";
@@ -3188,17 +3212,26 @@ const _prepareClonedDocForHDImage = (clonedDoc, contentEl) => {
 // resultado mostraba el texto crudo en vez de los íconos, y el encabezado con el layout roto. No
 // lanzaba ningún error de JS (por eso el intento de respaldo automático nunca se activaba), así
 // que se optó por quedarse con html2canvas, que sí renderiza estos íconos correctamente.
-// Congela las gráficas ECharts en su estado final: si se exporta mientras animan (p. ej. justo
-// después de cambiar de esquema o filtro) el lienzo se copia a medias o vacío.
+// Antes de copiar los lienzos de ECharts hay que asegurarse de que NO estén a media animación: si se
+// exporta justo después de cambiar de esquema o filtro, las barras, el aro o los puntos salen a medias o
+// vacíos. Si el render es reciente se vuelve a dibujar el panel SIN animación (mismo camino que el ZIP
+// masivo, que dibuja de una vez); en las vistas que consultan datos (comparativa, deserción, influenza)
+// solo se espera a que termine la animación. Se usa setTimeout y no requestAnimationFrame para no colgarse
+// con la pestaña en segundo plano.
 async function _rdaAsentarGraficas() {
-    Object.values(_rdaCharts).forEach(ch => {
-        if (!ch || typeof ch.getOption !== 'function') return;
-        try {
-            const o = ch.getOption();
-            ch.setOption({ ...o, animation: false, animationDuration: 0, animationDurationUpdate: 0 }, true);
-        } catch (e) { /* gráfica ya liberada */ }
-    });
-    await new Promise(r => requestAnimationFrame(() => setTimeout(r, 80)));
+    if (window._isBatchExporting) return;
+    const reciente = (Date.now() - (_rdaState.lastRenderAt || 0)) < 1600;
+    if (!reciente) return;
+    const redibujable = ['basico', 'adultos', 'mayores', 'embarazadas', 'invernal', 'adicionales'].includes(_rdaState.esquema);
+    if (redibujable) {
+        window._isBatchExporting = true;
+        try { await renderDashboard(); } finally { window._isBatchExporting = false; }
+        await new Promise(r => setTimeout(r, 300));
+        // Dibujo síncrono de cada gráfica (no depende de que el navegador dispare el siguiente cuadro)
+        Object.values(_rdaCharts).forEach(ch => { try { if (ch && ch.getZr) ch.getZr().refreshImmediately(); } catch (e) { /* liberada */ } });
+    } else {
+        await new Promise(r => setTimeout(r, 1600 - (Date.now() - _rdaState.lastRenderAt)));
+    }
 }
 
 async function _captureRdaContentAsCanvas(content, scale) {
