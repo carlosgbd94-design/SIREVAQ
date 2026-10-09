@@ -182,3 +182,46 @@ test('El SIS abre en el mes que se reporta (el anterior) y el selector lo explic
   await page.selectOption('#selMes', String(actual));
   if (actual !== esperado.mes) await expect(page.locator('#chipPeriodo')).toContainText('mes en curso');
 });
+
+test('Municipal: cada paso tiene su camino de regreso (unidades <- revisión, concentrado <- entrega, unidades <- concentrado)', async ({ page }) => {
+  await abrir(page);
+  // Paso 2 -> volver a la lista de unidades (paso 1)
+  await page.click('#munCtaSiguiente');
+  await expect(page.locator('#munBarraRevision')).toBeVisible();
+  await page.click('#munVolverLista');
+  await expect(page.locator('#munEnvios .mun-unidad')).toHaveCount(4);
+  // Paso 3 -> "Volver a las unidades"
+  await page.click('#dockPasosMun .hoja-tab[data-mpaso="3"]');
+  await expect(page.locator('#munVolverUnidades')).toBeVisible();
+  await page.click('#munVolverUnidades');
+  await expect(page.locator('#munEnvios .mun-unidad')).toHaveCount(4);
+  // Paso 4 -> "Volver al concentrado"
+  await page.click('#dockPasosMun .hoja-tab[data-mpaso="4"]');
+  await expect(page.locator('#munVolverConcentradoEnt')).toBeVisible();
+  await page.click('#munVolverConcentradoEnt');
+  await expect(page.locator('#munVolverUnidades')).toBeVisible();   // de nuevo en el concentrado (paso 3)
+});
+
+test('Municipal: una unidad que no envía se deja "sin envío" (con motivo) y no bloquea; se puede deshacer', async ({ page }) => {
+  await abrir(page);
+  await expect(page.locator('#pildoraMun1')).toHaveText('3/4');
+  // Beta (borrador, sin enviar) -> abrirla y continuar sin ella
+  await page.click('#munEnvios .mun-unidad[data-clues="QTSSA000002"]');
+  await expect(page.locator('#munBarraRevision .mun-rev-unidad b')).toHaveText('C.S. Beta');
+  await page.click('#munSinEnvio');
+  await expect(page.locator('#modalTitulo')).toHaveText('Continuar sin esta unidad');
+  await page.click('#modalBtnAceptar');                                   // sin motivo no avanza
+  await expect(page.locator('#modalOverlay')).toHaveClass(/abierto/);
+  await page.fill('#modalInputMotivo', 'Falla de internet en la unidad');
+  await page.click('#modalBtnAceptar');
+  await expect(page.locator('#munQuitarSinEnvio')).toBeVisible();
+  await expect(page.locator('#pildoraMun1')).toHaveText('3/3');           // ya no se espera su envío
+  await page.click('#munVolverLista');
+  await expect(page.locator('#munEnvios .mun-unidad[data-clues="QTSSA000002"] .mun-pill.omitida')).toHaveText('Sin envío');
+  await expect(page.locator('#munEnvios .mun-unidad[data-clues="QTSSA000002"]')).toContainText('Falla de internet');
+  // Deshacer
+  await page.click('#munEnvios .mun-unidad[data-clues="QTSSA000002"]');
+  await page.click('#munQuitarSinEnvio');
+  await expect(page.locator('#munSinEnvio')).toBeVisible();
+  await expect(page.locator('#pildoraMun1')).toHaveText('3/4');
+});

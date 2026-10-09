@@ -15,7 +15,7 @@ async function abrirDetalle(page) {
   await page.waitForSelector('#dockJuris', { state: 'visible', timeout: 15000 });
   await page.selectOption('#selAnio', '2026');
   await page.selectOption('#selMes', '10');
-  await expect(page.locator('#pildoraJ1')).toHaveText('2/4');
+  await expect(page.locator('#pildoraJ1')).toHaveText('3/4');
   await page.click('#btnSiguiente');
   await page.click('[data-action="ir-lote"]');
   await expect(page.locator('#drilldownContenido tr.muni-resumen')).toHaveCount(1);
@@ -35,7 +35,7 @@ test('Jurisdicción pide corregir un municipio: fila gris, corrección debajo y 
   await expect(edicion).toBeVisible();
   await expect(resumen).toHaveClass(/fila-gris/);
   const recibido = edicion.locator('[data-cm-campo="recibido_frascos"]');
-  await expect(recibido).toHaveValue('15');                                   // 10 + 5 de sus dos unidades
+  await expect(recibido).toHaveValue('15');                                   // el Movimiento del municipio (10 + 5 de sus unidades)
 
   // Sin cambios no se manda nada
   await edicion.locator('[data-action="enviar-correccion-muni"]').click();

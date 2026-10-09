@@ -784,7 +784,7 @@ function renderCaptureGrid() {
       // Semáforo de color
       let barColor, badgeBg, badgeText, badgeBorder;
       if (!meta) {
-        barColor = '#cbd5e1'; badgeBg = '#f1f5f9'; badgeText = '#94a3b8'; badgeBorder = '#e2e8f0';
+        barColor = '#cbd5e1'; badgeBg = '#f1f5f9'; badgeText = '#64748b'; badgeBorder = '#cbd5e1';
       } else if (pct >= 85) {
         barColor = '#10b981'; badgeBg = '#d1fae5'; badgeText = '#065f46'; badgeBorder = '#6ee7b7';
       } else if (pct >= 50) {
@@ -795,21 +795,23 @@ function renderCaptureGrid() {
 
       // Estilo de fila inhabilitada
       if (isLocked) {
-        row.style.cssText = 'opacity:0.4; pointer-events:none; background: #f8fafc;';
+        row.style.cssText = 'opacity:0.72; background: #f8fafc;';   // legible; el campo ya está deshabilitado y la fila explica el porqué al pasar el cursor
       } else {
         row.className = 'border-b border-slate-100 hover:bg-violet-50/30 transition-all duration-200';
       }
 
       row.innerHTML = `
         <td class="p-3">
-          <span class="text-xs font-semibold ${isLocked ? 'text-slate-400 italic' : 'text-slate-700'}">${rb.edad}</span>
-          ${reglaCal ? `<span class="inf-pill-regla">${reglaCal.etiqueta}</span>` : (isLocked && meta === 0 ? '<span style="display:inline-block;margin-left:6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;background:#e2e8f0;color:#94a3b8;padding:1px 6px;border-radius:20px;">Sin meta</span>' : '')}
+          <span class="text-xs font-semibold ${isLocked ? 'text-slate-500 italic' : 'text-slate-700'}">${rb.edad}</span>
+          ${reglaCal ? `<span class="inf-pill-regla">${reglaCal.etiqueta}</span>` : (isLocked && meta === 0 ? '<span style="display:inline-block;margin-left:6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;background:#e2e8f0;color:#475569;padding:1px 6px;border-radius:20px;" title="Tu unidad no tiene meta asignada para este grupo, por eso no se captura">Sin meta</span>' : '')}
         </td>
         <td class="p-3 text-center font-bold text-slate-600 text-xs">${meta || '—'}</td>
         <td class="p-3 text-center font-bold text-xs" style="color:#6d28d9;">${acum}</td>
         <td class="p-3 text-center">
           <input type="number" min="0" step="1"
             id="input_inf_${rb.id}"
+            aria-label="${String(rb.grupo || rb.categoria || '').replace(/"/g, '&quot;')} · ${String(rb.edad || '').replace(/"/g, '&quot;')}: dosis aplicadas esta semana"
+            ${isLocked ? `title="${meta === 0 ? 'Sin meta asignada para este grupo: no se captura' : (capturaCerrada ? 'La captura de esta semana está cerrada' : 'Este grupo no se captura en esta fecha')}"` : ''}
             style="width:70px; text-align:center; font-weight:700; font-size:12px;
               background:${isLocked ? '#f1f5f9' : '#fff'};
               border:1.5px solid ${isLocked ? '#e2e8f0' : '#c4b5fd'};
@@ -832,7 +834,7 @@ function renderCaptureGrid() {
               ">${meta > 0 ? pct + '%' : 'N/A'}</span>
             </div>
             <div style="width:100%; height:6px; background:#e2e8f0; border-radius:6px; overflow:hidden;">
-              <div id="bar_inf_${rb.id}" style="
+              <div id="bar_inf_${rb.id}" role="progressbar" aria-label="Avance contra la meta" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${cappedPct}" style="
                 height:100%; width:${cappedPct}%;
                 background:${barColor};
                 border-radius:6px;
@@ -867,9 +869,13 @@ function renderCaptureGrid() {
           if (overMeta) {
             input.style.borderColor = '#ef4444';
             input.style.background  = '#fee2e2';
+            input.setAttribute('aria-invalid', 'true');
+            input.title = 'Con esta cifra superas la meta de este grupo: confirma que es correcta';
           } else {
             input.style.borderColor = '#c4b5fd';
             input.style.background  = '#fff';
+            input.removeAttribute('aria-invalid');
+            input.removeAttribute('title');
           }
 
           const livePct = Math.round((total / meta) * 100);
@@ -889,6 +895,7 @@ function renderCaptureGrid() {
           pctEl.style.color        = lBadgeText;
           pctEl.style.borderColor  = lBadgeBorder;
           barEl.style.width        = liveCapped + '%';
+          barEl.setAttribute('aria-valuenow', String(liveCapped));
           barEl.style.background   = lBarColor;
         });
       }
@@ -2890,7 +2897,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
       else barColor = '#ef4444';
 
       rowsHtml += `
-        <tr class="border-b border-slate-100 last:border-0" style="${isLocked ? 'opacity: 0.45; background-color:#f8fafc;' : ''}">
+        <tr class="border-b border-slate-100 last:border-0" style="${isLocked ? 'opacity: 0.72; background-color:#f8fafc;' : ''}">
           <td class="p-3 text-xs font-semibold text-slate-700">
             ${rb.edad}
             ${reglaCal ? `<span class="inf-pill-regla">${reglaCal.etiqueta}</span>` : (isLocked ? '<span class="ml-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-slate-200 text-slate-400">Sin Meta</span>' : '')}
@@ -2901,6 +2908,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
           <td class="p-3 text-center">
             <input type="number" min="0" step="1"
               id="val_input_inf_${rb.id}"
+              aria-label="${String(rb.grupo || rb.categoria || '').replace(/"/g, '&quot;')} · ${String(rb.edad || '').replace(/"/g, '&quot;')}: dosis a validar"
               class="w-16 h-8 text-center font-bold text-xs bg-slate-50 border border-slate-300 rounded-lg outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all"
               value="${val}"
               ${isLocked ? 'disabled placeholder="—"' : 'placeholder="0"'}

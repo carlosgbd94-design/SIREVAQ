@@ -12,6 +12,7 @@ body.mun-guiado #wrapUnidadRevision { display: none !important; }
 button.pt { cursor: pointer; }
 .pt.parcial { background: #f59e0b; }
 .pt.completo { background: #16a34a; }
+.pt.omitida { background: repeating-linear-gradient(135deg, #cbd5e1 0 3px, #f1f5f9 3px 6px); border: 1px solid #94a3b8; }
 .pt.actual { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary); }
 @media (hover: hover) and (pointer: fine) { button.pt:hover { transform: scale(1.5); } }
 .puntos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
@@ -51,6 +52,8 @@ button.pt { cursor: pointer; }
 .mun-dot { width: 11px; height: 11px; border-radius: 50%; background: #cbd5e1; flex: none; }
 .mun-unidad.parcial .mun-dot { background: #f59e0b; }
 .mun-unidad.completo .mun-dot { background: #16a34a; }
+.mun-unidad.omitida .mun-dot { background: #94a3b8; }
+.mun-unidad.omitida { background: #f8fafc; border-style: dashed; }
 .mun-unidad.parcial { background: #fffdf5; }
 .mun-u-txt { flex: 1; min-width: 0; }
 .mun-u-txt b { display: block; font-size: 13px; color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -59,6 +62,7 @@ button.pt { cursor: pointer; }
 .mun-pill { font-size: 10px; font-weight: 800; padding: 2px 9px; border-radius: 20px; white-space: nowrap; background: #f1f5f9; color: #94a3b8; }
 .mun-pill.parcial, .mun-pill.aviso { background: var(--warning-bg); color: var(--warning); }
 .mun-pill.completo, .mun-pill.ok { background: var(--success-bg); color: var(--success); }
+.mun-pill.omitida { background: #e2e8f0; color: #475569; }
 
 /* --- Paso 2: barra de revisión --- */
 .mun-revision { padding: 14px 18px; }

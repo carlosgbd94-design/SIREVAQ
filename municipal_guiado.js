@@ -38,16 +38,22 @@
     { id: 'btnSeccionCEH', pildora: 'pildoraCEH', t: 'SIS-SS-CE-H', icono: 'table_view', color: '#16a34a' },
     { id: 'btnSeccionInfluenza', pildora: 'pildoraInfluenza', t: 'Influenza', icono: 'vaccines', color: '#C26750' }
   ];
-  const ETIQUETA = { VALIDADO: 'Validado', ENVIADO: 'Por validar', SIN: 'Sin enviar' };
-  const CLASE_EST = { VALIDADO: 'completo', ENVIADO: 'parcial', SIN: 'vacio' };
-  const ORDEN_EST = { ENVIADO: 0, SIN: 1, VALIDADO: 2 };
+  const ETIQUETA = { VALIDADO: 'Validado', ENVIADO: 'Por validar', SIN: 'Sin enviar', OMITIDA: 'Sin envío' };
+  const CLASE_EST = { VALIDADO: 'completo', ENVIADO: 'parcial', SIN: 'vacio', OMITIDA: 'omitida' };
+  const ORDEN_EST = { ENVIADO: 0, SIN: 1, VALIDADO: 2, OMITIDA: 3 };
 
   const ES_HOSPITAL = { NHG: true, HENM: true };
   const st = { activo: false, modo: 'municipal', todas: [], paso: 1, filas: [], filtro: 'todas', clues: null, muni: null, vista3: 'concentrado', hojaActual: 'btnSeccionSIS06P', tokenConc: 0, conc: null };
 
   function activo() { return st.activo; }
   function periodo() { return { mes: Number($('selMes').value), anio: Number($('selAnio').value) }; }
-  function estadoDe(f) { return f.estado === 'VALIDADO' ? 'VALIDADO' : f.estado === 'ENVIADO' ? 'ENVIADO' : 'SIN'; }
+  // "OMITIDA" = el municipal decidió continuar sin esa unidad (no envió): no bloquea ni se suma.
+  function estadoDe(f) {
+    if (f.estado === 'VALIDADO') return 'VALIDADO';
+    if (f.estado === 'ENVIADO') return 'ENVIADO';
+    return f.sin_envio ? 'OMITIDA' : 'SIN';
+  }
+  function eraUnidades(mes, anio) { return `${anio}-${String(mes).padStart(2, '0')}-01` >= (estado.inicioPorUnidad || '2026-10-01'); }
   function nombreMes(m) { const x = (typeof MESES !== 'undefined') && MESES.find((k) => k.v === m); return x ? x.l : String(m); }
   function etiquetaMuni(v) { return (window.SIS06PDashboard && window.SIS06PDashboard.MUNICIPIO_LABEL[v]) || v; }
   function fechaCorta(iso) { return iso ? new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : ''; }
@@ -59,14 +65,18 @@
   function filasDe(muni) { return st.filas.filter((f) => f.municipio === muni); }
 
   function resumen(filas) {
-    const r = { total: filas.length, sin: 0, enviado: 0, validado: 0, difs: 0 };
+    const r = { total: filas.length, sin: 0, enviado: 0, validado: 0, omitida: 0, difs: 0 };
     filas.forEach((f) => {
       const e = estadoDe(f);
-      if (e === 'VALIDADO') r.validado++; else if (e === 'ENVIADO') r.enviado++; else r.sin++;
-      if (Number(f.diferencias) > 0) r.difs++;
+      if (e === 'VALIDADO') r.validado++; else if (e === 'ENVIADO') r.enviado++; else if (e === 'OMITIDA') r.omitida++; else r.sin++;
+      if (Number(f.diferencias) > 0 && e !== 'OMITIDA') r.difs++;
     });
+    r.enviaron = r.validado + r.enviado;                 // las que sí mandaron su SINBA-SIS
+    r.esperadas = r.total - r.omitida;                   // las que se esperaba que enviaran
     return r;
   }
+  // Listo para cerrar/entregar: nada por enviar ni por validar (las "sin envío" no cuentan) y al menos una validada.
+  function listoDe(r) { return r.total > 0 && r.sin === 0 && r.enviado === 0 && r.validado > 0; }
 
   // ------------------------------------------------------------------ datos
   // La jurisdicción solo revisa y valida los hospitales; los municipios los ve como avance.
@@ -88,10 +98,10 @@
   // ------------------------------------------------- ruta del mes (arriba)
   function estadoPasos() {
     const r = resumen(st.filas);
-    const listo = r.total > 0 && r.validado === r.total;
+    const listo = listoDe(r);
     return [
-      { hecho: r.total > 0 && r.sin === 0, texto: r.total ? `${r.total - r.sin} de ${r.total} enviaron` : 'Sin unidades', pill: r.total ? `${r.total - r.sin}/${r.total}` : '', pillCls: r.total > 0 && r.sin === 0 ? 'ok' : '' },
-      { hecho: listo, texto: r.total ? `${r.validado} de ${r.total} validadas` : 'Sin unidades', pill: r.total ? `${r.validado}/${r.total}` : '', pillCls: listo ? 'ok' : '' },
+      { hecho: r.total > 0 && r.sin === 0, texto: r.total ? `${r.enviaron} de ${r.esperadas} enviaron${r.omitida ? ` · ${r.omitida} sin envío` : ''}` : 'Sin unidades', pill: r.total ? `${r.enviaron}/${r.esperadas}` : '', pillCls: r.total > 0 && r.sin === 0 ? 'ok' : '' },
+      { hecho: listo, texto: r.total ? `${r.validado} de ${r.esperadas} validadas` : 'Sin unidades', pill: r.total ? `${r.validado}/${r.esperadas}` : '', pillCls: listo ? 'ok' : '' },
       { hecho: listo && r.difs === 0, alerta: r.difs > 0, texto: r.difs ? `${plural(r.difs, 'unidad con diferencia', 'unidades con diferencia')}` : (listo ? 'Sin diferencias' : 'Se arma con lo que validas'), pill: r.difs ? `${r.difs} ≠` : (listo ? '✓' : ''), pillCls: r.difs ? 'aviso' : (listo ? 'ok' : '') },
       { hecho: false, texto: listo ? 'Listo: descarga el CSV oficial' : 'Se habilita al validar todas', pill: listo ? '✓' : '', pillCls: listo ? 'ok' : '' }
     ];
@@ -282,6 +292,7 @@
     const e = estadoDe(f);
     if (e === 'VALIDADO') return `Validado por ${f.validado_por || '—'}${f.validado_en ? ', ' + fechaCorta(f.validado_en) : ''}`;
     if (e === 'ENVIADO') return `Enviado por ${f.enviado_por || '—'}${f.enviado_en ? ', ' + fechaCorta(f.enviado_en) : ''}`;
+    if (e === 'OMITIDA') return `Se continúa sin ella: ${f.sin_envio_motivo || 'sin motivo'}`;
     return detalleAvance(f);
   }
   function pillConciliacion(f) {
@@ -310,14 +321,16 @@
 
     const r = resumen(st.filas);
     if (!st.filas.length) { cont.innerHTML = '<div class="mun-vacio">No hay unidades en tu alcance.</div>'; pintarRuta(); pintarDock(); return; }
-    const conteos = { todas: r.total, ENVIADO: r.enviado, SIN: r.sin, VALIDADO: r.validado };
+    const conteos = { todas: r.total, ENVIADO: r.enviado, SIN: r.sin, VALIDADO: r.validado, OMITIDA: r.omitida };
     const visibles = filasOrdenadas().filter((f) => st.filtro === 'todas' || estadoDe(f) === st.filtro)
       .sort((a, b) => ORDEN_EST[estadoDe(a)] - ORDEN_EST[estadoDe(b)]);
-    const pct = r.total ? Math.round((r.validado / r.total) * 100) : 0;
+    const pct = r.esperadas ? Math.round((r.validado / r.esperadas) * 100) : 0;
     const cta = r.enviado > 0
       ? `<button type="button" class="btn-primario" id="munCtaSiguiente"><span class="material-symbols-rounded">fact_check</span> Revisar la siguiente por validar (${r.enviado})</button>`
       : r.sin > 0
-        ? `<span class="mun-espera"><span class="material-symbols-rounded">hourglass_top</span> Faltan ${plural(r.sin, 'unidad', 'unidades')} por enviar</span>`
+        ? (new Date() < new Date(periodo().anio, periodo().mes, 0)
+          ? `<span class="mun-espera"><span class="material-symbols-rounded">hourglass_top</span> El mes sigue en curso: las unidades van prellenando y el envío se abre al cierre del mes.</span>`
+          : `<span class="mun-espera"><span class="material-symbols-rounded">hourglass_top</span> Faltan ${plural(r.sin, 'unidad', 'unidades')} por enviar. Si alguna no va a enviar este mes (internet, etc.), ábrela y elige «Continuar sin esta unidad»: no bloquea nada.</span>`)
         : `<button type="button" class="btn-primario" id="munCtaConcentrado"><span class="material-symbols-rounded">table_chart</span> Todo validado: ir al concentrado</button>`;
     const chip = (k, txt) => `<button type="button" class="mun-chip ${st.filtro === k ? 'activo' : ''}" data-filtro="${k}">${txt}<b>${conteos[k]}</b></button>`;
 
@@ -333,13 +346,13 @@
 
     cont.innerHTML = `${otros}
       <div class="mun-avance">
-        <div class="mun-avance-cab"><div><b>${nombreMes(periodo().mes)} ${periodo().anio}</b><small>${r.total - r.sin} de ${r.total} unidades ya enviaron su SINBA-SIS</small></div><span class="mun-pct">${r.validado}/${r.total} validadas</span></div>
+        <div class="mun-avance-cab"><div><b>${nombreMes(periodo().mes)} ${periodo().anio}</b><small>${r.enviaron} de ${r.esperadas} unidades ya enviaron su SINBA-SIS${r.omitida ? ` · ${plural(r.omitida, 'unidad continúa', 'unidades continúan')} sin envío` : ''}</small></div><span class="mun-pct">${r.validado}/${r.esperadas} validadas</span></div>
         <div class="mun-barra"><i style="width:${pct}%"></i></div>
         <div class="puntos">${puntosHtml(filasOrdenadas(), null)}</div>
-        <div class="mun-leyenda"><span><i class="pt vacio"></i>sin enviar</span><span><i class="pt parcial"></i>por validar</span><span><i class="pt completo"></i>validada</span></div>
+        <div class="mun-leyenda"><span><i class="pt vacio"></i>sin enviar</span><span><i class="pt parcial"></i>por validar</span><span><i class="pt completo"></i>validada</span>${r.omitida ? '<span><i class="pt omitida"></i>sin envío</span>' : ''}</div>
       </div>
       <div class="mun-acciones">${cta}
-        <div class="mun-chips">${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}</div>
+        <div class="mun-chips">${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}${r.omitida ? chip('OMITIDA', 'Sin envío') : ''}</div>
       </div>
       <div class="mun-grid">${visibles.map((f) => `
         <button type="button" class="mun-unidad ${CLASE_EST[estadoDe(f)]}" data-clues="${esc(f.clues)}">
@@ -388,6 +401,7 @@
     const e = f ? estadoDe(f) : 'SIN';
     cont.innerHTML = `
       <div class="mun-rev-fila">
+        <button type="button" class="btn-secundario btn-mini" id="munVolverLista" title="Volver a la lista de unidades" aria-label="Volver a la lista de unidades"><span class="material-symbols-rounded" aria-hidden="true">arrow_back</span> Unidades</button>
         <button type="button" class="mun-nav" id="munPrev" title="Unidad anterior" aria-label="Unidad anterior"><span class="material-symbols-rounded">chevron_left</span></button>
         <div class="mun-rev-unidad">
           <b>${esc(f ? (f.unidad || f.clues) : '')}</b>
@@ -396,6 +410,8 @@
         <button type="button" class="mun-nav" id="munNext" title="Unidad siguiente" aria-label="Unidad siguiente"><span class="material-symbols-rounded">chevron_right</span></button>
         <select id="munRevSelect" class="mun-select" aria-label="Elegir unidad">${lista.map((x) => `<option value="${esc(x.clues)}" ${f && x.clues === f.clues ? 'selected' : ''}>${esc(x.unidad || x.clues)}</option>`).join('')}</select>
         <button type="button" class="btn-secundario btn-mini" id="munSigPend" ${r.enviado - (e === 'ENVIADO' ? 1 : 0) > 0 ? '' : 'disabled'}><span class="material-symbols-rounded">skip_next</span> Siguiente por validar (${r.enviado})</button>
+        ${e === 'SIN' ? '<button type="button" class="btn-secundario btn-mini" id="munSinEnvio" title="Esta unidad no va a enviar este mes: se continúa sin ella (queda registrado y se puede deshacer)"><span class="material-symbols-rounded" aria-hidden="true">event_busy</span> Continuar sin esta unidad</button>' : ''}
+        ${e === 'OMITIDA' ? '<button type="button" class="btn-secundario btn-mini" id="munQuitarSinEnvio" title="Volver a esperar el envío de esta unidad"><span class="material-symbols-rounded" aria-hidden="true">undo</span> Volver a esperarla</button>' : ''}
       </div>
       <div class="puntos mun-rev-puntos">${puntosHtml(lista, f && f.clues)}</div>
       <div class="mun-hojas" role="tablist">${HOJAS.map((h) => `
@@ -552,11 +568,11 @@
     const juris = st.modo === 'juris';
     const nombre = etiquetaMuni(muni) || 'tu municipio';
     const resu = resumen(filasDe(muni));
-    const listoCSV = resu.total > 0 && resu.validado === resu.total;
+    const listoCSV = listoDe(resu);
     const token = ++st.tokenConc;
     st.conc = null;
     const pseudo = pseudoDe(muni);
-    const esManual = !juris && !!pseudo && !esDerivado(pseudo, mes, anio);
+    const esManual = !juris && !!pseudo && !esDerivado(pseudo, mes, anio) && !eraUnidades(mes, anio);
 
     panel.innerHTML = `
       <div class="mun-cab">
@@ -600,7 +616,7 @@
               '<button type="button" class="btn-secundario btn-mini" data-descarga="conc" disabled aria-label="Descargar Excel del concentrado municipal"><span class="material-symbols-rounded">download</span> Descargar Excel</button>')}
             ${juris ? '' : filaArchivo(1, 'inventory_2', '#d97706', 'Excel de Movimiento de Biológico (BIOVAC)', 'El formato por lote y caducidad, con entradas, recibidos, aplicados, desechos, existencia final, ARF y canjes.',
               '<button type="button" class="btn-secundario btn-mini" data-descarga="mov" disabled aria-label="Descargar Excel de Movimiento de Biológico"><span class="material-symbols-rounded">download</span> Descargar Excel</button>')}
-            ${filaArchivo(2, 'description', '#7c3aed', 'CSV oficial para estadística', listoCSV ? 'Una fila por clave SIS de cada unidad validada.' : `Se habilita cuando todas las unidades estén validadas (${resu.validado} de ${resu.total}).`,
+            ${filaArchivo(2, 'description', '#7c3aed', 'CSV oficial para estadística', listoCSV ? 'Una fila por clave SIS de cada unidad validada.' : `Se habilita cuando todas las unidades estén validadas (${resu.validado} de ${resu.esperadas}${resu.omitida ? '; ' + resu.omitida + ' sin envío no cuentan' : ''}).`,
               `<button type="button" class="btn-secundario btn-mini" data-descarga="csv" ${listoCSV ? '' : 'disabled'} aria-label="Descargar CSV oficial"><span class="material-symbols-rounded">download</span> Descargar CSV</button>`)}
           </ul>
         </li>
@@ -608,6 +624,7 @@
       <details class="mun-det mun-det-grande"><summary>Ver el concentrado en pantalla (paloteo y seguimiento de biológico)</summary><div id="munConcTablas" class="mun-det-cuerpo"></div></details>
       <div class="mun-siguiente">
         <span>Cuando todo cuadre y tengas tus archivos, sigue con la entrega.</span>
+        <button type="button" class="btn-secundario" id="munVolverUnidades"><span class="material-symbols-rounded" aria-hidden="true">arrow_back</span> Volver a las unidades</button>
         <button type="button" class="btn-primario" id="munIrEntrega">Continuar a Entrega <span class="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
       </div>`;
 
@@ -638,10 +655,12 @@
         if (!vigente()) return;
         st.conc = api;
         const rec = $('munConcRecibido');
-        if (rec) rec.innerHTML = api ? api.htmlRecibido() : '<div class="mun-vacio">No se pudo cargar.</div>';
-        verif.rec = api ? api.nDifRecibido : 0;
-        verif.recTotal = api ? api.d.requisicion.length : 0;
-        if (api && api.nDifRecibido > 0) $('munDetRecibido').open = true;
+        const sinEnvios = resu.enviaron === 0;     // nada que comparar todavía: lo recibido llega por las unidades
+        if (rec) rec.innerHTML = sinEnvios ? '<div class="mun-vacio">Aún ninguna unidad ha enviado: lo recibido se compara contra la requisición en cuanto lleguen los primeros envíos.</div>'
+          : (api ? api.htmlRecibido() : '<div class="mun-vacio">No se pudo cargar.</div>');
+        verif.rec = (api && !sinEnvios) ? api.nDifRecibido : 0;
+        verif.recTotal = (api && !sinEnvios) ? api.d.requisicion.length : 0;
+        if (api && !sinEnvios && api.nDifRecibido > 0) $('munDetRecibido').open = true;
         const b = panel.querySelector('[data-descarga="conc"]');
         if (b && api) b.disabled = false;
         cerrarVerif();
@@ -672,10 +691,12 @@
       cuerpo.innerHTML = '<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">auto_awesome</span><span>Desde octubre 2026 el Movimiento del municipio es la suma de sus unidades: no se captura ni se cierra aquí. Cada unidad exporta el suyo.</span></p>';
       return;
     }
-    const intro = esManual ? `<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span><span><b>${nombreMes(mes)} se captura a mano en el municipio</b>, porque las unidades todavía no capturan el suyo. Desde octubre se arma solo.</span></p>` : '';
+    const eraU = eraUnidades(mes, anio);
+    const intro = eraU ? `<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">group_work</span><span><b>Se arma solo con lo que envían tus unidades</b> y lo puedes ajustar (recibido, aplicadas y desechadas): la existencia anterior viene del mes pasado. Descárgalo e imprímelo para validarlo con la Jurisdicción; al empatar, ciérralo con <b>Cerrar mes</b>.</span></p>`
+      : esManual ? `<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span><span><b>${nombreMes(mes)} se captura a mano en el municipio</b>, porque las unidades todavía no capturan el suyo. Desde octubre se arma con tus unidades.</span></p>` : '';
     if (!info.mov) {
-      caja.innerHTML = chipEstado('pend', 'Sin iniciar', 'radio_button_unchecked');
-      cuerpo.innerHTML = `${intro}<div class="mun-fase-acciones">${abrir('Iniciar y capturar', true)}</div>`;
+      caja.innerHTML = chipEstado('pend', eraU ? 'Aparece al enviar la 1.ª unidad' : 'Sin iniciar', eraU ? 'hourglass_top' : 'radio_button_unchecked');
+      cuerpo.innerHTML = `${intro}<div class="mun-fase-acciones">${eraU ? abrir('Abrir en blanco', false) : abrir('Iniciar y capturar', true)}</div>`;
       return;
     }
     const e = ESTADO_MOV[info.mov.estado] || ESTADO_MOV.BORRADOR;
@@ -684,7 +705,11 @@
     const ayuda = cerrado
       ? 'El mes ya está cerrado: la existencia final pasó al mes siguiente. Para cambiar algo, ábrelo y usa «Corregir movimiento» (queda registrado).'
       : 'Lo que captures se guarda solo al salir de cada celda. Cuando todo cuadre, usa <b>Cerrar mes</b> en la barra de abajo: termina el mes, lo bloquea y pasa la existencia final al mes siguiente.';
-    cuerpo.innerHTML = `${intro}<p class="mun-ayuda-mov">${ayuda}</p><div class="mun-fase-acciones">${abrir(cerrado ? 'Ver Movimiento' : 'Abrir y capturar', !cerrado)}</div>`;
+    const armadoTxt = eraU && !cerrado
+      ? `<p class="mun-ayuda-mov">${info.mov.armado_en ? `Se actualiza sola cada vez que una unidad envía. Última suma: ${fechaCorta(info.mov.armado_en)}.` : 'Se actualizará sola en cuanto una unidad envíe su SINBA-SIS.'}</p>` : '';
+    const discHtml = eraU ? '<div id="munDiscrepancias" class="disc-caja" aria-live="polite"></div>' : '';
+    cuerpo.innerHTML = `${intro}${armadoTxt}${discHtml}<p class="mun-ayuda-mov">${ayuda}</p><div class="mun-fase-acciones">${abrir(cerrado ? 'Ver Movimiento' : (eraU ? 'Abrir y ajustar' : 'Abrir y capturar'), !cerrado)}</div>`;
+    if (eraU && typeof pintarDiscrepanciasMunicipio === 'function') pintarDiscrepanciasMunicipio($('munDiscrepancias'), muni, mes, anio);
     const btn = document.querySelector('#panelMunConcentrado [data-descarga="mov"]');
     if (btn) btn.disabled = false;
   }
@@ -722,11 +747,11 @@
         <span id="munMovEstado" aria-live="polite"></span>
         <button type="button" class="btn-secundario btn-mini" id="munMovExcel"><span class="material-symbols-rounded" aria-hidden="true">download</span> Descargar Excel</button>
       </div>
-      <ol class="mun-guia">
+      ${eraUnidades(periodo().mes, periodo().anio) ? '' : `<ol class="mun-guia">
         <li><i aria-hidden="true">1</i><div><b>Captura</b><small>Cada celda se guarda sola al salir de ella. El botón Guardar de la barra de abajo es solo para confirmarlo.</small></div></li>
         <li><i aria-hidden="true">2</i><div><b>Revisa</b><small>La existencia final debe cuadrar con el paloteo del concentrado.</small></div></li>
         <li><i aria-hidden="true">3</i><div><b>Cerrar mes</b><small>Da el mes por terminado: lo bloquea y pasa la existencia final al mes siguiente. Se puede reabrir con un motivo.</small></div></li>
-      </ol>`;
+      </ol>`}`;
     barra.style.display = 'block';
     animarEntrada(barra);
     $('btnSeccionMovimiento').click();
@@ -742,7 +767,7 @@
     const muni = st.muni;
     const filas = filasDe(muni);
     const r = resumen(filas);
-    const listo = r.total > 0 && r.validado === r.total;
+    const listo = listoDe(r);
     panel.innerHTML = `
       <div class="mun-cab">
         <div class="mun-cab-icono" style="background:#f5f3ff; border-color:#ddd6fe;"><span class="material-symbols-rounded" style="color:#7c3aed;">outbox</span></div>
@@ -753,7 +778,7 @@
       </div>
       ${chipsMunicipio('ent')}
       <ul class="mun-check" id="munCheck">
-        <li class="${listo ? 'ok' : 'pend'}"><span class="material-symbols-rounded">${listo ? 'check_circle' : 'radio_button_unchecked'}</span><div><b>Todas las unidades validadas</b><small>${r.validado} de ${r.total}${listo ? '' : ` — faltan ${r.total - r.validado}`}</small></div>${listo ? '' : '<button type="button" class="btn-secundario btn-mini" id="munIrPendientes">Ir a revisar</button>'}</li>
+        <li class="${listo ? 'ok' : 'pend'}"><span class="material-symbols-rounded">${listo ? 'check_circle' : 'radio_button_unchecked'}</span><div><b>Todas las unidades validadas</b><small>${r.validado} de ${r.esperadas}${r.omitida ? ` · ${r.omitida} sin envío (no cuentan)` : ''}${listo ? '' : ` — faltan ${r.esperadas - r.validado}`}</small></div>${listo ? '' : '<button type="button" class="btn-secundario btn-mini" id="munIrPendientes">Ir a revisar</button>'}</li>
         <li class="${r.difs === 0 ? 'ok' : 'pend'}"><span class="material-symbols-rounded">${r.difs === 0 ? 'check_circle' : 'error'}</span><div><b>Paloteo y Movimiento coinciden</b><small>${r.difs === 0 ? 'Ninguna unidad con diferencia' : plural(r.difs, 'unidad con diferencia', 'unidades con diferencia')}</small></div></li>
         <li class="cargando" id="munCheckRecibido"><span class="material-symbols-rounded">hourglass_top</span><div><b>Recibido igual a la requisición</b><small>Comparando…</small></div></li>
       </ul>
@@ -764,6 +789,10 @@
       <div class="mun-entregar">
         <div><b>Indicadores (RDA)</b><small id="munPubEstado">${listo ? 'Consultando…' : 'Se carga sola al validar la última unidad.'}</small></div>
         <button type="button" class="btn-secundario" id="munPublicar" ${listo ? '' : 'disabled'} title="${listo ? 'Cargar de nuevo el concentrado validado a los indicadores' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">cloud_upload</span> Cargar a indicadores</button>
+      </div>
+      <div class="mun-siguiente">
+        <span>¿Algo no cuadra? Puedes regresar sin perder nada.</span>
+        <button type="button" class="btn-secundario" id="munVolverConcentradoEnt"><span class="material-symbols-rounded" aria-hidden="true">arrow_back</span> Volver al concentrado</button>
       </div>
       <p class="mun-nota-csv">Abajo, la vista previa: se va llenando con lo que capturan las unidades. El archivo que se descarga tiene el mismo formato que la hoja CSV del Excel oficial.</p>`;
     if (listo && window.SIS06PDashboard) window.SIS06PDashboard.pintarEstadoPublicacion($('munPubEstado'), muni, mes, anio);
@@ -783,6 +812,30 @@
     }
   }
 
+  // -------------------------------------------------------------- sin envío y armado
+  // El municipal puede continuar sin una unidad que no envió (internet, etc.): queda con motivo y se puede deshacer.
+  async function marcarSinEnvio(clues) {
+    const f = st.filas.find((x) => x.clues === clues);
+    if (!f) return;
+    const { mes, anio } = periodo();
+    const motivo = await mostrarModal({
+      titulo: 'Continuar sin esta unidad',
+      mensaje: `${f.unidad || clues} no envió su SINBA-SIS de ${nombreMes(mes)} ${anio}. Podrás cerrar el mes y entregar sin ella; su información no se suma. Si después envía, se toma en cuenta sola. Escribe el motivo (queda registrado).`,
+      pedirMotivo: true, placeholderMotivo: 'Ej. Falla de internet en la unidad', textoAceptar: 'Continuar sin ella'
+    });
+    if (!motivo) return;
+    const { error } = await estado.db.rpc('sis06p_marcar_sin_envio', { p_clues: clues, p_mes: mes, p_anio: anio, p_motivo: motivo });
+    if (error) { toast('No se pudo marcar: ' + error.message, 'error'); return; }
+    toast('Listo: se continúa sin esta unidad.', 'ok');
+    await refrescarFilas();
+  }
+  async function quitarSinEnvio(clues) {
+    const { mes, anio } = periodo();
+    const { error } = await estado.db.rpc('sis06p_quitar_sin_envio', { p_clues: clues, p_mes: mes, p_anio: anio });
+    if (error) { toast('No se pudo deshacer: ' + error.message, 'error'); return; }
+    toast('Se vuelve a esperar el envío de esta unidad.', 'ok');
+    await refrescarFilas();
+  }
   // -------------------------------------------------------------- eventos
   function descargar(btn) {
     const { mes, anio } = periodo();
@@ -824,7 +877,10 @@
       else if (t.closest('#munCtaSiguiente')) { const s = siguientePendiente(null); if (s) revisar(s.clues); }
       else if (t.closest('#munCtaConcentrado')) irAPaso(3);
       else if (t.closest('#munVerMovimiento')) verMovimiento();
-      else if (t.closest('#munVolverConcentrado')) irAPaso(3);
+      else if (t.closest('#munSinEnvio')) marcarSinEnvio(st.clues);
+      else if (t.closest('#munQuitarSinEnvio')) quitarSinEnvio(st.clues);
+      else if (t.closest('#munVolverConcentrado') || t.closest('#munVolverConcentradoEnt')) irAPaso(3);
+      else if (t.closest('#munVolverUnidades') || t.closest('#munVolverLista')) irAPaso(1);
       else if (t.closest('#munIrEntrega')) irAPaso(4);
       else if (t.closest('#munMovExcel')) { const { mes, anio } = periodo(); conCarga(t.closest('#munMovExcel'), () => descargarMovimientoBiovac(st.muni, mes, anio)); }
       else if (t.closest('#munIrPendientes')) { st.filtro = 'ENVIADO'; irAPaso(1); }

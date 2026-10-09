@@ -37,7 +37,7 @@ test('movimientoEsDerivado: hospitales desde septiembre, municipios desde octubr
   expect(r.nhgSeptiembre).toBe(true);       // desde septiembre se arma de la cuenta del hospital
   expect(r.nhgOctubre).toBe(true);
   expect(r.qroSeptiembre).toBe(false);      // los municipios no cambian: septiembre sigue siendo por municipio
-  expect(r.qroOctubre).toBe(true);
+  expect(r.qroOctubre).toBe(false);         // los municipios ya no son "derivados": se arman con las unidades y se editan
   expect(r.huimilpanOctubre).toBe(false);   // sin unidad real conserva su fila
   expect(r.unidadReal).toBe(false);         // una unidad real nunca es "derivada"
 });

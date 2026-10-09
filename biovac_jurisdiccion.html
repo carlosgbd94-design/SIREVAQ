@@ -12,12 +12,13 @@
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=8">
 <link rel="stylesheet" href="ayuda.css?v=1">
-<script defer src="ayuda.js?v=8"></script>
+<script defer src="ayuda.js?v=13"></script>
+<script defer src="a11y_global.js?v=5"></script>
 <script defer src="dock_glass.js?v=4"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.8"></script>
-<script defer src="biovac_jurisdiccion_ui.js?v=2026.11"></script>
+<script defer src="biovac_jurisdiccion_ui.js?v=2026.15"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -492,19 +493,22 @@
   .drilldown tr.fila-correccion input { width: 72px; padding: 5px 4px; text-align: center; font-weight: 700; border: 1.5px solid var(--warning-border); border-radius: 8px; }
   .drilldown tr.fila-correccion .motivo { font-size: 11px; font-weight: 600; font-style: italic; }
   @media (max-width: 760px) { .jur-val-detalle > div { grid-template-columns: 1fr; gap: 2px; } }
+  .enlace-cruzado { color: #0369a1; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; border-radius: 4px; }
+  .enlace-cruzado:hover { color: #0c4a6e; }
 </style>
 </head>
 <body>
 
 <a class="volver" href="index.html"><span class="material-symbols-rounded">arrow_back</span> Volver a SIREVAQ</a>
 
+<main id="contenidoPrincipal">
 <div class="tarjeta panel-encabezado">
   <div class="fila-logo">
     <img id="imgLogoApp" alt="SIREVAQ" src="assets/logo_nuevo.png">
     <div class="divisor"></div>
     <div>
       <h1>Concentrado Jurisdiccional<span id="avisoUsuario"></span></h1>
-      <p class="subtitulo">Movimiento de biológico de la jurisdicción: la suma de los municipios y hospitales (cada municipio suma sus unidades). Tú vigilas el cierre, revisas los avisos y emites el informe.</p>
+      <p class="subtitulo">Movimiento de biológico de la jurisdicción: la suma de los municipios y hospitales (cada municipio con su propio Movimiento, armado con lo que envían sus unidades). Tú vigilas el cierre, revisas los avisos y emites el informe. Para revisar o validar el SINBA-SIS de una unidad ve a <a href="biovac.html" class="enlace-cruzado">SINBA-SIS por unidad</a>.</p>
     </div>
   </div>
 
@@ -608,6 +612,8 @@
     <button type="button" class="dock-btn dock-enviar" id="btnGenerarInforme" style="display:none;" title="Generar el informe de este mes"><span class="material-symbols-rounded">summarize</span><span class="dock-etiqueta">Generar informe</span></button>
   </div>
 </nav>
+
+</main>
 
 <div id="toast" class="toast"></div>
 

@@ -324,3 +324,51 @@ test('Validar con diferencias: el municipal NO tiene excepción, solo el aviso d
   await expect(page.locator('#toast')).toContainText('No se pudo validar');
   expect(await page.evaluate(() => window.__rpcs.includes('sis06p_validar_con_excepcion'))).toBe(false);
 });
+
+// Dos candados distintos: Enviar es de la unidad; Cerrar el Movimiento es de los revisores.
+test('UNIDAD: no ve "Cerrar mes" (su único candado es Enviar) y se le explica', async ({ page }) => {
+  await abrir(page, 'UNIDAD');
+  await pintarMovimiento(page, { rol: 'UNIDAD', estadoMov: 'BORRADOR', sisEstado: 'BORRADOR' });
+  expect(await page.evaluate(() => document.getElementById('btnCerrarMes').style.display)).toBe('none');   // (el botón de la cabecera vive oculto por CSS; su estado lo espeja la barra)
+  await expect(page.locator('#bannerMovimiento')).toContainText('Tu único candado es Enviar');
+});
+
+test('MUNICIPAL: sí cierra el Movimiento; con el SIS enviado el aviso dice que se cerró con el envío', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await pintarMovimiento(page, { rol: 'MUNICIPAL', estadoMov: 'BORRADOR', sisEstado: 'BORRADOR' });
+  expect(await page.evaluate(() => document.getElementById('btnCerrarMes').style.display)).toBe('inline-block');
+  await pintarMovimiento(page, { rol: 'MUNICIPAL', estadoMov: 'CERRADO', sisEstado: 'ENVIADO' });
+  await expect(page.locator('#bannerMovimiento')).toContainText('cerrado con el envío del SINBA-SIS');
+  await expect(page.locator('#bannerMovimiento [data-banner="corregir"]')).toBeVisible();
+});
+
+test('UNIDAD: fuera de su ventana de captura no se invita a "Iniciar movimiento" (mismo candado que SIS-06-P)', async ({ page }) => {
+  await abrir(page, 'UNIDAD');
+  await prepararSIS(page, { rol: 'UNIDAD' });
+  await page.evaluate(async () => {
+    window.SIS06PBiovac.fueraDeVentana = () => true;
+    const real = estado.db;
+    const vacio = () => { const api = new Proxy({}, { get: (t, q) => (q === 'then' ? undefined : (q === 'maybeSingle' || q === 'single') ? async () => ({ data: null, error: null }) : () => api) }); return api; };
+    estado.db = new Proxy(real, { get: (t, p) => (p === 'from' ? (tabla) => (tabla === 'biovac_movimientos' ? vacio() : t.from(tabla)) : t[p]) });
+    document.getElementById('btnSeccionMovimiento').classList.add('activo');
+    await cargarMovimiento();
+  });
+  await expect(page.locator('#panelSinMovimiento')).toBeVisible();
+  await expect(page.locator('#btnIniciarMovimiento')).toBeDisabled();
+  await expect(page.locator('#notaSinMovimiento')).toContainText('fuera de su ventana de captura');
+});
+
+test('UNIDAD: el responsable se puede cambiar aunque el mes esté fuera de su ventana; solo queda fijo tras enviar', async ({ page }) => {
+  await abrir(page, 'UNIDAD');
+  await prepararSIS(page, { rol: 'UNIDAD' });
+  await page.evaluate(async () => { document.getElementById('panelSIS06P').style.display = 'block'; await SIS06PBiovac.init(); });
+  const inp = page.locator('#selUsuario');
+  await expect(inp).toBeVisible();
+  await expect(inp).not.toHaveJSProperty('readOnly', true);
+  await inp.fill('Ana Pérez López');
+  await expect(inp).toHaveValue('Ana Pérez López');
+  // tras el envío sí queda fijo
+  await prepararSIS(page, { rol: 'UNIDAD', estadoCaptura: 'ENVIADO' });
+  await page.evaluate(async () => { await SIS06PBiovac.init(); });
+  await expect(inp).toHaveJSProperty('readOnly', true);
+});

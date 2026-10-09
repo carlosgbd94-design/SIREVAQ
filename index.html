@@ -389,8 +389,9 @@
        (ensurePdfAssetsLoaded) solo al exportar el PDF de Resguardo.
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
-  <script defer src="ayuda.js?v=10"></script>
-  <script src="dist/bundle-head.js?v=2026.110" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script defer src="ayuda.js?v=13"></script>
+  <script defer src="a11y_global.js?v=5"></script>
+  <script src="dist/bundle-head.js?v=2026.113" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -1055,7 +1056,7 @@
     </div>
   </div>
 
-  <div class="max-w-[1750px] w-full mx-auto px-4 sm:px-10 pt-[100px] sm:pt-[130px] pb-32 sm:pb-12">
+  <div role="main" id="contenidoPrincipal" class="max-w-[1750px] w-full mx-auto px-4 sm:px-10 pt-[100px] sm:pt-[130px] pb-32 sm:pb-12">
 
     <!-- RIGHT (APP) -->
     <div class="w-full flex flex-col gap-6 hidden" id="rightColumn">
@@ -1755,6 +1756,7 @@
                 <h2 class="cp-title" id="cpInfTitle">Meta-Logro de vacuna anti influenza estacional</h2>
                 <p class="cp-sub">Reporta cada semana las dosis que aplicó tu unidad y consulta tu avance contra la meta de la campaña.</p>
                 <div class="cp-chips">
+                  <a id="influenzaVolverSIS" href="biovac.html" class="cp-chip" style="display:none; text-decoration:none; color:#6d28d9; border-color:#c4b5fd; background:#fff;" title="Regresar a tu SINBA-SIS donde estabas" onclick="try{sessionStorage.removeItem('sirevaq_desde_sis')}catch(e){}"><span class="material-symbols-rounded" aria-hidden="true">arrow_back</span>Volver a mi SINBA-SIS</a>
                   <span class="cp-chip"><span class="material-symbols-rounded" aria-hidden="true">event_available</span>Un reporte por semana</span>
                   <button type="button" class="cp-help-btn" data-ayuda="influenza_captura" aria-label="Cómo funciona el panel de Influenza"><span class="material-symbols-rounded" aria-hidden="true">help</span>¿Cómo funciona?</button>
                 </div>
@@ -2150,7 +2152,7 @@
           <a class="nav-tab" id="tabOPS_BIOVAC" data-role-gate="ADMIN,MUNICIPAL" style="text-decoration:none"
             href="biovac.html">
             <span class="material-symbols-rounded">medication_liquid</span>
-            <span>Movimiento de Biológico</span>
+            <span>SINBA-SIS por unidad</span>
           </a>
 
           <a class="nav-tab" id="tabOPS_BIOVAC_JURISDICCION" data-role-gate="ADMIN,JURISDICCIONAL" style="text-decoration:none"

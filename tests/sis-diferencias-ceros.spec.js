@@ -105,7 +105,7 @@ test('Diferencias paloteo vs Movimiento: aviso rojo permanente con la lista y En
   await expect(aviso.locator('button[data-dif-ir="mov"]')).toBeVisible();
 
   // La tarjeta de la 06-P también es roja y el dock lo dice
-  await expect(page.locator('#sis06pConciliacion')).toContainText('2 biológico(s) NO coinciden');
+  await expect(page.locator('#sis06pConciliacion')).toContainText('2 biológicos NO coinciden');
   const colorTarjeta = await page.evaluate(() => getComputedStyle(document.getElementById('sis06pConciliacion')).borderTopColor);
   expect(colorTarjeta).toBe('rgb(248, 113, 113)');
   await expect(page.locator('#dockEstadoDetalle')).toContainText('2 biológicos no coinciden');

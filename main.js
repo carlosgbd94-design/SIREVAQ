@@ -9490,14 +9490,14 @@ async function hydrateSessionUi(user, status, opts = {}) {
   exposeAppFns();
   assertCriticalFns();
 
-  // Cargar los mapeos de variables SIS dinámicos de 2025 y 2026 desde Supabase
+  // Mapeos de variables SIS dinámicos (2025 y 2026): ya no bloquean la pantalla. Solo los usa el
+  // módulo SIS (que además recarga el mapeo de su año al abrirse) y los valores por defecto son válidos.
   try {
     if (typeof window.loadRdaMappingFromDatabase === 'function') {
-      await Promise.all([
+      Promise.all([
         window.loadRdaMappingFromDatabase(2025),
         window.loadRdaMappingFromDatabase(2026)
-      ]);
-      console.log("[hydrateSessionUi] Mapeos dinámicos SIS 2025 y 2026 cargados exitosamente de Supabase.");
+      ]).catch(err => console.error("[hydrateSessionUi] Error al cargar mapeos dinámicos SIS:", err));
     }
   } catch (err) {
     console.error("[hydrateSessionUi] Error al cargar mapeos dinámicos SIS:", err);
@@ -9511,6 +9511,9 @@ async function hydrateSessionUi(user, status, opts = {}) {
   setLoggedInUI(user, status);
   showRightColumn(true);
   hideOverlay();
+  // Interfaz lista: se libera la guardia de arranque YA, sin esperar a los datos (lotes, resumen, etc.),
+  // que se siguen cargando abajo y se pintan al llegar.
+  finishBootGuard();
   window.MUST_CHANGE_PASSWORD = !!mustChangePassword;
 
   if (window.MUST_CHANGE_PASSWORD && typeof openPasswordModal === "function") {
@@ -14853,6 +14856,12 @@ function activateMain(tab) {
 
 function activateCapture(tab) {
   const role = String((USER && USER.rol) || "").trim().toUpperCase();
+  // "Volver a mi SINBA-SIS" solo acompaña a quien llegó desde su SIS: al irse de Influenza deja de mostrarse.
+  if (tab !== "INFLUENZA") {
+    const volverSIS = document.getElementById("influenzaVolverSIS");
+    if (volverSIS) volverSIS.style.display = "none";
+    try { sessionStorage.removeItem("sirevaq_desde_sis"); } catch (_) { /* sin almacenamiento */ }
+  }
 
 
   const updateTabClass = (id, cond) => {

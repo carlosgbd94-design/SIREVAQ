@@ -287,15 +287,17 @@ function cuentaParaJurisdiccion(u, anio, mes, todas) {
   const esPseudo = (x) => Boolean(x.clues && x.clues.startsWith('JS1-'));
   // Hospitales con cuenta propia: desde su mes de arranque solo cuenta su fila real (la JS1- queda guardada, sin sumar)
   if (ES_HOSPITAL_JUR[u.municipio] && primerDia >= (estado.inicioHospitales || '2026-09-01')) return !esPseudo(u);
-  if (primerDia < (estado.inicioPorUnidad || '2026-10-01')) return esPseudo(u);
-  return !esPseudo(u) || !todas.some((r) => r.municipio === u.municipio && !esPseudo(r) && r.activo);
+  // La jurisdicción suma por MUNICIPIO (fila JS1-), nunca por unidad: las unidades son la base del municipio y este
+  // y los hospitales (cuenta propia) forman la jurisdicción. Mismo criterio que biovac_cuenta_para_jurisdiccion.
+  return esPseudo(u);
 }
 
 // Cada aviso del servidor, dicho en claro: qué pasa, quién lo resuelve y qué hacer.
 const INFO_VALIDACION = {
   EXISTENCIA_NEGATIVA: { titulo: 'Existencia negativa', icono: 'remove_circle', nivel: 'ERROR' },
   CADUCIDAD_INCONSISTENTE: { titulo: 'Caducidades distintas', icono: 'event_busy', nivel: 'ADVERTENCIA' },
-  ARF_SIN_RESOLVER: { titulo: 'Lote en dictamen sin resolver', icono: 'hourglass_bottom', nivel: 'ADVERTENCIA' }
+  ARF_SIN_RESOLVER: { titulo: 'Lote en dictamen sin resolver', icono: 'hourglass_bottom', nivel: 'ADVERTENCIA' },
+  MUNICIPIO_VS_UNIDADES: { titulo: 'Municipio vs. sus unidades', icono: 'compare_arrows', nivel: 'ADVERTENCIA' }
 };
 
 function filasDeLote(v) {
@@ -338,6 +340,13 @@ function explicarValidacion(v) {
       que: `Este lote lleva 3 meses o más en dictamen (A.R.F. o canje) y todavía tiene ${total} frascos sin resolver${donde}.`,
       quien: 'Lo resuelve el municipio desde su Movimiento',
       hacer: 'Pídele que lo regrese a existencia normal o registre el canje. No necesitas corregir nada aquí.'
+    };
+  }
+  if (v.codigo === 'MUNICIPIO_VS_UNIDADES') {
+    return {
+      que: v.mensaje || `El Movimiento del municipio no coincide con la suma de sus unidades${donde}.`,
+      quien: 'Lo resuelve el municipal',
+      hacer: 'El municipal revisa ese lote contra sus unidades (el aviso dice la causa probable) y lo ajusta o lo confirma. Aquí no hace falta corregir nada.'
     };
   }
   return { que: v.mensaje || '', quien: '', hacer: '' };
@@ -391,6 +400,12 @@ async function cargarConcentrado(opciones) {
     const { data: sis } = await estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio });
     estado.sisFilas = sis || [];
   } catch (e) { /* sin permiso o sin datos: no estorba */ }
+  // Unidades que el municipal dejó "sin envío" (no bloquean el cierre ni se suman)
+  estado.sinEnvio = new Set();
+  try {
+    const { data: marcas } = await estado.db.rpc('sis06p_sin_envio_lista', { p_mes: mes, p_anio: anio });
+    (marcas || []).filter((m) => m.vigente).forEach((m) => estado.sinEnvio.add(m.clues));
+  } catch (e) { /* sin la función: todo sigue como antes */ }
 
   document.getElementById('panelResultados').style.display = 'block';
   document.getElementById('dockJuris').style.display = 'flex';
@@ -408,8 +423,10 @@ function gruposMunicipio() {
   const est = (u) => (estado.movPorUnidad.get(u.id) || {}).estado || 'SIN_MOVIMIENTO';
   return orden.map((m) => {
     const unidades = porMuni.get(m);
-    const cerradas = unidades.filter((u) => est(u) === 'CERRADO').length;
-    return { muni: m, unidades, cerradas, completo: cerradas === unidades.length, est };
+    const omitida = (u) => Boolean(estado.sinEnvio && estado.sinEnvio.has(u.clues) && est(u) !== 'CERRADO');
+    const omitidas = unidades.filter(omitida).length;
+    const cerradas = unidades.filter((u) => est(u) === 'CERRADO' || omitida(u)).length;
+    return { muni: m, unidades, cerradas, omitidas, completo: cerradas === unidades.length, est };
   });
 }
 
@@ -501,7 +518,7 @@ function renderCierre() {
   document.getElementById('cierreResumen').innerHTML = `
     <div class="jur-avance">
       <div class="jur-avance-cab"><div><b>${nombreMesJ(mes)} ${anio}</b><small>${conUnidades
-        ? 'Cada unidad cierra su Movimiento al enviar su SINBA-SIS; el municipio queda cerrado cuando cierran todas sus unidades.'
+        ? 'Las unidades envían su SINBA-SIS y de ahí se arma solo el Movimiento de cada municipio; el municipal lo valida contigo en papel y lo cierra. Los hospitales cuentan aparte. Se suma por municipio, no por unidad.'
         : 'Antes del arranque por unidad, cada municipio y hospital cierra su propio Movimiento.'}</small></div><span class="jur-pct">${r.munisCerrados} de ${r.munis} cerrados</span></div>
       <div class="jur-barra"><i style="width:${pct}%"></i></div>
     </div>
@@ -515,7 +532,8 @@ function renderCierre() {
     const txt = porUnidad
       ? (g.completo
         ? (n === 1 ? 'La unidad cerró su Movimiento' : `Las ${n} unidades cerraron su Movimiento`)
-        : (n === 1 ? 'La unidad aún no cierra su Movimiento' : `${g.cerradas} de ${n} unidades cerraron su Movimiento`))
+        : (n === 1 ? 'La unidad aún no envía su SINBA-SIS' : `${g.cerradas - g.omitidas} de ${n} unidades ya enviaron su SINBA-SIS`))
+      + (g.omitidas ? ` · ${g.omitidas} sin envío (se continúa)` : '')
       : (g.completo ? 'Movimiento cerrado' : `Movimiento ${String(TEXTO_MOV[g.est(g.unidades[0])]).toLowerCase()}`);
     // El SINBA-SIS lo capturan las unidades desde el primer mes (aunque el Movimiento de ese mes todavía se cierre
     // por municipio/hospital), así que su avance y el acceso para validar a los hospitales salen siempre,
@@ -525,16 +543,17 @@ function renderCierre() {
     if (filas.length) {
       const v = filas.filter((f) => f.estado === 'VALIDADO').length;
       const e = filas.filter((f) => f.estado === 'ENVIADO').length;
-      const sinEnviar = filas.length - v - e;
+      const omit = filas.filter((f) => f.estado !== 'VALIDADO' && f.estado !== 'ENVIADO' && estado.sinEnvio && estado.sinEnvio.has(f.clues)).length;
+      const sinEnviar = filas.length - v - e - omit;
       // "Por validar" resalta cuando hay algo que hacer; el número solo se dice una vez, aquí.
-      sis = `SINBA-SIS (consulta): ${v} validados · ${e > 0 ? `<b class="jur-sis-pendiente">${e} por validar</b>` : '0 por validar'} · ${sinEnviar} sin enviar`;
+      sis = `SINBA-SIS (consulta): ${v} validados · ${e > 0 ? `<b class="jur-sis-pendiente">${e} por validar</b>` : '0 por validar'} · ${sinEnviar} sin enviar${omit ? ` · ${omit} sin envío (se continúa)` : ''}`;
       if (esHosp && e > 0 && puedeEditar()) accion = `<a class="btn-primario jur-btn-validar" href="biovac.html"><span class="material-symbols-rounded">fact_check</span> Revisar y validar el SINBA-SIS</a>`;
     }
     return `<div class="jur-muni ${g.completo ? 'completo' : ''}">
       <div class="jur-muni-cab">
         <span class="jur-muni-icono"><span class="material-symbols-rounded">${esHosp ? 'local_hospital' : 'location_city'}</span></span>
         <div class="jur-muni-tit"><b>${escJ(etiquetaMuniJ(g.muni))}</b><small>${escJ(txt)}</small></div>
-        <span class="jur-estado ${g.completo ? 'ok' : ''}">${g.completo ? '<span class="material-symbols-rounded">check_circle</span> Cerrado' : 'En proceso'}</span>
+        <span class="jur-estado ${g.completo ? 'ok' : ''}" title="${g.completo ? 'Cerrado: ya es definitivo' : 'Provisional: se suma lo que ya llegó y puede cambiar hasta que se cierre'}">${g.completo ? '<span class="material-symbols-rounded">check_circle</span> Cerrado' : 'Provisional'}</span>
       </div>
       <div class="jur-barra jur-barra-fina"><i style="width:${pctM}%"></i></div>
       ${sis ? `<p class="jur-sis">${sis}</p>` : ''}
@@ -597,10 +616,10 @@ function renderValidaciones(validaciones) {
       if (!porMuni.has(m)) porMuni.set(m, []);
       porMuni.get(m).push(v.unidad);
     });
-    const resumen = [...porMuni.entries()].map(([m, l]) => `${etiquetaMuniJ(m)} ${l.length}`).join(' · ');
+    const resumen = [...porMuni.keys()].map((m) => etiquetaMuniJ(m)).join(' · ');
     pendientes = `<details class="jur-pendientes">
-      <summary><span class="material-symbols-rounded">lock_open</span><b>${plural(sinCerrar.length, 'unidad sin cerrar', 'unidades sin cerrar')}</b> <small>${escJ(resumen)}</small></summary>
-      <p>Mientras no cierren, el concentrado es provisional: se completa solo en cuanto cierren. Es solo consulta; cada municipio les da seguimiento.</p>
+      <summary><span class="material-symbols-rounded">lock_open</span><b>${plural(sinCerrar.length, 'municipio u hospital sin cerrar', 'municipios u hospitales sin cerrar')}</b> <small>${escJ(resumen)}</small></summary>
+      <p>Mientras no cierren, el concentrado es provisional: se completa solo en cuanto cierren. Es solo consulta; el municipal les da seguimiento.</p>
       ${[...porMuni.entries()].map(([m, l]) => `<div class="jur-pend-muni"><b>${escJ(etiquetaMuniJ(m))}</b><span>${l.map(escJ).join(' · ')}</span></div>`).join('')}
     </details>`;
   }
@@ -822,7 +841,7 @@ function renderFilaConcentrado(f) {
     <td>
       <div class="lote-texto">${f.numero_lote}<span data-corr-chip="${f.lote_id}|${f.categoria}"></span></div>
       ${f.categoria !== 'NORMAL' ? `<span class="tag-${f.categoria.toLowerCase()}">${f.categoria}</span>` : ''}
-      ${f.es_provisional ? `<span class="tag-provisional" title="Al menos un municipio todavía no cierra este mes -- el número puede cambiar">Provisional</span>` : ''}
+      ${f.es_provisional ? `<span class="tag-provisional" title="Al menos una unidad de este municipio todavía no envía su SINBA-SIS -- el número puede cambiar">Provisional</span>` : ''}
     </td>
     <td><div class="caducidad-chip ${semaforo}"><span class="semaforo"></span>${formatMmmAa(f.caducidad)}</div></td>
     <td class="c-ant">${redondearFrascos(f.existencia_anterior_frascos)}</td>
@@ -907,7 +926,7 @@ function renderFilaCorreccionMuni(m, fila, sumas, split, pend, editando) {
   };
   const ab = (a, b) => (split ? `${celda(pend[`obj_${a}`], sumas[a])} / ${celda(pend[`obj_${b}`], sumas[b])}` : celda(pend[`obj_${a}`], sumas[a]));
   return `<tr class="fila-correccion">
-    <td><b>Corrección de Jurisdicción</b><small class="muni-sub">Pendiente: el municipio ajusta sus unidades</small></td>
+    <td><b>Corrección de Jurisdicción</b><small class="muni-sub">Pendiente: el municipal ajusta su Movimiento</small></td>
     <td><span class="estado-badge estado-EN_CORRECCION">Pendiente</span></td><td>—</td>
     <td>${celda(pend.obj_recibido, sumas.recibido_frascos)}</td><td>${ab('aplicadas_a', 'aplicadas_b')}</td><td>${ab('desechadas_a', 'desechadas_b')}</td><td>—</td>
     <td class="motivo">${escJ(pend.motivo)}<br><small>${escJ(pend.creado_por)}</small></td>
@@ -991,7 +1010,10 @@ function renderDetalleLote(data, filaLote, anio, mes) {
 
   const filas = orden.map((m) => {
     const ds = porMuni.get(m);
-    if (ds.length === 1) return renderFilaDrilldown(ds[0], anio, mes, split, etiquetaMuniJ(m));
+    // Desde octubre cada municipio trae UNA fila: su propio Movimiento (armado con sus unidades). Conserva la fila de municipio
+    // para poder pedirle correcciones; los hospitales (cuenta propia) siguen como fila simple.
+    const esMovMuni = ds.length === 1 && desdeArranquePorUnidad() && !ES_HOSPITAL_JUR[m];
+    if (ds.length === 1 && !esMovMuni) return renderFilaDrilldown(ds[0], anio, mes, split, etiquetaMuniJ(m));
     const s = (c) => ds.reduce((a, d) => a + num(d, c), 0);
     const todasCerradas = ds.every((d) => d.movimiento_estado === 'CERRADO');
     const abierta = estado.munisAbiertas && estado.munisAbiertas.has(m);
@@ -1002,9 +1024,9 @@ function renderDetalleLote(data, filaLote, anio, mes) {
     CAMPOS_CORR_MUNI.forEach((c) => { sumasCm[c] = s(c); });
     const filaCorr = (pendCm || editandoCm) ? renderFilaCorreccionMuni(m, filaLote, sumasCm, split, pendCm, editandoCm) : '';
     const botonCorregirMuni = (filaLote && puedeEditar() && !pendCm && !editandoCm)
-      ? `<button type="button" class="btn-mini btn-secundario" data-action="corregir-muni" data-muni="${escJ(m)}" title="Pide al municipio que ajuste sus unidades para que la suma quede como tú indiques"><span class="material-symbols-rounded">edit_note</span> Corregir municipio</button>` : '';
+      ? `<button type="button" class="btn-mini btn-secundario" data-action="corregir-muni" data-muni="${escJ(m)}" title="Pide al municipal que ajuste su Movimiento para que quede como tú indiques"><span class="material-symbols-rounded">edit_note</span> Corregir municipio</button>` : '';
     return `<tr class="muni-resumen${(pendCm || editandoCm) ? ' fila-gris' : ''}">
-        <td><b>${escJ(etiquetaMuniJ(m))}</b><small class="muni-sub">${plural(ds.length, 'unidad', 'unidades')}</small></td>
+        <td><b>${escJ(etiquetaMuniJ(m))}</b><small class="muni-sub">${esMovMuni ? 'Movimiento del municipio' : plural(ds.length, 'unidad', 'unidades')}</small></td>
         <td><span class="estado-badge estado-${todasCerradas ? 'CERRADO' : 'BORRADOR'}">${todasCerradas ? 'Cerrado' : 'En captura'}</span></td>
         <td>${redondearFrascos(s('existencia_anterior_frascos'))}</td>
         <td>${s('recibido_frascos')}</td>
@@ -1012,14 +1034,14 @@ function renderDetalleLote(data, filaLote, anio, mes) {
         <td>${celdaAB(s('desechadas_a'), s('desechadas_b'))}</td>
         <td class="existencia-final"><b>${redondearFrascos(s('existencia_final_frascos'))}</b></td>
         <td></td>
-        <td><button type="button" class="btn-mini btn-secundario" data-action="toggle-unidades" data-muni="${escJ(m)}"><span class="material-symbols-rounded">${abierta ? 'expand_less' : 'expand_more'}</span> ${abierta ? 'Ocultar' : 'Ver'} unidades</button> ${botonCorregirMuni}</td>
+        <td><button type="button" class="btn-mini btn-secundario" data-action="toggle-unidades" data-muni="${escJ(m)}"><span class="material-symbols-rounded">${abierta ? 'expand_less' : 'expand_more'}</span> ${abierta ? 'Ocultar' : 'Ver'} ${esMovMuni ? 'detalle' : 'unidades'}</button> ${botonCorregirMuni}</td>
       </tr>
       ${filaCorr}
       ${ds.map((d) => renderFilaDrilldown(d, anio, mes, split, null, m, abierta)).join('')}`;
   }).join('');
 
   return `${callout}
-    <p class="jur-drill-nota">Cada renglón es un municipio u hospital: la suma de las unidades que reportaron este lote.</p>
+    <p class="jur-drill-nota">Cada renglón es un municipio u hospital: el Movimiento del municipio (armado con lo que enviaron sus unidades) o la cuenta propia del hospital.</p>
     <table class="jur-drill"><thead><tr>
       <th>Municipio</th><th>Estado</th><th class="c-ant">Ant.</th><th class="c-rec">Recibido</th><th class="c-apl">${split ? 'Aplicadas (A / B)' : 'Aplicadas'}</th><th class="c-des">${split ? 'Desechadas (A / B)' : 'Desechadas'}</th><th class="c-fin">Final</th><th>Observaciones</th><th></th>
     </tr></thead><tbody>${filas || '<tr><td colspan="9" style="color:var(--muted)">Ninguna unidad reportó este lote este mes.</td></tr>'}</tbody></table>

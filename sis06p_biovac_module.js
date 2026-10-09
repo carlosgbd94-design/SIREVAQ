@@ -164,6 +164,7 @@
     const hora = d.ts ? new Date(d.ts).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '';
     const viejo = (d.base || null) !== ((currentReport && currentReport.updated_at) || null);
     if (banner) {
+      banner.setAttribute('role', 'status');
       banner.style.cssText = 'display:block; margin-bottom:14px; padding:11px 14px; border-radius:12px; font-size:12px; font-weight:700; background:var(--warning-bg); color:var(--warning); border:1px solid var(--warning-border);';
       banner.innerHTML = `<span class="material-symbols-rounded" style="font-size:15px; vertical-align:middle;">restore</span>
         Recuperamos tu avance sin guardar${hora ? ' (' + hora + ')' : ''}: son ${cambios} casilla${cambios === 1 ? '' : 's'} distinta${cambios === 1 ? '' : 's'} de lo guardado. Revísalas y toca <b>Guardar</b>.
@@ -581,20 +582,20 @@
     const campo = (key, etiqueta) => `
       <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:11.5px; font-weight:600; padding:3px 0;">
         <span>${etiqueta}</span>
-        <input type="number" min="0" step="1" id="sisb_ajuste_${key}" ${soloLectura ? 'disabled' : ''}
+        <input type="number" min="0" step="1" inputmode="numeric" id="sisb_ajuste_${key}" aria-label="${etiqueta.replace(/"/g, '&quot;')}" ${soloLectura ? 'disabled' : ''}
           value="${_num2(ajustes[key]) > 0 ? _num2(ajustes[key]) : ''}" placeholder="0"
           style="width:88px; text-align:center; font-weight:800; font-size:13px; border:1.5px solid #cbd5e1; border-radius:9px; padding:6px 8px; ${soloLectura ? 'background:#f1f5f9;' : ''}">
       </label>`;
     const bloques = AJUSTES_DEF.map((d) => `
       <div data-comodin-par="${d.idx}" style="padding:8px 0; border-top:1px solid rgba(0,0,0,.06);">
         <div style="font-size:11.5px; font-weight:800;">${d.a} / ${d.b}</div>
-        <div data-comodin-diag="${d.idx}" style="margin:2px 0 6px;"></div>
+        <div data-comodin-diag="${d.idx}" role="status" aria-live="polite" style="margin:2px 0 6px;"></div>
         ${campo(d.keyFwd, `Dosis de ${d.b} aplicadas y reportadas en el paloteo como ${d.a}`)}
         ${campo(d.keyRev, `Dosis de ${d.a} aplicadas y reportadas en el paloteo como ${d.b}`)}
       </div>`).join('');
     return `
       <details id="sisbComodin" open style="margin-top:10px; background:rgba(255,255,255,.65); border:1px solid rgba(0,0,0,.08); border-radius:10px;">
-        <summary style="cursor:pointer; padding:8px 12px; font-size:11.5px; font-weight:800;">Ajuste por sustitución (comodín)</summary>
+        <summary style="cursor:pointer; padding:8px 12px; font-size:11.5px; font-weight:800;" title="Úsalo solo si aplicaste una vacuna y en el paloteo la reportaste como otra">Ajuste por sustitución (comodín)</summary>
         <div style="padding:2px 12px 8px;">
           <div style="font-size:11px; font-weight:500; opacity:.85; margin-bottom:4px;">Si se aplicó una vacuna y en el paloteo se reportó como otra (SRP por SR, TdPa por DPT o al revés), el Movimiento la da de baja como la que realmente se usó. El aviso se actualiza en vivo con lo que tecleas en el paloteo; el comodín solo se guarda con el botón Guardar.</div>
           ${bloques}
@@ -623,10 +624,15 @@
       const dg = diagnosticoPar(d, x, aj);
       const tecleado = dg.sug && (dg.sug.dir === 'fwd' ? aj.fwd : aj.rev) === dg.sug.n;
       const btn = (!_comodinSoloLectura && dg.sug && !tecleado)
-        ? ` <button type="button" class="btn-mini btn-secundario" data-comodin-usar="${dg.sug.dir === 'fwd' ? d.keyFwd : d.keyRev}" data-opuesto="${dg.sug.dir === 'fwd' ? d.keyRev : d.keyFwd}" data-valor="${dg.sug.n}"><span class="material-symbols-rounded">auto_fix_high</span> Usar ${dg.sug.n}</button>` : '';
+        ? ` <button type="button" class="btn-mini btn-secundario comodin-usar" data-comodin-usar="${dg.sug.dir === 'fwd' ? d.keyFwd : d.keyRev}" data-opuesto="${dg.sug.dir === 'fwd' ? d.keyRev : d.keyFwd}" data-valor="${dg.sug.n}" title="Escribe ${dg.sug.n} en la casilla correcta; tú decides cuándo guardar" aria-label="Aplicar el ajuste sugerido de ${dg.sug.n} dosis"><span class="material-symbols-rounded" aria-hidden="true">auto_fix_high</span> Aplicar ${dg.sug.n} dosis</button>` : '';
+      // Icono además del color: el estado no depende solo de distinguir rojo/verde/ámbar.
+      const ico = dg.cuadra ? 'check_circle' : (dg.color.indexOf('error') >= 0 ? 'error' : 'lightbulb');
+      const huella = dg.cuadra + '|' + dg.texto;
       diag.innerHTML = `
-        <div style="font-size:10.5px; font-weight:500; opacity:.8;">${d.a}: paloteo ${x.pA} / Movimiento ${x.aA} · ${d.b}: paloteo ${x.pB} / Movimiento ${x.aB}</div>
-        <div style="font-size:11px; font-weight:700; color:${dg.color}; margin-top:2px;">${dg.texto}${btn}</div>`;
+        <div style="font-size:10.5px; font-weight:500; color:#475569;">${d.a}: paloteo ${x.pA} / Movimiento ${x.aA} · ${d.b}: paloteo ${x.pB} / Movimiento ${x.aB}</div>
+        <div class="comodin-msg${dg.cuadra ? ' cuadra' : ''}" style="font-size:11px; font-weight:700; color:${dg.color}; margin-top:2px;"><span class="material-symbols-rounded" aria-hidden="true" style="font-size:14px; vertical-align:-3px;">${ico}</span> ${dg.texto}${btn}</div>`;
+      // el aviso solo se anima/anuncia cuando cambia su contenido, no en cada tecla
+      if (diag.dataset.huella !== huella) { diag.dataset.huella = huella; diag.classList.remove('comodin-cambio'); void diag.offsetWidth; diag.classList.add('comodin-cambio'); }
     });
     cont.style.display = algunoVisible ? '' : 'none';
   }
@@ -647,6 +653,7 @@
     input.value = btn.getAttribute('data-valor');
     input.dispatchEvent(new Event('input', { bubbles: true }));
     toast('Comodín capturado: presiona Guardar para aplicarlo.', 'ok');
+    try { input.focus(); input.select(); } catch (_) { /* no-op */ }
   });
   // Cualquier cambio del paloteo o del comodín repinta el aviso en vivo.
   document.addEventListener('input', (ev) => {
@@ -691,13 +698,13 @@
         <td style="padding:5px 8px;">${f.etiqueta}</td>
         <td style="padding:5px 8px; text-align:center; font-weight:800;">${Number(f.paloteo)}</td>
         <td style="padding:5px 8px; text-align:center; font-weight:800;">${Number(f.aplicado)}</td>
-        <td style="padding:5px 8px; text-align:center; font-weight:800;">${f.coincide ? '✓' : Number(f.paloteo) - Number(f.aplicado) > 0 ? `+${Number(f.paloteo) - Number(f.aplicado)}` : Number(f.paloteo) - Number(f.aplicado)}</td>
+        <td style="padding:5px 8px; text-align:center; font-weight:800;">${f.coincide ? '✓' : _num2(Number(f.paloteo) - Number(f.aplicado)) > 0 ? `+${_num2(Number(f.paloteo) - Number(f.aplicado))}` : _num2(Number(f.paloteo) - Number(f.aplicado))}</td>
       </tr>`;
     const tabla = (lista) => `
       <div style="overflow-x:auto; margin-top:8px;">
         <table style="width:100%; border-collapse:collapse; font-size:11.5px; font-weight:600;">
           <thead><tr style="text-align:center; font-size:10px; text-transform:uppercase; opacity:.75;">
-            <th style="padding:4px 8px; text-align:left;">Biológico</th><th style="padding:4px 8px;">Paloteo SIS-06-P</th><th style="padding:4px 8px;">Aplicado (Movimiento)</th><th style="padding:4px 8px;">Diferencia</th>
+            <th scope="col" style="padding:4px 8px; text-align:left;">Biológico</th><th scope="col" style="padding:4px 8px;">Paloteo SIS-06-P</th><th scope="col" style="padding:4px 8px;">Aplicado (Movimiento)</th><th scope="col" style="padding:4px 8px;">Diferencia</th>
           </tr></thead>
           <tbody>${lista.map(fila).join('')}</tbody>
         </table>
@@ -705,15 +712,18 @@
 
     if (ok) {
       cont.style.cssText = 'display:block; margin-bottom:14px; padding:10px 14px; border-radius:12px; font-size:12px; font-weight:700; background:var(--success-bg); color:var(--success);';
-      cont.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">check_circle</span> Conciliación con Movimiento de Biológico: las dosis aplicadas coinciden en los ${filas.length} biológico(s) con captura.` + htmlAjustes(soloLectura, currentReport);
+      cont.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">check_circle</span> Conciliación con Movimiento de Biológico: las dosis aplicadas coinciden en ${filas.length === 1 ? 'el único biológico con captura' : 'los ' + filas.length + ' biológicos con captura'}.` + htmlAjustes(soloLectura, currentReport);
       return;
     }
     const esUnidad = estado.perfil && estado.perfil.rol === 'UNIDAD';
     cont.style.cssText = 'display:block; margin-bottom:14px; padding:14px 16px; border-radius:12px; font-size:13px; font-weight:700; background:#fef2f2; color:#991b1b; border:2px solid #f87171; box-shadow:0 2px 10px rgba(220,38,38,.15);';
     cont.innerHTML = `
-      <div style="font-size:14px; font-weight:800;"><span class="material-symbols-rounded" style="font-size:20px; vertical-align:middle;">error</span>
-        ${dif.length} biológico(s) NO coinciden entre el paloteo SIS-06-P y el Movimiento de Biológico.
-        ${esUnidad ? 'No podrás enviar el SIS hasta que las dosis aplicadas sean iguales -- corrige el paloteo aquí o las "aplicadas" por lote en Movimiento de Biológico.' : 'No se puede validar hasta que coincidan -- corrige el lado que esté mal (modo revisión).'}
+      <div style="display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap; justify-content:space-between;">
+        <div style="flex:1; min-width:240px; font-size:14px; font-weight:800;"><span class="material-symbols-rounded" aria-hidden="true" style="font-size:20px; vertical-align:middle;">error</span>
+          ${dif.length === 1 ? '1 biológico NO coincide' : dif.length + ' biológicos NO coinciden'} con el Movimiento.
+          <div style="font-size:12px; font-weight:600; margin-top:3px;">${esUnidad ? 'No podrás enviar hasta que las dosis aplicadas sean iguales: corrige el paloteo aquí o las «aplicadas» por lote en el Movimiento.' : 'No se puede validar hasta que coincidan: corrige el lado que esté mal (modo revisión).'}</div>
+        </div>
+        <button type="button" class="btn-secundario btn-mini" data-dif-ir="mov"><span class="material-symbols-rounded" aria-hidden="true">medication_liquid</span> Ir al Movimiento</button>
       </div>
       ${tabla(dif)}
       ${htmlAjustes(soloLectura, currentReport)}`;
@@ -756,9 +766,13 @@
     // resaltan más grandes/oscuras que el resto del texto para que salten a
     // la vista sin tener que leer la frase completa.
     const destacada = (fecha) => `<strong style="font-size:13.5px; font-weight:900; letter-spacing:.01em;">${fecha}</strong>`;
-    if (_ventanaCache.dentro_envio) {
-      banner.style.cssText += 'background:var(--success-bg); color:var(--success);';
-      banner.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">check_circle</span> Ya puedes enviar tu concentrado -- tienes hasta el ${destacada(fechaLargaMX(_ventanaCache.fin_envio))} para hacerlo.`;
+    if (_ventanaCache.dentro_envio && hayDiferenciasConciliacion()) {
+      banner.style.cssText += 'background:var(--warning-bg); color:var(--warning);';
+      banner.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">schedule</span> El envío está abierto hasta el ${destacada(fechaLargaMX(_ventanaCache.fin_envio))}, pero antes deben coincidir las dosis aplicadas del paloteo y del Movimiento.`;
+    } else if (_ventanaCache.dentro_envio) {
+      // Caso feliz: la ruta del mes (paso 3) y la barra de abajo ya dicen "puedes enviar hasta el ..."; un tercer
+      // recuadro verde con lo mismo solo estorba, así que aquí no se repite.
+      banner.style.display = 'none';
     } else {
       banner.style.cssText += 'background:var(--warning-bg); color:var(--warning);';
       banner.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">schedule</span> Todavía puedes ir prellenando tu concentrado -- el envío se habilita del ${destacada(fechaLargaMX(_ventanaCache.inicio_envio))} al ${destacada(fechaLargaMX(_ventanaCache.fin_envio))}.`;
@@ -873,6 +887,10 @@
       const header = document.createElement('button');
       header.type = 'button';
       header.className = 'sis-card-header';
+      const idCuerpo = 'sisCuerpo_' + _normBio(biologico).replace(/[^A-Z0-9]+/gi, '_');
+      header.setAttribute('aria-expanded', 'false');
+      header.setAttribute('aria-controls', idCuerpo);
+      header.setAttribute('aria-label', biologico + ': ' + capturadas + ' de ' + vars.length + ' variables capturadas');
       // El degradado de fondo es la "personalidad" de cada tarjeta -- muy
       // sutil (6% de opacidad) y en `background-image`, aparte de
       // `background-color`, para que el :hover (definido en CSS) se pueda
@@ -891,25 +909,28 @@
             <span class="material-symbols-rounded sis-chevron" style="font-size:18px; color:#94a3b8; transition:transform .32s cubic-bezier(.4,0,.2,1);">expand_more</span>
           </span>
         </div>
-        <div class="sis-progress-track">
+        <div class="sis-progress-track" aria-hidden="true">
           <div class="sis-progress-fill" style="width:${pct}%; background-image:linear-gradient(90deg, ${accent.light}, ${accent.hex});"></div>
         </div>
       `;
 
       const body = document.createElement('div');
       body.className = 'sis-card-body';
+      body.id = idCuerpo;
+      body.setAttribute('role', 'region');
+      body.setAttribute('aria-label', biologico);
       body.innerHTML = `
         <div style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px;">
             <thead>
               <tr style="background:#f8fafc; border-bottom:1px solid var(--outline-variant);">
-                <th style="padding:10px; text-align:left; font-weight:600; color:#475569;">Grupo poblacional</th>
-                <th style="padding:10px; text-align:center; width:140px; font-weight:600; font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:.03em;">Dosis</th>
-                <th style="padding:10px; text-align:center; width:90px; font-weight:600; font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:.03em;">Clave</th>
-                <th style="padding:10px; text-align:center; width:110px; font-weight:800; font-size:11px; color:#334155;">TOTAL</th>
-                <th style="padding:10px; text-align:center; width:88px; font-weight:500; font-size:10px; color:#94a3b8;">Afromex.</th>
-                <th style="padding:10px; text-align:center; width:88px; font-weight:500; font-size:10px; color:#94a3b8;">Indígena</th>
-                <th style="padding:10px; text-align:center; width:88px; font-weight:500; font-size:10px; color:#94a3b8;">Migrante</th>
+                <th scope="col" style="padding:10px; text-align:left; font-weight:600; color:#475569;">Grupo poblacional</th>
+                <th scope="col" style="padding:10px; text-align:center; width:140px; font-weight:600; font-size:10px; color:#526071; text-transform:uppercase; letter-spacing:.03em;">Dosis</th>
+                <th scope="col" style="padding:10px; text-align:center; width:90px; font-weight:600; font-size:10px; color:#526071; text-transform:uppercase; letter-spacing:.03em;">Clave</th>
+                <th scope="col" style="padding:10px; text-align:center; width:110px; font-weight:800; font-size:11px; color:#334155;">TOTAL</th>
+                <th scope="col" style="padding:10px; text-align:center; width:88px; font-weight:600; font-size:10px; color:#526071;">Afromex.</th>
+                <th scope="col" style="padding:10px; text-align:center; width:88px; font-weight:600; font-size:10px; color:#526071;">Indígena</th>
+                <th scope="col" style="padding:10px; text-align:center; width:88px; font-weight:600; font-size:10px; color:#526071;">Migrante</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -921,18 +942,21 @@
       vars.forEach((v) => {
         const rowVal = currentValores[String(v.fila_excel)] || {};
         const row = document.createElement('tr');
+        // Nombre accesible de cada casilla: biológico + grupo/dosis/edad + columna
+        // (sin esto un lector de pantalla solo oye "campo numérico" 140 veces).
+        const nombreFila = (biologico + ', ' + [v.grupo_poblacional, (v.dosis && v.dosis !== v.grupo_poblacional) ? v.dosis : '', v.edad].filter(Boolean).join(', ')).replace(/"/g, '&quot;');
         row.style.cssText = 'border-bottom:1px solid #f1f5f9;';
 
         const dis = soloLectura ? 'disabled' : '';
         const mkTotal = (val) => `
-          <input type="number" min="0" step="1" id="sisb_${v.fila_excel}_total" data-fila="${v.fila_excel}" data-kind="total" ${dis}
+          <input type="number" min="0" step="1" inputmode="numeric" id="sisb_${v.fila_excel}_total" data-fila="${v.fila_excel}" data-kind="total" ${dis} aria-label="${nombreFila}: total"
             style="width:88px; max-width:100%; text-align:center; font-weight:800; font-size:13px; color:${accent.hex};
-              background:${soloLectura ? '#f1f5f9' : accent.tintSoft}; border:1.5px solid ${accent.hex}; border-radius:9px; padding:6px 8px; outline:none;"
+              background:${soloLectura ? '#f1f5f9' : accent.tintSoft}; border:1.5px solid ${accent.hex}; border-radius:9px; padding:6px 8px;"
             value="${val !== undefined && val !== null && Number(val) !== 0 ? val : ''}" placeholder="0">`;
         const mkSub = (kind, val) => `
-          <input type="number" min="0" step="1" id="sisb_${v.fila_excel}_${kind}" data-fila="${v.fila_excel}" data-kind="${kind}" ${dis}
-            style="width:66px; max-width:100%; text-align:center; font-weight:500; font-size:11px; color:#94a3b8;
-              background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:5px 6px; outline:none;"
+          <input type="number" min="0" step="1" inputmode="numeric" id="sisb_${v.fila_excel}_${kind}" data-fila="${v.fila_excel}" data-kind="${kind}" ${dis} aria-label="${nombreFila}: ${SUBCONTEO_LABEL[kind] || kind}"
+            style="width:66px; max-width:100%; text-align:center; font-weight:500; font-size:11px; color:#526071;
+              background:#f8fafc; border:1px solid #94a3b8; border-radius:8px; padding:5px 6px;"
             value="${val !== undefined && val !== null && Number(val) !== 0 ? val : ''}" placeholder="0">`;
 
         // Clave vive en su propia columna, no ya metida dentro del texto de
@@ -940,8 +964,8 @@
         // largo saliera ese texto (se encimaba o se iba a una línea rara
         // cuando la descripción era larga, ver VPH).
         const claveBadge = v.clave_general
-          ? `<span style="display:inline-block;font-size:9px;font-weight:700;font-family:monospace;background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:6px;white-space:nowrap;">${v.clave_general}</span>`
-          : `<span style="display:inline-block;font-size:9px;font-weight:700;text-transform:uppercase;background:#e2e8f0;color:#94a3b8;padding:2px 7px;border-radius:20px;">No RDA</span>`;
+          ? `<span style="display:inline-block;font-size:9px;font-weight:700;font-family:monospace;background:#f1f5f9;color:#475569;padding:2px 7px;border-radius:6px;white-space:nowrap;">${v.clave_general}</span>`
+          : `<span style="display:inline-block;font-size:9px;font-weight:700;text-transform:uppercase;background:#e2e8f0;color:#475569;padding:2px 7px;border-radius:20px;" title="Esta fila no tiene clave en RDA: se captura pero no se sube">No RDA</span>`;
 
         // Grupo poblacional y Dosis son columnas reales en la hoja
         // (BIOLÓGICO | DOSIS/GRUPO POBLACIONAL, con "dosis" -- ÚNICA,
@@ -952,7 +976,7 @@
         // p.ej.), se muestra UNA sola vez con colspan en vez de repetirlo en
         // las dos columnas.
         const mismaCelda = v.dosis && v.dosis === v.grupo_poblacional;
-        const edadHtml = v.edad ? `<br><span style="font-size:10px; color:#94a3b8; font-weight:600;">${v.edad}</span>` : '';
+        const edadHtml = v.edad ? `<br><span style="font-size:10px; color:#526071; font-weight:600;">${v.edad}</span>` : '';
         const celdaDosis = `${v.dosis || '—'}${edadHtml}`;
         const celdasGrupoDosis = mismaCelda
           ? `<td colspan="2" style="padding:10px;"><span style="font-size:12px; font-weight:600; color:#334155;">${v.grupo_poblacional || v.dosis}${edadHtml}</span></td>`
@@ -978,8 +1002,12 @@
               const sub = parseInt(subInput.value) || 0;
               if (sub > total) {
                 subInput.style.borderColor = '#ef4444'; subInput.style.background = '#fee2e2'; subInput.style.color = '#991b1b';
+                subInput.setAttribute('aria-invalid', 'true');
+                subInput.title = 'Supera el Total de esta fila: corrígelo para poder guardar';
               } else {
-                subInput.style.borderColor = '#e2e8f0'; subInput.style.background = '#f8fafc'; subInput.style.color = '#94a3b8';
+                subInput.style.borderColor = '#94a3b8'; subInput.style.background = '#f8fafc'; subInput.style.color = '#526071';
+                subInput.removeAttribute('aria-invalid');
+                subInput.removeAttribute('title');
               }
             };
             subInput.addEventListener('input', validate);
@@ -995,6 +1023,7 @@
       // el layout) sin quedar recortado por una altura vieja congelada.
       header.addEventListener('click', () => {
         const abriendo = !body.classList.contains('abierto');
+        header.setAttribute('aria-expanded', abriendo ? 'true' : 'false');
         header.querySelector('.sis-chevron').style.transform = abriendo ? 'rotate(180deg)' : 'rotate(0deg)';
         if (abriendo) {
           body.classList.add('abierto');
@@ -1189,6 +1218,16 @@
     const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
     if (!currentReport) { toast('Guarda tu concentrado antes de enviarlo.', 'error'); return; }
     if (_sinGuardar) { toast('Tienes cambios sin guardar en el paloteo -- guárdalos antes de enviar.', 'error'); return; }
+    if (!responsableElaboracion()) {
+      const campo = document.getElementById('selUsuario');
+      await mostrarModal({
+        titulo: 'Falta el nombre de quien elabora',
+        mensaje: 'El SINBA-SIS sale con el nombre de la persona que lo elaboró en todas sus hojas. Escríbelo en «Responsable de la información» (arriba) y vuelve a enviar.',
+        textoAceptar: 'Entendido', sinCancelar: true
+      });
+      if (campo) { campo.scrollIntoView({ block: 'center' }); campo.focus(); }
+      return;
+    }
 
     // Con diferencias el servidor no deja enviar: se explica aquí, con la lista, en vez de un aviso que se pierde.
     try { await cargarConciliacion(activa.clues); } catch (_) { /* si falla, el servidor decide */ }
@@ -1205,6 +1244,15 @@
     }
 
     const unidadBiovac = (estado.unidades || []).find((u) => u.clues === activa.clues);
+
+    // Enviar es definitivo para la unidad: congela el paloteo y cierra el Movimiento.
+    // Se confirma explícitamente (antes un clic accidental lo mandaba directo).
+    const confirmaEnvio = await mostrarModal({
+      titulo: 'Enviar el SINBA-SIS para validación',
+      mensaje: 'Vas a enviar el SINBA-SIS de ' + activa.unidad + ' (' + mesNombre(mes) + ' ' + anio + '). Al enviarlo, el paloteo SIS-06-P y el Movimiento de Biológico quedan bloqueados: ya no podrás editarlos, solo el municipal podrá corregirlos. ¿Confirmas que todo está completo y revisado?',
+      textoAceptar: 'Sí, enviar'
+    });
+    if (!confirmaEnvio) return;
 
     mostrarCargando('Enviando el SIS para validación...');
     try {
@@ -1453,15 +1501,15 @@
       const valores = captura ? (captura.valores || {}) : {};
       _sisVariablesCache.forEach((v) => {
         const val = valores[String(v.fila_excel)] || {};
-        const total = Number(val.total || 0);
+        const total = Math.round(Number(val.total || 0));   // redondeo igual que el servidor (_sis_filas_publicables)
         if (v.clave_general) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_general, MES: mes, ANIO: anio, VALOR: total });
         // Mismas filas que sis_filas_csv / la publicación a registros_sis: las claves de afro/indígena/migrante
         // salen siempre (aun en 0), igual que la rejilla histórica.
-        const afro = Number(val.afro || 0);
+        const afro = Math.round(Number(val.afro || 0));
         if (v.clave_afro) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_afro, MES: mes, ANIO: anio, VALOR: afro });
-        const indigena = Number(val.indigena || 0);
+        const indigena = Math.round(Number(val.indigena || 0));
         if (v.clave_indigena) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_indigena, MES: mes, ANIO: anio, VALOR: indigena });
-        const migrante = Number(val.migrante || 0);
+        const migrante = Math.round(Number(val.migrante || 0));
         if (v.clave_migrante) rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: v.clave_migrante, MES: mes, ANIO: anio, VALOR: migrante });
       });
 
@@ -1472,7 +1520,7 @@
         Object.entries(c.valores || {}).forEach(([rubro, val]) => { sumas[rubro] = (sumas[rubro] || 0) + Number(val || 0); });
       });
       Object.entries(INFLUENZA_SIS_MAPPING).forEach(([rubro, clave]) => {
-        rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: clave, MES: mes, ANIO: anio, VALOR: sumas[rubro] || 0 });
+        rows.push({ CLUES: u.clues, MUNICIPIO: municipio, VARIABLE_SIS: clave, MES: mes, ANIO: anio, VALOR: Math.round(sumas[rubro] || 0) });
       });
     });
 
@@ -1498,7 +1546,7 @@
     const subtitulo = document.getElementById('csvPanelSubtitulo');
     if (titulo && subtitulo) {
       titulo.textContent = 'CSV -- concentrado completo del municipio';
-      subtitulo.textContent = 'Todas las CLUES del municipio, una fila por clave SIS -- se va llenando conforme cada unidad captura (0 mientras no ha capturado).';
+      subtitulo.textContent = 'Vista previa con todas las CLUES del municipio, una fila por clave SIS: incluye borradores y se va llenando (0 mientras no capturan). El archivo que se descarga solo sale cuando TODAS las unidades están validadas.';
     }
 
     tbody.innerHTML = '<tr><td colspan="5" style="padding:14px; text-align:center; color:var(--muted);">Cargando…</td></tr>';
@@ -2152,12 +2200,16 @@
     const captura = capturaDelMesActual();
     const mov = (estado.movimiento && Number(estado.movimiento.mes) === mes && Number(estado.movimiento.anio) === anio)
       ? estado.movimiento.responsable_elaboracion : null;
-    const guardado = (captura && captura.capturado_por) || mov || null;
+    // un responsable guardado con el usuario técnico (CLUES_NOMBRE) no cuenta: se pide el nombre de una persona
+    const candidato = (captura && captura.capturado_por) || mov || null;
+    const guardado = (candidato && !esNombreTecnico(candidato)) ? candidato : null;
 
-    const bloqueado = Boolean((captura && captura.estado !== 'BORRADOR') || fueraDeVentanaDeCaptura(captura));
+    // El responsable se puede cambiar siempre que el SINBA-SIS no se haya enviado (aunque el mes todavía no abra su captura:
+    // se recuerda en este dispositivo y viaja con el SIS cuando se guarda). Solo queda fijo tras el envío.
+    const bloqueado = Boolean(captura && captura.estado !== 'BORRADOR');
     inp.readOnly = bloqueado;
     inp.title = bloqueado
-      ? 'El SINBA-SIS ya fue enviado (o este mes está fuera de su ventana de captura): el responsable quedó fijo. Si hay que cambiarlo, pídelo al municipal.'
+      ? 'El SINBA-SIS ya fue enviado: el responsable quedó fijo. Si hay que cambiarlo, pídelo al municipal.'
       : 'Nombre de quien elabora la información: sale como responsable en todas las hojas del SINBA-SIS. Puedes cambiarlo.';
 
     if (document.activeElement === inp && !bloqueado) return; // no pisar lo que se está tecleando
@@ -2165,14 +2217,15 @@
     if (_responsableManual) return;
     let recordado = null;
     try { recordado = localStorage.getItem('sis_responsable_' + estado.perfil.clues); } catch (e) { /* sin storage */ }
-    inp.value = recordado || nombreCompletoDePerfil(estado.perfil) || '';
+    inp.value = (recordado && !esNombreTecnico(recordado)) ? recordado : (nombrePersonaDe(estado.perfil) || '');
   }
 
   async function guardarResponsable() {
     if (!esUnidadSesion()) return;
     const inp = document.getElementById('selUsuario');
     let nombre = inp.value.trim();
-    if (!nombre) { nombre = nombreCompletoDePerfil(estado.perfil) || ''; inp.value = nombre; } // vacío no se guarda
+    if (!nombre || esNombreTecnico(nombre)) { nombre = nombrePersonaDe(estado.perfil) || ''; inp.value = nombre; } // vacío o usuario técnico no se guardan
+    if (!nombre) { toast('Escribe el nombre de quien elabora este SINBA-SIS.', 'error'); return; }
     _responsableManual = true;
     try { localStorage.setItem('sis_responsable_' + estado.perfil.clues, nombre); } catch (e) { /* sin storage */ }
 
@@ -2180,7 +2233,12 @@
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
     const captura = capturaDelMesActual();
-    if ((captura && captura.estado !== 'BORRADOR') || fueraDeVentanaDeCaptura(captura)) { aplicarResponsable(); return; }
+    if (captura && captura.estado !== 'BORRADOR') { aplicarResponsable(); return; }
+    if (fueraDeVentanaDeCaptura(captura)) {
+      // todavía no abre (o ya cerró) la captura de este mes: queda recordado en el dispositivo y se aplica al guardar el SIS
+      toast('Responsable guardado en este dispositivo: saldrá en tu SINBA-SIS cuando guardes el mes.', 'ok');
+      return;
+    }
 
     let guardadoAlgo = false;
     try {
@@ -2913,9 +2971,9 @@
     ];
     const actual = pasos.findIndex((p) => !p.hecho);
     cont.innerHTML = `
-      <ol class="ruta-pasos">
+      <ol class="ruta-pasos" aria-label="Ruta del mes">
         ${pasos.map((p, i) => `
-          <li class="ruta-paso ${p.hecho ? 'hecho' : (i === actual ? (p.alerta ? 'alerta' : 'actual') : '')}">
+          <li class="ruta-paso ${p.hecho ? 'hecho' : (i === actual ? (p.alerta ? 'alerta' : 'actual') : '')}"${i === actual ? ' aria-current="step"' : ''}>
             <span class="ruta-num">${p.hecho ? '<span class="material-symbols-rounded">check</span>' : (p.alerta ? '<span class="material-symbols-rounded">priority_high</span>' : i + 1)}</span>
             <span class="ruta-txt"><b>${p.t}</b><small>${_esc(p.x)}</small></span>
           </li>`).join('')}
@@ -2931,8 +2989,14 @@
       el.textContent = texto;
       el.className = 'hoja-pildora' + (cls ? ' ' + cls : '');
       el.title = titulo || '';
+      // El aria-label de la pestaña tapa el texto interno: se le agrega el estado de la píldora.
+      const tab = el.closest('[role=tab]');
+      if (tab) {
+        if (!tab.dataset.etiquetaBase) tab.dataset.etiquetaBase = tab.getAttribute('aria-label') || '';
+        tab.setAttribute('aria-label', tab.dataset.etiquetaBase + (titulo ? ' — ' + titulo : ''));
+      }
     };
-    poner('pildoraSIS06P', _sinGuardar ? '​' : '', 'punto', 'Cambios sin guardar');
+    poner('pildoraSIS06P', _sinGuardar ? '​' : '', 'punto', _sinGuardar ? 'Cambios sin guardar' : '');
     const filas = Array.isArray(_conciliacionCache) ? _conciliacionCache : null;
     if (filas && filas.length) {
       const nd = filas.filter((f) => !f.coincide).length;
@@ -2956,9 +3020,15 @@
 
   // Aviso permanente (visible en cualquier hoja del SINBA-SIS) cuando el paloteo y el Movimiento no coinciden:
   // el servidor NO deja enviar ni validar así, y antes solo había una tarjeta dentro de la 06-P y un botón apagado.
+  document.addEventListener('click', (ev) => {
+    const b = ev.target && ev.target.closest ? ev.target.closest('#sis06pConciliacion [data-dif-ir="mov"]') : null;
+    if (!b) return;
+    const btn = document.getElementById('btnSeccionMovimiento');
+    if (btn) btn.click();
+  });
   function listaDiferenciasHtml(dif) {
     return dif.map((f) => {
-      const d = Number(f.paloteo) - Number(f.aplicado);
+      const d = _num2(Number(f.paloteo) - Number(f.aplicado));
       return `<span class="sis-dif-chip"><b>${_esc(f.etiqueta)}</b>: paloteo ${Number(f.paloteo)} · Movimiento ${Number(f.aplicado)} <em>(${d > 0 ? '+' : ''}${d})</em></span>`;
     }).join('');
   }
@@ -2968,7 +3038,11 @@
     const dif = Array.isArray(_conciliacionCache) ? _conciliacionCache.filter((f) => !f.coincide) : [];
     const sinEnviar = !captura || captura.estado === 'BORRADOR';
     const porValidar = Boolean(captura) && captura.estado === 'ENVIADO';
-    const mostrar = Boolean(datosUnidadActiva()) && dif.length > 0 && (sinEnviar || porValidar);
+    const btnHojaSis = document.getElementById('btnSeccionSIS06P');
+    const panelSis = document.getElementById('panelSIS06P');
+    const enHojaSis = Boolean(btnHojaSis && btnHojaSis.classList.contains('activo') && panelSis && panelSis.style.display !== 'none');
+    // En la hoja SIS-06-P la tarjeta de conciliación (con la tabla y el comodín) ya dice lo mismo: no se duplica.
+    const mostrar = Boolean(datosUnidadActiva()) && dif.length > 0 && (sinEnviar || porValidar) && !enHojaSis;
     if (!mostrar) { if (el) el.style.display = 'none'; return; }
     if (!el) {
       const ref = document.getElementById('rutaMes') || document.getElementById('sis06pConciliacion');
@@ -3344,6 +3418,7 @@
       const ok = await save();
       if (!ok) return; // no se pierde nada: se queda aquí con el aviso del error
     }
+    try { sessionStorage.setItem('sirevaq_desde_sis', '1'); } catch (_) { /* sin almacenamiento: solo no aparece el enlace de regreso */ }
     window.location.href = 'index.html?captura=INFLUENZA';
   }
 
@@ -3381,7 +3456,7 @@
   // vez dentro del propio biovac.html, donde ambos módulos sí conviven.
   window.SIS06PComodin = { PARES: AJUSTES_DEF, num2: _num2, diagnosticoPar };
   window.SIS06PBiovac = {
-    init, render, save, hayCambiosSinGuardar: () => _sinGuardar, renderCSVPreview, exportarSISOficialCompleto, exportarZipMunicipio, configurarImpresionOficial, INFLUENZA_SIS_MAPPING,
+    init, render, save, hayCambiosSinGuardar: () => _sinGuardar, fueraDeVentana: () => fueraDeVentanaDeCaptura(capturaDelMesActual()), renderCSVPreview, exportarSISOficialCompleto, exportarZipMunicipio, configurarImpresionOficial, INFLUENZA_SIS_MAPPING,
     abrirHistorial, abrirEditorInfluenza,
     renderCEH, renderInfluenza, aplicarResponsable, guardarResponsable, marcarResponsableManual, refrescarConciliacion, actualizarDock
   };

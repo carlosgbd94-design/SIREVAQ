@@ -21,7 +21,7 @@ async function abrir(page, rol) {
   // Octubre 2026: ya se suma por unidad (CLUES).
   await page.selectOption('#selAnio', '2026');
   await page.selectOption('#selMes', '10');
-  await expect(page.locator('#pildoraJ1')).toHaveText('2/4');
+  await expect(page.locator('#pildoraJ1')).toHaveText('3/4');
   return errores;
 }
 
@@ -35,13 +35,14 @@ test('Jurisdicción: concentrado guiado por municipio en 4 pasos', async ({ page
   await expect(page.locator('#estadoUnidades .jur-muni')).toHaveCount(4);             // Querétaro, Corregidora, NHG, HENM
   await expect(page.locator('#estadoUnidades .pt')).toHaveCount(0);                   // sin puntos por unidad
   await expect(page.locator('#estadoUnidades details[open]')).toHaveCount(0);         // la lista de unidades viene plegada
-  await expect(page.locator('#pildoraJ1')).toHaveText('2/4');                          // NHG y HENM ya cerraron completos
-  await expect(page.locator('#cierreResumen')).toContainText('2 de 4 cerrados');
+  await expect(page.locator('#pildoraJ1')).toHaveText('3/4');                          // NHG y HENM ya cerraron completos
+  await expect(page.locator('#cierreResumen')).toContainText('3 de 4 cerrados');
   const qro = page.locator('#estadoUnidades .jur-muni').first();
   await expect(qro).toContainText('Querétaro');
-  await expect(qro).toContainText('1 de 3 unidades cerraron su Movimiento');
+  await expect(qro).toContainText('Movimiento en captura');                              // suma por municipio, no por unidad
+  await expect(qro).toContainText('Provisional');
   await expect(qro).toContainText('SINBA-SIS (consulta): 1 validados · 1 por validar · 1 sin enviar');
-  await expect(page.locator('#estadoUnidades .jur-estado.ok')).toHaveCount(2);
+  await expect(page.locator('#estadoUnidades .jur-estado.ok')).toHaveCount(3);
   await expect(page.locator('#dockJTitulo')).toContainText('Paso 1 de 4');
   // Los hospitales tienen su SINBA-SIS en biovac.html (solo el que tiene concentrados por validar); los municipios no llevan ese botón
   await expect(page.locator('#estadoUnidades a[href="biovac.html"]')).toHaveCount(1);
@@ -60,7 +61,7 @@ test('Jurisdicción: concentrado guiado por municipio en 4 pasos', async ({ page
   // ...pero el SINBA-SIS de los hospitales se valida desde el primer mes, también en septiembre
   await expect(nhg.locator('a[href="biovac.html"]')).toContainText('Revisar y validar el SINBA-SIS');
   await page.selectOption('#selMes', '10');
-  await expect(page.locator('#pildoraJ1')).toHaveText('2/4');
+  await expect(page.locator('#pildoraJ1')).toHaveText('3/4');
 
   // --- Paso 2: por revisar (qué pasa, quién lo resuelve, qué hacer) -------------
   await page.click('#btnSiguiente');
@@ -71,7 +72,7 @@ test('Jurisdicción: concentrado guiado por municipio en 4 pasos', async ({ page
   await expect(page.locator('.validacion-grupo.ERROR')).toContainText('existencia final del lote queda en -5');
   await expect(page.locator('.validacion-grupo.ERROR')).toContainText('Quién lo resuelve');
   await expect(page.locator('.validacion-grupo.ERROR')).toContainText('Querétaro');
-  await expect(page.locator('.jur-pendientes')).toContainText('3 unidades sin cerrar');   // plegado, solo consulta
+  await expect(page.locator('.jur-pendientes')).toContainText('3 municipios u hospitales sin cerrar');   // plegado, solo consulta
   await expect(page.locator('.jur-pendientes[open]')).toHaveCount(0);
   await expect(page.locator('#pildoraJ2')).toHaveText('1');
 
@@ -80,17 +81,17 @@ test('Jurisdicción: concentrado guiado por municipio en 4 pasos', async ({ page
   await expect(page.locator('#panelPaso3')).toBeVisible();
   await expect(page.locator('#drilldownContenido .jur-callout')).toContainText('Se dieron de baja más frascos');
   const filasMuni = page.locator('#drilldownContenido table.jur-drill tbody tr');
-  await expect(page.locator('#drilldownContenido tr.muni-resumen')).toHaveCount(1);       // Querétaro = suma de sus 2 unidades
+  await expect(page.locator('#drilldownContenido tr.muni-resumen')).toHaveCount(1);       // Querétaro = su Movimiento (armado con sus unidades)
   await expect(page.locator('#drilldownContenido tr.muni-resumen')).toContainText('Querétaro');
-  await expect(page.locator('#drilldownContenido tr.muni-resumen .existencia-final')).toHaveText('1');   // -2 + 3
-  await expect(page.locator('#drilldownContenido tr.sub-fila')).toHaveCount(2);
+  await expect(page.locator('#drilldownContenido tr.muni-resumen .existencia-final')).toHaveText('1');
+  await expect(page.locator('#drilldownContenido tr.sub-fila')).toHaveCount(1);          // una sola fila por municipio: ya no se suma por unidad
   await expect(page.locator('#drilldownContenido tr.sub-fila').first()).toBeHidden();      // las unidades vienen plegadas
-  await expect(page.locator('#drilldownContenido')).not.toContainText('C.S. Dos');         // quien no reportó el lote no estorba
+  await expect(page.locator('#drilldownContenido')).not.toContainText('CORREGIDORA');      // quien no reportó el lote no estorba
   await expect(page.locator('#drilldownContenido')).toContainText('1 unidad no reportó este lote');
   await page.click('#drilldownContenido [data-action="toggle-unidades"]');
   await expect(page.locator('#drilldownContenido tr.sub-fila').first()).toBeVisible();
-  await expect(page.locator('#drilldownContenido tr.sub-fila').first()).toContainText('C.S. Alfa');
-  expect(await filasMuni.count()).toBe(4);                                                  // resumen + 2 unidades + Corregidora
+  await expect(page.locator('#drilldownContenido tr.sub-fila').first()).toContainText('QUERETARO');
+  expect(await filasMuni.count()).toBe(2);                                                  // resumen + su fila (Corregidora no reportó este lote)
   await expect(page.locator('#chipsBio .jur-chip.activo')).toContainText('SRP');
   await expect(page.locator('table.concentrado tbody tr').filter({ hasText: 'HX001' })).toHaveCount(0);   // filtrado por biológico
 
@@ -106,7 +107,7 @@ test('Jurisdicción: concentrado guiado por municipio en 4 pasos', async ({ page
   await page.click('#dockJTabs .hoja-tab[data-jpaso="4"]');
   await expect(page.locator('#checkInforme li')).toHaveCount(3);
   await expect(page.locator('#checkInforme li.ok')).toHaveCount(1);                          // solo "sin otros avisos"
-  await expect(page.locator('#checkInforme li').first()).toContainText('2 de 4');
+  await expect(page.locator('#checkInforme li').first()).toContainText('3 de 4');
   await expect(page.locator('#btnGenerarInforme')).toBeVisible();
   await expect(page.locator('#btnSiguiente')).toBeHidden();
   await page.click('#btnGenerarInforme');

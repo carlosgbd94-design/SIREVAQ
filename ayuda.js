@@ -136,6 +136,13 @@
         P(2, 'Concilia', 'Las dosis aplicadas del paloteo y las del Movimiento deben coincidir, biológico por biológico. Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT) usa el comodín de sustitución.'),
         P(3, 'Envía', 'Solo del último día del mes a la semana siguiente. Al enviar, todo el archivo se bloquea, incluida Influenza.'),
         P(4, 'Validación', 'El municipal revisa; si corrige algo, tú ves cada cambio y lo aceptas. Ya validado puedes exportar el Excel oficial e imprimir.'),
+        T('Dos candados, dos dueños'),
+        I('send', '#0f172a', 'Enviar (la unidad)', 'Es el ÚNICO candado de la unidad y bloquea todo el SINBA-SIS a la vez: paloteo, Movimiento e Influenza. Al enviar, el Movimiento se cierra solo; no hay que «cerrar el mes» aparte.'),
+        I('lock', '#475569', 'Cerrar Movimiento (el municipal)', 'Solo cierra el Movimiento de Biológico; no envía ni valida. Lo manejan municipal, jurisdicción y administración, y se puede reabrir con «Corregir movimiento».'),
+        T('Cómo se consolida'),
+        P(1, 'Unidad', 'Cada unidad envía su SINBA-SIS. Si las dosis aplicadas del paloteo y del Movimiento no coinciden, el sistema no lo envía.'),
+        P(2, 'Municipio', 'El municipal valida unidad por unidad (puede corregir y la unidad ve cada cambio). El Movimiento del municipio se arma SOLO con lo que envían sus unidades (cada envío se suma al instante); el municipal puede ajustar recibido, aplicadas y desechadas, y sus ajustes se conservan. La existencia anterior viene del cierre del mes pasado. Una unidad que no envíe (internet, etc.) no lo bloquea: se marca «sin envío» con un motivo.'),
+        P(3, 'Jurisdicción', 'Suma por MUNICIPIO (no por unidad) y los hospitales aparte. Lo que llega se suma como «provisional». El municipal imprime su Movimiento, la jurisdicción lo valida en papel, se corrige en la plataforma y, al empatar, el municipal lo cierra con «Cerrar mes»: entonces queda definitivo. Para cerrar, todas las unidades deben estar validadas (o «sin envío»).'),
         N('Una vez enviado, la unidad ya no puede cambiar nada (ni SIS-06-P, ni Movimiento, ni Influenza): solo el municipal. Con «Historial» consultas todos tus meses, siempre sin poder editarlos.')
       ]
     },
@@ -329,7 +336,7 @@
       bloques: [
         T('Las tres tarjetas'),
         P(1, 'Verifica que cuadre', 'Paloteo contra Movimiento, unidad por unidad (solo aparecen las que difieren), y lo recibido contra la requisición. La requisición es informativa: no bloquea.'),
-        P(2, 'Movimiento de Biológico (BIOVAC)', 'El Movimiento del propio municipio, por lote y caducidad. Hasta septiembre 2026 se captura a mano aquí; desde octubre es la suma de las unidades y se arma solo.'),
+        P(2, 'Movimiento de Biológico (BIOVAC)', 'El Movimiento del propio municipio, por lote y caducidad. Hasta septiembre 2026 se captura a mano aquí; desde octubre se arma solo con lo que envían tus unidades y lo ajustas en recibido, aplicadas y desechadas. Un aviso te dice dónde no cuadra con tus unidades (existencia anterior distinta, ajustes a mano, una unidad que cambió después…).'),
         P(3, 'Descarga tus archivos', 'Excel del concentrado (PALOTEO, SEGUIMIENTO DE BIOLÓGICO, CSV y recibido vs. requisición), Excel BIOVAC y CSV oficial: cada uno con su botón en la misma tarjeta.'),
         T('Guardar y cerrar el mes (Movimiento)'),
         I('save', '#0284c7', 'Guardar', 'Cada celda se guarda sola al salir de ella. El botón Guardar solo lo confirma.'),

@@ -19,6 +19,8 @@
   };
   const mov = (unidad_id, estadoM, fue_corregido) => tables.biovac_movimientos.push({ unidad_id, anio: 2026, mes: 10, estado: estadoM, fue_corregido: !!fue_corregido });
   mov('q-a', 'CERRADO'); mov('q-b', 'BORRADOR'); mov('c-1', 'CERRADO'); mov('c-2', 'EN_CORRECCION', true); mov('n-1', 'CERRADO'); mov('h-1', 'CERRADO');
+  // Desde octubre la jurisdicción suma por MUNICIPIO (su fila JS1-, armada con las unidades), no por unidad
+  mov('ps-q', 'BORRADOR'); mov('ps-c', 'CERRADO');
   // Septiembre: los hospitales ya capturan en su propia cuenta (la fila JS1- queda sin sumar)
   tables.biovac_movimientos.push({ unidad_id: 'n-1', anio: 2026, mes: 9, estado: 'CERRADO' }, { unidad_id: 'h-1', anio: 2026, mes: 9, estado: 'CERRADO' }, { unidad_id: 'ps-n', anio: 2026, mes: 9, estado: 'BORRADOR' });
 
@@ -29,7 +31,7 @@
     fila({ biologico_id: 'hexa', clave: 'HEXAVALENTE', nombre_excel: 'VACUNA HEXAVALENTE', lote_id: 'l3', numero_lote: 'HX001', es_provisional: true, unidades_cerradas: 1 })
   ];
   const validaciones = [
-    { severidad: 'ERROR', codigo: 'EXISTENCIA_NEGATIVA', mensaje: 'Existencia final negativa en un renglón', unidad: 'C.S. Alfa', biologico: 'VACUNA SRP', lote: 'AB123' },
+    { severidad: 'ERROR', codigo: 'EXISTENCIA_NEGATIVA', mensaje: 'Existencia final negativa en un renglón', unidad: 'QUERETARO', biologico: 'VACUNA SRP', lote: 'AB123' },
     { severidad: 'ADVERTENCIA', codigo: 'MOVIMIENTO_NO_CERRADO', mensaje: 'x', unidad: 'C.S. Beta', biologico: null, lote: null },
     { severidad: 'ADVERTENCIA', codigo: 'MOVIMIENTO_NO_CERRADO', mensaje: 'x', unidad: 'C.S. Gamma', biologico: null, lote: null },
     { severidad: 'ADVERTENCIA', codigo: 'MOVIMIENTO_NO_CERRADO', mensaje: 'x', unidad: 'C.S. Dos', biologico: null, lote: null }
@@ -44,10 +46,9 @@
     biovac_concentrado_jurisdiccion: () => concentrado,
     sis06p_resumen_seguimiento: () => sis,
     biovac_detalle_lote_jurisdiccion: () => [
-      { unidad_id: 'q-a', unidad_nombre: 'C.S. Alfa', movimiento_id: 'm-a', movimiento_estado: 'CERRADO', renglon_id: 'r-a', existencia_anterior_frascos: 0, recibido_frascos: 10, aplicadas_a: 12, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, existencia_final_frascos: -2, observaciones: '' },
-      { unidad_id: 'q-b', unidad_nombre: 'C.S. Beta', movimiento_id: 'm-b', movimiento_estado: 'BORRADOR', renglon_id: 'r-b', existencia_anterior_frascos: 0, recibido_frascos: 5, aplicadas_a: 2, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, existencia_final_frascos: 3, observaciones: '' },
-      { unidad_id: 'c-1', unidad_nombre: 'C.S. Uno', movimiento_id: 'm-c1', movimiento_estado: 'CERRADO', renglon_id: 'r-c1', existencia_anterior_frascos: 1, recibido_frascos: 6, aplicadas_a: 2, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, existencia_final_frascos: 5, observaciones: '' },
-      { unidad_id: 'c-2', unidad_nombre: 'C.S. Dos', movimiento_id: 'm-c2', movimiento_estado: 'EN_CORRECCION', renglon_id: null, existencia_anterior_frascos: null, recibido_frascos: null, aplicadas_a: null, aplicadas_b: null, desechadas_a: null, desechadas_b: null, existencia_final_frascos: null, observaciones: null }
+      // Desde octubre cada municipio trae UNA fila: su Movimiento (JS1-), armado con la suma de sus unidades (10 + 5 recibido, etc.)
+      { unidad_id: 'ps-q', unidad_nombre: 'QUERETARO', movimiento_id: 'm-q', movimiento_estado: 'BORRADOR', renglon_id: 'r-q', existencia_anterior_frascos: 0, recibido_frascos: 15, aplicadas_a: 14, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, existencia_final_frascos: 1, observaciones: '' },
+      { unidad_id: 'ps-c', unidad_nombre: 'CORREGIDORA', movimiento_id: 'm-c', movimiento_estado: 'CERRADO', renglon_id: null, existencia_anterior_frascos: null, recibido_frascos: null, aplicadas_a: null, aplicadas_b: null, desechadas_a: null, desechadas_b: null, existencia_final_frascos: null, observaciones: null }
     ],
     biovac_generar_informe_jurisdiccional: (a) => {
       tables.biovac_informes_jurisdiccionales.push({ id: 'inf-' + tables.biovac_informes_jurisdiccionales.length, jurisdiccion_id: a.p_jurisdiccion_id, anio: a.p_anio, mes: a.p_mes, generado_por: a.p_usuario, generado_en: new Date().toISOString(), estado: 'GENERADO' });

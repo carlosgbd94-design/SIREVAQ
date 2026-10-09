@@ -33,8 +33,12 @@
   }
   seg.forEach((f, i) => tables.sis06p_capturas.push({ id: 'cap-' + i, clues: f.clues, municipio: 'QUERETARO', mes, anio, estado: f.estado, valores: {} }));
 
+  const sinEnvio = [];
   const rpc = {
     sis06p_resumen_seguimiento: () => seg.map((f) => ({ ...f })),
+    sis06p_sin_envio_lista: () => sinEnvio.map((m) => ({ ...m, vigente: true })),
+    sis06p_marcar_sin_envio: (a) => { sinEnvio.push({ clues: a.p_clues, municipio: 'QUERETARO', motivo: a.p_motivo, usuario: 'muni' }); return null; },
+    sis06p_quitar_sin_envio: (a) => { const i = sinEnvio.findIndex((m) => m.clues === a.p_clues); if (i >= 0) sinEnvio.splice(i, 1); return null; },
     sis06p_ventana_envio: () => [{ dentro_prellenado: true, dentro_envio: true, inicio_prellenado: '2026-09-23', inicio_envio: '2026-09-30', fin_envio: '2026-10-07' }],
     sis06p_comparativo: (a) => [
       { municipio: 'QUERETARO', clues: 'QTSSA000001', unidad: 'C.S. Alfa', etiqueta: 'SRP', paloteo: 10, aplicado: 10, coincide: true },

@@ -617,7 +617,7 @@
         <div style="padding:4px 14px 14px;">${cuerpo}</div>
       </details>`;
     const insigniaRecibido = d.requisicion.length === 0 ? '' : (nDifRecibido > 0
-      ? `<span style="font-size:10px; font-weight:800; background:var(--warning-bg); color:var(--warning); padding:2px 9px; border-radius:20px;">${nDifRecibido} no coincide(n)</span>`
+      ? `<span style="font-size:10px; font-weight:800; background:var(--warning-bg); color:var(--warning); padding:2px 9px; border-radius:20px;">${nDifRecibido} ${nDifRecibido === 1 ? 'no coincide' : 'no coinciden'}</span>`
       : '<span style="font-size:10px; font-weight:800; background:var(--success-bg); color:var(--success); padding:2px 9px; border-radius:20px;">Coincide</span>');
 
     cont.innerHTML = `

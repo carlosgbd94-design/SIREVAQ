@@ -28,10 +28,11 @@
   // lotes del Movimiento, diferencias) va en las columnas de Detalle y
   // Conciliación, no como un estatus aparte que parece "en proceso de envío".
   const ESTADO_LABEL = {
-    SIN_INICIAR: 'Sin enviar', BORRADOR: 'Sin enviar', ENVIADO: 'Por validar', VALIDADO: 'Validado'
+    SIN_INICIAR: 'Sin enviar', BORRADOR: 'Sin enviar', ENVIADO: 'Por validar', VALIDADO: 'Validado', SIN_ENVIO: 'Sin envío'
   };
   const ESTADO_COLOR = {
-    SIN_INICIAR: { bg: '#f1f5f9', text: '#94a3b8' },
+    SIN_ENVIO: { bg: '#e2e8f0', text: '#475569' },
+    SIN_INICIAR: { bg: '#f1f5f9', text: '#64748b' },
     BORRADOR: { bg: '#e0f2fe', text: '#0369a1' },
     ENVIADO: { bg: 'var(--warning-bg)', text: 'var(--warning)' },
     VALIDADO: { bg: 'var(--success-bg)', text: 'var(--success)' }
@@ -84,7 +85,7 @@
       return;
     }
 
-    const filas = data || [];
+    const filas = await anotarSinEnvio(data || [], mes, anio);
     window.__sis06pUltimasFilas = filas;
     // MUNICIPAL con el cierre guiado: el seguimiento se pinta como el paso 1
     // (municipal_guiado.js); el resto de este archivo lo sigue usando ADMIN/JURISDICCIONAL.
@@ -93,9 +94,9 @@
       window.MunicipalGuiado.pintarEnvios(filas);
       return;
     }
-    const conteos = { SIN_ENVIAR: 0, ENVIADO: 0, VALIDADO: 0 };
+    const conteos = { SIN_ENVIAR: 0, ENVIADO: 0, VALIDADO: 0, SIN_ENVIO: 0 };
     filas.forEach((f) => {
-      const key = (f.estado === 'ENVIADO' || f.estado === 'VALIDADO') ? f.estado : 'SIN_ENVIAR';
+      const key = (f.estado === 'ENVIADO' || f.estado === 'VALIDADO') ? f.estado : (f.sin_envio ? 'SIN_ENVIO' : 'SIN_ENVIAR');
       conteos[key] += 1;
     });
     const tarjetas = [
@@ -103,6 +104,7 @@
       { key: 'ENVIADO', label: 'Por validar', color: ESTADO_COLOR.ENVIADO },
       { key: 'VALIDADO', label: 'Validado', color: ESTADO_COLOR.VALIDADO }
     ];
+    if (conteos.SIN_ENVIO > 0) tarjetas.push({ key: 'SIN_ENVIO', label: 'Sin envío (se continúa)', color: ESTADO_COLOR.SIN_ENVIO });
     contadores.innerHTML = tarjetas.map((t) => `
       <div style="background:${t.color.bg}; border-radius:14px; padding:14px 16px;">
         <div style="font-size:24px; font-weight:900; color:${t.color.text};">${conteos[t.key] || 0}</div>
@@ -148,7 +150,7 @@
     const lotes = Number(f.movimiento_lotes) || 0;
     if (dosis === 0 && lotes === 0) return '<span style="color:#cbd5e1;">—</span>';
     const n = Number(f.diferencias) || 0;
-    if (n > 0) return `<span style="font-size:10px; font-weight:800; background:var(--warning-bg); color:var(--warning); padding:2px 9px; border-radius:20px; white-space:nowrap;">${n} no coincide(n)</span>`;
+    if (n > 0) return `<span style="font-size:10px; font-weight:800; background:var(--warning-bg); color:var(--warning); padding:2px 9px; border-radius:20px; white-space:nowrap;">${n} ${n === 1 ? 'no coincide' : 'no coinciden'}</span>`;
     return '<span style="font-size:10px; font-weight:800; background:var(--success-bg); color:var(--success); padding:2px 9px; border-radius:20px;">Coincide</span>';
   }
 
@@ -252,9 +254,10 @@
     }
 
     tbody.innerHTML = filas.map((f) => {
-      const color = ESTADO_COLOR[f.estado] || ESTADO_COLOR.SIN_INICIAR;
+      const color = ESTADO_COLOR[claveEstado(f)] || ESTADO_COLOR.SIN_INICIAR;
       let detalle = '';
-      if (f.estado === 'VALIDADO') detalle = `Validado por ${f.validado_por || '—'}, ${f.validado_en ? new Date(f.validado_en).toLocaleDateString('es-MX') : ''}`;
+      if (f.sin_envio && f.estado !== 'ENVIADO' && f.estado !== 'VALIDADO') detalle = `Se continúa sin ella: ${f.sin_envio_motivo || 'sin motivo'}`;
+      else if (f.estado === 'VALIDADO') detalle = `Validado por ${f.validado_por || '—'}, ${f.validado_en ? new Date(f.validado_en).toLocaleDateString('es-MX') : ''}`;
       else if (f.estado === 'ENVIADO') detalle = `Enviado por ${f.enviado_por || '—'}, ${f.enviado_en ? new Date(f.enviado_en).toLocaleDateString('es-MX') : ''}`;
       else detalle = detalleAvance(f);
 
@@ -264,7 +267,7 @@
           <td style="padding:9px; font-family:monospace;">${f.clues}</td>
           <td style="padding:9px;">${f.unidad || ''}</td>
           <td style="padding:9px; text-align:center;">
-            <span style="font-size:10px; font-weight:800; background:${color.bg}; color:${color.text}; padding:2px 10px; border-radius:20px;">${ESTADO_LABEL[f.estado] || f.estado}</span>
+            <span style="font-size:10px; font-weight:800; background:${color.bg}; color:${color.text}; padding:2px 10px; border-radius:20px;">${ESTADO_LABEL[claveEstado(f)] || f.estado}</span>
           </td>
           <td style="padding:9px; font-size:11.5px; color:var(--muted);">${detalle}</td>
           <td style="padding:9px; text-align:center;">${celdaConciliacion(f)}</td>
@@ -337,13 +340,13 @@
         <table style="width:100%; border-collapse:collapse; font-size:12px;">
           <tbody>
             ${unidadesGrupo.map((f) => {
-              const color = ESTADO_COLOR[f.estado] || ESTADO_COLOR.SIN_INICIAR;
+              const color = ESTADO_COLOR[claveEstado(f)] || ESTADO_COLOR.SIN_INICIAR;
               return `
                 <tr style="border-bottom:1px solid #f1f5f9;${ES_HOSPITAL[municipio] ? ' cursor:pointer;' : ''}" ${ES_HOSPITAL[municipio] ? `data-hospital-clues="${f.clues}"` : ''}>
                   <td style="padding:8px 12px; font-family:monospace; color:#64748b; width:110px;">${f.clues}</td>
                   <td style="padding:8px 12px; color:#334155;">${f.unidad || ''}</td>
                   <td style="padding:8px 12px; text-align:right; width:120px;">
-                    <span style="font-size:10px; font-weight:800; background:${color.bg}; color:${color.text}; padding:2px 10px; border-radius:20px;">${ESTADO_LABEL[f.estado] || f.estado}</span>
+                    <span style="font-size:10px; font-weight:800; background:${color.bg}; color:${color.text}; padding:2px 10px; border-radius:20px;">${ESTADO_LABEL[claveEstado(f)] || f.estado}</span>
                   </td>
                 </tr>
               `;
@@ -547,7 +550,7 @@
           <div style="margin-bottom:10px; border:1px solid var(--warning-border); border-radius:12px; overflow:hidden; background:#fff;">
             <div style="padding:8px 12px; background:var(--warning-bg); color:var(--warning); font-size:12px; font-weight:800; display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">
               <span>${u.unidad || ''} <span style="font-family:monospace; font-weight:600;">${clues}</span></span>
-              <span>${dif.length} biológico(s) no coinciden</span>
+              <span>${dif.length === 1 ? '1 biológico no coincide' : dif.length + ' biológicos no coinciden'}</span>
             </div>
             <div style="overflow-x:auto;">
             <table style="width:100%; border-collapse:collapse; font-size:12px;">
@@ -733,13 +736,31 @@
     selUnidadRevision.dispatchEvent(new Event('change'));
   }
 
+  // "Sin envío": el municipal (o la jurisdicción en hospitales) decidió continuar sin una unidad que no envió. Las marcas
+  // viven aparte; aquí se sobreponen a las filas del seguimiento (f.sin_envio, f.sin_envio_motivo, f.sin_envio_por).
+  async function anotarSinEnvio(filas, mes, anio) {
+    try {
+      const { data: marcas } = await estado.db.rpc('sis06p_sin_envio_lista', { p_mes: mes, p_anio: anio });
+      const porClues = new Map((marcas || []).filter((m) => m.vigente).map((m) => [m.clues, m]));
+      filas.forEach((f) => {
+        const m = porClues.get(f.clues);
+        f.sin_envio = Boolean(m) && f.estado !== 'ENVIADO' && f.estado !== 'VALIDADO';
+        f.sin_envio_motivo = m ? m.motivo : null;
+        f.sin_envio_por = m ? m.usuario : null;
+      });
+    } catch (e) { /* sin la función en la base: todo sigue como antes */ }
+    return filas;
+  }
+  function claveEstado(f) { return f.sin_envio && f.estado !== 'ENVIADO' && f.estado !== 'VALIDADO' ? 'SIN_ENVIO' : f.estado; }
+
   // Solo trae las filas del seguimiento (sin pintar nada): las usa el cierre guiado
   // del municipal para su ruta, sus puntos de avance y la navegación entre unidades.
   async function cargarFilas(mes, anio) {
     const { data, error } = await estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio });
     if (error) { toast('No se pudo cargar el seguimiento: ' + error.message, 'error'); return null; }
-    window.__sis06pUltimasFilas = data || [];
-    return data || [];
+    const filas = await anotarSinEnvio(data || [], mes, anio);
+    window.__sis06pUltimasFilas = filas;
+    return filas;
   }
 
   window.SIS06PDashboard = { render, cargarFilas, renderBannerVentana, renderComparativoAplicado, exportarCSVOficialMunicipio, publicarMunicipio, pintarEstadoPublicacion, MUNICIPIO_LABEL };

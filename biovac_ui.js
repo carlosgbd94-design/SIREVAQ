@@ -116,6 +116,18 @@ function nombreCompletoDePerfil(perfil) {
   return (perfil && PERFIL_ID_A_NOMBRE_COMPLETO[perfil.id]) || (perfil ? perfil.usuario : null);
 }
 
+// Las cuentas de las unidades nacieron con el CLUES como usuario (QTSSA012561_UMME_AMBULANCIA_1): sirve para entrar y para la
+// auditoría, pero NO es el nombre de quien elabora el SINBA-SIS. Detecta ese formato técnico para no ofrecerlo como "responsable".
+function esNombreTecnico(n) {
+  const t = String(n == null ? '' : n).trim();
+  return Boolean(t) && (/^[A-Za-z]{3,6}\d{4,}(?:[_\s-]|$)/.test(t) || (/^[A-Z0-9_]+$/.test(t) && t.indexOf('_') >= 0));
+}
+// Nombre de persona sugerido para el responsable ('' si lo único que hay es el usuario técnico).
+function nombrePersonaDe(perfil) {
+  const n = nombreCompletoDePerfil(perfil);
+  return esNombreTecnico(n) ? '' : (n || '');
+}
+
 // Valor especial de "Municipio" (no es un id real de biovac_unidades) que
 // arma el renglón jurisdiccional: la SUMA de todas las unidades, lote por
 // lote y Estatus por Estatus, con la misma tabla de captura de siempre en
@@ -160,7 +172,7 @@ async function cargarSesionReal() {
   estado.perfil = perfil;
   const nombreCompleto = nombreCompletoDePerfil(perfil);
   const inp = document.getElementById('selUsuario');
-  inp.value = nombreCompleto;
+  inp.value = perfil.rol === 'UNIDAD' ? nombrePersonaDe(perfil) : nombreCompleto;
   if (perfil.rol === 'UNIDAD') {
     // En la unidad, "quien elabora" el SINBA-SIS no siempre es quien tiene la
     // sesión (varias personas capturan con la misma cuenta): el campo se
@@ -170,10 +182,11 @@ async function cargarSesionReal() {
     // sesión real, para que el rastro no se pueda cambiar tecleando.
     let recordado = null;
     try { recordado = localStorage.getItem('sis_responsable_' + perfil.clues); } catch (e) { /* sin storage */ }
-    if (recordado) inp.value = recordado;
+    if (recordado && !esNombreTecnico(recordado)) inp.value = recordado;
     inp.readOnly = false;
-    document.getElementById('labelSelUsuario').textContent = 'Responsable / capturista';
-    inp.placeholder = 'Quién elabora el SINBA-SIS';
+    document.getElementById('labelSelUsuario').textContent = 'Responsable de la información';
+    inp.placeholder = 'Tu nombre completo (quien elabora este SIS)';
+    inp.setAttribute('autocomplete', 'name');
     inp.title = 'Nombre de quien elabora la información: sale como responsable en todas las hojas del SINBA-SIS. Puedes cambiarlo.';
   } else {
     inp.readOnly = true;
@@ -204,7 +217,7 @@ function usuarioActual() {
 function responsableElaboracion() {
   if (estado.perfil && estado.perfil.rol === 'UNIDAD') {
     const v = document.getElementById('selUsuario').value.trim();
-    return v || nombreCompletoDePerfil(estado.perfil);
+    return (v && !esNombreTecnico(v)) ? v : nombrePersonaDe(estado.perfil);
   }
   return usuarioActual();
 }
@@ -334,6 +347,9 @@ function toast(msg, tipo) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = 'toast' + (tipo ? ' ' + tipo : '');
+  // Los errores se anuncian de inmediato a lector de pantalla; lo demás, sin interrumpir.
+  el.setAttribute('role', tipo === 'error' ? 'alert' : 'status');
+  el.setAttribute('aria-live', tipo === 'error' ? 'assertive' : 'polite');
   el.style.display = 'block';
   clearTimeout(toast._t);
   toast._t = setTimeout(() => { el.style.display = 'none'; }, 4500);
@@ -379,10 +395,15 @@ function mostrarModal({ titulo, mensaje, detalleHtml = '', pedirMotivo = false, 
     // p. ej. la precarga de la requisición en una unidad, que no se puede rechazar.
     btnCancelar.style.display = sinCancelar ? 'none' : '';
 
+    const retorno = document.activeElement;
     function cerrar(resultado) {
       btnCancelar.style.display = '';
       overlay.classList.remove('abierto');
       document.removeEventListener('keydown', onTecla);
+      // el foco vuelve a donde estaba (si ese control sigue en pantalla)
+      if (retorno && retorno !== document.body && document.contains(retorno) && typeof retorno.focus === 'function') {
+        try { retorno.focus(); } catch (_) { /* no-op */ }
+      }
       btnAceptar.removeEventListener('click', onAceptar);
       btnCancelar.removeEventListener('click', onCancelar);
       resolve(resultado);
@@ -397,13 +418,32 @@ function mostrarModal({ titulo, mensaje, detalleHtml = '', pedirMotivo = false, 
       }
     }
     function onCancelar() { if (sinCancelar) return; cerrar(pedirMotivo ? null : false); }
-    function onTecla(ev) { if (ev.key === 'Escape') onCancelar(); if (ev.key === 'Enter' && !pedirMotivo) onAceptar(); }
+    function onTecla(ev) {
+      if (ev.key === 'Escape') { onCancelar(); return; }
+      // Enter solo confirma si el foco NO está en otro botón: con el foco en "Cancelar",
+      // Enter debe cancelar (antes confirmaba la acción por la espalda).
+      if (ev.key === 'Enter' && !pedirMotivo && !(ev.target && ev.target.closest && ev.target.closest('button'))) { onAceptar(); return; }
+      // Tab queda atrapado dentro del cuadro mientras está abierto (modal de verdad).
+      if (ev.key === 'Tab') {
+        const foco = Array.from(overlay.querySelectorAll('button, input, select, textarea, [href]'))
+          .filter((el) => el.offsetParent !== null && !el.disabled);
+        if (!foco.length) return;
+        const primero = foco[0]; const ultimo = foco[foco.length - 1];
+        if (!overlay.contains(document.activeElement)) { ev.preventDefault(); primero.focus(); }
+        else if (ev.shiftKey && document.activeElement === primero) { ev.preventDefault(); ultimo.focus(); }
+        else if (!ev.shiftKey && document.activeElement === ultimo) { ev.preventDefault(); primero.focus(); }
+      }
+    }
 
     btnAceptar.addEventListener('click', onAceptar);
     btnCancelar.addEventListener('click', onCancelar);
     document.addEventListener('keydown', onTecla);
     overlay.classList.add('abierto');
+    // Foco inicial: el motivo si se pide; si no, el botón seguro (Cancelar) cuando
+    // la acción es peligrosa y, en el resto, Aceptar.
     if (pedirMotivo) inputMotivo.focus();
+    else if (peligro && !sinCancelar) btnCancelar.focus();
+    else btnAceptar.focus();
   });
 }
 
@@ -493,7 +533,7 @@ async function cargarCatalogo() {
   const unidadesParaSelUnidad = rol === 'UNIDAD' ? unidadesClues : unidadesPseudo;
   const opcionesUnidad = unidadesParaSelUnidad.map((u) => `<option value="${u.id}">${u.nombre} (${u.municipio})</option>`);
   if (rol === 'JURISDICCIONAL' || rol === 'ADMIN') {
-    opcionesUnidad.unshift(`<option value="${UNIDAD_JURISDICCION}">Jurisdicción (suma de las ${unidadesPseudo.length} unidades)</option>`);
+    opcionesUnidad.unshift(`<option value="${UNIDAD_JURISDICCION}">Jurisdicción (suma de ${unidadesPseudo.length === 1 ? 'la unidad' : 'las ' + unidadesPseudo.length + ' unidades'})</option>`);
   }
   selUnidad.innerHTML = opcionesUnidad.join('');
 
@@ -745,6 +785,19 @@ function inicializarToggleSIS06P() {
     document.getElementById('rutaMes').style.display = 'flex';
     document.title = 'SINBA-SIS — SIREVAQ';
   }
+  // Roles revisores: esta pantalla es la REVISIÓN del SINBA-SIS unidad por unidad (no el
+  // concentrado). Se dice con todas sus letras y, para admin/jurisdicción, se enlaza al otro
+  // panel (Concentrado Biológico) para que no parezcan dos pantallas del mismo asunto.
+  if (rolActual && rolActual !== 'UNIDAD') {
+    const tit = document.getElementById('tituloPagina');
+    if (tit && tit.textContent === 'Movimiento de Biológico') tit.textContent = 'SINBA-SIS · Revisión por unidad';
+    const sub = document.getElementById('subtituloPagina');
+    if (sub) {
+      const enlace = (rolActual === 'ADMIN' || rolActual === 'JURISDICCIONAL')
+        ? ' Los totales del municipio y de la jurisdicción se arman solos: están en <a href="biovac_jurisdiccion.html" class="enlace-cruzado">Concentrado Biológico</a>.' : '';
+      sub.innerHTML = 'Revisa, corrige y valida el SINBA-SIS que envía cada unidad (paloteo SIS-06-P + Movimiento de Biológico).' + enlace;
+    }
+  }
   if (rolActual === 'JURISDICCIONAL' || rolActual === 'ADMIN') {
     if (rolActual === 'ADMIN') { btnSis.style.display = 'none'; btnCeh.style.display = 'none'; btnInf.style.display = 'none'; }
     btnCsv.style.display = 'none';
@@ -759,6 +812,27 @@ function inicializarToggleSIS06P() {
       if (b) b.style.display = 'none';
     });
   }
+
+  // aria-selected sigue a la clase .activo (que cambian varios módulos), y las flechas
+  // izquierda/derecha, Inicio y Fin mueven entre las hojas visibles (patrón de pestañas).
+  const sincronizarSeleccion = () => botones.forEach((b) => b.setAttribute('aria-selected', b.classList.contains('activo') ? 'true' : 'false'));
+  if (typeof MutationObserver !== 'undefined') {
+    const obs = new MutationObserver(sincronizarSeleccion);
+    botones.forEach((b) => obs.observe(b, { attributes: true, attributeFilter: ['class'] }));
+  }
+  sincronizarSeleccion();
+  const dockHojas = document.getElementById('dockHojas');
+  if (dockHojas) dockHojas.addEventListener('keydown', (ev) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(ev.key)) return;
+    const visibles = botones.filter((b) => b.offsetParent !== null);
+    const i = visibles.indexOf(document.activeElement);
+    if (i < 0) return;
+    ev.preventDefault();
+    const j = ev.key === 'Home' ? 0 : ev.key === 'End' ? visibles.length - 1
+      : (i + (ev.key === 'ArrowRight' ? 1 : -1) + visibles.length) % visibles.length;
+    visibles[j].focus();
+    visibles[j].click();
+  });
 
   function ocultarTodo() {
     botones.forEach((b) => b.classList.remove('activo'));
@@ -1007,11 +1081,22 @@ function movimientoEsDerivado(unidadId, anio, mes) {
   // Los hospitales (HENM, NHG) capturan en su propia cuenta desde antes (sis_config.inicio_captura_hospitales): desde
   // ese mes su fila JS1- ya no se captura ni se suma (mismo criterio que biovac_cuenta_para_jurisdiccion).
   const esHospital = MUNICIPIOS_HOSPITAL.indexOf(u.municipio) >= 0;
-  const inicio = esHospital
-    ? (estado.inicioHospitales || '2026-09-01')
-    : (estado.inicioPorUnidad || '2026-10-01');
+  // Los municipios (no hospitales) ya NO son derivados: desde octubre su Movimiento se arma con las unidades pero
+  // es editable (recibido / aplicadas / desechadas) y lo cierra el municipal. Ver movimientoDelMunicipioPorUnidades().
+  if (!esHospital) return false;
+  const inicio = estado.inicioHospitales || '2026-09-01';
   if (primerDiaMes < inicio) return false;
   return (estado.unidadesClues || []).some((x) => x.municipio === u.municipio);
+}
+
+// ¿El Movimiento a la vista es el del MUNICIPIO (fila JS1-) de un mes con captura por unidad? Ese se arma con las
+// unidades: la existencia anterior viene del mes pasado y no se edita; recibido, aplicadas y desechadas sí.
+function movimientoDelMunicipioPorUnidades(mv) {
+  const m = mv || estado.movimiento;
+  if (!m || !m.unidad_id) return false;
+  const u = (estado.unidades || []).find((x) => x.id === m.unidad_id);
+  if (!u || !u.clues || !u.clues.startsWith('JS1-') || MUNICIPIOS_HOSPITAL.indexOf(u.municipio) >= 0) return false;
+  return `${m.anio}-${String(m.mes).padStart(2, '0')}-01` >= (estado.inicioPorUnidad || '2026-10-01');
 }
 
 function toggleSeccionesVisible() {
@@ -1073,8 +1158,19 @@ async function cargarMovimiento() {
     document.getElementById('filaCabeceraMovimiento').style.display = 'none';
     document.getElementById('filaBotonesCabecera').style.display = 'none';
     document.getElementById('panelSinMovimiento').style.display = 'block';
+    // La unidad no abre el Movimiento de un mes que todavía no está abierto para captura (mismo candado que SIS-06-P)
+    const fueraVentana = Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD' && window.SIS06PBiovac
+      && window.SIS06PBiovac.fueraDeVentana && window.SIS06PBiovac.fueraDeVentana());
+    const btnIni = document.getElementById('btnIniciarMovimiento');
+    const notaIni = document.getElementById('notaSinMovimiento');
+    if (btnIni) btnIni.disabled = fueraVentana;
+    if (notaIni) {
+      notaIni.style.display = fueraVentana ? 'block' : 'none';
+      notaIni.textContent = fueraVentana ? 'Este mes está fuera de su ventana de captura: el aviso de arriba dice desde cuándo puedes llenarlo. Tu Movimiento se abre junto con tu SIS-06-P.' : '';
+    }
     sincronizarDockMovimiento();
-    document.getElementById('btnAbrirImportador').style.display = (estado.perfil && estado.perfil.rol === 'UNIDAD') ? 'none' : 'inline-flex';
+    document.getElementById('btnAbrirImportador').style.display = ((estado.perfil && estado.perfil.rol === 'UNIDAD')
+      || (movimientoDelMunicipioPorUnidades({ unidad_id: unidadId, anio, mes }) && !(estado.perfil && estado.perfil.rol === 'ADMIN'))) ? 'none' : 'inline-flex';
     return;
   }
   document.getElementById('panelSinMovimiento').style.display = 'none';
@@ -1108,7 +1204,9 @@ async function cargarMovimiento() {
     // nunca el de todo su municipio completo.
     const unidad = estado.unidades.find((u) => u.id === unidadId);
     const esPseudoMunicipio = unidad && unidad.clues && unidad.clues.startsWith('JS1-');
-    if (esPseudoMunicipio) await ofrecerCargaDesdeRequisiciones();
+    // Desde octubre el municipio NO recibe su requisición por su cuenta: cada unidad recibe la suya y de ahí se arma el
+    // Movimiento del municipio. Precargarlo también aquí contaría dos veces lo mismo.
+    if (esPseudoMunicipio) { if (!movimientoDelMunicipioPorUnidades()) await ofrecerCargaDesdeRequisiciones(); }
     else if (unidad) await ofrecerCargaDesdeRequisicionesUnidad(unidad.clues);
   }
 }
@@ -1589,7 +1687,11 @@ function render() {
   document.getElementById('infoFechaCorte').textContent = new Date(fechaCorte + 'T00:00:00')
     .toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
 
-  document.getElementById('btnCerrarMes').style.display = (m.estado === 'BORRADOR' && !movimientoBloqueadoParaUnidad()) ? 'inline-block' : 'none';
+  // "Cerrar mes" es el candado del Movimiento y es de los revisores. La unidad tiene UN solo
+  // candado: Enviar el SINBA-SIS (que cierra el Movimiento dentro del mismo envío). Si pudiera
+  // cerrarlo aparte no podría reabrirlo y se quedaría sin forma de corregir.
+  document.getElementById('btnCerrarMes').style.display = (m.estado === 'BORRADOR' && !movimientoBloqueadoParaUnidad()
+    && !(estado.perfil && estado.perfil.rol === 'UNIDAD')) ? 'inline-block' : 'none';
   // La unidad no reabre un mes ya cerrado (el servidor tampoco lo permite): solo MUNICIPAL/JURISDICCIONAL/ADMIN.
   document.getElementById('btnAbrirCorreccion').style.display = (m.estado === 'CERRADO' && !(estado.perfil && estado.perfil.rol === 'UNIDAD')) ? 'inline-block' : 'none';
   document.getElementById('btnAplicarCorreccion').style.display = m.estado === 'EN_CORRECCION' ? 'inline-block' : 'none';
@@ -1617,7 +1719,9 @@ function render() {
   // Influenza), así que importarlo dejaría el SIS a medias (solo Movimiento):
   // la unidad captura directo en el sistema y nunca importa (queda solo para
   // los roles revisores).
-  document.getElementById('btnAbrirImportador').style.display = (esJurisdiccional || esUnidad) ? 'none' : 'inline-flex';
+  // Tampoco aplica al Movimiento del municipio de octubre en adelante: se arma solo con las unidades (importar un Excel manual lo pisaría).
+  const porUnidadesMuni = movimientoDelMunicipioPorUnidades() && !(estado.perfil && estado.perfil.rol === 'ADMIN');
+  document.getElementById('btnAbrirImportador').style.display = (esJurisdiccional || esUnidad || porUnidadesMuni) ? 'none' : 'inline-flex';
 
   renderBannerMovimiento(m, esJurisdiccional);
   renderGuiaCaptura(m, editable);
@@ -2400,6 +2504,8 @@ function irACasillaRecibido(renglonId) {
 // mes cambia después, la anterior se recalcula como cierre + ajuste (la secuencia no se rompe).
 function anteriorEditablePorRol() {
   const rol = estado.perfil ? estado.perfil.rol : null;
+  // Movimiento del municipio armado con unidades: la anterior es la del cierre del mes pasado (solo mantenimiento ADMIN la toca).
+  if (movimientoDelMunicipioPorUnidades() && rol !== 'ADMIN') return false;
   return estado.anteriorEditable !== false || Boolean(rol && rol !== 'UNIDAD');
 }
 
@@ -2523,21 +2629,88 @@ function alternarEdicionAnterior(renglonId) {
 function renderBannerMovimiento(m, esJurisdiccional) {
   const cont = document.getElementById('bannerMovimiento');
   if (!cont) return;
+  // La franja "Recibido, aplicadas y desechadas por lote..." repite lo que ya dice el aviso del Movimiento del municipio
+  const franja = document.querySelector('#panelMovimiento .ayuda-franja');
+  if (franja) franja.style.display = (estado.perfil && estado.perfil.rol !== 'UNIDAD' && movimientoDelMunicipioPorUnidades()
+    && (m.estado === 'BORRADOR' || m.estado === 'EN_CORRECCION')) ? 'none' : '';
   const rol = estado.perfil ? estado.perfil.rol : null;
   if (esJurisdiccional || !rol) { cont.innerHTML = ''; return; }
   if (rol === 'UNIDAD' && movimientoBloqueadoParaUnidad()) {
     cont.innerHTML = `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock</span>
       <div class="texto"><b>Enviado: solo lectura</b>Ya enviaste el SINBA-SIS de este mes, así que el Movimiento de Biológico no se puede modificar. Si algo está mal, pide la corrección al municipal.</div></div>`;
   } else if (m.estado === 'CERRADO' && rol !== 'UNIDAD') {
+    const porEnvio = estado.sis06pEstadoActual && estado.sis06pEstadoActual !== 'BORRADOR';
+    const quien = m.cerrado_por ? ` por ${String(m.cerrado_por).replace(/[<>&"]/g, '')}` : '';
     cont.innerHTML = `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock</span>
-      <div class="texto"><b>Movimiento cerrado por la unidad</b>Para corregir lotes, cantidades, la existencia anterior o eliminar renglones, ábrelo en modo corrección: queda registrado y los meses siguientes se recalculan solos (la existencia de cada mes arrastra la del anterior y tus ajustes manuales se conservan).</div>
+      <div class="texto"><b>${porEnvio ? 'Movimiento cerrado con el envío del SINBA-SIS' : 'Movimiento cerrado' + quien}</b>Para corregir lotes, cantidades, la existencia anterior o eliminar renglones, ábrelo en modo corrección: queda registrado y los meses siguientes se recalculan solos (la existencia de cada mes arrastra la del anterior y tus ajustes manuales se conservan).</div>
       <button type="button" class="btn-primario" data-banner="corregir"><span class="material-symbols-rounded">edit_note</span> Corregir movimiento</button></div>`;
   } else if (m.estado === 'EN_CORRECCION') {
     cont.innerHTML = `<div class="banner-mov correccion"><span class="material-symbols-rounded">edit_note</span>
       <div class="texto"><b>Modo corrección</b>Puedes editar cantidades, corregir la existencia anterior (lápiz), eliminar renglones (bote) o agregar lotes. Al terminar guarda la corrección.</div>
       <button type="button" class="btn-primario" data-banner="guardar"><span class="material-symbols-rounded">check_circle</span> Guardar corrección</button></div>`;
+  } else if (rol === 'UNIDAD' && m.estado === 'BORRADOR') {
+    cont.innerHTML = `<div class="banner-mov info"><span class="material-symbols-rounded">info</span>
+      <div class="texto"><b>Tu único candado es Enviar</b>El Movimiento y el paloteo son un solo SINBA-SIS: no hay que «cerrar el mes» aparte. Cuando las dosis aplicadas coincidan, pulsa <b style="display:inline">Enviar</b> en la barra de abajo y todo queda bloqueado a la vez.</div></div>`;
   } else {
     cont.innerHTML = '';
+  }
+  // Movimiento del municipio (desde octubre): se arma SOLO con lo que envían las unidades y se ajusta aquí.
+  if (rol !== 'UNIDAD' && movimientoDelMunicipioPorUnidades() && (m.estado === 'BORRADOR' || m.estado === 'EN_CORRECCION')) {
+    cont.insertAdjacentHTML('afterbegin', `<div class="banner-mov info"><span class="material-symbols-rounded" aria-hidden="true">auto_awesome</span>
+      <div class="texto"><b>Se arma solo con tus unidades</b>Cada envío se suma aquí. La existencia anterior viene del mes pasado y no se edita; recibido, aplicadas y desechadas sí puedes ajustarlas, y tus ajustes se conservan.</div></div>
+      <div id="discrepanciasMunicipio" class="disc-caja" aria-live="polite"></div>`);
+    const u = (estado.unidades || []).find((x) => x.id === m.unidad_id);
+    if (u) pintarDiscrepanciasMunicipio(document.getElementById('discrepanciasMunicipio'), u.municipio, m.mes, m.anio);
+  }
+}
+
+// Detector de discrepancias entre las unidades y el Movimiento del municipio (RPC biovac_discrepancias_municipio).
+// Lo usan la hoja Movimiento y el cierre guiado del municipal. Solo informa: nunca cambia datos.
+const TITULO_DISCREPANCIA = {
+  FINAL_NEGATIVA: 'Existencia negativa', UNIDAD_CAMBIO_POSTERIOR: 'Una unidad cambió después', INCONSISTENCIA: 'No se explica',
+  EDITADO_A_MANO: 'Ajustado a mano', SOLO_MUNICIPIO: 'Solo está en el municipio', ANTERIOR_DISTINTA: 'Existencia anterior distinta'
+};
+const ICONO_DISCREPANCIA = { ERROR: 'error', ADVERTENCIA: 'warning', INFO: 'info' };
+function _escD(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+function htmlDiscrepancias(filas) {
+  if (!filas || !filas.length) {
+    return '<p class="disc-ok"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span> Las unidades y el municipio cuadran en todos los lotes.</p>';
+  }
+  const n = (sev) => filas.filter((f) => f.severidad === sev).length;
+  const partes = [];
+  if (n('ERROR')) partes.push(`<b class="disc-err">${n('ERROR')} por corregir</b>`);
+  if (n('ADVERTENCIA')) partes.push(`<b class="disc-adv">${n('ADVERTENCIA')} por confirmar</b>`);
+  if (n('INFO')) partes.push(`${n('INFO')} informativas`);
+  const items = filas.slice(0, 60).map((f) => `
+    <li class="disc-${String(f.severidad).toLowerCase()}">
+      <span class="material-symbols-rounded" aria-hidden="true">${ICONO_DISCREPANCIA[f.severidad] || 'info'}</span>
+      <div><b>${_escD(f.biologico)} · lote ${_escD(f.numero_lote)}${f.categoria && f.categoria !== 'NORMAL' ? ' (' + _escD(f.categoria) + ')' : ''}</b>
+        <small>${_escD(TITULO_DISCREPANCIA[f.tipo] || f.tipo)}</small>
+        <p>${_escD(f.mensaje)}</p></div>
+    </li>`).join('');
+  return `<details class="disc-det"${n('ERROR') ? ' open' : ''}>
+    <summary><span class="material-symbols-rounded" aria-hidden="true">fact_check</span> Revisión de unidades contra municipio: ${partes.join(' · ')}</summary>
+    <ul class="disc-lista">${items}</ul>${filas.length > 60 ? `<p class="disc-mas">Se muestran 60 de ${filas.length}.</p>` : ''}
+  </details>`;
+}
+
+async function pintarDiscrepanciasMunicipio(contenedor, municipio, mes, anio) {
+  if (!contenedor) return;
+  contenedor.innerHTML = '<p class="disc-carga">Revisando unidades contra el municipio…</p>';
+  try {
+    const [{ data, error }, seg] = await Promise.all([
+      estado.db.rpc('biovac_discrepancias_municipio', { p_municipio: municipio, p_mes: mes, p_anio: anio }),
+      estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio }).then((r) => r, () => ({ data: null }))
+    ]);
+    if (error) throw error;
+    const hayEnvios = !seg || !Array.isArray(seg.data) || seg.data.some((f) => f.municipio === municipio && (f.estado === 'ENVIADO' || f.estado === 'VALIDADO'));
+    if (!document.body.contains(contenedor)) return;
+    contenedor.innerHTML = (!hayEnvios && !(data || []).length)
+      ? '<p class="disc-carga"><span class="material-symbols-rounded" aria-hidden="true">hourglass_top</span> Aún ninguna unidad ha enviado: la revisión empieza cuando lleguen los primeros envíos.</p>'
+      : htmlDiscrepancias(data || []);
+  } catch (err) {
+    if (document.body.contains(contenedor)) contenedor.innerHTML = '';
   }
 }
 
@@ -2894,12 +3067,14 @@ async function cerrarMes() {
   if (!usuario) return;
   const ok = await mostrarModal({
     titulo: 'Cerrar mes',
-    mensaje: 'Quedará bloqueado para edición directa y la existencia se arrastrará al mes siguiente. Si después necesitas corregir algo, puedes reabrirlo: el cambio se propagará automáticamente a los meses ya cerrados que siguen.',
+    mensaje: movimientoDelMunicipioPorUnidades()
+      ? 'Cierra el Movimiento del municipio: ya validado con la jurisdicción y empatado, queda bloqueado y su existencia final pasa como existencia anterior al mes siguiente. Solo se puede cerrar si todas las unidades están validadas (o marcadas «sin envío»). Si después hay que corregir algo, se reabre con «Corregir movimiento» y queda en la auditoría.'
+      : 'Esto cierra SOLO el Movimiento de Biológico de este mes: queda bloqueado para edición directa y su existencia final pasa como existencia anterior al mes siguiente. No envía ni valida el SINBA-SIS. Si después necesitas corregir algo, puedes reabrirlo con «Corregir movimiento» (queda en la auditoría) y el cambio se propaga a los meses siguientes ya cerrados.',
     textoAceptar: 'Cerrar mes'
   });
   if (!ok) return;
   const { error } = await estado.db.rpc('biovac_cerrar_mes', { p_movimiento_id: estado.movimiento.id, p_usuario: usuario });
-  if (error) { toast('No se pudo cerrar: ' + error.message, 'error'); return; }
+  if (error) { toast('No se pudo cerrar: ' + String(error.message || '').slice(0, 260), 'error'); return; }
   toast('Mes cerrado correctamente.', 'ok');
   await cargarMovimiento();
 }
