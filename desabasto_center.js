@@ -440,6 +440,10 @@
       const ts = new Date(n.created_ts || 0).getTime() || 0;
       if (!isActive && ts < cutoff) return; // historial resuelto viejo: no estorba en la bandeja
 
+      let missing = Array.isArray(meta.missing) ? meta.missing : [];
+      // UMME y FAM (caravanas) no aplican BCG: alertas viejas que lo traían ya no se muestran
+      if (/^(UMME|FAM)\b/i.test(String(meta.unidad || '').trim())) missing = missing.filter((b) => !/^bcg$/i.test(String(b).trim()));
+      if (isActive && !missing.length) return;
       allIds.push(n.id);
       const clues = String(meta.clues || n.id).trim().toUpperCase();
       let u = byClues.get(clues);
@@ -447,7 +451,6 @@
         u = { clues, unidad: '', municipio: '', ts: 0, activeMissing: new Set(), lastMissing: [], activeIds: [], status: 'resuelta', unread: false };
         byClues.set(clues, u);
       }
-      const missing = Array.isArray(meta.missing) ? meta.missing : [];
       if (ts >= u.ts) {
         u.ts = ts;
         u.unidad = meta.unidad || u.unidad || clues;

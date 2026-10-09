@@ -4963,9 +4963,16 @@ function findCatalogByClues(clues) {
   ) || null;
 }
 
+// UMME y FAM (caravanas) NO aplican BCG. La CLUES es QTSSA..., así que se reconocen por el nombre de la unidad.
+function esUnidadCaravana(unidad, clues) {
+  const nombre = String(unidad || "").trim().toUpperCase();
+  const c = String(clues || "").trim().toUpperCase().replace(/\s+/g, "");
+  return /^(UMME|FAM)\b/.test(nombre) || c.startsWith("UMME") || c.startsWith("FAM");
+}
+window.esUnidadCaravana = esUnidadCaravana;
+
 function isCurrentUnitCaravana() {
-  const clues = String((USER && USER.clues) || "").trim().toUpperCase().replace(/\s+/g, "");
-  return clues.startsWith("FAM") || clues.startsWith("UMME");
+  return esUnidadCaravana(USER && USER.unidad, USER && USER.clues);
 }
 
 function findCatalogByUnidad(unidad) {
@@ -5726,6 +5733,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
         const finalMissingEsquemaBasico = finalMissing.filter(bioName => {
           const bioMeta = window.getBioMetadata(bioName);
           if (!bioMeta.isEsquemaBasico) return false;
+          if (bioMeta.key === "bcg" && esUnidadCaravana(unidad, clues)) return false; // UMME/FAM no aplican BCG
 
           // Regla especial para vacunas con historia previa obligatoria (ej: NEUMOCÓCICA 20 / 13)
           if (bioMeta.requiresPriorHistory) {

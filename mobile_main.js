@@ -3367,6 +3367,7 @@
                     const isEsquema = (typeof window.isBioEsquemaBasico === 'function') ? window.isBioEsquemaBasico(b) : true;
                     if (!isEsquema) return false;
                     if (summaryRecord[b] !== 0) return false;
+                    if (b === "bcg" && /^(UMME|FAM)\b/i.test(String(currentProfile.unidad || "").trim())) return false; // UMME/FAM no aplican BCG
 
                     const bioMeta = (typeof window.getBioMetadata === 'function') ? window.getBioMetadata(b) : {};
                     if (bioMeta.requiresPriorHistory || b === "neumococica_20" || b === "neumococica_13") {

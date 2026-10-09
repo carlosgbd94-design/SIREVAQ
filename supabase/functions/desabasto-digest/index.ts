@@ -60,7 +60,10 @@ function consolidate(rows: { id: string; created_ts: string; meta_json: unknown 
     if (m.status !== 'activa') continue // ya se resolvió antes de que saliera el correo
     const clues = String(m.clues || '').trim().toUpperCase()
     if (!clues) continue
-    const missing: string[] = Array.isArray(m.missing) ? m.missing : []
+    let missing: string[] = Array.isArray(m.missing) ? m.missing : []
+    // UMME y FAM (caravanas) no aplican BCG: alertas viejas que lo traían ya no deben avisarlo
+    if (/^(UMME|FAM)\b/i.test(String(m.unidad || '').trim())) missing = missing.filter((b) => !/^bcg$/i.test(String(b).trim()))
+    if (!missing.length) continue
     const prev = byClues.get(clues)
     if (prev) {
       prev.missing = Array.from(new Set([...prev.missing, ...missing]))
