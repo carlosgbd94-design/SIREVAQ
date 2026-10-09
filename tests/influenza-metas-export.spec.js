@@ -191,3 +191,17 @@ test.describe('Archivo de una sola unidad (lo baja la propia unidad)', () => {
   });
 });
 
+
+test('el libro exportado no trae vínculos a hojas o libros de la plantilla original', async () => {
+  const metas = [meta('QTSSA001793', 'QUERETARO', 10), meta(null, 'QUERETARO', 10)];
+  for (const muni of ['QUERETARO', 'CORREGIDORA', 'HOSPITALES']) {
+    const wb = await construir(muni, metas, [unidad('QTSSA001793', 'JURICA', 'QUERETARO')]);
+    const zip = await JSZip.loadAsync(await X.escribirLibro(wb, JSZip));
+    const nombres = Object.keys(zip.files);
+    expect(nombres.filter((n) => /externalLink|connections|queryTable/i.test(n)), muni).toEqual([]);
+    for (const n of nombres.filter((n) => /xl\/worksheets\/sheet\d+\.xml$/.test(n))) {
+      const xml = await zip.file(n).async('string');
+      expect(xml, `${muni} ${n}`).not.toMatch(/CLUES JS1|XLOOKUP|\[\d+\]/);
+    }
+  }
+});

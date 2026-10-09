@@ -260,6 +260,8 @@
     const total = ws.getRow(rt);
     for (let c = 1; c <= 12; c++) total.getCell(c).style = Object.assign({}, estilos[c], { font: Object.assign({}, (estilos[c] || {}).font, { bold: true }) });
     total.getCell(2).value = "TOTAL";
+    // La fila de total hereda de la plantilla un XLOOKUP hacia «CLUES JS1» (hoja que no se exporta) en A; K y L sobran
+    for (const c of [1, 11, 12]) total.getCell(c).value = null;
     "CDEFGH".split("").forEach((l) => { total.getCell(l).value = { formula: `SUM(${l}2:${l}${rt - 1})` }; });
     // Las columnas auxiliares (I, J) y los encabezados repetidos de K y L sobraban en la plantilla
     for (const l of ["K", "L"]) ws.getCell(`${l}1`).value = null;
@@ -295,6 +297,18 @@
     const hojaDe = (rango) => { const m = /^'((?:[^']|'')+)'!|^([^'!]+)!/.exec(String(rango)); return m ? (m[1] || m[2]).replace(/''/g, "'") : null; };
     const modelo = (wb.definedNames && wb.definedNames.model) || [];
     wb.definedNames.model = modelo.filter((n) => (n.ranges || []).every((r) => { const h = hojaDe(r); return !h || existentes.has(h); }));
+
+    // Fórmulas que quedaron apuntando a hojas que ya no existen o a otro libro ([1]Hoja!A1): Excel las muestra como vínculos
+    // rotos y pide «Actualizar vínculos». Se dejan con el último valor calculado (o vacías).
+    const roto = (f) => {
+      const refs = String(f).matchAll(/(?:'((?:[^']|'')+)'|([A-Za-z_][\w.]*))!|\[\d+\]/g);
+      for (const m of refs) { if (m[0].startsWith("[")) return true; const h = (m[1] || m[2]).replace(/''/g, "'"); if (!existentes.has(h)) return true; }
+      return false;
+    };
+    wb.worksheets.forEach((ws) => ws.eachRow({ includeEmpty: false }, (row) => row.eachCell({ includeEmpty: false }, (cell) => {
+      const v = cell.value;
+      if (v && typeof v === "object" && typeof v.formula === "string" && roto(v.formula)) cell.value = v.result == null ? null : v.result;
+    })));
   }
 
   /**
