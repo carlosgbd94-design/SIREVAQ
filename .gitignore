@@ -15,3 +15,8 @@ test-results/
 
 # Archivos de bloqueo temporales de Office
 ~$*
+
+# Material local que no forma parte de la página (datos de prueba/operativos y scripts de red locales)
+ARREGLO_RED_SUPABASE/
+PRUEBAS_EXPORTACION/
+SEPTIEMBRE/
