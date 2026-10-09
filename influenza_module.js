@@ -5988,7 +5988,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   } else {
     // Cargar catálogo de unidades
     const { data: allUnits } = await window.supabase.from("unidades").select("clues, municipio, unidad").eq("activo", "SI");
-    const filtered = allUnits.filter(u => !muniFilter || u.municipio.toUpperCase() === muniFilter.toUpperCase());
+    const filtered = (allUnits || []).filter(u => !muniFilter || String(u.municipio || '').toUpperCase() === muniFilter.toUpperCase());
     evalCluesList = filtered.map(u => u.clues);
   }
 
@@ -6039,49 +6039,63 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
 
   // Inyectar HTML en el contenedor de indicadores
   container.innerHTML = `
+    <!-- Cómo leerlo -->
+    <div id="rdaAvanceNota" role="note" style="margin: 0 0 16px 0; padding: 10px 14px; border-radius: 12px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 600; line-height: 1.5;">
+      <b style="color:#0f172a;">Cómo leerlo:</b> el <b>avance</b> es el total de dosis aplicadas ÷ la <b>meta de la campaña</b> (${activeCampaignName}).
+      Verde desde <b>85%</b>, ámbar de <b>50% a 84%</b> y rojo por debajo de <b>50%</b>.
+      ${(totalDosisAplicadas === 0 && totalMetaDosis > 0) ? '<br><b style="color:#b45309;">Aún no hay dosis capturadas en esta campaña para el ámbito elegido.</b>' : ''}
+    </div>
+
     <!-- KPI Cards Grid -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; margin-bottom: 32px;">
-      
-      <div class="rda-kpi-card">
-        <div class="rda-icon-box" style="background: #f0f9ff; color: #0284c7;">
-          <span class="material-symbols-rounded">child_care</span>
+    <div role="group" aria-label="Avance de la campaña de influenza" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; margin-bottom: 32px;">
+      ${[
+        { id: 'blanco', titulo: 'Población Blanco', icono: 'child_care', bg: '#f0f9ff', fg: '#0284c7', pct: pctBlanco, aplic: totalBlancoAplicadas, meta: totalBlancoMeta },
+        { id: 'riesgo', titulo: 'Población de Riesgo', icono: 'warning', bg: '#f5f3ff', fg: '#7c3aed', pct: pctRiesgo, aplic: totalRiesgoAplicadas, meta: totalRiesgoMeta },
+        { id: 'total', titulo: 'Total Campaña', icono: 'vaccines', bg: '#fdf2f8', fg: '#db2777', pct: pctTotal, aplic: totalDosisAplicadas, meta: totalMetaDosis }
+      ].map(k => {
+        const ok = k.pct >= 85, medio = k.pct >= 50;
+        const color = ok ? '#047857' : medio ? '#b45309' : '#dc2626';
+        const estado = ok ? 'ÓPTIMO (META ALCANZADA)' : medio ? 'REGULAR (AVANCE MEDIO)' : 'CRÍTICO (REQUIERE ATENCIÓN)';
+        const fmt = n => Math.round(n).toLocaleString('es-MX');
+        const falta = Math.max(0, k.meta - k.aplic);
+        const mensaje = k.meta <= 0 ? 'Sin meta capturada' : (k.pct >= 100 ? '+' + (k.pct - 100) + ' pts sobre la meta' : 'Faltan ' + fmt(falta) + ' dosis para la meta');
+        return `
+      <div class="rda-kpi-card" role="group" aria-label="${k.titulo}: avance ${k.pct} por ciento, ${estado.toLowerCase()}. ${fmt(k.aplic)} de ${fmt(k.meta)} dosis.">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+          <div class="rda-icon-box" style="background: ${k.bg}; color: ${k.fg}; width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+            <span class="material-symbols-rounded" style="font-size:20px;">${k.icono}</span>
+          </div>
+          <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2;">${k.titulo}</div>
         </div>
-        <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;">Población Blanco</div>
-        <div style="font-size: 36px; font-weight: 900; color: ${pctBlanco >= 85 ? '#059669' : pctBlanco >= 50 ? '#d97706' : '#dc2626'}; letter-spacing: -0.04em; line-height: 1.1;">${pctBlanco}%</div>
-        <div style="font-size: 13px; font-weight: 700; color: #64748b; margin-top: 8px;">${totalBlancoAplicadas.toLocaleString('es-MX')} de ${totalBlancoMeta.toLocaleString('es-MX')} dosis</div>
-      </div>
-
-      <div class="rda-kpi-card">
-        <div class="rda-icon-box" style="background: #f5f3ff; color: #7c3aed;">
-          <span class="material-symbols-rounded">warning</span>
+        <div style="font-size: 11px; line-height: 1.3; font-weight: 900; color: #64748b; letter-spacing: 0.08em; text-transform: uppercase;">Avance de la meta</div>
+        <div style="font-size: 46px; font-weight: 900; color: ${color}; letter-spacing: -0.02em; line-height: 1.25; padding-bottom: 8px;">${k.pct}%</div>
+        <div style="display:block; margin-top:2px; line-height:1.3; font-size: 11px; font-weight: 900; color: ${color}; letter-spacing: 0.05em; text-transform: uppercase;">${estado}</div>
+        <div style="margin: 10px 0 2px 0;">
+          <div role="progressbar" aria-label="Avance de ${k.titulo}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, k.pct)}" aria-valuetext="${k.pct} por ciento de la meta" style="width: 100%; height: 10px; background: rgba(15, 23, 42, 0.07); border-radius: 999px; overflow: hidden;">
+            <div style="height: 100%; width: ${Math.min(100, Math.max(k.pct > 0 ? 2 : 0, k.pct))}%; background: ${color}; border-radius: 999px;"></div>
+          </div>
+          <div aria-hidden="true" style="display:flex; justify-content:space-between; font-size:10.5px; font-weight:800; color:#64748b; margin-top:3px;"><span>0%</span><span>Meta 100%</span></div>
         </div>
-        <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;">Población de Riesgo</div>
-        <div style="font-size: 36px; font-weight: 900; color: ${pctRiesgo >= 85 ? '#059669' : pctRiesgo >= 50 ? '#d97706' : '#dc2626'}; letter-spacing: -0.04em; line-height: 1.1;">${pctRiesgo}%</div>
-        <div style="font-size: 13px; font-weight: 700; color: #64748b; margin-top: 8px;">${totalRiesgoAplicadas.toLocaleString('es-MX')} de ${totalRiesgoMeta.toLocaleString('es-MX')} dosis</div>
-      </div>
-
-      <div class="rda-kpi-card">
-        <div class="rda-icon-box" style="background: #fdf2f8; color: #db2777;">
-          <span class="material-symbols-rounded">vaccines</span>
+        <div style="min-height: 22px; font-size: 11.5px; font-weight: 800; color: ${color}; margin-top: 6px;">${mensaje}</div>
+        <div style="border-top: 1px solid #f1f5f9; margin-top: 10px; padding-top: 6px;">
+          <div style="display:flex; justify-content:space-between; padding:5px 0;"><span style="font-size:11px; font-weight:700; color:#64748b;">Meta de la campaña</span><span style="font-size:13.5px; font-weight:900; color:#0f172a;">${fmt(k.meta)}</span></div>
+          <div style="display:flex; justify-content:space-between; padding:5px 0;"><span style="font-size:11px; font-weight:700; color:#64748b;">Dosis aplicadas</span><span style="font-size:13.5px; font-weight:900; color:#0f172a;">${fmt(k.aplic)}</span></div>
         </div>
-        <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;">Total Campaña</div>
-        <div style="font-size: 36px; font-weight: 900; color: ${pctTotal >= 85 ? '#059669' : pctTotal >= 50 ? '#d97706' : '#dc2626'}; letter-spacing: -0.04em; line-height: 1.1;">${pctTotal}%</div>
-        <div style="font-size: 13px; font-weight: 700; color: #64748b; margin-top: 8px;">${totalDosisAplicadas.toLocaleString('es-MX')} de ${totalMetaDosis.toLocaleString('es-MX')} dosis</div>
-      </div>
-
+      </div>`;
+      }).join('')}
     </div>
 
     <!-- Tabla Detallada por Rubro -->
     <div class="bg-surface rounded-3xl border border-slate-200 shadow-sm p-6 overflow-hidden">
       <h3 class="text-sm font-extrabold text-slate-700 mb-4 uppercase tracking-wider">Desglose de Meta-Logro por Rubro</h3>
       <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200">
-        <table class="w-full border-collapse text-left text-xs font-semibold text-slate-700">
+        <table class="w-full border-collapse text-left text-xs font-semibold text-slate-700" aria-label="Desglose de meta y logro de influenza por rubro">
           <thead>
             <tr class="bg-slate-50 border-b border-slate-200">
-              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider">Subgrupo / Edad</th>
-              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center" style="width: 120px;">Meta Total</th>
-              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center" style="width: 120px;">Aplicadas</th>
-              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center" style="width: 120px;">Avance %</th>
+              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider" scope="col">Subgrupo / Edad</th>
+              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center" style="width: 120px;" scope="col">Meta Total</th>
+              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center" style="width: 120px;" scope="col">Aplicadas</th>
+              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center" style="width: 120px;" scope="col">Avance %</th>
             </tr>
           </thead>
           <tbody>
@@ -6132,7 +6146,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
                       <td class="p-3 text-center font-bold text-slate-600">${rMeta.toLocaleString('es-MX')}</td>
                       <td class="p-3 text-center font-bold text-violet-900">${rAplicadas.toLocaleString('es-MX')}</td>
                       <td class="p-3 text-center">
-                        <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold ${progressColor} ${progressBg}">${rMeta > 0 ? `${rPct}%` : 'N/A'}</span>
+                        <span class="px-2.5 py-1 rounded-full text-[11px] font-extrabold ${progressColor} ${progressBg}">${rMeta > 0 ? `${rPct}%` : 'N/A'}</span>
                       </td>
                     </tr>
                   `;

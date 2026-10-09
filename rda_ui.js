@@ -193,6 +193,18 @@ function initRDADashboard() {
             #rdaDetailTable tr:nth-child(even) td:nth-child(2) {
                 background-color: var(--md-sys-color-surface-container) !important;
             }
+            #rdaDetailTable tr.rda-fila-total td {
+                position: sticky !important;
+                bottom: 0 !important;
+                z-index: 14 !important;
+                background-color: #eef2f7 !important;
+                border-top: 2px solid #cbd5e1 !important;
+                box-shadow: 0 -4px 8px -6px rgba(15, 23, 42, 0.18) !important;
+            }
+            #rdaDetailTable tr.rda-fila-total td:nth-child(1),
+            #rdaDetailTable tr.rda-fila-total td:nth-child(2) {
+                z-index: 24 !important;
+            }
             #rdaDetailTable tr td[colspan] {
                 position: sticky !important;
                 left: 0 !important;
@@ -363,16 +375,22 @@ function initRDADashboard() {
         const btnE = toggleWrapper.querySelector('#btnViewEsquema');
         const btnB = toggleWrapper.querySelector('#btnViewBiologico');
         
+        btnE.setAttribute('aria-pressed', 'true');
+        btnB.setAttribute('aria-pressed', 'false');
+        toggleWrapper.setAttribute('role', 'group');
+        toggleWrapper.setAttribute('aria-label', 'Vista de indicadores');
         btnE.addEventListener('click', () => {
             _rdaState.vistaBasico = 'esquema';
             btnE.className = 'active';
             btnB.className = 'inactive';
+            btnE.setAttribute('aria-pressed', 'true'); btnB.setAttribute('aria-pressed', 'false');
             renderDashboard();
         });
         btnB.addEventListener('click', () => {
             _rdaState.vistaBasico = 'biologico';
             btnB.className = 'active';
             btnE.className = 'inactive';
+            btnB.setAttribute('aria-pressed', 'true'); btnE.setAttribute('aria-pressed', 'false');
             renderDashboard();
         });
 
@@ -388,9 +406,30 @@ function initRDADashboard() {
     const expBtn = document.getElementById('btnExportRdaToggle');
     const expDrop = document.getElementById('rdaExportDropdown');
     if (expBtn && expDrop) {
-        expBtn.addEventListener('click', () => expDrop.style.display = expDrop.style.display === 'none' ? 'block' : 'none');
+        expBtn.setAttribute('aria-haspopup', 'true');
+        expBtn.setAttribute('aria-expanded', 'false');
+        expDrop.setAttribute('role', 'menu');
+        expDrop.querySelectorAll('.rda-export-opt').forEach(o => o.setAttribute('role', 'menuitem'));
+        const cerrarMenu = (devolverFoco) => {
+            expDrop.style.display = 'none';
+            expBtn.setAttribute('aria-expanded', 'false');
+            if (devolverFoco) expBtn.focus();
+        };
+        expBtn.addEventListener('click', () => {
+            const abrir = expDrop.style.display === 'none';
+            expDrop.style.display = abrir ? 'block' : 'none';
+            expBtn.setAttribute('aria-expanded', String(abrir));
+            if (abrir) expDrop.querySelector('.rda-export-opt')?.focus();
+        });
+        expDrop.addEventListener('keydown', e => {
+            const items = [...expDrop.querySelectorAll('.rda-export-opt')].filter(i => i.offsetParent !== null);
+            const i = items.indexOf(document.activeElement);
+            if (e.key === 'Escape') { e.preventDefault(); cerrarMenu(true); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
+        });
         document.addEventListener('click', e => {
-            if (!document.getElementById('rdaExportContainer')?.contains(e.target)) expDrop.style.display = 'none';
+            if (!document.getElementById('rdaExportContainer')?.contains(e.target)) { expDrop.style.display = 'none'; expBtn.setAttribute('aria-expanded', 'false'); }
         });
     }
     document.querySelectorAll('.rda-export-opt').forEach(btn => {
@@ -398,6 +437,7 @@ function initRDADashboard() {
         btn.addEventListener('mouseleave', () => btn.style.background = 'transparent');
         btn.addEventListener('click', () => {
             expDrop.style.display = 'none';
+            expBtn?.setAttribute('aria-expanded', 'false');
             const type = btn.dataset.export;
             if (type === 'individual') exportIndividualPDF();
             else if (type === 'png' || type === 'jpeg') exportDashboardImagen(type);
@@ -831,18 +871,110 @@ async function renderDashboard() {
     }
     renderBarChart(fUnits, muniFilter, esquema);
     renderTable(fUnits, esquema, agg);
+    const tituloAnio = document.getElementById('rdaTituloAnio');
+    if (tituloAnio) tituloAnio.textContent = `Indicadores vacunas ${_rdaCache.anio || 2026}`;
+    _rdaAnunciarResumen(agg, esquema, fUnits);
+}
+
+// ══════════ ACCESIBILIDAD: resumen textual de gráficas y aviso de actualización ══════════
+// Solo atributos y una región oculta FUERA de #rdaDashboardContent: no altera el tamaño ni el
+// contenido que capturan las exportaciones (PNG/JPEG/ZIP leen ese contenedor; el PDF lee la tabla).
+function _rdaGruposBasico(agg) {
+    const mm = _rdaCache.maxMes || 12;
+    const g = (nombre, pob, dosis, div, avance) => ({ nombre, avance, meta: Math.round(pob * 0.0833 * mm), eq: Math.round(dosis / div) });
+    const lista = [
+        g('menores de 1 año', agg.pob_menor_1, agg.bcg_dosis + agg.hepb_0_7_dosis + agg.hexa_3_dosis + agg.rota_2_dosis + agg.neumo_2_dosis, 4, agg.cobertura_menor1),
+        g('niños de 1 año', agg.pob_1_ano, agg.hexa_ref_dosis + agg.neumo_ref_dosis + agg.srp_2_dosis, 3, agg.cobertura_uno),
+        g('niños de 4 años', agg.pob_4_anos, agg.dpt_4_dosis, 1, agg.cobertura_cuatro)
+    ];
+    if (_rdaCache.anio === 2025) lista.push(g('niños de 6 años', agg.pob_6_anos || 0, agg.srp_6_dosis || 0, 1, agg.cobertura_seis));
+    return lista;
+}
+
+function _rdaAnunciarResumen(agg, esquema, fUnits) {
+    try {
+        const mes = MONTH_NAMES[(_rdaCache.maxMes || 12) - 1] || '';
+        const esquemaSel = document.getElementById('rdaFilterEsquema');
+        const esquemaTxt = esquemaSel ? esquemaSel.options[esquemaSel.selectedIndex].text : '';
+        let detalle = '';
+        if (esquema === 'basico') {
+            detalle = _rdaGruposBasico(agg).map(x => `${x.nombre}: avance ${x.avance} por ciento, aplicadas equivalentes ${x.eq.toLocaleString('es-MX')} de una meta al corte de ${x.meta.toLocaleString('es-MX')}`).join('. ');
+        }
+        const resumenGrafica = esquema === 'basico' && _rdaState.vistaBasico !== 'biologico'
+            ? `Gráfica de barras y línea con meta al corte, aplicadas equivalentes y avance por grupo de edad. ${detalle}. La línea punteada marca el 100 por ciento de la meta.`
+            : `Gráfica de ${esquemaTxt}. Los valores exactos están en la tabla de detalle por unidad médica.`;
+        ['chartBarTotal', 'chartBar', 'chartDoughnut'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.setAttribute('role', 'img');
+            el.setAttribute('aria-label', id === 'chartBar' && fUnits.length > 1
+                ? 'Gráfica de barras horizontales con el avance por municipio o unidad; los valores exactos están en la tabla de detalle.'
+                : resumenGrafica);
+        });
+
+        let vivo = document.getElementById('rdaLiveRegion');
+        if (!vivo) {
+            vivo = document.createElement('div');
+            vivo.id = 'rdaLiveRegion';
+            vivo.setAttribute('role', 'status');
+            vivo.setAttribute('aria-live', 'polite');
+            vivo.style.cssText = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;';
+            document.getElementById('rdaDashboardOverlay')?.appendChild(vivo) || document.body.appendChild(vivo);
+        }
+        const msg = `Indicadores actualizados. ${esquemaTxt}, corte a ${mes}, ${fUnits.length} unidades. ${detalle}`.trim();
+        if (vivo.dataset.ultimo !== msg) { vivo.dataset.ultimo = msg; vivo.textContent = msg; }
+    } catch (e) { console.warn('[RDA a11y]', e); }
 }
 
 
 
+// Alinea los dos ejes (cantidad a la izquierda, % a la derecha) para que 100 % coincida con la altura
+// de la barra "Meta al corte"; así la línea punteada de 100 % no engaña. Se aplica como fusión
+// posterior al setOption (no cambia el tamaño del lienzo).
+function _rdaAlignAxes(chart, eSeries) {
+    try {
+        const metaS = eSeries.find(x => x.name === 'Meta al corte');
+        const avS = eSeries.find(x => x.name === 'Avance');
+        const appS = eSeries.find(x => x.name === 'Aplicadas (equiv.)');
+        if (!chart || !metaS || !avS) return;
+        const metas = metaS.data.filter(v => v > 0);
+        if (!metas.length) return;
+        const metaRef = metas.reduce((a, b) => a + b, 0) / metas.length;
+        const maxAv = Math.max(100, ...avS.data.map(v => +v || 0));
+        const maxApp = appS ? Math.max(0, ...appS.data.map(v => +v || 0)) : 0;
+        const maxLeft = Math.max(maxApp, ...metaS.data.map(v => +v || 0));
+        const needPct = Math.max(maxAv * 1.08, (maxLeft / metaRef) * 100 * 1.05, 120);
+        const pctMax = Math.ceil(needPct / 50) * 50;
+        const leftMax = pctMax * metaRef / 100;
+        chart.setOption({
+            yAxis: [
+                { min: 0, max: leftMax, interval: leftMax / (pctMax / 50), axisLabel: { formatter: v => { const m = Math.pow(10, Math.max(0, String(Math.round(v)).length - 3)); return (Math.round(v / m) * m).toLocaleString('es-MX'); } } },
+                { min: 0, max: pctMax, interval: 50 }
+            ]
+        });
+    } catch (e) { console.warn('[RDA ejes]', e); }
+}
+
 // Línea de referencia del 100 % de la meta al corte sobre el eje de Avance
 function _rdaAddMetaMarkLine(series) {
     series.markLine = {
-        silent: true, symbol: 'none',
+        silent: true, symbol: 'none', animation: false,
         lineStyle: { color: '#16a34a', type: 'dashed', width: 1.5 },
         label: { formatter: 'Meta 100%', position: 'insideEndTop', color: '#16a34a', fontWeight: 'bold', fontSize: 11 },
         data: [{ yAxis: 100 }]
     };
+}
+
+// Ámbito que se está viendo (jurisdicción, municipio o unidad) para rotular la población meta
+function _rdaEtiquetaAmbito() {
+    const uni = document.getElementById('rdaFilterUnidad')?.value || '';
+    const muni = document.getElementById('rdaFilterMunicipio')?.value || '';
+    if (uni) {
+        const u = (_rdaCache.unidades || []).find(x => x.clues === uni);
+        return String(u?.nombre || uni).toUpperCase();
+    }
+    if (muni) return `MUNICIPIO DE ${muni.toUpperCase()}`;
+    return 'JURISDICCIÓN SANITARIA NO. 1';
 }
 
 // Constructor Dinámico de KPIs
@@ -929,7 +1061,7 @@ function renderKPIs(agg, esquema) {
                     barShadow = '0 0 10px rgba(16, 185, 129, 0.3)';
                 } else if (valNum >= 75) {
                     statusLabel = 'REGULAR (AVANCE MEDIO)';
-                    statusColor = '#d97706';
+                    statusColor = '#b45309';
                     barGrad = 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)';
                     barShadow = '0 0 10px rgba(245, 158, 11, 0.3)';
                 } else {
@@ -953,7 +1085,7 @@ function renderKPIs(agg, esquema) {
                 valText = valNum.toLocaleString('es-MX');
                 subText = 'dosis aplicadas en el periodo';
                 statusLabel = 'DOSIS APLICADAS';
-                statusColor = '#0284c7';
+                statusColor = '#0369a1';
                 barGrad = 'linear-gradient(90deg, #0284c7 0%, #0369a1 100%)';
                 barShadow = '0 0 10px rgba(2, 132, 199, 0.3)';
             }
@@ -983,8 +1115,8 @@ function renderKPIs(agg, esquema) {
                     </div>
                     <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2;">Población Meta Total</div>
                 </div>
-                <div style="font-size: 28px; font-weight: 900; color: #0f172a; letter-spacing: -0.03em; line-height: 1.1;">${valText} <span style="font-size: 12px; font-weight: 700; color: #94a3b8;">hab.</span></div>
-                <div style="font-size: 9.5px; font-weight: 900; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 2px;">JURISDICCIÓN SANITARIA NO. 1 (0-8 AÑOS)</div>
+                <div style="font-size: 28px; font-weight: 900; color: #0f172a; letter-spacing: -0.03em; line-height: 1.25;">${valText} <span style="font-size: 12px; font-weight: 700; color: #64748b;">hab.</span></div>
+                <div style="font-size: 10.5px; font-weight: 900; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 2px;">${_rdaEtiquetaAmbito()} (0-8 AÑOS)</div>
                 
                 <!-- BARRA MULTI-SEGMENTO DE PROPORCIÓN DE POBLACIÓN -->
                 <div style="margin: 10px 0 8px 0;">
@@ -998,21 +1130,21 @@ function renderKPIs(agg, esquema) {
 
                 <div style="display: grid; grid-template-columns: ${gridCols}; gap: 4px; border-top: 1px solid #f1f5f9; padding-top: 8px; margin-top: 4px;">
                     <div style="background: #f8fafc; padding: 5px 3px; border-radius: 8px; text-align: center; border: 1px solid #e2e8f0; min-width: 0; box-sizing: border-box;">
-                        <div style="font-size: 8.5px; font-weight: 800; color: #0d9488; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><1 Año</div>
-                        <div style="font-size: 10.5px; font-weight: 900; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${agg.pob_menor_1.toLocaleString('es-MX')}</div>
+                        <div style="font-size: 11px; font-weight: 800; color: #0f766e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><1 Año</div>
+                        <div style="font-size: 11px; font-weight: 900; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${agg.pob_menor_1.toLocaleString('es-MX')}</div>
                     </div>
                     <div style="background: #f8fafc; padding: 5px 3px; border-radius: 8px; text-align: center; border: 1px solid #e2e8f0; min-width: 0; box-sizing: border-box;">
-                        <div style="font-size: 8.5px; font-weight: 800; color: #0284c7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">1 Año</div>
-                        <div style="font-size: 10.5px; font-weight: 900; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${agg.pob_1_ano.toLocaleString('es-MX')}</div>
+                        <div style="font-size: 11px; font-weight: 800; color: #0369a1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">1 Año</div>
+                        <div style="font-size: 11px; font-weight: 900; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${agg.pob_1_ano.toLocaleString('es-MX')}</div>
                     </div>
                     <div style="background: #f8fafc; padding: 5px 3px; border-radius: 8px; text-align: center; border: 1px solid #e2e8f0; min-width: 0; box-sizing: border-box;">
-                        <div style="font-size: 8.5px; font-weight: 800; color: #7c3aed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">4 Años</div>
-                        <div style="font-size: 10.5px; font-weight: 900; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${agg.pob_4_anos.toLocaleString('es-MX')}</div>
+                        <div style="font-size: 11px; font-weight: 800; color: #6d28d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">4 Años</div>
+                        <div style="font-size: 11px; font-weight: 900; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${agg.pob_4_anos.toLocaleString('es-MX')}</div>
                     </div>
                     ${has6A ? `
                     <div style="background: #f8fafc; padding: 5px 3px; border-radius: 8px; text-align: center; border: 1px solid #e2e8f0; min-width: 0; box-sizing: border-box;">
-                        <div style="font-size: 8.5px; font-weight: 800; color: #e11d48; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">6 Años</div>
-                        <div style="font-size: 10.5px; font-weight: 900; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${(agg.pob_6_anos || 0).toLocaleString('es-MX')}</div>
+                        <div style="font-size: 11px; font-weight: 800; color: #be123c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">6 Años</div>
+                        <div style="font-size: 11px; font-weight: 900; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${(agg.pob_6_anos || 0).toLocaleString('es-MX')}</div>
                     </div>` : ''}
                 </div>
             `;
@@ -1031,16 +1163,16 @@ function renderKPIs(agg, esquema) {
                     </div>
                     <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2;">${k.label}</div>
                 </div>
-                <div style="font-size: 9.5px; font-weight: 900; color: #94a3b8; letter-spacing: 0.08em; text-transform: uppercase;">Avance de la meta</div>
-                <div style="font-size: 46px; font-weight: 900; color: ${statusColor}; letter-spacing: -0.04em; line-height: 1.05; font-variant-numeric: tabular-nums;">${valText}</div>
-                <div style="display:inline-block; margin-top:4px; font-size: 9.5px; font-weight: 900; color: ${statusColor}; letter-spacing: 0.05em; text-transform: uppercase;">${statusLabel}</div>
+                <div style="font-size: 11px; line-height: 1.3; font-weight: 900; color: #64748b; letter-spacing: 0.08em; text-transform: uppercase;">Avance de la meta</div>
+                <div style="font-size: 46px; font-weight: 900; color: ${statusColor}; letter-spacing: -0.02em; line-height: 1.25; padding-bottom: 8px;">${valText}</div>
+                <div style="display:block; margin-top:2px; line-height:1.3; font-size: 11px; font-weight: 900; color: ${statusColor}; letter-spacing: 0.05em; text-transform: uppercase;">${statusLabel}</div>
                 <div style="margin: 10px 0 2px 0;">
-                    <div style="width: 100%; height: 10px; background: rgba(15, 23, 42, 0.07); border-radius: 999px; overflow: hidden;">
+                    <div role="progressbar" aria-label="Avance de ${k.label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, valNum)}" aria-valuetext="${valNum} por ciento de la meta al corte" style="width: 100%; height: 10px; background: rgba(15, 23, 42, 0.07); border-radius: 999px; overflow: hidden;">
                         <div style="height: 100%; width: ${barPct}%; background: ${statusColor}; border-radius: 999px; transition: width 0.8s ease;"></div>
                     </div>
-                    <div style="display:flex; justify-content:space-between; font-size:9px; font-weight:800; color:#94a3b8; margin-top:3px;"><span>0%</span><span>Meta 100%</span></div>
+                    <div aria-hidden="true" style="display:flex; justify-content:space-between; font-size:10.5px; font-weight:800; color:#64748b; margin-top:3px;"><span>0%</span><span>Meta 100%</span></div>
                 </div>
-                ${sobre}${faltan}
+                <div style="min-height: 40px;">${sobre}${faltan}</div>
                 <div style="border-top: 1px solid #f1f5f9; margin-top: 10px; padding-top: 6px;">
                     ${fila(`Meta al corte (ene–${mesTxt.slice(0, 3).toLowerCase()})`, fmt(calc.meta), true)}
                     ${fila(calc.div > 1 ? `Aplicadas (equiv. ÷${calc.div})` : 'Aplicadas', fmt(calc.eq), true)}
@@ -1057,8 +1189,8 @@ function renderKPIs(agg, esquema) {
                     </div>
                     <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2;">${k.label}</div>
                 </div>
-                <div style="font-size: 28px; font-weight: 900; color: #0f172a; letter-spacing: -0.03em; line-height: 1.1;">${valText}</div>
-                <div style="font-size: 9.5px; font-weight: 900; color: ${statusColor}; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 2px;">${statusLabel}</div>
+                <div style="font-size: 28px; font-weight: 900; color: #0f172a; letter-spacing: -0.03em; line-height: 1.25; padding-bottom: 4px;">${valText}</div>
+                <div style="font-size: 11px; font-weight: 900; color: ${statusColor}; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 2px;">${statusLabel}</div>
                 
                 <!-- BARRA DE AVANCE MODERNA PREMIUM -->
                 <div style="margin: 10px 0 8px 0;">
@@ -1070,8 +1202,14 @@ function renderKPIs(agg, esquema) {
                 <div style="font-size: 11.5px; font-weight: 600; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 8px; margin-top: 4px;">${subText}</div>
             `;
         }
+        card.setAttribute('role', 'group');
+        card.setAttribute('aria-label', calc && esquema === 'basico'
+            ? `${k.label}: avance ${valNum} por ciento de la meta al corte, ${statusLabel.toLowerCase()}. Meta al corte ${Math.round(calc.meta).toLocaleString('es-MX')}, aplicadas equivalentes ${Math.round(calc.eq).toLocaleString('es-MX')}, población anual ${Math.round(calc.pob).toLocaleString('es-MX')}.`
+            : `${k.label}: ${valText}. ${subText}`);
         container.appendChild(card);
     });
+    container.setAttribute('role', 'group');
+    container.setAttribute('aria-label', 'Indicadores de avance del esquema');
 }
 
 // Chart.js Recycler: In-Place Doughnut update
@@ -1705,11 +1843,12 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                 grid: { left: '2%', right: '2%', bottom: '15%', top: '15%', containLabel: true },
                 xAxis: { type: 'category', data: tLabels, axisLabel: { color: '#0f172a', fontWeight: 'bold', fontFamily: 'Inter, sans-serif' }, axisLine: { lineStyle: { color: '#e2e8f0' } } },
                 yAxis: [
-                    { type: 'value', axisLabel: { color: '#94a3b8', fontFamily: 'Inter, sans-serif' }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } } },
+                    { type: 'value', axisLabel: { color: '#64748b', fontFamily: 'Inter, sans-serif' }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } } },
                     { type: 'value', axisLabel: { color: '#64748b', formatter: '{value}%', fontFamily: 'Inter, sans-serif' }, splitLine: { show: false } }
                 ],
                 series: eSeries
             }, true);
+            _rdaAlignAxes(_rdaCharts.total, eSeries);
         }
     }
 
@@ -1749,10 +1888,10 @@ function renderBarChart(fUnits, muniFilter, esquema) {
         animationEasing: 'cubicOut',
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: 'rgba(15, 23, 42, 0.9)', textStyle: { color: '#fff', fontFamily: 'Inter, sans-serif' }, borderWidth: 0, borderRadius: 12 },
         legend: { bottom: 0, icon: 'circle', show: isSingleUnit || isHorizontal, textStyle: { fontFamily: 'Inter, sans-serif', color: '#64748b', fontWeight: 'bold' } },
-        grid: { left: '2%', right: '2%', bottom: '15%', top: '15%', containLabel: true },
+        grid: { left: '2%', right: isHorizontal ? '6%' : '2%', bottom: isHorizontal ? '22%' : '15%', top: '15%', containLabel: true },
         xAxis: isHorizontal ? { type: 'value', name: esquema === 'basico' ? 'Avance de la meta (%)' : '', nameLocation: 'middle', nameGap: 28, nameTextStyle: { color: '#64748b', fontWeight: 'bold', fontFamily: 'Inter, sans-serif' }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } }, axisLabel: { fontFamily: 'Inter, sans-serif', formatter: esquema === 'basico' ? '{value}%' : '{value}' } } : { type: 'category', data: labels, axisLabel: { color: '#0f172a', fontWeight: 'bold', fontFamily: 'Inter, sans-serif' }, axisLine: { lineStyle: { color: '#e2e8f0' } } },
         yAxis: isHorizontal ? { type: 'category', data: labels, axisLabel: { color: '#0f172a', fontWeight: 'bold', fontFamily: 'Inter, sans-serif' }, inverse: true, axisLine: { lineStyle: { color: '#e2e8f0' } } } : [
-            { type: 'value', axisLabel: { color: '#94a3b8', fontFamily: 'Inter, sans-serif' }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } } },
+            { type: 'value', axisLabel: { color: '#64748b', fontFamily: 'Inter, sans-serif' }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } } },
             { type: 'value', axisLabel: { color: '#64748b', formatter: '{value}%', fontFamily: 'Inter, sans-serif' }, splitLine: { show: false } }
         ],
         series: eSeries
@@ -1760,6 +1899,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
 
     _rdaCharts.b.resize();
     _rdaCharts.b.setOption(eOptions, true);
+    if (!isHorizontal) _rdaAlignAxes(_rdaCharts.b, eSeries);
 
     // Ensure ECharts resizes when window resizes
     if (!window._rdaEchartsResizeAttached) {
@@ -1822,7 +1962,8 @@ function renderTable(fUnits, esquema, agg) {
     }
 
     // "Meta" sólo es visible para el esquema "basico"
-    const showMeta = (esquema === 'basico' && _rdaState.vistaBasico !== 'biologico');
+    const showMeta = (esquema === 'basico');
+    const vistaBio = (esquema === 'basico' && _rdaState.vistaBasico === 'biologico');
     // Proporciones fijas de columnas
     const numV = vCols.length;
     const colGroupHTML = `
@@ -1831,8 +1972,8 @@ function renderTable(fUnits, esquema, agg) {
             <col style="width: 220px;">
             <col style="width: 150px;">
             ${vCols.map(() => `<col style="width: 110px;">`).join('')}
-            ${showMeta ? `<col style="width: 95px;">` : ''}
-            <col style="width: 95px;">
+            ${showMeta ? `<col style="width: 130px;">` : ''}
+            <col style="width: 140px;">
         </colgroup>
     `;
 
@@ -1842,8 +1983,8 @@ function renderTable(fUnits, esquema, agg) {
             <th style="padding: 12px; text-align: left;" data-sort="nombre">UNIDAD MÉDICA</th>
             <th style="padding: 12px; text-align: left;" data-sort="municipio">MUNICIPIO</th>
             ${vCols.map(c => `<th style="padding: 12px; text-align: center;" data-sort="${c.s}">${c.n}</th>`).join('')}
-            ${showMeta ? `<th style="padding: 12px; text-align: center;" data-sort="meta">META AL CORTE</th>` : ''}
-            <th style="padding: 12px; text-align: center;" data-sort="dosis">${showMeta ? 'APLICADAS (EQUIV.)' : 'DOSIS'}</th>
+            ${showMeta ? `<th style="padding: 12px; text-align: center;" data-sort="meta">${vistaBio ? 'POBLACIÓN ANUAL' : 'META AL CORTE'}</th>` : ''}
+            <th style="padding: 12px; text-align: center;" data-sort="dosis">${vistaBio ? 'DOSIS REGISTRADAS' : (showMeta ? 'APLICADAS (EQUIV.)' : 'DOSIS')}</th>
         </tr>
     `;
 
@@ -1853,13 +1994,31 @@ function renderTable(fUnits, esquema, agg) {
     thead.innerHTML = headerColsHTML;
 
     thead.querySelectorAll('th[data-sort]').forEach(th => {
-        th.addEventListener('click', () => {
+        const ordenar = async () => {
             const col = th.dataset.sort;
             if (_rdaState.sortCol === col) _rdaState.sortAsc = !_rdaState.sortAsc;
             else { _rdaState.sortCol = col; _rdaState.sortAsc = false; }
-            renderDashboard();
-        });
+            await renderDashboard();
+            // renderDashboard reconstruye la cabecera: devolver el foco a la misma columna
+            const nuevo = document.querySelector(`#rdaDetailTable th[data-sort="${col}"]`);
+            if (nuevo) nuevo.focus();
+        };
+        th.addEventListener('click', ordenar);
+        th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ordenar(); } });
+        th.setAttribute('tabindex', '0');
+        th.setAttribute('scope', 'col');
+        th.setAttribute('title', 'Ordenar por esta columna');
+        th.setAttribute('aria-sort', _rdaState.sortCol === th.dataset.sort ? (_rdaState.sortAsc ? 'ascending' : 'descending') : 'none');
     });
+    table.setAttribute('aria-label', esquema === 'basico'
+        ? 'Detalle por unidad médica: porcentaje de avance por grupo de edad, meta y dosis'
+        : 'Detalle por unidad médica: dosis aplicadas por biológico');
+    const regionTabla = table.parentElement;
+    if (regionTabla && regionTabla.id === 'rdaTableContainer') {
+        regionTabla.setAttribute('role', 'region');
+        regionTabla.setAttribute('tabindex', '0');
+        regionTabla.setAttribute('aria-label', 'Tabla de detalle por unidad médica, desplazable con las flechas del teclado');
+    }
 
     // 2. Mapear filas
     const rows = fUnits.map(u => {
@@ -1889,6 +2048,7 @@ function renderTable(fUnits, esquema, agg) {
                 if (_rdaCache.anio === 2025) {
                     res.v10 = factorSeis > 0 ? Math.round(((u.srp_6_dosis || 0) / factorSeis * 100) * 10) / 10 : 0;
                 }
+                res.meta = res.pob;
                 res.dosis = (u.bcg_dosis || 0) + (u.hepb_0_7_dosis || 0) + (u.hexa_1_dosis || 0) + (u.hexa_2_dosis || 0) + (u.hexa_3_dosis || 0) + (u.rota_2_dosis || 0) + (u.neumo_1_dosis || 0) + (u.neumo_2_dosis || 0) + (u.neumo_c1_dosis || 0) + (u.neumo_c2_dosis || 0) + (u.hexa_ref_dosis || 0) + (u.neumo_ref_dosis || 0) + (u.neumo_c3_dosis || 0) + (u.srp_1_dosis || 0) + (u.srp_2_dosis || 0) + (u.dpt_4_dosis || 0) + (u.srp_6_dosis || 0);
             } else {
                 const dosisM1 = (u.bcg_dosis || 0) + (u.hepb_0_7_dosis || 0) + (u.hexa_3_dosis || 0) + (u.rota_2_dosis || 0) + (u.neumo_2_dosis || 0);
@@ -1950,14 +2110,14 @@ function renderTable(fUnits, esquema, agg) {
         });
     }
 
-    if (countEl) countEl.textContent = `${rows.length} unidades`;
+    if (countEl) countEl.textContent = `${rows.length} ${rows.length === 1 ? 'unidad' : 'unidades'}`;
     
     const badge = (v, vName) => {
         if (esquema !== 'basico') {
             return `
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <div style="font-size: 12.5px; font-weight: 900; color: #0f172a; line-height: 1.2;">${v ? v.toLocaleString('es-MX') : '0'}</div>
-                    <div style="font-size: 9px; font-weight: 800; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.1; margin-top: 1px;">DOSIS</div>
+                    <div style="font-size: 10.5px; font-weight: 800; color: #475569; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.2; margin-top: 1px;">DOSIS</div>
                 </div>
             `;
         }
@@ -1981,12 +2141,12 @@ function renderTable(fUnits, esquema, agg) {
         const barPct = Math.max(0, Math.min(100, pct));
 
         return `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;" title="${statusText}">
+            <div role="img" aria-label="${vName}: ${pct} por ciento, ${statusText.toLowerCase()}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;" title="${statusText}">
                 <div style="display: inline-flex; align-items: center; gap: 5px;">
                     <span style="display: flex; align-items: center; justify-content: center; color: ${statusColor}; flex-shrink: 0;">
                         <svg viewBox="0 0 24 24" width="13" height="13" style="fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;">${statusIcon}</svg>
                     </span>
-                    <span style="font-size: 13px; font-weight: 900; color: #0f172a; line-height: 1.2;">${pct}%</span>
+                    <span style="font-size: 13px; font-weight: 900; color: #0f172a; line-height: 1.5;">${pct}%</span>
                 </div>
                 <span style="display: block; width: 52px; height: 4px; border-radius: 2px; background: #eef1f6; overflow: hidden;">
                     <span style="display: block; height: 100%; border-radius: 2px; width: ${barPct}%; background: ${statusColor};"></span>
@@ -2025,7 +2185,8 @@ function renderTable(fUnits, esquema, agg) {
     const canSeeJurisdictionTotal = ['ADMIN', 'JURISDICCIONAL', 'VISUALIZADOR_JURISDICCIONAL'].includes(roleForTotal);
     const canSeeMunicipalTotal = roleForTotal === 'MUNICIPAL';
     const canSeeCaravanasTotal = roleForTotal === 'CARAVANAS';
-    if ((canSeeJurisdictionTotal || canSeeMunicipalTotal || canSeeCaravanasTotal) && rows.length > 0) {
+    // Sin fila de total cuando se ve una sola unidad: el total sería la misma fila repetida
+    if ((canSeeJurisdictionTotal || canSeeMunicipalTotal || canSeeCaravanasTotal) && rows.length > 1 && fUnits.length > 1) {
         let totalRowLabel;
         if (canSeeMunicipalTotal) {
             totalRowLabel = `TOTAL MUNICIPAL (${(rows[0]?.municipio || '').toUpperCase()})`;
@@ -2039,23 +2200,30 @@ function renderTable(fUnits, esquema, agg) {
         }
         const jurPob = rows.reduce((sum, r) => sum + (r.meta || 0), 0);
         const jurDosis = rows.reduce((sum, r) => sum + (r.dosis || 0), 0);
-        
-        // Usar los porcentajes de cobertura globales calculados para la Jurisdicción en agg (no promedio simple de unidades)
+
+        // Porcentajes globales de la jurisdicción/municipio (no promedio simple de unidades)
+        const bio = (_rdaState.vistaBasico === 'biologico');
+        const mapaBasico = bio
+            ? { v1: agg.cobertura_bcg, v2: agg.cobertura_hepb, v3: agg.cobertura_rota, v4: agg.cobertura_hexa_m1, v5: agg.cobertura_hexa_uno,
+                v6: agg.cobertura_neumo_m1, v7: agg.cobertura_neumo_uno, v8: agg.cobertura_srp, v9: agg.cobertura_dpt, v10: agg.cobertura_seis }
+            : { v1: agg.cobertura_menor1, v2: agg.cobertura_uno, v3: agg.cobertura_cuatro, v4: agg.cobertura_seis };
         const jurVCols = vCols.map(c => {
-            if (c.s === 'v1') return agg.cobertura_menor1;
-            if (c.s === 'v2') return agg.cobertura_uno;
-            if (c.s === 'v3') return agg.cobertura_cuatro;
-            if (c.s === 'v4' && _rdaCache.anio === 2025) return agg.cobertura_seis;
-            
-            const validRows = rows.filter(r => r[c.s] !== undefined && !isNaN(r[c.s]));
-            if (validRows.length === 0) return '—';
-            const sumVal = validRows.reduce((s, r) => s + r[c.s], 0);
-            return Math.round((sumVal / validRows.length) * 10) / 10;
+            if (esquema === 'basico') return mapaBasico[c.s] ?? '—';
+            // Esquemas de solo dosis: el total es la SUMA de las unidades (antes se mostraba el promedio)
+            return rows.reduce((sum, r) => sum + (r[c.s] || 0), 0);
         });
 
+        const muniFiltro = document.getElementById('rdaFilterMunicipio')?.value || '';
+        const textoAmbito = (!canSeeMunicipalTotal && !canSeeCaravanasTotal && muniFiltro)
+            ? `MUNICIPAL · ${muniFiltro.toUpperCase()}`
+            : canSeeMunicipalTotal
+            ? `MUNICIPAL · ${(rows[0]?.municipio || '').toUpperCase()}`
+            : (canSeeCaravanasTotal ? totalRowLabel.replace('TOTAL ', '').replace(/\s*\(JURISDICCIÓN SANITARIA 1\)/, '') : 'JURISDICCIONAL · JS 1');
         html += `
-            <tr style="background-color:#f1f5f9; color:#0f172a; font-weight:900; border-top:2px solid #cbd5e1; border-bottom:2px solid #cbd5e1;">
-                <td colspan="3" style="padding:14px 24px; font-size:12px; uppercase tracking-wider; color:#0f172a; font-weight:900;">${totalRowLabel}</td>
+            <tr data-rda-total="1" class="rda-fila-total">
+                <td style="padding:14px 24px; font-size:12px; font-weight:900; color:#0f172a;">TOTAL</td>
+                <td style="padding:14px 24px; font-size:11px; font-weight:800; color:#334155; white-space:normal; line-height:1.3;">${textoAmbito}</td>
+                <td style="padding:14px 24px;"></td>
                 ${vCols.map((c, idx) => `<td style="padding:12px 10px; text-align:center;">${badge(jurVCols[idx], c.n)}</td>`).join('')}
                 ${showMeta ? `<td style="padding:14px 24px; text-align:center; font-size:12px; font-weight:900; color:#0369a1;">${jurPob.toLocaleString('es-MX')}</td>` : ''}
                 <td style="padding:14px 24px; text-align:center; font-size:12px; font-weight:900; color:#0f766e;">${jurDosis.toLocaleString('es-MX')}</td>
@@ -2074,6 +2242,36 @@ function _dateStr() { return new Date().toISOString().slice(0,10).replace(/-/g,'
 function _safeName(n) { return (n||'').replace(/[^a-zA-Z0-9]/g,'_').substring(0,40); }
 
 // Motor de exportación a PDF (Premium Vectorial - Direct Render)
+// PDF paginado a partir de la captura del panel (vistas sin tabla de detalle)
+async function _rdaPdfDesdeCaptura(jsPDF, nombreArchivo, devolverBlob) {
+    const content = document.getElementById('rdaDashboardContent');
+    if (!content) throw new Error('Contenido del panel no encontrado.');
+    const canvas = await _captureRdaContentAsCanvas(content, 1.6);
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+    const pageW = 215.9, pageH = 279.4, margin = 10, footer = 10;
+    const imgW = pageW - margin * 2;
+    const mmPorPx = imgW / canvas.width;
+    const sliceHpx = Math.floor((pageH - margin - footer - 4) / mmPorPx);
+    const paginas = Math.max(1, Math.ceil(canvas.height / sliceHpx));
+    for (let i = 0; i < paginas; i++) {
+        if (i > 0) doc.addPage();
+        const y0 = i * sliceHpx;
+        const h = Math.min(sliceHpx, canvas.height - y0);
+        const tmp = document.createElement('canvas');
+        tmp.width = canvas.width; tmp.height = h;
+        const ctx = tmp.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, tmp.width, tmp.height);
+        ctx.drawImage(canvas, 0, y0, canvas.width, h, 0, 0, canvas.width, h);
+        doc.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, imgW, h * mmPorPx, undefined, 'FAST');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+        doc.text(`REPORTE GENERADO EL ${new Date().toLocaleString('es-MX')} — INTELIGENCIA OPERATIVA JS1`, margin, pageH - 6);
+        doc.text(`Página ${i + 1} de ${paginas}`, pageW - margin, pageH - 6, { align: 'right' });
+    }
+    if (devolverBlob) return doc.output('blob');
+    doc.save(nombreArchivo);
+    return true;
+}
+
 async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob = false) {
     return new Promise(async (resolve, reject) => {
         try {
@@ -2196,14 +2394,23 @@ async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob =
                     return resolve(true);
                 }
             }
-            if (!tablaOriginal) return reject("Tabla de datos no encontrada.");
+            if (!tablaOriginal) {
+                // Vistas sin tabla de detalle (Meta-Logro Influenza, Deserción de Esquema): el PDF se arma
+                // con la captura del propio panel (incluye el membrete institucional) paginada en Carta.
+                const blobCaptura = await _rdaPdfDesdeCaptura(jsPDF, nombreArchivo, devolverBlob);
+                return resolve(blobCaptura);
+            }
 
             const tableHeaders = Array.from(tablaOriginal.querySelectorAll('thead th'))
                 .map(th => th.innerText.replace(/[↕\n\r]/g, '').trim());
 
-            const tableRowsRaw = Array.from(tablaOriginal.querySelectorAll('tbody tr')).map(tr => {
+            const trsDom = Array.from(tablaOriginal.querySelectorAll('tbody tr'));
+            const trTotal = trsDom.find(tr => tr.dataset.rdaTotal);
+            const trsDatos = trsDom.filter(tr => !tr.dataset.rdaTotal);
+            const tableRowsRaw = trsDatos.map(tr => {
                 return Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
             });
+            const totalCeldas = trTotal ? Array.from(trTotal.querySelectorAll('td')).map(td => td.innerText.trim()) : null;
 
             // Lógica Universal: Agrupar por Unidad y Municipio
             const colsLen = tableHeaders.length - 3;
@@ -2257,6 +2464,14 @@ async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob =
                 
                 currentBody.push(row.slice(3));
             });
+            if (totalCeldas && !isSingleUnit) {
+                currentBody.push([{
+                    content: `TOTAL ${(totalCeldas[1] || '').toUpperCase()}`,
+                    colSpan: colsLen,
+                    styles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'left' }
+                }]);
+                currentBody.push(totalCeldas.slice(3));
+            }
             if (currentBody.length > 0) {
                 tablesGrouped.push({ muni: currentGroupName, rows: currentBody });
             }
@@ -2385,7 +2600,7 @@ async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob =
             let numPorcentajes = 0;
             let sumaPorcentajes = 0;
             
-            Array.from(tablaOriginal.querySelectorAll('tbody tr')).forEach(tr => {
+            trsDatos.forEach(tr => {
                 const tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
                 tds.forEach(cText => {
                     if (cText.includes('%')) {
@@ -2411,7 +2626,7 @@ async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob =
             let kpiPob = '';
             let kpiPobLabel = '';
             if (_rdaState.esquema === 'basico') {
-                kpiPobLabel = 'POBLACIÓN META';
+                kpiPobLabel = _rdaState.vistaBasico === 'biologico' ? 'POBLACIÓN ANUAL' : 'META AL CORTE';
                 kpiPob = totalMeta.toLocaleString('es-MX');
             } else {
                 kpiPobLabel = tableRowsRaw.length === 1 ? 'REPORTES ENCONTRADOS' : 'UNIDADES ANALIZADAS';
@@ -2442,7 +2657,7 @@ async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob =
             
             // Colores vibrantes y originales
             drawModernKpiCard(marginX, currentY, kpiWidth, 22, kpiPobLabel, kpiPob, [15, 23, 42], [30, 41, 59]); // Dark Slate
-            drawModernKpiCard(marginX + kpiWidth + kpiGap, currentY, kpiWidth, 22, "TOTAL DOSIS APLICADAS", kpiDosis, [13, 148, 136], [17, 94, 89]); // Emerald/Teal
+            drawModernKpiCard(marginX + kpiWidth + kpiGap, currentY, kpiWidth, 22, (_rdaState.esquema === 'basico' && _rdaState.vistaBasico !== 'biologico') ? "DOSIS APLICADAS (EQUIV.)" : "TOTAL DOSIS APLICADAS", kpiDosis, [13, 148, 136], [17, 94, 89]); // Emerald/Teal
             drawModernKpiCard(marginX + (kpiWidth * 2) + (kpiGap * 2), currentY, kpiWidth, 22, "COBERTURA GLOBAL PROM.", kpiPromedio, [99, 102, 241], [79, 70, 229]); // Indigo
 
             currentY += 28;
@@ -2632,7 +2847,7 @@ const _getComparativeFilename = (ext, muniVal, uniVal) => {
 async function exportIndividualPDF() {
     const muni = document.getElementById('rdaFilterMunicipio')?.value || '';
     const uni = document.getElementById('rdaFilterUnidad')?.value || '';
-    let fname = `Indicadores_RDA2026_${_tLabel()}_${_dateStr()}.pdf`;
+    let fname = `Indicadores_RDA${_rdaCache.anio || 2026}_${_tLabel()}_${_dateStr()}.pdf`;
 
     if (_rdaState.esquema === 'comparativa_multianual') {
         fname = _getComparativeFilename('pdf', muni, uni);
@@ -2672,7 +2887,11 @@ const _applyExportFixesToRoot = (clonedContent) => {
         clonedContent.style.overflow = 'visible';
         clonedContent.style.maxHeight = 'none';
         clonedContent.style.height = 'auto';
-        clonedContent.style.width = '1280px';
+        // Ancho base 1280; si la tabla (p. ej. vista "Por Biológico", 14 columnas) es más ancha, se amplía
+        // para que la imagen no recorte las últimas columnas.
+        const _tablaOrig = document.getElementById('rdaDetailTable');
+        const _anchoTabla = _tablaOrig ? _tablaOrig.scrollWidth + 64 + 2 : 0;
+        clonedContent.style.width = Math.max(1280, _anchoTabla) + 'px';
         clonedContent.style.boxSizing = 'border-box';
         clonedContent.style.padding = '32px';
         clonedContent.style.background = '#ffffff';
@@ -2724,7 +2943,8 @@ const _applyExportFixesToRoot = (clonedContent) => {
                 embarazadas: 'Embarazadas',
                 invernal: 'Temporada Invernal',
                 comparativa_multianual: 'Comparativa Multianual (2025 vs 2026)',
-                meta_logro_influenza: 'Cobertura e Indicadores de Influenza y COVID-19'
+                meta_logro_influenza: 'Cobertura e Indicadores de Influenza y COVID-19',
+                abandono_esquema: 'Índice de Deserción de Esquema'
             };
             const esquemaLabel = esquemaLabelMap[esquema] || 'Indicadores de Salud';
             const maxMesName = MONTH_NAMES[(_rdaCache.maxMes || 12) - 1] || 'Final';
@@ -2764,7 +2984,7 @@ const _applyExportFixesToRoot = (clonedContent) => {
                         SECRETARÍA DE SALUD DEL ESTADO DE QUERÉTARO — JURISDICCIÓN SANITARIA NO. 1
                     </div>
                     <div style="font-size: 19px; font-weight: 900; letter-spacing: -0.02em; color: #ffffff; line-height: 1.2;">
-                        EVALUACIÓN DE INDICADORES DE COBERTURA VACUNAL 2026
+                        EVALUACIÓN DE INDICADORES DE COBERTURA VACUNAL ${_rdaCache.anio || 2026}
                     </div>
                     <div style="font-size: 11.5px; color: #94a3b8; font-weight: 600; margin-top: 2px;">
                         FECHA Y HORA DE EMISIÓN: <span style="color: #f1f5f9; font-weight: 700;">${fechaStr}</span>
@@ -2826,6 +3046,16 @@ const _applyExportFixesToRoot = (clonedContent) => {
             el.scrollLeft = 0;
         });
 
+        // La tabla de detalle SIEMPRE se exporta completa. El PASO 1 salta los contenedores que traen
+        // <svg> (los iconos de estado de cada celda lo son), así que el contenedor conservaba
+        // max-height 540px + scroll y la imagen salía con solo ~10 filas, sin la fila de total.
+        const contTabla = clonedContent.querySelector('#rdaTableContainer');
+        if (contTabla) {
+            ['overflow', 'overflow-x', 'overflow-y'].forEach(pr => contTabla.style.setProperty(pr, 'visible', 'important'));
+            contTabla.style.setProperty('max-height', 'none', 'important');
+            contTabla.style.setProperty('height', 'auto', 'important');
+        }
+
         // === PASO 2: Sticky via getComputedStyle en el iframe ===
         const defaultView = clonedDoc.defaultView || window;
         clonedContent.querySelectorAll('*').forEach(el => {
@@ -2834,6 +3064,8 @@ const _applyExportFixesToRoot = (clonedContent) => {
                 if (cs.position === 'sticky') {
                     el.style.setProperty('position', 'relative', 'important');
                     el.style.setProperty('top', 'auto', 'important');
+                    // Sin esto las columnas fijas (CLUES/Unidad) quedaban corridas a la derecha y tapaban la de Municipio
+                    el.style.setProperty('left', 'auto', 'important');
                 }
                 // También quitar overflow oculto en contenedores sin gráficas detectados via computedStyle
                 if ((cs.overflow === 'hidden' || cs.overflowY === 'hidden' || cs.overflowX === 'hidden') && !el.querySelector('canvas, svg')) {
@@ -2893,13 +3125,18 @@ const _applyExportFixesToRoot = (clonedContent) => {
 
         // Chips de porcentaje/cobertura en celdas de tabla (span con border-radius inline)
         clonedContent.querySelectorAll('td span[style*="border-radius"], td div[style*="border-radius"]').forEach(clonedEl => {
+            // Las barritas de avance de la tabla son <span> sin texto: forzarlas a inline-block
+            // con line-height las convertía en bloques gigantes de color en la imagen exportada.
+            if (!clonedEl.textContent.trim()) return;
             centerChipText(clonedEl);
         });
 
         // Chips del #rdaExportHeader
         clonedContent.querySelectorAll('#rdaExportHeader span[style], #rdaExportHeader div[style]').forEach(clonedEl => {
             const inSt = clonedEl.getAttribute('style') || '';
-            if (inSt.includes('border-radius') || inSt.includes('padding')) {
+            // Solo hojas con borde redondeado (chips reales): aplicar inline-block/nowrap a las
+            // columnas y cuadrículas del membrete las aplastaba en una sola línea.
+            if (clonedEl.children.length === 0 && inSt.includes('border-radius')) {
                 centerChipText(clonedEl);
             }
         });
@@ -2951,8 +3188,22 @@ const _prepareClonedDocForHDImage = (clonedDoc, contentEl) => {
 // resultado mostraba el texto crudo en vez de los íconos, y el encabezado con el layout roto. No
 // lanzaba ningún error de JS (por eso el intento de respaldo automático nunca se activaba), así
 // que se optó por quedarse con html2canvas, que sí renderiza estos íconos correctamente.
+// Congela las gráficas ECharts en su estado final: si se exporta mientras animan (p. ej. justo
+// después de cambiar de esquema o filtro) el lienzo se copia a medias o vacío.
+async function _rdaAsentarGraficas() {
+    Object.values(_rdaCharts).forEach(ch => {
+        if (!ch || typeof ch.getOption !== 'function') return;
+        try {
+            const o = ch.getOption();
+            ch.setOption({ ...o, animation: false, animationDuration: 0, animationDurationUpdate: 0 }, true);
+        } catch (e) { /* gráfica ya liberada */ }
+    });
+    await new Promise(r => requestAnimationFrame(() => setTimeout(r, 80)));
+}
+
 async function _captureRdaContentAsCanvas(content, scale) {
     if (window.ensureLibsLoaded) await window.ensureLibsLoaded('html2canvas');
+    await _rdaAsentarGraficas();
     return await html2canvas(content, {
         scale,
         useCORS: true,
@@ -2983,7 +3234,7 @@ async function exportDashboardImagen(format = 'png') {
     const muni = document.getElementById('rdaFilterMunicipio')?.value || '';
     const uni = document.getElementById('rdaFilterUnidad')?.value || '';
     const ext = format.toLowerCase() === 'jpeg' ? 'jpg' : 'png';
-    let fname = `Indicadores_RDA2026_${_tLabel()}_${_dateStr()}.${ext}`;
+    let fname = `Indicadores_RDA${_rdaCache.anio || 2026}_${_tLabel()}_${_dateStr()}.${ext}`;
 
     if (_rdaState.esquema === 'comparativa_multianual') {
         fname = _getComparativeFilename(ext, muni, uni);
@@ -3231,7 +3482,7 @@ async function exportMasivoZIP(mode = 'pdf') {
         const link = document.createElement('a');
         link.href = URL.createObjectURL(zipBlob);
         const tagMode = isJpeg ? 'JPEG' : (mode === 'png' ? 'PNG_HD' : 'PDF');
-        link.download = `Indicadores_RDA2026_${tagMode}_${_safeName(originalMuni) || 'JS1'}_${_dateStr()}.zip`;
+        link.download = `Indicadores_RDA${_rdaCache.anio || 2026}_${tagMode}_${_safeName(originalMuni) || 'JS1'}_${_dateStr()}.zip`;
         link.click();
         URL.revokeObjectURL(link.href);
 
@@ -4924,6 +5175,7 @@ async function renderAbandonoEsquema(muniFilter, uniFilter) {
         });
         worstDrops.sort((a, b) => b.dropPct - a.dropPct);
 
+        const resumenGrafica = 'Gráfica de barras con el total de dosis de cada paso por cadena. ' + chainTotals.map(c => c.label + ': ' + c.steps.map((st, i) => st.label + ' ' + c.totals[i].toLocaleString('es-MX')).join(', ')).join('. ');
         const scopeLabel = uniFilter ? (rows[0]?.nombre || uniFilter) : (muniFilter ? `Municipio: ${muniFilter}` : 'Jurisdicción Sanitaria 1 (4 Municipios)');
 
         const chainRowsHtml = chainTotals.map(chain => {
@@ -4935,12 +5187,12 @@ async function renderAbandonoEsquema(muniFilter, uniFilter) {
                 return `
                     <td style="text-align:center; padding:8px 10px;">
                         <div style="font-weight:800; font-size:14px; color:#0f172a;">${total.toLocaleString('es-MX')}</div>
-                        ${desercion !== null ? `<div style="font-size:10.5px; font-weight:700; color:${rate < 70 ? '#dc2626' : rate < 90 ? '#d97706' : '#16a34a'};">Deserción: ${desercion.toFixed(1)}%</div>` : '<div style="font-size:10.5px; color:#94a3b8;">Base (Dosis 1)</div>'}
+                        ${(i > 0 && !prevTotal) ? '<div style="font-size:11.5px; font-weight:700; color:#64748b;">Sin dosis previas</div>' : desercion !== null ? `<div style="font-size:11.5px; font-weight:800; color:${rate < 70 ? '#dc2626' : rate < 90 ? '#b45309' : '#15803d'};">Deserción: ${desercion.toFixed(1)}%</div>` : '<div style="font-size:11.5px; font-weight:700; color:#64748b;">Base (Dosis 1)</div>'}
                     </td>`;
             }).join('');
             return `
                 <tr style="border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:8px 10px; font-weight:800; font-size:12.5px; color:${chain.color};">${chain.label}</td>
+                    <td style="padding:8px 10px; vertical-align:middle; font-weight:800; font-size:12.5px; color:${({ '#d97706': '#b45309', '#f59e0b': '#b45309', '#16a34a': '#15803d' })[chain.color] || chain.color};">${chain.label}</td>
                     ${stepsHtml}
                     ${chain.steps.length < 4 ? '<td></td>'.repeat(4 - chain.steps.length) : ''}
                 </tr>`;
@@ -4948,16 +5200,16 @@ async function renderAbandonoEsquema(muniFilter, uniFilter) {
 
         const worstDropsHtml = worstDrops.slice(0, 30).map(w => `
             <tr style="border-bottom:1px solid #f1f5f9;">
-                <td style="padding:7px 10px; font-size:12px; color:#475569;">${w.municipio || ''}</td>
+                <td style="padding:7px 10px; font-size:12.5px; color:#475569;">${w.municipio || ''}</td>
                 <td style="padding:7px 10px; font-size:12.5px; font-weight:700; color:#0f172a;">${w.unidad || w.clues}</td>
-                <td style="padding:7px 10px; font-size:12px; color:#475569;">${w.chain}: ${w.from} → ${w.to}</td>
-                <td style="padding:7px 10px; font-size:12px; color:#475569; text-align:center;">${w.prevVal} → ${w.curVal}</td>
-                <td style="padding:7px 10px; text-align:center;"><span style="font-weight:800; font-size:12.5px; color:${w.dropPct >= 50 ? '#dc2626' : '#d97706'};">-${w.dropPct.toFixed(1)}%</span></td>
+                <td style="padding:7px 10px; font-size:12.5px; color:#475569;">${w.chain}: ${w.from} → ${w.to}</td>
+                <td style="padding:7px 10px; font-size:12.5px; color:#475569; text-align:center;">${w.prevVal} → ${w.curVal}</td>
+                <td style="padding:7px 10px; text-align:center;"><span style="font-weight:800; font-size:12.5px; color:${w.dropPct >= 50 ? '#dc2626' : '#b45309'};">-${w.dropPct.toFixed(1)}%</span></td>
             </tr>`).join('');
 
         container.innerHTML = `
             <div style="padding:24px;">
-                <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:14px; padding:14px 18px; margin-bottom:20px; display:flex; gap:12px; align-items:flex-start;">
+                <div role="note" style="background:#fffbeb; border:1px solid #fde68a; border-radius:14px; padding:14px 18px; margin-bottom:20px; display:flex; gap:12px; align-items:flex-start;">
                     <span class="material-symbols-rounded" style="color:#d97706; font-size:22px;">info</span>
                     <div style="font-size:12.5px; font-weight:700; color:#78350f; line-height:1.5;">
                         Índice de deserción según la metodología de supervisión del <strong>Manual de Vacunación 2021</strong>
@@ -4972,37 +5224,37 @@ async function renderAbandonoEsquema(muniFilter, uniFilter) {
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                     <div>
                         <h3 style="margin:0; font-size:16px; font-weight:900; color:#0f172a;">Índice de Deserción por Cadena de Dosis</h3>
-                        <span style="font-size:12px; font-weight:700; color:#64748b;">${scopeLabel} · ${anio}, Enero a ${MONTH_NAMES[maxMes - 1] || maxMes}</span>
+                        <span style="font-size:12px; font-weight:700; color:#475569;">${scopeLabel} · ${anio}, Enero a ${MONTH_NAMES[maxMes - 1] || maxMes}</span>
                     </div>
                 </div>
 
                 <div style="background:#fff; border:1px solid #e2e8f0; border-radius:16px; overflow:hidden; margin-bottom:16px;">
-                    <table style="width:100%; border-collapse:collapse;">
+                    <table aria-label="Dosis por paso de cada cadena y su deserción respecto al paso anterior" style="width:100%; border-collapse:collapse;">
                         <thead>
                             <tr style="background:#f8fafc;">
-                                <th style="text-align:left; padding:8px 10px; font-size:10.5px; font-weight:800; color:#64748b; text-transform:uppercase;">Cadena</th>
-                                <th style="text-align:center; padding:8px 10px; font-size:10.5px; font-weight:800; color:#64748b; text-transform:uppercase;">Paso 1</th>
-                                <th style="text-align:center; padding:8px 10px; font-size:10.5px; font-weight:800; color:#64748b; text-transform:uppercase;">Paso 2</th>
-                                <th style="text-align:center; padding:8px 10px; font-size:10.5px; font-weight:800; color:#64748b; text-transform:uppercase;">Paso 3</th>
-                                <th style="text-align:center; padding:8px 10px; font-size:10.5px; font-weight:800; color:#64748b; text-transform:uppercase;">Paso 4</th>
+                                <th scope="col" style="text-align:left; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Cadena</th>
+                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Paso 1</th>
+                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Paso 2</th>
+                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Paso 3</th>
+                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Paso 4</th>
                             </tr>
                         </thead>
                         <tbody>${chainRowsHtml}</tbody>
                     </table>
                 </div>
 
-                <div id="abandonoChartContainer" style="width:100%; height:360px; background:#fff; border:1px solid #e2e8f0; border-radius:16px; margin-bottom:16px;"></div>
+                <div id="abandonoChartContainer" role="img" aria-label="${resumenGrafica}" style="width:100%; height:360px; background:#fff; border:1px solid #e2e8f0; border-radius:16px; margin-bottom:16px;"></div>
 
                 <h4 style="margin:0 0 10px; font-size:14px; font-weight:900; color:#0f172a;">Mayor índice de deserción por unidad (Top 30)</h4>
                 <div style="background:#fff; border:1px solid #e2e8f0; border-radius:16px; overflow:hidden;">
-                    <table style="width:100%; border-collapse:collapse;">
+                    <table aria-label="Unidades con mayor deserción entre dosis" style="width:100%; border-collapse:collapse;">
                         <thead>
                             <tr style="background:#f8fafc;">
-                                <th style="text-align:left; padding:8px 10px; font-size:10.5px; font-weight:800; color:#64748b; text-transform:uppercase;">Municipio</th>
-                                <th style="text-align:left; padding:8px 10px; font-size:10.5px; font-weight:800; color:#64748b; text-transform:uppercase;">Unidad</th>
-                                <th style="text-align:left; padding:8px 10px; font-size:10.5px; font-weight:800; color:#64748b; text-transform:uppercase;">Paso con mayor deserción</th>
-                                <th style="text-align:center; padding:8px 10px; font-size:10.5px; font-weight:800; color:#64748b; text-transform:uppercase;">Dosis</th>
-                                <th style="text-align:center; padding:8px 10px; font-size:10.5px; font-weight:800; color:#64748b; text-transform:uppercase;">Deserción</th>
+                                <th scope="col" style="text-align:left; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Municipio</th>
+                                <th scope="col" style="text-align:left; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Unidad</th>
+                                <th scope="col" style="text-align:left; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Paso con mayor deserción</th>
+                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Dosis</th>
+                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Deserción</th>
                             </tr>
                         </thead>
                         <tbody>${worstDropsHtml || '<tr><td colspan="5" style="padding:20px; text-align:center; color:#94a3b8;">Sin datos suficientes para calcular deserción en este filtro.</td></tr>'}</tbody>
@@ -5176,7 +5428,7 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
         const calcTotals = (arr, evalMes = maxMes2026) => {
             let r = {
                 pM1: 0, p1A: 0, p4A: 0, p6A: 0,
-                bcg: 0, hepb: 0, rota: 0, hexaM1: 0, hexa1A: 0, neumoM1: 0, neumo1A: 0, srp1: 0, srp2: 0, dpt: 0, srp6: 0,
+                bcg: 0, hepb: 0, rota: 0, hexa3: 0, neumo2: 0, neumoRef: 0, hexaM1: 0, hexa1A: 0, neumoM1: 0, neumo1A: 0, srp1: 0, srp2: 0, dpt: 0, srp6: 0,
                 adol_hb: 0, adol_sr: 0, adol_vph: 0, adol_td: 0, adol_tdpa: 0,
                 am_neumo13: 0, am_neumo20: 0, am_td: 0,
                 emb_tdpa: 0, emb_vsr: 0,
@@ -5187,6 +5439,7 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                 r.bcg += u.bcg_dosis || 0; r.hepb += u.hepb_0_7_dosis || 0; r.rota += u.rota_2_dosis || 0;
                 r.hexaM1 += (u.hexa_1_dosis||0) + (u.hexa_2_dosis||0) + (u.hexa_3_dosis||0);
                 r.hexa1A += u.hexa_ref_dosis || 0;
+                r.hexa3 += u.hexa_3_dosis || 0; r.neumo2 += u.neumo_2_dosis || 0; r.neumoRef += u.neumo_ref_dosis || 0;
                 r.neumoM1 += (u.neumo_1_dosis||0) + (u.neumo_2_dosis||0) + (u.neumo_c1_dosis||0) + (u.neumo_c2_dosis||0);
                 r.neumo1A += (u.neumo_ref_dosis||0) + (u.neumo_c3_dosis||0);
                 r.srp1 += u.srp_1_dosis || 0; r.srp2 += u.srp_2_dosis || 0; r.dpt += u.dpt_4_dosis || 0; r.srp6 += u.srp_6_dosis || 0;
@@ -5212,8 +5465,10 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
             const f4A = (r.p4A * 0.0833) * evalMes;
             const f6A = ((r.p6A || r.p4A) * 0.0833) * evalMes;
 
-            const dosisM1 = r.bcg + r.hepb + r.hexaM1 + r.rota + r.neumoM1;
-            const dosis1A = r.hexa1A + r.neumo1A + r.srp2;
+            // Misma fórmula que el panel principal y el RPC (BCG + HepB + Hexa 3ª + Rota 2ª + Neumo 2ª ÷ 4; Hexa ref + Neumo ref + SRP 2ª ÷ 3);
+            // antes se sumaban también Hexa 1ª/2ª y Neumo 1ª y daba porcentajes distintos al del panel (251.8 % vs 200.2 %).
+            const dosisM1 = r.bcg + r.hepb + r.hexa3 + r.rota + r.neumo2;
+            const dosis1A = r.hexa1A + r.neumoRef + r.srp2;
             const dosis4A = r.dpt;
             const dosis6A = r.srp6;
 
@@ -5271,7 +5526,7 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                 statusColor = '#d97706';
                 statusIcon = '<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><circle cx="12" cy="16.3" r=".6" fill="currentColor" stroke="none"/>';
             }
-            const mainColor = isPrimary2026 ? '#0284c7' : '#0f172a';
+            const mainColor = isPrimary2026 ? '#0369a1' : '#0f172a';
             const barPct = Math.max(0, Math.min(100, pct));
             return `
                 <div style="display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px;" title="${statusLabel}">
@@ -5295,21 +5550,21 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                 return `
                     <div style="display: flex; flex-direction: column; align-items: flex-start;">
                         <div style="font-size: 12.5px; font-weight: 900; color: #15803d; line-height: 1.2;">▲ +${diff}%</div>
-                        <div style="font-size: 9px; font-weight: 800; color: #166534; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.1; margin-top: 1px;">AVANCE SUPERIOR</div>
+                        <div style="font-size: 11px; font-weight: 800; color: #166534; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.1; margin-top: 1px;">AVANCE SUPERIOR</div>
                     </div>
                 `;
             } else if (diff >= -3) {
                 return `
                     <div style="display: flex; flex-direction: column; align-items: flex-start;">
                         <div style="font-size: 12.5px; font-weight: 900; color: #334155; line-height: 1.2;">● ${diff}%</div>
-                        <div style="font-size: 9px; font-weight: 800; color: #475569; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.1; margin-top: 1px;">DESEMPEÑO SIMILAR</div>
+                        <div style="font-size: 11px; font-weight: 800; color: #475569; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.1; margin-top: 1px;">DESEMPEÑO SIMILAR</div>
                     </div>
                 `;
             } else {
                 return `
                     <div style="display: flex; flex-direction: column; align-items: flex-start;">
                         <div style="font-size: 12.5px; font-weight: 900; color: #b91c1c; line-height: 1.2;">▼ ${diff}%</div>
-                        <div style="font-size: 9px; font-weight: 800; color: #dc2626; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.1; margin-top: 1px;">AVANCE MENOR</div>
+                        <div style="font-size: 11px; font-weight: 800; color: #dc2626; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.1; margin-top: 1px;">AVANCE MENOR</div>
                     </div>
                 `;
             }
@@ -5361,7 +5616,7 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
             const diff = Math.round((cov26 - cov25) * 10) / 10;
             const isUp = diff >= 0;
             const absDiff = Math.abs(diff);
-            const themeColor = isUp ? '#059669' : '#dc2626';
+            const themeColor = isUp ? '#047857' : '#dc2626';
             const themeBg = isUp ? '#ecfdf5' : '#fef2f2';
             const themeBorder = isUp ? '#a7f3d0' : '#fecdd3';
             const gradFill = isUp ? 'linear-gradient(90deg, #10b981, #059669)' : 'linear-gradient(90deg, #f43f5e, #dc2626)';
@@ -5370,18 +5625,18 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                 <div style="background: #ffffff; border-radius: 20px; padding: 22px; border: 1px solid #e2e8f0; box-shadow: 0 4px 16px rgba(15,23,42,0.04); position: relative; overflow: hidden; transition: transform 0.2s ease, box-shadow 0.2s ease;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 24px rgba(15,23,42,0.08)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 16px rgba(15,23,42,0.04)';">
                     <div style="font-size: 11.5px; font-weight: 900; color: #334155; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; justify-content: space-between;">
                         <span>${title}</span>
-                        <span style="font-size: 10px; font-weight: 800; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 6px;">COMPARATIVO</span>
+                        <span style="font-size: 11px; font-weight: 800; color: #475569; background: #f1f5f9; padding: 2px 8px; border-radius: 6px;">COMPARATIVO</span>
                     </div>
 
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; align-items: baseline;">
                         <!-- AÑO 2025 (Soft Slate) -->
                         <div style="background: #f8fafc; padding: 10px 12px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                            <span style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; display: block;">AÑO 2025</span>
+                            <span style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; display: block;">AÑO 2025</span>
                             <div style="font-size: 21px; font-weight: 800; color: #475569; margin-top: 2px;">${cov25}%</div>
                         </div>
                         <!-- AÑO 2026 (Electric Vibrant Blue) -->
                         <div style="background: #f0f9ff; padding: 10px 12px; border-radius: 12px; border: 1px solid #bae6fd;">
-                            <span style="font-size: 10px; font-weight: 900; color: #0284c7; text-transform: uppercase; letter-spacing: 0.04em;">AÑO 2026 <span style="font-size: 9px;">⚡</span></span>
+                            <span style="font-size: 11px; font-weight: 900; color: #0369a1; text-transform: uppercase; letter-spacing: 0.04em;">AÑO 2026 <span style="font-size: 11px;">⚡</span></span>
                             <div style="font-size: 25px; font-weight: 900; color: #0369a1; margin-top: 2px;">${cov26}%</div>
                         </div>
                     </div>
@@ -5397,7 +5652,7 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                                 </div>
                                 <span style="font-size: 12.5px; font-weight: 900; color: ${themeColor};">${isUp ? '+' : ''}${diff}% pts</span>
                             </div>
-                            <span style="font-size: 9.5px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 6px; background: #ffffff; color: ${themeColor}; border: 1px solid ${themeBorder};">
+                            <span style="font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 6px; background: #ffffff; color: ${themeColor}; border: 1px solid ${themeBorder};">
                                 ${isUp ? 'AVANCE SUPERIOR' : 'DECREMENTO'}
                             </span>
                         </div>
@@ -5418,7 +5673,7 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                     <div>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span style="background: #0f172a; color: white; padding: 5px 12px; border-radius: 8px; font-size: 11px; font-weight: 900; letter-spacing: 0.05em;">EXECUTIVE COMPARATIVE SUITE</span>
-                            <span style="font-size: 12px; font-weight: 800; color: #0284c7; background: #f0f9ff; border: 1px solid #bae6fd; padding: 5px 14px; border-radius: 8px; box-shadow: 0 2px 6px rgba(2,132,199,0.08);">${getPeriodoText(maxMes2026)}</span>
+                            <span style="font-size: 12px; font-weight: 800; color: #0369a1; background: #f0f9ff; border: 1px solid #bae6fd; padding: 5px 14px; border-radius: 8px; box-shadow: 0 2px 6px rgba(2,132,199,0.08);">${getPeriodoText(maxMes2026)}</span>
                         </div>
                         <h2 style="margin: 8px 0 0 0; font-size: 22px; font-weight: 900; color: #0f172a; letter-spacing: -0.03em;">
                             Comparativa Multianual de Cobertura Vacunal (2025 vs 2026)
@@ -5436,7 +5691,7 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
 
                 <!-- HISTOGRAMA GRÁFICO DUAL EN TONOS PIZARRA SOBRIOS (SLATE) -->
                 <div style="background: #ffffff; border-radius: 20px; padding: 24px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(15,23,42,0.03); margin-bottom: 32px;">
-                    <div id="chartComparativeMulti" style="width: 100%; height: 400px;"></div>
+                    <div id="chartComparativeMulti" role="img" aria-label="Gráfica de barras: cobertura por grupo de edad de 2025 contra 2026. Los valores exactos están en las tablas de abajo." style="width: 100%; height: 400px;"></div>
                 </div>
 
                 <!-- TABLA 1: DESGLOSE POR MUNICIPIOS (Solo se despliega en el Concentrado Jurisdiccional) -->
@@ -5446,7 +5701,7 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                         <span class="material-symbols-rounded" style="color: #0f172a; font-size: 20px;">location_on</span> Comportamiento por Municipio (Avance 2025 vs 2026 | ${getPeriodoText(maxMes2026)})
                     </h3>
                     <div style="border-radius: 20px; border: 1px solid #e2e8f0; overflow: hidden; background: #ffffff; box-shadow: 0 4px 20px rgba(15,23,42,0.03);">
-                        <table style="width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 11.5px;">
+                        <table aria-label="Comparativa de cobertura 2025 contra 2026 por municipio" style="width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 11.5px;">
                             <colgroup>
                                 <col style="width: 22%;">
                                 <col style="width: 9%;">
@@ -5465,14 +5720,14 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                                     <th style="padding: 12px 10px; text-align: left; border-right: 1px solid #f1f5f9; position: sticky; top: 0; background: #f8fafc; z-index: 20;" colspan="2">4 AÑOS</th>
                                     <th style="padding: 12px 12px; text-align: left; position: sticky; top: 0; background: #f8fafc; z-index: 20;">TENDENCIA GLOBAL</th>
                                 </tr>
-                                <tr style="background: #f1f5f9; font-weight: 800; color: #64748b; border-bottom: 2px solid #e2e8f0;">
+                                <tr style="background: #f1f5f9; font-weight: 800; color: #475569; border-bottom: 2px solid #e2e8f0;">
                                     <th style="padding: 8px 14px; text-align: left; border-right: 1px solid #e2e8f0; position: sticky; top: 37px; background: #f1f5f9; z-index: 20;">JS1 QUERÉTARO</th>
-                                    <th style="padding: 8px 10px; text-align: left; color: #64748b; font-weight: 800; position: sticky; top: 37px; background: #f1f5f9; z-index: 20;">2025</th>
-                                    <th style="padding: 8px 10px; text-align: left; color: #0284c7; font-weight: 900; background: #f0f9ff; border-right: 1px solid #e2e8f0; position: sticky; top: 37px; z-index: 20;">2026 ⚡</th>
-                                    <th style="padding: 8px 10px; text-align: left; color: #64748b; font-weight: 800; position: sticky; top: 37px; background: #f1f5f9; z-index: 20;">2025</th>
-                                    <th style="padding: 8px 10px; text-align: left; color: #0284c7; font-weight: 900; background: #f0f9ff; border-right: 1px solid #e2e8f0; position: sticky; top: 37px; z-index: 20;">2026 ⚡</th>
-                                    <th style="padding: 8px 10px; text-align: left; color: #64748b; font-weight: 800; position: sticky; top: 37px; background: #f1f5f9; z-index: 20;">2025</th>
-                                    <th style="padding: 8px 10px; text-align: left; color: #0284c7; font-weight: 900; background: #f0f9ff; border-right: 1px solid #e2e8f0; position: sticky; top: 37px; z-index: 20;">2026 ⚡</th>
+                                    <th style="padding: 8px 10px; text-align: left; color: #475569; font-weight: 800; position: sticky; top: 37px; background: #f1f5f9; z-index: 20;">2025</th>
+                                    <th style="padding: 8px 10px; text-align: left; color: #0369a1; font-weight: 900; background: #f0f9ff; border-right: 1px solid #e2e8f0; position: sticky; top: 37px; z-index: 20;">2026 ⚡</th>
+                                    <th style="padding: 8px 10px; text-align: left; color: #475569; font-weight: 800; position: sticky; top: 37px; background: #f1f5f9; z-index: 20;">2025</th>
+                                    <th style="padding: 8px 10px; text-align: left; color: #0369a1; font-weight: 900; background: #f0f9ff; border-right: 1px solid #e2e8f0; position: sticky; top: 37px; z-index: 20;">2026 ⚡</th>
+                                    <th style="padding: 8px 10px; text-align: left; color: #475569; font-weight: 800; position: sticky; top: 37px; background: #f1f5f9; z-index: 20;">2025</th>
+                                    <th style="padding: 8px 10px; text-align: left; color: #0369a1; font-weight: 900; background: #f0f9ff; border-right: 1px solid #e2e8f0; position: sticky; top: 37px; z-index: 20;">2026 ⚡</th>
                                     <th style="padding: 8px 12px; text-align: left; position: sticky; top: 37px; background: #f1f5f9; z-index: 20;">ESTADO</th>
                                 </tr>
                             </thead>
@@ -5482,18 +5737,18 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                                     return `
                                         <tr style="border-bottom: 1px solid #f1f5f9; font-weight: 700; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
                                             <td style="padding: 12px 14px; text-align: left; font-weight: 900; color: #0f172a; border-right: 1px solid #f1f5f9;">${m.nombre}</td>
-                                            <td style="padding: 10px 10px; text-align: left; color: #64748b; font-weight: 800;">${renderOption8Coverage(m.t25.covM1, false)}</td>
-                                            <td style="padding: 10px 10px; text-align: left; color: #0284c7; font-weight: 900; background: rgba(240,249,255,0.4); border-right: 1px solid #f1f5f9;">${renderOption8Coverage(m.t26.covM1, true)}</td>
-                                            <td style="padding: 10px 10px; text-align: left; color: #64748b; font-weight: 800;">${renderOption8Coverage(m.t25.cov1A, false)}</td>
-                                            <td style="padding: 10px 10px; text-align: left; color: #0284c7; font-weight: 900; background: rgba(240,249,255,0.4); border-right: 1px solid #f1f5f9;">${renderOption8Coverage(m.t26.cov1A, true)}</td>
-                                            <td style="padding: 10px 10px; text-align: left; color: #64748b; font-weight: 800;">${renderOption8Coverage(m.t25.cov4A, false)}</td>
-                                            <td style="padding: 10px 10px; text-align: left; color: #0284c7; font-weight: 900; background: rgba(240,249,255,0.4); border-right: 1px solid #f1f5f9;">${renderOption8Coverage(m.t26.cov4A, true)}</td>
+                                            <td style="padding: 10px 10px; text-align: left; color: #475569; font-weight: 800;">${renderOption8Coverage(m.t25.covM1, false)}</td>
+                                            <td style="padding: 10px 10px; text-align: left; color: #0369a1; font-weight: 900; background: rgba(240,249,255,0.4); border-right: 1px solid #f1f5f9;">${renderOption8Coverage(m.t26.covM1, true)}</td>
+                                            <td style="padding: 10px 10px; text-align: left; color: #475569; font-weight: 800;">${renderOption8Coverage(m.t25.cov1A, false)}</td>
+                                            <td style="padding: 10px 10px; text-align: left; color: #0369a1; font-weight: 900; background: rgba(240,249,255,0.4); border-right: 1px solid #f1f5f9;">${renderOption8Coverage(m.t26.cov1A, true)}</td>
+                                            <td style="padding: 10px 10px; text-align: left; color: #475569; font-weight: 800;">${renderOption8Coverage(m.t25.cov4A, false)}</td>
+                                            <td style="padding: 10px 10px; text-align: left; color: #0369a1; font-weight: 900; background: rgba(240,249,255,0.4); border-right: 1px solid #f1f5f9;">${renderOption8Coverage(m.t26.cov4A, true)}</td>
                                             <td style="padding: 10px 8px; text-align: left;">
                                                 <div style="display: flex; flex-direction: column; align-items: flex-start;">
                                                     <div style="font-size: 12.5px; font-weight: 900; color: ${isPositive ? '#15803d' : '#b91c1c'}; line-height: 1.2;">
                                                         ${isPositive ? '▲ ASCENDENTE' : '▼ EN REVISIÓN'}
                                                     </div>
-                                                    <div style="font-size: 9px; font-weight: 800; color: ${isPositive ? '#166534' : '#dc2626'}; letter-spacing: 0.05em; line-height: 1.1; margin-top: 1px;">
+                                                    <div style="font-size: 11px; font-weight: 800; color: ${isPositive ? '#166534' : '#dc2626'}; letter-spacing: 0.05em; line-height: 1.1; margin-top: 1px;">
                                                         ${isPositive ? 'CUMPLIMIENTO ÓPTIMO' : 'BAJO SEGUIMIENTO'}
                                                     </div>
                                                 </div>
@@ -5503,16 +5758,16 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                                 }).join('')}
                                 <tr style="background: #f8fafc; font-weight: 900; color: #0f172a; border-top: 2px solid #cbd5e1;">
                                     <td style="padding: 14px 14px; text-align: left; border-right: 1px solid #cbd5e1;">TOTAL JURISDICCIONAL</td>
-                                    <td style="padding: 10px 10px; text-align: left; color: #64748b; font-weight: 800;">${renderOption8Coverage(t25.covM1, false)}</td>
-                                    <td style="padding: 10px 10px; text-align: left; color: #0284c7; font-weight: 900; background: #f0f9ff; border-right: 1px solid #cbd5e1;">${renderOption8Coverage(t26.covM1, true)}</td>
-                                    <td style="padding: 10px 10px; text-align: left; color: #64748b; font-weight: 800;">${renderOption8Coverage(t25.cov1A, false)}</td>
-                                    <td style="padding: 10px 10px; text-align: left; color: #0284c7; font-weight: 900; background: #f0f9ff; border-right: 1px solid #cbd5e1;">${renderOption8Coverage(t26.cov1A, true)}</td>
-                                    <td style="padding: 10px 10px; text-align: left; color: #64748b; font-weight: 800;">${renderOption8Coverage(t25.cov4A, false)}</td>
-                                    <td style="padding: 10px 10px; text-align: left; color: #0284c7; font-weight: 900; background: #f0f9ff; border-right: 1px solid #cbd5e1;">${renderOption8Coverage(t26.cov4A, true)}</td>
+                                    <td style="padding: 10px 10px; text-align: left; color: #475569; font-weight: 800;">${renderOption8Coverage(t25.covM1, false)}</td>
+                                    <td style="padding: 10px 10px; text-align: left; color: #0369a1; font-weight: 900; background: #f0f9ff; border-right: 1px solid #cbd5e1;">${renderOption8Coverage(t26.covM1, true)}</td>
+                                    <td style="padding: 10px 10px; text-align: left; color: #475569; font-weight: 800;">${renderOption8Coverage(t25.cov1A, false)}</td>
+                                    <td style="padding: 10px 10px; text-align: left; color: #0369a1; font-weight: 900; background: #f0f9ff; border-right: 1px solid #cbd5e1;">${renderOption8Coverage(t26.cov1A, true)}</td>
+                                    <td style="padding: 10px 10px; text-align: left; color: #475569; font-weight: 800;">${renderOption8Coverage(t25.cov4A, false)}</td>
+                                    <td style="padding: 10px 10px; text-align: left; color: #0369a1; font-weight: 900; background: #f0f9ff; border-right: 1px solid #cbd5e1;">${renderOption8Coverage(t26.cov4A, true)}</td>
                                     <td style="padding: 12px 8px; text-align: left;">
                                         <div style="display: flex; flex-direction: column; align-items: flex-start;">
-                                            <div style="font-size: 12.5px; font-weight: 900; color: #0284c7; line-height: 1.2;">✓ CONSOLIDADO</div>
-                                            <div style="font-size: 9px; font-weight: 800; color: #64748b; letter-spacing: 0.05em; line-height: 1.1; margin-top: 1px;">JURISDICCIÓN SANITARIA 1</div>
+                                            <div style="font-size: 12.5px; font-weight: 900; color: #0369a1; line-height: 1.2;">✓ CONSOLIDADO</div>
+                                            <div style="font-size: 11px; font-weight: 800; color: #475569; letter-spacing: 0.05em; line-height: 1.1; margin-top: 1px;">JURISDICCIÓN SANITARIA 1</div>
                                         </div>
                                     </td>
                                 </tr>
@@ -5528,7 +5783,7 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                         <span class="material-symbols-rounded" style="color: #0f172a; font-size: 20px;">vaccines</span> Matriz Multianual por Biológico e Indicadores de Población
                     </h3>
                     <div style="border-radius: 20px; border: 1px solid #e2e8f0; overflow-y: auto; max-height: 520px; background: #ffffff; box-shadow: 0 4px 20px rgba(15,23,42,0.03);">
-                        <table style="width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 11.5px;">
+                        <table aria-label="Comparativa de cobertura y dosis 2025 contra 2026 por biológico" style="width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 11.5px;">
                             <colgroup>
                                 <col style="width: 22%;">
                                 <col style="width: 14%;">
@@ -5542,10 +5797,10 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                                 <tr style="background: #f8fafc; font-weight: 900; color: #334155; border-bottom: 2px solid #e2e8f0;">
                                     <th style="padding: 12px 14px; text-align: left; position: sticky; top: 0; background: #f8fafc; z-index: 25; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">BIOLÓGICO Y ESQUEMA</th>
                                     <th style="padding: 12px 10px; text-align: left; position: sticky; top: 0; background: #f8fafc; z-index: 25; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">GRUPO POBLACIONAL</th>
-                                    <th style="padding: 12px 14px; text-align: left; color: #64748b; font-weight: 800; position: sticky; top: 0; background: #f8fafc; z-index: 25; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">DOSIS 2025</th>
-                                    <th style="padding: 12px 14px; text-align: left; color: #0284c7; font-weight: 900; background: #f0f9ff; position: sticky; top: 0; z-index: 25; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">DOSIS 2026</th>
-                                    <th style="padding: 12px 14px; text-align: left; color: #64748b; font-weight: 800; position: sticky; top: 0; background: #f8fafc; z-index: 25; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">AVANCE 2025</th>
-                                    <th style="padding: 12px 14px; text-align: left; color: #0284c7; font-weight: 900; background: #f0f9ff; position: sticky; top: 0; z-index: 25; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">AVANCE 2026</th>
+                                    <th style="padding: 12px 14px; text-align: left; color: #475569; font-weight: 800; position: sticky; top: 0; background: #f8fafc; z-index: 25; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">DOSIS 2025</th>
+                                    <th style="padding: 12px 14px; text-align: left; color: #0369a1; font-weight: 900; background: #f0f9ff; position: sticky; top: 0; z-index: 25; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">DOSIS 2026</th>
+                                    <th style="padding: 12px 14px; text-align: left; color: #475569; font-weight: 800; position: sticky; top: 0; background: #f8fafc; z-index: 25; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">AVANCE 2025</th>
+                                    <th style="padding: 12px 14px; text-align: left; color: #0369a1; font-weight: 900; background: #f0f9ff; position: sticky; top: 0; z-index: 25; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">AVANCE 2026</th>
                                     <th style="padding: 12px 10px; text-align: left; position: sticky; top: 0; background: #f8fafc; z-index: 25; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">COMPARATIVA (2026 VS 2025)</th>
                                 </tr>
                             </thead>
@@ -5558,23 +5813,23 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                                         return `
                                         <tr style="border-bottom: 1px solid #f1f5f9; font-weight: 700; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
                                             <td style="padding: 12px 14px; text-align: left; font-weight: 900; color: #0f172a;">${n}</td>
-                                            <td style="padding: 12px 10px; text-align: left; color: #64748b; font-weight: 800;">${g}</td>
-                                            <td style="padding: 12px 14px; text-align: left; color: #64748b; font-weight: 800;">${d25 ? d25.toLocaleString('es-MX') : '0'}</td>
-                                            <td style="padding: 12px 14px; text-align: left; color: #0284c7; font-weight: 900; background: rgba(240,249,255,0.4);">${d26 ? d26.toLocaleString('es-MX') : '0'}</td>
-                                            <td style="padding: 12px 14px; text-align: left; color: #64748b; font-weight: 800;">${c25}</td>
-                                            <td style="padding: 12px 14px; text-align: left; color: #0284c7; font-weight: 900; background: rgba(240,249,255,0.4);">${c26}</td>
+                                            <td style="padding: 12px 10px; text-align: left; color: #475569; font-weight: 800;">${g}</td>
+                                            <td style="padding: 12px 14px; text-align: left; color: #475569; font-weight: 800;">${d25 ? d25.toLocaleString('es-MX') : '0'}</td>
+                                            <td style="padding: 12px 14px; text-align: left; color: #0369a1; font-weight: 900; background: rgba(240,249,255,0.4);">${d26 ? d26.toLocaleString('es-MX') : '0'}</td>
+                                            <td style="padding: 12px 14px; text-align: left; color: #475569; font-weight: 800;">${c25}</td>
+                                            <td style="padding: 12px 14px; text-align: left; color: #0369a1; font-weight: 900; background: rgba(240,249,255,0.4);">${c26}</td>
                                             <td style="padding: 10px 12px; text-align: left;">
                                                 ${isSpecial ? `
                                                     <div style="display: flex; flex-direction: column; align-items: flex-start;">
                                                         <div style="font-size: 12.5px; font-weight: 900; color: #0369a1; line-height: 1.2;">${difStr}</div>
-                                                        <div style="font-size: 9px; font-weight: 800; color: #0284c7; letter-spacing: 0.05em; line-height: 1.1; margin-top: 1px;">DOSIS APLICADAS</div>
+                                                        <div style="font-size: 11px; font-weight: 800; color: #0369a1; letter-spacing: 0.05em; line-height: 1.1; margin-top: 1px;">DOSIS APLICADAS</div>
                                                     </div>
                                                 ` : `
                                                     <div style="display: flex; flex-direction: column; align-items: flex-start;">
                                                         <div style="font-size: 12.5px; font-weight: 900; color: ${isUp ? '#15803d' : '#b91c1c'}; line-height: 1.2;">
                                                             ${isUp ? '▲' : '▼'} ${difStr}
                                                         </div>
-                                                        <div style="font-size: 9px; font-weight: 800; color: ${isUp ? '#166534' : '#991b1b'}; letter-spacing: 0.05em; line-height: 1.1; margin-top: 1px;">
+                                                        <div style="font-size: 11px; font-weight: 800; color: ${isUp ? '#166534' : '#991b1b'}; letter-spacing: 0.05em; line-height: 1.1; margin-top: 1px;">
                                                             ${isUp ? 'AVANCE SUPERIOR' : 'AVANCE MENOR'}
                                                         </div>
                                                     </div>
