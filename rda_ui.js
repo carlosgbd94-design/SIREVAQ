@@ -835,11 +835,35 @@ async function renderDashboard() {
 
 
 
+// Línea de referencia del 100 % de la meta al corte sobre el eje de Avance
+function _rdaAddMetaMarkLine(series) {
+    series.markLine = {
+        silent: true, symbol: 'none',
+        lineStyle: { color: '#16a34a', type: 'dashed', width: 1.5 },
+        label: { formatter: 'Meta 100%', position: 'insideEndTop', color: '#16a34a', fontWeight: 'bold', fontSize: 11 },
+        data: [{ yAxis: 100 }]
+    };
+}
+
 // Constructor Dinámico de KPIs
 function renderKPIs(agg, esquema) {
     const container = document.getElementById('rdaKpiGrid');
     if (!container) return;
     container.innerHTML = '';
+
+    let note = document.getElementById('rdaAvanceNota');
+    if (esquema === 'basico') {
+        const mm = _rdaCache.maxMes || 12;
+        if (!note) {
+            note = document.createElement('div');
+            note.id = 'rdaAvanceNota';
+            note.style.cssText = 'margin: 0 0 12px 0; padding: 10px 14px; border-radius: 12px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 600; line-height: 1.5;';
+            container.parentElement.insertBefore(note, container);
+        }
+        note.innerHTML = `<b style="color:#0f172a;">Cómo leerlo:</b> el <b>avance</b> compara las dosis aplicadas contra la <b>meta al corte</b>, no contra la población anual. Con corte a <b>${MONTH_NAMES[mm - 1] || ''}</b> (${mm} de 12 meses) la meta es el <b>${Math.round(mm / 12 * 1000) / 10}%</b> de la población de cada grupo. Al llegar al <b>100%</b> se cumple la meta del periodo.`;
+    } else if (note) {
+        note.remove();
+    }
 
     let list = [...(SCHEME_KPIS[esquema] || SCHEME_KPIS.basico)];
     if (esquema === 'basico' && _rdaCache.anio === 2025) {
@@ -860,8 +884,20 @@ function renderKPIs(agg, esquema) {
         let statusColor = '#64748b';
         let barGrad = 'linear-gradient(90deg, #0284c7 0%, #0369a1 100%)';
         let barShadow = '0 0 10px rgba(2, 132, 199, 0.3)';
+        let calc = null;
 
         if (esquema === 'basico') {
+            const _mm = _rdaCache.maxMes || 12;
+            const _mk = (pob, dosis, div, vacunas) => ({ pob, dosis, div, vacunas, meta: pob * 0.0833 * _mm, eq: dosis / div });
+            if (k.key === 'menor1') {
+                calc = _mk(agg.pob_menor_1, agg.bcg_dosis + agg.hepb_0_7_dosis + agg.hexa_3_dosis + agg.rota_2_dosis + agg.neumo_2_dosis, 4, '5 vacunas');
+            } else if (k.key === 'uno') {
+                calc = _mk(agg.pob_1_ano, agg.hexa_ref_dosis + agg.neumo_ref_dosis + agg.srp_2_dosis, 3, '3 vacunas');
+            } else if (k.key === 'cuatro') {
+                calc = _mk(agg.pob_4_anos, agg.dpt_4_dosis, 1, 'DPT');
+            } else if (k.key === 'seis') {
+                calc = _mk(agg.pob_6_anos || 0, agg.srp_6_dosis || 0, 1, 'SRP');
+            }
             if (k.key === 'menor1') {
                 valNum = agg.cobertura_menor1;
                 valText = `${valNum}%`;
@@ -978,6 +1014,38 @@ function renderKPIs(agg, esquema) {
                         <div style="font-size: 8.5px; font-weight: 800; color: #e11d48; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">6 Años</div>
                         <div style="font-size: 10.5px; font-weight: 900; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${(agg.pob_6_anos || 0).toLocaleString('es-MX')}</div>
                     </div>` : ''}
+                </div>
+            `;
+        } else if (calc && esquema === 'basico') {
+            const fmt = n => Math.round(n).toLocaleString('es-MX');
+            const barPct = Math.min(100, Math.max(2, valNum));
+            const sobre = valNum > 100 ? `<div style="font-size: 11.5px; font-weight: 800; color: ${statusColor}; margin-top: 6px;">+${(Math.round((valNum - 100) * 10) / 10)} pts sobre la meta al corte</div>` : '';
+            const faltan = valNum < 100 ? `<div style="font-size: 11.5px; font-weight: 800; color: ${statusColor}; margin-top: 6px;">Faltan ${fmt(Math.max(0, calc.meta - calc.eq))} aplicaciones para la meta al corte</div>` : '';
+            const mesTxt = MONTH_NAMES[(_rdaCache.maxMes || 12) - 1] || '';
+            const fila = (t, v, strong) => `<div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:5px 0;"><span style="font-size:11px; font-weight:700; color:#64748b;">${t}</span><span style="font-size:${strong ? 13.5 : 12}px; font-weight:${strong ? 900 : 700}; color:${strong ? '#0f172a' : '#475569'}; font-variant-numeric: tabular-nums;">${v}</span></div>`;
+            card.title = `Avance = dosis aplicadas${calc.div > 1 ? ` ÷ ${calc.div}` : ''} ÷ (población × 8.33% × ${_rdaCache.maxMes || 12} meses)`;
+            card.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <div class="rda-icon-box" style="background: ${k.bg}; color: ${k.fg}; width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+                        <span class="material-symbols-rounded" style="font-size:20px;">${k.icon}</span>
+                    </div>
+                    <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2;">${k.label}</div>
+                </div>
+                <div style="font-size: 9.5px; font-weight: 900; color: #94a3b8; letter-spacing: 0.08em; text-transform: uppercase;">Avance de la meta</div>
+                <div style="font-size: 46px; font-weight: 900; color: ${statusColor}; letter-spacing: -0.04em; line-height: 1.05; font-variant-numeric: tabular-nums;">${valText}</div>
+                <div style="display:inline-block; margin-top:4px; font-size: 9.5px; font-weight: 900; color: ${statusColor}; letter-spacing: 0.05em; text-transform: uppercase;">${statusLabel}</div>
+                <div style="margin: 10px 0 2px 0;">
+                    <div style="width: 100%; height: 10px; background: rgba(15, 23, 42, 0.07); border-radius: 999px; overflow: hidden;">
+                        <div style="height: 100%; width: ${barPct}%; background: ${statusColor}; border-radius: 999px; transition: width 0.8s ease;"></div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:9px; font-weight:800; color:#94a3b8; margin-top:3px;"><span>0%</span><span>Meta 100%</span></div>
+                </div>
+                ${sobre}${faltan}
+                <div style="border-top: 1px solid #f1f5f9; margin-top: 10px; padding-top: 6px;">
+                    ${fila(`Meta al corte (ene–${mesTxt.slice(0, 3).toLowerCase()})`, fmt(calc.meta), true)}
+                    ${fila(calc.div > 1 ? `Aplicadas (equiv. ÷${calc.div})` : 'Aplicadas', fmt(calc.eq), true)}
+                    ${fila('Población anual', fmt(calc.pob))}
+                    ${fila(`Dosis registradas (${calc.vacunas})`, fmt(calc.dosis))}
                 </div>
             `;
         } else {
@@ -1170,7 +1238,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                 finalDatasets = [
                     {
                         type: 'bar',
-                        label: 'Aplicaciones',
+                        label: 'Aplicadas (equiv.)',
                         data: [appBCG, appHepB, appRota, appHexaM1, appHexa1A, appNeumoM1, appNeumo1A, appSRP, appDPT],
                         backgroundColor: '#e2e8f0',
                         borderRadius: 4,
@@ -1181,7 +1249,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                     },
                     {
                         type: 'bar',
-                        label: 'Meta',
+                        label: 'Meta al corte',
                         data: [
                             Math.round(factorM1), Math.round(factorM1), Math.round(factorM1),
                             Math.round(factorM1), Math.round(factorUno),
@@ -1229,7 +1297,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                 finalDatasets = [
                     {
                         type: 'bar',
-                        label: 'Aplicaciones',
+                        label: 'Aplicadas (equiv.)',
                         data: [Math.round(dosisM1/4.0), Math.round(dosisUno/3.0), dosisCuatro],
                         backgroundColor: '#e2e8f0',
                         borderRadius: 4,
@@ -1240,7 +1308,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                     },
                     {
                         type: 'bar',
-                        label: 'Meta',
+                        label: 'Meta al corte',
                         data: [Math.round(factorM1), Math.round(factorUno), Math.round(factorCuatro)],
                         backgroundColor: '#0f172a',
                         borderRadius: 4,
@@ -1532,8 +1600,8 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                     }
 
                     tDatasets = [
-                        { type: 'bar', label: 'Aplicaciones', data: appData, backgroundColor: '#e2e8f0', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
-                        { type: 'bar', label: 'Meta', data: metaData, backgroundColor: '#0f172a', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
+                        { type: 'bar', label: 'Aplicadas (equiv.)', data: appData, backgroundColor: '#e2e8f0', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
+                        { type: 'bar', label: 'Meta al corte', data: metaData, backgroundColor: '#0f172a', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
                         { type: 'line', label: 'Avance', data: avanceData, borderColor: '#3b82f6', borderWidth: 4, tension: 0.4, fill: false, pointBackgroundColor: '#ffffff', pointBorderColor: '#3b82f6', pointBorderWidth: 2, pointRadius: 6, pointHoverRadius: 8, yAxisID: 'y1', order: 0 }
                     ];
                 } else {
@@ -1566,8 +1634,8 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                     }
 
                     tDatasets = [
-                        { type: 'bar', label: 'Aplicaciones', data: appData, backgroundColor: '#e2e8f0', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
-                        { type: 'bar', label: 'Meta', data: metaData, backgroundColor: '#0f172a', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
+                        { type: 'bar', label: 'Aplicadas (equiv.)', data: appData, backgroundColor: '#e2e8f0', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
+                        { type: 'bar', label: 'Meta al corte', data: metaData, backgroundColor: '#0f172a', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
                         { type: 'line', label: 'Avance', data: avanceData, borderColor: '#3b82f6', borderWidth: 4, tension: 0.4, fill: false, pointBackgroundColor: '#ffffff', pointBorderColor: '#3b82f6', pointBorderWidth: 2, pointRadius: 6, pointHoverRadius: 8, yAxisID: 'y1', order: 0 }
                     ];
                 }
@@ -1613,7 +1681,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                 if (series.type === 'bar') {
                     series.itemStyle = { color: ds.backgroundColor, borderRadius: [4, 4, 0, 0] };
                     series.emphasis = { itemStyle: { shadowBlur: 8, shadowColor: 'rgba(0,0,0,0.3)' } };
-                    if (ds.label === 'Aplicaciones' || ds.label === 'Dosis' || ds.label === 'Avance General') {
+                    if (ds.label === 'Aplicadas (equiv.)' || ds.label === 'Dosis' || ds.label === 'Avance General') {
                         series.emphasis.itemStyle.color = '#52525b';
                     }
                     if (ds.yAxisID === 'y1') series.yAxisIndex = 1;
@@ -1624,6 +1692,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                     series.symbol = 'circle';
                     series.symbolSize = 8;
                     if (ds.yAxisID === 'y1') series.yAxisIndex = 1;
+                    if (ds.label === 'Avance') _rdaAddMetaMarkLine(series);
                 }
                 return series;
             });
@@ -1659,7 +1728,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
         if (series.type === 'bar') {
             series.itemStyle = { color: ds.backgroundColor, borderRadius: isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0] };
             series.emphasis = { itemStyle: { shadowBlur: 8, shadowColor: 'rgba(0,0,0,0.3)' } };
-            if (ds.label === 'Aplicaciones' || ds.label === 'Dosis' || ds.label === 'Avance General' || ds.backgroundColor === '#e2e8f0') {
+            if (ds.label === 'Aplicadas (equiv.)' || ds.label === 'Dosis' || ds.label === 'Avance General' || ds.backgroundColor === '#e2e8f0') {
                 series.emphasis.itemStyle.color = '#52525b';
             }
             if (ds.yAxisID === 'y1') series.yAxisIndex = 1;
@@ -1670,6 +1739,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
             series.symbol = 'circle';
             series.symbolSize = 8;
             if (ds.yAxisID === 'y1') series.yAxisIndex = 1;
+            if (ds.label === 'Avance') _rdaAddMetaMarkLine(series);
         }
         return series;
     });
@@ -1752,7 +1822,7 @@ function renderTable(fUnits, esquema, agg) {
     }
 
     // "Meta" sólo es visible para el esquema "basico"
-    const showMeta = (esquema === 'basico');
+    const showMeta = (esquema === 'basico' && _rdaState.vistaBasico !== 'biologico');
     // Proporciones fijas de columnas
     const numV = vCols.length;
     const colGroupHTML = `
@@ -1772,8 +1842,8 @@ function renderTable(fUnits, esquema, agg) {
             <th style="padding: 12px; text-align: left;" data-sort="nombre">UNIDAD MÉDICA</th>
             <th style="padding: 12px; text-align: left;" data-sort="municipio">MUNICIPIO</th>
             ${vCols.map(c => `<th style="padding: 12px; text-align: center;" data-sort="${c.s}">${c.n}</th>`).join('')}
-            ${showMeta ? `<th style="padding: 12px; text-align: center;" data-sort="meta">META</th>` : ''}
-            <th style="padding: 12px; text-align: center;" data-sort="total">TOTAL</th>
+            ${showMeta ? `<th style="padding: 12px; text-align: center;" data-sort="meta">META AL CORTE</th>` : ''}
+            <th style="padding: 12px; text-align: center;" data-sort="dosis">${showMeta ? 'APLICADAS (EQUIV.)' : 'DOSIS'}</th>
         </tr>
     `;
 
@@ -1832,7 +1902,8 @@ function renderTable(fUnits, esquema, agg) {
                 if (_rdaCache.anio === 2025) {
                     res.v4 = factorSeis > 0 ? Math.round(((dosisSeis / factorSeis) * 100) * 10) / 10 : 0;
                 }
-                res.dosis = dosisM1 + dosisUno + dosisCuatro + dosisSeis;
+                res.dosis = Math.round(dosisM1 / 4 + dosisUno / 3 + dosisCuatro + dosisSeis);
+                res.meta = Math.round(factorM1 + factorUno + factorCuatro + (_rdaCache.anio === 2025 ? factorSeis : 0));
             }
         } else if (esquema === 'adultos') {
             res.v1 = u.adol_hb || 0;
@@ -1940,7 +2011,7 @@ function renderTable(fUnits, esquema, agg) {
             <td style="padding:16px 24px;font-size:11px;font-weight:800;color:#0f172a">${r.nombre}</td>
             <td style="padding:16px 24px;font-size:11px;color:#64748b;font-weight:600;">${r.municipio}</td>
             ${vCols.map(c => `<td style="padding:8px 12px;text-align:center">${badge(r[c.s], c.n)}</td>`).join('')}
-            ${showMeta ? `<td style="padding:16px 24px;text-align:center;font-size:11px;font-weight:800;color:#64748b">${(r.pob || 0).toLocaleString('es-MX')}</td>` : ''}
+            ${showMeta ? `<td style="padding:16px 24px;text-align:center;font-size:11px;font-weight:800;color:#64748b">${(r.meta || 0).toLocaleString('es-MX')}</td>` : ''}
             <td style="padding:16px 24px;text-align:center;font-size:11px;font-weight:800;color:#0f172a">${(r.dosis || 0).toLocaleString('es-MX')}</td>
         </tr>`;
     });
@@ -1966,7 +2037,7 @@ function renderTable(fUnits, esquema, agg) {
         } else {
             totalRowLabel = 'TOTAL JURISDICCIONAL (JURISDICCIÓN SANITARIA 1)';
         }
-        const jurPob = rows.reduce((sum, r) => sum + (r.pob || 0), 0);
+        const jurPob = rows.reduce((sum, r) => sum + (r.meta || 0), 0);
         const jurDosis = rows.reduce((sum, r) => sum + (r.dosis || 0), 0);
         
         // Usar los porcentajes de cobertura globales calculados para la Jurisdicción en agg (no promedio simple de unidades)

@@ -533,7 +533,7 @@ async function cargarCatalogo() {
   const unidadesParaSelUnidad = rol === 'UNIDAD' ? unidadesClues : unidadesPseudo;
   const opcionesUnidad = unidadesParaSelUnidad.map((u) => `<option value="${u.id}">${u.nombre} (${u.municipio})</option>`);
   if (rol === 'JURISDICCIONAL' || rol === 'ADMIN') {
-    opcionesUnidad.unshift(`<option value="${UNIDAD_JURISDICCION}">Jurisdicción (suma de ${unidadesPseudo.length === 1 ? 'la unidad' : 'las ' + unidadesPseudo.length + ' unidades'})</option>`);
+    opcionesUnidad.unshift(`<option value="${UNIDAD_JURISDICCION}">Jurisdicción (suma de ${unidadesPseudo.length === 1 ? 'el municipio' : 'los ' + unidadesPseudo.length + ' municipios y hospitales'})</option>`);
   }
   selUnidad.innerHTML = opcionesUnidad.join('');
 
@@ -790,7 +790,7 @@ function inicializarToggleSIS06P() {
   // panel (Concentrado Biológico) para que no parezcan dos pantallas del mismo asunto.
   if (rolActual && rolActual !== 'UNIDAD') {
     const tit = document.getElementById('tituloPagina');
-    if (tit && tit.textContent === 'Movimiento de Biológico') tit.textContent = 'SINBA-SIS · Revisión por unidad';
+    if (tit && tit.textContent === 'Movimiento de Biológico') { tit.textContent = 'SINBA-SIS · Revisión por unidad'; document.title = 'SINBA-SIS · Revisión — SIREVAQ'; }
     const sub = document.getElementById('subtituloPagina');
     if (sub) {
       const enlace = (rolActual === 'ADMIN' || rolActual === 'JURISDICCIONAL')
@@ -1335,7 +1335,7 @@ async function cargarMovimientoJurisdiccional(anio, mes) {
     aplicadas_a: f.aplicadas_a, aplicadas_b: f.aplicadas_b,
     desechadas_a: f.desechadas_a, desechadas_b: f.desechadas_b,
     existencia_final_frascos: f.existencia_final_frascos,
-    observaciones: `${f.es_provisional ? 'Provisional -- ' : ''}${f.unidades_cerradas}/${f.unidades_reportando} unidades cerradas`,
+    observaciones: `${f.es_provisional ? 'Provisional -- ' : ''}${f.unidades_cerradas}/${f.unidades_reportando} ${f.unidades_reportando === 1 ? 'municipio u hospital cerrado' : 'municipios u hospitales cerrados'}`,
     biovac_lotes: {
       id: f.lote_id, numero_lote: f.numero_lote, caducidad: f.caducidad,
       dosis_por_frasco_override: f.dosis_por_frasco_override, biologico_id: f.biologico_id

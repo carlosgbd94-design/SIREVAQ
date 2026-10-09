@@ -32,7 +32,7 @@
   };
   const ESTADO_COLOR = {
     SIN_ENVIO: { bg: '#e2e8f0', text: '#475569' },
-    SIN_INICIAR: { bg: '#f1f5f9', text: '#64748b' },
+    SIN_INICIAR: { bg: '#f1f5f9', text: '#475569' },
     BORRADOR: { bg: '#e0f2fe', text: '#0369a1' },
     ENVIADO: { bg: 'var(--warning-bg)', text: 'var(--warning)' },
     VALIDADO: { bg: 'var(--success-bg)', text: 'var(--success)' }
@@ -170,7 +170,7 @@
         banner.textContent = `Envío abierto: las unidades pueden enviar su SIS hasta el ${fecha(v.fin_envio)}.`;
       } else {
         const antes = new Date() < new Date(v.inicio_envio + 'T00:00:00');
-        banner.style.cssText = 'display:block; margin-bottom:14px; padding:10px 14px; border-radius:12px; font-size:12px; font-weight:700; background:#f1f5f9; color:#64748b;';
+        banner.style.cssText = 'display:block; margin-bottom:14px; padding:10px 14px; border-radius:12px; font-size:12px; font-weight:700; background:#f1f5f9; color:#475569;';
         banner.textContent = antes
           ? `El envío de este mes se habilita del ${fecha(v.inicio_envio)} al ${fecha(v.fin_envio)}. Hasta entonces las unidades solo pueden prellenar -- todas aparecen como "Sin enviar".`
           : `La ventana de envío de este mes ya cerró (${fecha(v.inicio_envio)} al ${fecha(v.fin_envio)}).`;
