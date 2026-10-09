@@ -3226,7 +3226,7 @@ async function _rdaAsentarGraficas() {
     if (redibujable) {
         window._isBatchExporting = true;
         try { await renderDashboard(); } finally { window._isBatchExporting = false; }
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, document.hidden ? 1300 : 300));
         // Dibujo síncrono de cada gráfica (no depende de que el navegador dispare el siguiente cuadro)
         Object.values(_rdaCharts).forEach(ch => { try { if (ch && ch.getZr) ch.getZr().refreshImmediately(); } catch (e) { /* liberada */ } });
     } else {
