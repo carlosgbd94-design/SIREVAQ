@@ -103,21 +103,28 @@
       subtitulo: 'Un reporte por semana, con folio, validado contra la meta de tu unidad.',
       bloques: [
         T('Cuándo se captura'),
-        I('event', '#7c3aed', 'Un reporte por viernes de corte', 'Cada semana se reporta con fecha del viernes. Se captura el jueves o el viernes; la semana se abre el jueves previo.'),
-        I('event_available', '#0284c7', 'Corte de fin de mes', 'Si el mes termina de lunes a jueves, ese último día se captura un reporte extra (por ejemplo, un miércoles 30): jueves y viernes ya serían del mes siguiente. Aparece en la lista de semanas como «Corte de fin de mes» y se captura el mismo día.'),
-        I('lock_clock', '#64748b', 'Panel cerrado', 'Antes del inicio de la campaña, fuera de sus fechas o antes de que abra la semana no se puede escribir ni guardar; el aviso te dice cuándo abre.'),
+        I('event', '#7c3aed', 'Un reporte por semana', 'Cada semana se reporta una sola vez, con fecha del viernes. El panel abre desde el lunes y puedes capturar o corregir cualquier día: no importa cuándo lo captures, es el mismo reporte.'),
+        I('weekend', '#0284c7', 'Sábado y domingo', 'Cuentan para el viernes de esa misma semana (lunes a domingo). Si tu unidad vacuna en fin de semana, súmalo al reporte de esa semana.'),
+        I('event_available', '#0284c7', 'Corte de fin de mes', 'Si el mes termina de lunes a jueves, ese último día se captura un reporte extra (por ejemplo, un miércoles 30) con lo aplicado de esa semana hasta ese día; el reporte del viernes ya sería del mes siguiente. Aparece en la lista como «Corte de fin de mes».'),
+        I('lock_clock', '#64748b', 'Panel cerrado', 'Antes del inicio de la campaña, fuera de sus fechas o antes de que abra la semana no se puede guardar; el aviso te dice cuándo abre.'),
         T('Cómo se captura'),
-        P(1, 'Elige la semana', 'En «Semana a reportar». Las etiquetas dicen si ya está capturada, pendiente o cuándo abre.'),
+        P(1, 'Elige la semana', 'En «Semana a reportar». Entras en la semana en curso; las etiquetas dicen si ya está capturada, pendiente o cuándo abre.'),
         P(2, 'Escribe tu nombre', 'Queda registrado como quien capturó el reporte.'),
-        P(3, 'Captura las dosis', 'En «Esta semana». Meta anual es lo asignado a tu unidad y Acumulado lo ya reportado; el avance se calcula solo y no puedes pasar de la meta. Si no aplicaste dosis, activa «Sin movimiento».'),
-        P(4, 'Guarda', 'Con el botón azul. Cada reporte recibe un folio único, que ves en el paso 4 y en el Historial de Reportes.'),
+        P(3, 'Anota las dosis aplicadas', 'En «Esta semana», escribe solo lo que aplicaste en esa semana; no sumes lo de semanas anteriores. Si no aplicaste nada, activa «Sin movimiento».'),
+        P(4, 'Guarda', 'Con el botón azul. Cada reporte recibe un folio único, que ves en el paso 4 y en el Historial de Reportes. Puedes volver a guardar la misma semana para corregirla.'),
+        T('Cómo leer la tabla'),
+        I('flag', '#16a34a', 'Meta anual', 'Lo asignado a tu unidad para ese grupo en toda la campaña. Es el tope: no se puede reportar más.'),
+        I('functions', '#7c3aed', 'Acumulado', 'Lo que ya reportaste en las demás semanas de la campaña.'),
+        I('edit', '#0284c7', 'Esta semana', 'Lo que aplicaste en la semana elegida. El avance se calcula solo con Acumulado + Esta semana contra la Meta anual y debajo de la barra ves «X de Y».'),
+        I('error', '#dc2626', 'Te pasas por N', 'Si con lo que anotas rebasas la meta, el renglón se marca en rojo con cuántas dosis te pasas y el reporte no se guarda hasta corregirlo.'),
+        I('history', '#d97706', 'Avisos sobre la tabla', 'Aparecen solo cuando importan: si algún grupo rebasa su meta y si te falta capturar alguna semana anterior, con un acceso directo.'),
         T('Resumen de meta'),
         I('insights', '#7c3aed', 'Tu avance de un vistazo', 'La pestaña «Resumen de meta» muestra tu meta, las dosis aplicadas, el avance contra lo esperado a la fecha, las semanas reportadas, tu ritmo y el detalle por grupo. Ahí también están el abasto de frascos y el pronóstico de autonomía.'),
         I('table_view', '#16a34a', 'Descargar mi meta (Excel)', 'Genera el archivo oficial de metas con solo tu unidad: tu columna con la meta de cada rubro y tu distribución de jeringa.'),
         T('Rubros bloqueados'),
-        I('block', '#d97706', 'Sin meta', 'Tu unidad no tiene meta en ese rubro, así que no se captura.'),
+        I('block', '#d97706', 'Sin meta', 'Si tu unidad no tiene meta en un renglón, aparece atenuado con «Sin meta» y no se captura. Los grupos completos sin meta se reúnen en un aviso al final de la página.'),
         I('schedule', '#d97706', '2ª y 1ª dosis', 'No hay 2ª dosis durante el 1er mes de la campaña ni 1ª dosis durante el último mes.'),
-        N('Mientras el panel esté abierto puedes volver a guardar la misma semana para corregirla; las ediciones quedan en el historial del reporte.')
+        N('Un reporte guardado se puede corregir mientras la semana esté abierta; si el SIS del mes ya se envió, la corrección la hace tu municipio.')
       ]
     },
 
@@ -475,7 +482,7 @@
           <div style="min-width:0;"><h3 id="ayudaTitulo"></h3><p id="ayudaSub"></p></div>
           <button type="button" class="ayuda-cerrar" id="ayudaCerrarX" title="Cerrar" aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
         </div>
-        <div class="ayuda-cuerpo" id="ayudaCuerpo"></div>
+        <div class="ayuda-cuerpo" id="ayudaCuerpo" tabindex="0" role="region" aria-labelledby="ayudaTitulo"></div>
         <div class="ayuda-pie"><button type="button" id="ayudaCerrarBtn">Entendido</button></div>
       </div>`;
     document.body.appendChild(ov);
@@ -518,7 +525,19 @@
     ev.stopPropagation();
     abrir(b.dataset.ayuda);
   });
-  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') cerrar(); });
+  document.addEventListener('keydown', (ev) => {
+    const ov = document.getElementById('ayudaOverlay');
+    if (!ov || !ov.classList.contains('abierto')) return;
+    if (ev.key === 'Escape') { ev.preventDefault(); cerrar(); return; }
+    // El diálogo es modal: el foco da la vuelta entre sus controles y no se escapa a la página de atrás.
+    if (ev.key === 'Tab') {
+      const f = [...ov.querySelectorAll('button, [tabindex="0"]')].filter((e) => !e.disabled && e.offsetParent !== null);
+      if (!f.length) return;
+      const primero = f[0], ultimo = f[f.length - 1];
+      if (ev.shiftKey && (document.activeElement === primero || !ov.contains(document.activeElement))) { ev.preventDefault(); ultimo.focus(); }
+      else if (!ev.shiftKey && (document.activeElement === ultimo || !ov.contains(document.activeElement))) { ev.preventDefault(); primero.focus(); }
+    }
+  });
 
   window.Ayuda = { abrir, cerrar, contenido: CONTENIDO };
 })();

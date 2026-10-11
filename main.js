@@ -24941,17 +24941,11 @@ function syncCommandHub() {
     const flowStatus = getPinolFlowStatus();
     isSaveDisabled = (flowStatus !== "NONE");
   } else if (captureTab === "INFLUENZA") {
-    // Misma regla que el panel: campaña iniciada, semana ya abierta (jueves previo) y solo jueves/viernes.
+    // Misma regla que el panel: campaña iniciada y la semana ya abierta (abre el lunes; cualquier día de la semana).
     const estInf = typeof window.influenzaEstadoCaptura === "function" ? window.influenzaEstadoCaptura() : null;
     if (estInf && !estInf.abierta) {
       isValidDate = false;
       reasonInvalid = estInf.motivo;
-    } else if (!estInf) {
-      const day = new Date().getDay();
-      if (day !== 4 && day !== 5) {
-        isValidDate = false;
-        reasonInvalid = "La captura de Influenza solo se puede realizar los días Jueves o Viernes.";
-      }
     }
     isSaveDisabled = !isValidDate;
   }
@@ -25086,14 +25080,15 @@ function syncCommandHub() {
             showToast(ventanaErr, false, "bad");
             return;
           }
-          const isSinMov = document.getElementById("chkSinMovimientoINF")?.checked || false;
-          const valores = {};
-          if (typeof INFLUENZA_RUBROS !== "undefined") {
-            INFLUENZA_RUBROS.forEach(rb => {
-              const input = document.getElementById(`input_inf_${rb.id}`);
-              valores[rb.id] = isSinMov ? 0 : (input ? (parseInt(input.value) || 0) : 0);
-            });
+          // Mismas reglas que el guardado en línea: meta de la unidad, rubros sin meta y calendario de dosis.
+          const validacion = typeof window.influenzaValidarCaptura === "function"
+            ? window.influenzaValidarCaptura(document.getElementById("influenza_semana")?.value) : null;
+          if (validacion && validacion.error) {
+            showToast(validacion.error, false, "bad");
+            return;
           }
+          const isSinMov = validacion ? validacion.isSinMov : (document.getElementById("chkSinMovimientoINF")?.checked || false);
+          const valores = validacion ? validacion.valores : {};
           const payload = {
             clues: USER?.clues,
             unidad: USER?.unidad,

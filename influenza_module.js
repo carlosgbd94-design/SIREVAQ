@@ -172,13 +172,7 @@ async function handleInfluenzaCampanaChange(e) {
   const weeks = generateCampaignWeeks();
   const weekSelect = document.getElementById("influenza_semana");
   if (weekSelect && weeks.length) {
-    const today = new Date().toISOString().split("T")[0];
-    const matchingWeek = weeks.find(w => w.fecha >= today);
-    if (matchingWeek) {
-      weekSelect.value = matchingWeek.fecha;
-    } else {
-      weekSelect.value = weeks[weeks.length - 1].fecha;
-    }
+    weekSelect.value = influenzaSemanaPredeterminada(weeks);
     updateInfluenzaWeekBtnLabel(weekSelect.value);
     updateInfluenzaSinMovimientoUI();
   }
@@ -307,89 +301,63 @@ function renderInfluenzaWeekPicker() {
   dropdown.style.setProperty("width", "360px", "important");
 
   const weeks = generateCampaignWeeks();
-  const today = new Date().toISOString().split("T")[0];
-
-  // Determinar semana epidemiológica actual (la primera futura/actual o la última)
-  let currentWeekFecha = null;
-  const futureOrCurrentWeeks = weeks.filter(w => w.fecha >= today);
-  if (futureOrCurrentWeeks.length) {
-    currentWeekFecha = futureOrCurrentWeeks[0].fecha;
-  } else if (weeks.length) {
-    currentWeekFecha = weeks[weeks.length - 1].fecha;
-  }
+  // Semana en curso: la más reciente que ya abrió (el fin de semana sigue siendo de la semana que corre)
+  const currentWeekFecha = influenzaSemanaPredeterminada(weeks);
 
   dropdown.innerHTML = "";
+
+  const chip = (cls, icono, txt) => `<span class="inf-chip inf-chip--${cls}"><span class="material-symbols-rounded" aria-hidden="true">${icono}</span>${txt}</span>`;
 
   weeks.forEach(w => {
     const captureRecord = _influenzaCapturasCache.find(r => r.fecha === w.fecha);
     const isCaptured = !!captureRecord;
     const isSinMov = captureRecord && (captureRecord.sin_movimiento === true || captureRecord.sin_movimiento === 'SI');
     const isCurrent = w.fecha === currentWeekFecha;
-    
-    let statusBadge = "";
-    if (isSinMov) {
-      statusBadge = `<span style="background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900; display: inline-flex; align-items: center; gap: 4px;" class="shrink-0 shadow-sm"><span class="material-symbols-rounded text-xs" style="font-size:11px; color: #1d4ed8;">pause_circle</span>Sin Movimiento</span>`;
-    } else if (isCaptured) {
-      statusBadge = `<span style="background-color: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900; display: inline-flex; align-items: center; gap: 4px;" class="shrink-0 shadow-sm"><span class="material-symbols-rounded text-xs" style="font-size:11px; color: #047857;">check_circle</span>Capturado</span>`;
-    } else if (influenzaVentanaError(w.fecha)) {
-      statusBadge = `<span style="background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 800; white-space: nowrap;" class="shrink-0">Abre ${influenzaDiaCorto(influenzaSemanaAbre(w.fecha))}</span>`;
-    } else {
-      statusBadge = `<span style="background-color: #fffbeb; color: #b45309; border: 1px solid #fde68a; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900; display: inline-flex; align-items: center; gap: 4px;" class="shrink-0 shadow-sm"><span class="material-symbols-rounded text-xs" style="font-size:11px; color: #b45309;">error</span>Pendiente</span>`;
-    }
-
-    const currentBadge = isCurrent ? `<span style="background-color: #7c3aed; color: #ffffff; text-shadow: 0 1px 1px rgba(0,0,0,0.1); text-transform: uppercase; letter-spacing: 0.05em; font-size: 8px; font-weight: 900; padding: 1.5px 5px; border-radius: 4px; display: inline-flex; align-items: center; margin-left: 6px; line-height: 1;" class="shrink-0">ACTUAL</span>` : "";
     const isSelected = hiddenInput.value === w.fecha;
+
+    let estado;
+    if (isSinMov) estado = chip("azul", "pause_circle", "Sin movimiento");
+    else if (isCaptured) estado = chip("verde", "check_circle", "Capturado");
+    else if (influenzaVentanaError(w.fecha)) estado = chip("gris", "schedule", `Abre ${influenzaDiaCorto(influenzaSemanaAbre(w.fecha))}`);
+    else estado = chip("ambar", "error", "Pendiente");
+
+    const lunes = influenzaLunesDe(w.fecha);
+    const rango = w.corte
+      ? `Corte de fin de mes · ${influenzaDiaCorto(w.fecha)}`
+      : `Viernes ${influenzaFechaCorta(w.fecha)} · semana del ${influenzaFechaCorta(lunes)} al ${influenzaFechaCorta(influenzaSumaDias(lunes, 6))}`;
 
     const item = document.createElement("button");
     item.type = "button";
-    item.className = `w-full text-left p-2.5 rounded-xl border flex items-center justify-between gap-2.5 transition-all`;
-
-    // Estilos premium explícitos para el selector de semanas
-    if (isSelected) {
-      item.style.backgroundColor = "#f3e8ff"; // Fondo lavanda/violeta claro
-      item.style.borderColor = "#c084fc"; // Borde violeta medio
-      item.classList.add("shadow-sm");
-    } else {
-      item.style.backgroundColor = "transparent";
-      item.style.borderColor = "#f1f5f9"; // slate-100
-      
-      item.addEventListener("mouseenter", () => {
-        item.style.backgroundColor = "#f8fafc"; // slate-50
-        item.style.borderColor = "#e2e8f0"; // slate-200
-      });
-      item.addEventListener("mouseleave", () => {
-        item.style.backgroundColor = "transparent";
-        item.style.borderColor = "#f1f5f9";
-      });
-    }
-
-    const textStyle = isSelected ? `style="color: #6b21a8; font-weight: 900;"` : `style="color: #1e293b; font-weight: 800;"`;
-    const labelStyle = isSelected ? `style="color: #8b5cf6;"` : `style="color: #94a3b8;"`;
-
+    item.className = "inf-sem-item" + (isSelected ? " is-selected" : "");
+    if (isSelected) item.setAttribute("aria-current", "true");
+    item.dataset.fecha = w.fecha;
     item.innerHTML = `
-      <div class="flex flex-col min-w-0">
-        <div class="flex items-center gap-1.5">
-          <span class="text-xs shrink-0" ${textStyle}>Semana ${w.semana}</span>
-          ${currentBadge}
-        </div>
-        <span class="text-[10px] mt-0.5 truncate" ${labelStyle}>${w.corte ? "Corte de fin de mes · " + influenzaDiaCorto(w.fecha) : "Viernes " + influenzaFechaCorta(w.fecha)} ${w.fecha.slice(0, 4)}</span>
-      </div>
-      <div class="flex items-center gap-2 shrink-0">
-        ${statusBadge}
-        ${isSelected ? '<span class="material-symbols-rounded text-xs shrink-0" style="color: #6b21a8; font-weight: 900;">check</span>' : ''}
-      </div>
-    `;
+      <span class="inf-sem-item-txt">
+        <span class="inf-sem-item-tit">Semana ${w.semana}${isCurrent ? '<span class="inf-sem-actual">En curso</span>' : ""}</span>
+        <span class="inf-sem-item-sub">${rango} ${w.fecha.slice(0, 4)}</span>
+      </span>
+      <span class="inf-sem-item-est">${estado}${isSelected ? '<span class="material-symbols-rounded inf-sem-check" aria-hidden="true">check</span>' : ""}</span>`;
 
     item.onclick = (e) => {
       e.stopPropagation();
       hiddenInput.value = w.fecha;
       hiddenInput.dispatchEvent(new Event("change"));
-      dropdown.classList.add("hidden");
-      dropdown.style.display = "none";
+      cerrarSelectorSemanaInfluenza(true);
     };
 
     dropdown.appendChild(item);
   });
+}
+
+/** Cierra la lista de semanas; con `devolverFoco` el foco vuelve al botón (teclado). */
+function cerrarSelectorSemanaInfluenza(devolverFoco) {
+  const dropdown = document.getElementById("influenza_semana_dropdown");
+  const btn = document.getElementById("influenza_semana_btn");
+  if (dropdown) { dropdown.classList.add("hidden"); dropdown.style.display = "none"; }
+  if (btn) {
+    btn.setAttribute("aria-expanded", "false");
+    if (devolverFoco) btn.focus();
+  }
 }
 
 // Helper para actualizar la etiqueta del botón selector
@@ -422,6 +390,9 @@ function updateInfluenzaWeekBtnLabel(fecha) {
 }
 
 let SIN_MOVIMIENTO_INF = false;
+// Un reporte guardado «Sin movimiento» se puede reabrir mientras la semana siga abierta (la semana corre de lunes a
+// domingo, así que puede haber dosis después de haberlo marcado): aquí se recuerda esa decisión por semana.
+let _infSinMovReabierto = null;   // { fecha, valor }
 
 function updateInfluenzaSinMovimientoUI() {
   const chkINF = document.getElementById("chkSinMovimientoINF");
@@ -434,9 +405,11 @@ function updateInfluenzaSinMovimientoUI() {
   if (currentReport) {
     cardINF.style.display = "flex";
     const isSinMov = !!(currentReport.sin_movimiento === true || currentReport.sin_movimiento === 'SI');
-    chkINF.checked = isSinMov;
-    chkINF.disabled = true;
-    SIN_MOVIMIENTO_INF = isSinMov;
+    const reabierto = _infSinMovReabierto && _infSinMovReabierto.fecha === selectedFecha ? _infSinMovReabierto.valor : null;
+    chkINF.checked = reabierto == null ? isSinMov : reabierto;
+    // Un reporte con dosis no se pone en ceros de un clic (eso borraría lo capturado): se corrigen las casillas.
+    chkINF.disabled = !isSinMov;
+    SIN_MOVIMIENTO_INF = chkINF.checked;
   } else {
     cardINF.style.display = "flex";
     chkINF.checked = SIN_MOVIMIENTO_INF;
@@ -466,35 +439,15 @@ function updateInfluenzaSinMovimientoUI() {
     if (labelText) labelText.style.color = "";
   }
 
-  // Bloquear selectores principales (Semana y Campaña)
-  const isSinMovActive = chkINF.checked;
+  // «Sin movimiento» ya no congela los selectores: al cambiar de semana se reinicia (ver initInfluenzaCaptureFlow).
   const weekBtn = document.getElementById("influenza_semana_btn");
-  // El selector real es el <select id="influenza_campana"> nativo: se bloquea directamente.
   const campSelect = document.getElementById("influenza_campana");
-
-  if (isSinMovActive) {
-    if (weekBtn) {
-      weekBtn.disabled = true;
-      weekBtn.style.opacity = "0.55";
-      weekBtn.style.pointerEvents = "none";
-    }
-    if (campSelect) {
-      campSelect.disabled = true;
-      campSelect.style.opacity = "0.55";
-      campSelect.style.pointerEvents = "none";
-    }
-  } else {
-    if (weekBtn) {
-      weekBtn.disabled = false;
-      weekBtn.style.opacity = "";
-      weekBtn.style.pointerEvents = "";
-    }
-    if (campSelect) {
-      campSelect.disabled = false;
-      campSelect.style.opacity = "";
-      campSelect.style.pointerEvents = "";
-    }
-  }
+  [weekBtn, campSelect].forEach(el => {
+    if (!el) return;
+    el.disabled = false;
+    el.style.opacity = "";
+    el.style.pointerEvents = "";
+  });
 }
 
 // Inicializar el flujo de captura en UNIDAD
@@ -559,15 +512,9 @@ async function initInfluenzaCaptureFlow() {
   const weekDropdown = document.getElementById("influenza_semana_dropdown");
 
   if (weekSelect && weekBtn && weekDropdown) {
-    const today = new Date().toISOString().split("T")[0];
-    const matchingWeek = weeks.find(w => w.fecha >= today);
-    if (matchingWeek) {
-      weekSelect.value = matchingWeek.fecha;
-    } else {
-      weekSelect.value = weeks[weeks.length - 1].fecha;
-    }
-    
-    // Toggle dropdown
+    weekSelect.value = influenzaSemanaPredeterminada(weeks);
+
+    // Abrir/cerrar la lista; con teclado: flechas para recorrerla, Esc para cerrarla
     weekBtn.onclick = (e) => {
       e.stopPropagation();
 
@@ -576,36 +523,55 @@ async function initInfluenzaCaptureFlow() {
         renderInfluenzaWeekPicker();
         weekDropdown.classList.remove("hidden");
         weekDropdown.style.display = "flex";
+        weekBtn.setAttribute("aria-expanded", "true");
+        const enfocar = weekDropdown.querySelector('[aria-current="true"]') || weekDropdown.querySelector(".inf-sem-item");
+        if (enfocar && e.detail === 0) enfocar.focus();   // detail 0 = se abrió con teclado
+        if (enfocar && typeof enfocar.scrollIntoView === "function") enfocar.scrollIntoView({ block: "nearest" });
       } else {
-        weekDropdown.classList.add("hidden");
-        weekDropdown.style.display = "none";
+        cerrarSelectorSemanaInfluenza(false);
       }
-      weekBtn.setAttribute("aria-expanded", isHidden ? "true" : "false");
     };
 
-    // Cerrar al dar click fuera
-    document.addEventListener("click", (e) => {
-      if (!weekBtn.contains(e.target) && !weekDropdown.contains(e.target)) {
-        weekDropdown.classList.add("hidden");
-        weekDropdown.style.display = "none";
-        weekBtn.setAttribute("aria-expanded", "false");
-      }
+    weekDropdown.addEventListener("keydown", (e) => {
+      const items = [...weekDropdown.querySelectorAll(".inf-sem-item")];
+      const i = items.indexOf(document.activeElement);
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cerrarSelectorSemanaInfluenza(true); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); (items[i + 1] || items[0])?.focus(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); (items[i - 1] || items[items.length - 1])?.focus(); }
+      else if (e.key === "Tab") cerrarSelectorSemanaInfluenza(false);
+    });
+    weekBtn.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown" && weekDropdown.classList.contains("hidden")) { e.preventDefault(); weekBtn.click(); }
     });
 
+    // Cerrar al dar click fuera (una sola vez, aunque el panel se reinicialice)
+    if (!window._infSemanaClickFuera) {
+      window._infSemanaClickFuera = true;
+      document.addEventListener("click", (e) => {
+        const btn = document.getElementById("influenza_semana_btn");
+        const dd = document.getElementById("influenza_semana_dropdown");
+        if (btn && dd && !btn.contains(e.target) && !dd.contains(e.target)) cerrarSelectorSemanaInfluenza(false);
+      });
+    }
+
     // Enlazar evento change
-    weekSelect.removeEventListener("change", renderCaptureGrid);
-    weekSelect.addEventListener("change", renderCaptureGrid);
-    
-    // Auto-actualizar botón y dropdown
-    weekSelect.addEventListener("change", (e) => {
-      updateInfluenzaWeekBtnLabel(e.target.value);
-      updateInfluenzaSinMovimientoUI();
-    });
+    // Cada semana arranca limpia: la marca «Sin movimiento» de otra semana no se arrastra.
+    if (!weekSelect.dataset.enlazado) {
+      weekSelect.dataset.enlazado = "1";
+      weekSelect.addEventListener("change", (e) => {
+        SIN_MOVIMIENTO_INF = false;
+        _infSinMovReabierto = null;
+        updateInfluenzaWeekBtnLabel(e.target.value);
+        updateInfluenzaSinMovimientoUI();
+        renderCaptureGrid();
+      });
+    }
   }
 
   const chkINF = document.getElementById("chkSinMovimientoINF");
   if (chkINF) {
     chkINF.onchange = () => {
+      _infSinMovReabierto = { fecha: document.getElementById("influenza_semana").value, valor: chkINF.checked };
       SIN_MOVIMIENTO_INF = chkINF.checked;
       updateInfluenzaSinMovimientoUI();
       renderCaptureGrid();
@@ -687,6 +653,121 @@ function avisoReglasSemana(fecha) {
   return Object.values(ejemplos).map(r => `<div class="inf-aviso"><b>${r.tipo === "segunda" ? "2ª dosis" : "1ª dosis"} no disponible esta semana.</b> ${r.texto}</div>`).join("");
 }
 
+// Estado de la tabla pintada (acumulado previo por rubro) para recalcular sin volver a pintar.
+let _infGrid = { acum: {}, fecha: "", cerrada: false };
+
+/** Tono del avance: gris sin meta, verde >= 85 %, ámbar >= 50 %, rojo debajo; «over» si rebasa la meta. */
+function infTonoAvance(meta, pct) {
+  if (!meta) return "none";
+  if (pct > 100) return "over";
+  if (pct >= 85) return "good";
+  if (pct >= 50) return "warn";
+  return "bad";
+}
+
+/** Repinta una fila con lo que se va tecleando: avance, barra y la línea «X de Y» (o «Te pasas por N» si rebasa la meta). */
+function actualizarFilaInfluenza(rubroId, v) {
+  const meta = Number(_influenzaMetasCache[rubroId] || 0);
+  const acum = _infGrid.acum[rubroId] || 0;
+  const input = document.getElementById(`input_inf_${rubroId}`);
+  const disp = document.getElementById(`disp_inf_${rubroId}`);
+  const pctEl = document.getElementById(`pct_inf_${rubroId}`);
+  const barEl = document.getElementById(`bar_inf_${rubroId}`);
+  if (!input || !meta) return;
+
+  const total = acum + v;
+  const exceso = total - meta;
+  const pct = Math.round((total / meta) * 100);
+  const tono = infTonoAvance(meta, pct);
+
+  if (exceso > 0) {
+    input.setAttribute("aria-invalid", "true");
+    input.title = `Con esta cifra superas la meta de este grupo por ${exceso}: confirma que es correcta`;
+    input.classList.add("is-over");
+    if (disp) { disp.className = "inf-disp is-over"; disp.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">warning</span>Te pasas por ${exceso}`; }
+  } else {
+    input.removeAttribute("aria-invalid");
+    input.removeAttribute("title");
+    input.classList.remove("is-over");
+    if (disp) { disp.className = "inf-disp" + (exceso === 0 ? " is-justo" : ""); disp.textContent = `${total} de ${meta}`; }
+  }
+  if (pctEl) { pctEl.textContent = `${pct}%`; pctEl.dataset.tono = tono; }
+  if (barEl) {
+    barEl.style.width = Math.min(pct, 100) + "%";
+    barEl.setAttribute("aria-valuenow", String(Math.min(pct, 100)));
+    barEl.dataset.tono = tono;
+  }
+}
+
+/**
+ * Panel «Control de tu meta» de la captura: suma lo tecleado de toda la tabla contra la meta y lo ya acumulado,
+ * dice cuántas dosis le quedan a la unidad y señala los grupos que se pasarían (el guardado los rechaza).
+ */
+function actualizarControlMetaInfluenza() {
+  const box = document.getElementById("infControlMeta");
+  if (!box) return;
+  const sinMov = !!document.getElementById("chkSinMovimientoINF")?.checked;
+  let meta = 0, acum = 0, semana = 0;
+  const excedidos = [];
+  INFLUENZA_RUBROS.forEach(rb => {
+    const m = Number(_influenzaMetasCache[rb.id] || 0);
+    const a = _infGrid.acum[rb.id] || 0;
+    const input = document.getElementById(`input_inf_${rb.id}`);
+    const v = sinMov ? 0 : (parseInt(input?.value, 10) || 0);
+    if (m > 0) {
+      meta += m; acum += a; semana += Math.max(0, v);
+      if (a + v > m) excedidos.push({ rb, exceso: a + v - m });
+    }
+  });
+
+  box.hidden = false;
+  if (!meta) {
+    box.innerHTML = `<div class="inf-ctl-msg is-info"><span class="material-symbols-rounded" aria-hidden="true">info</span><div><b>Tu unidad aún no tiene meta asignada.</b> Cuando tu municipio la registre podrás capturar y verás aquí tu avance.</div></div>`;
+    return;
+  }
+
+  const avance = (acum + semana) * 100 / meta;
+  const esperado = influenzaResumenCalcular().esperadoPct;
+  const diff = avance - esperado;
+  const f1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
+  const lista = excedidos.slice(0, 4).map(e => `${escapeHtml(e.rb.grupo)} · ${escapeHtml(e.rb.edad)} (+${e.exceso})`).join("; ") + (excedidos.length > 4 ? `; y ${excedidos.length - 4} más` : "");
+
+  let msg;
+  if (excedidos.length) {
+    msg = `<div class="inf-ctl-msg is-over" role="alert"><span class="material-symbols-rounded" aria-hidden="true">error</span><div><b>${excedidos.length === 1 ? "1 grupo rebasa" : excedidos.length + " grupos rebasan"} su meta:</b> ${lista}. Corrige la cifra: no se puede guardar un reporte que supere la meta.</div></div>`;
+  } else if (_infGrid.cerrada) {
+    msg = "";
+  } else if (sinMov) {
+    msg = `<div class="inf-ctl-msg is-info"><span class="material-symbols-rounded" aria-hidden="true">pause_circle</span><div>Esta semana se guarda <b>sin movimiento</b>: todo en ceros.</div></div>`;
+  } else if (semana === 0) {
+    msg = `<div class="inf-ctl-msg is-info"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span><div>Anota las dosis aplicadas esta semana. Cada grupo muestra cuántas te quedan; los que no tienen meta están bloqueados.</div></div>`;
+  } else {
+    const ritmo = diff >= -5 ? "Vas al ritmo esperado" : `Vas ${f1(-diff)} puntos por debajo del ritmo esperado a hoy`;
+    msg = `<div class="inf-ctl-msg is-ok"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span><div><b>Dentro de tu meta.</b> Con esta captura llevas ${f1(avance)}% de tu meta (esperado a hoy: ${f1(esperado)}%). ${ritmo}.</div></div>`;
+  }
+
+  // Semanas anteriores sin reporte (el panel abre toda la semana, pero cada semana se reporta una sola vez)
+  const hoy = influenzaHoy();
+  const atrasadas = generateCampaignWeeks().filter(w => w.fecha < hoy && w.fecha !== _infGrid.fecha
+    && !_influenzaCapturasCache.some(r => r.fecha === w.fecha) && !influenzaVentanaError(w.fecha));
+  const pend = atrasadas.length
+    ? `<div class="inf-ctl-msg is-warn"><span class="material-symbols-rounded" aria-hidden="true">history</span><div>Tienes <b>${atrasadas.length === 1 ? "1 semana anterior" : atrasadas.length + " semanas anteriores"} sin reporte</b>. <button type="button" class="inf-ctl-link" data-fecha="${atrasadas[0].fecha}">Ir a la semana del ${influenzaFechaCorta(atrasadas[0].fecha)}</button></div></div>`
+    : "";
+
+  // Las cifras de la campaña (meta, aplicadas, avance vs esperado) viven en «Resumen de meta»; aquí solo van
+  // los avisos que importan al capturar: si algo rebasa la meta y si falta alguna semana.
+  box.innerHTML = msg + pend;
+  box.hidden = !(msg || pend);
+
+  box.querySelectorAll(".inf-ctl-link").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const sel = document.getElementById("influenza_semana");
+      sel.value = btn.dataset.fecha;
+      sel.dispatchEvent(new Event("change"));
+    });
+  });
+}
+
 function renderCaptureGrid() {
   const container = document.getElementById("influenzaCaptureGroupsContainer");
   if (!container) return;
@@ -713,7 +794,7 @@ function renderCaptureGrid() {
   const currentReport = _influenzaCapturasCache.find(r => r.fecha === selectedFecha);
   const currentValores = currentReport ? currentReport.valores : {};
 
-  // Calcular acumulado previo (excluyendo la semana seleccionada)
+  // Acumulado previo por rubro (todo lo reportado en las demás semanas de la campaña)
   const acumuladosPrevios = {};
   INFLUENZA_RUBROS.forEach(rb => {
     acumuladosPrevios[rb.id] = 0;
@@ -723,6 +804,14 @@ function renderCaptureGrid() {
       }
     });
   });
+  _infGrid = { acum: acumuladosPrevios, fecha: selectedFecha, cerrada: capturaCerrada };
+
+  // Control de meta: panel que resume en vivo lo que se va a reportar contra lo disponible
+  const control = document.createElement("section");
+  control.id = "infControlMeta";
+  control.className = "inf-ctl";
+  control.setAttribute("aria-label", "Control de tu meta");
+  container.appendChild(control);
 
   // Agrupar rubros por categoría y grupo para una presentación visual limpia y organizada
   const groups = {};
@@ -734,8 +823,18 @@ function renderCaptureGrid() {
     groups[groupKey].push(rb);
   });
 
+  const chkINF = document.getElementById("chkSinMovimientoINF");
+  const isSinMovActive = !!(chkINF && chkINF.checked);
+
   // Renderizar cada grupo en un panel/tarjeta con fondo blanco sólido
+  const gruposSinMeta = [];
   Object.entries(groups).forEach(([groupTitle, rubros]) => {
+    // Un grupo donde la unidad no tiene meta en ningún renglón no se captura: va en un solo aviso al final,
+    // no como una tabla entera de guiones.
+    if (rubros.every(rb => !Number(_influenzaMetasCache[rb.id] || 0))) {
+      gruposSinMeta.push(groupTitle);
+      return;
+    }
     const card = document.createElement("div");
     card.className = "bg-white border border-slate-200 rounded-[24px] p-6 shadow-sm flex flex-col gap-4";
     card.style.backgroundColor = "#ffffff";
@@ -745,14 +844,15 @@ function renderCaptureGrid() {
         <h4 class="text-xs font-black text-violet-900 uppercase tracking-wider m-0">${groupTitle}</h4>
       </div>
       <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200 bg-white">
-        <table class="w-full border-collapse text-left text-xs font-semibold text-slate-700">
+        <table class="inf-cap-tabla w-full border-collapse text-left text-xs font-semibold text-slate-700">
+          <caption class="sr-only">${groupTitle}: meta anual, acumulado, dosis de esta semana y avance por grupo de edad</caption>
           <thead>
             <tr class="bg-slate-50 border-b border-slate-200">
-              <th class="p-3">Subgrupo / Edad</th>
-              <th class="p-3 text-center" style="width: 100px;">Meta Anual</th>
-              <th class="p-3 text-center" style="width: 100px;">Acumulado</th>
-              <th class="p-3 text-center" style="width: 120px;">Esta Semana</th>
-              <th class="p-3 text-center" style="width: 100px;">Avance %</th>
+              <th scope="col" class="p-3">Subgrupo / Edad</th>
+              <th scope="col" class="p-3 text-center">Meta Anual</th>
+              <th scope="col" class="p-3 text-center">Acumulado</th>
+              <th scope="col" class="p-3 text-center">Esta Semana</th>
+              <th scope="col" class="p-3 text-center">Avance %</th>
             </tr>
           </thead>
           <tbody class="tbody-inputs">
@@ -763,9 +863,6 @@ function renderCaptureGrid() {
 
     const tbody = card.querySelector(".tbody-inputs");
 
-    const chkINF = document.getElementById("chkSinMovimientoINF");
-    const isSinMovActive = chkINF && chkINF.checked;
-
     rubros.forEach(rb => {
       const meta = Number(_influenzaMetasCache[rb.id] || 0);
       const acum = acumuladosPrevios[rb.id];
@@ -775,135 +872,69 @@ function renderCaptureGrid() {
 
       const row = document.createElement("tr");
 
-      // Calcular avance inicial
       const currentVal = Number(val || 0);
-      const totalDoses = acum + currentVal;
-      const pct = meta > 0 ? Math.round((totalDoses / meta) * 100) : 0;
-      const cappedPct = Math.min(pct, 100);
+      const pct = meta > 0 ? Math.round(((acum + currentVal) / meta) * 100) : 0;
+      const t = infTonoAvance(meta, pct);
 
-      // Semáforo de color
-      let barColor, badgeBg, badgeText, badgeBorder;
-      if (!meta) {
-        barColor = '#cbd5e1'; badgeBg = '#f1f5f9'; badgeText = '#64748b'; badgeBorder = '#cbd5e1';
-      } else if (pct >= 85) {
-        barColor = '#10b981'; badgeBg = '#d1fae5'; badgeText = '#065f46'; badgeBorder = '#6ee7b7';
-      } else if (pct >= 50) {
-        barColor = '#f59e0b'; badgeBg = '#fef3c7'; badgeText = '#92400e'; badgeBorder = '#fcd34d';
-      } else {
-        barColor = '#ef4444'; badgeBg = '#fee2e2'; badgeText = '#991b1b'; badgeBorder = '#fca5a5';
-      }
+      row.className = meta === 0 ? "inf-fila is-bloqueada" : "inf-fila";
 
-      // Estilo de fila inhabilitada
-      if (isLocked) {
-        row.style.cssText = 'opacity:0.72; background: #f8fafc;';   // legible; el campo ya está deshabilitado y la fila explica el porqué al pasar el cursor
-      } else {
-        row.className = 'border-b border-slate-100 hover:bg-violet-50/30 transition-all duration-200';
-      }
+      const rubroTxt = `${String(rb.grupo || rb.categoria || "").replace(/"/g, "&quot;")} · ${String(rb.edad || "").replace(/"/g, "&quot;")}`;
+      const motivoBloqueo = meta === 0 ? "Sin meta asignada para este grupo: no se captura"
+        : (capturaCerrada ? "La captura de esta semana está cerrada" : (isSinMovActive ? "Marcaste «Sin movimiento»: esta semana se guarda en ceros" : "Este grupo no se captura en esta fecha"));
 
       row.innerHTML = `
-        <td class="p-3">
-          <span class="text-xs font-semibold ${isLocked ? 'text-slate-500 italic' : 'text-slate-700'}">${rb.edad}</span>
-          ${reglaCal ? `<span class="inf-pill-regla">${reglaCal.etiqueta}</span>` : (isLocked && meta === 0 ? '<span style="display:inline-block;margin-left:6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;background:#e2e8f0;color:#475569;padding:1px 6px;border-radius:20px;" title="Tu unidad no tiene meta asignada para este grupo, por eso no se captura">Sin meta</span>' : '')}
-        </td>
-        <td class="p-3 text-center font-bold text-slate-600 text-xs">${meta || '—'}</td>
-        <td class="p-3 text-center font-bold text-xs" style="color:#6d28d9;">${acum}</td>
+        <th scope="row" class="p-3 inf-fila-edad">
+          <span class="${meta === 0 ? "inf-edad is-bloqueada" : "inf-edad"}">${rb.edad}</span>
+          ${reglaCal ? `<span class="inf-pill-regla">${reglaCal.etiqueta}</span>` : ''}
+        </th>
+        <td class="p-3 text-center inf-num">${meta || '—'}</td>
+        <td class="p-3 text-center inf-num inf-num--acum">${acum}</td>
         <td class="p-3 text-center">
-          <input type="number" min="0" step="1"
-            id="input_inf_${rb.id}"
-            aria-label="${String(rb.grupo || rb.categoria || '').replace(/"/g, '&quot;')} · ${String(rb.edad || '').replace(/"/g, '&quot;')}: dosis aplicadas esta semana"
-            ${isLocked ? `title="${meta === 0 ? 'Sin meta asignada para este grupo: no se captura' : (capturaCerrada ? 'La captura de esta semana está cerrada' : 'Este grupo no se captura en esta fecha')}"` : ''}
-            style="width:70px; text-align:center; font-weight:700; font-size:12px;
-              background:${isLocked ? '#f1f5f9' : '#fff'};
-              border:1.5px solid ${isLocked ? '#e2e8f0' : '#c4b5fd'};
-              border-radius:10px; padding:5px 8px; outline:none;
-              cursor:${isLocked ? 'not-allowed' : 'text'};
-              transition: border-color 0.2s, box-shadow 0.2s;"
+          <input type="number" min="0" step="1" inputmode="numeric"
+            id="input_inf_${rb.id}" class="inf-input"
+            aria-label="${rubroTxt}: dosis aplicadas esta semana"
+            ${meta > 0 ? `aria-describedby="disp_inf_${rb.id}"` : ''}
+            ${isLocked ? `title="${motivoBloqueo}"` : ''}
             value="${val}"
             ${isLocked ? 'disabled placeholder="—"' : 'placeholder="0"'}
           >
         </td>
-        <td class="p-3" style="min-width:110px;">
-          <div style="display:flex; flex-direction:column; align-items:flex-start; gap:3px;">
-            <div style="display:flex; justify-content:space-between; width:100%; margin-bottom:2px;">
-              <span id="pct_inf_${rb.id}" style="
-                font-size:10px; font-weight:800;
-                background:${badgeBg}; color:${badgeText};
-                border:1px solid ${badgeBorder};
-                padding:2px 7px; border-radius:20px;
-                transition: background 0.3s, color 0.3s;
-              ">${meta > 0 ? pct + '%' : 'N/A'}</span>
-            </div>
-            <div style="width:100%; height:6px; background:#e2e8f0; border-radius:6px; overflow:hidden;">
-              <div id="bar_inf_${rb.id}" role="progressbar" aria-label="Avance contra la meta" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${cappedPct}" style="
-                height:100%; width:${cappedPct}%;
-                background:${barColor};
-                border-radius:6px;
-                transition: width 0.5s cubic-bezier(0.34,1.56,0.64,1), background 0.3s;
-              "></div>
-            </div>
+        <td class="p-3 text-center inf-col-avance">
+          <span id="pct_inf_${rb.id}" class="inf-pct" data-tono="${t}">${meta > 0 ? pct + '%' : 'N/A'}</span>
+          <div class="inf-barra">
+            <div id="bar_inf_${rb.id}" class="inf-barra-fill" data-tono="${t}" role="progressbar" aria-label="Avance contra la meta" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(pct, 100)}" style="width:${Math.min(pct, 100)}%;"></div>
           </div>
+          <span id="disp_inf_${rb.id}" class="inf-disp">${meta > 0 ? `${acum + currentVal} de ${meta}` : ''}</span>
         </td>
       `;
       tbody.appendChild(row);
 
-      // Eventos en vivo para validación y avance % con barra
+      // Validación y avance en vivo
       if (!isLocked) {
-        const input  = row.querySelector(`#input_inf_${rb.id}`);
-        const pctEl  = row.querySelector(`#pct_inf_${rb.id}`);
-        const barEl  = row.querySelector(`#bar_inf_${rb.id}`);
-
-        input.addEventListener("focus", () => {
-          input.style.boxShadow = '0 0 0 3px rgba(139,92,246,0.2)';
-        });
-        input.addEventListener("blur", () => {
-          input.style.boxShadow = '';
-        });
-
+        const input = row.querySelector(`#input_inf_${rb.id}`);
         input.addEventListener("input", () => {
-          let v = parseInt(input.value) || 0;
+          let v = parseInt(input.value, 10) || 0;
           if (v < 0) { v = 0; input.value = 0; }
-
-          const total = acum + v;
-          const overMeta = total > meta;
-
-          if (overMeta) {
-            input.style.borderColor = '#ef4444';
-            input.style.background  = '#fee2e2';
-            input.setAttribute('aria-invalid', 'true');
-            input.title = 'Con esta cifra superas la meta de este grupo: confirma que es correcta';
-          } else {
-            input.style.borderColor = '#c4b5fd';
-            input.style.background  = '#fff';
-            input.removeAttribute('aria-invalid');
-            input.removeAttribute('title');
-          }
-
-          const livePct = Math.round((total / meta) * 100);
-          const liveCapped = Math.min(livePct, 100);
-
-          let lBarColor, lBadgeBg, lBadgeText, lBadgeBorder;
-          if (livePct >= 85) {
-            lBarColor = '#10b981'; lBadgeBg = '#d1fae5'; lBadgeText = '#065f46'; lBadgeBorder = '#6ee7b7';
-          } else if (livePct >= 50) {
-            lBarColor = '#f59e0b'; lBadgeBg = '#fef3c7'; lBadgeText = '#92400e'; lBadgeBorder = '#fcd34d';
-          } else {
-            lBarColor = '#ef4444'; lBadgeBg = '#fee2e2'; lBadgeText = '#991b1b'; lBadgeBorder = '#fca5a5';
-          }
-
-          pctEl.textContent = `${livePct}%`;
-          pctEl.style.background   = lBadgeBg;
-          pctEl.style.color        = lBadgeText;
-          pctEl.style.borderColor  = lBadgeBorder;
-          barEl.style.width        = liveCapped + '%';
-          barEl.setAttribute('aria-valuenow', String(liveCapped));
-          barEl.style.background   = lBarColor;
+          actualizarFilaInfluenza(rb.id, v);
+          actualizarControlMetaInfluenza();
         });
+        if (currentVal > 0) actualizarFilaInfluenza(rb.id, currentVal);
       }
     });
 
     container.appendChild(card);
   });
 
+  if (gruposSinMeta.length) {
+    const det = document.createElement("details");
+    det.className = "inf-sinmeta";
+    det.innerHTML = `
+      <summary><span class="material-symbols-rounded" aria-hidden="true">block</span>${gruposSinMeta.length === 1 ? "1 grupo sin meta" : gruposSinMeta.length + " grupos sin meta"} para tu unidad: no se capturan</summary>
+      <ul>${gruposSinMeta.map(g => `<li>${g}</li>`).join("")}</ul>`;
+    container.appendChild(det);
+  }
+
+  actualizarControlMetaInfluenza();
   actualizarPasosInfluenza();
   if (typeof syncCommandHub === "function") syncCommandHub();
 }
@@ -1235,22 +1266,28 @@ async function loadInfluenzaHistoryList() {
 }
 
 /**
- * Ventana de captura de la unidad: no se captura antes de que inicie la campaña, ni fuera de ella, ni una
- * semana futura (a lo mucho el jueves previo al viernes del reporte). null = se puede capturar.
- * Lo mismo lo exige el trigger influenza_trg_ventana_captura en la base.
+ * Semana de captura de la unidad. El reporte se fecha el viernes, pero la semana es la ISO (lunes a domingo): el
+ * panel abre el lunes y se puede capturar cualquier día; sábado y domingo cuentan para el viernes de esa misma
+ * semana. Sigue habiendo UN solo reporte por semana, sin importar el día en que se capture.
+ * null = se puede capturar. Lo mismo lo exige el trigger influenza_trg_ventana_captura en la base.
  */
 function influenzaVentanaError(fecha) {
   const ini = _campaignConfig.fecha_inicio, fin = _campaignConfig.fecha_fin;
   if (!ini || !fin || !fecha) return null;
-  const hoy = new Date().toLocaleDateString("en-CA");
-  const manana = new Date(Date.now() + 86400000).toLocaleDateString("en-CA");
+  const hoy = influenzaHoy();
   const L = window.InfluenzaReglas ? window.InfluenzaReglas.fechaLarga : (x) => x;
   if (hoy < ini) return `La campaña de Influenza inicia el ${L(ini)}. Aún no se pueden capturar reportes.`;
   if (fecha < ini || fecha > fin) return `La semana del ${L(fecha)} queda fuera de la campaña (${L(ini)} al ${L(fin)}).`;
-  if (fecha > manana) return `La semana del ${L(fecha)} aún no se puede capturar: se abre el jueves previo.`;
+  const abre = influenzaSemanaAbre(fecha);
+  if (hoy < abre) return `La semana del ${L(fecha)} aún no se puede capturar: se abre el ${influenzaDiaCorto(abre)}.`;
   return null;
 }
 window.influenzaVentanaError = influenzaVentanaError;
+
+/** Hoy en la fecha local de la unidad (AAAA-MM-DD); toISOString daría el día siguiente después de las 6 pm. */
+function influenzaHoy() {
+  return new Date().toLocaleDateString("en-CA");
+}
 
 function influenzaFechaCorta(ymd) {
   return window.InfluenzaReglas ? window.InfluenzaReglas.fechaCorta(ymd) : ymd;
@@ -1262,18 +1299,50 @@ function influenzaDiaCorto(ymd) {
   return `${dias[dow]} ${influenzaFechaCorta(ymd)}`;
 }
 
-function influenzaDiaAnterior(ymd) {
+function influenzaSumaDias(ymd, n) {
   const [y, m, d] = String(ymd).split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
-/** Primer día en que se puede capturar la semana de `fecha`: el jueves previo, o el inicio de la campaña si es después. */
-function influenzaSemanaAbre(fecha) {
-  if (influenzaEsCorte(fecha)) return fecha;   // el corte de fin de mes se captura el mismo día
-  const jueves = influenzaDiaAnterior(fecha);
-  const ini = _campaignConfig.fecha_inicio;
-  return ini && ini > jueves ? ini : jueves;
+function influenzaDiaAnterior(ymd) {
+  return influenzaSumaDias(ymd, -1);
 }
+
+/** Lunes de la semana (lunes a domingo) que contiene `ymd`. */
+function influenzaLunesDe(ymd) {
+  const dow = window.InfluenzaReglas ? window.InfluenzaReglas.diaSemana(ymd) : 1;
+  return influenzaSumaDias(ymd, -((dow + 6) % 7));
+}
+
+/**
+ * Primer día en que se puede capturar la semana de `fecha`: el lunes de esa semana (o el inicio de la campaña si es
+ * después). El viernes que sigue a un corte de fin de mes entre semana abre al día siguiente del corte, porque los
+ * días anteriores ya forman parte del reporte del corte.
+ */
+function influenzaSemanaAbre(fecha) {
+  const ini = _campaignConfig.fecha_inicio;
+  const lunes = influenzaLunesDe(fecha);
+  let abre = lunes;
+  if (!influenzaEsCorte(fecha) && window.InfluenzaReglas) {
+    const previos = window.InfluenzaReglas.cortes(_campaignConfig.fecha_inicio, _campaignConfig.fecha_fin)
+      .filter(c => c >= lunes && c < fecha);
+    if (previos.length) abre = influenzaSumaDias(previos[previos.length - 1], 1);
+  }
+  return ini && ini > abre ? ini : abre;
+}
+
+/**
+ * Semana que se muestra al entrar: la más reciente que ya abrió (sábado y domingo siguen en la semana que corre).
+ * Antes de que abra la campaña, la primera.
+ */
+function influenzaSemanaPredeterminada(weeks) {
+  weeks = weeks || generateCampaignWeeks();
+  if (!weeks.length) return "";
+  const hoy = influenzaHoy();
+  const abiertas = weeks.filter(w => influenzaSemanaAbre(w.fecha) <= hoy);
+  return (abiertas.length ? abiertas[abiertas.length - 1] : weeks[0]).fecha;
+}
+window.influenzaSemanaPredeterminada = influenzaSemanaPredeterminada;
 
 /** true si `fecha` es un corte de fin de mes entre semana (no un viernes de corte). */
 function influenzaEsCorte(fecha) {
@@ -1296,20 +1365,51 @@ window.influenzaFolio = influenzaFolio;
 function influenzaEstadoCaptura(fecha) {
   fecha = fecha || document.getElementById("influenza_semana")?.value;
   const reporte = _influenzaCapturasCache.find(r => r.fecha === fecha) || null;
-  let motivo = influenzaVentanaError(fecha);
-  if (!motivo && fecha) {
-    const dow = new Date().getDay();
-    const hoy = new Date().toLocaleDateString("en-CA");
-    const esSuCorte = influenzaEsCorte(fecha) && fecha === hoy;   // el corte de fin de mes se captura ese mismo día
-    if (dow !== 4 && dow !== 5 && !esSuCorte) {
-      motivo = influenzaEsCorte(fecha)
-        ? `El corte de fin de mes se captura el ${influenzaFechaCorta(fecha)} (o el jueves o viernes siguiente).`
-        : "El reporte de Influenza solo se captura los jueves y viernes.";
-    }
-  }
+  const motivo = influenzaVentanaError(fecha);
   return { abierta: !motivo, motivo, reporte, guardado: !!reporte, folio: reporte ? influenzaFolio(reporte) : "" };
 }
 window.influenzaEstadoCaptura = influenzaEstadoCaptura;
+
+/**
+ * Lee la tabla y valida el reporte de la semana contra la meta de la unidad y las reglas de calendario:
+ * sin meta no se captura, 2ª/1ª dosis según la campaña y ningún grupo puede rebasar su meta con lo ya acumulado.
+ * Solo cuenta lo NUEVO: un valor ya guardado antes de la regla (o antes de que bajara la meta) no bloquea el reporte.
+ * Devuelve { error, valores, isSinMov }; error = null si se puede guardar. Lo usan el guardado normal y el offline.
+ */
+function influenzaValidarCaptura(selectedFecha) {
+  const isSinMov = document.getElementById("chkSinMovimientoINF")?.checked || false;
+  const valores = {};
+  let reglaError = null;
+  let excedeRubro = "";
+  const reporteActual = _influenzaCapturasCache.find(r => r.fecha === selectedFecha);
+
+  for (const rb of INFLUENZA_RUBROS) {
+    const input = document.getElementById(`input_inf_${rb.id}`);
+    const val = isSinMov ? 0 : Math.max(0, input ? parseInt(input.value, 10) || 0 : 0);
+    valores[rb.id] = val;
+    if (isSinMov) continue;
+
+    const previo = Number(reporteActual?.valores?.[rb.id] || 0);
+    const meta = Number(_influenzaMetasCache[rb.id] || 0);
+    if (val > previo) {
+      if (!meta) reglaError = reglaError || `${rb.grupo} ${rb.edad}: la unidad no tiene meta asignada en este rubro.`;
+      const cal = reglaDosisRubro(rb, selectedFecha);
+      if (cal) reglaError = reglaError || `${rb.grupo} ${rb.edad}: ${cal.texto}`;
+
+      let acum = 0;
+      _influenzaCapturasCache.forEach(r => {
+        if (r.fecha !== selectedFecha) acum += Number(r.valores[rb.id] || 0);
+      });
+      if (meta > 0 && acum + val > meta && !excedeRubro) excedeRubro = `${rb.grupo} ${rb.edad}`;
+    }
+  }
+
+  let error = reglaError;
+  if (!error && excedeRubro) error = `No se puede guardar el reporte: ${excedeRubro} supera la meta asignada de tu unidad. Revisa los grupos marcados en rojo.`;
+  if (!error) error = influenzaVentanaError(selectedFecha);
+  return { error, valores, isSinMov };
+}
+window.influenzaValidarCaptura = influenzaValidarCaptura;
 
 async function saveInfluenzaReport() {
   const selectedFecha = document.getElementById("influenza_semana").value;
@@ -1327,66 +1427,12 @@ async function saveInfluenzaReport() {
     return;
   }
 
-  // Validaciones del reporte
-  const isSinMov = document.getElementById("chkSinMovimientoINF")?.checked || false;
-  let hasOverMetaError = false;
-  const valores = {};
-  let reglaError = null;
-  const reporteActual = _influenzaCapturasCache.find(r => r.fecha === selectedFecha);
-
-  for (const rb of INFLUENZA_RUBROS) {
-    const input = document.getElementById(`input_inf_${rb.id}`);
-    const val = isSinMov ? 0 : (input ? parseInt(input.value) || 0 : 0);
-    valores[rb.id] = val;
-
-    // Reglas de captura: sin meta no se aplica, y el calendario del esquema (2ª / 1ª dosis).
-    // Solo cuenta lo NUEVO: un valor ya guardado antes de la regla no bloquea el reporte.
-    const previo = Number(reporteActual?.valores?.[rb.id] || 0);
-    if (!isSinMov && val > previo) {
-      if (!Number(_influenzaMetasCache[rb.id] || 0)) reglaError = reglaError || `${rb.grupo} ${rb.edad}: la unidad no tiene meta asignada en este rubro.`;
-      const cal = reglaDosisRubro(rb, selectedFecha);
-      if (cal) reglaError = reglaError || `${rb.grupo} ${rb.edad}: ${cal.texto}`;
-    }
-
-    if (!isSinMov) {
-      // Calcular acumulado
-      let acum = 0;
-      _influenzaCapturasCache.forEach(r => {
-        if (r.fecha !== selectedFecha) {
-          acum += Number(r.valores[rb.id] || 0);
-        }
-      });
-
-      const meta = Number(_influenzaMetasCache[rb.id] || 0);
-      if (meta > 0 && (acum + val) > meta) {
-        hasOverMetaError = true;
-      }
-    }
-  }
-
-  if (reglaError) {
-    showToast(reglaError, false, "bad");
+  const validacion = influenzaValidarCaptura(selectedFecha);
+  if (validacion.error) {
+    showToast(validacion.error, false, "bad");
     return;
   }
-
-  if (hasOverMetaError) {
-    showToast("No se puede guardar el reporte. Uno o más rubros superan la meta asignada.", false, "bad");
-    return;
-  }
-
-  const ventanaError = influenzaVentanaError(selectedFecha);
-  if (ventanaError) {
-    showToast(ventanaError, false, "bad");
-    return;
-  }
-
-  // Lógica de ventana: Jueves y Viernes
-  const d_dow = new Date().getDay();
-  // Permitir capturar/editar solo Jueves (4) o Viernes (5)
-  if (d_dow !== 4 && d_dow !== 5) {
-    showToast("El reporte de Influenza solo se puede capturar los días Jueves o Viernes.", false, "bad");
-    return;
-  }
+  const { isSinMov, valores } = validacion;
 
   const payload = {
     clues: USER.clues,
@@ -1429,6 +1475,7 @@ async function saveInfluenzaReport() {
     eventMsg: runCaptureEventMsg,
     action: async () => {
       const res = await AppService.call("saveinfluenza_captura", payload);
+      _infSinMovReabierto = null;
       await loadInfluenzaUnitData();
       const folioGuardado = res?.folio || influenzaFolio(_influenzaCapturasCache.find(r => r.fecha === selectedFecha));
       if (folioGuardado) showToast(`Folio del reporte: ${folioGuardado}`, true, "info");
@@ -1436,7 +1483,8 @@ async function saveInfluenzaReport() {
       updateInfluenzaSinMovimientoUI();
       renderCaptureGrid();
       loadInfluenzaHistoryList();
-      if (typeof confetti === 'function') {
+      const sinMovimientoVisual = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (typeof confetti === 'function' && !sinMovimientoVisual) {
         confetti({
           particleCount: 150,
           spread: 80,
@@ -2556,7 +2604,14 @@ function renderUnitDetail(clues, unidadNombre, minFecha, maxFecha) {
     groups[key].push(rb);
   });
 
+  const gruposSinMeta = [];
   Object.entries(groups).forEach(([groupTitle, rubros]) => {
+    // Un grupo donde la unidad no tiene meta en ningún renglón no se captura: va en un solo aviso al final,
+    // no como una tabla entera de guiones.
+    if (rubros.every(rb => !Number(_influenzaMetasCache[rb.id] || 0))) {
+      gruposSinMeta.push(groupTitle);
+      return;
+    }
     const card = document.createElement("div");
     card.className = "bg-white border border-slate-200 rounded-[24px] p-6 shadow-sm flex flex-col gap-4";
     card.style.backgroundColor = "#ffffff";
@@ -2857,7 +2912,14 @@ function renderValidacionEdicionGrid(clues, fecha) {
     groups[key].push(rb);
   });
 
+  const gruposSinMeta = [];
   Object.entries(groups).forEach(([groupTitle, rubros]) => {
+    // Un grupo donde la unidad no tiene meta en ningún renglón no se captura: va en un solo aviso al final,
+    // no como una tabla entera de guiones.
+    if (rubros.every(rb => !Number(_influenzaMetasCache[rb.id] || 0))) {
+      gruposSinMeta.push(groupTitle);
+      return;
+    }
     const card = document.createElement("div");
     card.className = "bg-white border border-slate-200 rounded-[24px] p-6 shadow-sm flex flex-col gap-4";
     card.style.backgroundColor = "#ffffff";
@@ -3085,7 +3147,8 @@ async function saveValidationReport(clues, fecha) {
       document.getElementById("validationReportContent").classList.add("hidden");
       document.getElementById("validationDashboard").classList.remove("hidden");
       renderValidationDashboard();
-      if (typeof confetti === 'function') {
+      const sinMovimientoVisual = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (typeof confetti === 'function' && !sinMovimientoVisual) {
         confetti({
           particleCount: 150,
           spread: 80,
@@ -4742,7 +4805,8 @@ async function saveInfluenzaMetasConfig() {
       await loadInfluenzaAdminData();
       renderMetasConfigurationGrid();
       if (avisoFaltantes) showToast(avisoFaltantes, false, "warn");
-      if (typeof confetti === 'function') {
+      const sinMovimientoVisual = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (typeof confetti === 'function' && !sinMovimientoVisual) {
         confetti({
           particleCount: 150,
           spread: 80,

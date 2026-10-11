@@ -36,9 +36,9 @@ function servidor(db) {
   };
 }
 
-async function abrirPanel(page, { metas = true, fecha = '2026-10-20T12:00:00' } = {}) {
+async function abrirPanel(page, { metas = true, fecha = '2026-10-20T12:00:00', extra = {} } = {}) {
   const meta = Object.fromEntries(Array.from({ length: 46 }, (_, k) => [`r${k + 1}`, 0]));
-  Object.assign(meta, { r1: 100, r2: 60, r3: 40 });
+  Object.assign(meta, { r1: 100, r2: 60, r3: 40 }, extra);
   const db = {
     campanas: [{ id: 'c1', nombre: CAMP, fecha_inicio: '2026-10-02', fecha_fin: '2027-04-30', activo: true }],
     influenza_metas: metas ? [{ anio_campana: CAMP, clues: CLUES, municipio: 'QUERETARO', metas: meta }] : [],
@@ -202,6 +202,83 @@ test.describe('Panel de Influenza (unidad)', () => {
     expect(ws.getCell(13, 7).value).toBe(40);
     expect(ws.getCell(14, 7).value == null).toBe(true);
     expect(wb.getWorksheet('DISTRIBUCIÓN DE JERINGA').getCell(2, 1).value).toBe(CLUES);
+    expect(errores).toEqual([]);
+  });
+
+  test('sábado: entra a la semana que corre (viernes 16) y la puede capturar; el panel resume tu meta en vivo', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-17T11:00:00' });
+    await expect(page.locator('#influenza_semana')).toHaveValue('2026-10-16');
+    await expect(page.locator('.inf-aviso--cerrada')).toHaveCount(0);
+    const habil = page.locator('#formINFLUENZA input[id^="input_inf_"]:not([disabled])').first();
+    await expect(habil).toBeEnabled();
+    const ctl = page.locator('#infControlMeta');
+    await expect(ctl).toBeVisible();
+    // el 16 ya tiene un reporte (r1: 30): meta r1 = 100, antes = 20, con 90 más rebasa
+    const r1 = page.locator('#input_inf_r1');
+    await r1.fill('90');
+    await expect(page.locator('#disp_inf_r1')).toContainText('Te pasas por 10');
+    await expect(ctl.locator('[role="alert"]')).toContainText('rebasa su meta');
+    await r1.fill('80');
+    await expect(page.locator('#disp_inf_r1')).toHaveText('100 de 100');
+    await expect(ctl.locator('[role="alert"]')).toHaveCount(0);
+    if (process.env.GUARDAR_CAPTURAS) {
+      await r1.fill('90');
+      await page.locator('#influenzaCaptureGroupsContainer').screenshot({ path: path.join(process.env.GUARDAR_CAPTURAS, 'influenza_control_meta.png'), clip: undefined });
+    }
+    expect(errores).toEqual([]);
+  });
+
+  test('selector de semanas: teclado (flechas, Esc) y estados visibles', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-20T12:00:00' });
+    const btn = page.locator('#influenza_semana_btn');
+    await btn.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(btn).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('.inf-sem-item[aria-current="true"]')).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('.inf-sem-item[data-fecha="2026-10-30"]')).toBeFocused();   // la semana siguiente a la elegida (23)
+    await page.keyboard.press('Escape');
+    await expect(btn).toHaveAttribute('aria-expanded', 'false');
+    await expect(btn).toBeFocused();
+    expect(errores).toEqual([]);
+  });
+
+  test('la ayuda: «Entendido» responde al mouse, al clic y al teclado; el foco no se escapa', async ({ page }) => {
+    const { errores } = await abrirPanel(page);
+    await page.locator('#formINFLUENZA .cp-help-btn').click();
+    const ok = page.locator('#ayudaCerrarBtn');
+    await expect(ok).toBeVisible();
+    const estilo = () => ok.evaluate((e) => { const c = getComputedStyle(e); return { t: c.transform, s: c.boxShadow, bg: c.backgroundColor, h: e.getBoundingClientRect().height }; });
+    await page.waitForTimeout(400);   // termina la animación de entrada
+    const reposo = await estilo();
+    expect(reposo.h).toBeGreaterThanOrEqual(43.5);
+    await ok.hover();
+    await page.waitForTimeout(350);
+    const hover = await estilo();
+    expect(hover.t).not.toBe(reposo.t);        // se eleva
+    expect(hover.s).not.toBe(reposo.s);        // sombra
+    await page.mouse.down();
+    await page.waitForTimeout(250);
+    const presionado = await estilo();
+    expect(presionado.t).not.toBe(hover.t);    // se hunde
+    await page.mouse.up();                      // cierra
+    await expect(page.locator('#ayudaOverlay')).not.toHaveClass(/abierto/);
+    // teclado: Tab da la vuelta dentro del diálogo
+    await page.locator('#formINFLUENZA .cp-help-btn').click();
+    await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
+    const dentro = await page.evaluate(() => document.getElementById('ayudaOverlay').contains(document.activeElement));
+    expect(dentro).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#ayudaOverlay')).not.toHaveClass(/abierto/);
+    expect(errores).toEqual([]);
+  });
+
+  test('todas las tablas de captura tienen las columnas en las mismas posiciones', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-11-20T12:00:00', extra: { r6: 5000, r7: 3 } });
+    const pos = await page.evaluate(() => [...document.querySelectorAll('#influenzaCaptureGroupsContainer table.inf-cap-tabla')]
+      .map((t) => [...t.querySelectorAll('thead th')].map((th) => Math.round(th.getBoundingClientRect().left - t.getBoundingClientRect().left)).join(',')));
+    expect(pos.length).toBeGreaterThan(1);
+    expect(new Set(pos).size).toBe(1);
     expect(errores).toEqual([]);
   });
 });

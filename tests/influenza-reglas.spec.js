@@ -63,7 +63,8 @@ async function montarCaptura(page, fecha, valoresGuardados) {
       'var AppService = { call: async (a, p) => { window.__guardados.push([a, p]); return { ok: true }; }, runCapture: async (o) => o.action() };',
       'var loadInfluenzaUnitData = async () => {}; var updateInfluenzaWeekBtnLabel = () => {}; var updateInfluenzaSinMovimientoUI = () => {};',
       'var loadInfluenzaHistoryList = () => {};',
-      'var RealDate = Date; Date = class extends RealDate { getDay() { return 5; } };   // la captura solo se permite jueves/viernes'
+      'var influenzaResumenCalcular = () => ({ esperadoPct: 40 }); var frascoFmt = (n) => String(n); var escapeHtml = (t) => String(t);',
+      'var RealDate = Date;   // la captura ya no depende del día de la semana'
     ].join('\n')
   });
   await page.addScriptTag({ content: rubros + isoFn + semanasFn + reglasFn + gridFn + saveFn + 'window.__grid = renderCaptureGrid; window.__save = saveInfluenzaReport;' });
@@ -193,4 +194,85 @@ test('Corte de fin de mes: se captura el mismo día aunque no sea jueves ni vier
     return { corte: influenzaEsCorte('2026-11-30'), abre: influenzaSemanaAbre('2026-11-30'), semanas: generateCampaignWeeks().filter(w => w.corte).map(w => w.fecha), estado: influenzaEstadoCaptura('2026-11-30').abierta, viernes: influenzaEstadoCaptura('2026-12-04').abierta };
   }, [INI27, FIN27]);
   expect(r).toEqual({ corte: true, abre: '2026-11-30', semanas: ['2026-11-30', '2026-12-31', '2027-03-31'], estado: true, viernes: false });
+});
+
+// ─── Panel abierto toda la semana (lunes a domingo), un solo reporte por semana ──────────────
+async function semana(page, ahora) {
+  await page.clock.install({ time: new Date(ahora) });
+  await montarCaptura(page, '2026-10-16');
+  return page.evaluate(([i, fn]) => {
+    _campaignConfig = { fecha_inicio: i, fecha_fin: fn };
+    const v = (f) => window.influenzaVentanaError(f);
+    return {
+      abre16: influenzaSemanaAbre('2026-10-16'), abre23: influenzaSemanaAbre('2026-10-23'),
+      v16: v('2026-10-16'), v23: v('2026-10-23'), actual: influenzaSemanaPredeterminada(),
+      est16: influenzaEstadoCaptura('2026-10-16').abierta
+    };
+  }, [INI27, FIN27]);
+}
+
+test('Semana abierta: el lunes ya se captura el reporte del viernes de esa semana', async ({ page }) => {
+  const r = await semana(page, '2026-10-12T09:00:00');   // lunes, primer día de la campaña
+  expect(r.abre16).toBe('2026-10-12');
+  expect(r.v16).toBeNull();
+  expect(r.est16).toBe(true);
+  expect(r.actual).toBe('2026-10-16');
+  expect(r.v23).toContain('aún no se puede capturar');
+});
+
+test('Semana abierta: martes y miércoles también capturan (ya no solo jueves y viernes)', async ({ page }) => {
+  for (const dia of ['2026-10-13T12:00:00', '2026-10-14T12:00:00']) {
+    const r = await semana(page, dia);
+    expect(r.est16).toBe(true);
+  }
+});
+
+test('Semana abierta: sábado y domingo siguen en la semana que corre; el lunes pasa a la siguiente', async ({ page }) => {
+  expect((await semana(page, '2026-10-17T10:00:00')).actual).toBe('2026-10-16');   // sábado
+  expect((await semana(page, '2026-10-18T22:30:00')).actual).toBe('2026-10-16');   // domingo, en la noche
+  const sab = await semana(page, '2026-10-17T10:00:00');
+  expect(sab.est16).toBe(true);                       // todavía se puede capturar el fin de semana
+  expect(sab.v23).toContain('se abre el lun 19 oct');
+  expect((await semana(page, '2026-10-19T08:00:00')).actual).toBe('2026-10-23');   // lunes
+});
+
+test('Semana abierta: el viernes que sigue a un corte de fin de mes abre al día siguiente del corte', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-30T12:00:00') });   // lunes 30-nov = corte
+  await montarCaptura(page, '2026-11-30');
+  const r = await page.evaluate(([i, fn]) => {
+    _campaignConfig = { fecha_inicio: i, fecha_fin: fn };
+    return { corte: influenzaEstadoCaptura('2026-11-30').abierta, viernes: influenzaEstadoCaptura('2026-12-04').abierta, abreViernes: influenzaSemanaAbre('2026-12-04') };
+  }, [INI27, FIN27]);
+  expect(r).toEqual({ corte: true, viernes: false, abreViernes: '2026-12-01' });
+});
+
+test('Captura sin importar el día: guarda el reporte un domingo', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-01-18T12:00:00') });   // domingo (la semana de su viernes 16-ene)
+  await montarCaptura(page, '2026-01-16');
+  await page.fill('#input_inf_r1', '30');
+  await page.evaluate(() => window.__save());
+  expect(await page.evaluate(() => window.__guardados.length)).toBe(1);
+  expect(await page.evaluate(() => window.__guardados[0][1].fecha)).toBe('2026-01-16');
+});
+
+test('Control de meta: avisa por escrito qué grupo rebasa y cuánto, y no deja guardar', async ({ page }) => {
+  await montarCaptura(page, '2026-01-16', null);
+  await page.fill('#input_inf_r1', '130');   // meta 100
+  await expect(page.locator('#disp_inf_r1')).toContainText('Te pasas por 30');
+  await expect(page.locator('#infControlMeta [role="alert"]')).toContainText('rebasa su meta');
+  await expect(page.locator('#input_inf_r1')).toHaveAttribute('aria-invalid', 'true');
+  await page.evaluate(() => window.__save());
+  expect(await page.evaluate(() => window.__guardados.length)).toBe(0);
+  expect(await page.evaluate(() => window.__toasts.at(-1))).toContain('supera la meta');
+  await page.fill('#input_inf_r1', '100');   // justo la meta: permitido
+  await expect(page.locator('#disp_inf_r1')).toHaveText('100 de 100');
+  await expect(page.locator('#infControlMeta [role="alert"]')).toHaveCount(0);
+  await page.evaluate(() => window.__save());
+  expect(await page.evaluate(() => window.__guardados.length)).toBe(1);
+});
+
+test('Si la meta bajó después de capturar, volver a guardar la misma cifra no se bloquea', async ({ page }) => {
+  await montarCaptura(page, '2026-01-16', { r1: 150 });   // ya guardado 150 con meta 100
+  await page.evaluate(() => window.__save());
+  expect(await page.evaluate(() => window.__guardados.length)).toBe(1);
 });
