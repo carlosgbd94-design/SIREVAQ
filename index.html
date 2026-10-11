@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=2">
-  <link rel="stylesheet" href="style.css?v=2026.119" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.124" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -391,7 +391,7 @@
        (sin borrar) por si hace falta revertir este cambio. -->
   <script defer src="ayuda.js?v=16"></script>
   <script defer src="a11y_global.js?v=5"></script>
-  <script src="dist/bundle-head.js?v=2026.120" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.125" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -6121,6 +6121,13 @@
                 </div>
                 <span style="white-space: nowrap; flex: 1;">Reporte PDF Individual</span>
               </button>
+              <button class="rda-export-opt" data-export="excel" id="rdaExportExcelInfluenza" style="display: none;
+                width: 100%; padding: 12px 14px; border: none; background: transparent; text-align: left; font-size: 13px; font-weight: 700; color: var(--md-sys-color-on-surface); cursor: pointer; align-items: center; border-radius: 8px; box-sizing: border-box;">
+                <div style="width: 28px; min-width: 28px; height: 24px; display: flex; align-items: center; justify-content: flex-start; flex-shrink: 0;">
+                  <span class="material-symbols-rounded" style="color: #16a34a; font-size: 20px;">table_view</span>
+                </div>
+                <span style="white-space: nowrap; flex: 1;">Excel con las cifras (.xlsx)</span>
+              </button>
               <button class="rda-export-opt" data-export="png"
                 style="width: 100%; padding: 12px 14px; border: none; background: transparent; text-align: left; font-size: 13px; font-weight: 700; color: var(--md-sys-color-on-surface); cursor: pointer; display: flex; align-items: center; border-radius: 8px; box-sizing: border-box;">
                 <div
@@ -8754,7 +8761,7 @@
 
   <!-- Empaquetado: bundle-body.js = rda_calculator + rda_parser + param_calculator
        + rda_ui, en ese mismo orden. Generado por build-bundle.js. -->
-  <script src="dist/bundle-body.js?v=2026.64" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
+  <script src="dist/bundle-body.js?v=2026.66" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
 
   <!-- FEEDBACK FAB & MODAL -->
   <style>

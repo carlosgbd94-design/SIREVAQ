@@ -281,4 +281,88 @@ test.describe('Panel de Influenza (unidad)', () => {
     expect(new Set(pos).size).toBe(1);
     expect(errores).toEqual([]);
   });
+
+  test('Indicadores de influenza: avance vs esperado, ritmo, cobertura, abasto y detalle por grupo', async ({ page }) => {
+    const { errores } = await abrirPanel(page);
+    await page.evaluate(async () => {
+      const previo = document.getElementById('rdaDashboardContent'); if (previo) previo.id = 'rdaDashboardContent_oculto';
+      const d = document.createElement('div'); d.id = 'rdaDashboardContent'; d.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff;overflow:auto;padding:24px'; document.body.appendChild(d);
+      try { await renderInfluenzaIndicatorsDashboard(null, null); } catch (e) { window.__indErr = String(e && e.stack || e); }
+    });
+    expect(await page.evaluate(() => window.__indErr)).toBeUndefined();
+    const raiz = page.locator('#rdaDashboardContent .iinf');
+    await expect(raiz).toBeVisible();
+    // Meta 200, aplicadas 60 = 30 %; la campaña lleva ~8.6 %
+    await expect(raiz.locator('.iinf-hero')).toContainText('30.0');
+    await expect(raiz.locator('.iinf-hero')).toContainText('puntos por delante');
+    await expect(raiz.locator('.iinf-kpi').filter({ hasText: 'Faltan por aplicar' })).toContainText('140');
+    await expect(raiz.locator('.iinf-kpi').filter({ hasText: 'Meta de la campaña' })).toContainText('200');
+    await expect(raiz.locator('.iinf-kpi').filter({ hasText: 'Proyección al cierre' })).toBeVisible();
+    await expect(raiz).toContainText('Reporte de la semana del 16 oct');
+    await expect(raiz).toContainText('1 de 1 unidad');
+    await expect(raiz.locator('#iinfRankTit')).toHaveText('Avance por municipio');
+    await expect(raiz.locator('.iinf-svg')).toBeVisible();
+    await expect(raiz.locator('#iinfAbTit')).toBeVisible();
+    await expect(raiz.locator('#iinfAbTit').locator('xpath=ancestor::section')).toContainText('15');   // frascos repartidos
+    await expect(raiz.locator('#iinfGrpTit')).toBeVisible();
+    await expect(raiz.locator('[role="progressbar"]').first()).toHaveAttribute('aria-valuenow', /\d+/);
+    expect(await raiz.locator('.sr-only').count()).toBe(0);   // el export a imagen/PDF no soporta texto oculto dentro del contenido
+    if (process.env.GUARDAR_CAPTURAS) await raiz.screenshot({ path: path.join(process.env.GUARDAR_CAPTURAS, 'influenza_indicadores.png') });
+    expect(errores).toEqual([]);
+  });
+
+  test('Indicadores de influenza: se exporta a Excel, PDF e imagen con las cifras del tablero', async ({ page }) => {
+    test.setTimeout(90000);
+    const { errores } = await abrirPanel(page);
+    await page.evaluate(async () => {
+      _rdaCache.unidades = []; _rdaCache.registros = []; _rdaState.esquema = 'meta_logro_influenza';
+      document.getElementById('rdaDetailTable')?.remove();   // en esta vista el panel no tiene tabla de detalle
+      const previo = document.getElementById('rdaDashboardContent'); if (previo) previo.id = 'rdaDashboardContent_oculto';
+      const d = document.createElement('div'); d.id = 'rdaDashboardContent'; d.style.cssText = 'position:absolute;left:0;top:0;width:1280px;z-index:99999;background:#fff;padding:24px'; document.body.appendChild(d);
+      await renderInfluenzaIndicatorsDashboard(null, null);
+    });
+
+    // Excel
+    const [descarga] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportInfluenzaIndicadoresExcel())]);
+    expect(descarga.suggestedFilename()).toMatch(/^Indicadores_Influenza_2026_2027_Jurisdiccion_Sanitaria_1_\d{4}-\d{2}-\d{2}\.xlsx$/);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(await descarga.path());
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Resumen', 'Por municipio', 'Por semana', 'Por grupo', 'Por edad', 'Abasto de frascos', 'Por revisar']);
+    const res = wb.getWorksheet('Resumen');
+    const fila = (ws, txt) => { let r = null; ws.eachRow((row) => { if (String(row.getCell(1).value || '').startsWith(txt)) r = row; }); return r; };
+    expect(fila(res, 'Meta de la campaña').getCell(2).value).toBe(200);
+    expect(fila(res, 'Dosis aplicadas').getCell(2).value).toBe(60);
+    expect(fila(res, 'Avance de la meta').getCell(2).value).toBeCloseTo(0.3, 5);
+    expect(fila(res, 'Dosis que faltan').getCell(2).value).toBe(140);
+    expect(wb.getWorksheet('Por municipio').getCell(5, 1).value).toBe('QUERETARO');
+    expect(wb.getWorksheet('Por semana').getCell(5, 2).value).toBe(0);    // 2-oct: sin captura
+    expect(wb.getWorksheet('Por semana').getCell(6, 2).value).toBe(30);   // 9-oct: 20 + 10
+    expect(wb.getWorksheet('Por semana').getCell(7, 3).value).toBe(60);   // acumulado al 16-oct
+    expect(wb.getWorksheet('Por grupo').getCell(5, 2).value).toBe(200);
+
+    // PDF e imagen (usan las librerías de captura; si el entorno no las puede descargar se omite)
+    const libs = await page.evaluate(async () => { try { await window.ensureLibsLoaded('html2canvas'); await window.ensureJsPdfLoaded(); return true; } catch (e) { return false; } });
+    if (libs) {
+      const pdf = await page.evaluate(async () => {
+        const blob = await generarPDFRobusto('rdaDashboardContent', 'x.pdf', true);
+        const buf = new Uint8Array(await blob.arrayBuffer());
+        const txt = new TextDecoder('latin1').decode(buf);
+        return { bytes: buf.length, cabecera: txt.slice(0, 5), paginas: (txt.match(/\/Type\s*\/Page[^s]/g) || []).length };
+      });
+      expect(pdf.cabecera).toBe('%PDF-');
+      expect(pdf.bytes).toBeGreaterThan(20000);
+      expect(pdf.paginas).toBeGreaterThanOrEqual(1);
+      const img = await page.evaluate(async () => {
+        const c = await _captureRdaContentAsCanvas(document.getElementById('rdaDashboardContent'), 1);
+        return { w: c.width, h: c.height, uri: c.toDataURL('image/png').length, data: c.toDataURL('image/jpeg', 0.7) };
+      });
+      if (process.env.GUARDAR_CAPTURAS) require('fs').writeFileSync(path.join(process.env.GUARDAR_CAPTURAS, 'influenza_export.jpg'), Buffer.from(img.data.split(',')[1], 'base64'));
+      expect(img.w).toBeGreaterThanOrEqual(1280);
+      expect(img.h).toBeGreaterThan(1500);       // el tablero completo, con tablas y detalle desplegado
+      expect(img.uri).toBeGreaterThan(30000);
+    } else {
+      test.info().annotations.push({ type: 'omitido', description: 'Sin acceso a las librerías de captura (CDN) en este entorno' });
+    }
+    expect(errores).toEqual([]);
+  });
 });

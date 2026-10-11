@@ -440,6 +440,7 @@ function initRDADashboard() {
             expBtn?.setAttribute('aria-expanded', 'false');
             const type = btn.dataset.export;
             if (type === 'individual') exportIndividualPDF();
+            else if (type === 'excel') { if (typeof exportInfluenzaIndicadoresExcel === 'function') exportInfluenzaIndicadoresExcel(); }
             else if (type === 'png' || type === 'jpeg') exportDashboardImagen(type);
             else if (type === 'masivo_pdf') exportMasivoZIP('pdf');
             else if (type === 'masivo_img') exportMasivoZIP('png');
@@ -739,6 +740,9 @@ async function renderDashboard() {
         const label = labelMap[esquema] || 'Análisis RDA';
         cierreEl.textContent = `${label} | Cierre: ${MONTH_NAMES[(_rdaCache.maxMes||12)-1] || 'Sin datos'}`;
     }
+
+    const optExcelInf = document.getElementById('rdaExportExcelInfluenza');
+    if (optExcelInf) optExcelInf.style.display = (esquema === 'meta_logro_influenza') ? 'flex' : 'none';
 
     if (esquema === 'meta_logro_influenza') {
         if (typeof renderInfluenzaIndicatorsDashboard === 'function') {
@@ -2937,6 +2941,12 @@ const _applyExportFixesToRoot = (clonedContent) => {
                 visibility: hidden !important;
                 animation: none !important;
             }
+            /* === Tablero de influenza: tablas completas (sin scroll interno) === */
+            .iinf-scroll { max-height: none !important; overflow: visible !important; }
+            .iinf-hero-num b { line-height: 1.35 !important; }
+            .iinf-hero-num .iinf-chip { margin-top: 8px !important; }
+            .iinf-det > summary { display: block !important; list-style: none !important; }
+            .iinf-tabla thead th { position: static !important; }
             /* === Detener todas las animaciones === */
             * {
                 animation: none !important;
@@ -2953,6 +2963,8 @@ const _applyExportFixesToRoot = (clonedContent) => {
             }
         `;
         clonedDoc.head.appendChild(exportFixStyle);
+        // Los bloques plegables (detalle por edad, datos por semana) salen desplegados en PDF e imagen.
+        clonedContent.querySelectorAll('details').forEach(dt => dt.setAttribute('open', ''));
 
         // Prepend Membrete Institucional Oficial de Exportación si no existe
         if (!clonedContent.querySelector('#rdaExportHeader')) {
@@ -2972,10 +2984,20 @@ const _applyExportFixesToRoot = (clonedContent) => {
             };
             const esquemaLabel = esquemaLabelMap[esquema] || 'Indicadores de Salud';
             const maxMesName = MONTH_NAMES[(_rdaCache.maxMes || 12) - 1] || 'Final';
+            // Tablero de influenza: el membrete habla de la campaña y de su corte, no del cierre mensual del RDA.
+            const infDatos = (esquema === 'meta_logro_influenza') ? window._infIndicadoresDatos : null;
+            const tituloMembrete = infDatos
+                ? `META-LOGRO DE VACUNACIÓN ANTIINFLUENZA ${String(infDatos.campana || '').replace(/^Campaña Influenza\s*/i, '')}`
+                : `EVALUACIÓN DE INDICADORES DE COBERTURA VACUNAL ${_rdaCache.anio || 2026}`;
+            const cierreMembrete = infDatos
+                ? `CORTE AL ${String(infDatos.fechaCorte).split('-').reverse().join('/')}`
+                : `CIERRE ${maxMesName.toUpperCase()}`;
             const fechaStr = new Date().toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
 
             let scopeText = 'JURISDICCIÓN SANITARIA NO. 1 (4 MUNICIPIOS)';
-            if (uni) {
+            if (infDatos && infDatos.ambito) {
+                scopeText = String(infDatos.ambito).toUpperCase();
+            } else if (uni) {
                 const uObj = (_rdaCache.unidades || []).find(x => x.clues === uni);
                 const mName = muni ? muni.toUpperCase() : (uObj?.municipio || '').toUpperCase();
                 const uName = uObj?.nombre ? uObj.nombre.toUpperCase() : uni;
@@ -3008,7 +3030,7 @@ const _applyExportFixesToRoot = (clonedContent) => {
                         SECRETARÍA DE SALUD DEL ESTADO DE QUERÉTARO — JURISDICCIÓN SANITARIA NO. 1
                     </div>
                     <div style="font-size: 19px; font-weight: 900; letter-spacing: -0.02em; color: #ffffff; line-height: 1.2;">
-                        EVALUACIÓN DE INDICADORES DE COBERTURA VACUNAL ${_rdaCache.anio || 2026}
+                        ${tituloMembrete}
                     </div>
                     <div style="font-size: 11.5px; color: #94a3b8; font-weight: 600; margin-top: 2px;">
                         FECHA Y HORA DE EMISIÓN: <span style="color: #f1f5f9; font-weight: 700;">${fechaStr}</span>
@@ -3025,7 +3047,7 @@ const _applyExportFixesToRoot = (clonedContent) => {
                     </div>
                     <div>
                         <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Cierre Información</div>
-                        <div style="font-size: 12.5px; font-weight: 800; color: #ffffff; margin-top: 2px;">CIERRE ${maxMesName.toUpperCase()}</div>
+                        <div style="font-size: 12.5px; font-weight: 800; color: #ffffff; margin-top: 2px;">${cierreMembrete}</div>
                     </div>
                     <div>
                         <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Estado Reporte</div>

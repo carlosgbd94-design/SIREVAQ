@@ -6023,208 +6023,520 @@ function iniciarDockFrascos(esJuris) {
 
 // --- ═══════════ INDICADORES — EVALUACIÓN META-LOGRO INFLUENZA ═══════════ ---
 
+// ─── Indicadores · Meta-Logro Influenza ─────────────────────────────────────────────────────────────────────
+// Vista del ámbito elegido (jurisdicción, municipio u hospital, o una unidad): avance contra la meta y contra lo
+// que debería llevarse a la fecha, ritmo y proyección al cierre, cobertura de reporte de la semana, avance por
+// municipio/unidad, tendencia semanal, abasto de frascos y detalle por grupo. Todo sale de metas, capturas y
+// reparto de la campaña activa (sin tablas nuevas).
+function infIndSemanas(ini, fin) {
+  const out = [];
+  if (!ini || !fin) return out;
+  const d = new Date(ini + "T12:00:00");
+  const end = new Date(fin + "T12:00:00");
+  while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
+  while (d <= end) { out.push(d.toLocaleDateString("en-CA")); d.setDate(d.getDate() + 7); }
+  const cortes = window.InfluenzaReglas ? window.InfluenzaReglas.cortes(ini, fin) : [];
+  return [...new Set([...out, ...cortes])].sort();
+}
+
+function infIndTono(diff) {
+  return diff >= -5 ? "good" : (diff >= -15 ? "warn" : "bad");
+}
+
+function infIndEtiqueta(tono, pct) {
+  if (pct >= 100) return "Meta alcanzada";
+  return tono === "good" ? "En ritmo" : (tono === "warn" ? "Algo atrasado" : "Atrasado");
+}
+
 async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   const container = document.getElementById("rdaDashboardContent");
   if (!container) return;
+  container.innerHTML = '<div class="iinf-cargando" role="status">Calculando indicadores de influenza…</div>';
 
-  // Determinar la campaña activa dinámicamente (nunca hardcoded, cambia cada temporada)
+  // Campaña activa (nunca fija: cambia cada temporada)
   const resConfig = await AppService.call("getinfluenza_config");
-  const activeCampaignName = resConfig?.data?.nombre
+  const camp = resConfig?.data || null;
+  const activeCampaignName = camp?.nombre
     || `Campaña Influenza ${deriveCampaignName(_campaignConfig.fecha_inicio, _campaignConfig.fecha_fin)}`;
+  const ini = camp?.fecha_inicio || _campaignConfig.fecha_inicio;
+  const fin = camp?.fecha_fin || _campaignConfig.fecha_fin;
 
-  // Título e info de cierre
   const scopeEl = document.getElementById("rdaScopeLabel");
   if (scopeEl) {
     if (uniFilter) scopeEl.textContent = `Unidad: ${uniFilter}`;
     else if (muniFilter) scopeEl.textContent = `Municipio: ${muniFilter}`;
     else scopeEl.textContent = "Jurisdicción Sanitaria 1";
   }
-
   const cierreEl = document.getElementById("rdaCierreLabel");
-  if (cierreEl) {
-    cierreEl.textContent = `Meta-Logro Influenza | ${activeCampaignName}`;
-  }
+  if (cierreEl) cierreEl.textContent = `Meta-Logro Influenza | ${activeCampaignName}`;
 
-  // 1. Obtener la lista de CLUES a evaluar
-  let evalCluesList = [];
-  if (uniFilter) {
-    evalCluesList = [uniFilter];
-  } else {
-    // Cargar catálogo de unidades
-    const { data: allUnits } = await window.supabase.from("unidades").select("clues, municipio, unidad").eq("activo", "SI");
-    const filtered = (allUnits || []).filter(u => !muniFilter || String(u.municipio || '').toUpperCase() === muniFilter.toUpperCase());
-    evalCluesList = filtered.map(u => u.clues);
-  }
+  // 1. Unidades del ámbito (los hospitales cuentan como su propio destino)
+  const hospitales = [
+    { id: "HENM", clues: "QTSSA001740" },
+    { id: "NHG", clues: "QTSSA002901" }
+  ];
+  const { data: allUnits } = await window.supabase.from("unidades").select("clues, municipio, unidad").eq("activo", "SI");
+  const destinoDe = (u) => {
+    const h = hospitales.find(x => x.clues === u.clues);
+    return h ? h.id : String(u.municipio || "").toUpperCase();
+  };
+  let units = (allUnits || []).map(u => ({ clues: u.clues, unidad: u.unidad || u.clues, municipio: String(u.municipio || "").toUpperCase(), destino: destinoDe(u) }));
+  if (uniFilter) units = units.filter(u => u.clues === uniFilter);
+  else if (muniFilter) units = units.filter(u => u.destino === String(muniFilter).toUpperCase() || u.municipio === String(muniFilter).toUpperCase());
 
-  // 2. Fetch metas y capturas de la campaña
-  const [resMetas, resCapturas] = await Promise.all([
+  // 2. Metas, capturas y reparto de la campaña
+  const [resMetas, resCapturas, resFrascos] = await Promise.all([
     AppService.call("getinfluenza_metas", { anio_campana: activeCampaignName }),
-    AppService.call("getinfluenza_capturas", { anio_campana: activeCampaignName })
+    AppService.call("getinfluenza_capturas", { anio_campana: activeCampaignName }),
+    AppService.call("getinfluenza_distribucion", { anio_campana: activeCampaignName })
   ]);
+  const metasPorClues = {};
+  (resMetas.data || []).forEach(m => { if (m.clues) metasPorClues[m.clues] = m.metas || {}; });
+  const capturasPorClues = {};
+  (resCapturas.data || []).forEach(c => { (capturasPorClues[c.clues] = capturasPorClues[c.clues] || []).push(c); });
+  const frascosPorClues = {};
+  (resFrascos.data || []).forEach(f => { if (f.clues) frascosPorClues[f.clues] = (frascosPorClues[f.clues] || 0) + Number(f.cantidad_frascos || 0); });
 
-  const metasData = resMetas.data || [];
-  const capturasData = resCapturas.data || [];
+  // 3. Calendario de la campaña
+  const hoy = new Date().toLocaleDateString("en-CA");
+  const semanas = infIndSemanas(ini, fin);
+  const vencidas = semanas.filter(f => f <= hoy);
+  const ultimaSemana = vencidas[vencidas.length - 1] || null;
+  const restantes = semanas.filter(f => f > hoy).length;
+  const t0 = Date.parse(ini + "T12:00:00"), t1 = Date.parse(fin + "T12:00:00"), tn = Date.parse(hoy + "T12:00:00");
+  const esperadoPct = (t1 > t0) ? Math.max(0, Math.min(100, (tn - t0) * 100 / (t1 - t0))) : 0;
 
-  // Calcular agregados
-  let totalMetaDosis = 0;
-  let totalDosisAplicadas = 0;
-  let totalBlancoMeta = 0;
-  let totalBlancoAplicadas = 0;
-  let totalRiesgoMeta = 0;
-  let totalRiesgoAplicadas = 0;
-
-  evalCluesList.forEach(c => {
-    const metaRec = metasData.find(m => m.clues === c);
-    const metas = metaRec ? metaRec.metas : {};
-
-    // Sumar metas
-    INFLUENZA_RUBROS.forEach(rb => {
-      const metaVal = Number(metas[rb.id] || 0);
-      totalMetaDosis += metaVal;
-      if (rb.categoria.includes("blanca")) totalBlancoMeta += metaVal;
-      else totalRiesgoMeta += metaVal;
-    });
-
-    // Sumar capturas
-    const unitCapturas = capturasData.filter(r => r.clues === c);
-    unitCapturas.forEach(r => {
-      INFLUENZA_RUBROS.forEach(rb => {
-        const valVal = Number(r.valores[rb.id] || 0);
-        totalDosisAplicadas += valVal;
-        if (rb.categoria.includes("blanca")) totalBlancoAplicadas += valVal;
-        else totalRiesgoAplicadas += valVal;
-      });
-    });
+  // 4. Agregados por unidad, grupo y semana
+  const grupos = {};
+  INFLUENZA_RUBROS.forEach(rb => {
+    const k = `${rb.categoria} - ${rb.grupo}`;
+    (grupos[k] = grupos[k] || []).push(rb);
   });
+  const rubro = {};
+  INFLUENZA_RUBROS.forEach(rb => { rubro[rb.id] = { meta: 0, apl: 0 }; });
+  const porSemana = {};
+  semanas.forEach(f => { porSemana[f] = 0; });
+  const filas = units.map(u => {
+    const metas = metasPorClues[u.clues] || {};
+    const caps = capturasPorClues[u.clues] || [];
+    let meta = 0, apl = 0, blancoM = 0, blancoA = 0, riesgoM = 0, riesgoA = 0, rebasa = 0;
+    const aplRubro = {};
+    caps.forEach(c => {
+      INFLUENZA_RUBROS.forEach(rb => { aplRubro[rb.id] = (aplRubro[rb.id] || 0) + Number((c.valores || {})[rb.id] || 0); });
+      const dosis = Object.values(c.valores || {}).reduce((s, v) => s + Number(v || 0), 0);
+      porSemana[c.fecha] = (porSemana[c.fecha] || 0) + dosis;
+    });
+    INFLUENZA_RUBROS.forEach(rb => {
+      const m = Number(metas[rb.id] || 0), a = aplRubro[rb.id] || 0;
+      const esBlanco = String(rb.categoria).includes("blanca");
+      meta += m; apl += a;
+      if (esBlanco) { blancoM += m; blancoA += a; } else { riesgoM += m; riesgoA += a; }
+      if (m > 0 && a > m) rebasa++;
+      rubro[rb.id].meta += m; rubro[rb.id].apl += a;
+    });
+    const ultima = caps.reduce((x, c) => (c.fecha > x ? c.fecha : x), "");
+    return {
+      ...u, meta, apl, blancoM, blancoA, riesgoM, riesgoA, rebasa, ultima,
+      conMeta: meta > 0, nunca: caps.length === 0,
+      reportoUltima: !!ultimaSemana && caps.some(c => c.fecha === ultimaSemana),
+      frascos: frascosPorClues[u.clues] || 0
+    };
+  });
+  const evaluables = filas.filter(f => f.conMeta);
+  const sum = (arr, k) => arr.reduce((s, x) => s + x[k], 0);
+  const meta = sum(filas, "meta"), apl = sum(filas, "apl");
+  const pct = meta > 0 ? apl * 100 / meta : 0;
+  const diff = pct - esperadoPct;
+  const tono = infIndTono(diff);
+  const faltan = Math.max(0, meta - apl);
 
-  const pctTotal = totalMetaDosis > 0 ? Math.round((totalDosisAplicadas / totalMetaDosis) * 100) : 0;
-  const pctBlanco = totalBlancoMeta > 0 ? Math.round((totalBlancoAplicadas / totalBlancoMeta) * 100) : 0;
-  const pctRiesgo = totalRiesgoMeta > 0 ? Math.round((totalRiesgoAplicadas / totalRiesgoMeta) * 100) : 0;
+  const fmt = (n) => Math.round(n).toLocaleString("es-MX");
+  const f1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
+  const corta = (ymd) => (window.InfluenzaReglas ? window.InfluenzaReglas.fechaCorta(ymd) : ymd);
+  const e = (t) => escapeHtml(String(t == null ? "" : t));
 
-  // Inyectar HTML en el contenedor de indicadores
-  container.innerHTML = `
-    <!-- Cómo leerlo -->
-    <div id="rdaAvanceNota" role="note" style="margin: 0 0 16px 0; padding: 10px 14px; border-radius: 12px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 600; line-height: 1.5;">
-      <b style="color:#0f172a;">Cómo leerlo:</b> el <b>avance</b> es el total de dosis aplicadas ÷ la <b>meta de la campaña</b> (${activeCampaignName}).
-      Verde desde <b>85%</b>, ámbar de <b>50% a 84%</b> y rojo por debajo de <b>50%</b>.
-      ${(totalDosisAplicadas === 0 && totalMetaDosis > 0) ? '<br><b style="color:#b45309;">Aún no hay dosis capturadas en esta campaña para el ámbito elegido.</b>' : ''}
-    </div>
+  if (!meta) {
+    container.innerHTML = `<div class="iinf"><div class="iinf-vacio"><span class="material-symbols-rounded" aria-hidden="true">flag</span><div><b>Este ámbito aún no tiene meta de influenza asignada.</b><p>Cuando se registre la meta en «Distribución de Metas», aquí verás el avance, el ritmo y la cobertura de reporte.</p></div></div></div>`;
+    return;
+  }
 
-    <!-- KPI Cards Grid -->
-    <div role="group" aria-label="Avance de la campaña de influenza" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; margin-bottom: 32px;">
-      ${[
-        { id: 'blanco', titulo: 'Población Blanco', icono: 'child_care', bg: '#f0f9ff', fg: '#0284c7', pct: pctBlanco, aplic: totalBlancoAplicadas, meta: totalBlancoMeta },
-        { id: 'riesgo', titulo: 'Población de Riesgo', icono: 'warning', bg: '#f5f3ff', fg: '#7c3aed', pct: pctRiesgo, aplic: totalRiesgoAplicadas, meta: totalRiesgoMeta },
-        { id: 'total', titulo: 'Total Campaña', icono: 'vaccines', bg: '#fdf2f8', fg: '#db2777', pct: pctTotal, aplic: totalDosisAplicadas, meta: totalMetaDosis }
-      ].map(k => {
-        const ok = k.pct >= 85, medio = k.pct >= 50;
-        const color = ok ? '#047857' : medio ? '#b45309' : '#dc2626';
-        const estado = ok ? 'ÓPTIMO (META ALCANZADA)' : medio ? 'REGULAR (AVANCE MEDIO)' : 'CRÍTICO (REQUIERE ATENCIÓN)';
-        const fmt = n => Math.round(n).toLocaleString('es-MX');
-        const falta = Math.max(0, k.meta - k.aplic);
-        const mensaje = k.meta <= 0 ? 'Sin meta capturada' : (k.pct >= 100 ? '+' + (k.pct - 100) + ' pts sobre la meta' : 'Faltan ' + fmt(falta) + ' dosis para la meta');
-        return `
-      <div class="rda-kpi-card" role="group" aria-label="${k.titulo}: avance ${k.pct} por ciento, ${estado.toLowerCase()}. ${fmt(k.aplic)} de ${fmt(k.meta)} dosis.">
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-          <div class="rda-icon-box" style="background: ${k.bg}; color: ${k.fg}; width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
-            <span class="material-symbols-rounded" style="font-size:20px;">${k.icono}</span>
-          </div>
-          <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2;">${k.titulo}</div>
+  // Ritmo: promedio de las últimas 4 semanas vencidas contra lo que se necesita por semana restante
+  const ult4 = vencidas.slice(-4);
+  const ritmo4 = ult4.length ? ult4.reduce((s, f) => s + (porSemana[f] || 0), 0) / ult4.length : 0;
+  const necesario = (restantes > 0 && faltan > 0) ? faltan / restantes : null;
+  const proyeccion = apl + ritmo4 * restantes;
+  const pctProy = meta > 0 ? proyeccion * 100 / meta : 0;
+  const proyFiable = vencidas.length >= 4 || restantes === 0;   // con menos semanas el promedio no dice nada
+  const semanaN = vencidas.length;
+
+  // Cobertura de reporte de la última semana vencida
+  const sinReporte = evaluables.filter(f => !f.reportoUltima);
+  const reportaron = evaluables.length - sinReporte.length;
+  const nuncaReportaron = evaluables.filter(f => f.nunca);
+
+  // Abasto de frascos (solo unidades con reparto registrado)
+  const conReparto = filas.filter(f => f.frascos > 0);
+  const frascosRec = sum(conReparto, "frascos");
+  const dosisRec = frascosRec * DOSIS_POR_FRASCO;
+  const aplConReparto = sum(conReparto, "apl");
+  const excedenReparto = conReparto.filter(f => f.apl > f.frascos * DOSIS_POR_FRASCO);
+
+  const chip = (t, txt) => `<span class="iinf-chip iinf-chip--${t}">${txt}</span>`;
+  const barra = (p, t, aria) => `<div class="iinf-bar" role="progressbar" aria-label="${e(aria)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, Math.round(p))}"><span class="iinf-fill" data-tono="${t}" style="width:${Math.min(100, Math.max(p > 0 ? 2 : 0, p)).toFixed(1)}%"></span></div>`;
+  const tonoGrupo = (m, a) => (m > 0 ? infIndTono(a * 100 / m - esperadoPct) : "none");
+
+  // ── Hero ──
+  const heroEstado = infIndEtiqueta(tono, pct);
+  const hero = `
+    <section class="iinf-hero" data-tono="${tono}" aria-labelledby="iinfHeroTit">
+      <div class="iinf-hero-num">
+        <span class="iinf-eyebrow" id="iinfHeroTit">Avance de la campaña</span>
+        <b>${f1(pct)}<small>%</small></b>
+        ${chip(tono, heroEstado)}
+      </div>
+      <div class="iinf-hero-txt">
+        <p>Se han aplicado <b>${fmt(apl)}</b> de <b>${fmt(meta)}</b> dosis de la meta (≈ ${fmt(Math.ceil(meta / DOSIS_POR_FRASCO))} frascos).
+        A esta fecha, con ${fmt(semanaN)} de ${fmt(semanas.length)} semanas de campaña, se debería llevar <b>${f1(esperadoPct)}%</b>:
+        ${diff >= 0 ? `vas <b>${f1(diff)} puntos por delante</b>` : `faltan <b>${f1(-diff)} puntos</b> para ir en ritmo`}.</p>
+        <div class="iinf-prog" role="progressbar" aria-label="Avance de la meta contra lo esperado a hoy" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, Math.round(pct))}" aria-valuetext="${f1(pct)} por ciento; esperado a hoy ${f1(esperadoPct)} por ciento">
+          <i data-tono="${tono}" style="width:${Math.min(100, pct).toFixed(1)}%"></i>
+          <span class="iinf-prog-marca" style="left:${Math.min(100, esperadoPct).toFixed(1)}%" title="Avance esperado a hoy"></span>
         </div>
-        <div style="font-size: 11px; line-height: 1.3; font-weight: 900; color: #64748b; letter-spacing: 0.08em; text-transform: uppercase;">Avance de la meta</div>
-        <div style="font-size: 46px; font-weight: 900; color: ${color}; letter-spacing: -0.02em; line-height: 1.25; padding-bottom: 8px;">${k.pct}%</div>
-        <div style="display:block; margin-top:2px; line-height:1.3; font-size: 11px; font-weight: 900; color: ${color}; letter-spacing: 0.05em; text-transform: uppercase;">${estado}</div>
-        <div style="margin: 10px 0 2px 0;">
-          <div role="progressbar" aria-label="Avance de ${k.titulo}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, k.pct)}" aria-valuetext="${k.pct} por ciento de la meta" style="width: 100%; height: 10px; background: rgba(15, 23, 42, 0.07); border-radius: 999px; overflow: hidden;">
-            <div style="height: 100%; width: ${Math.min(100, Math.max(k.pct > 0 ? 2 : 0, k.pct))}%; background: ${color}; border-radius: 999px;"></div>
-          </div>
-          <div aria-hidden="true" style="display:flex; justify-content:space-between; font-size:10.5px; font-weight:800; color:#64748b; margin-top:3px;"><span>0%</span><span>Meta 100%</span></div>
-        </div>
-        <div style="min-height: 22px; font-size: 11.5px; font-weight: 800; color: ${color}; margin-top: 6px;">${mensaje}</div>
-        <div style="border-top: 1px solid #f1f5f9; margin-top: 10px; padding-top: 6px;">
-          <div style="display:flex; justify-content:space-between; padding:5px 0;"><span style="font-size:11px; font-weight:700; color:#64748b;">Meta de la campaña</span><span style="font-size:13.5px; font-weight:900; color:#0f172a;">${fmt(k.meta)}</span></div>
-          <div style="display:flex; justify-content:space-between; padding:5px 0;"><span style="font-size:11px; font-weight:700; color:#64748b;">Dosis aplicadas</span><span style="font-size:13.5px; font-weight:900; color:#0f172a;">${fmt(k.aplic)}</span></div>
-        </div>
-      </div>`;
-      }).join('')}
-    </div>
+        <div class="iinf-prog-leyenda" aria-hidden="true"><span>0%</span><span>La marca es lo esperado a hoy (${f1(esperadoPct)}%)</span><span>Meta 100%</span></div>
+      </div>
+    </section>`;
 
-    <!-- Tabla Detallada por Rubro -->
-    <div class="bg-surface rounded-3xl border border-slate-200 shadow-sm p-6 overflow-hidden">
-      <h3 class="text-sm font-extrabold text-slate-700 mb-4 uppercase tracking-wider">Desglose de Meta-Logro por Rubro</h3>
-      <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200">
-        <table class="w-full border-collapse text-left text-xs font-semibold text-slate-700" aria-label="Desglose de meta y logro de influenza por rubro">
-          <thead>
-            <tr class="bg-slate-50 border-b border-slate-200">
-              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider" scope="col">Subgrupo / Edad</th>
-              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center" style="width: 120px;" scope="col">Meta Total</th>
-              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center" style="width: 120px;" scope="col">Aplicadas</th>
-              <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center" style="width: 120px;" scope="col">Avance %</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(() => {
-              // Group rubros by category & group
-              const grouped = {};
-              INFLUENZA_RUBROS.forEach(rb => {
-                const key = `${rb.categoria} - ${rb.grupo}`;
-                if (!grouped[key]) grouped[key] = [];
-                grouped[key].push(rb);
-              });
+  // ── Indicadores clave ──
+  const kpi = (icono, etq, valor, nota, t) => `
+    <div class="iinf-kpi"${t ? ` data-tono="${t}"` : ""}>
+      <span class="material-symbols-rounded" aria-hidden="true">${icono}</span>
+      <div><small>${etq}</small><b>${valor}</b><em>${nota}</em></div>
+    </div>`;
+  const tonoRitmo = necesario == null ? "good" : (ritmo4 >= necesario ? "good" : (ritmo4 >= necesario * 0.7 ? "warn" : "bad"));
+  const tonoProy = pctProy >= 100 ? "good" : (pctProy >= 85 ? "warn" : "bad");
+  const kpis = `
+    <div class="iinf-kpis" role="group" aria-label="Indicadores clave de la campaña">
+      ${kpi("flag", "Meta de la campaña", fmt(meta), `${fmt(evaluables.length)} ${evaluables.length === 1 ? "unidad con meta" : "unidades con meta"}`)}
+      ${kpi("vaccines", "Dosis aplicadas", fmt(apl), ultimaSemana ? `Corte al ${corta(ultimaSemana)}` : "Aún sin semanas vencidas")}
+      ${kpi("hourglass_top", "Faltan por aplicar", fmt(faltan), `≈ ${fmt(Math.ceil(faltan / DOSIS_POR_FRASCO))} frascos`)}
+      ${kpi("calendar_month", "Semana de campaña", `${fmt(semanaN)} de ${fmt(semanas.length)}`, restantes ? `Quedan ${fmt(restantes)} ${restantes === 1 ? "semana" : "semanas"}` : "La campaña ya terminó")}
+      ${kpi("speed", "Ritmo reciente", `${fmt(ritmo4)} <small>dosis/sem</small>`, necesario == null ? (faltan > 0 ? "Sin semanas restantes" : "Meta cumplida") : `Necesario: ${fmt(necesario)} por semana`, tonoRitmo)}
+      ${proyFiable
+        ? kpi("trending_up", "Proyección al cierre", `${f1(pctProy)}<small>%</small>`, restantes ? `A este ritmo, ${fmt(proyeccion)} dosis` : "Resultado final", tonoProy)
+        : kpi("trending_up", "Proyección al cierre", "—", "Se calcula con 4 semanas de reportes")}
+    </div>`;
 
-              return Object.entries(grouped).map(([groupTitle, rubros]) => {
-                const headerRow = `
-                  <tr class="bg-slate-50 border-b border-slate-200">
-                    <td colspan="4" class="p-3 bg-violet-50/50">
-                      <div class="text-xs font-black text-violet-950 uppercase tracking-wider" style="max-width: 600px; white-space: normal; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.35;" title="${groupTitle}">${groupTitle}</div>
-                    </td>
-                  </tr>
-                `;
-                
-                const rows = rubros.map(rb => {
-                  let rMeta = 0;
-                  let rAplicadas = 0;
+  // ── Cobertura de reporte ──
+  const pctCob = evaluables.length ? reportaron * 100 / evaluables.length : 0;
+  const tonoCob = pctCob >= 90 ? "good" : (pctCob >= 70 ? "warn" : "bad");
+  const nombresSin = sinReporte.slice(0, 12).map(f => `<li>${e(f.unidad)}<small>${e(f.destino)}</small></li>`).join("");
+  const cobertura = ultimaSemana ? `
+    <section class="iinf-card" aria-labelledby="iinfCobTit">
+      <header><h3 id="iinfCobTit">Reporte de la semana del ${corta(ultimaSemana)}</h3>${chip(tonoCob, `${fmt(reportaron)} de ${fmt(evaluables.length)} ${evaluables.length === 1 ? "unidad" : "unidades"}`)}</header>
+      ${barra(pctCob, tonoCob, "Unidades que reportaron la última semana")}
+      ${sinReporte.length
+        ? `<p class="iinf-nota">${fmt(sinReporte.length)} ${sinReporte.length === 1 ? "unidad no ha reportado" : "unidades no han reportado"} esa semana${nuncaReportaron.length ? ` (${fmt(nuncaReportaron.length)} sin ningún reporte en la campaña)` : ""}:</p>
+           <ul class="iinf-lista">${nombresSin}</ul>${sinReporte.length > 12 ? `<p class="iinf-nota">y ${fmt(sinReporte.length - 12)} más.</p>` : ""}`
+        : '<p class="iinf-nota">Todas las unidades con meta reportaron esa semana.</p>'}
+    </section>` : "";
 
-                  evalCluesList.forEach(c => {
-                    const metaRec = metasData.find(m => m.clues === c);
-                    rMeta += metaRec ? Number(metaRec.metas[rb.id] || 0) : 0;
+  // ── Población blanco / riesgo ──
+  const blancoM = sum(filas, "blancoM"), blancoA = sum(filas, "blancoA"), riesgoM = sum(filas, "riesgoM"), riesgoA = sum(filas, "riesgoA");
+  const poblacion = [
+    { t: "Población blanco", ico: "child_care", m: blancoM, a: blancoA },
+    { t: "Población de riesgo", ico: "health_and_safety", m: riesgoM, a: riesgoA }
+  ].map(p => {
+    const pp = p.m > 0 ? p.a * 100 / p.m : 0, tt = tonoGrupo(p.m, p.a);
+    return `<div class="iinf-pob" data-tono="${tt}">
+      <span class="material-symbols-rounded" aria-hidden="true">${p.ico}</span>
+      <div><small>${p.t}</small><b>${p.m > 0 ? f1(pp) + "%" : "Sin meta"}</b>
+      ${barra(pp, tt, "Avance de " + p.t)}
+      <em>${fmt(p.a)} de ${fmt(p.m)} dosis</em></div></div>`;
+  }).join("");
 
-                    const unitCapturas = capturasData.filter(r => r.clues === c);
-                    unitCapturas.forEach(r => {
-                      rAplicadas += Number(r.valores[rb.id] || 0);
-                    });
-                  });
-
-                  const rPct = rMeta > 0 ? Math.round((rAplicadas / rMeta) * 100) : 0;
-                  let progressColor = "text-slate-700";
-                  let progressBg = "bg-slate-100";
-                  if (rMeta > 0) {
-                    if (rPct >= 85) { progressColor = "text-emerald-800"; progressBg = "bg-emerald-100"; }
-                    else if (rPct >= 50) { progressColor = "text-amber-800"; progressBg = "bg-amber-100"; }
-                    else { progressColor = "text-rose-800"; progressBg = "bg-rose-100"; }
-                  }
-
-                  return `
-                    <tr class="border-b border-slate-100 hover:bg-violet-50/10 transition-colors duration-150">
-                      <td class="p-3 pl-6 font-semibold text-slate-700 max-w-[400px] whitespace-normal break-words">${rb.edad}</td>
-                      <td class="p-3 text-center font-bold text-slate-600">${rMeta.toLocaleString('es-MX')}</td>
-                      <td class="p-3 text-center font-bold text-violet-900">${rAplicadas.toLocaleString('es-MX')}</td>
-                      <td class="p-3 text-center">
-                        <span class="px-2.5 py-1 rounded-full text-[11px] font-extrabold ${progressColor} ${progressBg}">${rMeta > 0 ? `${rPct}%` : 'N/A'}</span>
-                      </td>
-                    </tr>
-                  `;
-                }).join("");
-
-                return headerRow + rows;
-              }).join("");
-            })()}
-          </tbody>
+  // ── Avance por municipio / unidad ──
+  let ranking = "";
+  const porUnidad = !!muniFilter;
+  const mapa = {};
+  evaluables.forEach(f => {
+    const k = porUnidad ? f.clues : f.destino;
+    const o = mapa[k] || (mapa[k] = { nombre: porUnidad ? f.unidad : f.destino, n: 0, meta: 0, apl: 0, ultima: "", sinRep: 0 });
+    o.n++; o.meta += f.meta; o.apl += f.apl;
+    if (f.ultima > o.ultima) o.ultima = f.ultima;
+    if (!f.reportoUltima) o.sinRep++;
+  });
+  const lista = Object.values(mapa).map(o => ({ ...o, p: o.meta ? o.apl * 100 / o.meta : 0 }))
+    .map(o => ({ ...o, d: o.p - esperadoPct })).sort((a, b) => a.d - b.d);
+  if (!uniFilter) {
+    ranking = `
+    <section class="iinf-card" aria-labelledby="iinfRankTit">
+      <header><h3 id="iinfRankTit">Avance por ${porUnidad ? "unidad" : "municipio"}</h3><span class="iinf-sub">Primero quienes van más atrasados contra lo esperado</span></header>
+      <div class="iinf-scroll">
+        <table class="iinf-tabla" aria-label="Avance de la meta de influenza por ${porUnidad ? "unidad" : "municipio"}, ordenado del más atrasado al más adelantado">
+          <thead><tr><th scope="col">${porUnidad ? "Unidad" : "Municipio / hospital"}</th><th scope="col" class="c">Meta</th><th scope="col" class="c">Aplicadas</th><th scope="col">Avance</th><th scope="col" class="c">Contra lo esperado</th><th scope="col" class="c">Último reporte</th></tr></thead>
+          <tbody>${lista.map(o => {
+            const tt = infIndTono(o.d);
+            return `<tr>
+              <th scope="row">${e(o.nombre)}${!porUnidad ? `<small>${fmt(o.n)} ${o.n === 1 ? "unidad" : "unidades"}${o.sinRep ? ` · ${fmt(o.sinRep)} sin reporte` : ""}</small>` : ""}</th>
+              <td class="c">${fmt(o.meta)}</td><td class="c"><b>${fmt(o.apl)}</b></td>
+              <td class="iinf-avance"><div class="iinf-avance-in">${barra(o.p, tt, "Avance de " + o.nombre)}<span>${f1(o.p)}%</span></div></td>
+              <td class="c">${chip(tt, `${o.d >= 0 ? "+" : "−"}${f1(Math.abs(o.d))} pts`)}</td>
+              <td class="c">${o.ultima ? corta(o.ultima) : "Sin reporte"}</td></tr>`;
+          }).join("")}</tbody>
         </table>
       </div>
-    </div>
-  `;
+    </section>`;
+  }
+
+  // ── Tendencia semanal ──
+  const barras = vencidas.map(f => ({ f, v: porSemana[f] || 0 }));
+  const maxV = Math.max(1, ...barras.map(b => b.v), necesario || 0);
+  const W = 720, H = 190, padL = 44, padB = 28, padT = 14, gw = W - padL - 8, gh = H - padB - padT;
+  const bw = barras.length ? Math.max(4, Math.min(34, gw / barras.length - 4)) : 10;
+  const paso = barras.length ? gw / barras.length : gw;
+  const yDe = v => padT + gh - (v / maxV) * gh;
+  const cada = Math.max(1, Math.ceil(barras.length / 12));
+  const svg = barras.length ? `
+    <svg viewBox="0 0 ${W} ${H}" class="iinf-svg" role="img" aria-label="Dosis aplicadas por semana: ${barras.map(b => `${corta(b.f)} ${fmt(b.v)}`).join(", ")}">
+      <line x1="${padL}" y1="${padT + gh}" x2="${W - 8}" y2="${padT + gh}" class="iinf-eje"/>
+      <line x1="${padL}" y1="${padT}" x2="${W - 8}" y2="${padT}" class="iinf-grid"/>
+      <text x="${padL - 6}" y="${padT + 4}" class="iinf-txt" text-anchor="end">${fmt(maxV)}</text>
+      <text x="${padL - 6}" y="${padT + gh + 4}" class="iinf-txt" text-anchor="end">0</text>
+      ${necesario != null ? `<line x1="${padL}" y1="${yDe(necesario).toFixed(1)}" x2="${W - 8}" y2="${yDe(necesario).toFixed(1)}" class="iinf-necesario"/><text x="${padL + 6}" y="${(yDe(necesario) - 5).toFixed(1)}" class="iinf-txt iinf-txt--nec" text-anchor="start">Ritmo necesario: ${fmt(necesario)} por semana</text>` : ""}
+      ${barras.map((b, i) => {
+        const x = padL + i * paso + (paso - bw) / 2, y = yDe(b.v);
+        return `<g><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw}" height="${Math.max(1, padT + gh - y).toFixed(1)}" rx="3" class="iinf-col"><title>${corta(b.f)}: ${fmt(b.v)} dosis</title></rect>
+        ${i % cada === 0 || i === barras.length - 1 ? `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 8}" class="iinf-txt" text-anchor="middle">${corta(b.f)}</text>` : ""}</g>`;
+      }).join("")}
+    </svg>` : "";
+  const tendencia = `
+    <section class="iinf-card" aria-labelledby="iinfTendTit">
+      <header><h3 id="iinfTendTit">Dosis aplicadas por semana</h3><span class="iinf-sub">Cada barra es una semana de reporte; la línea punteada es lo que hace falta por semana para cumplir</span></header>
+      ${svg || '<p class="iinf-nota">La campaña aún no tiene semanas vencidas.</p>'}
+      ${barras.length ? `<details class="iinf-det"><summary>Ver los datos por semana</summary>
+        <table class="iinf-tabla iinf-tabla--mini" aria-label="Dosis aplicadas por semana"><thead><tr><th scope="col">Semana</th><th scope="col" class="c">Dosis</th></tr></thead>
+        <tbody>${barras.slice().reverse().map(b => `<tr><th scope="row">${corta(b.f)}</th><td class="c">${fmt(b.v)}</td></tr>`).join("")}</tbody></table></details>` : ""}
+    </section>`;
+
+  // ── Abasto de frascos ──
+  const abasto = `
+    <section class="iinf-card" aria-labelledby="iinfAbTit">
+      <header><h3 id="iinfAbTit">Abasto de frascos</h3><span class="iinf-sub">Lo repartido a las unidades contra lo que han aplicado</span></header>
+      ${frascosRec ? `
+      <div class="iinf-mini-kpis">
+        <div><small>Repartidos</small><b>${fmt(frascosRec)}</b><em>${fmt(dosisRec)} dosis</em></div>
+        <div><small>Aplicadas</small><b>${fmt(aplConReparto)}</b><em>${f1(dosisRec ? aplConReparto * 100 / dosisRec : 0)}% de lo repartido</em></div>
+        <div data-tono="${aplConReparto > dosisRec ? "bad" : "good"}"><small>Existencia estimada</small><b>${fmt(Math.max(0, dosisRec - aplConReparto))}</b><em>dosis</em></div>
+      </div>
+      ${excedenReparto.length ? `<p class="iinf-nota iinf-nota--alerta">${fmt(excedenReparto.length)} ${excedenReparto.length === 1 ? "unidad ha aplicado más" : "unidades han aplicado más"} de lo que se les repartió: ${excedenReparto.slice(0, 6).map(f => e(f.unidad)).join(", ")}${excedenReparto.length > 6 ? "…" : ""}. Revisa el reparto o la captura.</p>` : '<p class="iinf-nota">Ninguna unidad ha aplicado más de lo que se le repartió.</p>'}
+      ${conReparto.length < evaluables.length ? `<p class="iinf-nota">${fmt(evaluables.length - conReparto.length)} ${evaluables.length - conReparto.length === 1 ? "unidad con meta aún no tiene" : "unidades con meta aún no tienen"} reparto registrado.</p>` : ""}`
+      : '<p class="iinf-nota">Todavía no hay reparto de frascos registrado por unidad para este ámbito.</p>'}
+    </section>`;
+
+  // ── Por grupo ──
+  const filasGrupo = Object.entries(grupos).map(([titulo, rubros]) => {
+    const m = rubros.reduce((s, rb) => s + rubro[rb.id].meta, 0);
+    const a = rubros.reduce((s, rb) => s + rubro[rb.id].apl, 0);
+    return { titulo, rubros, m, a };
+  }).filter(g => g.m > 0 || g.a > 0);
+  const tablaGrupos = `
+    <section class="iinf-card" aria-labelledby="iinfGrpTit">
+      <header><h3 id="iinfGrpTit">Avance por grupo de población</h3><span class="iinf-sub">Cada grupo contra su meta; la columna final compara con lo esperado a hoy</span></header>
+      <div class="iinf-scroll">
+        <table class="iinf-tabla" aria-label="Meta y dosis aplicadas de influenza por grupo de población">
+          <thead><tr><th scope="col">Grupo</th><th scope="col" class="c">Meta</th><th scope="col" class="c">Aplicadas</th><th scope="col">Avance</th><th scope="col" class="c">Contra lo esperado</th></tr></thead>
+          <tbody>${filasGrupo.map(g => {
+            const p = g.m ? g.a * 100 / g.m : 0, tt = tonoGrupo(g.m, g.a), d = p - esperadoPct;
+            return `<tr><th scope="row">${e(g.titulo)}</th><td class="c">${fmt(g.m)}</td><td class="c"><b>${fmt(g.a)}</b></td>
+              <td class="iinf-avance"><div class="iinf-avance-in">${barra(p, tt, "Avance de " + g.titulo)}<span>${g.m ? f1(p) + "%" : "Sin meta"}</span></div></td>
+              <td class="c">${g.m ? chip(tt, `${d >= 0 ? "+" : "−"}${f1(Math.abs(d))} pts`) : "—"}</td></tr>`;
+          }).join("")}</tbody>
+          <tfoot><tr><th scope="row">Total</th><td class="c">${fmt(meta)}</td><td class="c"><b>${fmt(apl)}</b></td><td class="iinf-avance"><div class="iinf-avance-in"><span>${f1(pct)}%</span></div></td><td class="c">${chip(tono, `${diff >= 0 ? "+" : "−"}${f1(Math.abs(diff))} pts`)}</td></tr></tfoot>
+        </table>
+      </div>
+      <details class="iinf-det"><summary>Ver el detalle por edad</summary>
+        <div class="iinf-scroll"><table class="iinf-tabla" aria-label="Meta y dosis aplicadas de influenza por rubro y edad">
+          <thead><tr><th scope="col">Grupo y edad</th><th scope="col" class="c">Meta</th><th scope="col" class="c">Aplicadas</th><th scope="col" class="c">Avance</th></tr></thead>
+          <tbody>${filasGrupo.map(g => `<tr class="iinf-grp"><th scope="colgroup" colspan="4">${e(g.titulo)}</th></tr>` + g.rubros.map(rb => {
+            const r = rubro[rb.id];
+            if (!r.meta && !r.apl) return "";
+            const p = r.meta ? r.apl * 100 / r.meta : 0;
+            return `<tr><th scope="row" class="iinf-edad">${e(rb.edad)}</th><td class="c">${fmt(r.meta)}</td><td class="c">${fmt(r.apl)}</td><td class="c">${r.meta ? chip(r.apl > r.meta ? "bad" : tonoGrupo(r.meta, r.apl), f1(p) + "%") : "—"}</td></tr>`;
+          }).join("")).join("")}</tbody>
+        </table></div>
+      </details>
+    </section>`;
+
+  // ── Por revisar ──
+  const sinMeta = filas.filter(f => !f.conMeta);
+  const rebasan = filas.filter(f => f.rebasa > 0);
+  const alertas = [];
+  if (rebasan.length) alertas.push(`<li><b>${fmt(rebasan.length)} ${rebasan.length === 1 ? "unidad rebasa" : "unidades rebasan"} su meta</b> en algún grupo: ${rebasan.slice(0, 6).map(f => e(f.unidad)).join(", ")}${rebasan.length > 6 ? "…" : ""}.</li>`);
+  if (sinMeta.length && !uniFilter) alertas.push(`<li><b>${fmt(sinMeta.length)} ${sinMeta.length === 1 ? "unidad activa no tiene" : "unidades activas no tienen"} meta asignada</b> en esta campaña.</li>`);
+  if (nuncaReportaron.length && vencidas.length >= 2) alertas.push(`<li><b>${fmt(nuncaReportaron.length)} ${nuncaReportaron.length === 1 ? "unidad con meta no ha reportado" : "unidades con meta no han reportado"} nunca</b> en esta campaña: ${nuncaReportaron.slice(0, 6).map(f => e(f.unidad)).join(", ")}${nuncaReportaron.length > 6 ? "…" : ""}.</li>`);
+  const revisar = alertas.length ? `
+    <section class="iinf-card iinf-card--alerta" aria-labelledby="iinfRevTit">
+      <header><h3 id="iinfRevTit">Por revisar</h3></header>
+      <ul class="iinf-alertas">${alertas.join("")}</ul>
+    </section>` : "";
+
+  // Datos del tablero para el Excel (exportInfluenzaIndicadoresExcel): mismas cifras que se ven en pantalla.
+  window._infIndicadoresDatos = {
+    campana: activeCampaignName,
+    ambito: uniFilter ? `Unidad: ${(units[0] && units[0].unidad) || uniFilter}` : (muniFilter ? `Municipio: ${muniFilter}` : "Jurisdicción Sanitaria 1"),
+    fechaCorte: hoy, ultimaSemana, inicio: ini, fin,
+    meta, apl, pct, esperadoPct, diff, estado: heroEstado, faltan, semanaN, totalSemanas: semanas.length, restantes,
+    ritmo4, necesario, proyeccion: proyFiable ? proyeccion : null, pctProy: proyFiable ? pctProy : null,
+    unidadesConMeta: evaluables.length, reportaron, sinReporte: sinReporte.map(f => ({ unidad: f.unidad, destino: f.destino })),
+    nuncaReportaron: nuncaReportaron.length,
+    blanco: { meta: blancoM, apl: blancoA }, riesgo: { meta: riesgoM, apl: riesgoA },
+    porUnidad, ranking: uniFilter ? [] : lista,
+    semanas: barras.map(b => ({ fecha: b.f, dosis: b.v })),
+    grupos: filasGrupo.map(g => ({ titulo: g.titulo, meta: g.m, apl: g.a, edades: g.rubros.map(rb => ({ edad: rb.edad, meta: rubro[rb.id].meta, apl: rubro[rb.id].apl })).filter(x => x.meta || x.apl) })),
+    abasto: { frascos: frascosRec, dosis: dosisRec, apl: aplConReparto, exceden: excedenReparto.map(f => f.unidad), conReparto: conReparto.length },
+    revisar: { rebasan: rebasan.map(f => f.unidad), sinMeta: sinMeta.map(f => f.unidad), nunca: nuncaReportaron.map(f => f.unidad) }
+  };
+
+  container.innerHTML = `
+    <div class="iinf">
+      ${hero}
+      ${kpis}
+      <div class="iinf-dos">${cobertura}<section class="iinf-card" aria-labelledby="iinfPobTit"><header><h3 id="iinfPobTit">Población blanco y de riesgo</h3></header><div class="iinf-pobs">${poblacion}</div></section></div>
+      ${revisar}
+      ${ranking}
+      ${tendencia}
+      ${abasto}
+      ${tablaGrupos}
+      <p class="iinf-pie" role="note"><b>Cómo leerlo:</b> el avance es dosis aplicadas ÷ meta de la campaña (${e(activeCampaignName)}). «Esperado a hoy» es la proporción de la campaña que ya transcurrió; verde si vas a menos de 5 puntos de ella, ámbar hasta 15 y rojo si estás más atrás. La proyección supone que se mantiene el ritmo de las últimas 4 semanas.</p>
+    </div>`;
 }
+
+
+/** Excel del tablero de Indicadores de influenza (mismas cifras que se ven en pantalla). */
+async function exportInfluenzaIndicadoresExcel() {
+  const d = window._infIndicadoresDatos;
+  if (!d) { showToast("Primero abre el tablero de influenza para generar el Excel.", false, "warn"); return; }
+  try {
+    await window.ensureLibsLoaded("exceljs");
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "SIREVAQ · Jurisdicción Sanitaria 1";
+    wb.created = new Date();
+    const AZUL = "FF1E293B";
+    const borde = { style: "thin", color: { argb: "FFE2E8F0" } };
+    const tonoFill = (diff) => ({ type: "pattern", pattern: "solid", fgColor: { argb: diff >= -5 ? "FFD1FAE5" : (diff >= -15 ? "FFFEF3C7" : "FFFEE2E2") } });
+
+    const hoja = (nombre, titulo, columnas, filas, alFila) => {
+      const ws = wb.addWorksheet(nombre, { views: [{ state: "frozen", ySplit: 4 }], pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+      ws.mergeCells(1, 1, 1, columnas.length);
+      ws.getCell(1, 1).value = titulo;
+      ws.getCell(1, 1).font = { bold: true, size: 14, color: { argb: AZUL } };
+      ws.mergeCells(2, 1, 2, columnas.length);
+      ws.getCell(2, 1).value = `${d.campana} · ${d.ambito} · Corte al ${d.fechaCorte}`;
+      ws.getCell(2, 1).font = { size: 10, color: { argb: "FF64748B" } };
+      const cab = ws.getRow(4);
+      columnas.forEach((c, i) => {
+        const cell = cab.getCell(i + 1);
+        cell.value = c.t;
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: AZUL } };
+        cell.alignment = { horizontal: i === 0 ? "left" : "center", vertical: "middle", wrapText: true };
+        ws.getColumn(i + 1).width = c.w || 16;
+      });
+      cab.height = 26;
+      filas.forEach((f, r) => {
+        const row = ws.getRow(5 + r);
+        f.forEach((v, i) => {
+          const cell = row.getCell(i + 1);
+          cell.value = v;
+          const fmt = typeof v === "number" ? (columnas[i].fmt || null) : null;
+          if (fmt) cell.numFmt = fmt;
+          cell.alignment = { horizontal: i === 0 ? "left" : "center", vertical: "middle", wrapText: i === 0 };
+          cell.border = { bottom: borde };
+        });
+        if (alFila) alFila(row, f, r);
+      });
+      return ws;
+    };
+
+    const pctFmt = "0.0%";
+    const resumen = [
+      ["Meta de la campaña (dosis)", d.meta, "#,##0"],
+      ["Dosis aplicadas", d.apl, "#,##0"],
+      ["Avance de la meta", d.pct / 100, pctFmt],
+      ["Avance esperado a la fecha", d.esperadoPct / 100, pctFmt],
+      ["Diferencia contra lo esperado (puntos)", Math.round(d.diff * 10) / 10, "0.0"],
+      ["Estado", d.estado],
+      ["Dosis que faltan", d.faltan, "#,##0"],
+      ["Frascos que faltan (aprox.)", Math.ceil(d.faltan / DOSIS_POR_FRASCO), "#,##0"],
+      ["Semana de campaña", `${d.semanaN} de ${d.totalSemanas}`],
+      ["Semanas restantes", d.restantes],
+      ["Ritmo reciente (dosis por semana, últimas 4)", Math.round(d.ritmo4), "#,##0"],
+      ["Ritmo necesario (dosis por semana)", d.necesario == null ? "—" : Math.round(d.necesario), "#,##0"],
+      ["Proyección al cierre (% de la meta)", d.pctProy == null ? "Se calcula con 4 semanas de reportes" : d.pctProy / 100, pctFmt],
+      ["Unidades con meta", d.unidadesConMeta],
+      [`Unidades que reportaron la semana del ${d.ultimaSemana || "—"}`, d.reportaron],
+      ["Unidades que no reportaron esa semana", d.sinReporte.length],
+      ["Población blanco: avance de su meta", d.blanco.meta ? d.blanco.apl / d.blanco.meta : "Sin meta", pctFmt],
+      ["Población de riesgo: avance de su meta", d.riesgo.meta ? d.riesgo.apl / d.riesgo.meta : "Sin meta", pctFmt]
+    ];
+    hoja("Resumen", "Indicadores de influenza · Resumen", [{ t: "Indicador", w: 52 }, { t: "Valor", w: 30 }],
+      resumen.map(r => [r[0], r[1]]),
+      (row, f, i) => { if (resumen[i][2] && typeof f[1] === "number") row.getCell(2).numFmt = resumen[i][2]; });
+
+    if (d.ranking.length) {
+      hoja(d.porUnidad ? "Por unidad" : "Por municipio", `Avance por ${d.porUnidad ? "unidad" : "municipio / hospital"} (más atrasados primero)`,
+        [{ t: d.porUnidad ? "Unidad" : "Municipio / hospital", w: 34 }, { t: "Unidades", w: 12 }, { t: "Meta", w: 12, fmt: "#,##0" }, { t: "Aplicadas", w: 12, fmt: "#,##0" },
+         { t: "Avance", w: 12, fmt: pctFmt }, { t: "Contra lo esperado (pts)", w: 16, fmt: "0.0" }, { t: "Sin reporte última semana", w: 16 }, { t: "Último reporte", w: 16 }],
+        d.ranking.map(o => [o.nombre, o.n, o.meta, o.apl, o.p / 100, Math.round(o.d * 10) / 10, o.sinRep, o.ultima || "Sin reporte"]),
+        (row, f, r) => { row.getCell(6).fill = tonoFill(d.ranking[r].d); });
+    }
+
+    let acum = 0;
+    hoja("Por semana", "Dosis aplicadas por semana",
+      [{ t: "Semana (fecha del reporte)", w: 28 }, { t: "Dosis", w: 14, fmt: "#,##0" }, { t: "Acumulado", w: 14, fmt: "#,##0" }, { t: "% de la meta", w: 14, fmt: pctFmt }],
+      d.semanas.map(s => { acum += s.dosis; return [s.fecha, s.dosis, acum, d.meta ? acum / d.meta : 0]; }));
+
+    hoja("Por grupo", "Avance por grupo de población",
+      [{ t: "Grupo", w: 60 }, { t: "Meta", w: 12, fmt: "#,##0" }, { t: "Aplicadas", w: 12, fmt: "#,##0" }, { t: "Avance", w: 12, fmt: pctFmt }, { t: "Contra lo esperado (pts)", w: 16, fmt: "0.0" }],
+      d.grupos.map(g => { const p = g.meta ? g.apl * 100 / g.meta : null; return [g.titulo, g.meta, g.apl, p == null ? "Sin meta" : p / 100, p == null ? "—" : Math.round((p - d.esperadoPct) * 10) / 10]; }),
+      (row, f) => { if (typeof f[4] === "number") row.getCell(5).fill = tonoFill(f[4]); });
+
+    const edades = [];
+    d.grupos.forEach(g => g.edades.forEach(e => edades.push([g.titulo, e.edad, e.meta, e.apl, e.meta ? e.apl / e.meta : "Sin meta"])));
+    hoja("Por edad", "Detalle por grupo y edad",
+      [{ t: "Grupo", w: 52 }, { t: "Edad", w: 22 }, { t: "Meta", w: 12, fmt: "#,##0" }, { t: "Aplicadas", w: 12, fmt: "#,##0" }, { t: "Avance", w: 12, fmt: pctFmt }], edades);
+
+    hoja("Abasto de frascos", "Abasto de frascos", [{ t: "Concepto", w: 46 }, { t: "Valor", w: 20, fmt: "#,##0" }],
+      [["Frascos repartidos a las unidades", d.abasto.frascos], ["Dosis repartidas", d.abasto.dosis], ["Dosis aplicadas (unidades con reparto)", d.abasto.apl],
+       ["Existencia estimada (dosis)", Math.max(0, d.abasto.dosis - d.abasto.apl)], ["Unidades con reparto registrado", d.abasto.conReparto],
+       ["Unidades que aplicaron más de lo repartido", d.abasto.exceden.length]]);
+
+    const rev = [];
+    d.sinReporte.forEach(u => rev.push(["No reportó la última semana", u.unidad, u.destino]));
+    d.revisar.nunca.forEach(u => rev.push(["Sin ningún reporte en la campaña", u, ""]));
+    d.revisar.rebasan.forEach(u => rev.push(["Rebasa su meta en algún grupo", u, ""]));
+    d.revisar.sinMeta.forEach(u => rev.push(["Sin meta asignada", u, ""]));
+    d.abasto.exceden.forEach(u => rev.push(["Aplicó más de lo repartido", u, ""]));
+    hoja("Por revisar", "Unidades por revisar", [{ t: "Motivo", w: 40 }, { t: "Unidad", w: 46 }, { t: "Municipio", w: 20 }], rev.length ? rev : [["Sin pendientes", "", ""]]);
+
+    const buf = await wb.xlsx.writeBuffer();
+    const limpio = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    const nombre = `Indicadores_Influenza_${limpio(d.campana.replace(/^Campaña Influenza\s*/, ""))}_${limpio(d.ambito)}_${d.fechaCorte}.xlsx`;
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = nombre;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    showToast("Excel de indicadores de influenza descargado.", true, "good");
+  } catch (err) {
+    console.error("Error al exportar indicadores de influenza:", err);
+    showToast("No se pudo generar el Excel de influenza.", false, "bad");
+  }
+}
+window.exportInfluenzaIndicadoresExcel = exportInfluenzaIndicadoresExcel;
 
 let _editingCampaignId = null;
 
