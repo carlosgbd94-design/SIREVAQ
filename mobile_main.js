@@ -131,12 +131,10 @@
         }
     };
 
-    const INDICATOR_W = 50; // Circular pointer width/height
+    // Fecha de HOY en hora local (YYYY-MM-DD). Nunca usar toISOString(): es UTC y, después de
+    // las 6 pm en México, daría la fecha de mañana (capturas guardadas con el día equivocado).
+    const todayLocalYmd = () => dateToLocalYmd(new Date());
 
-    // Drag state for Selection Dock
-    let isDraggingDock = false;
-    let dragStartX = 0;
-    let dockLeftOffset = 0;
 
     // --- Audio & Confetti Haptic Helpers ---
     const playNotificationSound = (type = "success") => {
@@ -254,14 +252,18 @@
             playNotificationSound('error');
             if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 150]);
             
-            // Screen shake
-            const mainApp = document.getElementById('mainApp') || document.body;
-            mainApp.classList.remove('shake-organic');
-            void mainApp.offsetWidth; // Force layout recalculation
-            mainApp.classList.add('shake-organic');
-            setTimeout(() => {
-                mainApp.classList.remove('shake-organic');
-            }, 600);
+            // Sacudida del contenido. Solo se anima el área de captura: el dock y el hub flotante
+            // están dentro de #mainApp y, si éste lleva transform, dejan de ser "fixed" respecto a
+            // la pantalla y se desplazan (era lo que movía la barra al errar en el panel Pedido).
+            const shakeTarget = document.getElementById('captureContentArea');
+            if (shakeTarget && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+                shakeTarget.classList.remove('shake-organic');
+                void shakeTarget.offsetWidth; // Force layout recalculation
+                shakeTarget.classList.add('shake-organic');
+                setTimeout(() => {
+                    shakeTarget.classList.remove('shake-organic');
+                }, 600);
+            }
         }
 
         setTimeout(() => {
@@ -376,7 +378,7 @@
         
         // Manual override check in aperturas_existencia
         try {
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = todayLocalYmd();
             const { data: extOverride } = await supabaseClient
                 .from('aperturas_existencia')
                 .select('*')
@@ -401,27 +403,8 @@
         initNotificationsRealtime();
         initPinolRealtimeMobile();
         
-        // Initialize the physics-based glass shaders and copy the clone-world content
-        initDockGlass();
-        const cloneWorld = document.getElementById('dockCloneWorld');
-        if (cloneWorld) {
-            // Render the clone background using a realistic representation of the app gradient and glowing nodes
-            cloneWorld.innerHTML = `
-                <div style="position: absolute; inset: 0; background: linear-gradient(135deg, #f1f4f8, #e2e8f0); opacity: 0.95;"></div>
-                <div style="position: absolute; border-radius: 50%; filter: blur(40px); opacity: 0.35; background: #3b82f6; width: 140px; height: 140px; top: -70px; left: 20px;"></div>
-                <div style="position: absolute; border-radius: 50%; filter: blur(40px); opacity: 0.35; background: #10b981; width: 140px; height: 140px; bottom: -70px; right: 20px;"></div>
-            `;
-            if (document.documentElement.classList.contains('dark')) {
-                cloneWorld.innerHTML = `
-                    <div style="position: absolute; inset: 0; background: #000000; opacity: 0.95;"></div>
-                    <div style="position: absolute; border-radius: 50%; filter: blur(40px); opacity: 0.25; background: #1e3a8a; width: 140px; height: 140px; top: -70px; left: 20px;"></div>
-                    <div style="position: absolute; border-radius: 50%; filter: blur(40px); opacity: 0.25; background: #064e3b; width: 140px; height: 140px; bottom: -70px; right: 20px;"></div>
-                `;
-            }
-        }
-        
         switchPanel('SR');
-        initDockDrag();
+        initDockBehavior();
     };
 
     const fetchProfile = async () => {
@@ -572,6 +555,21 @@
         return normalized;
     };
 
+    // Múltiplo en que debe pedirse cada biológico (misma regla que el escritorio, main.js):
+    // Hexavalente de 10 en 10; Rotavirus, Neumocócica 13/20 y SRP de 5 en 5; el resto libre.
+    const bioMultiploPedido = (name) => {
+        const key = String(name || "").toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+        if (key === "HEXAVALENTE") return 10;
+        if (["ROTAVIRUS", "NEUMOCOCICA 13", "NEUMOCOCICA 20", "SRP"].includes(key)) return 5;
+        return 1;
+    };
+
+    // Biológicos que no se evalúan contra el promedio mensual (campañas / no esquema básico).
+    const bioExentoPromedio = (name) => {
+        const key = String(name || "").toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+        return ["VPH", "INFLUENZA", "COVID-19", "COVID 19", "VARICELA", "HEPATITIS A"].includes(key);
+    };
+
     const fetchCatalogs = async () => {
         let catData, catError;
         try {
@@ -696,7 +694,7 @@
         if (!currentProfile) return;
         const isAdmin = currentProfile.rol === 'ADMIN' || currentProfile.rol === 'JURISDICCIONAL';
         const cluesFilter = isAdmin ? 'QTSSA012154' : (currentProfile.clues || '');
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayLocalYmd();
 
         const { data: savedItem, error } = await supabaseClient
             .from('consumibles')
@@ -743,9 +741,9 @@
             
             if (chkSinMov) {
                 chkSinMov.checked = (savedItem.sin_movimiento === "SI" || savedItem.sin_movimiento === true);
-                chkSinMov.dispatchEvent(new Event('change'));
+                chkSinMov.dispatchEvent(new CustomEvent('change', { detail: { programmatic: true } }));
             }
-            
+
             hasTodayCONS = true;
             syncCommandHub();
         }
@@ -765,13 +763,15 @@
     };
 
     const fetchLotes = async () => {
-        const { data, error } = await supabaseClient.from('lotes').select('*');
+        const { data: lotesData, error } = await supabaseClient.from('lotes').select('*');
         if (error) {
             console.error("fetchLotes error:", error);
             showToast("Error lotes: " + error.message, "error");
-            return;
         }
-        if (data) {
+        // Aun con error de lotes se arman los formularios (antes el panel Pedido se quedaba en
+        // "Cargando pedidos..." para siempre y no se precargaba ningún reporte).
+        const data = lotesData || [];
+        {
             const isAdmin = currentProfile && (currentProfile.rol === 'ADMIN' || currentProfile.rol === 'JURISDICCIONAL');
             // Hospitales (HENM/NHG): están bajo municipio QUERETARO, pero sus lotes se asignan
             // con municipio "HENM"/"NHG" (mismo criterio que loteHospitalKeyForUser_ en main.js).
@@ -809,7 +809,7 @@
     };
 
     const fetchTargetDate = async () => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayLocalYmd();
         const { data, error } = await supabaseClient
             .from('calendario_pedidos')
             .select('*')
@@ -1010,9 +1010,9 @@
                         <span class="material-symbols-rounded" style="font-size:14px; color:#b45309; vertical-align:middle;" role="img" aria-label="Si capturas un decimal en TD, DPT, Influenza o Hepatitis B, te pediremos la fecha de apertura del frasco (vigencia de 28 días una vez abierto). BCG y SR quedan excluidas por el manual." title="Si capturas un decimal en TD, DPT, Influenza o Hepatitis B, te pediremos la fecha de apertura del frasco (vigencia de 28 días una vez abierto). BCG y SR quedan excluidas por el manual.">info</span>
                     </label>
                     <div class="touch-stepper-wrap flex items-center gap-2">
-                        <button type="button" class="stepper-btn" aria-label="Disminuir cantidad" onclick="const inp=this.nextElementSibling; inp.value=Math.max(0, (parseInt(inp.value)||0)-1);">-</button>
+                        <button type="button" class="stepper-btn" aria-label="Disminuir cantidad" onclick="const inp=this.nextElementSibling; inp.value=Math.max(0, +((parseFloat(inp.value)||0)-1).toFixed(2)); inp.dispatchEvent(new Event('blur'));">-</button>
                         <input id="${cardId}_qty" type="number" inputmode="decimal" data-field="cantidad" value="${data?.cantidad || 0}" min="0" class="w-full text-center font-black sr-qty-input">
-                        <button type="button" class="stepper-btn" aria-label="Aumentar cantidad" onclick="const inp=this.previousElementSibling; inp.value=(parseInt(inp.value)||0)+1;">+</button>
+                        <button type="button" class="stepper-btn" aria-label="Aumentar cantidad" onclick="const inp=this.previousElementSibling; inp.value=+((parseFloat(inp.value)||0)+1).toFixed(2); inp.dispatchEvent(new Event('blur'));">+</button>
                     </div>
                     <div class="sr-apertura-badge" role="button" tabindex="0" style="display:none; justify-content:center; margin-top:6px; cursor:pointer;"></div>
                 </div>
@@ -1181,12 +1181,11 @@
         if (lastRecord && lastRecord.length > 0) {
             const lastDate = lastRecord[0].fecha;
             const respName = lastRecord[0].capturado_por;
-            const sinMov = lastRecord[0].sin_movimiento === 'SI' || lastRecord[0].sin_movimiento === true;
 
             // Detección de salto de semanas (paridad con desktop: execPrefillSemanal).
             // Si pasaron 9 días o más desde la última captura, se guarda el detalle del salto
             // para poder advertir al usuario si intenta guardar sin cambios en saveReport().
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = todayLocalYmd();
             const diffDays = Math.round((new Date(todayStr).getTime() - new Date(lastDate).getTime()) / (1000 * 3600 * 24));
             if (diffDays >= 9) {
                 srPrefillGapInfo = { diffDays, missedWeeks: Math.max(1, Math.floor(diffDays / 7)), lastDate };
@@ -1197,18 +1196,16 @@
             const nombreSRInput = document.getElementById('nombreSR');
             if (nombreSRInput && respName) nombreSRInput.value = respName;
 
+            // "Sin movimiento" se decide cada semana: nunca se hereda de la captura anterior (antes,
+            // si la última fue "sin movimiento" el formulario abría vacío y marcado, y al guardar se
+            // registraba toda la existencia en ceros con alertas de desabasto falsas).
             const chkSinMov = document.getElementById('chkSinMovimientoSR');
-            if (chkSinMov) {
-                chkSinMov.checked = sinMov;
-                chkSinMov.dispatchEvent(new Event('change'));
+            if (chkSinMov && chkSinMov.checked) {
+                chkSinMov.checked = false;
+                chkSinMov.dispatchEvent(new CustomEvent('change', { detail: { programmatic: true } }));
             }
 
-            if (sinMov) {
-                const container = document.getElementById('srCardsContainer');
-                if (container) container.innerHTML = '';
-                srPrefillSnapshot = null;
-                showToast("Se pre-llenó la información de la captura anterior.");
-            } else {
+            {
                 const { data: details } = await supabaseClient
                     .from('existencia_detalle')
                     .select('*')
@@ -1407,21 +1404,28 @@
         const isPinolLocked = hasActivePinol || !pinolCacheLoaded;
 
         // Lock/Unlock SR inputs
+        const sinMovSRMarcado = !!document.getElementById('chkSinMovimientoSR')?.checked;
         document.querySelectorAll('#srCardsContainer select, #srCardsContainer input, #srCardsContainer button').forEach(el => {
             if (el.classList.contains('btn-delete-card') || el.classList.contains('btn-clone-card')) {
                 el.style.display = isSRLocked ? 'none' : 'flex';
+                el.disabled = sinMovSRMarcado;
             } else {
-                el.disabled = isSRLocked;
+                el.disabled = isSRLocked || sinMovSRMarcado;
             }
         });
         const btnAddSRCard = document.getElementById('btnAddSRCard');
-        if (btnAddSRCard) btnAddSRCard.style.display = isSRLocked ? 'none' : 'flex';
+        if (btnAddSRCard) {
+            btnAddSRCard.style.display = isSRLocked ? 'none' : 'flex';
+            btnAddSRCard.disabled = sinMovSRMarcado;
+        }
 
         // Lock/Unlock CONS inputs
+        const sinMovCONSMarcado = !!document.getElementById('chkSinMovimientoCONS')?.checked;
         document.querySelectorAll('#panelCONS input, #panelCONS textarea').forEach(el => {
-            if (el.id !== 'chkSinMovimientoCONS') {
-                el.disabled = isCONSLocked;
-            }
+            if (el.id === 'chkSinMovimientoCONS') return;
+            // La aguja siempre es automática (= jeringa 5.0): nunca se habilita.
+            if (el.id === 'aguja_0600403711') { el.disabled = true; return; }
+            el.disabled = isCONSLocked || (sinMovCONSMarcado && el.id !== 'nombreCONS');
         });
         const chkSinMovCONS = document.getElementById('chkSinMovimientoCONS');
         if (chkSinMovCONS) chkSinMovCONS.disabled = isCONSLocked || !canCaptureConsGlobal;
@@ -1529,7 +1533,7 @@
         if (!currentProfile) return;
         const isAdmin = currentProfile.rol === 'ADMIN' || currentProfile.rol === 'JURISDICCIONAL';
         const cluesFilter = isAdmin ? 'QTSSA012154' : (currentProfile.clues || '');
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayLocalYmd();
 
         // Weekly capture check: if Thursday or Friday, check both dates
         let srDateFilter = [today];
@@ -1537,11 +1541,11 @@
         if (dow === 5) {
             const yesterdayObj = new Date();
             yesterdayObj.setDate(yesterdayObj.getDate() - 1);
-            srDateFilter.push(yesterdayObj.toISOString().split('T')[0]);
+            srDateFilter.push(dateToLocalYmd(yesterdayObj));
         } else if (dow === 4) {
             const tomorrowObj = new Date();
             tomorrowObj.setDate(tomorrowObj.getDate() + 1);
-            srDateFilter.push(tomorrowObj.toISOString().split('T')[0]);
+            srDateFilter.push(dateToLocalYmd(tomorrowObj));
         }
 
         try {
@@ -1615,8 +1619,8 @@
         const todayObj = new Date();
         const year = todayObj.getFullYear();
         const month = todayObj.getMonth();
-        const todayYmd = todayObj.toISOString().split('T')[0];
-        const startOfMonthStr = new Date(year, month, 1).toISOString().split('T')[0];
+        const todayYmd = dateToLocalYmd(todayObj);
+        const startOfMonthStr = dateToLocalYmd(new Date(year, month, 1));
 
         const [resBio, resCons, resPedido] = await Promise.all([
             supabaseClient.from('biologicos_existencia').select('fecha').eq('clues', cluesFilter).gte('fecha', startOfMonthStr),
@@ -1632,7 +1636,7 @@
         let iter = new Date(startOfMonth);
         while (iter <= endOfMonth) {
             const dow = iter.getDay();
-            const ymd = iter.toISOString().split('T')[0];
+            const ymd = dateToLocalYmd(iter);
             if (dow === 4) expectedDatesCons.push(ymd);
             if (dow === 5) expectedDatesBio.push(ymd);
             iter.setDate(iter.getDate() + 1);
@@ -1648,7 +1652,7 @@
             if (isMexicanHoliday(dJue)) {
                 const dMie = new Date(dJue);
                 dMie.setDate(dJue.getDate() - 1);
-                targetWindow.push(dMie.toISOString().split('T')[0]);
+                targetWindow.push(dateToLocalYmd(dMie));
             }
             if (resCons.data && resCons.data.some(r => targetWindow.includes(r.fecha))) {
                 cons_semanas_ok++;
@@ -1660,11 +1664,11 @@
             const dVie = new Date(`${targetViernes}T12:00:00`);
             const dJue = new Date(dVie);
             dJue.setDate(dVie.getDate() - 1);
-            const targetWindow = [targetViernes, dJue.toISOString().split('T')[0]];
+            const targetWindow = [targetViernes, dateToLocalYmd(dJue)];
             if (isMexicanHoliday(dVie) && isMexicanHoliday(dJue)) {
                 const dMie = new Date(dJue);
                 dMie.setDate(dJue.getDate() - 1);
-                targetWindow.push(dMie.toISOString().split('T')[0]);
+                targetWindow.push(dateToLocalYmd(dMie));
             }
             if (resBio.data && resBio.data.some(r => targetWindow.includes(r.fecha))) {
                 bio_semanas_ok++;
@@ -1676,7 +1680,7 @@
         const pPct = (resPedido.data && resPedido.data.length > 0) ? 100 : 0;
 
         const intelligentWindow = calculateBioIntelligentWindow(year, month);
-        const windowStartYmd = intelligentWindow.start.toISOString().split('T')[0];
+        const windowStartYmd = dateToLocalYmd(intelligentWindow.start);
         const isPedidoRequired = todayYmd >= windowStartYmd;
 
         let score = 0;
@@ -1759,9 +1763,7 @@
             const minDosis = bio.min_dosis || 0;
             const maxDosis = bio.max_dosis || 0;
 
-            const bioKey = String(bio.biologico).trim().toUpperCase();
-            const requires5 = ["BCG", "HEXAVALENTE", "ROTAVIRUS", "NEUMOCOCICA 13", "NEUMOCOCICA 20", "SRP"].includes(bioKey);
-            const multiple = requires5 ? 5 : 1;
+            const multiple = bioMultiploPedido(bio.biologico);
 
             const bioDomId = 'bio_' + String(bio.id).replace(/[^a-zA-Z0-9_-]/g, '');
             card.innerHTML = `
@@ -1825,7 +1827,7 @@
                     message = `⚠️ Múltiplo de ${multiple}`;
                     badgeClass = "bg-red-100 text-red-700 border border-red-200";
                 }
-                else if (promedio > 0 && total < promedio) {
+                else if (promedio > 0 && total < promedio && !bioExentoPromedio(bio.biologico)) {
                     const sinPed = !!document.getElementById('chkNoPedido')?.checked;
                     message = sinPed ? `⚠️ Sin pedido: faltan ${promedio - total} fr. de existencia` : `⚠️ Faltan ${promedio - total} fr.`;
                     badgeClass = "bg-amber-100 text-amber-700 border border-amber-200";
@@ -1939,6 +1941,9 @@
             showToast("Error al confirmar recepción", "error");
         }
     };
+
+    // Escapa texto de la base de datos antes de pintarlo con innerHTML (títulos/mensajes los escriben otros usuarios).
+    const escHtml = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
     // --- Notificaciones ---
     const loadNotifications = async () => {
@@ -2070,7 +2075,7 @@
                     return html;
                 };
 
-                const displayMsg = formatNotifBodyMobile(notif.title, notif.message, notif.from_usuario);
+                const displayMsg = formatNotifBodyMobile(escHtml(notif.title), escHtml(notif.message), escHtml(notif.from_usuario));
                 const canConfirm = canConfirmPinolReceipt(item);
                 const confirmBtnHtml = canConfirm 
                     ? `<button class="btn-confirm-pinol-receipt mt-3 w-full py-2.5 px-4 bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all" data-notif-id="${item.notificacion_id}">
@@ -2097,7 +2102,7 @@
                             <div class="flex items-center justify-between gap-2 border-b border-slate-100/50 pb-2">
                                 <div class="flex items-center gap-2 overflow-hidden">
                                     ${unreadDot}
-                                    <span class="text-xs font-black tracking-tight truncate ${isUnread ? 'text-slate-900' : 'text-slate-600'}">${notif.title || 'Alerta'}</span>
+                                    <span class="text-xs font-black tracking-tight truncate ${isUnread ? 'text-slate-900' : 'text-slate-600'}">${escHtml(notif.title) || 'Alerta'}</span>
                                 </div>
                                 <div class="flex items-center gap-2 shrink-0">
                                     ${typeBadge}
@@ -2498,198 +2503,27 @@
     };
 
     // =========================================================================
-    // DOCK LIQUID GLASS ENGINE — Exact port from reference.html (Pebble & Void)
-    // Uses Canvas 2D physics-based Snell's Law displacement map + clone-world
-    // technique so refraction works on ALL browsers (not just backdrop-filter).
+    // BARRA DE PANELES (One UI): la cápsula de selección se desliza al botón activo.
     // =========================================================================
-
-    // SurfaceEquations: convex squircle lens profile
-    const dockSurfaceEq = (x) => Math.pow(1 - Math.pow(1 - x, 4), 1 / 4);
-
-    // Calculate 1D surface normal displacement profile
-    const calcDispMap1D = (gt, bw, sf, ri, s = 128) => {
-        const e = 1 / ri;
-        const r = [];
-        for (let i = 0; i < s; i++) {
-            const x = i / s;
-            const y = sf(x);
-            const dx = x < 1 ? 0.0001 : -0.0001;
-            const d = (sf(Math.max(0, Math.min(1, x + dx))) - y) / dx;
-            const m = Math.sqrt(d * d + 1);
-            const n = [-d / m, -1 / m];
-            const dt = n[1];
-            const k = 1 - e * e * (1 - dt * dt);
-            if (k < 0) {
-                r.push(0);
-            } else {
-                const rf = [-(e * dt + Math.sqrt(k)) * n[0], e - (e * dt + Math.sqrt(k)) * n[1]];
-                r.push(rf[0] * ((y * bw + gt) / rf[1]));
-            }
-        }
-        return r;
-    };
-
-    // Calculate 2D displacement map ImageData using squircle surface normals
-    const calcDispMap2D = (cw, ch, ow, oh, rad, bw, md, pMap) => {
-        const img = new ImageData(cw, ch);
-        for (let i = 0; i < img.data.length; i += 4) {
-            img.data[i] = 128;
-            img.data[i + 1] = 128;
-            img.data[i + 3] = 255;
-        }
-        const rSq = rad * rad;
-        const rp1Sq = (rad + 1) ** 2;
-        const rmBwSq = Math.max(0, rad - bw) ** 2;
-        const wB = ow - rad * 2;
-        const hB = oh - rad * 2;
-        const oX = (cw - ow) / 2;
-        const oY = (ch - oh) / 2;
-        for (let y1 = 0; y1 < oh; y1++) {
-            for (let x1 = 0; x1 < ow; x1++) {
-                const idx = ((oY + y1) * cw + oX + x1) * 4;
-                const x = x1 < rad ? x1 - rad : x1 >= ow - rad ? x1 - rad - wB : 0;
-                const y = y1 < rad ? y1 - rad : y1 >= oh - rad ? y1 - rad - hB : 0;
-                const dSq = x * x + y * y;
-                if (dSq <= rp1Sq && dSq >= rmBwSq) {
-                    const dist = Math.sqrt(dSq);
-                    const op = dSq < rSq ? 1 : 1 - (dist - rad) / (Math.sqrt(rp1Sq) - rad);
-                    const bIdx = Math.floor(Math.max(0, Math.min(1, (rad - dist) / bw)) * pMap.length);
-                    const dVal = pMap[Math.max(0, Math.min(bIdx, pMap.length - 1))] || 0;
-                    const dX = md > 0 ? (-(dist > 0 ? x / dist : 0) * dVal) / md : 0;
-                    const dY = md > 0 ? (-(dist > 0 ? y / dist : 0) * dVal) / md : 0;
-                    img.data[idx] = Math.max(0, Math.min(255, 128 + dX * 127 * op));
-                    img.data[idx + 1] = Math.max(0, Math.min(255, 128 + dY * 127 * op));
-                }
-            }
-        }
-        return img;
-    };
-
-    // Calculate specular highlight ImageData
-    const calcSpecular = (ow, oh, rad, bw) => {
-        const img = new ImageData(ow, oh);
-        const sVec = [Math.cos(Math.PI / 3), Math.sin(Math.PI / 3)];
-        const rSq = rad * rad;
-        const rp1Sq = (rad + 1) ** 2;
-        const rmSSq = Math.max(0, (rad - 1.5) ** 2);
-        for (let y1 = 0; y1 < oh; y1++) {
-            for (let x1 = 0; x1 < ow; x1++) {
-                const x = x1 < rad ? x1 - rad : x1 >= ow - rad ? x1 - rad - (ow - rad * 2) : 0;
-                const y = y1 < rad ? y1 - rad : y1 >= oh - rad ? y1 - rad - (oh - rad * 2) : 0;
-                const dSq = x * x + y * y;
-                if (dSq <= rp1Sq && dSq >= rmSSq) {
-                    const dist = Math.sqrt(dSq);
-                    const op = dSq < rSq ? 1 : 1 - (dist - rad) / (Math.sqrt(rp1Sq) - rad);
-                    const dp = Math.abs((dist > 0 ? x / dist : 0) * sVec[0] + (dist > 0 ? -y / dist : 0) * sVec[1]);
-                    const cf = dp * Math.sqrt(1 - (1 - Math.max(0, Math.min(1, (rad - dist) / 1.5))) ** 2);
-                    const c = Math.min(255, 255 * cf);
-                    const idx = (y1 * ow + x1) * 4;
-                    img.data[idx] = img.data[idx + 1] = img.data[idx + 2] = c;
-                    img.data[idx + 3] = Math.min(255, c * cf * op);
-                }
-            }
-        }
-        return img;
-    };
-
-    const imageDataToURL = (img) => {
-        const c = document.createElement('canvas');
-        c.width = img.width; c.height = img.height;
-        c.getContext('2d').putImageData(img, 0, 0);
-        return c.toDataURL();
-    };
-
-    // Dock glass config (matching reference.html dock settings)
-    const DOCK_GLASS = { w: 76, h: 50, r: 25, bw: 18, gt: 100, ri: 2.0, md: 0 };
-
-    // Initialize once: build high-res canvas displacement map + specular, inject SVG filter
-    const initDockGlass = () => {
-        const pc = calcDispMap1D(DOCK_GLASS.gt, DOCK_GLASS.bw, dockSurfaceEq, DOCK_GLASS.ri);
-        DOCK_GLASS.md = Math.max(...pc.map(Math.abs));
-
-        // Use 3x super-sampling resolution (High DPI Retina) to eliminate pixelation and jagged lines
-        const retinaScale = 3;
-        const widthRes = DOCK_GLASS.w * retinaScale;
-        const heightRes = DOCK_GLASS.h * retinaScale;
-        const radiusRes = DOCK_GLASS.r * retinaScale;
-        const bezelRes = DOCK_GLASS.bw * retinaScale;
-
-        const dispURL = imageDataToURL(calcDispMap2D(
-            widthRes, heightRes, widthRes, heightRes,
-            radiusRes, bezelRes, DOCK_GLASS.md || 1, pc
-        ));
-        const specURL = imageDataToURL(calcSpecular(widthRes, heightRes, radiusRes, bezelRes));
-
-        // Inject SVG filter with Retina maps and explicit pixel dimensions
-        // Expanded filter region (x="-100%", y="-100%", width="300%", height="300%") prevents boundary clipping lines (the blue/cyan border artifacts)
-        const filterHTML = `<svg id="dockGlassSVG" width="0" height="0" style="position:absolute;pointer-events:none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-                <filter id="dockGlassFilter" x="-100%" y="-100%" width="300%" height="300%" color-interpolation-filters="sRGB">
-                    <!-- Set stdDeviation to 0 to keep the background and icons razor sharp (no dirty blur) -->
-                    <feGaussianBlur in="SourceGraphic" stdDeviation="0" result="blurred" />
-                    <!-- Render the high resolution images fit into layout dimensions with image-rendering: crisp-edges quality -->
-                    <feImage id="dockDispImg" href="${dispURL}" x="0" y="0" width="${DOCK_GLASS.w}" height="${DOCK_GLASS.h}" result="displacement_map" preserveAspectRatio="none" style="image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;" />
-                    <!-- Scale reduced slightly (DOCK_GLASS.md * 0.9) to prevent extreme stretches that yield grey pixel borders -->
-                    <feDisplacementMap id="dockDispMap" in="blurred" in2="displacement_map" scale="${DOCK_GLASS.md * 0.9}" xChannelSelector="R" yChannelSelector="G" result="displaced" />
-                    <feColorMatrix in="displaced" type="saturate" values="1.2" result="displaced_saturated" />
-                    <feImage id="dockSpecImg" href="${specURL}" x="0" y="0" width="${DOCK_GLASS.w}" height="${DOCK_GLASS.h}" result="specular_layer" preserveAspectRatio="none" style="image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;" />
-                    <feComponentTransfer in="specular_layer" result="specular_faded">
-                        <feFuncA type="linear" slope="0.8" />
-                    </feComponentTransfer>
-                    <feBlend in="specular_faded" in2="displaced_saturated" mode="screen" />
-                </filter>
-            </defs>
-        </svg>`;
-        document.body.insertAdjacentHTML('beforeend', filterHTML);
-
-        DOCK_GLASS.dispURL = dispURL;
-        DOCK_GLASS.specURL = specURL;
-
-        // Detect backdrop-filter:url() support (Chrome desktop)
-        const testEl = document.createElement('div');
-        testEl.style.backdropFilter = 'url(#test)';
-        DOCK_GLASS.useBackdropFilter = testEl.style.backdropFilter.includes('url');
-        
-        if (DOCK_GLASS.useBackdropFilter) {
-            document.body.classList.add('use-backdrop-filter');
-        } else {
-            document.body.classList.remove('use-backdrop-filter');
-        }
-
-        // Apply to inner element
-        const inner = document.getElementById('dockIndicatorInner');
-        if (!inner) return;
-
-        if (DOCK_GLASS.useBackdropFilter) {
-            inner.style.backdropFilter = 'url(#dockGlassFilter)';
-            inner.style.webkitBackdropFilter = 'url(#dockGlassFilter)';
-        } else {
-            // Clone-world fallback: apply filter to the clone div inside the indicator
-            const clone = document.getElementById('dockBubbleClone');
-            if (clone) clone.style.filter = 'url(#dockGlassFilter)';
-        }
-    };
-
-    // Update clone-world transform when indicator moves (reference.html line 1650-1654)
-    const updateDockGlassFilter = () => {
-        if (DOCK_GLASS.useBackdropFilter) return; // backdrop-filter handles it natively
-
-        const bubble = document.getElementById('dockIndicator');
-        const cloneWorld = document.getElementById('dockCloneWorld');
+    const moveDockIndicator = () => {
+        const indicator = document.getElementById('dockIndicator');
         const dock = document.getElementById('mobileCaptureDock');
-        if (!bubble || !cloneWorld || !dock) return;
-
-        const dockRect = dock.getBoundingClientRect();
-        const bubbleRect = bubble.getBoundingClientRect();
-
-        // Translate the clone world opposite to the indicator's position
-        // so the clone appears to show the real scene "behind" the indicator
-        const gx = bubbleRect.left - dockRect.left;
-        const gy = bubbleRect.top - dockRect.top;
-        cloneWorld.style.transform = `translate(${-gx}px, ${-gy}px)`;
+        const activeBtn = dock && dock.querySelector('.dock-item.active');
+        if (!indicator || !activeBtn || activeBtn.offsetWidth === 0) return;
+        const primeraVez = indicator.dataset.colocada !== '1';
+        if (primeraVez) indicator.style.transition = 'none'; // la primera colocación no se anima desde 0
+        indicator.style.width = activeBtn.offsetWidth + 'px';
+        indicator.style.transform = 'translateX(' + activeBtn.offsetLeft + 'px)';
+        indicator.style.setProperty('--hoja', activeBtn.style.getPropertyValue('--hoja') || '#0284c7');
+        if (primeraVez) {
+            void indicator.offsetWidth; // aplica la posición sin transición
+            indicator.style.transition = '';
+            indicator.dataset.colocada = '1';
+        }
     };
 
     const switchPanel = (panelId) => {
+        const changed = activePanel !== panelId;
         activePanel = panelId;
         
         document.querySelectorAll('.panel-section').forEach(sec => sec.classList.add('hidden'));
@@ -2697,28 +2531,15 @@
         const mpAnnounce = document.getElementById('mpAnnounce');
         if (mpAnnounce) mpAnnounce.textContent = 'Panel: ' + (document.getElementById(`panel${panelId}`)?.getAttribute('aria-label') || panelId);
 
-        const items = document.querySelectorAll('.dock-item');
-        let activeBtn = null;
-        items.forEach(item => {
+        document.querySelectorAll('.dock-item').forEach(item => {
             const isActive = item.dataset.panel === panelId;
             item.classList.toggle('active', isActive);
-            if (isActive) { item.setAttribute('aria-current', 'page'); activeBtn = item; } else { item.removeAttribute('aria-current'); }
+            if (isActive) { item.setAttribute('aria-current', 'page'); } else { item.removeAttribute('aria-current'); }
         });
+        moveDockIndicator();
 
-        if (activeBtn) {
-            const indicator = document.getElementById('dockIndicator');
-            const dock = document.getElementById('mobileCaptureDock');
-            const dockRect = dock.getBoundingClientRect();
-            const btnRect = activeBtn.getBoundingClientRect();
-            
-            const transformX = btnRect.left - dockRect.left + (btnRect.width - 76) / 2;
-
-            requestAnimationFrame(() => {
-                indicator.style.transform = `translate(${transformX}px, -50%) scale(1.15)`;
-                indicator.style.opacity = '1';
-                updateDockGlassFilter();
-            });
-        }
+        // Cada panel abre desde arriba (antes quedaba a media página del panel anterior).
+        if (changed) window.scrollTo({ top: 0, behavior: 'auto' });
 
         const hub = document.getElementById('globalCommandHub');
         if (hub) {
@@ -2733,67 +2554,48 @@
         }).catch(err => console.error("Error refreshing captures on panel switch:", err));
     };
 
-
-    // --- Dock Touch/Drag Logic (Fully non-blocking) ---
-    const initDockDrag = () => {
-        const indicator = document.getElementById('dockIndicator');
+    // Reposiciona la cápsula si cambia el ancho (rotación, teclado, fuentes) y retira la barra
+    // mientras se edita un campo para que no tape el campo ni "salte" con el teclado.
+    const initDockBehavior = () => {
         const dock = document.getElementById('mobileCaptureDock');
+        if (!dock) return;
+        window.addEventListener('resize', moveDockIndicator);
+        if (typeof ResizeObserver === 'function') new ResizeObserver(moveDockIndicator).observe(dock);
 
-        dock.addEventListener('touchstart', (e) => {
-            const touchX = e.touches[0].clientX;
-            const indRect = indicator.getBoundingClientRect();
-            
-            if (touchX >= indRect.left && touchX <= indRect.right) {
-                isDraggingDock = true;
-                dragStartX = touchX;
-                const dockRect = dock.getBoundingClientRect();
-                dockLeftOffset = indRect.left - dockRect.left;
-                indicator.style.transition = 'none';
-            }
-        }, { passive: true });
+        // Ancla la barra y el botón de guardar al viewport VISIBLE. Cuando el viewport de layout
+        // es mayor que el visible (barra del navegador que se oculta al desplazar, zoom/escala del
+        // emulador, teclado) los elementos "fixed" quedaban medio fuera de la pantalla y la barra
+        // "caía" al hacer scroll. Con viewport normal los offsets valen 0.
+        const root = document.documentElement;
+        const anclarAlViewport = () => {
+            const vv = window.visualViewport;
+            if (!vv) return;
+            const left = Math.max(0, Math.round(vv.offsetLeft));
+            const top = Math.max(0, Math.round(vv.offsetTop));
+            const bottom = Math.max(0, Math.round(window.innerHeight - (vv.height + top)));
+            const right = Math.max(0, Math.round(window.innerWidth - (vv.width + left)));
+            root.style.setProperty('--vv-left', left + 'px');
+            root.style.setProperty('--vv-right', right + 'px');
+            root.style.setProperty('--vv-bottom', bottom + 'px');
+        };
+        anclarAlViewport();
+        window.addEventListener('resize', anclarAlViewport);
+        window.addEventListener('scroll', anclarAlViewport, { passive: true });
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', anclarAlViewport);
+            window.visualViewport.addEventListener('scroll', anclarAlViewport);
+        }
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(moveDockIndicator);
 
-        dock.addEventListener('touchmove', (e) => {
-            if (!isDraggingDock) return;
-            const clientX = e.touches[0].clientX;
-            const deltaX = clientX - dragStartX;
-            const dockRect = dock.getBoundingClientRect();
-            
-            let newX = dockLeftOffset + deltaX;
-            newX = Math.max(8, Math.min(newX, dockRect.width - 84));
-
-            requestAnimationFrame(() => {
-                indicator.style.transform = `translate(${newX}px, -50%) scale(1.15)`;
-                updateDockGlassFilter();
-            });
-        }, { passive: true });
-
-        dock.addEventListener('touchend', (e) => {
-            if (!isDraggingDock) return;
-            isDraggingDock = false;
-            indicator.style.transition = 'transform 0.4s cubic-bezier(0.25, 1, 0.2, 1)';
-
-            const indRect = indicator.getBoundingClientRect();
-            const indCenter = indRect.left + indRect.width / 2;
-
-            const items = Array.from(document.querySelectorAll('.dock-item'));
-            let closestItem = items[0];
-            let minDistance = Infinity;
-
-            items.forEach(item => {
-                const rect = item.getBoundingClientRect();
-                const itemCenter = rect.left + rect.width / 2;
-                const dist = Math.abs(indCenter - itemCenter);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closestItem = item;
-                }
-            });
-
-            switchPanel(closestItem.dataset.panel);
+        const esCampo = (el) => !!(el && el.matches && el.matches('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]), textarea, select'));
+        document.addEventListener('focusin', (e) => {
+            if (esCampo(e.target) && e.target.closest('#captureContentArea')) document.body.classList.add('teclado-abierto');
         });
-
-        window.addEventListener('resize', () => {
-            updateDockGlassFilter();
+        document.addEventListener('focusout', () => {
+            setTimeout(() => {
+                const el = document.activeElement;
+                if (!(esCampo(el) && el.closest('#captureContentArea'))) document.body.classList.remove('teclado-abierto');
+            }, 80);
         });
     };
 
@@ -2836,7 +2638,7 @@
             const btnCancel = document.getElementById('btnAperturaFrascoCancel');
             if (!overlay || !dateInput) { resolve(null); return; }
 
-            const hoy = new Date().toISOString().split('T')[0];
+            const hoy = todayLocalYmd();
             if (contextEl) {
                 contextEl.innerHTML = `Detectamos una cantidad decimal en <b>${biologico || ""}</b>, lote <b>${lote || "—"}</b>. Según el manual de vacunación, este frasco debe usarse dentro de los <b>28 días</b> posteriores a su apertura.`;
             }
@@ -2961,7 +2763,7 @@
             const btnCancel = document.getElementById('btnAperturaBatchCancel');
             if (!overlay || !listEl) { resolve(false); return; }
 
-            const hoy = new Date().toISOString().split('T')[0];
+            const hoy = todayLocalYmd();
 
             listEl.innerHTML = pendingCards.map((p, i) => `
                 <div class="apertura-batch-item">
@@ -3084,7 +2886,7 @@
                 usuario: currentProfile.usuario,
                 clues: cluesFilter,
                 municipio: muniFilter,
-                fecha_captura: new Date().toISOString().split('T')[0]
+                fecha_captura: todayLocalYmd()
             };
 
             let tableName = "";
@@ -3122,6 +2924,9 @@
                     const tipo = tipoSelect?.value || "REQUISICION";
 
                     if (!bio && !lote && !cant && !recep) return;
+                    // Sin movimiento: se replican tal cual los renglones completos de la captura
+                    // anterior (igual que en escritorio); los incompletos se omiten.
+                    if (sinMovimiento && !(bio && lote && cant !== "" && recep)) return;
 
                     const rowErrors = [];
                     if (!bio) rowErrors.push("falta seleccionar el biológico");
@@ -3154,6 +2959,8 @@
                             }
                         }
                     }
+
+                    if (sinMovimiento) rowErrors.length = 0;
 
                     if (rowErrors.length > 0) {
                         hasInvalid = true;
@@ -3190,8 +2997,10 @@
                     throw new Error("Validaciones fallidas");
                 }
 
-                if (!items.length && !sinMovimiento) {
-                    showToast("Captura al menos un biológico", "error");
+                if (!items.length) {
+                    showToast(sinMovimiento
+                        ? "No hay datos de la captura anterior que replicar. Desmarca «Sin movimiento» y captura tu existencia."
+                        : "Captura al menos un biológico", "error");
                     throw new Error("Sin items");
                 }
 
@@ -3472,7 +3281,7 @@
                     showToast("Ingresa el nombre del responsable", "error");
                     throw new Error("Nombre requerido");
                 }
-                const today = new Date().toISOString().split('T')[0];
+                const today = todayLocalYmd();
                 dataObject.capturado_por = nombreCONS;
                 dataObject.id = btoa(cluesFilter + ":" + today);
 
@@ -3504,7 +3313,7 @@
                 dataObject.jeringa_aplic_05ml_0605502657 = j05;
                 dataObject.jeringa_reconst_5ml_0605500438 = j50;
                 dataObject.aguja_0600403711 = j50; // igual a la jeringa 5.0 (misma regla que en escritorio)
-                dataObject.fecha = new Date().toISOString().split('T')[0];
+                dataObject.fecha = todayLocalYmd();
 
             } else if (activePanel === 'BIO') {
                 tableName = "biologicos_pedido";
@@ -3515,11 +3324,9 @@
                     throw new Error("Nombre requerido");
                 }
 
-                // Delete existing first to avoid duplicate keys (desktop parity)
-                await supabaseClient.from('biologicos_pedido').delete().eq('clues', cluesFilter).eq('fecha_pedido_programada', targetPedidoDate);
-
                 let records = [];
-                let hasError = false;
+                const bioErrors = [];
+                const sinPedido = !!document.getElementById('chkNoPedido')?.checked;
 
                 document.querySelectorAll('#bioCardsContainer input').forEach(el => {
                     const bioId = el.dataset.bioId;
@@ -3529,36 +3336,28 @@
 
                     if (bioId && field) {
                         if (val < 0) {
-                            showToast(`La cantidad para ${bioName} no puede ser negativa`, "error");
-                            hasError = true;
+                            bioErrors.push(`${bioName}: la cantidad no puede ser negativa`);
                             return;
                         }
-                        const bioKey = String(bioName).trim().toUpperCase();
-                        let multiplo = 1;
-                        if (bioKey === "HEXAVALENTE") {
-                            multiplo = 10;
-                        } else if (["BCG", "ROTAVIRUS", "NEUMOCOCICA 13", "NEUMOCOCICA 20", "SRP"].includes(bioKey)) {
-                            multiplo = 5;
-                        }
+                        const multiplo = bioMultiploPedido(bioName);
                         if (field === 'pedido' && multiplo > 1 && val > 0 && val % multiplo !== 0) {
-                            showToast(`El pedido para ${bioName} debe ser múltiplo de ${multiplo} (se ingresó ${val})`, "error");
-                            hasError = true;
+                            bioErrors.push(`${bioName}: el pedido debe ser múltiplo de ${multiplo} (se ingresó ${val})`);
                             return;
                         }
-                        
+
                         let rec = records.find(r => r.biologico === bioName);
                         if (!rec) {
                             rec = {
                                 id: btoa(cluesFilter + ":" + bioName + ":" + Date.now()),
                                 timestamp: new Date().toISOString(),
-                                fecha_captura: new Date().toISOString().split('T')[0],
+                                fecha_captura: todayLocalYmd(),
                                 fecha_pedido_programada: targetPedidoDate,
                                 municipio: muniFilter,
                                 clues: cluesFilter,
                                 biologico: bioName,
                                 capturado_por: nombreBIO.toUpperCase(),
                                 tipo_pedido: tipoPedidoActual,
-                                sin_pedido: document.getElementById('chkNoPedido').checked,
+                                sin_pedido: sinPedido,
                                 existencia_actual_frascos: 0,
                                 pedido_frascos: 0
                             };
@@ -3572,30 +3371,41 @@
                     }
                 });
 
-                if (hasError) throw new Error("Validación de pedido fallida");
+                // Un solo aviso con todos los errores (antes: un toast —y una sacudida— por campo).
+                if (bioErrors.length) {
+                    showToast(bioErrors.join(" · "), "error");
+                    throw new Error("Validación de pedido fallida");
+                }
+
+                if (!records.length) {
+                    showToast("No hay biológicos para capturar en el pedido.", "error");
+                    throw new Error("Validación de pedido fallida");
+                }
 
                 // Enforce stock vs average monthly rules (BIO lock)
                 let warningMsgs = [];
-                const sinPedido = document.getElementById('chkNoPedido').checked;
                 records.forEach(rec => {
                     const matchedBio = biologicosCatalogo.find(b => 
                         normalizeString(b.biologico) === normalizeString(rec.biologico)
                     );
                     const promedioVal = matchedBio ? (matchedBio.promedio_frascos || 0) : 0;
                     const totalVal = rec.existencia_actual_frascos + rec.pedido_frascos;
-                    const normKey = String(rec.biologico).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-                    const isExento = ["VPH", "INFLUENZA", "COVID-19", "COVID 19", "VARICELA", "HEPATITIS A"].includes(normKey);
-                    
-                    if (promedioVal > 0 && totalVal < promedioVal && !isExento) {
+
+                    if (promedioVal > 0 && totalVal < promedioVal && !bioExentoPromedio(rec.biologico)) {
                         warningMsgs.push(`${rec.biologico} (Promedio: ${promedioVal}, Ingresado: ${totalVal})`);
                     }
                 });
 
                 if (warningMsgs.length > 0) {
                     showToast("🚫 Ajuste de cantidades requerido: " + warningMsgs.join(", "), "error");
-                    throw new Error("Existencia + Pedido es menor al promedio mensual");
+                    throw new Error("Validación de pedido fallida");
                 }
-                
+
+                // Solo después de validar se reemplaza el pedido anterior: antes se borraba primero y
+                // un error de validación dejaba al usuario sin el pedido que ya tenía guardado.
+                const { error: delBioErr } = await supabaseClient.from('biologicos_pedido').delete().eq('clues', cluesFilter).eq('fecha_pedido_programada', targetPedidoDate);
+                if (delBioErr) throw delBioErr;
+
                 const { error } = await supabaseClient.from('biologicos_pedido').insert(records);
                 if (error) throw error;
 
@@ -3626,7 +3436,7 @@
                 const pinolRecord = {
                     id: btoa(cluesFilter + ":" + Date.now()),
                     timestamp_solicitud: new Date().toISOString(),
-                    fecha_solicitud: new Date().toISOString().split('T')[0],
+                    fecha_solicitud: todayLocalYmd(),
                     clues: cluesFilter,
                     unidad: currentProfile.unidad || "UNIDAD SIN NOMBRE",
                     municipio: muniFilter,
@@ -3679,13 +3489,18 @@
 
         } catch (err) {
             console.error(err);
-            if (err.message === "Confirmación cancelada" || err.message === "Captura de fecha de apertura cancelada") {
-                // Cancelación intencional del usuario (modal de salto de semanas / fecha de apertura) — sin toast.
-            } else if (err.message && err.message !== "Nombre requerido" && err.message !== "Validaciones fallidas" && err.message !== "Sin items" && err.message !== "Campos incompletos" && err.message !== "Valores negativos" && err.message !== "Validación de pedido fallida") {
-                showToast("Error: " + err.message, "error");
+            // Estos errores se lanzan DESPUÉS de mostrar su propio aviso (o son una cancelación
+            // del usuario): no se repite un segundo toast.
+            const yaAvisados = [
+                "Confirmación cancelada", "Captura de fecha de apertura cancelada", "Nombre requerido",
+                "Validaciones fallidas", "Sin items", "Campos incompletos", "Valores negativos",
+                "Validación de pedido fallida", "Cantidad de solicitud inválida",
+                "Múltiples pedidos de Pinol no permitidos", "Sin datos previos"
+            ];
+            if (yaAvisados.includes(err.message)) {
+                // sin toast adicional
             } else if (err.message) {
-                // If it is a validation error but has a message, let's toast it to alert the user
-                showToast(err.message, "error");
+                showToast("Error: " + err.message, "error");
             } else {
                 showToast("Error al guardar reporte.", "error");
             }
@@ -3878,29 +3693,59 @@
             });
         });
 
+        // "Sin movimiento" (SR): la existencia no cambió. Se bloquean las tarjetas SIN borrar sus
+        // valores y al guardar se replica la captura anterior, igual que en escritorio (antes se
+        // ponían en cero y el guardado quedaba bloqueado por "lotes en ceros").
         document.getElementById('chkSinMovimientoSR')?.addEventListener('change', (e) => {
-            const disabled = e.target.checked;
+            const marcado = e.target.checked;
             document.querySelectorAll('#srCardsContainer select, #srCardsContainer input, #srCardsContainer button, #btnAddSRCard').forEach(el => {
-                if (el.id === 'chkSinMovimientoSR') return;
-                el.disabled = disabled;
-                el.style.opacity = disabled ? "0.55" : "";
-                el.style.pointerEvents = disabled ? "none" : "";
-                if (disabled && el.type === 'number') el.value = 0;
+                el.style.opacity = marcado ? "0.55" : "";
+                el.style.pointerEvents = marcado ? "none" : "";
             });
-            if (disabled) showToast("Biológicos marcados Sin Movimiento.");
+            applyFormLocks();
+            if (marcado && !(e.detail && e.detail.programmatic)) showToast("Biológicos marcados Sin Movimiento: se replicará tu captura anterior.");
         });
 
-        document.getElementById('chkSinMovimientoCONS')?.addEventListener('change', (e) => {
-            const disabled = e.target.checked;
-            document.querySelectorAll('#panelCONS input, #panelCONS textarea, #panelCONS select').forEach(el => {
-                if (el.id !== 'chkSinMovimientoCONS' && el.id !== 'nombreCONS') {
-                    el.disabled = disabled;
-                    el.style.opacity = disabled ? "0.55" : "";
-                    el.style.pointerEvents = disabled ? "none" : "";
-                    if (disabled && el.type === 'number') el.value = 0;
-                }
-            });
-            if (disabled) showToast("Consumibles marcados Sin Movimiento.");
+        // "Sin movimiento" (CONS): se cargan los valores de la última captura de consumibles y se
+        // guardan tal cual (antes se guardaban en ceros, borrando la existencia real).
+        document.getElementById('chkSinMovimientoCONS')?.addEventListener('change', async (e) => {
+            const chk = e.target;
+            const setVisual = (marcado) => {
+                document.querySelectorAll('#panelCONS input, #panelCONS textarea, #panelCONS select').forEach(el => {
+                    if (el.id === 'chkSinMovimientoCONS' || el.id === 'nombreCONS') return;
+                    el.style.opacity = marcado ? "0.55" : "";
+                    el.style.pointerEvents = marcado ? "none" : "";
+                });
+            };
+            if (e.detail && e.detail.programmatic) { setVisual(chk.checked); applyFormLocks(); return; }
+            if (!chk.checked) { setVisual(false); applyFormLocks(); return; }
+
+            const isAdmin = currentProfile && (currentProfile.rol === 'ADMIN' || currentProfile.rol === 'JURISDICCIONAL');
+            const clues = isAdmin ? 'QTSSA012154' : (currentProfile?.clues || '');
+            chk.disabled = true;
+            let prev = null;
+            try {
+                const { data } = await supabaseClient.from('consumibles').select('*').eq('clues', clues)
+                    .order('fecha', { ascending: false }).limit(1).maybeSingle();
+                prev = data || null;
+            } catch (err) { console.warn("Sin movimiento CONS: no se pudo leer la captura anterior", err); }
+            chk.disabled = false;
+            if (!prev) {
+                chk.checked = false;
+                setVisual(false);
+                applyFormLocks();
+                showToast("No hay una captura anterior de consumibles que replicar.", "error");
+                return;
+            }
+            const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? 0; };
+            setVal('srp_dosis', prev.srp_dosis);
+            setVal('sr_dosis', prev.sr_dosis);
+            setVal('jeringa_aplic_05ml_0605502657', prev.jeringa_aplic_05ml_0605502657);
+            setVal('jeringa_reconst_5ml_0605500438', prev.jeringa_reconst_5ml_0605500438);
+            setVal('aguja_0600403711', prev.jeringa_reconst_5ml_0605500438);
+            setVisual(true);
+            applyFormLocks();
+            showToast("Consumibles marcados Sin Movimiento: se replicó tu última captura.");
         });
 
         document.getElementById('chkNoPedido')?.addEventListener('change', (e) => {
@@ -3925,23 +3770,30 @@
 
         document.getElementById('mobileCaptureDock')?.addEventListener('click', (e) => {
             const btn = e.target.closest('.dock-item');
-            if (btn && !isDraggingDock) {
+            if (btn) {
                 switchPanel(btn.dataset.panel);
             }
         });
 
         let touchStartX = 0;
+        let touchStartY = 0;
         let touchEndX = 0;
+        let touchOnField = false;
         const mainArea = document.getElementById('captureContentArea');
         mainArea?.addEventListener('touchstart', e => {
             touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+            // Un deslizamiento que empieza sobre un campo/botón no cambia de panel (evita saltos
+            // accidentales al editar o al desplazar la pantalla en diagonal).
+            touchOnField = !!(e.target.closest && e.target.closest('input, select, textarea, button, label, [role="button"]'));
         }, { passive: true });
         mainArea?.addEventListener('touchend', e => {
             touchEndX = e.changedTouches[0].screenX;
             const diffX = touchStartX - touchEndX;
+            const diffY = touchStartY - e.changedTouches[0].screenY;
             const panels = ['SR', 'CONS', 'BIO', 'PINOL'];
             const curIdx = panels.indexOf(activePanel);
-            if (Math.abs(diffX) > 80 && !isDraggingDock) {
+            if (!touchOnField && Math.abs(diffX) > 90 && Math.abs(diffX) > Math.abs(diffY) * 2) {
                 if (diffX > 0 && curIdx < panels.length - 1) switchPanel(panels[curIdx + 1]);
                 else if (diffX < 0 && curIdx > 0) switchPanel(panels[curIdx - 1]);
             }

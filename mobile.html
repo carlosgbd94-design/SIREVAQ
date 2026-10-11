@@ -39,45 +39,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1" rel="stylesheet">
 
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="mobile_style.css?v=2026.35">
+  <link rel="stylesheet" href="mobile_style.css?v=2026.37">
   <link rel="stylesheet" href="ayuda.css?v=1">
 </head>
 <body class="bg-[#f1f4f8] text-slate-800 min-h-[100dvh] flex flex-col relative overflow-x-hidden">
-
-  <!-- Filtros GPU (Inline SVG) para Liquid Glass (iOS 26) -->
-  <svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="0" height="0"
-    style="position: absolute; pointer-events: none; visibility: hidden;">
-    <defs>
-      <filter id="liquid-refraction" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
-        <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="3" result="raw-noise" />
-        <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.18 0" in="raw-noise"
-          result="noise-map" />
-        <feDisplacementMap in="SourceGraphic" in2="noise-map" scale="18" xChannelSelector="R" yChannelSelector="G" />
-      </filter>
-
-      <!-- True Re-creation SVG Liquid Glass Filter (Chromatic Aberration & Refraction) -->
-      <filter id="liquid-glass" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
-        <!-- Generate organic noise representing the liquid surface -->
-        <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" result="noise" />
-        
-        <!-- Displace backdrop channel-by-channel with desynchronized scaling -->
-        <feDisplacementMap in="SourceGraphic" in2="noise" scale="18" xChannelSelector="R" yChannelSelector="G" result="dispR" />
-        <feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" in="dispR" result="red" />
-        
-        <feDisplacementMap in="SourceGraphic" in2="noise" scale="12" xChannelSelector="R" yChannelSelector="G" result="dispG" />
-        <feColorMatrix type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" in="dispG" result="green" />
-        
-        <feDisplacementMap in="SourceGraphic" in2="noise" scale="6" xChannelSelector="R" yChannelSelector="G" result="dispB" />
-        <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" in="dispB" result="blue" />
-        
-        <feBlend in="red" in2="green" mode="screen" result="rgBlend" />
-        <feBlend in="rgBlend" in2="blue" mode="screen" />
-      </filter>
-    </defs>
-  </svg>
-
-  <!-- Contenedor dinámico para Filtros SVG de la Selección Dock -->
-  <div id="dock-glass-svg-container" style="position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; z-index: -9999;"></div>
 
   <!-- 🌀 Premium Loading Screen Overlay -->
   <div id="premiumLoadingScreen" class="premium-loading-overlay">
@@ -430,35 +395,27 @@
       </button>
     </div>
 
-    <!-- 📱 DOCK DE SELECCIÓN DE MÓDULOS -->
+    <!-- 📱 BARRA DE PANELES (One UI): cápsula flotante de vidrio esmerilado.
+         La cápsula #dockIndicator se desliza al panel activo (ver switchPanel en mobile_main.js);
+         cada botón lleva su color en --hoja. -->
     <div id="mobileCaptureDockWrapper" class="dock-wrapper-v5">
       <div id="mobileCaptureDock" class="dock-container" role="navigation" aria-label="Módulos de captura">
-        <!-- Liquid Glass indicator (below buttons at z-index 1) -->
-        <!-- Structure mirrors reference.html dock-bubble exactly:
-             dockBubbleClone = receives filter:url(#dockGlassFilter) in non-backdrop-filter mode
-             dockCloneWorld  = clone of background, translated opposite to indicator position
-             dockIndicatorInner = receives backdrop-filter:url(#dockGlassFilter) in Chrome -->
-        <div class="dock-indicator" id="dockIndicator">
-          <div class="dock-bubble-clone" id="dockBubbleClone">
-            <div class="dock-clone-world" id="dockCloneWorld"></div>
-          </div>
-          <div class="dock-indicator-inner" id="dockIndicatorInner"></div>
-        </div>
-        <button class="dock-item" data-panel="SR" type="button">
+        <span class="dock-indicator" id="dockIndicator" aria-hidden="true"></span>
+        <button class="dock-item" data-panel="SR" type="button" style="--hoja:#0284c7;">
           <span class="material-symbols-rounded" aria-hidden="true">vaccines</span>
-          <label>BIOLÓGICOS</label>
+          <span class="dock-label">Biológicos</span>
         </button>
-        <button class="dock-item" data-panel="CONS" type="button">
+        <button class="dock-item" data-panel="CONS" type="button" style="--hoja:#d97706;">
           <span class="material-symbols-rounded" aria-hidden="true">add_business</span>
-          <label>CONSUMIBLES</label>
+          <span class="dock-label">Consumibles</span>
         </button>
-        <button class="dock-item" data-panel="BIO" type="button">
+        <button class="dock-item" data-panel="BIO" type="button" style="--hoja:#7c3aed;">
           <span class="material-symbols-rounded" aria-hidden="true">science</span>
-          <label>PEDIDO</label>
+          <span class="dock-label">Pedido</span>
         </button>
-        <button class="dock-item" data-panel="PINOL" type="button">
+        <button class="dock-item" data-panel="PINOL" type="button" style="--hoja:#059669;">
           <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
-          <label>PINOL</label>
+          <span class="dock-label">Pinol</span>
         </button>
       </div>
     </div>
@@ -808,6 +765,6 @@
   <script src="calendario_capacitaciones.js?v=2026.4" defer></script>
   <script src="ayuda.js?v=13" defer></script>
 <script defer src="a11y_global.js?v=5"></script>
-  <script src="mobile_main.js" defer></script>
+  <script src="mobile_main.js?v=2026.37" defer></script>
 </body>
 </html>

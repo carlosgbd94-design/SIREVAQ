@@ -69,21 +69,44 @@ h1, h2, h3, h4, h5, h6 {
   font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
 
-/* iOS 27 Premium Liquid Glass Spec */
+/* ===========================================================================
+   One UI 9 -- vidrio esmerilado (sin refraccion, sin biseles).
+   Superficie translucida neutra + desenfoque con saturacion, aro de luz fino y una
+   sombra suave. Se usa en la barra de paneles, encabezado, chips y tarjetas informativas.
+   =========================================================================== */
+:root {
+  --oui-glass: rgba(255, 255, 255, 0.62);
+  --oui-glass-strong: rgba(255, 255, 255, 0.78);
+  --oui-glass-border: rgba(255, 255, 255, 0.72);
+  --oui-glass-ring: rgba(15, 23, 42, 0.07);
+  --oui-glass-shadow: 0 10px 30px rgba(20, 30, 50, 0.16), 0 2px 6px rgba(20, 30, 50, 0.08);
+  --oui-glass-blur: blur(26px) saturate(170%);
+}
+html.dark {
+  --oui-glass: rgba(34, 36, 42, 0.62);
+  --oui-glass-strong: rgba(34, 36, 42, 0.82);
+  --oui-glass-border: rgba(255, 255, 255, 0.13);
+  --oui-glass-ring: rgba(0, 0, 0, 0.5);
+  --oui-glass-shadow: 0 12px 32px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
 .liquid-glass {
-  background: rgba(255, 255, 255, 0.45) !important;
-  border: 1px solid rgba(255, 255, 255, 0.6) !important;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.04), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
-  backdrop-filter: url(#liquid-refraction) blur(20px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(190%) !important;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--oui-glass) !important;
+  border: 1px solid var(--oui-glass-border) !important;
+  box-shadow: 0 0 0 0.5px var(--oui-glass-ring), 0 6px 20px rgba(20, 30, 50, 0.08) !important;
+  -webkit-backdrop-filter: var(--oui-glass-blur) !important;
+  backdrop-filter: var(--oui-glass-blur) !important;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .liquid-glass { background: var(--oui-glass-strong) !important; }
 }
 
 /* 🛸 Floating Command Hub (iOS FAB Edition) */
 .command-hub {
   position: fixed !important;
-  bottom: 110px !important;
-  right: 20px !important;
+  bottom: calc(104px + env(safe-area-inset-bottom, 0px) + var(--vv-bottom, 0px)) !important;
+  right: calc(20px + var(--vv-right, 0px)) !important;
   left: auto !important;
   transform: translateY(20px) !important;
   width: 56px !important;
@@ -186,161 +209,128 @@ html.dark .command-hub button {
   display: none !important;
 }
 
-/* 📱 Selection Dock (iOS Liquid Glass - Matches referenceIOS26Oficial.html) */
+/* 📱 Barra de paneles -- One UI 9: cápsula flotante de vidrio esmerilado con márgenes a los
+   bordes. La selección es una cápsula tonal con el color del panel que se desliza de uno a otro
+   (dock_glass.css usa el mismo lenguaje en escritorio). Plano a propósito: sin refracción ni biseles. */
 .dock-wrapper-v5 {
   position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 32px);
-  max-width: 380px;
-  height: 76px;
+  left: var(--vv-left, 0px);
+  right: var(--vv-right, 0px);
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px) + var(--vv-bottom, 0px));
+  display: flex;
+  justify-content: center;
+  padding: 0 16px;
   z-index: 100;
+  pointer-events: none;
+  transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.25, 1), opacity 0.2s ease;
 }
 
 .dock-container {
-  position: absolute;
-  inset: 0;
-  border-radius: 36px;
+  position: relative;
+  pointer-events: auto;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  padding: 8px;
-  box-shadow: var(--glass-shadow);
-  touch-action: none;
-  overflow: visible;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+  max-width: 400px;
+  padding: 6px;
+  border-radius: 999px;
+  background: var(--oui-glass);
+  border: 1px solid var(--oui-glass-border);
+  box-shadow: 0 0 0 0.5px var(--oui-glass-ring), var(--oui-glass-shadow);
+  -webkit-backdrop-filter: var(--oui-glass-blur);
+  backdrop-filter: var(--oui-glass-blur);
+  touch-action: manipulation;
+  overflow: hidden;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dock-container { background: var(--oui-glass-strong); }
 }
 
-/* Glass blur applied via pseudo-element so dock-indicator's backdrop-filter
-   captures the ACTUAL PAGE CONTENT (sharp panel text/icons), not a pre-blurred composite.
-   Without this, CA is invisible because there are no sharp edges to refract. */
-.dock-container::before {
-  content: '';
+/* Cápsula de selección: se posiciona con JS (ancho y translateX del botón activo). */
+.dock-indicator {
   position: absolute;
-  inset: 0;
-  border-radius: 36px;
-  background: var(--glass-bg);
-  border: 1.5px solid var(--glass-border);
-  z-index: -1;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 0;
+  border-radius: 999px;
   pointer-events: none;
+  z-index: 0;
+  background: rgba(15, 23, 42, 0.07);
+  background: color-mix(in srgb, var(--hoja, #0284c7) 17%, rgba(255, 255, 255, 0.55));
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hoja, #0284c7) 26%, transparent);
+  transition: transform 0.36s cubic-bezier(0.2, 0.9, 0.25, 1), width 0.36s cubic-bezier(0.2, 0.9, 0.25, 1), background-color 0.3s ease;
+  will-change: transform;
+}
+html.dark .dock-indicator {
+  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--hoja, #0284c7) 34%, rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hoja, #0284c7) 40%, transparent);
 }
 
 .dock-item {
   position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  padding: 6px 2px;
   background: transparent;
   border: none;
+  border-radius: 999px;
   outline: none;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: color 0.3s ease;
-  z-index: 0; /* below indicator (z-index: 1) so they get refracted */
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.2s ease;
 }
 
-.dock-item span {
-  font-size: 22px !important;
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+.dock-item .material-symbols-rounded {
+  font-size: 24px !important;
+  line-height: 1;
+  transition: color 0.2s ease;
 }
 
-.dock-item label {
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  margin-top: 4px;
-  opacity: 0.8;
-  transition: opacity 0.3s ease;
+.dock-item .dock-label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dock-item.active {
   color: var(--text-primary);
-  z-index: 2; /* above indicator (z-index: 1) so it is sharp and not distorted */
 }
-
-.dock-item.active span {
-  transform: translateY(-2px) scale(1.1);
-  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
-}
-
-.dock-item.active label {
-  opacity: 1;
-}
-
-/* Liquid Glass Indicator - z-index 1, below dock items */
-.dock-indicator {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 76px;
-  height: 50px;
-  border-radius: 25px !important;
-  z-index: 1;
-  pointer-events: none;
-  transition: transform 0.4s cubic-bezier(0.25, 1, 0.2, 1);
-  will-change: transform;
-  transform: translateY(-50%) scale(1.15);
-}
-
-.dock-bubble-clone {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  border-radius: inherit;
-  z-index: 1;
-  will-change: filter, transform;
-  contain: strict;
-}
-
-.use-backdrop-filter .dock-bubble-clone {
-  display: none;
-}
-
-.dock-clone-world {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 380px;
-  height: 76px;
-  pointer-events: none;
-  will-change: transform;
-  transform-origin: top left;
-  background: transparent;
-}
-
-.dock-indicator-inner {
-  width: 100%;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 25px !important;
-  box-shadow: 
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    0 10px 30px rgba(0, 0, 0, 0.2);
-  will-change: backdrop-filter;
-  z-index: 3;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-html.dark .dock-indicator-inner {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 25px !important;
-  box-shadow: 
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 10px 30px rgba(0, 0, 0, 0.5);
-}
-
-/* Active panel icon fill style */
 .dock-item.active .material-symbols-rounded {
+  color: var(--hoja, #0284c7);
   font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24 !important;
 }
+html.dark .dock-item.active .material-symbols-rounded { color: color-mix(in srgb, var(--hoja, #38bdf8) 55%, #ffffff); }
+.dock-item.active .dock-label { font-weight: 800; }
+
+@media (max-width: 340px) {
+  .dock-item .dock-label { font-size: 10px; }
+  .dock-container { padding: 5px; }
+}
+
+/* Con el teclado abierto (se edita un campo) la barra se retira: no tapa el campo ni salta. */
+body.teclado-abierto .dock-wrapper-v5 {
+  transform: translateY(150%);
+  opacity: 0;
+}
+body.teclado-abierto .dock-wrapper-v5 .dock-container { pointer-events: none; }
+body.teclado-abierto .command-hub { bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--vv-bottom, 0px)) !important; }
+
+/* Los avisos deben quedar por encima de los diálogos (z-index 50000), no detrás. */
+#toastContainer { z-index: 60000 !important; }
 
 /* 🗂️ Cascade Card Layout */
 .biologic-card {
@@ -1203,22 +1193,20 @@ html.dark .loading-indicator-bar-container {
     100% { left: 140%; }
 }
 
-/* 📳 Shake animation for errors */
+/* 📳 Shake animation for errors: solo translateX (sin rotación, para no generar desborde
+   horizontal) y solo sobre #captureContentArea -- nunca sobre un contenedor del dock fijo. */
 @keyframes shakeOrganic {
-    0%, 100% { transform: translateX(0) rotate(0deg); }
-    15% { transform: translateX(-8px) rotate(-1.5deg); }
-    30% { transform: translateX(6px) rotate(1.2deg); }
-    45% { transform: translateX(-5px) rotate(-0.8deg); }
-    60% { transform: translateX(4px) rotate(0.6deg); }
-    75% { transform: translateX(-2px) rotate(-0.3deg); }
-    90% { transform: translateX(1px) rotate(0.1deg); }
+    0%, 100% { transform: translateX(0); }
+    15% { transform: translateX(-7px); }
+    30% { transform: translateX(6px); }
+    45% { transform: translateX(-5px); }
+    60% { transform: translateX(4px); }
+    75% { transform: translateX(-2px); }
+    90% { transform: translateX(1px); }
 }
 
 .shake-organic {
-    animation: shakeOrganic 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
-    transform: translate3d(0, 0, 0);
-    backface-visibility: hidden;
-    perspective: 1000px;
+    animation: shakeOrganic 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
 /* 🎯 Highlight focus dynamic card entry */
@@ -1317,16 +1305,13 @@ html {
     }
 }
 
-/* Custom mobile login card glassmorphic styling over dark background (Refractive Liquid Glass) */
+/* Custom mobile login card glassmorphic styling over dark background (vidrio esmerilado One UI) */
 #loginScreen .bg-white\/70 {
     background: rgba(255, 255, 255, 0.35) !important;
     border: 1px solid rgba(255, 255, 255, 0.6) !important;
-    backdrop-filter: url(#liquid-refraction) blur(24px) saturate(160%) !important;
-    -webkit-backdrop-filter: url(#liquid-refraction) blur(24px) saturate(160%) !important;
-    box-shadow: 
-        0 20px 40px rgba(15, 23, 42, 0.06),
-        inset 0 1px 1px rgba(255, 255, 255, 0.7),
-        inset 0 -1px 1px rgba(0, 0, 0, 0.02) !important;
+    backdrop-filter: blur(24px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
+    box-shadow: 0 0 0 0.5px rgba(15, 23, 42, 0.07), 0 18px 40px rgba(15, 23, 42, 0.1) !important;
 }
 
 #loginScreen h1.text-slate-900 {
@@ -1449,3 +1434,16 @@ html.dark .cp-flow.pending .cp-step.done .cp-step-dot, html.dark .cp-flow.pendin
 html.dark .cp-flow.delivered .cp-step.done .cp-step-dot, html.dark .cp-flow.delivered .cp-step.current .cp-step-dot { background: #93c5fd; }
 html.dark .panel-section .biologic-card.liquid-glass { background: #0a0a0a; border-color: #27272a; }
 html.dark .panel-section .biologic-card h4 { color: #f8fafc; }
+
+/* One UI 9 -- modo oscuro del vidrio: el texto y los iconos del encabezado/chips deben ser claros
+   (antes el vidrio era siempre claro y ahora sigue el tema). */
+html.dark .liquid-glass,
+html.dark .liquid-glass :is(.material-symbols-rounded, .text-slate-900, .font-black, span) { color: #f1f5f9; }
+html.dark .liquid-glass .text-slate-400 { color: #a1a1aa !important; }
+html.dark .liquid-glass .text-slate-500 { color: #b4bcc8 !important; }
+html.dark .liquid-glass .text-emerald-500, html.dark .liquid-glass .text-emerald-600 { color: #34d399 !important; }
+html.dark .liquid-glass .text-sky-600 { color: #38bdf8 !important; }
+html.dark .liquid-glass .text-amber-600 { color: #fbbf24 !important; }
+html.dark .liquid-glass .text-purple-600 { color: #c4b5fd !important; }
+html.dark .liquid-glass .text-emerald-600 { color: #34d399 !important; }
+html.dark .panel-section .biologic-card.liquid-glass :is(h4, p) { color: #f1f5f9; }
