@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instructivo del panel de Influenza · SIREVAQ</title>
+<meta name="description" content="Cómo capturar tu reporte semanal de Influenza y cuidar tu meta en SIREVAQ. Campaña 2026-2027.">
+<meta property="og:title" content="Instructivo del panel de Influenza · SIREVAQ">
+<meta property="og:description" content="Cómo capturar tu reporte semanal de Influenza y cuidar tu meta. Campaña 2026-2027.">
+<meta name="theme-color" content="#1E1B3A">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Rubik:wght@500;600;700&display=swap">
+<style>
+  :root {
+    --noche: #1E1B3A; --papel: #F7F5FB; --tarjeta: #FFFFFF; --linea: #E4E0F0;
+    --texto: #1E1B3A; --suave: #4A4668; --violeta: #6D28D9; --violeta-claro: #EDE9FE; --lila: #C4B5FD;
+    --ok: #047857; --ok-fondo: #D1FAE5; --aviso: #B45309; --aviso-fondo: #FEF3C7; --error: #B91C1C; --error-fondo: #FEE2E2;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: #E9E5F5; color: var(--texto); font-family: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif; line-height: 1.5; }
+  .barra { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: var(--noche); color: #fff; }
+  .barra b { font-family: 'Rubik', system-ui, sans-serif; font-size: 16px; font-weight: 600; }
+  .barra a { color: #fff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 8px 16px; border-radius: 999px; background: var(--violeta); transition: transform .15s ease, filter .15s ease; }
+  .barra a:hover { filter: brightness(1.12); transform: translateY(-1px); }
+  .barra a:active { transform: scale(.96); }
+  .barra a:focus-visible { outline: 3px solid var(--lila); outline-offset: 2px; }
+  .deck { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px 12px 48px; }
+  .slide { width: min(1100px, 100%); background: var(--papel); border-radius: 24px; padding: clamp(22px, 4.6vw, 60px); display: flex; flex-direction: column; gap: clamp(14px, 2.4vw, 28px); box-shadow: 0 2px 10px rgba(30, 27, 58, .08); position: relative; overflow: hidden; }
+  .slide.noche { background: var(--noche); color: #F7F5FB; }
+  h1, h2, h3 { font-family: 'Rubik', system-ui, sans-serif; margin: 0; line-height: 1.12; }
+  h1 { font-size: clamp(34px, 6.4vw, 84px); font-weight: 600; }
+  h2 { font-size: clamp(24px, 3.5vw, 46px); font-weight: 600; }
+  h3 { font-size: clamp(18px, 2.1vw, 28px); font-weight: 600; }
+  p { margin: 0; font-size: clamp(16px, 1.75vw, 24px); color: var(--suave); }
+  .noche p { color: #D9D2F5; }
+  .etq { font-size: clamp(13px, 1.4vw, 19px); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--violeta); }
+  .noche .etq { color: var(--lila); }
+  .fila { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: clamp(12px, 1.8vw, 24px); }
+  .tarj { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 20px; padding: clamp(16px, 2.2vw, 30px); display: flex; flex-direction: column; gap: 8px; }
+  .tarj p { font-size: clamp(15px, 1.55vw, 21px); }
+  .num { width: clamp(34px, 3.6vw, 48px); height: clamp(34px, 3.6vw, 48px); border-radius: 50%; background: var(--violeta); color: #fff; font-family: 'Rubik', sans-serif; font-weight: 600; font-size: clamp(17px, 1.9vw, 26px); display: grid; place-items: center; }
+  .dias { display: grid; grid-template-columns: repeat(7, 1fr); gap: clamp(6px, 1vw, 14px); }
+  .dia { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 16px; padding: clamp(10px, 1.8vw, 24px) 4px; text-align: center; font-weight: 800; font-size: clamp(14px, 1.8vw, 26px); color: var(--texto); }
+  .dia.fin { background: var(--violeta-claro); border-color: var(--lila); color: var(--violeta); }
+  .dia.rep { background: var(--violeta); border-color: var(--violeta); color: #fff; }
+  .chip { display: inline-block; padding: 4px 14px; border-radius: 999px; font-weight: 800; font-size: clamp(13px, 1.4vw, 19px); }
+  .chip.ok { background: var(--ok-fondo); color: var(--ok); }
+  .chip.aviso { background: var(--aviso-fondo); color: var(--aviso); }
+  .chip.error { background: var(--error-fondo); color: var(--error); }
+  .chip.suave { background: var(--violeta-claro); color: var(--violeta); }
+  table { width: 100%; border-collapse: collapse; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 16px; overflow: hidden; font-size: clamp(14px, 1.6vw, 22px); }
+  th { background: #F1EEFB; color: var(--suave); font-weight: 800; padding: 10px 12px; text-align: center; }
+  th:first-child, td:first-child { text-align: left; }
+  td { padding: 12px; text-align: center; font-weight: 700; color: var(--texto); border-top: 1px solid var(--linea); }
+  .barra-av { height: 10px; border-radius: 999px; background: #E2E8F0; max-width: 220px; margin: 6px auto 4px; }
+  .barra-av i { display: block; height: 10px; border-radius: 999px; background: #F59E0B; }
+  .barra-av.rojo i { background: #991B1B; }
+  .peque { font-size: clamp(13px, 1.4vw, 18px); font-weight: 700; color: var(--suave); }
+  .pie { margin-top: auto; font-size: clamp(12px, 1.2vw, 16px); font-weight: 700; color: #8A85A8; }
+  .noche .pie { color: #A9A3CF; }
+  ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 8px; }
+  li { font-size: clamp(16px, 1.75vw, 24px); color: var(--suave); }
+  b { color: var(--texto); } .noche b { color: #fff; }
+  .dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: clamp(14px, 2vw, 28px); align-items: start; }
+
+  /* PDF / impresión: una diapositiva 16:9 por página */
+  @page { size: 1280px 720px; margin: 0; }
+  @media print {
+    body { background: #fff; }
+    .barra { display: none; }
+    .deck { padding: 0; gap: 0; display: block; }
+    .slide { width: 1280px; height: 720px; border-radius: 0; box-shadow: none; padding: 52px 72px; break-after: page; page-break-after: always; gap: 22px; }
+    .slide { justify-content: center; gap: 26px; }
+    .pie { position: absolute; left: 72px; bottom: 26px; margin: 0; }
+    .dos { grid-template-columns: 1fr 1fr; }
+    .tarj { padding: 22px 26px; }
+    h1 { font-size: 84px; } h2 { font-size: 46px; } h3 { font-size: 30px; }
+    p, li { font-size: 25px; } .tarj p { font-size: 23px; }
+    .etq { font-size: 18px; } .dia { font-size: 28px; padding: 22px 4px; } table { font-size: 24px; }
+    .num { width: 50px; height: 50px; font-size: 27px; } .chip { font-size: 20px; } .peque { font-size: 20px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .barra a { transition: none; } }
+</style>
+</head>
+<body>
+<div class="barra">
+  <b>Instructivo · Panel de Influenza</b>
+  <a href="instructivo_influenza.pdf" download>Descargar PDF</a>
+</div>
+<main class="deck">
+
+<!-- 1 · Portada -->
+<section class="slide noche" aria-label="Portada">
+  <p class="etq">Campaña de vacunación 2026-2027</p>
+  <h1>Panel de Influenza</h1>
+  <h3 style="color:#E4DDFB;font-weight:500">Cómo capturar tu reporte semanal y cuidar tu meta</h3>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
+</section>
+
+<!-- 2 · Lo esencial -->
+<section class="slide" aria-label="Lo esencial">
+  <p class="etq">Antes de empezar</p>
+  <h2>Lo esencial en 30 segundos</h2>
+  <div class="fila">
+    <div class="tarj"><div class="num">1</div><h3>Un reporte por semana</h3><p>Cada semana se reporta una sola vez, con fecha del viernes.</p></div>
+    <div class="tarj"><div class="num">2</div><h3>Captúralo cualquier día</h3><p>El panel abre el lunes. Sábado y domingo cuentan para esa misma semana.</p></div>
+    <div class="tarj"><div class="num">3</div><h3>Tu meta es el tope</h3><p>El panel te dice cuántas dosis llevas y no deja guardar si te pasas.</p></div>
+  </div>
+  <p class="pie">Panel de Influenza · SIREVAQ</p>
+</section>
+
+<!-- 3 · La semana -->
+<section class="slide" aria-label="La semana">
+  <p class="etq">Cuándo se captura</p>
+  <h2>La semana va de lunes a domingo y se reporta con la fecha del viernes</h2>
+  <div class="dias" role="list">
+    <div class="dia" role="listitem">Lun</div><div class="dia" role="listitem">Mar</div><div class="dia" role="listitem">Mié</div>
+    <div class="dia" role="listitem">Jue</div><div class="dia rep" role="listitem">Vie</div>
+    <div class="dia fin" role="listitem">Sáb</div><div class="dia fin" role="listitem">Dom</div>
+  </div>
+  <div class="fila">
+    <div class="tarj"><span class="chip suave" style="align-self:flex-start">Viernes = fecha del reporte</span><p>Todo lo que apliques de lunes a domingo se suma al reporte del viernes de esa semana.</p></div>
+    <div class="tarj"><span class="chip suave" style="align-self:flex-start">Sábado y domingo</span><p>Si tu unidad vacuna en fin de semana, súmalo al reporte de esa misma semana.</p></div>
+    <div class="tarj"><span class="chip ok" style="align-self:flex-start">Abre el lunes</span><p>Puedes capturar o corregir el reporte cualquier día; sigue siendo el mismo reporte.</p></div>
+  </div>
+  <p class="pie">Panel de Influenza · SIREVAQ</p>
+</section>
+
+<!-- 4 · Corte de mes -->
+<section class="slide" aria-label="Corte de fin de mes">
+  <p class="etq">Cuándo se captura</p>
+  <h2>Fin de mes: a veces hay un reporte extra</h2>
+  <div class="dos">
+    <div class="tarj">
+      <h3>La regla</h3>
+      <p>Si el mes termina de <b>lunes a jueves</b>, ese último día se captura un reporte extra («Corte de fin de mes») con lo aplicado esa semana hasta ese día.</p>
+      <p>El reporte del viernes ya cuenta para el mes siguiente.</p>
+      <p>Si el mes termina en viernes, ese viernes ya es su reporte. Si termina en fin de semana, entra en el reporte del viernes de esa semana.</p>
+    </div>
+    <div class="tarj">
+      <h3>Ejemplo: noviembre 2026</h3>
+      <p><span class="chip aviso">Lun 30 nov</span> Corte de fin de mes</p>
+      <p><span class="chip suave">Vie 4 dic</span> Reporte normal (abre el 1 de diciembre)</p>
+      <p class="peque">En la lista de semanas aparece como «Corte de fin de mes».</p>
+    </div>
+  </div>
+  <p class="pie">Panel de Influenza · SIREVAQ</p>
+</section>
+
+<!-- 5 · Pasos -->
+<section class="slide" aria-label="Paso a paso">
+  <p class="etq">Cómo se captura</p>
+  <h2>Tu reporte en 4 pasos</h2>
+  <div class="fila">
+    <div class="tarj"><div class="num">1</div><h3>Elige la semana</h3><p>En «Semana a reportar». El panel ya te muestra la semana en curso.</p></div>
+    <div class="tarj"><div class="num">2</div><h3>Escribe tu nombre</h3><p>Quien captura queda registrado en el reporte.</p></div>
+    <div class="tarj"><div class="num">3</div><h3>Anota las dosis</h3><p>En «Esta semana», solo lo que aplicaste en esa semana. Si no hubo, usa «Sin movimiento».</p></div>
+    <div class="tarj"><div class="num">4</div><h3>Guarda</h3><p>Con el botón azul. Cada reporte recibe un folio único.</p></div>
+  </div>
+  <p class="pie">Panel de Influenza · SIREVAQ</p>
+</section>
+
+<!-- 6 · La tabla -->
+<section class="slide" aria-label="Cómo leer la tabla">
+  <p class="etq">Cómo leer tu avance</p>
+  <h2>La tabla de captura</h2>
+  <table>
+    <thead><tr><th>Subgrupo / Edad</th><th>Meta anual</th><th>Acumulado</th><th>Esta semana</th><th>Avance %</th></tr></thead>
+    <tbody><tr><td>12 a 23 meses</td><td>60</td><td>10</td><td>5</td><td>25%<div class="barra-av"><i style="width:25%"></i></div><span class="peque">15 de 60</span></td></tr></tbody>
+  </table>
+  <div class="fila">
+    <div class="tarj"><h3>Meta anual</h3><p>Lo asignado a tu unidad para ese grupo en toda la campaña.</p></div>
+    <div class="tarj"><h3>Acumulado</h3><p>Lo que ya reportaste en las demás semanas.</p></div>
+    <div class="tarj"><h3>Esta semana</h3><p>Lo que aplicaste en la semana elegida: aquí escribes.</p></div>
+    <div class="tarj"><h3>Avance</h3><p>(Acumulado + Esta semana) ÷ Meta. Bajo la barra ves «X de Y».</p></div>
+  </div>
+  <p class="pie">Panel de Influenza · SIREVAQ</p>
+</section>
+
+<!-- 7 · Pasarse de la meta -->
+<section class="slide" aria-label="Si te pasas de la meta">
+  <p class="etq">Avisos</p>
+  <h2>Si te pasas de la meta, el panel te avisa</h2>
+  <table>
+    <thead><tr><th>Edad</th><th>Meta anual</th><th>Acumulado</th><th>Esta semana</th><th>Avance %</th></tr></thead>
+    <tbody><tr><td>6 a 11 meses</td><td>100</td><td>20</td><td style="background:var(--error-fondo);color:var(--error)">90</td><td style="color:var(--error)">110%<div class="barra-av rojo"><i style="width:100%"></i></div><span class="peque" style="color:var(--error)">Te pasas por 10</span></td></tr></tbody>
+  </table>
+  <ul>
+    <li>El renglón se marca en rojo y aparece <b>«Te pasas por N»</b>; arriba de la tabla te dice qué grupo se pasa y por cuánto.</li>
+    <li><b>No se puede guardar</b> hasta corregir la cifra.</li>
+    <li>Si de verdad aplicaste más dosis que tu meta, avisa a tu municipio para revisarla.</li>
+  </ul>
+  <p class="pie">Panel de Influenza · SIREVAQ</p>
+</section>
+
+<!-- 8 · Bloqueados -->
+<section class="slide" aria-label="Renglones bloqueados">
+  <p class="etq">Reglas</p>
+  <h2>Renglones que no se pueden capturar</h2>
+  <div class="fila">
+    <div class="tarj"><span class="chip suave" style="align-self:flex-start">Sin meta</span><h3>Tu unidad no tiene meta en ese grupo</h3><p>Aparece «Sin meta asignada». Los grupos completos sin meta se reúnen en un aviso al final de la página.</p></div>
+    <div class="tarj"><span class="chip aviso" style="align-self:flex-start">Desde el 12 nov</span><h3>2ª dosis</h3><p>No hay segunda dosis durante el primer mes de la campaña.</p></div>
+    <div class="tarj"><span class="chip aviso" style="align-self:flex-start">Hasta el 2 mar</span><h3>1ª dosis</h3><p>No hay primera dosis en el último mes: su segunda caería fuera de la temporada.</p></div>
+  </div>
+  <p class="pie">Panel de Influenza · SIREVAQ</p>
+</section>
+
+<!-- 9 · Sin movimiento -->
+<section class="slide" aria-label="Sin movimiento">
+  <p class="etq">Reglas</p>
+  <h2>¿No aplicaste dosis esta semana? Usa «Sin movimiento»</h2>
+  <div class="dos">
+    <div class="tarj"><h3>Cómo se usa</h3><p>Activa el interruptor «Sin movimiento». La semana se guarda en ceros y recibe su folio.</p></div>
+    <div class="tarj"><h3>Si luego aplicas dosis</h3><p>Desactívalo y captura las dosis mientras la semana siga abierta; se guarda como un reporte normal.</p></div>
+  </div>
+  <p><b>No dejes una semana sin reporte:</b> cada semana debe tener su folio, aunque sea en ceros.</p>
+  <p class="pie">Panel de Influenza · SIREVAQ</p>
+</section>
+
+<!-- 10 · Después de guardar -->
+<section class="slide" aria-label="Después de guardar">
+  <p class="etq">Después de guardar</p>
+  <h2>Folio, correcciones y seguimiento</h2>
+  <div class="fila">
+    <div class="tarj"><h3>Folio</h3><p>Cada reporte recibe un folio único. Lo ves en el paso 4 y en el Historial de Reportes.</p></div>
+    <div class="tarj"><h3>Corregir</h3><p>Puedes volver a guardar la misma semana. Las ediciones quedan en el historial.</p></div>
+    <div class="tarj"><h3>Resumen de meta</h3><p>Tu avance, tu ritmo, el abasto de frascos y la descarga de tu meta en Excel.</p></div>
+  </div>
+  <p>Si el SIS del mes ya fue enviado, la corrección la hace tu municipio.</p>
+  <p class="pie">Panel de Influenza · SIREVAQ</p>
+</section>
+
+<!-- 11 · Preguntas -->
+<section class="slide" aria-label="Preguntas frecuentes">
+  <p class="etq">Dudas comunes</p>
+  <h2>Preguntas frecuentes</h2>
+  <div class="dos">
+    <div class="tarj"><h3>Olvidé capturar una semana</h3><p>Captúrala después: el panel te avisa cuántas semanas tienes sin reporte y te lleva a ellas.</p></div>
+    <div class="tarj"><h3>Vacunamos sábado y domingo</h3><p>Cuentan para el viernes de esa semana (de lunes a domingo).</p></div>
+    <div class="tarj"><h3>No tengo internet</h3><p>El reporte se guarda en el equipo y se envía solo cuando regresa la conexión.</p></div>
+    <div class="tarj"><h3>Aún no abre la campaña</h3><p>Hasta el 12 de octubre verás «Captura cerrada». Ese día el panel abre.</p></div>
+  </div>
+  <p class="pie">Panel de Influenza · SIREVAQ</p>
+</section>
+
+<!-- 12 · Cierre -->
+<section class="slide noche" aria-label="Cierre">
+  <p class="etq">¿Dudas?</p>
+  <h1>Tu guía siempre a la mano</h1>
+  <p>Dentro del panel, el botón <b>«¿Cómo funciona?»</b> tiene esta misma guía. Para metas o reparto de frascos, consulta a tu coordinación municipal.</p>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
+</section>
+
+</main>
+</body>
+</html>

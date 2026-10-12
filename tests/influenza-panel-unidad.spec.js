@@ -245,7 +245,7 @@ test.describe('Panel de Influenza (unidad)', () => {
 
   test('la ayuda: «Entendido» responde al mouse, al clic y al teclado; el foco no se escapa', async ({ page }) => {
     const { errores } = await abrirPanel(page);
-    await page.locator('#formINFLUENZA .cp-help-btn').click();
+    await page.locator('#formINFLUENZA button.cp-help-btn').click();
     const ok = page.locator('#ayudaCerrarBtn');
     await expect(ok).toBeVisible();
     const estilo = () => ok.evaluate((e) => { const c = getComputedStyle(e); return { t: c.transform, s: c.boxShadow, bg: c.backgroundColor, h: e.getBoundingClientRect().height }; });
@@ -264,7 +264,7 @@ test.describe('Panel de Influenza (unidad)', () => {
     await page.mouse.up();                      // cierra
     await expect(page.locator('#ayudaOverlay')).not.toHaveClass(/abierto/);
     // teclado: Tab da la vuelta dentro del diálogo
-    await page.locator('#formINFLUENZA .cp-help-btn').click();
+    await page.locator('#formINFLUENZA button.cp-help-btn').click();
     await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
     const dentro = await page.evaluate(() => document.getElementById('ayudaOverlay').contains(document.activeElement));
     expect(dentro).toBe(true);
@@ -362,6 +362,18 @@ test.describe('Panel de Influenza (unidad)', () => {
       expect(img.uri).toBeGreaterThan(30000);
     } else {
       test.info().annotations.push({ type: 'omitido', description: 'Sin acceso a las librerías de captura (CDN) en este entorno' });
+    }
+    expect(errores).toEqual([]);
+  });
+
+  test('el panel enlaza el instructivo para las unidades y el archivo existe', async ({ page, request }) => {
+    const { errores } = await abrirPanel(page);
+    const enlace = page.locator('#formINFLUENZA a[href="instructivo_influenza.html"]');
+    await expect(enlace).toBeVisible();
+    await expect(enlace).toContainText('Instructivo');
+    for (const f of ['/instructivo_influenza.html', '/instructivo_influenza.pdf']) {
+      const r = await request.get(f);
+      expect(r.status()).toBe(200);
     }
     expect(errores).toEqual([]);
   });
