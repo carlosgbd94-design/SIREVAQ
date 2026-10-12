@@ -12,7 +12,7 @@
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=8">
 <link rel="stylesheet" href="ayuda.css?v=6">
-<script defer src="guias_contenido.js?v=2"></script>
+<script defer src="guias_contenido.js?v=3"></script>
 <script defer src="ayuda.js?v=20"></script>
 <script defer src="a11y_global.js?v=6"></script>
 <script defer src="dock_glass.js?v=4"></script>
@@ -432,8 +432,17 @@
   .ped-vacio { font-size: 13px; color: var(--muted); padding: 14px; border: 1.5px dashed var(--outline-variant); border-radius: 14px; text-align: center; }
   /* Lotes por definir / asignar lotes / transferencias */
   /* Entregas del mes, vista previa de caducidad, prellenado de cantidades */
-  .barra-entregas { display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: 4px; padding-left: 12px; border-left: 1px solid var(--outline-variant); }
+  .barra-entregas { display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: 4px; }
   .barra-entregas .entregas-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  /* Fecha en que se recibió la entrega activa: misma altura y bordes que los demás campos de la barra. */
+  .fecha-recepcion { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 0 4px 0 12px; min-height: 38px; box-sizing: border-box;
+    background: #fff; border: 1px solid var(--outline-variant); border-radius: 10px; }
+  .fecha-recepcion:focus-within { border-color: var(--secondary); box-shadow: 0 0 0 3px rgba(14,165,233,.15); }
+  .fecha-recepcion label { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+  .fecha-recepcion label .material-symbols-rounded { font-size: 17px; color: var(--secondary); }
+  .fecha-recepcion input[type=date] { border: none; background: transparent; box-shadow: none; padding: 8px 8px; font: inherit; font-size: 13px; font-weight: 700; color: var(--text); min-width: 0; }
+  .fecha-recepcion input[type=date]:focus { box-shadow: none; }
+  .fecha-recepcion input[type=date]:disabled { opacity: .7; cursor: default; }
     .confirmar-cuerpo { display: flex; gap: 14px; align-items: flex-start; padding: 22px 22px 14px; }
   .confirmar-cuerpo h3 { margin: 0; font: 800 16px/1.3 'Poppins', sans-serif; color: var(--primary); }
   .confirmar-cuerpo p { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); white-space: pre-line; }
@@ -649,16 +658,16 @@
         <button class="btn-icono solo-edicion" id="btnCargar" title="Cargar la requisición ya guardada de este año/mes"><span class="material-symbols-rounded">folder_open</span></button>
         <button class="btn-icono solo-edicion" id="btnGuardarCabecera" title="Guardar (crea la requisición del mes si no existe)"><span class="material-symbols-rounded">save</span></button>
       </div>
-      <div class="campo" id="campoFechaRecepcion" style="display:none;">
-        <label for="inpFechaRecepcion">Fecha de recepción</label>
-        <input type="date" id="inpFechaRecepcion" title="Fecha en que se recibió la requisición: es la que sale en el Excel">
-      </div>
       <span id="badgesEstadoRequisicion" style="display:none; gap:6px; align-items:center;"></span>
       <div class="barra-entregas" id="barraEntregas">
         <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;">Entregas del mes</span>
         <div class="entregas-chips"></div>
         <button type="button" class="icon-btn-pure solo-edicion" id="btnRenombrarEntrega" title="Ponerle nombre a esta entrega (ej. Influenza)"><span class="material-symbols-rounded" style="font-size:17px">edit</span></button>
         <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnNuevaEntrega" title="Llegó otra entrega este mes: se captura y reparte por separado"><span class="material-symbols-rounded" style="font-size:15px">add</span> Nueva entrega</button>
+        <div class="fecha-recepcion" id="campoFechaRecepcion" style="display:none;">
+          <label for="inpFechaRecepcion"><span class="material-symbols-rounded" aria-hidden="true">event</span>Recibida el</label>
+          <input type="date" id="inpFechaRecepcion" title="Fecha en que se recibió esta entrega: es la que sale en el Excel">
+        </div>
       </div>
     </div>
     <div class="hint" id="hintCabecera" style="margin-top:12px; display:none;"></div>

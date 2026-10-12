@@ -226,7 +226,7 @@
         T('Del mes a la exportación'),
         I('save', '#0284c7', 'Crear requisición', 'Si el mes todavía no existe, aparece un botón para crearla; hasta entonces no hay pasos.'),
         I('layers', '#0284c7', 'Entregas del mes', 'Si llega otra entrega en el mes, toca «Nueva entrega»: cada una se captura, se reparte y se exporta por separado (archivos _E1, _E2…) y puedes ponerle nombre con el lápiz.'),
-        I('event', '#7c3aed', 'Fecha de recepción', 'Captúrala junto al mes: es la que sale en el Excel. Al cerrar la entrega se conserva; ya no se pone el último día del mes.'),
+        I('event', '#7c3aed', 'Fecha de recepción', 'Se captura en «Recibida el», junto a las entregas del mes (cada entrega tiene la suya): es la que sale en el Excel y se conserva al cerrar.'),
         I('lock', '#0f172a', 'Cerrar entrega', 'La marca como enviada. Puedes seguir editando; quedará «corregida posteriormente» para que municipios y unidades lo sepan.'),
         I('history', '#64748b', 'Historial y exportar', 'El reloj abre las requisiciones de otros meses; «Exportar» genera los archivos oficiales por destino.')
       ] }
