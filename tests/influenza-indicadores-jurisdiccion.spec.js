@@ -90,7 +90,7 @@ function esperado(D, filtro) {
   return { meta, apl, pct: meta ? apl * 100 / meta : 0, conMeta: conMeta.length, reportaron, porDestino, frascos, unidades: us.length };
 }
 
-async function abrir(page, D) {
+async function abrir(page, D, hoy = HOY) {
   const errores = [];
   page.on('pageerror', (e) => errores.push('PAGEERROR: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !RUIDO.test(m.text())) errores.push('CONSOLE: ' + m.text().slice(0, 200)); });
@@ -100,7 +100,7 @@ async function abrir(page, D) {
   };
   await page.route(/\.supabase\.co\//, servidor(db));
   await page.route(/exceljs\.min\.js/, (r) => r.fulfill({ contentType: 'application/javascript', path: path.join(__dirname, '..', 'node_modules', 'exceljs', 'dist', 'exceljs.min.js') }));
-  await page.clock.setFixedTime(new Date(HOY + 'T12:00:00'));
+  await page.clock.setFixedTime(new Date(hoy + 'T12:00:00'));
   await page.goto('/index.html', { waitUntil: 'load' });
   await page.waitForFunction(() => typeof window.supabaseRequest === 'function' || typeof supabaseRequest === 'function', null, { timeout: 20000 });
   await page.evaluate(async () => {
@@ -291,6 +291,23 @@ test.describe('Indicadores de influenza con una jurisdicción completa', () => {
     expect(r.w).toBeGreaterThanOrEqual(1280);
     // La imagen es al menos tan alta como el tablero en pantalla (más el membrete): no se recorta nada
     expect(r.h).toBeGreaterThanOrEqual(r.alto);
+    expect(errores).toEqual([]);
+  });
+
+  test('antes de que inicie la campaña nadie aparece como "no reportó" y el Excel tampoco lo lista', async ({ page }) => {
+    test.setTimeout(60000);
+    const errores = await abrir(page, D, '2026-10-11');   // domingo previo al inicio (campaña: 2-oct en esta prueba; se mueve el inicio)
+    await page.evaluate(() => { _campaignConfig.fecha_inicio = '2026-10-12'; });
+    // El tablero usa la campaña activa de la base: se fuerza su inicio al lunes siguiente
+    await page.route(/\/rest\/v1\/campanas/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'c1', nombre: CAMP, fecha_inicio: '2026-10-12', fecha_fin: '2027-04-02', activo: true }]) }));
+    await render(page);
+    const d = await page.evaluate(() => window._infIndicadoresDatos);
+    expect(d.semanaN).toBe(0);
+    expect(d.ultimaSemana).toBeNull();
+    expect(d.sinReporte).toEqual([]);
+    expect(d.reportaron).toBe(0);
+    expect(d.revisar.nunca).toEqual([]);
+    await expect(page.locator('#rdaDashboardContent .iinf')).not.toContainText('no han reportado');
     expect(errores).toEqual([]);
   });
 });

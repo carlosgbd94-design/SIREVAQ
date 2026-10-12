@@ -6179,8 +6179,9 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   const semanaN = vencidas.length;
 
   // Cobertura de reporte de la última semana vencida
-  const sinReporte = evaluables.filter(f => !f.reportoUltima);
-  const reportaron = evaluables.length - sinReporte.length;
+  // Sin semanas vencidas (la campaña aún no inicia) nadie «dejó de reportar».
+  const sinReporte = ultimaSemana ? evaluables.filter(f => !f.reportoUltima) : [];
+  const reportaron = ultimaSemana ? evaluables.length - sinReporte.length : 0;
   const nuncaReportaron = evaluables.filter(f => f.nunca);
 
   // Abasto de frascos (solo unidades con reparto registrado)
@@ -6403,7 +6404,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
     semanas: barras.map(b => ({ fecha: b.f, dosis: b.v })),
     grupos: filasGrupo.map(g => ({ titulo: g.titulo, meta: g.m, apl: g.a, edades: g.rubros.map(rb => ({ edad: rb.edad, meta: rubro[rb.id].meta, apl: rubro[rb.id].apl })).filter(x => x.meta || x.apl) })),
     abasto: { frascos: frascosRec, dosis: dosisRec, apl: aplConReparto, exceden: excedenReparto.map(f => f.unidad), conReparto: conReparto.length },
-    revisar: { rebasan: rebasan.map(f => f.unidad), sinMeta: sinMeta.map(f => f.unidad), nunca: nuncaReportaron.map(f => f.unidad) }
+    revisar: { rebasan: rebasan.map(f => f.unidad), sinMeta: sinMeta.map(f => f.unidad), nunca: (vencidas.length >= 2 ? nuncaReportaron : []).map(f => f.unidad) }
   };
 
   container.innerHTML = `
