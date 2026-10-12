@@ -160,6 +160,14 @@ test.describe('Indicadores de influenza con una jurisdicción completa', () => {
     await expect(rev).toContainText('rebasa su meta');
     await expect(rev).toContainText('no tiene meta');
     await expect(rev).toContainText('no ha reportado nunca');
+    // Cada barra se dibuja con el ancho que dice su porcentaje (un 0 % no debe verse a medias)
+    const barras = await page.evaluate(() => [...document.querySelectorAll('#rdaDashboardContent .iinf-fill')].map((f) => {
+      const pad = f.parentElement.getBoundingClientRect().width;
+      const esperado = parseFloat(f.style.width) / 100 * pad;
+      return { real: f.getBoundingClientRect().width, esperado, pad };
+    }));
+    expect(barras.length).toBeGreaterThan(5);
+    barras.forEach((b) => expect(Math.abs(b.real - b.esperado)).toBeLessThanOrEqual(2));
     // Ninguna tabla del tablero se desborda dentro de su tarjeta (con nombres largos reales de grupo)
     const tablas = await page.evaluate(() => [...document.querySelectorAll('#rdaDashboardContent .iinf-scroll')].map((s) => ({ ancho: s.scrollWidth - s.clientWidth, cols: s.querySelectorAll('thead th').length })));
     expect(tablas.length).toBeGreaterThanOrEqual(3);

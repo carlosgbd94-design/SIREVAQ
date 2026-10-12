@@ -15061,7 +15061,7 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
 
 .iinf-avance-in { display: flex; align-items: center; gap: 10px; }
 .iinf-avance-in .iinf-bar { display: block; flex: 1 1 auto; width: auto; min-width: 70px; margin: 0; }
-.iinf-avance-in span { flex: none; min-width: 52px; }
+.iinf-avance-in > span { flex: none; min-width: 52px; }
 
 .iinf-dos { align-items: start; }
 .iinf-sub b { color: #b45309; font-weight: 800; }
