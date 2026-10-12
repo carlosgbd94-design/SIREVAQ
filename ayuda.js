@@ -208,7 +208,7 @@
       subtitulo: 'El corte del mes, leído de Meta-Logro.',
       bloques: [
         T('De dónde sale'),
-        I('sync_alt', '#C26750', 'Meta-Logro', 'Cada jueves o viernes reportas la semana en Meta-Logro, donde se valida contra tu meta. Aquí aparece solo; no hay nada que copiar ni capturar dos veces.'),
+        I('sync_alt', '#C26750', 'Meta-Logro', 'Cada semana reportas en Meta-Logro, donde se valida contra tu meta. Aquí aparece solo; no hay nada que copiar ni capturar dos veces.'),
         I('calendar_view_week', '#0284c7', 'Semanas', 'Cada reporte es una semana (de lunes a domingo); el mes toma las semanas que cierran en él (hasta 5). Una semana "sin movimiento" también cuenta como reportada.'),
         I('science', '#16a34a', 'Frascos', 'El total en frascos es el total de dosis entre 10 (10 dosis por frasco).'),
         T('Cómo usarla'),

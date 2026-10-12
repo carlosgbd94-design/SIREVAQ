@@ -24,6 +24,9 @@
   .barra a { color: #fff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 8px 16px; border-radius: 999px; background: var(--violeta); transition: transform .15s ease, filter .15s ease; }
   .barra a:hover { filter: brightness(1.12); transform: translateY(-1px); }
   .barra a:active { transform: scale(.96); }
+  .barra a.volver { background: transparent; border: 1.5px solid rgba(255,255,255,.55); padding: 6px 14px; }
+  .barra b { flex: 1; text-align: center; }
+  @media (max-width: 560px) { .barra b { display: none; } .barra { justify-content: space-between; } }
   .barra a:focus-visible { outline: 3px solid var(--lila); outline-offset: 2px; }
   .deck { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px 12px 48px; }
   .slide { width: min(1100px, 100%); background: var(--papel); border-radius: 24px; padding: clamp(22px, 4.6vw, 60px); display: flex; flex-direction: column; gap: clamp(14px, 2.4vw, 28px); box-shadow: 0 2px 10px rgba(30, 27, 58, .08); position: relative; overflow: hidden; }
@@ -80,11 +83,17 @@
     .etq { font-size: 18px; } .dia { font-size: 28px; padding: 22px 4px; } table { font-size: 24px; }
     .num { width: 50px; height: 50px; font-size: 27px; } .chip { font-size: 20px; } .peque { font-size: 20px; }
   }
-  @media (prefers-reduced-motion: reduce) { .barra a { transition: none; } }
+  .boton-final { display: inline-block; padding: 14px 28px; border-radius: 999px; background: var(--violeta); color: #fff !important; font-weight: 800; font-size: clamp(16px, 1.8vw, 24px); text-decoration: none; transition: transform .15s ease, filter .15s ease; }
+  .boton-final:hover { filter: brightness(1.15); transform: translateY(-2px); }
+  .boton-final:active { transform: scale(.96); }
+  .boton-final:focus-visible { outline: 3px solid var(--lila); outline-offset: 3px; }
+  @media print { .boton-final { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .barra a, .boton-final { transition: none; } }
 </style>
 </head>
 <body>
 <div class="barra">
+  <a class="volver" href="index.html" aria-label="Volver a SIREVAQ">&#8592; Volver a SIREVAQ</a>
   <b>Instructivo · Panel de Influenza</b>
   <a href="instructivo_influenza.pdf" download>Descargar PDF</a>
 </div>
@@ -248,6 +257,7 @@
   <p class="etq">¿Dudas?</p>
   <h1>Tu guía siempre a la mano</h1>
   <p>Dentro del panel, el botón <b>«¿Cómo funciona?»</b> tiene esta misma guía. Para metas o reparto de frascos, consulta a tu coordinación municipal.</p>
+  <p><a class="boton-final" href="index.html">&#8592; Volver a SIREVAQ</a></p>
   <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
 

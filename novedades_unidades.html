@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Novedades para las unidades · SIREVAQ</title>
+<meta name="description" content="Lo nuevo en SIREVAQ para las unidades de salud: SINBA-SIS, Influenza, calendario de capacitaciones y más.">
+<meta property="og:title" content="Novedades para las unidades · SIREVAQ">
+<meta property="og:description" content="Lo nuevo en SIREVAQ para las unidades de salud: SINBA-SIS, Influenza, calendario de capacitaciones y más.">
+<meta name="theme-color" content="#1E1B3A">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Rubik:wght@500;600;700&display=swap">
+<style>
+  :root {
+    --noche: #1E1B3A; --papel: #F7F5FB; --tarjeta: #FFFFFF; --linea: #E4E0F0;
+    --texto: #1E1B3A; --suave: #4A4668; --violeta: #6D28D9; --violeta-claro: #EDE9FE; --lila: #C4B5FD;
+    --ok: #047857; --ok-fondo: #D1FAE5; --aviso: #B45309; --aviso-fondo: #FEF3C7; --error: #B91C1C; --error-fondo: #FEE2E2;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: #E9E5F5; color: var(--texto); font-family: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif; line-height: 1.5; }
+  .barra { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: var(--noche); color: #fff; }
+  .barra b { font-family: 'Rubik', system-ui, sans-serif; font-size: 16px; font-weight: 600; }
+  .barra a { color: #fff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 8px 16px; border-radius: 999px; background: var(--violeta); transition: transform .15s ease, filter .15s ease; }
+  .barra a:hover { filter: brightness(1.12); transform: translateY(-1px); }
+  .barra a:active { transform: scale(.96); }
+  .barra a.volver { background: transparent; border: 1.5px solid rgba(255,255,255,.55); padding: 6px 14px; }
+  .barra b { flex: 1; text-align: center; }
+  @media (max-width: 560px) { .barra b { display: none; } .barra { justify-content: space-between; } }
+  .barra a:focus-visible { outline: 3px solid var(--lila); outline-offset: 2px; }
+  .deck { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px 12px 48px; }
+  .slide { width: min(1100px, 100%); background: var(--papel); border-radius: 24px; padding: clamp(22px, 4.6vw, 60px); display: flex; flex-direction: column; gap: clamp(14px, 2.4vw, 28px); box-shadow: 0 2px 10px rgba(30, 27, 58, .08); position: relative; overflow: hidden; }
+  .slide.noche { background: var(--noche); color: #F7F5FB; }
+  h1, h2, h3 { font-family: 'Rubik', system-ui, sans-serif; margin: 0; line-height: 1.12; }
+  h1 { font-size: clamp(34px, 6.4vw, 84px); font-weight: 600; }
+  h2 { font-size: clamp(24px, 3.5vw, 46px); font-weight: 600; }
+  h3 { font-size: clamp(18px, 2.1vw, 28px); font-weight: 600; }
+  p { margin: 0; font-size: clamp(16px, 1.75vw, 24px); color: var(--suave); }
+  .noche p { color: #D9D2F5; }
+  .etq { font-size: clamp(13px, 1.4vw, 19px); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--violeta); }
+  .noche .etq { color: var(--lila); }
+  .fila { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: clamp(12px, 1.8vw, 24px); }
+  .tarj { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 20px; padding: clamp(16px, 2.2vw, 30px); display: flex; flex-direction: column; gap: 8px; }
+  .tarj p { font-size: clamp(15px, 1.55vw, 21px); }
+  .num { width: clamp(34px, 3.6vw, 48px); height: clamp(34px, 3.6vw, 48px); border-radius: 50%; background: var(--violeta); color: #fff; font-family: 'Rubik', sans-serif; font-weight: 600; font-size: clamp(17px, 1.9vw, 26px); display: grid; place-items: center; }
+  .dias { display: grid; grid-template-columns: repeat(7, 1fr); gap: clamp(6px, 1vw, 14px); }
+  .dia { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 16px; padding: clamp(10px, 1.8vw, 24px) 4px; text-align: center; font-weight: 800; font-size: clamp(14px, 1.8vw, 26px); color: var(--texto); }
+  .dia.fin { background: var(--violeta-claro); border-color: var(--lila); color: var(--violeta); }
+  .dia.rep { background: var(--violeta); border-color: var(--violeta); color: #fff; }
+  .chip { display: inline-block; padding: 4px 14px; border-radius: 999px; font-weight: 800; font-size: clamp(13px, 1.4vw, 19px); }
+  .chip.ok { background: var(--ok-fondo); color: var(--ok); }
+  .chip.aviso { background: var(--aviso-fondo); color: var(--aviso); }
+  .chip.error { background: var(--error-fondo); color: var(--error); }
+  .chip.suave { background: var(--violeta-claro); color: var(--violeta); }
+  table { width: 100%; border-collapse: collapse; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 16px; overflow: hidden; font-size: clamp(14px, 1.6vw, 22px); }
+  th { background: #F1EEFB; color: var(--suave); font-weight: 800; padding: 10px 12px; text-align: center; }
+  th:first-child, td:first-child { text-align: left; }
+  td { padding: 12px; text-align: center; font-weight: 700; color: var(--texto); border-top: 1px solid var(--linea); }
+  .barra-av { height: 10px; border-radius: 999px; background: #E2E8F0; max-width: 220px; margin: 6px auto 4px; }
+  .barra-av i { display: block; height: 10px; border-radius: 999px; background: #F59E0B; }
+  .barra-av.rojo i { background: #991B1B; }
+  .peque { font-size: clamp(13px, 1.4vw, 18px); font-weight: 700; color: var(--suave); }
+  .pie { margin-top: auto; font-size: clamp(12px, 1.2vw, 16px); font-weight: 700; color: #8A85A8; }
+  .noche .pie { color: #A9A3CF; }
+  ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 8px; }
+  li { font-size: clamp(16px, 1.75vw, 24px); color: var(--suave); }
+  b { color: var(--texto); } .noche b { color: #fff; }
+  .dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: clamp(14px, 2vw, 28px); align-items: start; }
+
+  /* PDF / impresión: una diapositiva 16:9 por página */
+  @page { size: 1280px 720px; margin: 0; }
+  @media print {
+    body { background: #fff; }
+    .barra { display: none; }
+    .deck { padding: 0; gap: 0; display: block; }
+    .slide { width: 1280px; height: 720px; border-radius: 0; box-shadow: none; padding: 52px 72px; break-after: page; page-break-after: always; gap: 22px; }
+    .slide { justify-content: center; gap: 26px; }
+    .pie { position: absolute; left: 72px; bottom: 26px; margin: 0; }
+    .dos { grid-template-columns: 1fr 1fr; }
+    .tarj { padding: 22px 26px; }
+    h1 { font-size: 84px; } h2 { font-size: 46px; } h3 { font-size: 30px; }
+    p, li { font-size: 25px; } .tarj p { font-size: 23px; }
+    .etq { font-size: 18px; } .dia { font-size: 28px; padding: 22px 4px; } table { font-size: 24px; }
+    .num { width: 50px; height: 50px; font-size: 27px; } .chip { font-size: 20px; } .peque { font-size: 20px; }
+  }
+  .boton-final { display: inline-block; padding: 14px 28px; border-radius: 999px; background: var(--violeta); color: #fff !important; font-weight: 800; font-size: clamp(16px, 1.8vw, 24px); text-decoration: none; transition: transform .15s ease, filter .15s ease; }
+  .boton-final:hover { filter: brightness(1.15); transform: translateY(-2px); }
+  .boton-final:active { transform: scale(.96); }
+  .boton-final:focus-visible { outline: 3px solid var(--lila); outline-offset: 3px; }
+  @media print { .boton-final { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .barra a, .boton-final { transition: none; } }
+
+  .boton-final { display: inline-block; padding: 14px 28px; border-radius: 999px; background: var(--violeta); color: #fff !important; font-weight: 800; font-size: clamp(16px, 1.8vw, 24px); text-decoration: none; transition: transform .15s ease, filter .15s ease; }
+  .boton-final:hover { filter: brightness(1.15); transform: translateY(-2px); }
+  .boton-final:active { transform: scale(.96); }
+  .boton-final:focus-visible { outline: 3px solid var(--lila); outline-offset: 3px; }
+  @media print { .boton-final { display: none; } }
+
+  .tarjeta { gap: clamp(10px, 1.4vw, 18px); }
+  .nov { display: flex; gap: clamp(12px, 1.6vw, 22px); align-items: flex-start; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 18px; padding: clamp(14px, 1.8vw, 24px); }
+  .nov .num { flex: none; }
+  .nov h3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .nov p { font-size: clamp(15px, 1.5vw, 20px); }
+  .nov .donde { margin-top: 6px; font-size: clamp(13px, 1.3vw, 18px); color: var(--violeta); }
+  .nov .donde b { color: var(--violeta); }
+  .tarjeta-cab { justify-content: center; }
+  .solo-impresion { display: none; }
+  @media print { .solo-impresion { display: block; font-size: 14px; font-weight: 700; color: var(--violeta); word-break: break-all; } .tarjeta > .pie { display: none; } }
+  @page { size: Letter portrait; margin: 0; }
+  @media print {
+    .slide { width: auto; height: auto; padding: 36px 44px; break-after: auto; page-break-after: auto; }
+    .tarjeta-cab { padding: 30px 44px; }
+    .tarjeta { gap: 12px; }
+    h1 { font-size: 46px; } h2 { font-size: 32px; } h3 { font-size: 20px; }
+    .nov { padding: 11px 16px; } .nov p { font-size: 15px; } .nov .donde { font-size: 13px; margin-top: 3px; } .etq { font-size: 13px; } .tarjeta { padding-top: 22px; padding-bottom: 22px; }
+    .pie { position: static; margin-top: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="barra">
+  <a class="volver" href="index.html" aria-label="Volver a SIREVAQ">&#8592; Volver a SIREVAQ</a>
+  <b>Novedades · SIREVAQ</b>
+  <a href="novedades_unidades.pdf" download>Descargar PDF</a>
+</div>
+<main class="deck">
+
+<section class="slide noche tarjeta-cab" aria-label="Novedades">
+  <p class="etq">Para las unidades de salud · Octubre 2026</p>
+  <h1>Lo nuevo en SIREVAQ</h1>
+  <p>Seis cosas que ya puedes usar. Cada una dice dónde encontrarla.</p>
+</section>
+<section class="slide tarjeta" aria-label="Lista de novedades">
+
+  <article class="nov">
+    <div class="num">1</div>
+    <div class="nov-cuerpo">
+      <h3>SINBA-SIS en un solo archivo <span class="chip ok">Nuevo</span></h3>
+      <p>Tu mes completo en un lugar: SIS-06-P, Movimiento de Biológico, hoja de claves e Influenza. Una barra abajo te lleva entre hojas y muestra el estatus: captura, concilia, envía y validación.</p>
+      <p class="donde"><b>Dónde lo encuentro:</b> Captura de reportes → <b>SINBA-SIS</b></p>
+    </div>
+  </article>
+
+  <article class="nov">
+    <div class="num">2</div>
+    <div class="nov-cuerpo">
+      <h3>Influenza: un reporte por semana <span class="chip ok">Nuevo</span></h3>
+      <p>La semana (de lunes a domingo) se abre el lunes y la capturas cualquier día. El panel te muestra cuántas dosis llevas contra tu meta y no deja pasarte de ella.</p>
+      <p class="donde"><b>Dónde lo encuentro:</b> Captura de reportes → <b>Influenza</b> · botón «Instructivo»</p>
+    </div>
+  </article>
+
+  <article class="nov">
+    <div class="num">3</div>
+    <div class="nov-cuerpo">
+      <h3>Calendario de capacitaciones </h3>
+      <p>Consulta fechas, horarios y sedes de las capacitaciones de la Jurisdicción. Te avisa cuando se acercan (7, 3 y 1 día antes, y el mismo día).</p>
+      <p class="donde"><b>Dónde lo encuentro:</b> Mi perfil → pestaña <b>Más</b> → Calendario de capacitaciones</p>
+    </div>
+  </article>
+
+  <article class="nov">
+    <div class="num">4</div>
+    <div class="nov-cuerpo">
+      <h3>Pedidos extraordinarios </h3>
+      <p>Cuando la Jurisdicción abre un pedido extraordinario, eliges cuál capturar. Los extraordinarios no cuentan para tu cumplimiento del pedido mensual.</p>
+      <p class="donde"><b>Dónde lo encuentro:</b> Captura de reportes → <b>Pedido</b></p>
+    </div>
+  </article>
+
+  <article class="nov">
+    <div class="num">5</div>
+    <div class="nov-cuerpo">
+      <h3>Tu captura no se pierde </h3>
+      <p>Si se va el internet, SIS-06-P, Movimiento de Biológico e Influenza guardan un respaldo en tu equipo y se envían al volver la conexión.</p>
+      <p class="donde"><b>Dónde lo encuentro:</b> Automático, no hay que hacer nada</p>
+    </div>
+  </article>
+
+  <article class="nov">
+    <div class="num">6</div>
+    <div class="nov-cuerpo">
+      <h3>Ayuda en cada pantalla </h3>
+      <p>Busca el botón «?» o «¿Cómo funciona?»: explica la pantalla con pasos y ejemplos. En Mi perfil → Cuenta puedes actualizar tus datos de contacto y cambiar tu contraseña.</p>
+      <p class="donde"><b>Dónde lo encuentro:</b> Botón «?» junto al título de cada hoja · Mi perfil → <b>Cuenta</b></p>
+    </div>
+  </article>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1 · Guías completas: Influenza y SINBA-SIS</p>
+</section>
+<section class="slide" aria-label="Guías">
+  <p class="etq">Guías paso a paso</p>
+  <h2>Para ver todo con detalle</h2>
+  <div class="fila">
+    <div class="tarj"><h3>Instructivo de Influenza</h3><p>Cómo capturar tu reporte semanal y cuidar tu meta.</p><p><a class="boton-final" href="instructivo_influenza.html">Abrir instructivo</a></p><p class="solo-impresion">carlosgbd94-design.github.io/SIREVAQ/instructivo_influenza.html</p></div>
+    <div class="tarj"><h3>Instructivo del SINBA-SIS</h3><p>Cómo llenar, conciliar, enviar y dar seguimiento a tu archivo mensual.</p><p><a class="boton-final" href="instructivo_sis.html">Abrir instructivo</a></p><p class="solo-impresion">carlosgbd94-design.github.io/SIREVAQ/instructivo_sis.html</p></div>
+  </div>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
+</section>
+</main>
+</body>
+</html>

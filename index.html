@@ -389,7 +389,7 @@
        (ensurePdfAssetsLoaded) solo al exportar el PDF de Resguardo.
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
-  <script defer src="ayuda.js?v=17"></script>
+  <script defer src="ayuda.js?v=18"></script>
   <script defer src="a11y_global.js?v=5"></script>
   <script src="dist/bundle-head.js?v=2026.133" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
@@ -875,6 +875,20 @@
                   <span class="material-symbols-rounded" style="font-size:16px; flex:none; margin-top:1px;">notifications_active</span>
                   <span data-cal-cap-text></span>
                 </div>
+              </div>
+
+              <!-- 🆕 GUÍAS PARA LA UNIDAD: novedades e instructivos -->
+              <div id="profileGuiasUnidad" data-role-gate="UNIDAD" class="flex flex-col gap-2 w-full" style="margin-top: 10px !important;">
+                <a href="novedades_unidades.html" target="_blank" rel="noopener"
+                  style="display: flex; width: 100%; height: 38px; min-height: 38px; border-radius: 12px; font-weight: 700; font-size: 11px; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid #cbd5e1; background: transparent; color: #475569; text-decoration: none;">
+                  <span class="material-symbols-rounded" style="font-size: 20px; color: #6d28d9;">new_releases</span>
+                  <span class="uppercase tracking-wider">Novedades para tu unidad</span>
+                </a>
+                <a href="instructivo_sis.html" target="_blank" rel="noopener"
+                  style="display: flex; width: 100%; height: 38px; min-height: 38px; border-radius: 12px; font-weight: 700; font-size: 11px; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid #cbd5e1; background: transparent; color: #475569; text-decoration: none;">
+                  <span class="material-symbols-rounded" style="font-size: 20px; color: #6d28d9;">menu_book</span>
+                  <span class="uppercase tracking-wider">Instructivo del SINBA-SIS</span>
+                </a>
               </div>
             </div>
           </div>
