@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novedades para las unidades · SIREVAQ</title>
-<meta name="description" content="Lo nuevo en SIREVAQ para las unidades de salud: SINBA-SIS, Influenza, calendario de capacitaciones y más.">
-<meta property="og:title" content="Novedades para las unidades · SIREVAQ">
-<meta property="og:description" content="Lo nuevo en SIREVAQ para las unidades de salud: SINBA-SIS, Influenza, calendario de capacitaciones y más.">
+<title>¿Qué hay de nuevo? · SIREVAQ</title>
+<meta name="description" content="Lo nuevo en SIREVAQ para tu unidad. Cada cosa dice dónde encontrarla.">
+<meta property="og:title" content="¿Qué hay de nuevo? · SIREVAQ">
+<meta property="og:description" content="Lo nuevo en SIREVAQ para tu unidad. Cada cosa dice dónde encontrarla.">
 <meta name="theme-color" content="#1E1B3A">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Rubik:wght@500;600;700&display=swap">
@@ -90,110 +90,88 @@
   @media print { .boton-final { display: none; } }
   @media (prefers-reduced-motion: reduce) { .barra a, .boton-final { transition: none; } }
 
-  .boton-final { display: inline-block; padding: 14px 28px; border-radius: 999px; background: var(--violeta); color: #fff !important; font-weight: 800; font-size: clamp(16px, 1.8vw, 24px); text-decoration: none; transition: transform .15s ease, filter .15s ease; }
-  .boton-final:hover { filter: brightness(1.15); transform: translateY(-2px); }
-  .boton-final:active { transform: scale(.96); }
-  .boton-final:focus-visible { outline: 3px solid var(--lila); outline-offset: 3px; }
-  @media print { .boton-final { display: none; } }
+/* Guías generadas (build-guias.js) */
+.dia-lista { display: grid; gap: 8px; }
+.donde { font-size: clamp(13px, 1.35vw, 18px); font-weight: 700; color: var(--violeta); margin-top: 4px; }
+.nov-lista { display: flex; flex-direction: column; gap: clamp(10px, 1.4vw, 16px); }
+.nov { display: flex; gap: clamp(12px, 1.6vw, 22px); align-items: flex-start; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 18px; padding: clamp(14px, 1.8vw, 24px); }
+.nov .num { flex: none; }
+.nov h3 { margin-bottom: 4px; }
+.nov p { font-size: clamp(15px, 1.5vw, 20px); }
+.solo-impresion { display: none; }
+.boton-final { display: inline-block; padding: 14px 28px; border-radius: 999px; background: var(--violeta); color: #fff !important; font-weight: 800; font-size: clamp(16px, 1.8vw, 24px); text-decoration: none; transition: transform .15s ease, filter .15s ease; }
+.boton-final:hover { filter: brightness(1.15); transform: translateY(-2px); }
+.boton-final:active { transform: scale(.96); }
+.boton-final:focus-visible { outline: 3px solid var(--lila); outline-offset: 3px; }
+@media print {
+  .boton-final { display: none; }
+  .solo-impresion { display: block; font-size: 22px; font-weight: 700; color: var(--violeta); word-break: break-all; }
+}
+body.tarjeta .slide { }
+@media print {
+  body.tarjeta .slide { width: auto; height: auto; padding: 36px 44px; break-after: auto; page-break-after: auto; justify-content: flex-start; }
+  body.tarjeta .nov p { font-size: 15px; } body.tarjeta .nov .donde { font-size: 13px; }
+  body.tarjeta h1 { font-size: 46px; } body.tarjeta h2 { font-size: 32px; } body.tarjeta h3 { font-size: 20px; }
+  body.tarjeta .pie { position: static; margin-top: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .boton-final { transition: none; } }
 
-  .tarjeta { gap: clamp(10px, 1.4vw, 18px); }
-  .nov { display: flex; gap: clamp(12px, 1.6vw, 22px); align-items: flex-start; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 18px; padding: clamp(14px, 1.8vw, 24px); }
-  .nov .num { flex: none; }
-  .nov h3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .nov p { font-size: clamp(15px, 1.5vw, 20px); }
-  .nov .donde { margin-top: 6px; font-size: clamp(13px, 1.3vw, 18px); color: var(--violeta); }
-  .nov .donde b { color: var(--violeta); }
-  .tarjeta-cab { justify-content: center; }
-  .solo-impresion { display: none; }
-  @media print { .solo-impresion { display: block; font-size: 14px; font-weight: 700; color: var(--violeta); word-break: break-all; } .tarjeta > .pie { display: none; } }
-  @page { size: Letter portrait; margin: 0; }
-  @media print {
-    .slide { width: auto; height: auto; padding: 36px 44px; break-after: auto; page-break-after: auto; }
-    .tarjeta-cab { padding: 30px 44px; }
-    .tarjeta { gap: 12px; }
-    h1 { font-size: 46px; } h2 { font-size: 32px; } h3 { font-size: 20px; }
-    .nov { padding: 11px 16px; } .nov p { font-size: 15px; } .nov .donde { font-size: 13px; margin-top: 3px; } .etq { font-size: 13px; } .tarjeta { padding-top: 22px; padding-bottom: 22px; }
-    .pie { position: static; margin-top: 8px; }
-  }
+h3.sub { font-family: 'Nunito Sans', system-ui, sans-serif; font-weight: 700; color: var(--suave); font-size: clamp(17px, 2vw, 26px); }
+@media print { h3.sub { font-size: 26px; } }
+
+@page { size: Letter portrait; margin: 0; }
 </style>
 </head>
-<body>
+<body class="tarjeta">
 <div class="barra">
   <a class="volver" href="index.html" aria-label="Volver a SIREVAQ">&#8592; Volver a SIREVAQ</a>
-  <b>Novedades · SIREVAQ</b>
+  <b>¿Qué hay de nuevo?</b>
   <a href="novedades_unidades.pdf" download>Descargar PDF</a>
 </div>
 <main class="deck">
 
-<section class="slide noche tarjeta-cab" aria-label="Novedades">
-  <p class="etq">Para las unidades de salud · Octubre 2026</p>
+<section class="slide noche" aria-label="Novedades">
+  <p class="etq">Para las unidades de salud</p>
   <h1>Lo nuevo en SIREVAQ</h1>
-  <p>Seis cosas que ya puedes usar. Cada una dice dónde encontrarla.</p>
+  <p>6 cosas que ya puedes usar. Cada una dice dónde encontrarla.</p>
 </section>
-<section class="slide tarjeta" aria-label="Lista de novedades">
-
+<section class="slide" aria-label="Lista de novedades">
+  <div class="nov-lista">
   <article class="nov">
     <div class="num">1</div>
-    <div class="nov-cuerpo">
-      <h3>SINBA-SIS en un solo archivo <span class="chip ok">Nuevo</span></h3>
-      <p>Tu mes completo en un lugar: SIS-06-P, Movimiento de Biológico, hoja de claves e Influenza. Una barra abajo te lleva entre hojas y muestra el estatus: captura, concilia, envía y validación.</p>
-      <p class="donde"><b>Dónde lo encuentro:</b> Captura de reportes → <b>SINBA-SIS</b></p>
-    </div>
+    <div><h3>SINBA-SIS en un solo archivo</h3><p>Tu mes completo en un lugar: SIS-06-P, Movimiento de Biológico, hoja de claves e Influenza. Una barra abajo te lleva entre hojas y muestra el estatus: captura, concilia, envía y validación.</p><p class="donde">Dónde lo encuentro: Captura de reportes → SINBA-SIS</p></div>
   </article>
-
   <article class="nov">
     <div class="num">2</div>
-    <div class="nov-cuerpo">
-      <h3>Influenza: un reporte por semana <span class="chip ok">Nuevo</span></h3>
-      <p>La semana (de lunes a domingo) se abre el lunes y la capturas cualquier día. El panel te muestra cuántas dosis llevas contra tu meta y no deja pasarte de ella.</p>
-      <p class="donde"><b>Dónde lo encuentro:</b> Captura de reportes → <b>Influenza</b> · botón «Instructivo»</p>
-    </div>
+    <div><h3>Influenza: un reporte por semana</h3><p>La semana (de lunes a domingo) se abre el lunes y la capturas cualquier día. El panel te muestra cuántas dosis llevas contra tu meta y no deja pasarte de ella.</p><p class="donde">Dónde lo encuentro: Captura de reportes → Influenza</p></div>
   </article>
-
   <article class="nov">
     <div class="num">3</div>
-    <div class="nov-cuerpo">
-      <h3>Calendario de capacitaciones </h3>
-      <p>Consulta fechas, horarios y sedes de las capacitaciones de la Jurisdicción. Te avisa cuando se acercan (7, 3 y 1 día antes, y el mismo día).</p>
-      <p class="donde"><b>Dónde lo encuentro:</b> Mi perfil → pestaña <b>Más</b> → Calendario de capacitaciones</p>
-    </div>
+    <div><h3>Calendario de capacitaciones</h3><p>Consulta fechas, horarios y sedes de las capacitaciones de la Jurisdicción. Te avisa cuando se acercan (7, 3 y 1 día antes, y el mismo día).</p><p class="donde">Dónde lo encuentro: Mi perfil → Más → Calendario de capacitaciones</p></div>
   </article>
-
   <article class="nov">
     <div class="num">4</div>
-    <div class="nov-cuerpo">
-      <h3>Pedidos extraordinarios </h3>
-      <p>Cuando la Jurisdicción abre un pedido extraordinario, eliges cuál capturar. Los extraordinarios no cuentan para tu cumplimiento del pedido mensual.</p>
-      <p class="donde"><b>Dónde lo encuentro:</b> Captura de reportes → <b>Pedido</b></p>
-    </div>
+    <div><h3>Pedidos extraordinarios</h3><p>Cuando la Jurisdicción abre un pedido extraordinario, eliges cuál capturar. Los extraordinarios no cuentan para tu cumplimiento del pedido mensual.</p><p class="donde">Dónde lo encuentro: Captura de reportes → Pedido</p></div>
   </article>
-
   <article class="nov">
     <div class="num">5</div>
-    <div class="nov-cuerpo">
-      <h3>Tu captura no se pierde </h3>
-      <p>Si se va el internet, SIS-06-P, Movimiento de Biológico e Influenza guardan un respaldo en tu equipo y se envían al volver la conexión.</p>
-      <p class="donde"><b>Dónde lo encuentro:</b> Automático, no hay que hacer nada</p>
-    </div>
+    <div><h3>Tu captura no se pierde</h3><p>Si se va el internet, SIS-06-P, Movimiento de Biológico e Influenza guardan un respaldo en tu equipo y se envían al volver la conexión.</p><p class="donde">Dónde lo encuentro: Automático, no hay que hacer nada</p></div>
   </article>
-
   <article class="nov">
     <div class="num">6</div>
-    <div class="nov-cuerpo">
-      <h3>Ayuda en cada pantalla </h3>
-      <p>Busca el botón «?» o «¿Cómo funciona?»: explica la pantalla con pasos y ejemplos. En Mi perfil → Cuenta puedes actualizar tus datos de contacto y cambiar tu contraseña.</p>
-      <p class="donde"><b>Dónde lo encuentro:</b> Botón «?» junto al título de cada hoja · Mi perfil → <b>Cuenta</b></p>
-    </div>
+    <div><h3>Ayuda en cada pantalla</h3><p>El botón «?» o «¿Cómo funciona?» explica la pantalla paso a paso. En Mi perfil → Cuenta puedes actualizar tus datos de contacto y cambiar tu contraseña.</p><p class="donde">Dónde lo encuentro: Botón «?» junto al título de cada panel</p></div>
   </article>
-  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1 · Guías completas: Influenza y SINBA-SIS</p>
+  </div>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
 <section class="slide" aria-label="Guías">
   <p class="etq">Guías paso a paso</p>
   <h2>Para ver todo con detalle</h2>
   <div class="fila">
-    <div class="tarj"><h3>Instructivo de Influenza</h3><p>Cómo capturar tu reporte semanal y cuidar tu meta.</p><p><a class="boton-final" href="instructivo_influenza.html">Abrir instructivo</a></p><p class="solo-impresion">carlosgbd94-design.github.io/SIREVAQ/instructivo_influenza.html</p></div>
-    <div class="tarj"><h3>Instructivo del SINBA-SIS</h3><p>Cómo llenar, conciliar, enviar y dar seguimiento a tu archivo mensual.</p><p><a class="boton-final" href="instructivo_sis.html">Abrir instructivo</a></p><p class="solo-impresion">carlosgbd94-design.github.io/SIREVAQ/instructivo_sis.html</p></div>
+    <div class="tarj"><h3>Guía del panel de Influenza</h3><p>Cómo capturar tu reporte semanal y cuidar tu meta.</p><p class="solo-impresion">carlosgbd94-design.github.io/SIREVAQ/instructivo_influenza.html</p><p><a class="boton-final" href="instructivo_influenza.html">Abrir guía</a></p></div>
+    <div class="tarj"><h3>Guía del SINBA-SIS</h3><p>Cómo llenar, enviar y dar seguimiento a tu archivo mensual.</p><p class="solo-impresion">carlosgbd94-design.github.io/SIREVAQ/instructivo_sis.html</p><p><a class="boton-final" href="instructivo_sis.html">Abrir guía</a></p></div>
   </div>
+  <p><a class="boton-final" href="index.html">&#8592; Volver a SIREVAQ</a></p>
   <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
 </main>

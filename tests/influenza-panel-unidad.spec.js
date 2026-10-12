@@ -243,33 +243,51 @@ test.describe('Panel de Influenza (unidad)', () => {
     expect(errores).toEqual([]);
   });
 
-  test('la ayuda: «Entendido» responde al mouse, al clic y al teclado; el foco no se escapa', async ({ page }) => {
+  test('la guía del panel: pasos con Anterior/Siguiente, botones con hover/presionado y el foco no se escapa', async ({ page }) => {
     const { errores } = await abrirPanel(page);
     await page.locator('#formINFLUENZA button.cp-help-btn').click();
-    const ok = page.locator('#ayudaCerrarBtn');
-    await expect(ok).toBeVisible();
-    const estilo = () => ok.evaluate((e) => { const c = getComputedStyle(e); return { t: c.transform, s: c.boxShadow, bg: c.backgroundColor, h: e.getBoundingClientRect().height }; });
-    await page.waitForTimeout(400);   // termina la animación de entrada
+    await expect(page.locator('#ayudaTitulo')).toHaveText('Guía del panel de Influenza');
+    await expect(page.locator('#ayudaSub')).toContainText('Paso 1 de 7');
+    const sig = page.locator('#ayudaCerrarBtn');
+    await expect(sig).toHaveText('Siguiente');
+    await expect(page.locator('#ayudaAnt')).toBeHidden();
+    await expect(page.locator('#ayudaPuntos .ayuda-punto')).toHaveCount(7);
+    // PDF y compartir dentro de la misma tarjeta; sin salir de la página
+    await expect(page.locator('#ayudaExtras a[download]')).toHaveAttribute('href', 'instructivo_influenza.pdf');
+    await expect(page.locator('#ayudaExtras [data-accion="compartir"]')).toBeVisible();
+    await expect(page.locator('#ayudaExtras [data-accion="novedades"]')).toBeVisible();
+    // Hover y presionado del botón principal
+    const estilo = () => sig.evaluate((e) => { const c = getComputedStyle(e); return { t: c.transform, s: c.boxShadow, h: e.getBoundingClientRect().height }; });
+    await page.waitForTimeout(400);
     const reposo = await estilo();
     expect(reposo.h).toBeGreaterThanOrEqual(43.5);
-    await ok.hover();
+    await sig.hover();
     await page.waitForTimeout(350);
     const hover = await estilo();
-    expect(hover.t).not.toBe(reposo.t);        // se eleva
-    expect(hover.s).not.toBe(reposo.s);        // sombra
+    expect(hover.t).not.toBe(reposo.t);
+    expect(hover.s).not.toBe(reposo.s);
     await page.mouse.down();
     await page.waitForTimeout(250);
-    const presionado = await estilo();
-    expect(presionado.t).not.toBe(hover.t);    // se hunde
-    await page.mouse.up();                      // cierra
+    expect((await estilo()).t).not.toBe(hover.t);
+    await page.mouse.up();                                   // avanza al paso 2
+    await expect(page.locator('#ayudaSub')).toContainText('Paso 2 de 7');
+    await expect(page.locator('#ayudaAnt')).toBeVisible();
+    // Teclado: flechas cambian de paso y Tab no se escapa del diálogo
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator('#ayudaSub')).toContainText('Paso 3 de 7');
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.locator('#ayudaSub')).toContainText('Paso 2 de 7');
+    for (let k = 0; k < 14; k++) await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => document.getElementById('ayudaOverlay').contains(document.activeElement))).toBe(true);
+    // Último paso: el botón principal pasa a «Entendido» y cierra
+    await page.locator('#ayudaPuntos .ayuda-punto').last().click();
+    await expect(page.locator('#ayudaSub')).toContainText('Paso 7 de 7');
+    await expect(sig).toHaveText('Entendido');
+    await sig.click();
     await expect(page.locator('#ayudaOverlay')).not.toHaveClass(/abierto/);
-    // teclado: Tab da la vuelta dentro del diálogo
-    await page.locator('#formINFLUENZA button.cp-help-btn').click();
-    await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
-    const dentro = await page.evaluate(() => document.getElementById('ayudaOverlay').contains(document.activeElement));
-    expect(dentro).toBe(true);
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#ayudaOverlay')).not.toHaveClass(/abierto/);
+    // Regresa el foco al botón que abrió la guía (no se salió de la pantalla)
+    expect(await page.evaluate(() => document.activeElement && document.activeElement.className)).toContain('cp-help-btn');
+    expect(page.url()).toContain('index.html');
     expect(errores).toEqual([]);
   });
 
@@ -366,15 +384,10 @@ test.describe('Panel de Influenza (unidad)', () => {
     expect(errores).toEqual([]);
   });
 
-  test('el panel enlaza el instructivo para las unidades y el archivo existe', async ({ page, request }) => {
+  test('el instructivo vive en la tarjeta «¿Cómo funciona?» y ya no hay enlaces aparte en el panel', async ({ page }) => {
     const { errores } = await abrirPanel(page);
-    const enlace = page.locator('#formINFLUENZA a[href="instructivo_influenza.html"]');
-    await expect(enlace).toBeVisible();
-    await expect(enlace).toContainText('Instructivo');
-    for (const f of ['/instructivo_influenza.html', '/instructivo_influenza.pdf']) {
-      const r = await request.get(f);
-      expect(r.status()).toBe(200);
-    }
+    await expect(page.locator('#formINFLUENZA a[href^="instructivo_"]')).toHaveCount(0);
+    await expect(page.locator('#formINFLUENZA button.cp-help-btn')).toContainText('¿Cómo funciona?');
     expect(errores).toEqual([]);
   });
 

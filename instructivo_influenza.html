@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Instructivo del panel de Influenza · SIREVAQ</title>
-<meta name="description" content="Cómo capturar tu reporte semanal de Influenza y cuidar tu meta en SIREVAQ. Campaña 2026-2027.">
-<meta property="og:title" content="Instructivo del panel de Influenza · SIREVAQ">
-<meta property="og:description" content="Cómo capturar tu reporte semanal de Influenza y cuidar tu meta. Campaña 2026-2027.">
+<title>Guía del panel de Influenza · SIREVAQ</title>
+<meta name="description" content="Cómo capturar tu reporte semanal y cuidar tu meta.">
+<meta property="og:title" content="Guía del panel de Influenza · SIREVAQ">
+<meta property="og:description" content="Cómo capturar tu reporte semanal y cuidar tu meta.">
 <meta name="theme-color" content="#1E1B3A">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Rubik:wght@500;600;700&display=swap">
@@ -89,178 +89,106 @@
   .boton-final:focus-visible { outline: 3px solid var(--lila); outline-offset: 3px; }
   @media print { .boton-final { display: none; } }
   @media (prefers-reduced-motion: reduce) { .barra a, .boton-final { transition: none; } }
+
+/* Guías generadas (build-guias.js) */
+.dia-lista { display: grid; gap: 8px; }
+.donde { font-size: clamp(13px, 1.35vw, 18px); font-weight: 700; color: var(--violeta); margin-top: 4px; }
+.nov-lista { display: flex; flex-direction: column; gap: clamp(10px, 1.4vw, 16px); }
+.nov { display: flex; gap: clamp(12px, 1.6vw, 22px); align-items: flex-start; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 18px; padding: clamp(14px, 1.8vw, 24px); }
+.nov .num { flex: none; }
+.nov h3 { margin-bottom: 4px; }
+.nov p { font-size: clamp(15px, 1.5vw, 20px); }
+.solo-impresion { display: none; }
+.boton-final { display: inline-block; padding: 14px 28px; border-radius: 999px; background: var(--violeta); color: #fff !important; font-weight: 800; font-size: clamp(16px, 1.8vw, 24px); text-decoration: none; transition: transform .15s ease, filter .15s ease; }
+.boton-final:hover { filter: brightness(1.15); transform: translateY(-2px); }
+.boton-final:active { transform: scale(.96); }
+.boton-final:focus-visible { outline: 3px solid var(--lila); outline-offset: 3px; }
+@media print {
+  .boton-final { display: none; }
+  .solo-impresion { display: block; font-size: 22px; font-weight: 700; color: var(--violeta); word-break: break-all; }
+}
+body.tarjeta .slide { }
+@media print {
+  body.tarjeta .slide { width: auto; height: auto; padding: 36px 44px; break-after: auto; page-break-after: auto; justify-content: flex-start; }
+  body.tarjeta .nov p { font-size: 15px; } body.tarjeta .nov .donde { font-size: 13px; }
+  body.tarjeta h1 { font-size: 46px; } body.tarjeta h2 { font-size: 32px; } body.tarjeta h3 { font-size: 20px; }
+  body.tarjeta .pie { position: static; margin-top: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .boton-final { transition: none; } }
+
+h3.sub { font-family: 'Nunito Sans', system-ui, sans-serif; font-weight: 700; color: var(--suave); font-size: clamp(17px, 2vw, 26px); }
+@media print { h3.sub { font-size: 26px; } }
+
+
 </style>
 </head>
-<body>
+<body class="">
 <div class="barra">
   <a class="volver" href="index.html" aria-label="Volver a SIREVAQ">&#8592; Volver a SIREVAQ</a>
-  <b>Instructivo · Panel de Influenza</b>
+  <b>Guía del panel de Influenza</b>
   <a href="instructivo_influenza.pdf" download>Descargar PDF</a>
 </div>
 <main class="deck">
 
-<!-- 1 · Portada -->
 <section class="slide noche" aria-label="Portada">
-  <p class="etq">Campaña de vacunación 2026-2027</p>
-  <h1>Panel de Influenza</h1>
-  <h3 style="color:#E4DDFB;font-weight:500">Cómo capturar tu reporte semanal y cuidar tu meta</h3>
+  <p class="etq">Para las unidades de salud</p>
+  <h1>panel de Influenza</h1>
+  <h3 style="color:#E4DDFB;font-weight:500">Cómo capturar tu reporte semanal y cuidar tu meta.</h3>
   <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<!-- 2 · Lo esencial -->
-<section class="slide" aria-label="Lo esencial">
-  <p class="etq">Antes de empezar</p>
-  <h2>Lo esencial en 30 segundos</h2>
-  <div class="fila">
-    <div class="tarj"><div class="num">1</div><h3>Un reporte por semana</h3><p>Cada semana, de lunes a domingo, se reporta una sola vez.</p></div>
-    <div class="tarj"><div class="num">2</div><h3>Captúralo cualquier día</h3><p>El panel abre la semana el lunes. Sábado y domingo forman parte de la misma semana.</p></div>
-    <div class="tarj"><div class="num">3</div><h3>Tu meta es el tope</h3><p>El panel te dice cuántas dosis llevas y no deja guardar si te pasas.</p></div>
-  </div>
-  <p class="pie">Panel de Influenza · SIREVAQ</p>
-</section>
-
-<!-- 3 · La semana -->
 <section class="slide" aria-label="La semana">
-  <p class="etq">Cuándo se captura</p>
-  <h2>Cada semana, de lunes a domingo, es un solo reporte</h2>
-  <div class="dias" role="list">
-    <div class="dia rep" role="listitem">Lun</div><div class="dia rep" role="listitem">Mar</div><div class="dia rep" role="listitem">Mié</div>
-    <div class="dia rep" role="listitem">Jue</div><div class="dia rep" role="listitem">Vie</div>
-    <div class="dia rep" role="listitem">Sáb</div><div class="dia rep" role="listitem">Dom</div>
-  </div>
-  <div class="fila">
-    <div class="tarj"><span class="chip suave" style="align-self:flex-start">La semana completa</span><p>Todo lo que apliques de lunes a domingo se suma en el reporte de esa semana.</p></div>
-    <div class="tarj"><span class="chip suave" style="align-self:flex-start">Fin de semana incluido</span><p>Si tu unidad vacuna sábado o domingo, anótalo en el reporte de esa misma semana.</p></div>
-    <div class="tarj"><span class="chip ok" style="align-self:flex-start">Abre el lunes</span><p>Puedes capturar o corregir el reporte cualquier día; sigue siendo el mismo reporte.</p></div>
-  </div>
-  <p class="pie">Panel de Influenza · SIREVAQ</p>
+  <p class="etq">Paso 1 de 7</p>
+  <h2>La semana</h2>
+  <h3 class="sub">Cada semana, de lunes a domingo, es un solo reporte</h3>
+  <div class="fila"><div class="tarj"><h3>La semana completa</h3><p>Todo lo que apliques de lunes a domingo se suma en el reporte de esa semana.</p></div><div class="tarj"><h3>Fin de semana incluido</h3><p>Si tu unidad vacuna sábado o domingo, anótalo en el reporte de esa misma semana.</p></div><div class="tarj"><h3>Abre el lunes</h3><p>Puedes capturar o corregir el reporte cualquier día; sigue siendo el mismo reporte.</p></div></div>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<!-- 4 · Mes que termina a media semana -->
-<section class="slide" aria-label="Cuando el mes termina a media semana">
-  <p class="etq">Cuándo se captura</p>
-  <h2>Si el mes termina a media semana, esa semana se reporta en dos partes</h2>
-  <div class="dos">
-    <div class="tarj">
-      <h3>La regla</h3>
-      <p>Si el mes termina de <b>lunes a jueves</b>, la semana se divide en dos reportes: el <b>corte de fin de mes</b> (del lunes al último día del mes) y el <b>resto de la semana</b> (del día 1 al domingo).</p>
-      <p>Si el mes termina en <b>viernes, sábado o domingo</b>, la semana se reporta completa en un solo reporte.</p>
-    </div>
-    <div class="tarj">
-      <h3>Ejemplo: semana del 30 nov al 6 dic</h3>
-      <p><span class="chip aviso">30 nov</span> Corte de fin de mes</p>
-      <p><span class="chip suave">1 al 6 dic</span> Resto de la semana (abre el 1 de diciembre)</p>
-      <p class="peque">Cada semana aparece en el panel con sus fechas.</p>
-    </div>
-  </div>
-  <p class="pie">Panel de Influenza · SIREVAQ</p>
+<section class="slide" aria-label="Mes a media semana">
+  <p class="etq">Paso 2 de 7</p>
+  <h2>Mes a media semana</h2>
+  <h3 class="sub">Si el mes termina a media semana, esa semana se reporta en dos partes</h3>
+  <div class="fila"><div class="tarj"><h3>De lunes a jueves</h3><p>Se divide en el corte de fin de mes (del lunes al último día del mes) y el resto de la semana (del día 1 al domingo).</p></div><div class="tarj"><h3>Viernes, sábado o domingo</h3><p>La semana se reporta completa en un solo reporte.</p></div></div>
+  <p><b>Ejemplo, semana del 30 nov al 6 dic: «30 nov» es el corte de fin de mes y «1 al 6 dic» el resto. Cada semana aparece en el panel con sus fechas.</b></p>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<!-- 5 · Pasos -->
-<section class="slide" aria-label="Paso a paso">
-  <p class="etq">Cómo se captura</p>
+<section class="slide" aria-label="Tu reporte en 4 pasos">
+  <p class="etq">Paso 3 de 7</p>
   <h2>Tu reporte en 4 pasos</h2>
-  <div class="fila">
-    <div class="tarj"><div class="num">1</div><h3>Elige la semana</h3><p>En «Semana a reportar». El panel ya te muestra la semana en curso.</p></div>
-    <div class="tarj"><div class="num">2</div><h3>Escribe tu nombre</h3><p>Quien captura queda registrado en el reporte.</p></div>
-    <div class="tarj"><div class="num">3</div><h3>Anota las dosis</h3><p>En «Esta semana», solo lo que aplicaste en esa semana. Si no hubo, usa «Sin movimiento».</p></div>
-    <div class="tarj"><div class="num">4</div><h3>Guarda</h3><p>Con el botón azul. Cada reporte recibe un folio único.</p></div>
-  </div>
-  <p class="pie">Panel de Influenza · SIREVAQ</p>
+  <div class="fila"><div class="tarj"><div class="num">1</div><h3>Elige la semana</h3><p>En «Semana a reportar»; el panel ya te muestra la semana en curso con sus fechas.</p></div><div class="tarj"><div class="num">2</div><h3>Escribe tu nombre</h3><p>Quien captura queda registrado en el reporte.</p></div><div class="tarj"><div class="num">3</div><h3>Anota las dosis</h3><p>En «Esta semana», solo lo que aplicaste en esa semana. Si no hubo, usa «Sin movimiento».</p></div><div class="tarj"><div class="num">4</div><h3>Guarda</h3><p>Con el botón azul. Cada reporte recibe un folio único.</p></div></div>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<!-- 6 · La tabla -->
-<section class="slide" aria-label="Cómo leer la tabla">
-  <p class="etq">Cómo leer tu avance</p>
-  <h2>La tabla de captura</h2>
-  <table>
-    <thead><tr><th>Subgrupo / Edad</th><th>Meta anual</th><th>Acumulado</th><th>Esta semana</th><th>Avance %</th></tr></thead>
-    <tbody><tr><td>12 a 23 meses</td><td>60</td><td>10</td><td>5</td><td>25%<div class="barra-av"><i style="width:25%"></i></div><span class="peque">15 de 60</span></td></tr></tbody>
-  </table>
-  <div class="fila">
-    <div class="tarj"><h3>Meta anual</h3><p>Lo asignado a tu unidad para ese grupo en toda la campaña.</p></div>
-    <div class="tarj"><h3>Acumulado</h3><p>Lo que ya reportaste en las demás semanas.</p></div>
-    <div class="tarj"><h3>Esta semana</h3><p>Lo que aplicaste en la semana elegida: aquí escribes.</p></div>
-    <div class="tarj"><h3>Avance</h3><p>(Acumulado + Esta semana) ÷ Meta. Bajo la barra ves «X de Y».</p></div>
-  </div>
-  <p class="pie">Panel de Influenza · SIREVAQ</p>
+<section class="slide" aria-label="La tabla">
+  <p class="etq">Paso 4 de 7</p>
+  <h2>La tabla</h2>
+  <div class="fila"><div class="tarj"><h3>Meta anual</h3><p>Lo asignado a tu unidad para ese grupo en toda la campaña. Es el tope.</p></div><div class="tarj"><h3>Acumulado</h3><p>Lo que ya reportaste en las demás semanas.</p></div><div class="tarj"><h3>Esta semana</h3><p>Lo que aplicaste en la semana elegida: aquí escribes.</p></div><div class="tarj"><h3>Avance</h3><p>(Acumulado + Esta semana) ÷ Meta. Bajo la barra ves «X de Y».</p></div></div>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<!-- 7 · Pasarse de la meta -->
-<section class="slide" aria-label="Si te pasas de la meta">
-  <p class="etq">Avisos</p>
-  <h2>Si te pasas de la meta, el panel te avisa</h2>
-  <table>
-    <thead><tr><th>Edad</th><th>Meta anual</th><th>Acumulado</th><th>Esta semana</th><th>Avance %</th></tr></thead>
-    <tbody><tr><td>6 a 11 meses</td><td>100</td><td>20</td><td style="background:var(--error-fondo);color:var(--error)">90</td><td style="color:var(--error)">110%<div class="barra-av rojo"><i style="width:100%"></i></div><span class="peque" style="color:var(--error)">Te pasas por 10</span></td></tr></tbody>
-  </table>
-  <ul>
-    <li>El renglón se marca en rojo y aparece <b>«Te pasas por N»</b>; arriba de la tabla te dice qué grupo se pasa y por cuánto.</li>
-    <li><b>No se puede guardar</b> hasta corregir la cifra.</li>
-    <li>Si de verdad aplicaste más dosis que tu meta, avisa a tu municipio para revisarla.</li>
-  </ul>
-  <p class="pie">Panel de Influenza · SIREVAQ</p>
+<section class="slide" aria-label="Tu meta es el tope">
+  <p class="etq">Paso 5 de 7</p>
+  <h2>Tu meta es el tope</h2>
+  <div class="fila"><div class="tarj"><h3>Te pasas por N</h3><p>Con lo que anotas rebasas la meta: el renglón se marca en rojo y el reporte no se guarda hasta corregir la cifra.</p></div><div class="tarj"><h3>Sin meta</h3><p>Si tu unidad no tiene meta en un grupo, aparece «Sin meta asignada» y no se captura. Los grupos completos sin meta se reúnen en un aviso al final.</p></div><div class="tarj"><h3>2ª y 1ª dosis</h3><p>No hay 2ª dosis durante el primer mes de la campaña ni 1ª dosis durante el último mes.</p></div></div>
+  <p><b>Si de verdad aplicaste más dosis que tu meta, avisa a tu municipio para revisarla.</b></p>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<!-- 8 · Bloqueados -->
-<section class="slide" aria-label="Renglones bloqueados">
-  <p class="etq">Reglas</p>
-  <h2>Renglones que no se pueden capturar</h2>
-  <div class="fila">
-    <div class="tarj"><span class="chip suave" style="align-self:flex-start">Sin meta</span><h3>Tu unidad no tiene meta en ese grupo</h3><p>Aparece «Sin meta asignada». Los grupos completos sin meta se reúnen en un aviso al final de la página.</p></div>
-    <div class="tarj"><span class="chip aviso" style="align-self:flex-start">Desde el 12 nov</span><h3>2ª dosis</h3><p>No hay segunda dosis durante el primer mes de la campaña.</p></div>
-    <div class="tarj"><span class="chip aviso" style="align-self:flex-start">Hasta el 2 mar</span><h3>1ª dosis</h3><p>No hay primera dosis en el último mes: su segunda caería fuera de la temporada.</p></div>
-  </div>
-  <p class="pie">Panel de Influenza · SIREVAQ</p>
+<section class="slide" aria-label="Sin movimiento y después de guardar">
+  <p class="etq">Paso 6 de 7</p>
+  <h2>Sin movimiento y después de guardar</h2>
+  <div class="fila"><div class="tarj"><h3>Sin movimiento</h3><p>Si no aplicaste dosis, actívalo: la semana se guarda en ceros y recibe su folio. Si luego aplicas, desactívalo y corrige mientras la semana siga abierta.</p></div><div class="tarj"><h3>Folio</h3><p>Cada reporte recibe un folio único; lo ves en el paso 4 y en el Historial de Reportes.</p></div><div class="tarj"><h3>Corregir</h3><p>Puedes volver a guardar la misma semana; las ediciones quedan en el historial.</p></div><div class="tarj"><h3>Resumen de meta</h3><p>Tu avance, tu ritmo, el abasto de frascos y la descarga de tu meta en Excel.</p></div></div>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<!-- 9 · Sin movimiento -->
-<section class="slide" aria-label="Sin movimiento">
-  <p class="etq">Reglas</p>
-  <h2>¿No aplicaste dosis esta semana? Usa «Sin movimiento»</h2>
-  <div class="dos">
-    <div class="tarj"><h3>Cómo se usa</h3><p>Activa el interruptor «Sin movimiento». La semana se guarda en ceros y recibe su folio.</p></div>
-    <div class="tarj"><h3>Si luego aplicas dosis</h3><p>Desactívalo y captura las dosis mientras la semana siga abierta; se guarda como un reporte normal.</p></div>
-  </div>
-  <p><b>No dejes una semana sin reporte:</b> cada semana debe tener su folio, aunque sea en ceros.</p>
-  <p class="pie">Panel de Influenza · SIREVAQ</p>
+<section class="slide" aria-label="Dudas comunes">
+  <p class="etq">Paso 7 de 7</p>
+  <h2>Dudas comunes</h2>
+  <div class="fila"><div class="tarj"><h3>Olvidé capturar una semana</h3><p>Captúrala después: el panel te avisa cuántas semanas tienes sin reporte y te lleva a ellas.</p></div><div class="tarj"><h3>Vacunamos sábado y domingo</h3><p>Son parte de la misma semana (de lunes a domingo): anótalos en ese reporte.</p></div><div class="tarj"><h3>No tengo internet</h3><p>El reporte se guarda en el equipo y se envía solo cuando regresa la conexión.</p></div><div class="tarj"><h3>Aún no abre la campaña</h3><p>Antes del inicio verás «Captura cerrada»; ese día el panel abre.</p></div></div>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<!-- 10 · Después de guardar -->
-<section class="slide" aria-label="Después de guardar">
-  <p class="etq">Después de guardar</p>
-  <h2>Folio, correcciones y seguimiento</h2>
-  <div class="fila">
-    <div class="tarj"><h3>Folio</h3><p>Cada reporte recibe un folio único. Lo ves en el paso 4 y en el Historial de Reportes.</p></div>
-    <div class="tarj"><h3>Corregir</h3><p>Puedes volver a guardar la misma semana. Las ediciones quedan en el historial.</p></div>
-    <div class="tarj"><h3>Resumen de meta</h3><p>Tu avance, tu ritmo, el abasto de frascos y la descarga de tu meta en Excel.</p></div>
-  </div>
-  <p>Si el SIS del mes ya fue enviado, la corrección la hace tu municipio.</p>
-  <p class="pie">Panel de Influenza · SIREVAQ</p>
-</section>
-
-<!-- 11 · Preguntas -->
-<section class="slide" aria-label="Preguntas frecuentes">
-  <p class="etq">Dudas comunes</p>
-  <h2>Preguntas frecuentes</h2>
-  <div class="dos">
-    <div class="tarj"><h3>Olvidé capturar una semana</h3><p>Captúrala después: el panel te avisa cuántas semanas tienes sin reporte y te lleva a ellas.</p></div>
-    <div class="tarj"><h3>Vacunamos sábado y domingo</h3><p>Son parte de la misma semana (de lunes a domingo): anótalos en ese reporte.</p></div>
-    <div class="tarj"><h3>No tengo internet</h3><p>El reporte se guarda en el equipo y se envía solo cuando regresa la conexión.</p></div>
-    <div class="tarj"><h3>Aún no abre la campaña</h3><p>Hasta el 12 de octubre verás «Captura cerrada». Ese día el panel abre.</p></div>
-  </div>
-  <p class="pie">Panel de Influenza · SIREVAQ</p>
-</section>
-
-<!-- 12 · Cierre -->
 <section class="slide noche" aria-label="Cierre">
   <p class="etq">¿Dudas?</p>
-  <h1>Tu guía siempre a la mano</h1>
-  <p>Dentro del panel, el botón <b>«¿Cómo funciona?»</b> tiene esta misma guía. Para metas o reparto de frascos, consulta a tu coordinación municipal.</p>
+  <h1>La ayuda está en cada pantalla</h1>
+  <p>Busca el botón <b>«?»</b> o <b>«¿Cómo funciona?»</b> en tu panel: abre esta misma guía por pasos sin salir de lo que estás haciendo. Para correcciones, consulta a tu coordinación municipal.</p>
   <p><a class="boton-final" href="index.html">&#8592; Volver a SIREVAQ</a></p>
   <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
 </main>
 </body>
 </html>

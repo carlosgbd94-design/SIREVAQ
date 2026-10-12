@@ -457,17 +457,25 @@
     }
   };
 
-  function html(def) {
-    return def.bloques.map((b) => {
+  function htmlBloques(bloques) {
+    return (bloques || []).map((b) => {
       if (b.tipo === 'titulo') return `<div class="ayuda-tit">${esc(b.texto)}</div>`;
-      if (b.tipo === 'item') return `<div class="ayuda-item"><span class="material-symbols-rounded" style="color:${esc(b.color)};">${esc(b.icono)}</span><div><b>${esc(b.nombre)}</b><span class="t">${esc(b.texto)}</span></div></div>`;
+      if (b.tipo === 'item') return `<div class="ayuda-item"><span class="material-symbols-rounded" style="color:${esc(b.color)};">${esc(b.icono)}</span><div><b>${esc(b.nombre)}</b><span class="t">${esc(b.texto)}</span>${b.donde ? `<span class="ayuda-donde"><span class="material-symbols-rounded">near_me</span>${esc(b.donde)}</span>` : ''}</div></div>`;
       if (b.tipo === 'paso') return `<div class="ayuda-paso"><span class="ayuda-num">${esc(b.n)}</span><div><b>${esc(b.nombre)}.</b><span class="t">${esc(b.texto)}</span></div></div>`;
       if (b.tipo === 'nota') return `<div class="ayuda-nota">${esc(b.texto)}</div>`;
       return '';
     }).join('');
   }
 
+  // Las guías por pasos (guias_contenido.js) tienen prioridad sobre la ayuda corta del mismo nombre.
+  function definicion(clave) {
+    const G = window.GuiasContenido;
+    return (G && G[clave]) || CONTENIDO[clave] || null;
+  }
+
   let retorno = null;
+  let actual = null;      // { clave, def, i }
+  let avisoTimer = null;
 
   function crearDom() {
     if (document.getElementById('ayudaOverlay')) return;
@@ -479,33 +487,119 @@
       <div class="ayuda-hoja" role="dialog" aria-modal="true" aria-labelledby="ayudaTitulo">
         <div class="ayuda-asa"></div>
         <div class="ayuda-cab">
-          <div style="min-width:0;"><h3 id="ayudaTitulo"></h3><p id="ayudaSub"></p></div>
+          <div style="min-width:0;"><h3 id="ayudaTitulo"></h3><p id="ayudaSub" aria-live="polite"></p></div>
           <button type="button" class="ayuda-cerrar" id="ayudaCerrarX" title="Cerrar" aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
         </div>
+        <div class="ayuda-prog" id="ayudaProg" hidden><i id="ayudaProgRelleno"></i></div>
         <div class="ayuda-cuerpo" id="ayudaCuerpo" tabindex="0" role="region" aria-labelledby="ayudaTitulo"></div>
-        <div class="ayuda-pie"><button type="button" id="ayudaCerrarBtn">Entendido</button></div>
+        <div class="ayuda-pie">
+          <div class="ayuda-extras" id="ayudaExtras"></div>
+          <div class="ayuda-puntos" id="ayudaPuntos" role="group" aria-label="Pasos de la guía"></div>
+          <div class="ayuda-acciones">
+            <button type="button" class="ayuda-sec" id="ayudaAnt">Anterior</button>
+            <button type="button" id="ayudaCerrarBtn">Entendido</button>
+          </div>
+        </div>
       </div>`;
     document.body.appendChild(ov);
     ov.addEventListener('click', (ev) => { if (ev.target === ov) cerrar(); });
     document.getElementById('ayudaCerrarX').addEventListener('click', cerrar);
-    document.getElementById('ayudaCerrarBtn').addEventListener('click', cerrar);
+    document.getElementById('ayudaAnt').addEventListener('click', () => irAPaso(actual.i - 1));
+    document.getElementById('ayudaCerrarBtn').addEventListener('click', () => {
+      if (actual && actual.def.pasos && actual.i < actual.def.pasos.length - 1) irAPaso(actual.i + 1);
+      else cerrar();
+    });
+    document.getElementById('ayudaPuntos').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-paso]');
+      if (b) irAPaso(Number(b.dataset.paso));
+    });
+    document.getElementById('ayudaExtras').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-accion]');
+      if (!b || !actual) return;
+      if (b.dataset.accion === 'compartir') compartir(actual.def);
+      else if (b.dataset.accion === 'novedades') abrir('novedades');
+    });
   }
 
-  function abrir(clave) {
-    const def = CONTENIDO[clave];
+  function avisar(texto) {
+    const el = document.getElementById('ayudaAviso');
+    if (!el) return;
+    el.textContent = texto;
+    clearTimeout(avisoTimer);
+    avisoTimer = setTimeout(() => { el.textContent = ''; }, 2600);
+  }
+
+  async function compartir(def) {
+    const url = new URL(def.pagina || def.pdf || '', location.href).href;
+    if (navigator.share) {
+      try { await navigator.share({ title: def.titulo, text: def.subtitulo || '', url }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(url); avisar('Enlace copiado'); }
+    catch (e) { window.prompt('Copia este enlace:', url); }
+  }
+
+  // Pinta el paso actual (o la ayuda corta) y su pie.
+  function pintar() {
+    const { clave, def, i } = actual;
+    const pasos = def.pasos;
+    const cuerpo = document.getElementById('ayudaCuerpo');
+    document.getElementById('ayudaTitulo').textContent = def.titulo;
+    const prog = document.getElementById('ayudaProg');
+    const puntos = document.getElementById('ayudaPuntos');
+    const ant = document.getElementById('ayudaAnt');
+    const prim = document.getElementById('ayudaCerrarBtn');
+    if (pasos && pasos.length) {
+      const n = pasos.length, paso = pasos[i];
+      document.getElementById('ayudaSub').textContent = `Paso ${i + 1} de ${n} · ${paso.titulo}`;
+      cuerpo.innerHTML = htmlBloques(paso.bloques);
+      prog.hidden = false;
+      document.getElementById('ayudaProgRelleno').style.width = ((i + 1) / n * 100).toFixed(1) + '%';
+      puntos.innerHTML = pasos.map((p, k) => `<button type="button" class="ayuda-punto${k === i ? ' es-actual' : ''}${k < i ? ' es-hecho' : ''}" data-paso="${k}" aria-label="Ir al paso ${k + 1}: ${esc(p.titulo)}"${k === i ? ' aria-current="step"' : ''}></button>`).join('');
+      puntos.hidden = false;
+      ant.hidden = i === 0;
+      prim.textContent = i < n - 1 ? 'Siguiente' : 'Entendido';
+    } else {
+      document.getElementById('ayudaSub').textContent = def.subtitulo || '';
+      cuerpo.innerHTML = htmlBloques(def.bloques);
+      prog.hidden = true;
+      puntos.innerHTML = ''; puntos.hidden = true;
+      ant.hidden = true;
+      prim.textContent = 'Entendido';
+    }
+    cuerpo.scrollTop = 0;
+    // Pie: PDF y compartir (solo guías) y acceso a novedades desde cualquier guía
+    const extras = document.getElementById('ayudaExtras');
+    const partes = [];
+    if (def.pdf) partes.push(`<a class="ayuda-enlace" href="${esc(def.pdf)}" download><span class="material-symbols-rounded" aria-hidden="true">download</span>PDF</a>`);
+    if (def.pagina || def.pdf) partes.push(`<button type="button" class="ayuda-enlace" data-accion="compartir"><span class="material-symbols-rounded" aria-hidden="true">share</span>Compartir</button>`);
+    if (pasos && clave !== 'novedades' && window.GuiasContenido && window.GuiasContenido.novedades) {
+      partes.push(`<button type="button" class="ayuda-enlace" data-accion="novedades"><span class="material-symbols-rounded" aria-hidden="true">new_releases</span>Novedades</button>`);
+    }
+    extras.innerHTML = partes.join('') + '<span class="ayuda-aviso" id="ayudaAviso" role="status"></span>';
+  }
+
+  function irAPaso(i) {
+    if (!actual || !actual.def.pasos) return;
+    const n = actual.def.pasos.length;
+    actual.i = Math.max(0, Math.min(n - 1, i));
+    pintar();
+    document.getElementById('ayudaCerrarBtn').focus();
+  }
+
+  function abrir(clave, paso) {
+    const def = definicion(clave);
     if (!def) { console.warn('[Ayuda] Sin contenido para', clave); return; }
     crearDom();
-    document.getElementById('ayudaTitulo').textContent = def.titulo;
-    document.getElementById('ayudaSub').textContent = def.subtitulo || '';
-    const cuerpo = document.getElementById('ayudaCuerpo');
-    cuerpo.innerHTML = html(def);
-    cuerpo.scrollTop = 0;
-    retorno = document.activeElement;
     const ov = document.getElementById('ayudaOverlay');
+    const yaAbierto = ov.classList.contains('abierto');
+    actual = { clave, def, i: Math.max(0, Math.min((def.pasos ? def.pasos.length : 1) - 1, paso || 0)) };
+    pintar();
+    if (!yaAbierto) retorno = document.activeElement;
     ov.classList.add('abierto');
     ov.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
-    document.getElementById('ayudaCerrarX').focus();
+    document.getElementById(def.pasos ? 'ayudaCerrarBtn' : 'ayudaCerrarX').focus();
   }
 
   function cerrar() {
@@ -516,6 +610,22 @@
     document.body.style.overflow = '';
     if (retorno && typeof retorno.focus === 'function') retorno.focus();
     retorno = null;
+    actual = null;
+  }
+
+  // «¿Qué hay de nuevo?» se muestra UNA vez por versión de novedades y por navegador.
+  function novedadesUnaVez() {
+    const g = window.GuiasContenido && window.GuiasContenido.novedades;
+    if (!g) return false;
+    const llave = 'sirevaq_novedades_visto';
+    let visto = null;
+    try { visto = localStorage.getItem(llave); } catch (e) { /* sin almacenamiento: se muestra */ }
+    if (visto === g.version) return false;
+    const ov = document.getElementById('ayudaOverlay');
+    if (ov && ov.classList.contains('abierto')) return false;
+    try { localStorage.setItem(llave, g.version); } catch (e) { /* ignorar */ }
+    abrir('novedades');
+    return true;
   }
 
   document.addEventListener('click', (ev) => {
@@ -529,9 +639,15 @@
     const ov = document.getElementById('ayudaOverlay');
     if (!ov || !ov.classList.contains('abierto')) return;
     if (ev.key === 'Escape') { ev.preventDefault(); cerrar(); return; }
+    // Guías por pasos: flechas para avanzar y retroceder
+    if (actual && actual.def.pasos && (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft')) {
+      ev.preventDefault();
+      irAPaso(actual.i + (ev.key === 'ArrowRight' ? 1 : -1));
+      return;
+    }
     // El diálogo es modal: el foco da la vuelta entre sus controles y no se escapa a la página de atrás.
     if (ev.key === 'Tab') {
-      const f = [...ov.querySelectorAll('button, [tabindex="0"]')].filter((e) => !e.disabled && e.offsetParent !== null);
+      const f = [...ov.querySelectorAll('button, a[href], [tabindex="0"]')].filter((e) => !e.disabled && !e.hidden && e.offsetParent !== null);
       if (!f.length) return;
       const primero = f[0], ultimo = f[f.length - 1];
       if (ev.shiftKey && (document.activeElement === primero || !ov.contains(document.activeElement))) { ev.preventDefault(); ultimo.focus(); }
@@ -539,5 +655,5 @@
     }
   });
 
-  window.Ayuda = { abrir, cerrar, contenido: CONTENIDO };
+  window.Ayuda = { abrir, cerrar, contenido: CONTENIDO, novedadesUnaVez };
 })();

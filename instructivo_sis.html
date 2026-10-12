@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Instructivo del SINBA-SIS · SIREVAQ</title>
-<meta name="description" content="Cómo llenar, enviar y dar seguimiento a tu archivo mensual SINBA-SIS en SIREVAQ.">
-<meta property="og:title" content="Instructivo del SINBA-SIS · SIREVAQ">
-<meta property="og:description" content="Cómo llenar, enviar y dar seguimiento a tu archivo mensual SINBA-SIS en SIREVAQ.">
+<title>Guía del SINBA-SIS · SIREVAQ</title>
+<meta name="description" content="Cómo llenar, enviar y dar seguimiento a tu archivo mensual.">
+<meta property="og:title" content="Guía del SINBA-SIS · SIREVAQ">
+<meta property="og:description" content="Cómo llenar, enviar y dar seguimiento a tu archivo mensual.">
 <meta name="theme-color" content="#1E1B3A">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Rubik:wght@500;600;700&display=swap">
@@ -90,17 +90,42 @@
   @media print { .boton-final { display: none; } }
   @media (prefers-reduced-motion: reduce) { .barra a, .boton-final { transition: none; } }
 
-  .boton-final { display: inline-block; padding: 14px 28px; border-radius: 999px; background: var(--violeta); color: #fff !important; font-weight: 800; font-size: clamp(16px, 1.8vw, 24px); text-decoration: none; transition: transform .15s ease, filter .15s ease; }
-  .boton-final:hover { filter: brightness(1.15); transform: translateY(-2px); }
-  .boton-final:active { transform: scale(.96); }
-  .boton-final:focus-visible { outline: 3px solid var(--lila); outline-offset: 3px; }
-  @media print { .boton-final { display: none; } }
+/* Guías generadas (build-guias.js) */
+.dia-lista { display: grid; gap: 8px; }
+.donde { font-size: clamp(13px, 1.35vw, 18px); font-weight: 700; color: var(--violeta); margin-top: 4px; }
+.nov-lista { display: flex; flex-direction: column; gap: clamp(10px, 1.4vw, 16px); }
+.nov { display: flex; gap: clamp(12px, 1.6vw, 22px); align-items: flex-start; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 18px; padding: clamp(14px, 1.8vw, 24px); }
+.nov .num { flex: none; }
+.nov h3 { margin-bottom: 4px; }
+.nov p { font-size: clamp(15px, 1.5vw, 20px); }
+.solo-impresion { display: none; }
+.boton-final { display: inline-block; padding: 14px 28px; border-radius: 999px; background: var(--violeta); color: #fff !important; font-weight: 800; font-size: clamp(16px, 1.8vw, 24px); text-decoration: none; transition: transform .15s ease, filter .15s ease; }
+.boton-final:hover { filter: brightness(1.15); transform: translateY(-2px); }
+.boton-final:active { transform: scale(.96); }
+.boton-final:focus-visible { outline: 3px solid var(--lila); outline-offset: 3px; }
+@media print {
+  .boton-final { display: none; }
+  .solo-impresion { display: block; font-size: 22px; font-weight: 700; color: var(--violeta); word-break: break-all; }
+}
+body.tarjeta .slide { }
+@media print {
+  body.tarjeta .slide { width: auto; height: auto; padding: 36px 44px; break-after: auto; page-break-after: auto; justify-content: flex-start; }
+  body.tarjeta .nov p { font-size: 15px; } body.tarjeta .nov .donde { font-size: 13px; }
+  body.tarjeta h1 { font-size: 46px; } body.tarjeta h2 { font-size: 32px; } body.tarjeta h3 { font-size: 20px; }
+  body.tarjeta .pie { position: static; margin-top: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .boton-final { transition: none; } }
+
+h3.sub { font-family: 'Nunito Sans', system-ui, sans-serif; font-weight: 700; color: var(--suave); font-size: clamp(17px, 2vw, 26px); }
+@media print { h3.sub { font-size: 26px; } }
+
+
 </style>
 </head>
-<body>
+<body class="">
 <div class="barra">
-  <a class="volver" href="index.html" aria-label="Volver a SIREVAQ">&#8592; Volver a SIREVAQ</a>
-  <b>Instructivo · SINBA-SIS</b>
+  <a class="volver" href="biovac.html" aria-label="Volver al SINBA-SIS">&#8592; Volver al SINBA-SIS</a>
+  <b>Guía del SINBA-SIS</b>
   <a href="instructivo_sis.pdf" download>Descargar PDF</a>
 </div>
 <main class="deck">
@@ -108,92 +133,83 @@
 <section class="slide noche" aria-label="Portada">
   <p class="etq">Para las unidades de salud</p>
   <h1>SINBA-SIS</h1>
-  <h3 style="color:#E4DDFB;font-weight:500">Cómo llenar, enviar y dar seguimiento a tu archivo mensual</h3>
+  <h3 style="color:#E4DDFB;font-weight:500">Cómo llenar, enviar y dar seguimiento a tu archivo mensual.</h3>
   <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<section class="slide" aria-label="Qué es el SINBA-SIS">
-  <p class="etq">Qué es</p>
-  <h2>Un solo archivo al mes, con cuatro hojas</h2>
-  <div class="fila"><div class="tarj"><div class="num">1</div><h3>SIS-06-P</h3><p>Tu concentrado del mes: las dosis aplicadas por variable. <b>Tú lo capturas.</b></p></div><div class="tarj"><div class="num">2</div><h3>Movimiento de Biológico</h3><p>Existencias, recibido, aplicadas y desechadas por lote. <b>Tú lo capturas.</b></p></div><div class="tarj"><div class="num">3</div><h3>SIS-SS-CE-H</h3><p>La hoja de claves oficial. Se arma sola con lo que capturas. <b>Solo se lee.</b></p></div><div class="tarj"><div class="num">4</div><h3>Influenza</h3><p>El corte del mes, tomado de tu reporte semanal de Meta-Logro. <b>Solo se lee.</b></p></div></div>  <p>Las cuatro hojas se llenan, se concilian, se envían y se validan <b>juntas</b>: es un solo archivo.</p>
-  <p class="pie">SINBA-SIS · SIREVAQ</p>
+<section class="slide" aria-label="Qué es">
+  <p class="etq">Paso 1 de 10</p>
+  <h2>Qué es</h2>
+  <h3 class="sub">Un solo archivo al mes, con cuatro hojas</h3>
+  <div class="fila"><div class="tarj"><h3>SIS-06-P</h3><p>Tu concentrado del mes: las dosis aplicadas por variable. Tú lo capturas.</p></div><div class="tarj"><h3>Movimiento de Biológico</h3><p>Existencias, recibido, aplicadas y desechadas por lote. Tú lo capturas.</p></div><div class="tarj"><h3>SIS-SS-CE-H</h3><p>La hoja oficial de claves. Se arma sola con lo que capturas; solo se lee.</p></div><div class="tarj"><h3>Influenza</h3><p>El corte del mes, tomado de tu reporte semanal de Meta-Logro; solo se lee.</p></div></div>
+  <p><b>Las cuatro hojas se llenan, se concilian, se envían y se validan juntas: es un solo archivo.</b></p>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
 <section class="slide" aria-label="El mes en cuatro pasos">
-  <p class="etq">El mes en cuatro pasos</p>
-  <h2>Captura, concilia, envía y espera la validación</h2>
-  <div class="fila"><div class="tarj"><div class="num">1</div><h3>Captura</h3><p>Llena SIS-06-P y Movimiento de Biológico. Guarda con el botón de la barra de abajo.</p></div><div class="tarj"><div class="num">2</div><h3>Concilia</h3><p>Las dosis aplicadas del paloteo y las del Movimiento deben coincidir, biológico por biológico.</p></div><div class="tarj"><div class="num">3</div><h3>Envía</h3><p>Cuando todo cuadra y estás en la fecha de envío, el botón <b>Enviar</b> se enciende.</p></div><div class="tarj"><div class="num">4</div><h3>Validación</h3><p>Tu municipio revisa. Si corrige algo, tú ves el cambio y lo aceptas.</p></div></div>  <p>En la parte de arriba de la pantalla ves en qué paso va tu mes.</p>
-  <p class="pie">SINBA-SIS · SIREVAQ</p>
+  <p class="etq">Paso 2 de 10</p>
+  <h2>El mes en cuatro pasos</h2>
+  <div class="fila"><div class="tarj"><div class="num">1</div><h3>Captura</h3><p>Llena SIS-06-P y Movimiento de Biológico. Guarda con el botón de la barra de abajo.</p></div><div class="tarj"><div class="num">2</div><h3>Concilia</h3><p>Las dosis aplicadas del paloteo y las del Movimiento deben coincidir, biológico por biológico.</p></div><div class="tarj"><div class="num">3</div><h3>Envía</h3><p>Cuando todo cuadra y estás en la fecha de envío, el botón Enviar se enciende.</p></div><div class="tarj"><div class="num">4</div><h3>Validación</h3><p>Tu municipio revisa. Si corrige algo, tú ves el cambio y lo aceptas.</p></div></div>
+  <p><b>Arriba de la pantalla ves en qué paso va tu mes.</b></p>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
 <section class="slide" aria-label="Fechas">
-  <p class="etq">Fechas</p>
-  <h2>Cuándo se llena y cuándo se envía</h2>
-  <div class="fila"><div class="tarj"><span class="chip suave" style="align-self:flex-start">Antes del cierre</span><h3>Prellenado</h3><p>Desde <b>7 días antes</b> de que termine el mes puedes ir capturando y guardando.</p></div><div class="tarj"><span class="chip ok" style="align-self:flex-start">Ventana de envío</span><h3>Envío</h3><p>Del <b>último día del mes</b> hasta <b>7 días después</b>. Solo en esas fechas se enciende «Enviar».</p></div><div class="tarj"><span class="chip aviso" style="align-self:flex-start">Solo lectura</span><h3>Fuera de fechas</h3><p>Puedes ver todo, pero no se puede guardar ni enviar. Un aviso te dice cuándo abre.</p></div></div>  <p>Ejemplo, septiembre: capturas desde el 23 de septiembre y envías del 30 de septiembre al 7 de octubre.</p>
-  <p class="pie">SINBA-SIS · SIREVAQ</p>
+  <p class="etq">Paso 3 de 10</p>
+  <h2>Fechas</h2>
+  <div class="fila"><div class="tarj"><h3>Prellenado</h3><p>Desde 7 días antes de que termine el mes puedes ir capturando y guardando.</p></div><div class="tarj"><h3>Envío</h3><p>Del último día del mes hasta 7 días después. Solo en esas fechas se enciende «Enviar».</p></div><div class="tarj"><h3>Fuera de fechas</h3><p>Puedes ver todo, pero no guardar ni enviar. Un aviso te dice cuándo abre.</p></div></div>
+  <p><b>Ejemplo, septiembre: capturas desde el 23 de septiembre y envías del 30 de septiembre al 7 de octubre.</b></p>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
 <section class="slide" aria-label="Para empezar">
-  <p class="etq">Para empezar</p>
-  <h2>Elige el mes y escribe quién llena</h2>
-  <ul><li><b>Responsable de la información:</b> escribe tu nombre completo. Es un solo nombre para las cuatro hojas y queda fijo cuando envías.</li><li><b>Unidad:</b> aparece la tuya, ya seleccionada.</li><li><b>Mes que reportas y año:</b> por omisión es el mes que toca reportar. Con «Historial» consultas tus meses anteriores (solo lectura).</li></ul>
-  <p class="pie">SINBA-SIS · SIREVAQ</p>
+  <p class="etq">Paso 4 de 10</p>
+  <h2>Para empezar</h2>
+  <div class="fila"><div class="tarj"><h3>Responsable de la información</h3><p>Escribe tu nombre completo. Es un solo nombre para las cuatro hojas y queda fijo cuando envías.</p></div><div class="tarj"><h3>Unidad</h3><p>Aparece la tuya, ya seleccionada.</p></div><div class="tarj"><h3>Mes que reportas y año</h3><p>Por omisión es el mes que toca reportar. Con «Historial» consultas tus meses anteriores (solo lectura).</p></div></div>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<section class="slide" aria-label="SIS-06-P">
-  <p class="etq">Hoja 1 · SIS-06-P</p>
-  <h2>Tu concentrado: las dosis del mes por variable</h2>
-  <div class="dos"><div class="tarj"><h3>Qué capturas</h3><p>El <b>total</b> de dosis aplicadas en el mes por variable (biológico, grupo y dosis). No es el paloteo diario: va el resultado ya sumado.</p></div><div class="tarj"><h3>Afromexicanos, indígenas y migrantes</h3><p>Son una parte del total, <b>nunca se suman aparte</b>. Si el total es 40 y afromexicanos 20, el total sigue siendo 40. Ninguno puede superar al total de su fila.</p></div></div>  <ul><li>Cada biológico es un contenedor: ábrelo para capturar.</li><li>Si ves «Cambios sin guardar», falta guardar con el botón de la barra de abajo.</li></ul>
-  <p class="pie">SINBA-SIS · SIREVAQ</p>
+<section class="slide" aria-label="Hoja SIS-06-P">
+  <p class="etq">Paso 5 de 10</p>
+  <h2>Hoja SIS-06-P</h2>
+  <div class="fila"><div class="tarj"><h3>Qué capturas</h3><p>El total de dosis aplicadas en el mes por variable (biológico, grupo y dosis). No es el paloteo diario: va el resultado ya sumado.</p></div><div class="tarj"><h3>Afromexicanos, indígenas y migrantes</h3><p>Son una parte del total y nunca se suman aparte: si el total es 40 y afromexicanos 20, el total sigue siendo 40. Ninguno puede superar al total de su fila.</p></div></div>
+  <p><b>Cada biológico es un contenedor: ábrelo para capturar. Si ves «Cambios sin guardar», falta guardar con el botón de la barra de abajo.</b></p>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<section class="slide" aria-label="Movimiento de Biológico">
-  <p class="etq">Hoja 2 · Movimiento de Biológico</p>
-  <h2>Cuánto tenías, cuánto llegó y cuánto se usó, por lote</h2>
-  <div class="dos"><div class="tarj"><h3>Qué capturas por lote</h3><p><b>Recibido</b>, dosis <b>aplicadas</b> y dosis <b>desechadas</b>. Cada celda se guarda al salir de ella.</p></div><div class="tarj"><h3>Existencia final</h3><p>Existencia anterior + recibido − aplicadas − desechadas. La existencia final pasa sola como anterior del mes siguiente.</p></div></div>  <ul><li>¿Llegó un lote que no está en la lista? Agrégalo con el botón del biológico (también A.R.F. y Canje).</li><li>Lo recibido puede llegar precargado desde la requisición de la Jurisdicción: revísalo y edítalo si algo cambió.</li><li>Hepatitis B y COVID Moderna tienen dosis pediátrica y de adulto; para conciliar, la pediátrica cuenta como media dosis.</li></ul>
-  <p class="pie">SINBA-SIS · SIREVAQ</p>
+<section class="slide" aria-label="Hoja Movimiento de Biológico">
+  <p class="etq">Paso 6 de 10</p>
+  <h2>Hoja Movimiento de Biológico</h2>
+  <div class="fila"><div class="tarj"><h3>Qué capturas por lote</h3><p>Recibido, dosis aplicadas y dosis desechadas. Cada celda se guarda al salir de ella.</p></div><div class="tarj"><h3>Existencia final</h3><p>Existencia anterior + recibido − aplicadas − desechadas. La final pasa sola como anterior del mes siguiente.</p></div><div class="tarj"><h3>Agregar lote</h3><p>Si llegó un lote que no está en la lista, agrégalo con el botón del biológico (también A.R.F. y Canje).</p></div><div class="tarj"><h3>Dosis pediátrica y de adulto</h3><p>Hepatitis B y COVID Moderna tienen ambas; para conciliar, la pediátrica cuenta como media dosis.</p></div></div>
+  <p><b>Lo recibido puede llegar precargado desde la requisición de la Jurisdicción: revísalo y edítalo si algo cambió.</b></p>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<section class="slide" aria-label="Conciliación">
-  <p class="etq">Concilia</p>
-  <h2>El paloteo y el Movimiento deben coincidir</h2>
-  <div class="dos"><div class="tarj"><h3>Cómo se ve</h3><p>Bajo cada biológico ves cuántas dosis reportaste en SIS-06-P y cuántas suman tus lotes. En <b>verde</b>: coinciden. Si no, te dice la diferencia.</p></div><div class="tarj"><h3>Cómo se corrige</h3><p>Ajusta las «aplicadas» por lote en Movimiento, o el paloteo en SIS-06-P, hasta que sean iguales.</p></div></div>  <p><b>Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT):</b> usa el comodín de sustitución para anotar cuántas. Si las dosis no coinciden, el sistema no deja enviar.</p>
-  <p class="pie">SINBA-SIS · SIREVAQ</p>
+<section class="slide" aria-label="Concilia">
+  <p class="etq">Paso 7 de 10</p>
+  <h2>Concilia</h2>
+  <div class="fila"><div class="tarj"><h3>Cómo se ve</h3><p>Bajo cada biológico ves cuántas dosis reportaste en SIS-06-P y cuántas suman tus lotes. En verde: coinciden; si no, te dice la diferencia.</p></div><div class="tarj"><h3>Cómo se corrige</h3><p>Ajusta las «aplicadas» por lote en Movimiento, o el paloteo en SIS-06-P, hasta que sean iguales.</p></div><div class="tarj"><h3>Comodín de sustitución</h3><p>Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT), anota cuántas con el comodín.</p></div></div>
+  <p><b>Si las dosis no coinciden, el sistema no deja enviar.</b></p>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
 <section class="slide" aria-label="Hojas de solo lectura">
-  <p class="etq">Hojas 3 y 4 · solo lectura</p>
-  <h2>SIS-SS-CE-H e Influenza se arman solas</h2>
-  <div class="dos"><div class="tarj"><h3>SIS-SS-CE-H</h3><p>La hoja oficial de claves: cada variable con su clave SIS (total, afromexicanos, indígenas y migrantes). Vacío significa 0. Toca una fila para ver su detalle.</p></div><div class="tarj"><h3>Influenza</h3><p>Aquí ves el corte del mes por semana. Para cambiarlo, usa «Editar semanas en Meta-Logro»: ahí se valida contra tu meta.</p></div></div>  <p>Lo aplicado de Antiinfluenza en Movimiento debe ser igual al total de Influenza. Si no, «Usar este total aquí» lo pasa al lote.</p>
-  <p class="pie">SINBA-SIS · SIREVAQ</p>
+  <p class="etq">Paso 8 de 10</p>
+  <h2>Hojas de solo lectura</h2>
+  <div class="fila"><div class="tarj"><h3>SIS-SS-CE-H</h3><p>Cada variable con su clave SIS (total, afromexicanos, indígenas y migrantes). Vacío significa 0. Toca una fila para ver su detalle.</p></div><div class="tarj"><h3>Influenza</h3><p>Aquí ves el corte del mes por semana. Para cambiarlo, «Editar semanas en Meta-Logro»: ahí se valida contra tu meta.</p></div></div>
+  <p><b>Lo aplicado de Antiinfluenza en Movimiento debe ser igual al total de Influenza. Si no, «Usar este total aquí» lo pasa al lote.</b></p>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<section class="slide" aria-label="Enviar">
-  <p class="etq">Envía</p>
-  <h2>Al enviar, todo el archivo se bloquea</h2>
-  <div class="fila"><div class="tarj"><div class="num">1</div><h3>Revisa</h3><p>Que la conciliación esté en verde y que tu nombre esté escrito.</p></div><div class="tarj"><div class="num">2</div><h3>Envía</h3><p>Con el botón <b>Enviar</b> de la barra de abajo. Te pide confirmar antes de enviar.</p></div><div class="tarj"><div class="num">3</div><h3>Queda bloqueado</h3><p>SIS-06-P, Movimiento e Influenza ya no se pueden cambiar desde la unidad. El Movimiento se cierra solo.</p></div></div>  <p><b>Pensándolo bien antes de enviar:</b> una vez enviado, solo tu municipio puede corregir.</p>
-  <p class="pie">SINBA-SIS · SIREVAQ</p>
+<section class="slide" aria-label="Envía y validación">
+  <p class="etq">Paso 9 de 10</p>
+  <h2>Envía y validación</h2>
+  <div class="fila"><div class="tarj"><div class="num">1</div><h3>Revisa</h3><p>Que la conciliación esté en verde y que tu nombre esté escrito.</p></div><div class="tarj"><div class="num">2</div><h3>Envía</h3><p>Con el botón Enviar de la barra de abajo. Te pide confirmar antes de enviar.</p></div><div class="tarj"><div class="num">3</div><h3>Se bloquea</h3><p>SIS-06-P, Movimiento e Influenza ya no se pueden cambiar desde la unidad; el Movimiento se cierra solo.</p></div><div class="tarj"><div class="num">4</div><h3>Validación</h3><p>Si tu municipio corrige algo, te aparece cada cambio y lo aceptas. Ya validado puedes exportar el Excel oficial e imprimir.</p></div></div>
+  <p><b>Con «Historial» consultas todos tus meses y su estatus, sin poder editarlos.</b></p>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<section class="slide" aria-label="Validación">
-  <p class="etq">Validación</p>
-  <h2>Tu municipio revisa y tú aceptas los cambios</h2>
-  <div class="fila"><div class="tarj"><span class="chip aviso" style="align-self:flex-start">Control de cambios</span><h3>Si corrige algo</h3><p>Te aparece cada cambio (qué valor era y cuál quedó) y lo aceptas para dejarlo definitivo.</p></div><div class="tarj"><span class="chip ok" style="align-self:flex-start">Validado</span><h3>Cuando queda validado</h3><p>El estatus cambia a «Información validada» y ya puedes <b>exportar</b> el Excel oficial e <b>imprimir</b>.</p></div><div class="tarj"><span class="chip suave" style="align-self:flex-start">Historial</span><h3>Siempre a la mano</h3><p>Con «Historial» consultas todos tus meses y su estatus, sin poder editarlos.</p></div></div>
-  <p class="pie">SINBA-SIS · SIREVAQ</p>
+<section class="slide" aria-label="Si algo pasa">
+  <p class="etq">Paso 10 de 10</p>
+  <h2>Si algo pasa</h2>
+  <div class="fila"><div class="tarj"><h3>Se fue el internet</h3><p>Lo que tecleaste queda respaldado en tu equipo y lo recuperas al volver a abrir el mes. En Movimiento, el cambio se guarda solo al volver la conexión.</p></div><div class="tarj"><h3>No puedo enviar</h3><p>Revisa que estés en la fecha de envío, que la conciliación cuadre y que el responsable esté escrito.</p></div><div class="tarj"><h3>Quiero cambiar algo ya enviado</h3><p>Pide a tu municipio que lo corrija en modo revisión; tú verás el cambio para aceptarlo.</p></div><div class="tarj"><h3>Me equivoqué de mes</h3><p>Cambia «Mes que reportas» arriba: cada mes tiene su propio archivo y su propio estatus.</p></div></div>
+  <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
-
-<section class="slide" aria-label="Dudas comunes">
-  <p class="etq">Si algo pasa</p>
-  <h2>Dudas comunes</h2>
-  <div class="dos"><div class="tarj"><h3>Se fue el internet</h3><p>Lo que tecleaste queda respaldado en tu equipo. Al volver a abrir el mes te avisamos y lo recuperas; en Movimiento, el cambio se guarda solo al volver la conexión.</p></div><div class="tarj"><h3>No puedo enviar</h3><p>Revisa que estés en la fecha de envío, que la conciliación cuadre y que el responsable esté escrito.</p></div><div class="tarj"><h3>Quiero cambiar algo ya enviado</h3><p>Pide a tu municipio que lo corrija en modo revisión; tú verás el cambio para aceptarlo.</p></div><div class="tarj"><h3>Me equivoqué de mes</h3><p>Cambia «Mes que reportas» arriba: cada mes tiene su propio archivo y su propio estatus.</p></div></div>
-  <p class="pie">SINBA-SIS · SIREVAQ</p>
-</section>
-
 <section class="slide noche" aria-label="Cierre">
   <p class="etq">¿Dudas?</p>
-  <h1>La ayuda está en cada hoja</h1>
-  <p>Busca el botón <b>«?»</b> junto al título de cada hoja y en la parte de arriba: explica esa pantalla con pasos y ejemplos. Para correcciones, consulta a tu coordinación municipal.</p>
-  <p><a class="boton-final" href="index.html">&#8592; Volver a SIREVAQ</a></p>
+  <h1>La ayuda está en cada pantalla</h1>
+  <p>Busca el botón <b>«?»</b> o <b>«¿Cómo funciona?»</b> en tu panel: abre esta misma guía por pasos sin salir de lo que estás haciendo. Para correcciones, consulta a tu coordinación municipal.</p>
+  <p><a class="boton-final" href="biovac.html">&#8592; Volver al SINBA-SIS</a></p>
   <p class="pie">SIREVAQ · Jurisdicción Sanitaria 1</p>
 </section>
 </main>

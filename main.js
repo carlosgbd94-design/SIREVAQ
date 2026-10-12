@@ -14406,6 +14406,10 @@ function setLoggedInUI(user, status) {
   updateDynamicGreeting();
   applyRolePermissions(role);
   if (ensureCalendarioCap()) window.CalendarioCap.checkReminders();
+  // «¿Qué hay de nuevo?»: una vez por versión, solo para las unidades (la tarjeta se puede volver a abrir desde cualquier guía)
+  if (String(role || "").toUpperCase() === "UNIDAD" && window.Ayuda && typeof window.Ayuda.novedadesUnaVez === "function") {
+    setTimeout(() => { try { window.Ayuda.novedadesUnaVez(); } catch (e) { /* no bloquea */ } }, 3500);
+  }
   populateHistoryMunicipioFilter(user);
 
 
