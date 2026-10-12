@@ -520,7 +520,9 @@ test('Excel de distribución: hoja jurisdiccional con entregas, META y TOTAL ENT
   expect(ws.getRow(3).values.slice(2)).toEqual(['Querétaro', 'Corregidora', 'El Marqués', 'Huimilpan', 'HENM', 'NHGQ', 'TOTAL']);
   expect(ws.getRow(4).getCell(1).value).toBe('1ª entrega');
   expect(ws.getRow(4).getCell(2).value).toBe(312);
-  expect(ws.getRow(9).getCell(1).value).toBe('TOTAL ENTREGADO');
+  expect(ws.getRow(9).getCell(1).value).toBe('META (frascos)');
+  expect(ws.getRow(10).getCell(1).value).toBe('TOTAL ENTREGADO');
+  expect(JSON.stringify(ws.conditionalFormattings)).toContain('FFC6EFCE');
 });
 
 test('Barra flotante: un solo subpanel visible a la vez y el historial solo es municipal', async ({ page }) => {

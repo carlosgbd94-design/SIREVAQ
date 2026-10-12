@@ -5571,7 +5571,8 @@ async function exportFrascosExcel() {
       });
       const ultima = primera + numeros.length - 1;
       const rMeta = ultima + 1;
-      const rTot = ultima + 2;
+      const rMetaF = ultima + 2;
+      const rTot = ultima + 3;
       etiqueta(rMeta, "META (dosis)");
       etiqueta(rTot, "TOTAL ENTREGADO");
       columnas.forEach((c, i) => {
@@ -5582,9 +5583,11 @@ async function exportFrascosExcel() {
         t.value = { formula: `IF(SUM(${col}${primera}:${col}${ultima})=0,"-",SUM(${col}${primera}:${col}${ultima}))` };
       });
       const cl = letra(nCol);
-      ws.getCell(rMeta, nCol).value = { formula: `SUM(B${rMeta}:${letra(nCol - 1)}${rMeta})` };
+      const ultCol = letra(nCol - 1);
+      ws.getCell(rMeta, nCol).value = { formula: `SUM(B${rMeta}:${ultCol}${rMeta})` };
+      ws.getCell(rMetaF, nCol).value = { formula: `SUM(B${rMetaF}:${ultCol}${rMetaF})` };
       ws.getCell(rTot, nCol).value = { formula: `SUM(${cl}${primera}:${cl}${ultima})` };
-      [rMeta, rTot].forEach(r => {
+      [rMeta, rMetaF, rTot].forEach(r => {
         for (let c = 2; c <= nCol; c++) {
           const cell = ws.getCell(r, c);
           cell.font = { ...fuente, bold: true };
@@ -5673,11 +5676,15 @@ function frascoFechaCorta(f) {
 
 // Tabla «Reparto vs. captura semanal», por unidad. Municipal: las unidades de su municipio (todas);
 // Jurisdicción: toda unidad que ya tenga reparto o captura.
+      etiqueta(rMetaF, "META (frascos)");
 function renderFrascosBalance() {
   const tbody = document.getElementById("frascosBalanceTbody");
   if (!tbody) return;
   const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";
   const muni = document.getElementById("adminInfluenzaMuni")?.value;
+        // Meta en frascos = dosis / 10 hacia arriba (el último frasco puede quedar abierto); es la que se compara.
+        const mf = ws.getCell(rMetaF, i + 2);
+        mf.value = { formula: `IF(${col}${rMeta}>0,ROUNDUP(${col}${rMeta}/${DOSIS_POR_FRASCO},0),"")` };
   const unidades = esJuris ? _allUnidades.slice() : frascoUnidadesMunicipio(muni || "");
   const orden = FRASCO_DESTINOS.map(d => d.id);
   let filas = unidades.map(u => {
@@ -5692,6 +5699,22 @@ function renderFrascosBalance() {
   if (col) col.style.display = esJuris ? "" : "none";
   tbody.innerHTML = filas.length ? filas.map(({ u, destino, b }) => {
     const dest = FRASCO_DESTINOS.find(d => d.id === destino);
+      // Formato condicional del TOTAL ENTREGADO contra la META (frascos): verde = meta cubierta al 100 %,
+      // rojo = rebasa la meta, ámbar = entrega en curso (aún no la cubre). Sin meta o sin entregas no se pinta.
+      const verde = { type: "pattern", pattern: "solid", bgColor: { argb: "FFC6EFCE" } };
+      const rojo = { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFC7CE" } };
+      const ambar = { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFEB9C" } };
+      const ref = `B${rTot}:${cl}${rTot}`;
+      const ini = `B${rTot}`, mini = `B${rMetaF}`;
+      ws.addConditionalFormatting({ ref, rules: [
+        { type: "expression", priority: 1, formulae: [`AND(ISNUMBER(${ini}),N(${mini})>0,${ini}=${mini})`], style: { fill: verde, font: { bold: true, color: { argb: "FF006100" } } } },
+        { type: "expression", priority: 2, formulae: [`AND(ISNUMBER(${ini}),N(${mini})>0,${ini}>${mini})`], style: { fill: rojo, font: { bold: true, color: { argb: "FF9C0006" } } } },
+        { type: "expression", priority: 3, formulae: [`AND(ISNUMBER(${ini}),N(${mini})>0,${ini}<${mini})`], style: { fill: ambar, font: { bold: true, color: { argb: "FF9C5700" } } } }
+      ] });
+      // Leyenda para quien abre el archivo
+      const ley = ws.getCell(rTot + 2, 1);
+      ley.value = "Verde: meta cubierta al 100 % · Ámbar: entrega en curso · Rojo: rebasa la meta (frascos)";
+      ley.font = { ...fuente, size: 10, italic: true, color: { argb: "FF555555" } };
     return `<tr class="frs-row" data-estado="${b.estado}">
       <td><b>${u.unidad}</b><br><span class="frs-sub">${u.clues}</span></td>
       <td class="c" style="${esJuris ? "" : "display:none"}">${dest ? dest.label : destino}</td>
