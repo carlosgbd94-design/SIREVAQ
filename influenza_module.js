@@ -270,7 +270,7 @@ function generateCampaignWeeks() {
   while (d <= end) {
     const ymd = d.toISOString().split('T')[0];
     const weekNum = getISOWeek(d);
-    weeks.push({ semana: weekNum, fecha: ymd, label: `Semana ${weekNum} (Viernes ${ymd})` });
+    weeks.push({ semana: weekNum, fecha: ymd, label: `Semana ${weekNum} (${influenzaRangoTexto(ymd, startStr, endStr)})` });
     d.setDate(d.getDate() + 7);
   }
 
@@ -278,7 +278,7 @@ function generateCampaignWeeks() {
   const cortes = window.InfluenzaReglas ? window.InfluenzaReglas.cortes(startStr, endStr) : [];
   cortes.forEach(ymd => {
     const weekNum = getISOWeek(new Date(ymd + "T12:00:00"));
-    weeks.push({ semana: weekNum, fecha: ymd, corte: true, label: `Semana ${weekNum} (Corte de mes ${ymd})` });
+    weeks.push({ semana: weekNum, fecha: ymd, corte: true, label: `Semana ${weekNum} (corte de mes: ${influenzaRangoTexto(ymd, startStr, endStr)})` });
   });
   weeks.sort((a, b) => a.fecha.localeCompare(b.fecha));
   return weeks;
@@ -321,10 +321,10 @@ function renderInfluenzaWeekPicker() {
     else if (influenzaVentanaError(w.fecha)) estado = chip("gris", "schedule", `Abre ${influenzaDiaCorto(influenzaSemanaAbre(w.fecha))}`);
     else estado = chip("ambar", "error", "Pendiente");
 
-    const lunes = influenzaLunesDe(w.fecha);
-    const rango = w.corte
-      ? `Corte de fin de mes · ${influenzaDiaCorto(w.fecha)}`
-      : `Viernes ${influenzaFechaCorta(w.fecha)} · semana del ${influenzaFechaCorta(lunes)} al ${influenzaFechaCorta(influenzaSumaDias(lunes, 6))}`;
+    const rr = window.InfluenzaReglas.rangoSemana(w.fecha, _campaignConfig.fecha_inicio, _campaignConfig.fecha_fin);
+    const rangoTxt = window.InfluenzaReglas.textoRango(rr.desde, rr.hasta);
+    const rango = rr.parte === "corte" ? `Corte de fin de mes · ${rangoTxt}`
+      : (rr.parte === "resto" ? `${rangoTxt} · resto de la semana` : rangoTxt);
 
     const item = document.createElement("button");
     item.type = "button";
@@ -334,7 +334,7 @@ function renderInfluenzaWeekPicker() {
     item.innerHTML = `
       <span class="inf-sem-item-txt">
         <span class="inf-sem-item-tit">Semana ${w.semana}${isCurrent ? '<span class="inf-sem-actual">En curso</span>' : ""}</span>
-        <span class="inf-sem-item-sub">${rango} ${w.fecha.slice(0, 4)}</span>
+        <span class="inf-sem-item-sub">${rango}</span>
       </span>
       <span class="inf-sem-item-est">${estado}${isSelected ? '<span class="material-symbols-rounded inf-sem-check" aria-hidden="true">check</span>' : ""}</span>`;
 
@@ -383,7 +383,7 @@ function updateInfluenzaWeekBtnLabel(fecha) {
     } else {
       statusBadge = chip("text-amber-700 bg-amber-50 border-amber-200", "error", "Pendiente");
     }
-    labelSpan.innerHTML = `<span class="font-extrabold text-violet-700 shrink-0" style="white-space:nowrap;">Semana ${selected.semana}${selected.corte ? " · corte" : ""}</span> <span class="text-slate-400 font-bold shrink-0" style="white-space:nowrap;">· ${influenzaFechaCorta(selected.fecha)}</span> ${statusBadge}`;
+    labelSpan.innerHTML = `<span class="font-extrabold text-violet-700 shrink-0" style="white-space:nowrap;">Semana ${selected.semana}${selected.corte ? " · corte" : ""}</span> <span class="text-slate-400 font-bold shrink-0" style="white-space:nowrap;">· ${influenzaRangoTexto(selected.fecha)}</span> ${statusBadge}`;
   } else {
     labelSpan.innerHTML = `<span class="text-slate-400 font-bold">Seleccionar semana...</span>`;
   }
@@ -751,7 +751,7 @@ function actualizarControlMetaInfluenza() {
   const atrasadas = generateCampaignWeeks().filter(w => w.fecha < hoy && w.fecha !== _infGrid.fecha
     && !_influenzaCapturasCache.some(r => r.fecha === w.fecha) && !influenzaVentanaError(w.fecha));
   const pend = atrasadas.length
-    ? `<div class="inf-ctl-msg is-warn"><span class="material-symbols-rounded" aria-hidden="true">history</span><div>Tienes <b>${atrasadas.length === 1 ? "1 semana anterior" : atrasadas.length + " semanas anteriores"} sin reporte</b>. <button type="button" class="inf-ctl-link" data-fecha="${atrasadas[0].fecha}">Ir a la semana del ${influenzaFechaCorta(atrasadas[0].fecha)}</button></div></div>`
+    ? `<div class="inf-ctl-msg is-warn"><span class="material-symbols-rounded" aria-hidden="true">history</span><div>Tienes <b>${atrasadas.length === 1 ? "1 semana anterior" : atrasadas.length + " semanas anteriores"} sin reporte</b>. <button type="button" class="inf-ctl-link" data-fecha="${atrasadas[0].fecha}">Ir a la semana del ${influenzaRangoTexto(atrasadas[0].fecha)}</button></div></div>`
     : "";
 
   // Las cifras de la campaña (meta, aplicadas, avance vs esperado) viven en «Resumen de meta»; aquí solo van
@@ -955,7 +955,7 @@ function actualizarPasosInfluenza() {
 
   const pasos = [
     { titulo: "Elige la semana", ok: !!semana,
-      texto: semana ? (semana.corte ? `Corte de fin de mes · ${influenzaDiaCorto(fecha)}` : `Semana ${semana.semana} · viernes ${influenzaFechaCorta(fecha)}`) : "Selecciona la semana que vas a reportar." },
+      texto: semana ? (semana.corte ? `Corte de fin de mes · ${influenzaRangoTexto(fecha)}` : `Semana ${semana.semana} · ${influenzaRangoTexto(fecha)}`) : "Selecciona la semana que vas a reportar." },
     { titulo: "Escribe tu nombre", ok: !!nombre,
       texto: nombre ? nombre : "Quien captura queda registrado en el reporte." },
     { titulo: "Captura las dosis", ok: sinMov || hayDosis || estado.guardado,
@@ -1042,7 +1042,7 @@ function pintarResumenHistorialInfluenza() {
       avance === null ? "Sin meta asignada" : `${avance}% de tu meta anual`),
     tarjeta("pause_circle", "azul", "Sin movimiento", String(sinMov), sinMov === 1 ? "semana en ceros" : "semanas en ceros"),
     tarjeta("tag", "gris", "Último folio", ultimo ? `<span class="inf-hist-folio-mini">${influenzaFolio(ultimo)}</span>` : "—",
-      ultimo ? `Semana del ${L(ultimo.fecha)}` : "Aún no hay reportes")
+      ultimo ? `Semana del ${influenzaRangoTexto(ultimo.fecha)}` : "Aún no hay reportes")
   ].join("");
 }
 
@@ -1142,7 +1142,7 @@ async function loadInfluenzaHistoryList() {
         const m = parseInt(parts[1]) - 1;
         const d = parseInt(parts[2]);
         if (m >= 0 && m < 12) {
-          friendlyDate = `${d} de ${monthsEs[m]} de ${y}`;
+          friendlyDate = `${influenzaRangoTexto(r.fecha)} ${monthsEs[m]} ${y}`;
         }
       }
     }
@@ -1229,8 +1229,8 @@ async function loadInfluenzaHistoryList() {
     card.setAttribute("role", "button");
     card.innerHTML = `
       <div class="inf-hist-fecha">
-        <span class="inf-hist-mes">${INF_MESES_LARGOS[mm - 1].slice(0, 3)}</span>
-        <span class="inf-hist-dia">${dd}</span>
+        <span class="inf-hist-mes">Sem</span>
+        <span class="inf-hist-dia">${semana ? semana.semana : "·"}</span>
         <span class="inf-hist-anio">${yy}</span>
       </div>
       <div class="inf-hist-cuerpo">
@@ -1238,7 +1238,7 @@ async function loadInfluenzaHistoryList() {
           <span class="inf-hist-folio">${folioFormatted}</span>
           ${estado}${tipo}
         </div>
-        <div class="inf-hist-titulo">${semana ? `Semana ${semana.semana}` : "Semana"} <span>· ${p.friendlyDate || fechaFormatted}</span></div>
+        <div class="inf-hist-titulo">${semana ? `Semana ${semana.semana}` : "Semana"} <span>· ${influenzaRangoTexto(r.fecha)} ${yy}</span></div>
         <div class="inf-hist-meta">
           <span class="inf-hist-resp"><span class="inf-hist-avatar">${inicial}</span>${capturadoFormatted}</span>
           ${actualizado ? `<span><span class="material-symbols-rounded">schedule</span>Guardado ${actualizado}</span>` : ""}
@@ -1277,9 +1277,9 @@ function influenzaVentanaError(fecha) {
   const hoy = influenzaHoy();
   const L = window.InfluenzaReglas ? window.InfluenzaReglas.fechaLarga : (x) => x;
   if (hoy < ini) return `La campaña de Influenza inicia el ${L(ini)}. Aún no se pueden capturar reportes.`;
-  if (fecha < ini || fecha > fin) return `La semana del ${L(fecha)} queda fuera de la campaña (${L(ini)} al ${L(fin)}).`;
+  if (fecha < ini || fecha > fin) return `La semana del ${influenzaRangoTexto(fecha)} queda fuera de la campaña (${L(ini)} al ${L(fin)}).`;
   const abre = influenzaSemanaAbre(fecha);
-  if (hoy < abre) return `La semana del ${L(fecha)} aún no se puede capturar: se abre el ${influenzaDiaCorto(abre)}.`;
+  if (hoy < abre) return `La semana del ${influenzaRangoTexto(fecha)} aún no se puede capturar: se abre el ${influenzaDiaCorto(abre)}.`;
   return null;
 }
 window.influenzaVentanaError = influenzaVentanaError;
@@ -1288,6 +1288,15 @@ window.influenzaVentanaError = influenzaVentanaError;
 function influenzaHoy() {
   return new Date().toLocaleDateString("en-CA");
 }
+
+/** Rango que cubre el reporte de `fecha` (la semana, o su parte si hay corte de mes), p. ej. «12 al 18 oct». */
+function influenzaRangoTexto(fecha, ini, fin) {
+  const R = window.InfluenzaReglas;
+  if (!R || !fecha) return fecha || "";
+  const r = R.rangoSemana(fecha, ini || _campaignConfig.fecha_inicio, fin || _campaignConfig.fecha_fin);
+  return R.textoRango(r.desde, r.hasta);
+}
+window.influenzaRangoTexto = influenzaRangoTexto;
 
 function influenzaFechaCorta(ymd) {
   return window.InfluenzaReglas ? window.InfluenzaReglas.fechaCorta(ymd) : ymd;
@@ -5804,12 +5813,12 @@ function renderInfluenzaResumenUnidad() {
   kpis.innerHTML = `
     <div class="ip-kpis">
       ${kpi("Meta de la campaña", frascoFmt(c.metaTotal), `${c.conMeta} grupos con meta · ≈ ${frascoFmt(Math.ceil(c.metaTotal / DOSIS_POR_FRASCO))} frascos`)}
-      ${kpi("Dosis aplicadas", frascoFmt(c.logro), c.ultima ? "Última captura " + influenzaFechaCorta(c.ultima) : "Aún sin capturas")}
+      ${kpi("Dosis aplicadas", frascoFmt(c.logro), c.ultima ? "Última captura: semana del " + influenzaRangoTexto(c.ultima) : "Aún sin capturas")}
       ${kpi("Avance de tu meta", pct(c.avancePct), `Esperado a hoy: ${pct(c.esperadoPct)}`, tono)}
       ${kpi("Meta pendiente", frascoFmt(c.pendiente), `≈ ${frascoFmt(Math.ceil(c.pendiente / DOSIS_POR_FRASCO))} frascos por aplicar`)}
       ${kpi("Semanas reportadas", `${c.reportadasN} de ${c.totalSemanas}`, semNota, c.atrasadas ? "warn" : "good")}
       ${kpi("Ritmo promedio", `${frascoFmt(c.ritmoProm)} <small class="ip-unit-inline">dosis/sem</small>`, ritmoNota)}
-      ${kpi("Mejor semana", c.mejor ? frascoFmt(c.mejor.dosis) : "—", c.mejor ? "Semana del " + influenzaFechaCorta(c.mejor.fecha) : "Aún sin capturas")}
+      ${kpi("Mejor semana", c.mejor ? frascoFmt(c.mejor.dosis) : "—", c.mejor ? "Semana del " + influenzaRangoTexto(c.mejor.fecha) : "Aún sin capturas")}
       ${kpi("Grupos con meta cumplida", `${c.cumplidos} de ${c.conMeta}`, c.cumplidos === c.conMeta && c.conMeta ? "Todos cumplidos" : "Grupos que ya alcanzaron su meta")}
     </div>
     <div class="ip-progress-wrap">
@@ -6162,6 +6171,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   const fmt = (n) => Math.round(n).toLocaleString("es-MX");
   const f1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
   const corta = (ymd) => (window.InfluenzaReglas ? window.InfluenzaReglas.fechaCorta(ymd) : ymd);
+  const rangoDe = (ymd) => influenzaRangoTexto(ymd, ini, fin);
   const e = (t) => escapeHtml(String(t == null ? "" : t));
 
   if (!meta) {
@@ -6227,7 +6237,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   const kpis = `
     <div class="iinf-kpis" role="group" aria-label="Indicadores clave de la campaña">
       ${kpi("flag", "Meta de la campaña", fmt(meta), `${fmt(evaluables.length)} ${evaluables.length === 1 ? "unidad con meta" : "unidades con meta"}`)}
-      ${kpi("vaccines", "Dosis aplicadas", fmt(apl), ultimaSemana ? `Corte al ${corta(ultimaSemana)}` : "Aún sin semanas vencidas")}
+      ${kpi("vaccines", "Dosis aplicadas", fmt(apl), ultimaSemana ? `Corte: semana del ${rangoDe(ultimaSemana)}` : "Aún sin semanas vencidas")}
       ${kpi("hourglass_top", "Faltan por aplicar", fmt(faltan), `≈ ${fmt(Math.ceil(faltan / DOSIS_POR_FRASCO))} frascos`)}
       ${kpi("calendar_month", "Semana de campaña", `${fmt(semanaN)} de ${fmt(semanas.length)}`, restantes ? `Quedan ${fmt(restantes)} ${restantes === 1 ? "semana" : "semanas"}` : "La campaña ya terminó")}
       ${kpi("speed", "Ritmo reciente", `${fmt(ritmo4)} <small>dosis/sem</small>`, necesario == null ? (faltan > 0 ? "Sin semanas restantes" : "Meta cumplida") : `Necesario: ${fmt(necesario)} por semana`, tonoRitmo)}
@@ -6242,7 +6252,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   const nombresSin = sinReporte.slice(0, 12).map(f => `<li>${e(f.unidad)}<small>${e(f.destino)}</small></li>`).join("");
   const cobertura = ultimaSemana ? `
     <section class="iinf-card" aria-labelledby="iinfCobTit">
-      <header><h3 id="iinfCobTit">Reporte de la semana del ${corta(ultimaSemana)}</h3>${chip(tonoCob, `${fmt(reportaron)} de ${fmt(evaluables.length)} ${evaluables.length === 1 ? "unidad" : "unidades"}`)}</header>
+      <header><h3 id="iinfCobTit">Reporte de la semana del ${rangoDe(ultimaSemana)}</h3>${chip(tonoCob, `${fmt(reportaron)} de ${fmt(evaluables.length)} ${evaluables.length === 1 ? "unidad" : "unidades"}`)}</header>
       ${barra(pctCob, tonoCob, "Unidades que reportaron la última semana")}
       ${sinReporte.length
         ? `<p class="iinf-nota">${fmt(sinReporte.length)} ${sinReporte.length === 1 ? "unidad no ha reportado" : "unidades no han reportado"} esa semana${nuncaReportaron.length ? ` (${fmt(nuncaReportaron.length)} sin ningún reporte en la campaña)` : ""}:</p>
@@ -6291,7 +6301,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
               <td class="c">${fmt(o.meta)}</td><td class="c"><b>${fmt(o.apl)}</b></td>
               <td class="iinf-avance"><div class="iinf-avance-in">${barra(o.p, tt, "Avance de " + o.nombre)}<span>${f1(o.p)}%</span></div></td>
               <td class="c">${chip(tt, `${o.d >= 0 ? "+" : "−"}${f1(Math.abs(o.d))} pts`)}</td>
-              <td class="c">${o.ultima ? corta(o.ultima) : "Sin reporte"}</td></tr>`;
+              <td class="c">${o.ultima ? rangoDe(o.ultima) : "Sin reporte"}</td></tr>`;
           }).join("")}</tbody>
         </table>
       </div>
@@ -6307,7 +6317,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   const yDe = v => padT + gh - (v / maxV) * gh;
   const cada = Math.max(1, Math.ceil(barras.length / 12));
   const svg = barras.length ? `
-    <svg viewBox="0 0 ${W} ${H}" class="iinf-svg" role="img" aria-label="Dosis aplicadas por semana: ${barras.map(b => `${corta(b.f)} ${fmt(b.v)}`).join(", ")}">
+    <svg viewBox="0 0 ${W} ${H}" class="iinf-svg" role="img" aria-label="Dosis aplicadas por semana: ${barras.map(b => `semana del ${rangoDe(b.f)}: ${fmt(b.v)}`).join(", ")}">
       <line x1="${padL}" y1="${padT + gh}" x2="${W - 8}" y2="${padT + gh}" class="iinf-eje"/>
       <line x1="${padL}" y1="${padT}" x2="${W - 8}" y2="${padT}" class="iinf-grid"/>
       <text x="${padL - 6}" y="${padT + 4}" class="iinf-txt" text-anchor="end">${fmt(maxV)}</text>
@@ -6315,17 +6325,17 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
       ${necesario != null ? `<line x1="${padL}" y1="${yDe(necesario).toFixed(1)}" x2="${W - 8}" y2="${yDe(necesario).toFixed(1)}" class="iinf-necesario"/>` : ""}
       ${barras.map((b, i) => {
         const x = padL + i * paso + (paso - bw) / 2, y = yDe(b.v);
-        return `<g><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw}" height="${Math.max(1, padT + gh - y).toFixed(1)}" rx="3" class="iinf-col"><title>${corta(b.f)}: ${fmt(b.v)} dosis</title></rect>
-        ${i % cada === 0 || i === barras.length - 1 ? `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 8}" class="iinf-txt" text-anchor="middle">${corta(b.f)}</text>` : ""}</g>`;
+        return `<g><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw}" height="${Math.max(1, padT + gh - y).toFixed(1)}" rx="3" class="iinf-col"><title>Semana del ${rangoDe(b.f)}: ${fmt(b.v)} dosis</title></rect>
+        ${i % cada === 0 || i === barras.length - 1 ? `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 8}" class="iinf-txt" text-anchor="middle">${corta(window.InfluenzaReglas.rangoSemana(b.f, ini, fin).desde)}</text>` : ""}</g>`;
       }).join("")}
     </svg>` : "";
   const tendencia = `
     <section class="iinf-card" aria-labelledby="iinfTendTit">
-      <header><h3 id="iinfTendTit">Dosis aplicadas por semana</h3><span class="iinf-sub">Cada barra es una semana de reporte${necesario != null ? `; la línea punteada es el ritmo necesario para cumplir (<b>${fmt(necesario)}</b> dosis por semana)` : ""}</span></header>
+      <header><h3 id="iinfTendTit">Dosis aplicadas por semana</h3><span class="iinf-sub">Cada barra es una semana (se marca con su primer día)${necesario != null ? `; la línea punteada es el ritmo necesario para cumplir (<b>${fmt(necesario)}</b> dosis por semana)` : ""}</span></header>
       ${svg || '<p class="iinf-nota">La campaña aún no tiene semanas vencidas.</p>'}
       ${barras.length ? `<details class="iinf-det"><summary>Ver los datos por semana</summary>
         <table class="iinf-tabla iinf-tabla--mini" aria-label="Dosis aplicadas por semana"><thead><tr><th scope="col">Semana</th><th scope="col" class="c">Dosis</th></tr></thead>
-        <tbody>${barras.slice().reverse().map(b => `<tr><th scope="row">${corta(b.f)}</th><td class="c">${fmt(b.v)}</td></tr>`).join("")}</tbody></table></details>` : ""}
+        <tbody>${barras.slice().reverse().map(b => `<tr><th scope="row">${rangoDe(b.f)}</th><td class="c">${fmt(b.v)}</td></tr>`).join("")}</tbody></table></details>` : ""}
     </section>`;
 
   // ── Abasto de frascos ──
@@ -6401,7 +6411,8 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
     nuncaReportaron: nuncaReportaron.length,
     blanco: { meta: blancoM, apl: blancoA }, riesgo: { meta: riesgoM, apl: riesgoA },
     porUnidad, ranking: uniFilter ? [] : lista,
-    semanas: barras.map(b => ({ fecha: b.f, dosis: b.v })),
+    semanas: barras.map(b => ({ fecha: b.f, rango: rangoDe(b.f), desde: window.InfluenzaReglas.rangoSemana(b.f, ini, fin).desde, dosis: b.v })),
+    rangoUltimaSemana: ultimaSemana ? rangoDe(ultimaSemana) : null,
     grupos: filasGrupo.map(g => ({ titulo: g.titulo, meta: g.m, apl: g.a, edades: g.rubros.map(rb => ({ edad: rb.edad, meta: rubro[rb.id].meta, apl: rubro[rb.id].apl })).filter(x => x.meta || x.apl) })),
     abasto: { frascos: frascosRec, dosis: dosisRec, apl: aplConReparto, exceden: excedenReparto.map(f => f.unidad), conReparto: conReparto.length },
     revisar: { rebasan: rebasan.map(f => f.unidad), sinMeta: sinMeta.map(f => f.unidad), nunca: (vencidas.length >= 2 ? nuncaReportaron : []).map(f => f.unidad) }
@@ -6484,7 +6495,7 @@ async function exportInfluenzaIndicadoresExcel() {
       ["Ritmo necesario (dosis por semana)", d.necesario == null ? "—" : Math.round(d.necesario), "#,##0"],
       ["Proyección al cierre (% de la meta)", d.pctProy == null ? "Se calcula con 4 semanas de reportes" : d.pctProy / 100, pctFmt],
       ["Unidades con meta", d.unidadesConMeta],
-      [`Unidades que reportaron la semana del ${d.ultimaSemana || "—"}`, d.reportaron],
+      [`Unidades que reportaron la semana del ${d.rangoUltimaSemana || "—"}`, d.reportaron],
       ["Unidades que no reportaron esa semana", d.sinReporte.length],
       ["Población blanco: avance de su meta", d.blanco.meta ? d.blanco.apl / d.blanco.meta : "Sin meta", pctFmt],
       ["Población de riesgo: avance de su meta", d.riesgo.meta ? d.riesgo.apl / d.riesgo.meta : "Sin meta", pctFmt]
@@ -6496,15 +6507,15 @@ async function exportInfluenzaIndicadoresExcel() {
     if (d.ranking.length) {
       hoja(d.porUnidad ? "Por unidad" : "Por municipio", `Avance por ${d.porUnidad ? "unidad" : "municipio / hospital"} (más atrasados primero)`,
         [{ t: d.porUnidad ? "Unidad" : "Municipio / hospital", w: 34 }, { t: "Unidades", w: 12 }, { t: "Meta", w: 12, fmt: "#,##0" }, { t: "Aplicadas", w: 12, fmt: "#,##0" },
-         { t: "Avance", w: 12, fmt: pctFmt }, { t: "Contra lo esperado (pts)", w: 16, fmt: "0.0" }, { t: "Sin reporte última semana", w: 16 }, { t: "Último reporte", w: 16 }],
-        d.ranking.map(o => [o.nombre, o.n, o.meta, o.apl, o.p / 100, Math.round(o.d * 10) / 10, o.sinRep, o.ultima || "Sin reporte"]),
+         { t: "Avance", w: 12, fmt: pctFmt }, { t: "Contra lo esperado (pts)", w: 16, fmt: "0.0" }, { t: "Sin reporte última semana", w: 16 }, { t: "Último reporte (semana)", w: 24 }],
+        d.ranking.map(o => [o.nombre, o.n, o.meta, o.apl, o.p / 100, Math.round(o.d * 10) / 10, o.sinRep, o.ultima ? influenzaRangoTexto(o.ultima, d.inicio, d.fin) : "Sin reporte"]),
         (row, f, r) => { row.getCell(6).fill = tonoFill(d.ranking[r].d); });
     }
 
     let acum = 0;
     hoja("Por semana", "Dosis aplicadas por semana",
-      [{ t: "Semana (fecha del reporte)", w: 28 }, { t: "Dosis", w: 14, fmt: "#,##0" }, { t: "Acumulado", w: 14, fmt: "#,##0" }, { t: "% de la meta", w: 14, fmt: pctFmt }],
-      d.semanas.map(s => { acum += s.dosis; return [s.fecha, s.dosis, acum, d.meta ? acum / d.meta : 0]; }));
+      [{ t: "Semana", w: 28 }, { t: "Dosis", w: 14, fmt: "#,##0" }, { t: "Acumulado", w: 14, fmt: "#,##0" }, { t: "% de la meta", w: 14, fmt: pctFmt }],
+      d.semanas.map(s => { acum += s.dosis; return [s.rango, s.dosis, acum, d.meta ? acum / d.meta : 0]; }));
 
     hoja("Por grupo", "Avance por grupo de población",
       [{ t: "Grupo", w: 60 }, { t: "Meta", w: 12, fmt: "#,##0" }, { t: "Aplicadas", w: 12, fmt: "#,##0" }, { t: "Avance", w: 12, fmt: pctFmt }, { t: "Contra lo esperado (pts)", w: 16, fmt: "0.0" }],
@@ -6639,7 +6650,7 @@ async function influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob) {
   const tonoProy = d.pctProy == null ? "none" : (d.pctProy >= 100 ? "good" : (d.pctProy >= 85 ? "warn" : "bad"));
   const kpis = [
     ["META DE LA CAMPAÑA", fmt(d.meta), `${fmt(d.unidadesConMeta)} ${d.unidadesConMeta === 1 ? "unidad con meta" : "unidades con meta"}`, "none"],
-    ["DOSIS APLICADAS", fmt(d.apl), d.ultimaSemana ? `Corte al ${corta(d.ultimaSemana)}` : "Sin semanas vencidas", "none"],
+    ["DOSIS APLICADAS", fmt(d.apl), d.ultimaSemana ? `Corte: semana del ${d.rangoUltimaSemana}` : "Sin semanas vencidas", "none"],
     ["FALTAN POR APLICAR", fmt(d.faltan), `aprox. ${fmt(Math.ceil(d.faltan / DOSIS_POR_FRASCO))} frascos`, "none"],
     ["SEMANA DE CAMPAÑA", `${d.semanaN} de ${d.totalSemanas}`, d.restantes ? `Quedan ${d.restantes} semanas` : "La campaña ya terminó", "none"],
     ["RITMO RECIENTE", `${fmt(d.ritmo4)} dosis/sem`, d.necesario == null ? (d.faltan > 0 ? "Sin semanas restantes" : "Meta cumplida") : `Necesario: ${fmt(d.necesario)} por semana`, tonoRitmo],
@@ -6661,7 +6672,7 @@ async function influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob) {
   const pctCob = d.unidadesConMeta ? d.reportaron * 100 / d.unidadesConMeta : 0;
   const tCob = pctCob >= 90 ? "good" : (pctCob >= 70 ? "warn" : "bad");
   doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(51, 65, 85);
-  doc.text(tx(d.ultimaSemana ? `Semana del ${corta(d.ultimaSemana)}: ${d.reportaron} de ${d.unidadesConMeta} ${d.unidadesConMeta === 1 ? "unidad reportó" : "unidades reportaron"}.` : "La campaña aún no tiene semanas vencidas."), M, y + 3);
+  doc.text(tx(d.ultimaSemana ? `Semana del ${d.rangoUltimaSemana}: ${d.reportaron} de ${d.unidadesConMeta} ${d.unidadesConMeta === 1 ? "unidad reportó" : "unidades reportaron"}.` : "La campaña aún no tiene semanas vencidas."), M, y + 3);
   if (d.ultimaSemana) barra(M, y + 6, CW, 4, pctCob, tCob);
   y += 16;
   const pobl = (t, o) => { const p = o.meta ? o.apl * 100 / o.meta : null; return [t, o.meta ? fmt(o.meta) : "Sin meta", fmt(o.apl), p == null ? "-" : `${f1(p)}%`]; };
@@ -6692,7 +6703,7 @@ async function influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob) {
   if (d.ranking.length) {
     titulo(`Avance por ${d.porUnidad ? "unidad" : "municipio / hospital"}`, "Primero quienes van más atrasados contra lo esperado");
     tabla([d.porUnidad ? "Unidad" : "Municipio / hospital", "Meta", "Aplicadas", "Avance", "Contra lo esperado", "Último reporte"],
-      d.ranking.map(o => [o.nombre + (d.porUnidad ? "" : `  (${o.n} ${o.n === 1 ? "unidad" : "unidades"})`), fmt(o.meta), fmt(o.apl), `${f1(o.p)}%`, `${o.d >= 0 ? "+" : "-"}${f1(Math.abs(o.d))} pts`, o.ultima ? corta(o.ultima) : "Sin reporte"]),
+      d.ranking.map(o => [o.nombre + (d.porUnidad ? "" : `  (${o.n} ${o.n === 1 ? "unidad" : "unidades"})`), fmt(o.meta), fmt(o.apl), `${f1(o.p)}%`, `${o.d >= 0 ? "+" : "-"}${f1(Math.abs(o.d))} pts`, o.ultima ? influenzaRangoTexto(o.ultima, d.inicio, d.fin) : "Sin reporte"]),
       { columnStyles: { 0: { halign: "left", fontStyle: "bold", cellWidth: 62 }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center", fontStyle: "bold" }, 5: { halign: "center" } },
         didParseCell: (h) => { if (h.section === "body" && h.column.index === 4) { const t = tonoDe(d.ranking[h.row.index].d); h.cell.styles.fillColor = FON[t]; h.cell.styles.textColor = COL[t]; } } });
   }
@@ -6713,7 +6724,7 @@ async function influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob) {
     d.semanas.forEach((s, i) => {
       const bh = s.dosis / maxV * gh, x = gx + i * paso + (paso - bw) / 2;
       doc.setFillColor(124, 58, 237); if (bh > 0) doc.rect(x, gy2 + gh - bh, bw, bh, "F");
-      if (i % cada === 0 || i === d.semanas.length - 1) { doc.setFontSize(6.5); doc.setTextColor(100, 116, 139); doc.text(corta(s.fecha), x + bw / 2, gy2 + gh + 4, { align: "center" }); }
+      if (i % cada === 0 || i === d.semanas.length - 1) { doc.setFontSize(6.5); doc.setTextColor(100, 116, 139); doc.text(corta(s.desde), x + bw / 2, gy2 + gh + 4, { align: "center" }); }
     });
     if (d.necesario != null) {
       const ny = gy2 + gh - d.necesario / maxV * gh;
@@ -6721,7 +6732,7 @@ async function influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob) {
     }
     y = gy2 + gh + 10;
     let ac = 0;
-    tabla(["Semana", "Dosis", "Acumulado", "% de la meta"], d.semanas.map(s => { ac += s.dosis; return [corta(s.fecha), fmt(s.dosis), fmt(ac), `${f1(d.meta ? ac * 100 / d.meta : 0)}%`]; }),
+    tabla(["Semana", "Dosis", "Acumulado", "% de la meta"], d.semanas.map(s => { ac += s.dosis; return [s.rango, fmt(s.dosis), fmt(ac), `${f1(d.meta ? ac * 100 / d.meta : 0)}%`]; }),
       { columnStyles: { 0: { halign: "left", fontStyle: "bold" }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" } } });
   } else {
     doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(100, 116, 139);

@@ -196,6 +196,46 @@ test('Corte de fin de mes: se captura el mismo día aunque no sea jueves ni vier
   expect(r).toEqual({ corte: true, abre: '2026-11-30', semanas: ['2026-11-30', '2026-12-31', '2027-03-31'], estado: true, viernes: false });
 });
 
+// ─── La unidad de reporte es la SEMANA (lunes a domingo): rango que cubre cada reporte ───────────────
+test('Rango de la semana: lunes a domingo, sin depender del viernes', () => {
+  const rs = (f) => R.rangoSemana(f, INI27, FIN27);
+  const txt = (f) => { const r = rs(f); return R.textoRango(r.desde, r.hasta); };
+  expect(rs('2026-10-16')).toEqual({ desde: '2026-10-12', hasta: '2026-10-18', parte: 'completa' });
+  expect(txt('2026-10-16')).toBe('12 al 18 oct');
+  // Semana que cruza de mes (el mes termina en sábado): se reporta completa
+  expect(txt('2026-10-30')).toBe('26 oct al 1 nov');
+  // El mes termina de lunes a jueves: dos partes (corte y resto)
+  expect(rs('2026-11-30')).toEqual({ desde: '2026-11-30', hasta: '2026-11-30', parte: 'corte' });
+  expect(txt('2026-11-30')).toBe('30 nov');
+  expect(rs('2026-12-04')).toEqual({ desde: '2026-12-01', hasta: '2026-12-06', parte: 'resto' });
+  expect(txt('2026-12-04')).toBe('1 al 6 dic');
+  // Jueves 31-dic: el corte cubre lunes a jueves y el resto viernes a domingo
+  expect(txt('2026-12-31')).toBe('28 al 31 dic');
+  expect(txt('2027-01-01')).toBe('1 al 3 ene');
+  // Primer y último reporte quedan dentro de las fechas de la campaña
+  expect(txt('2026-10-16')).toBe('12 al 18 oct');
+  expect(R.textoRango(R.rangoSemana('2027-04-02', INI27, FIN27).desde, R.rangoSemana('2027-04-02', INI27, FIN27).hasta)).toBe('1 al 2 abr');
+  expect(txt('2027-03-31')).toBe('29 al 31 mar');
+  // Todos los días de la campaña caen en exactamente un reporte (nada se cuenta dos veces ni se pierde)
+  const claves = [];
+  for (let d = new Date('2026-10-12T12:00:00Z'); d <= new Date('2027-04-02T12:00:00Z'); d = new Date(d.getTime() + 86400000)) claves.push(d.toISOString().slice(0, 10));
+  const fechas = [];
+  const semanas = new Set();
+  claves.forEach((dia) => {
+    const dow = R.diaSemana(dia);
+    const viernes = R.sumaDias(dia, (5 - dow + 7) % 7);   // viernes de esa semana
+    semanas.add(viernes);
+  });
+  const reportes = new Set([...semanas, ...R.cortes(INI27, FIN27)]);
+  const cubiertos = new Map();
+  [...reportes].sort().forEach((f) => {
+    const r = rs(f);
+    for (let d = r.desde; d <= r.hasta; d = R.sumaDias(d, 1)) cubiertos.set(d, (cubiertos.get(d) || 0) + 1);
+  });
+  claves.forEach((dia) => expect(cubiertos.get(dia), dia).toBe(1));
+  expect(fechas.length).toBe(0);
+});
+
 // ─── Panel abierto toda la semana (lunes a domingo), un solo reporte por semana ──────────────
 async function semana(page, ahora) {
   await page.clock.install({ time: new Date(ahora) });

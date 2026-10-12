@@ -298,7 +298,7 @@ test.describe('Panel de Influenza (unidad)', () => {
     await expect(raiz.locator('.iinf-kpi').filter({ hasText: 'Faltan por aplicar' })).toContainText('140');
     await expect(raiz.locator('.iinf-kpi').filter({ hasText: 'Meta de la campaña' })).toContainText('200');
     await expect(raiz.locator('.iinf-kpi').filter({ hasText: 'Proyección al cierre' })).toBeVisible();
-    await expect(raiz).toContainText('Reporte de la semana del 16 oct');
+    await expect(raiz).toContainText('Reporte de la semana del 12 al 18 oct');
     await expect(raiz).toContainText('1 de 1 unidad');
     await expect(raiz.locator('#iinfRankTit')).toHaveText('Avance por municipio');
     await expect(raiz.locator('.iinf-svg')).toBeVisible();
@@ -375,6 +375,22 @@ test.describe('Panel de Influenza (unidad)', () => {
       const r = await request.get(f);
       expect(r.status()).toBe(200);
     }
+    expect(errores).toEqual([]);
+  });
+
+  test('las semanas se muestran con sus fechas (lunes a domingo), sin depender del viernes', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-20T12:00:00' });
+    await page.locator('#influenza_semana_btn').click();
+    const lista = page.locator('#influenza_semana_dropdown');
+    await expect(lista.locator('.inf-sem-item[data-fecha="2026-10-16"]')).toContainText('12 al 18 oct');
+    await expect(lista.locator('.inf-sem-item[data-fecha="2026-10-09"]')).toContainText('5 al 11 oct');
+    await expect(lista.locator('.inf-sem-item[data-fecha="2026-10-02"]')).toContainText('2 al 4 oct');   // primera semana: desde el inicio de la campaña
+    await expect(lista).not.toContainText(/viernes/i);
+    await page.keyboard.press('Escape');
+    // Guía de pasos, etiqueta del selector e historial hablan de la semana
+    await expect(page.locator('#influenza_semana_label')).toContainText('19 al 25 oct');
+    await expect(page.locator('#influenzaPasosGuia')).toContainText('19 al 25 oct');
+    await expect(page.locator('#influenzaPasosGuia')).not.toContainText(/viernes/i);
     expect(errores).toEqual([]);
   });
 });

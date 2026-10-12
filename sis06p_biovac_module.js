@@ -2324,6 +2324,33 @@
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
   }
 
+  // La unidad de reporte de Influenza es la SEMANA (lunes a domingo); `fecha` es solo la clave con que se guarda.
+  // Texto del rango que cubre: «12–18 oct». Si el mes terminó a media semana hay un reporte de corte (lunes a ese
+  // día) y otro con el resto de la semana (desde el día siguiente al corte hasta el domingo).
+  const _MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  function rangoSemanaTexto(fechaIso, otras) {
+    const f = new Date(fechaIso + 'T12:00:00');
+    const dow = f.getDay();                                  // 0 = domingo
+    const sumar = (d, n) => { const x = new Date(d.getTime()); x.setDate(x.getDate() + n); return x; };
+    const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const lunes = sumar(f, -((dow + 6) % 7));
+    let desde = lunes, hasta = sumar(lunes, 6);
+    if (dow >= 1 && dow <= 4) {
+      hasta = f;                                             // corte de fin de mes: del lunes a ese día
+    } else {
+      const lun = iso(lunes), fi = iso(f);
+      const previo = (otras || []).filter((c) => c >= lun && c < fi).map((c) => new Date(c + 'T12:00:00'))
+        .filter((c) => c.getDay() >= 1 && c.getDay() <= 4).sort((a, b) => a - b).pop();
+      if (previo) desde = sumar(previo, 1);
+    }
+    if (desde.getTime() === hasta.getTime()) return desde.getDate() + ' ' + _MES_CORTO[desde.getMonth()];
+    if (desde.getMonth() === hasta.getMonth()) return desde.getDate() + '–' + hasta.getDate() + ' ' + _MES_CORTO[hasta.getMonth()];
+    return desde.getDate() + ' ' + _MES_CORTO[desde.getMonth()] + '–' + hasta.getDate() + ' ' + _MES_CORTO[hasta.getMonth()];
+  }
+  function _fechasInfluenzaConocidas() {
+    return (_influenzaCapturasCache || []).map((c) => String(c.fecha).slice(0, 10));
+  }
+
   // Filas Categoría > Grupo > edad de Influenza, con `celdas(f)` aportando las
   // columnas de valores. Comparte estructura entre CE-H (una columna) y la
   // hoja Influenza (TOTAL + 5 semanas). Con `soloCategoria` solo emite esa
@@ -2687,7 +2714,7 @@
 
     const thSemana = (c) => {
       const cap = corte.semanas[c];
-      return `<th class="inf-sem inf-w${c + 1}" style="${_TH}">Sem ${c + 1}<br><span style="font-weight:600; font-size:9px; text-transform:none;">${cap ? fechaCortaMX(cap.fecha) : '—'}</span></th>`;
+      return `<th class="inf-sem inf-w${c + 1}" style="${_TH}">Sem ${c + 1}<br><span style="font-weight:600; font-size:9px; text-transform:none;">${cap ? rangoSemanaTexto(cap.fecha, _fechasInfluenzaConocidas()) : '—'}</span></th>`;
     };
     const categorias = [...new Set(INFLUENZA_FILAS.map((f) => f.categoria))];
     const contenedores = categorias.map((cat) => {
@@ -2874,7 +2901,7 @@
     const semanas = [0, 1, 2, 3, 4].map((c) => {
       const cap = corte.semanas[c];
       return `<tr><td>Semana ${c + 1}</td>
-        <td>${cap ? fechaCortaMX(cap.fecha) + (cap.sin_movimiento ? ' · <span style="color:var(--muted);">sin movimiento</span>' : '') : '<span style="color:var(--muted);">sin reporte</span>'}</td>
+        <td>${cap ? rangoSemanaTexto(cap.fecha, _fechasInfluenzaConocidas()) + (cap.sin_movimiento ? ' · <span style="color:var(--muted);">sin movimiento</span>' : '') : '<span style="color:var(--muted);">sin reporte</span>'}</td>
         <td class="num">${cap ? fila[c] : '—'}</td></tr>`;
     }).join('');
     abrirDetalleSIS({
@@ -2885,7 +2912,7 @@
           <div class="detalle-kpi"><div class="t">Clave SIS</div><div class="v" style="font-size:16px;">${_esc(f.clave)}</div></div>
           <div class="detalle-kpi"><div class="t">Dosis del mes</div><div class="v">${total}</div>${total > 0 ? `<div class="c" style="font-size:10.5px; color:var(--muted); font-weight:600;">${frascosDe(total)} ${frascosDe(total) === 1 ? 'frasco' : 'frascos'}</div>` : ''}</div>
         </div>
-        <table class="detalle-tabla"><thead><tr><th>Semana</th><th>Viernes</th><th style="text-align:right;">Dosis</th></tr></thead><tbody>${semanas}</tbody></table>
+        <table class="detalle-tabla"><thead><tr><th>Semana</th><th>Fechas</th><th style="text-align:right;">Dosis</th></tr></thead><tbody>${semanas}</tbody></table>
         <p style="font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0;">Se captura semana a semana en Meta-Logro Influenza (ahí se valida contra la meta); aquí solo se lee el corte del mes.</p>`,
       acciones: editable ? [{ texto: 'Editar en Meta-Logro', icono: 'edit_note', clase: 'btn-primario', onClick: () => { cerrarDetalleSIS(); irAMetaLogroInfluenza(); } }] : []
     });
@@ -2903,7 +2930,7 @@
       const quien = cap ? (cap.sin_movimiento ? 'Sin movimiento' : (cap.capturado_por || '')) : '';
       return `<tr>
         <td>Sem ${c + 1}</td>
-        <td>${cap ? fechaCortaMX(cap.fecha) : '<span style="color:var(--muted);">—</span>'}</td>
+        <td>${cap ? rangoSemanaTexto(cap.fecha, _fechasInfluenzaConocidas()) : '<span style="color:var(--muted);">—</span>'}</td>
         <td class="num">${cap ? porSemana[c] : '—'}</td>
         <td class="num" style="font-weight:600;">${cap && porSemana[c] > 0 ? frascosDe(porSemana[c]) : '—'}</td>
         <td style="color:var(--muted); font-size:11.5px;">${_esc(quien)}</td></tr>`;
@@ -2914,7 +2941,7 @@
       cuerpo: `
         <div style="overflow-x:auto;">
         <table class="detalle-tabla">
-          <thead><tr><th>Semana</th><th>Viernes</th><th style="text-align:right;">Dosis</th><th style="text-align:right;">Frascos</th><th>Reportó</th></tr></thead>
+          <thead><tr><th>Semana</th><th>Fechas</th><th style="text-align:right;">Dosis</th><th style="text-align:right;">Frascos</th><th>Reportó</th></tr></thead>
           <tbody>${filas}
             <tr style="background:#f8fafc;"><td colspan="2" style="font-weight:800;">Total del mes</td><td class="num">${total}</td><td class="num">${total > 0 ? frascosDe(total) : '—'}</td><td></td></tr>
           </tbody>
@@ -3186,7 +3213,7 @@
   function editorInfluenzaHtml() {
     const semanas = _edInf.semanas;
     const faltan = viernesDelMes(_edInf.mes, _edInf.anio).filter((f) => !semanas.some((w) => w.fecha === f));
-    const encabezado = semanas.map((w) => `<th style="${_TH}">${fechaCortaMX(w.fecha)}${w.nuevo ? '<br><span style="font-weight:600; font-size:9px; text-transform:none; color:var(--secondary);">nueva</span>' : ''}</th>`).join('');
+    const encabezado = semanas.map((w) => `<th style="${_TH}">${rangoSemanaTexto(w.fecha, semanas.map((x) => x.fecha))}${w.nuevo ? '<br><span style="font-weight:600; font-size:9px; text-transform:none; color:var(--secondary);">nueva</span>' : ''}</th>`).join('');
     let filas = '';
     let cat = null; let grp = null;
     INFLUENZA_FILAS.forEach((f) => {
@@ -3209,7 +3236,7 @@
     const agregar = faltan.length
       ? `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
           <label for="edInfNueva" style="font-size:11.5px; font-weight:700; color:var(--muted);">¿Falta una semana?</label>
-          <select id="edInfNueva" style="padding:6px 8px; border-radius:8px; border:1px solid var(--outline-variant);">${faltan.map((f) => `<option value="${f}">Viernes ${fechaCortaMX(f)}</option>`).join('')}</select>
+          <select id="edInfNueva" style="padding:6px 8px; border-radius:8px; border:1px solid var(--outline-variant);">${faltan.map((f) => `<option value="${f}">Semana del ${rangoSemanaTexto(f, semanas.map((x) => x.fecha))}</option>`).join('')}</select>
           <button type="button" class="btn-mini btn-secundario" id="edInfAgregar"><span class="material-symbols-rounded">add</span> Agregar semana</button>
         </div>` : '';
     return `${agregar}
@@ -3273,7 +3300,7 @@
             campanas = (data || []).filter((c) => c.nombre && c.nombre.indexOf('Campaña Influenza') === 0);
           }
           const camp = campanas.find((c) => w.fecha >= String(c.fecha_inicio).slice(0, 10) && w.fecha <= String(c.fecha_fin).slice(0, 10));
-          if (!camp) throw new Error('El viernes ' + fechaCortaMX(w.fecha) + ' queda fuera de una campaña de Influenza: no se puede agregar.');
+          if (!camp) throw new Error('La semana del ' + rangoSemanaTexto(w.fecha, cambios.map((x) => x.fecha)) + ' queda fuera de una campaña de Influenza: no se puede agregar.');
           anioCampana = camp.nombre;
         }
         const valores = {};
