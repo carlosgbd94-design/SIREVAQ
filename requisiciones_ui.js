@@ -133,6 +133,16 @@ function flashGuardado(el) {
 // muestra "FEB-27" y se captura tecleando solo números (270228, 02-27, etc.)
 // ---------------------------------------------------------------------------
 
+// Fecha de recepción de la requisición (columna fecha_envio): la que se captura; si no, la del pedido que se trajo.
+function fechaRecepcionDe(r) {
+  return (r && (r.fecha_envio || r.pedido_fecha)) || '';
+}
+
+function hoyIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function ultimoDiaMes(anio, mes) {
   const dia = new Date(anio, mes, 0).getDate();
   return `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
@@ -506,7 +516,9 @@ function actualizarEstadoGuardado() {
   const temas = sin.length + pend.length;
   $('dockGuardadoPend').textContent = temas || '';
   $('dockGuardadoPend').style.display = temas ? 'inline-flex' : 'none';
-  chip.setAttribute('aria-label', `${titulo}. ${texto}${temas ? `. ${plural(temas, 'tema pendiente', 'temas pendientes')}` : ''}`);
+  chip.removeAttribute('aria-label');       // el nombre accesible es el texto visible (título, detalle y conteo)
+  if (temas) chip.setAttribute('aria-description', plural(temas, 'tema pendiente', 'temas pendientes'));
+  else chip.removeAttribute('aria-description');
   const btn = $('btnGuardarTodo');
   if (btn) {
     btn.classList.toggle('en-reposo', fase === 'ok' || fase === 'guardando');
@@ -909,6 +921,12 @@ function renderEstadoRequisicion() {
   const badges = $('badgesEstadoRequisicion');
   const btnCerrar = $('btnCerrarMes');
   const r = estado.requisicion;
+  $('campoFechaRecepcion').style.display = r ? '' : 'none';
+  if (r) {
+    const f = $('inpFechaRecepcion');
+    f.value = fechaRecepcionDe(r);
+    f.disabled = !estado.puedeEditar;
+  }
   if (!r) { badges.style.display = 'none'; btnCerrar.style.display = 'none'; return; }
 
   const esCerrada = r.estado === 'CERRADA';
@@ -920,6 +938,18 @@ function renderEstadoRequisicion() {
     ${r.fue_corregido ? '<span class="pill pill-err">Corregido posteriormente</span>' : ''}
   `;
   btnCerrar.style.display = estado.puedeEditar && !esCerrada ? 'inline-flex' : 'none';
+}
+
+async function guardarFechaRecepcion() {
+  const f = $('inpFechaRecepcion');
+  if (!estado.puedeEditar || !estado.requisicion) return;
+  const nueva = f.value || null;
+  if ((nueva || '') === (estado.requisicion.fecha_envio || '')) return;
+  const { data, error } = await estado.db.from('requi_requisiciones')
+    .update({ fecha_envio: nueva }).eq('id', estado.requisicion.id).select().single();
+  if (error) { toast('No se pudo guardar la fecha de recepción: ' + error.message, true); f.value = fechaRecepcionDe(estado.requisicion); return; }
+  estado.requisicion = data;
+  toast(nueva ? 'Fecha de recepción guardada.' : 'Fecha de recepción borrada: saldrá la del pedido, o la de hoy al exportar.');
 }
 
 async function cerrarMes() {
@@ -939,7 +969,7 @@ Ojo: ${plural(pendientes, 'reparto todavía tiene', 'repartos todavía tienen')}
   });
   if (!ok) return;
   const { data, error } = await estado.db.from('requi_requisiciones')
-    .update({ estado: 'CERRADA', cerrado_en: new Date().toISOString(), fecha_envio: estado.requisicion.fecha_envio || ultimoDiaMes(estado.requisicion.anio, estado.requisicion.mes) })
+    .update({ estado: 'CERRADA', cerrado_en: new Date().toISOString(), fecha_envio: fechaRecepcionDe(estado.requisicion) || hoyIso() })
     .eq('id', estado.requisicion.id).select().single();
   if (error) { toast('No se pudo cerrar: ' + error.message, true); return; }
   estado.requisicion = data;
@@ -974,7 +1004,7 @@ function renderExplorador(filas) {
         <td><strong>${mesInfo ? mesInfo.l : r.mes} ${r.anio}</strong> <small style="color:var(--muted)">${esc(etiquetaEntrega(r))}</small></td>
         <td><span class="pill ${esCerrada ? 'pill-ok' : 'pill-warn'}">${esCerrada ? 'Cerrada' : 'Borrador'}</span></td>
         <td>${r.fue_corregido ? '<span class="pill pill-err">Corregido</span>' : ''}</td>
-        <td>${r.fecha_envio ? formatMmmAa(r.fecha_envio) : '—'}</td>
+        <td>${fechaRecepcionDe(r) ? formatDdMmAa(fechaRecepcionDe(r)) : '—'}</td>
         <td>${r.creado_por || '—'}</td>
         <td><button class="btn btn-outline btn-sm btn-abrir-historial" data-id="${r.id}">Abrir</button></td>
       </tr>
@@ -1194,7 +1224,7 @@ function renderAvance() {
 
   // Stepper superior
   $('stepper').innerHTML = pasos.map((p, i) => `${i ? `<span class="st-linea ${pasos[i - 1].hecho ? 'hecho' : ''}"></span>` : ''}
-    <button type="button" role="listitem" class="st-nodo ${p.hecho ? 'hecho' : p.iniciado ? 'iniciado' : ''} ${estado.pasoActual === p.n ? 'activo' : ''}" data-paso="${p.n}" style="--hoja:${p.color}">
+    <button type="button" class="st-nodo ${p.hecho ? 'hecho' : p.iniciado ? 'iniciado' : ''} ${estado.pasoActual === p.n ? 'activo' : ''}" data-paso="${p.n}"${estado.pasoActual === p.n ? ' aria-current="step"' : ''} style="--hoja:${p.color}">
       <span class="st-circulo">${p.hecho ? '<span class="material-symbols-rounded">check</span>' : p.n}</span>
       <span class="st-txt"><b>${p.titulo}</b><small>${esc(p.texto)}</small></span>
     </button>`).join('');
@@ -1418,7 +1448,7 @@ function filasBiologicoHtml(bio) {
         <span class="punto-bio" style="background:${color}"></span><strong>${esc(bio.nombre)}</strong><br>
         <span class="clave-bio" id="clave-${bio.id}" style="margin-left:18px;">
           <span class="clave-texto">${esc(textoClave(bio))}</span>
-          <button type="button" class="icon-btn-pure btn-editar-clave solo-edicion" data-bio="${bio.id}" title="Editar clave de artículo"><span class="material-symbols-rounded">edit</span></button>
+          <button type="button" class="icon-btn-pure btn-editar-clave solo-edicion" data-bio="${bio.id}" title="Editar clave de artículo" aria-label="Editar clave de artículo de ${esc(bio.nombre)}"><span class="material-symbols-rounded">edit</span></button>
         </span>
       </td>
       <td><span class="pill-presentacion ${esMultidosis ? 'multidosis' : ''}">${esc(bio.presentacion)}</span></td>
@@ -1431,10 +1461,10 @@ function filasBiologicoHtml(bio) {
         ? '<span class="chip-lote pendiente"><span class="material-symbols-rounded">hourglass_top</span>Lote por definir</span>'
         : `<span class="chip-lote"><span class="material-symbols-rounded">qr_code_2</span>Lote ${esc(it.requi_lotes.numero_lote)}</span><span class="cad-lote">Cad. ${cadHtml(it.requi_lotes.caducidad)}</span>`}</td>
       <td><div class="cant-wrap"><strong>${it.cantidad_surtida}</strong><span class="solo-edicion">
-        ${esPendiente(it) ? `<button type="button" class="btn btn-outline btn-sm btn-asignar-lotes" data-item="${it.id}" title="Ya llegaron los lotes: asígnalos"><span class="material-symbols-rounded" style="font-size:15px">edit_note</span> Asignar lotes</button>` : ''}
-        ${esPendiente(it) ? '' : `<button type="button" class="icon-btn-pure btn-asignar-lotes" data-item="${it.id}" title="Cambiar el número de lote o dividirlo en varios"><span class="material-symbols-rounded" style="font-size:16px">call_split</span></button>`}
-        <button type="button" class="icon-btn-pure btn-editar-item" data-item="${it.id}" title="Editar"><span class="material-symbols-rounded" style="font-size:16px">edit</span></button>
-        <button type="button" class="icon-btn-pure btn-quitar-item" data-item="${it.id}" data-bio="${bio.id}" title="Quitar"><span class="material-symbols-rounded" style="font-size:16px">delete</span></button>
+        ${esPendiente(it) ? `<button type="button" class="btn btn-outline btn-sm btn-asignar-lotes" data-item="${it.id}" title="Ya llegaron los lotes: asígnalos" aria-label="Asignar lotes de ${esc(bio.nombre)}"><span class="material-symbols-rounded" style="font-size:15px">edit_note</span> Asignar lotes</button>` : ''}
+        ${esPendiente(it) ? '' : `<button type="button" class="icon-btn-pure btn-asignar-lotes" data-item="${it.id}" title="Cambiar el número de lote o dividirlo en varios" aria-label="Cambiar o dividir el lote ${esc(it.requi_lotes.numero_lote)} de ${esc(bio.nombre)}"><span class="material-symbols-rounded" style="font-size:16px">call_split</span></button>`}
+        <button type="button" class="icon-btn-pure btn-editar-item" data-item="${it.id}" title="Editar" aria-label="Editar ${esPendiente(it) ? 'el lote por definir' : 'el lote ' + esc(it.requi_lotes.numero_lote)} de ${esc(bio.nombre)}"><span class="material-symbols-rounded" style="font-size:16px">edit</span></button>
+        <button type="button" class="icon-btn-pure btn-quitar-item" data-item="${it.id}" data-bio="${bio.id}" title="Quitar" aria-label="Quitar ${esPendiente(it) ? 'el lote por definir' : 'el lote ' + esc(it.requi_lotes.numero_lote)} de ${esc(bio.nombre)}"><span class="material-symbols-rounded" style="font-size:16px">delete</span></button>
       </span></div></td>
     </tr>`).join('');
   return filaBio + filasLotes;
@@ -2886,7 +2916,7 @@ async function construirDatosDestino(nivel, destino) {
   const mesInfo = MESES.find((m) => m.v === estado.requisicion.mes);
   const encabezado = {
     origenNombre: 'JURISDICCIÓN SANITARIA N.1', area: 'VACUNAS', origenDireccion: DIRECCION_JURISDICCION,
-    fechaEnvio: fechaExcelUtc(estado.requisicion.fecha_envio),
+    fechaEnvio: fechaExcelUtc(fechaRecepcionDe(estado.requisicion)),
     destinoNombre, folio: estado.requisicion.folio_oracle || '', destinoDireccion,
     // Solo el nombre del mes: la entrega/etiqueta es control interno y no se imprime.
     mesLabel: mesInfo ? mesInfo.l.toUpperCase() : ''
@@ -3288,6 +3318,7 @@ function instalarEventos() {
   $('btnNuevaEntrega').addEventListener('click', nuevaEntrega);
   $('btnRenombrarEntrega').addEventListener('click', renombrarEntrega);
   $('btnGuardarCabecera').addEventListener('click', guardarCabecera);
+  $('inpFechaRecepcion').addEventListener('change', guardarFechaRecepcion);
   $('btnCrearRequisicion').addEventListener('click', guardarCabecera);
   $('btnPdfJurisdiccional').addEventListener('click', () => exportarUno('JURISDICCIONAL', ''));
   $('btnGuardarFirmasJuris').addEventListener('click', guardarFirmasJurisdiccionales);

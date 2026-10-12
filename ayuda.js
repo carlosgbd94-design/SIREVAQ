@@ -366,80 +366,6 @@
     },
 
     // ------------------------------------------------------------- Requisiciones
-    requi: {
-      titulo: 'Requisiciones de biológicos',
-      subtitulo: 'De la Jurisdicción a los municipios y hospitales, y de ahí a las unidades. Tres pasos, en orden.',
-      bloques: [
-        T('El recorrido'),
-        P(1, 'Lo surtido', 'Registras lo que llegó del almacén estatal, lote por lote. Lo tecleas rápido o lo pegas desde Excel.'),
-        P(2, 'Municipios y hospitales', 'Una tabla: un renglón por lote y una columna por destino. Repartes todo el lote.'),
-        P(3, 'Unidades', 'Eliges el municipio y repartes cada lote entre sus unidades de salud.'),
-        T('Los puntos de avance'),
-        I('radio_button_unchecked', '#94a3b8', 'Gris · sin empezar', 'Ese lote todavía no tiene reparto.'),
-        I('timelapse', '#f59e0b', 'Ámbar · en proceso', 'Ya tiene reparto, pero aún queda saldo por repartir.'),
-        I('check_circle', '#16a34a', 'Verde · completo', 'No queda saldo. Si dejas algo sin repartir a propósito se queda ámbar y no pasa nada: solo te lo recordamos al cerrar el mes.'),
-        I('touch_app', '#0284c7', 'Toca un punto', 'Te lleva directo a ese lote. Arriba, los tres círculos numerados muestran el avance de cada paso y también son botones.'),
-        T('Para capturar más rápido'),
-        I('keyboard', '#0284c7', 'Solo teclado', 'Enter baja al siguiente renglón y Tab avanza a la siguiente celda. Lo que escribes se guarda al salir de la celda.'),
-        I('content_paste', '#7c3aed', 'Pegar desde Excel', 'En el paso 1 pega filas completas de lotes; en los pasos 2 y 3 pega un bloque de cantidades sobre la tabla y se acomoda solo.'),
-        I('auto_fix_high', '#d97706', 'Sugerir según el mes anterior', 'Llena los lotes que aún no tienen reparto con la misma proporción del mes pasado. Nunca toca lo que ya capturaste y después ajustas lo que haga falta.'),
-        I('ads_click', '#16a34a', 'Doble clic en una celda vacía', 'Pone todo el saldo que queda de ese lote.'),
-        T('El mes'),
-        I('save', '#0284c7', 'Crear requisición', 'Si el mes todavía no existe, aparece un botón para crearla; hasta entonces no hay pasos.'),
-        I('layers', '#0284c7', 'Entregas del mes', 'Si llega otra entrega en el mes (ej. la influenza después del esquema básico), toca "Nueva entrega": cada una se captura, se reparte y se exporta por separado (los archivos llevan _E1, _E2…) y puedes ponerle nombre con el lápiz.'),
-        I('format_list_numbered', '#0284c7', 'Cantidades primero, lotes después', 'Con "Prellenar cantidades" capturas cuánto llegó de cada biológico sin lote y ya puedes repartir. Cuando lleguen los lotes, "Asignar lotes" los pone y el reparto se acomoda solo. Con el ícono de dividir cambias o partes el lote de un renglón que ya lo tenía.'),
-        I('lock', '#0f172a', 'Cerrar entrega', 'La marca como enviada. Puedes seguir editando después; quedará "corregida posteriormente" para que municipios y unidades lo sepan.'),
-        I('history', '#64748b', 'Historial y exportar', 'El reloj abre las requisiciones de otros meses; Exportar genera los archivos oficiales por destino.'),
-        N('Cada unidad recibe lo que le repartas como precarga en su Movimiento de Biológico.')
-      ]
-    },
-    requi1: {
-      titulo: 'Paso 1 · Lo surtido',
-      subtitulo: 'Lo que llegó del almacén estatal, capturado sin soltar el teclado.',
-      bloques: [
-        T('Captura rápida'),
-        P(1, 'Elige el biológico', 'Toca su botón de color (o su renglón en la tabla). El recuadro gris confirma qué estás capturando.'),
-        P(2, 'Lote, caducidad, cantidad', 'Escribe el lote y presiona Enter. Si el lote ya lo conocía el sistema, la caducidad aparece sola y Enter te manda directo a la cantidad.'),
-        P(3, 'Enter guarda y sigue', 'Se guarda y regresas al campo Lote, listo para el siguiente lote del mismo biológico. Para cambiar de biológico toca otro botón.'),
-        I('event', '#0284c7', 'Caducidad', 'Se teclea DD-MM-AA (150729, 15-07-29 o 15/07/29) y a un lado ves cómo se mostrará: JUL-29. También entiende 07-29 o JUL-29 (toma el último día del mes).'),
-        T('Muchos lotes de golpe'),
-        I('content_paste', '#7c3aed', 'Pegar desde Excel', 'Copia las filas (biológico, lote, caducidad y cantidad) y pégalas en el campo Lote, o usa el botón de arriba. Antes de importar ves cómo se entendió cada fila.'),
-        T('Revisar y corregir'),
-        I('edit', '#0284c7', 'Lápiz del lote', 'Cambia su cantidad o caducidad sin salir del renglón. El lápiz junto a la clave edita la clave del biológico.'),
-        I('rule', '#d97706', 'Comparador de lotes', 'Te avisa si el lote ya existe o si parece un error de captura (por ejemplo, una letra de más) antes de guardarlo.'),
-        N('Un lote no se puede cambiar de biológico una vez capturado (quítalo y vuélvelo a agregar), ni bajar su cantidad por debajo de lo que ya repartiste.')
-      ]
-    },
-    requi2: {
-      titulo: 'Paso 2 · Municipios y hospitales',
-      subtitulo: 'Cada hospital es su propio destino, igual que un municipio.',
-      bloques: [
-        T('Cómo se llena la tabla'),
-        P(1, 'Ubica el lote', 'Un renglón por lote surtido, con el color de su biológico. Los botones de arriba filtran por biológico.'),
-        P(2, 'Escribe la cantidad de cada destino', 'Tab avanza al siguiente destino y Enter baja al siguiente lote. Se guarda al salir de la celda.'),
-        P(3, 'Revisa el saldo', 'La última columna dice cuánto queda por repartir: gris sin empezar, ámbar con saldo, verde completo.'),
-        T('Atajos'),
-        I('ads_click', '#16a34a', 'Doble clic en una celda vacía', 'Pone todo el saldo que queda de ese lote en ese destino.'),
-        I('content_paste', '#7c3aed', 'Pegar un bloque', 'Copia un rango de Excel y pégalo en cualquier celda: se acomoda hacia abajo y a la derecha desde ahí.'),
-        I('auto_fix_high', '#d97706', 'Sugerir según el mes anterior', 'Reparte los lotes vacíos con la proporción con que repartiste ese biológico el mes pasado. No toca lo que ya tiene reparto.'),
-        N('El sistema rechaza repartir más de lo surtido de ese lote, y no te deja bajar a un municipio por debajo de lo que ya repartió entre sus unidades.')
-      ]
-    },
-    requi3: {
-      titulo: 'Paso 3 · Unidades',
-      subtitulo: 'Cómo reparte cada municipio lo que recibió.',
-      bloques: [
-        T('Cómo se llena la tabla'),
-        P(1, 'Elige el municipio', 'Cada botón muestra cuántos de sus lotes ya quedaron completos. Solo salen los lotes que ese municipio tiene asignados en el paso 2.'),
-        P(2, 'Escribe por unidad', 'Un renglón por unidad (ordenadas por número de CLUES) y una columna por lote, en el orden del formato de requisición; arriba de cada columna ves el saldo. Tab avanza al siguiente lote y Enter baja a la siguiente unidad.'),
-        T('Atajos'),
-        I('ads_click', '#16a34a', 'Doble clic en una celda vacía', 'Pone todo el saldo que queda de ese lote en esa unidad.'),
-        I('content_paste', '#7c3aed', 'Pegar un bloque', 'Copia un rango de Excel (unidades × lotes) y pégalo en cualquier celda.'),
-        I('auto_fix_high', '#d97706', 'Sugerir según el mes anterior', 'Reparte los lotes vacíos del municipio con la misma proporción por unidad del mes pasado.'),
-        I('download', '#0284c7', 'Descargar', 'El ícono al final de cada renglón exporta el Excel oficial de esa unidad.'),
-        N('El reparto entre unidades no puede exceder lo asignado al municipio. Esa cantidad llega a cada unidad como precarga en su Movimiento.')
-      ]
-    },
     requi_pegar: {
       titulo: 'Pegar lo surtido desde Excel',
       subtitulo: 'Copias en Excel, pegas aquí y revisas antes de importar.',
@@ -573,7 +499,7 @@
     const partes = [];
     if (def.pdf) partes.push(`<a class="ayuda-enlace" href="${esc(def.pdf)}" download><span class="material-symbols-rounded" aria-hidden="true">download</span>PDF</a>`);
     if (def.pagina || def.pdf) partes.push(`<button type="button" class="ayuda-enlace" data-accion="compartir"><span class="material-symbols-rounded" aria-hidden="true">share</span>Compartir</button>`);
-    if (pasos && clave !== 'novedades' && window.GuiasContenido && window.GuiasContenido.novedades) {
+    if (pasos && clave !== 'novedades' && !def.sinNovedades && window.GuiasContenido && window.GuiasContenido.novedades) {
       partes.push(`<button type="button" class="ayuda-enlace" data-accion="novedades"><span class="material-symbols-rounded" aria-hidden="true">new_releases</span>Novedades</button>`);
     }
     extras.innerHTML = partes.join('') + '<span class="ayuda-aviso" id="ayudaAviso" role="status"></span>';
@@ -633,7 +559,7 @@
     if (!b) return;
     ev.preventDefault();
     ev.stopPropagation();
-    abrir(b.dataset.ayuda);
+    abrir(b.dataset.ayuda, Number(b.dataset.ayudaPaso) || 0);
   });
   document.addEventListener('keydown', (ev) => {
     const ov = document.getElementById('ayudaOverlay');

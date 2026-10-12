@@ -198,7 +198,7 @@ test('Requisiciones: flujo completo por pasos (captura rápida, pegado, matrices
   await expect(page.locator('#pildoraPaso3')).toHaveText('2/4');   // solo cuentan destinos con unidades registradas (en el simulado: Corregidora y Querétaro)
   await expect(page.locator('#stepper .st-nodo.hecho')).toHaveCount(1);       // solo el paso 1 está completo
   await expect(page.locator('#dockEstadoTitulo')).toContainText('Paso 2 de 3');
-  await page.click('#panelPaso2 [data-ayuda="requi2"]');
+  await page.click('#panelPaso2 [data-ayuda="requi"]');
   await expect(page.locator('#ayudaOverlay.abierto')).toBeVisible();
   await expect(page.locator('#ayudaCuerpo')).toContainText('Doble clic');
   await page.keyboard.press('Escape');

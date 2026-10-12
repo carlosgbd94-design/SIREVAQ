@@ -123,7 +123,10 @@
       destino.focus();
       destino.scrollIntoView({ block: 'start' });
     });
-    document.body.insertBefore(a, document.body.firstChild);
+    var nav = document.createElement('nav');
+    nav.setAttribute('aria-label', 'Saltar al contenido');
+    nav.appendChild(a);
+    document.body.insertBefore(nav, document.body.firstChild);
   }
 
   var pendiente = false;

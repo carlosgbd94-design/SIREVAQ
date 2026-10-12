@@ -3005,7 +3005,7 @@
             <span class="ruta-txt"><b>${p.t}</b><small>${_esc(p.x)}</small></span>
           </li>`).join('')}
       </ol>
-      <button type="button" class="ayuda-btn ruta-ayuda" data-ayuda="guia_sis" title="Guía del SINBA-SIS" aria-label="Abrir la guía del SINBA-SIS"><span class="material-symbols-rounded">help</span></button>`;
+      <button type="button" class="ayuda-btn ruta-ayuda" data-ayuda="guia_sis" title="Guía del SINBA-SIS" aria-label="Abrir la guía del SINBA-SIS"><span class="material-symbols-rounded">help</span>Guía</button>`;
   }
 
   // Píldoras vivas de cada hoja (barra de abajo).

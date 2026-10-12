@@ -11,9 +11,10 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1">
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=8">
-<link rel="stylesheet" href="ayuda.css?v=5">
-<script defer src="ayuda.js?v=19"></script>
-<script defer src="a11y_global.js?v=5"></script>
+<link rel="stylesheet" href="ayuda.css?v=6">
+<script defer src="guias_contenido.js?v=2"></script>
+<script defer src="ayuda.js?v=20"></script>
+<script defer src="a11y_global.js?v=6"></script>
 <script defer src="dock_glass.js?v=4"></script>
 <script defer src="requi_engine.js?v=3"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
@@ -566,7 +567,7 @@
 </head>
 <body data-solo-lectura="0" id="pagina">
 
-  <a href="index.html" class="volver"><span class="material-symbols-rounded">arrow_back</span> Volver a SIREVAQ</a>
+  <nav aria-label="Regresar a SIREVAQ"><a href="index.html" class="volver"><span class="material-symbols-rounded">arrow_back</span> Volver a SIREVAQ</a></nav>
 
   <main id="contenidoPrincipal">
   <div class="tarjeta">
@@ -648,6 +649,10 @@
         <button class="btn-icono solo-edicion" id="btnCargar" title="Cargar la requisición ya guardada de este año/mes"><span class="material-symbols-rounded">folder_open</span></button>
         <button class="btn-icono solo-edicion" id="btnGuardarCabecera" title="Guardar (crea la requisición del mes si no existe)"><span class="material-symbols-rounded">save</span></button>
       </div>
+      <div class="campo" id="campoFechaRecepcion" style="display:none;">
+        <label for="inpFechaRecepcion">Fecha de recepción</label>
+        <input type="date" id="inpFechaRecepcion" title="Fecha en que se recibió la requisición: es la que sale en el Excel">
+      </div>
       <span id="badgesEstadoRequisicion" style="display:none; gap:6px; align-items:center;"></span>
       <div class="barra-entregas" id="barraEntregas">
         <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;">Entregas del mes</span>
@@ -662,7 +667,7 @@
       <p class="hint" style="margin-bottom:10px;">Historial de requisiciones capturadas -- da clic en "Abrir" para saltar directo a ese mes.</p>
       <div class="tbl-scroll" style="max-height:280px;">
         <table class="tbl">
-          <thead><tr><th>Mes</th><th>Estado</th><th><span class="sr-only">Detalle</span></th><th>Fecha de envío</th><th>Creó</th><th><span class="sr-only">Acciones</span></th></tr></thead>
+          <thead><tr><th>Mes</th><th>Estado</th><th><span class="sr-only">Detalle</span></th><th>Fecha de recepción</th><th>Creó</th><th><span class="sr-only">Acciones</span></th></tr></thead>
           <tbody id="tbodyExplorador"></tbody>
         </table>
       </div>
@@ -730,7 +735,7 @@
     <!-- Avance general: los tres pasos con su punto de estado (gris = sin
          empezar, ámbar = en proceso, verde = completo). Cada uno es clicable. -->
     <div class="tarjeta stepper-tarjeta">
-      <div class="stepper" id="stepper" role="list" aria-label="Avance de la requisición"></div>
+      <div class="stepper" id="stepper" role="group" aria-label="Avance de la requisición"></div>
     </div>
 
     <!-- Barra flotante de pasos (One UI, vidrio ligero): los tres pasos de la
@@ -754,7 +759,7 @@
         <small id="dockEstadoTexto"></small>
       </div>
       <button type="button" class="dock-guardado ok solo-edicion" id="dockGuardado" aria-haspopup="dialog" aria-expanded="false" aria-controls="panelPendientes">
-        <span class="dg-ico"><span class="material-symbols-rounded" id="dockGuardadoIcono">cloud_done</span></span>
+        <span class="dg-ico" aria-hidden="true"><span class="material-symbols-rounded" id="dockGuardadoIcono">cloud_done</span></span>
         <span class="dg-txt"><b id="dockGuardadoTitulo">Todo guardado</b><small id="dockGuardadoTexto">Se guarda solo al instante</small></span>
         <span class="dg-pend" id="dockGuardadoPend" style="display:none;"></span>
       </button>
@@ -774,7 +779,7 @@
       <div class="avance" id="avancePaso1"></div>
 
       <div class="tarjeta solo-edicion">
-        <h2 style="margin:0 0 4px;"><span class="material-symbols-rounded">bolt</span> Captura rápida<button type="button" class="ayuda-btn" data-ayuda="requi1" title="Cómo funciona el paso 1" aria-label="Cómo funciona el paso 1"><span class="material-symbols-rounded">help</span></button>
+        <h2 style="margin:0 0 4px;"><span class="material-symbols-rounded">bolt</span> Captura rápida<button type="button" class="ayuda-btn" data-ayuda="requi" data-ayuda-paso="1" title="Cómo funciona el paso 1" aria-label="Cómo funciona el paso 1"><span class="material-symbols-rounded">help</span></button>
           <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSyncLotes" style="margin-left:auto;" title="Revisa que los lotes repartidos este mes estén dados de alta en el panel Lotes (nunca duplica ni borra)"><span class="material-symbols-rounded" style="font-size:15px">sync</span> Sincronizar lotes</button>
           <button type="button" class="btn btn-outline btn-sm" id="btnPrellenar" style="margin-left:8px;" title="Capturar solo cuánto llegó de cada biológico; los lotes se asignan después"><span class="material-symbols-rounded" style="font-size:15px">format_list_numbered</span> Prellenar cantidades</button>
           <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnTraerInfluenza" style="margin-left:8px;" title="Llenar la influenza con el reparto de frascos que ya hicieron Jurisdicción y los municipios"><span class="material-symbols-rounded" style="font-size:15px">vaccines</span> Traer reparto de influenza</button>
@@ -812,7 +817,7 @@
     <div class="paso-panel" id="panelPaso2">
       <div class="avance" id="avancePaso2"></div>
       <div class="tarjeta">
-        <h2><span class="material-symbols-rounded">alt_route</span> Reparto a Municipios y Hospitales<button type="button" class="ayuda-btn" data-ayuda="requi2" title="Cómo funciona el paso 2" aria-label="Cómo funciona el paso 2"><span class="material-symbols-rounded">help</span></button>
+        <h2><span class="material-symbols-rounded">alt_route</span> Reparto a Municipios y Hospitales<button type="button" class="ayuda-btn" data-ayuda="requi" data-ayuda-paso="3" title="Cómo funciona el paso 2" aria-label="Cómo funciona el paso 2"><span class="material-symbols-rounded">help</span></button>
           <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSugerir2" style="margin-left:auto;" title="Llena los lotes que aún no tienen reparto con la misma proporción del mes anterior"><span class="material-symbols-rounded" style="font-size:15px">auto_fix_high</span> Sugerir según el mes anterior</button>
         </h2>
         <p class="hint">Un renglón por lote, una columna por destino. <b>Tab</b> avanza al siguiente destino, <b>Enter</b> baja al siguiente lote. <b>Doble clic</b> en una celda vacía pone todo el saldo. También puedes <b>pegar un bloque</b> copiado de Excel.</p>
@@ -825,7 +830,7 @@
     <div class="paso-panel" id="panelPaso3">
       <div class="avance" id="avancePaso3"></div>
       <div class="tarjeta">
-        <h2><span class="material-symbols-rounded">local_hospital</span> Reparto a Unidades<button type="button" class="ayuda-btn" data-ayuda="requi3" title="Cómo funciona el paso 3" aria-label="Cómo funciona el paso 3"><span class="material-symbols-rounded">help</span></button>
+        <h2><span class="material-symbols-rounded">local_hospital</span> Reparto a Unidades<button type="button" class="ayuda-btn" data-ayuda="requi" data-ayuda-paso="4" title="Cómo funciona el paso 3" aria-label="Cómo funciona el paso 3"><span class="material-symbols-rounded">help</span></button>
           <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSugerir3" style="margin-left:auto;" title="Llena los lotes del municipio que aún no tienen reparto con la proporción del mes anterior"><span class="material-symbols-rounded" style="font-size:15px">auto_fix_high</span> Sugerir según el mes anterior</button>
         </h2>
         <p class="hint" id="hintPaso3">Elige el municipio u hospital (cada hospital es su propia unidad: lo que le asignas en el paso 2 se le pasa solo). Un renglón por unidad, una columna por lote (arriba ves cuánto le queda por repartir). <b>Tab</b> avanza al siguiente lote, <b>Enter</b> baja a la siguiente unidad. <b>Doble clic</b> en una celda vacía pone todo el saldo; también puedes <b>pegar desde Excel</b>.</p>
@@ -1004,6 +1009,6 @@
     </div>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

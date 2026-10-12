@@ -34,11 +34,11 @@ window.onunhandledrejection = function (event) {
 </script>
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=8">
-<link rel="stylesheet" href="ayuda.css?v=5">
+<link rel="stylesheet" href="ayuda.css?v=6">
 <link rel="stylesheet" href="municipal_guiado.css?v=6">
-<script defer src="guias_contenido.js?v=1"></script>
-<script defer src="ayuda.js?v=19"></script>
-<script defer src="a11y_global.js?v=5"></script>
+<script defer src="guias_contenido.js?v=2"></script>
+<script defer src="ayuda.js?v=20"></script>
+<script defer src="a11y_global.js?v=6"></script>
 <script defer src="dock_glass.js?v=4"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
@@ -47,7 +47,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="biovac_ui.js?v=2026.67"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.54"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.55"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.19"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
@@ -369,7 +369,9 @@ window.onunhandledrejection = function (event) {
   .ruta-txt small { display: block; font-size: 11px; color: var(--muted); line-height: 1.35; margin-top: 1px; }
   .ruta-paso.actual .ruta-txt small { color: var(--text); font-weight: 600; }
   .ruta-paso.alerta .ruta-txt small { color: var(--warning); font-weight: 700; }
-  .ruta-ayuda { flex: none; color: var(--muted); }
+  .ruta-ayuda.ayuda-btn { flex: none; gap: 6px; padding: 8px 14px 8px 10px !important; margin: 0 0 0 8px !important; border-radius: 999px !important; background: rgba(2,132,199,.1) !important; color: var(--secondary, #0284c7) !important; font: 800 13px 'Poppins', sans-serif; }
+  .ruta-ayuda.ayuda-btn .material-symbols-rounded { font-size: 20px; }
+  @media (hover: hover) and (pointer: fine) { .ruta-ayuda.ayuda-btn:hover { background: rgba(2,132,199,.18) !important; } }
   @media (max-width: 760px) {
     .ruta-pasos { flex-wrap: wrap; row-gap: 10px; }
     .ruta-paso { flex: 1 1 46%; }

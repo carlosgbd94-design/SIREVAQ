@@ -166,6 +166,73 @@
     ]
   };
 
+  // ───────────────────────────────────── Requisiciones (personal de la Jurisdicción) ─────────────────────────────────────
+  // Solo se ve en la tarjeta de ayuda de requisiciones.html; no genera página ni PDF aparte.
+  G.requi = {
+    titulo: 'Guía de Requisiciones',
+    subtitulo: 'De la Jurisdicción a los municipios y hospitales, y de ahí a las unidades.',
+    sinNovedades: true,
+    pasos: [
+      { titulo: 'El recorrido', bloques: [
+        T('Tres pasos, en orden'),
+        P(1, 'Lo surtido', 'Registras lo que llegó del almacén estatal, lote por lote. Lo tecleas rápido o lo pegas desde Excel.'),
+        P(2, 'Municipios y hospitales', 'Una tabla: un renglón por lote y una columna por destino. Repartes todo el lote.'),
+        P(3, 'Unidades', 'Eliges el municipio y repartes cada lote entre sus unidades de salud.'),
+        I('touch_app', '#0284c7', 'Los círculos de arriba', 'Muestran el avance de cada paso y también son botones para ir a él.'),
+        N('Cada unidad recibe lo que le repartas como precarga en su Movimiento de Biológico.')
+      ] },
+      { titulo: 'Paso 1 · Lo surtido', bloques: [
+        T('Captura rápida, sin soltar el teclado'),
+        P(1, 'Elige el biológico', 'Toca su botón de color (o su renglón en la tabla). El recuadro gris confirma qué estás capturando.'),
+        P(2, 'Lote, caducidad, cantidad', 'Escribe el lote y presiona Enter. Si el lote ya lo conocía el sistema, la caducidad aparece sola y Enter te manda directo a la cantidad.'),
+        P(3, 'Enter guarda y sigue', 'Se guarda y regresas al campo Lote, listo para el siguiente lote del mismo biológico.'),
+        I('event', '#0284c7', 'Caducidad', 'Se teclea DD-MM-AA (150729, 15-07-29 o 15/07/29) y a un lado ves cómo se mostrará: JUL-29. También entiende 07-29 o JUL-29 (toma el último día del mes).'),
+        I('content_paste', '#7c3aed', 'Muchos lotes de golpe', 'Copia las filas de Excel (biológico, lote, caducidad y cantidad) y pégalas en el campo Lote o usa «Pegar desde Excel». Antes de importar ves cómo se entendió cada fila.')
+      ] },
+      { titulo: 'Paso 1 · Corregir y lotes por llegar', bloques: [
+        T('Revisar y corregir'),
+        I('edit', '#0284c7', 'Lápiz del lote', 'Cambia su cantidad o caducidad sin salir del renglón. El lápiz junto a la clave edita la clave del biológico.'),
+        I('rule', '#d97706', 'Comparador de lotes', 'Te avisa si el lote ya existe o si parece un error de captura (por ejemplo, una letra de más) antes de guardarlo.'),
+        T('Cantidades primero, lotes después'),
+        I('format_list_numbered', '#0284c7', 'Prellenar y asignar', 'Con «Prellenar cantidades» capturas cuánto llegó de cada biológico sin lote y ya puedes repartir. Cuando lleguen los lotes, «Asignar lotes» los pone y el reparto se acomoda solo.'),
+        I('call_split', '#7c3aed', 'Cambiar o dividir', 'Con el ícono de dividir cambias o partes el lote de un renglón que ya lo tenía.'),
+        N('Un lote no se puede cambiar de biológico una vez capturado (quítalo y vuélvelo a agregar), ni bajar su cantidad por debajo de lo que ya repartiste.')
+      ] },
+      { titulo: 'Paso 2 · Municipios y hospitales', bloques: [
+        T('Cómo se llena la tabla'),
+        P(1, 'Ubica el lote', 'Un renglón por lote surtido, con el color de su biológico. Los botones de arriba filtran por biológico.'),
+        P(2, 'Escribe la cantidad de cada destino', 'Tab avanza al siguiente destino y Enter baja al siguiente lote. Se guarda al salir de la celda.'),
+        P(3, 'Revisa el saldo', 'La última columna dice cuánto queda por repartir: gris sin empezar, ámbar con saldo, verde completo.'),
+        I('ads_click', '#16a34a', 'Doble clic en una celda vacía', 'Pone todo el saldo que queda de ese lote en ese destino.'),
+        N('El sistema rechaza repartir más de lo surtido de ese lote, y no te deja bajar a un municipio por debajo de lo que ya repartió entre sus unidades.')
+      ] },
+      { titulo: 'Paso 3 · Unidades', bloques: [
+        T('Cómo reparte cada municipio'),
+        P(1, 'Elige el municipio', 'Cada botón muestra cuántos de sus lotes ya quedaron completos. Solo salen los lotes que ese municipio tiene asignados en el paso 2.'),
+        P(2, 'Escribe por unidad', 'Un renglón por unidad (ordenadas por CLUES) y una columna por lote; arriba de cada columna ves el saldo. Tab avanza al siguiente lote y Enter baja a la siguiente unidad.'),
+        I('download', '#0284c7', 'Descargar', 'El ícono al final de cada renglón exporta el Excel oficial de esa unidad.'),
+        N('El reparto entre unidades no puede exceder lo asignado al municipio.')
+      ] },
+      { titulo: 'Atajos y avance', bloques: [
+        T('Para repartir más rápido'),
+        I('content_paste', '#7c3aed', 'Pegar un bloque', 'En los pasos 2 y 3 copia un rango de Excel y pégalo en cualquier celda: se acomoda hacia abajo y a la derecha.'),
+        I('auto_fix_high', '#d97706', 'Sugerir según el mes anterior', 'Llena los lotes que aún no tienen reparto con la proporción del mes pasado. Nunca toca lo que ya capturaste.'),
+        T('Los puntos de avance'),
+        I('radio_button_unchecked', '#94a3b8', 'Gris · sin empezar', 'Ese lote todavía no tiene reparto.'),
+        I('timelapse', '#f59e0b', 'Ámbar · en proceso', 'Ya tiene reparto, pero aún queda saldo por repartir.'),
+        I('check_circle', '#16a34a', 'Verde · completo', 'No queda saldo. Si dejas algo sin repartir a propósito se queda ámbar y solo te lo recordamos al cerrar.')
+      ] },
+      { titulo: 'La entrega y su cierre', bloques: [
+        T('Del mes a la exportación'),
+        I('save', '#0284c7', 'Crear requisición', 'Si el mes todavía no existe, aparece un botón para crearla; hasta entonces no hay pasos.'),
+        I('layers', '#0284c7', 'Entregas del mes', 'Si llega otra entrega en el mes, toca «Nueva entrega»: cada una se captura, se reparte y se exporta por separado (archivos _E1, _E2…) y puedes ponerle nombre con el lápiz.'),
+        I('event', '#7c3aed', 'Fecha de recepción', 'Captúrala junto al mes: es la que sale en el Excel. Al cerrar la entrega se conserva; ya no se pone el último día del mes.'),
+        I('lock', '#0f172a', 'Cerrar entrega', 'La marca como enviada. Puedes seguir editando; quedará «corregida posteriormente» para que municipios y unidades lo sepan.'),
+        I('history', '#64748b', 'Historial y exportar', 'El reloj abre las requisiciones de otros meses; «Exportar» genera los archivos oficiales por destino.')
+      ] }
+    ]
+  };
+
   if (typeof module !== 'undefined' && module.exports) module.exports = G;
   root.GuiasContenido = G;
 })(typeof window !== 'undefined' ? window : globalThis);

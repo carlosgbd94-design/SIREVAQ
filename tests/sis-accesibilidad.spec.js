@@ -156,7 +156,7 @@ test('Accesibilidad global: iconos decorativos ocultos, botones con nombre, enla
   expect(r.foco).toBe(true);
   // "Saltar al contenido" es lo primero que enfoca el Tab y lleva al título de la pantalla
   // es el PRIMER elemento del documento (lo primero que alcanza el Tab al cargar) y lleva al título de la pantalla
-  expect(await page.evaluate(() => document.body.firstElementChild.classList.contains('saltar-contenido'))).toBe(true);
+  expect(await page.evaluate(() => !!document.body.firstElementChild.querySelector('.saltar-contenido'))).toBe(true);
   await page.focus('.saltar-contenido');
   await page.keyboard.press('Enter');
   expect(await page.evaluate(() => document.activeElement && document.activeElement.tagName)).toMatch(/^H[12]$/);
