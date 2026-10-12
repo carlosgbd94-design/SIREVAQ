@@ -6048,7 +6048,10 @@ function infIndEtiqueta(tono, pct) {
   return tono === "good" ? "En ritmo" : (tono === "warn" ? "Algo atrasado" : "Atrasado");
 }
 
+let _infIndRenderToken = 0;
 async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
+  const miToken = ++_infIndRenderToken;
+  window._infIndicadoresDatos = null;   // hasta que termine este cálculo, el Excel/PDF no usan cifras de otro ámbito
   const container = document.getElementById("rdaDashboardContent");
   if (!container) return;
   container.innerHTML = '<div class="iinf-cargando" role="status">Calculando indicadores de influenza…</div>';
@@ -6082,7 +6085,11 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   };
   let units = (allUnits || []).map(u => ({ clues: u.clues, unidad: u.unidad || u.clues, municipio: String(u.municipio || "").toUpperCase(), destino: destinoDe(u) }));
   if (uniFilter) units = units.filter(u => u.clues === uniFilter);
-  else if (muniFilter) units = units.filter(u => u.destino === String(muniFilter).toUpperCase() || u.municipio === String(muniFilter).toUpperCase());
+  else if (muniFilter) {
+    // Los hospitales (HENM, NHG) se manejan como destinos propios: no cuentan dentro de Querétaro.
+    const norm = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim().replace(/^EL\s+/, "");
+    units = units.filter(u => norm(u.destino) === norm(muniFilter));
+  }
 
   // 2. Metas, capturas y reparto de la campaña
   const [resMetas, resCapturas, resFrascos] = await Promise.all([
@@ -6096,6 +6103,8 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   (resCapturas.data || []).forEach(c => { (capturasPorClues[c.clues] = capturasPorClues[c.clues] || []).push(c); });
   const frascosPorClues = {};
   (resFrascos.data || []).forEach(f => { if (f.clues) frascosPorClues[f.clues] = (frascosPorClues[f.clues] || 0) + Number(f.cantidad_frascos || 0); });
+
+  if (miToken !== _infIndRenderToken) return;   // llegó un filtro más reciente: este cálculo ya no se pinta
 
   // 3. Calendario de la campaña
   const hoy = new Date().toLocaleDateString("en-CA");
@@ -6302,7 +6311,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
       <line x1="${padL}" y1="${padT}" x2="${W - 8}" y2="${padT}" class="iinf-grid"/>
       <text x="${padL - 6}" y="${padT + 4}" class="iinf-txt" text-anchor="end">${fmt(maxV)}</text>
       <text x="${padL - 6}" y="${padT + gh + 4}" class="iinf-txt" text-anchor="end">0</text>
-      ${necesario != null ? `<line x1="${padL}" y1="${yDe(necesario).toFixed(1)}" x2="${W - 8}" y2="${yDe(necesario).toFixed(1)}" class="iinf-necesario"/><text x="${padL + 6}" y="${(yDe(necesario) - 5).toFixed(1)}" class="iinf-txt iinf-txt--nec" text-anchor="start">Ritmo necesario: ${fmt(necesario)} por semana</text>` : ""}
+      ${necesario != null ? `<line x1="${padL}" y1="${yDe(necesario).toFixed(1)}" x2="${W - 8}" y2="${yDe(necesario).toFixed(1)}" class="iinf-necesario"/>` : ""}
       ${barras.map((b, i) => {
         const x = padL + i * paso + (paso - bw) / 2, y = yDe(b.v);
         return `<g><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw}" height="${Math.max(1, padT + gh - y).toFixed(1)}" rx="3" class="iinf-col"><title>${corta(b.f)}: ${fmt(b.v)} dosis</title></rect>
@@ -6311,7 +6320,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
     </svg>` : "";
   const tendencia = `
     <section class="iinf-card" aria-labelledby="iinfTendTit">
-      <header><h3 id="iinfTendTit">Dosis aplicadas por semana</h3><span class="iinf-sub">Cada barra es una semana de reporte; la línea punteada es lo que hace falta por semana para cumplir</span></header>
+      <header><h3 id="iinfTendTit">Dosis aplicadas por semana</h3><span class="iinf-sub">Cada barra es una semana de reporte${necesario != null ? `; la línea punteada es el ritmo necesario para cumplir (<b>${fmt(necesario)}</b> dosis por semana)` : ""}</span></header>
       ${svg || '<p class="iinf-nota">La campaña aún no tiene semanas vencidas.</p>'}
       ${barras.length ? `<details class="iinf-det"><summary>Ver los datos por semana</summary>
         <table class="iinf-tabla iinf-tabla--mini" aria-label="Dosis aplicadas por semana"><thead><tr><th scope="col">Semana</th><th scope="col" class="c">Dosis</th></tr></thead>
@@ -6537,6 +6546,246 @@ async function exportInfluenzaIndicadoresExcel() {
   }
 }
 window.exportInfluenzaIndicadoresExcel = exportInfluenzaIndicadoresExcel;
+
+
+/**
+ * PDF vectorial (texto seleccionable, tablas reales) del tablero de Indicadores de influenza.
+ * Usa las mismas cifras que la pantalla y el Excel (window._infIndicadoresDatos). Lo llama generarPDFRobusto
+ * (rda_ui.js) cuando el esquema es Meta-Logro Influenza; con `devolverBlob` entrega el Blob (ZIP masivo).
+ */
+async function influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob) {
+  const d = window._infIndicadoresDatos;
+  if (!d) throw new Error("Abre el tablero de influenza antes de exportar.");
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+  const PW = 215.9, PH = 279.4, M = 14, CW = PW - 2 * M, TOP = 16, BOT = PH - 16;
+  const fmt = (n) => Math.round(n).toLocaleString("es-MX");
+  const f1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
+  // Helvetica estándar solo trae Latin-1: se sustituyen los símbolos que no existen en ella.
+  const tx = (s) => String(s == null ? "" : s).replace(/≈/g, "aprox.").replace(/[−–]/g, "-").replace(/[→▸▾]/g, ">").replace(/[^\x00-\xFF]/g, "");
+  const corta = (ymd) => (window.InfluenzaReglas ? window.InfluenzaReglas.fechaCorta(ymd) : ymd);
+  const largaFecha = (ymd) => String(ymd).split("-").reverse().join("/");
+  const COL = { good: [4, 120, 87], warn: [180, 83, 9], bad: [185, 28, 28], none: [71, 85, 105] };
+  const FON = { good: [209, 250, 229], warn: [254, 243, 199], bad: [254, 226, 226], none: [241, 245, 249] };
+  const tonoDe = (diff) => (diff >= -5 ? "good" : (diff >= -15 ? "warn" : "bad"));
+  let y = TOP;
+
+  const nueva = () => { doc.addPage(); y = TOP; };
+  const hace = (h) => { if (y + h > BOT) nueva(); };
+  const titulo = (t, sub) => {
+    hace(16);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); doc.setTextColor(15, 23, 42);
+    doc.text(tx(t), M, y + 4);
+    if (sub) { doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(100, 116, 139); doc.text(tx(sub), M, y + 9); y += 5; }
+    y += 8;
+  };
+  const barra = (x, yy, w, h, p, tono, marca) => {
+    doc.setFillColor(226, 232, 240); doc.roundedRect(x, yy, w, h, h / 2, h / 2, "F");
+    const fw = Math.max(p > 0 ? h : 0, Math.min(100, p) / 100 * w);
+    if (fw > 0) { doc.setFillColor(...COL[tono]); doc.roundedRect(x, yy, fw, h, h / 2, h / 2, "F"); }
+    if (marca != null) { doc.setDrawColor(15, 23, 42); doc.setLineWidth(0.7); const mx = x + Math.min(100, marca) / 100 * w; doc.line(mx, yy - 1.5, mx, yy + h + 1.5); }
+  };
+  const tabla = (head, body, opts = {}) => {
+    // Una tabla que cabe en una página no se parte: si no cabe en lo que queda, pasa completa a la siguiente.
+    const estimada = (body.length + (opts.cabeceras || 1)) * 8.4 + 6;
+    if (y + estimada > BOT && estimada < BOT - TOP) nueva(); else hace(20);
+    doc.autoTable({
+      head: opts.headRows || [head.map(tx)], body: body.map(r => r.map(c => (c && typeof c === "object" && !Array.isArray(c) ? { ...c, content: tx(c.content) } : tx(c)))),
+      startY: y, margin: { left: M, right: M, top: TOP, bottom: 18 }, theme: "grid",
+      styles: { font: "helvetica", fontSize: 8.5, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.2, textColor: [30, 41, 59], valign: "middle" },
+      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: "bold", halign: "center" },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: opts.columnStyles || { 0: { halign: "left", fontStyle: "bold" } },
+      didParseCell: opts.didParseCell,
+      rowPageBreak: "avoid"
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  };
+
+  // ── Encabezado ──
+  doc.setFillColor(15, 23, 42); doc.rect(0, 0, PW, 30, "F");
+  doc.setFillColor(56, 189, 248); doc.rect(0, 30, PW, 1.2, "F");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(148, 163, 184);
+  doc.text("SECRETARÍA DE SALUD DEL ESTADO DE QUERÉTARO — JURISDICCIÓN SANITARIA NO. 1", M, 10);
+  doc.setFontSize(15); doc.setTextColor(255, 255, 255);
+  doc.text(tx(`Meta-Logro de vacunación antiinfluenza ${String(d.campana).replace(/^Campa.a Influenza\s*/i, "")}`), M, 18);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(203, 213, 225);
+  doc.text(tx(`${d.ambito}  |  Corte al ${largaFecha(d.fechaCorte)}  |  Emitido ${new Date().toLocaleString("es-MX")}`), M, 25);
+  y = 40;
+
+  // ── Avance de la campaña ──
+  const tono = tonoDe(d.diff);
+  hace(50);
+  doc.setFillColor(...FON[tono]); doc.roundedRect(M, y, CW, 42, 3, 3, "F");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+  doc.text("AVANCE DE LA CAMPAÑA", M + 6, y + 8);
+  doc.setFontSize(34); doc.setTextColor(...COL[tono]);
+  doc.text(`${f1(d.pct)}%`, M + 6, y + 24);
+  doc.setFontSize(9); doc.text(tx(d.estado), M + 6, y + 32);
+  const parrafo = `Se han aplicado ${fmt(d.apl)} de ${fmt(d.meta)} dosis de la meta (aprox. ${fmt(Math.ceil(d.meta / DOSIS_POR_FRASCO))} frascos). `
+    + `A esta fecha, con ${d.semanaN} de ${d.totalSemanas} semanas de campaña, se debería llevar ${f1(d.esperadoPct)}%: `
+    + (d.diff >= 0 ? `va ${f1(d.diff)} puntos por delante.` : `faltan ${f1(-d.diff)} puntos para ir en ritmo.`);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(51, 65, 85);
+  doc.text(doc.splitTextToSize(tx(parrafo), CW - 62), M + 52, y + 9);
+  barra(M + 52, y + 27, CW - 62, 5, d.pct, tono, d.esperadoPct);
+  doc.setFontSize(7.5); doc.setTextColor(100, 116, 139);
+  doc.text("0%", M + 52, y + 38);
+  doc.text(`La marca es lo esperado a hoy (${f1(d.esperadoPct)}%)`, M + 52 + (CW - 62) / 2, y + 38, { align: "center" });
+  doc.text("Meta 100%", M + 52 + CW - 62, y + 38, { align: "right" });
+  y += 50;
+
+  // ── Indicadores clave (3 x 2) ──
+  const tonoRitmo = d.necesario == null ? "good" : (d.ritmo4 >= d.necesario ? "good" : (d.ritmo4 >= d.necesario * 0.7 ? "warn" : "bad"));
+  const tonoProy = d.pctProy == null ? "none" : (d.pctProy >= 100 ? "good" : (d.pctProy >= 85 ? "warn" : "bad"));
+  const kpis = [
+    ["META DE LA CAMPAÑA", fmt(d.meta), `${fmt(d.unidadesConMeta)} ${d.unidadesConMeta === 1 ? "unidad con meta" : "unidades con meta"}`, "none"],
+    ["DOSIS APLICADAS", fmt(d.apl), d.ultimaSemana ? `Corte al ${corta(d.ultimaSemana)}` : "Sin semanas vencidas", "none"],
+    ["FALTAN POR APLICAR", fmt(d.faltan), `aprox. ${fmt(Math.ceil(d.faltan / DOSIS_POR_FRASCO))} frascos`, "none"],
+    ["SEMANA DE CAMPAÑA", `${d.semanaN} de ${d.totalSemanas}`, d.restantes ? `Quedan ${d.restantes} semanas` : "La campaña ya terminó", "none"],
+    ["RITMO RECIENTE", `${fmt(d.ritmo4)} dosis/sem`, d.necesario == null ? (d.faltan > 0 ? "Sin semanas restantes" : "Meta cumplida") : `Necesario: ${fmt(d.necesario)} por semana`, tonoRitmo],
+    ["PROYECCIÓN AL CIERRE", d.pctProy == null ? "-" : `${f1(d.pctProy)}%`, d.pctProy == null ? "Se calcula con 4 semanas de reportes" : `A este ritmo, ${fmt(d.proyeccion)} dosis`, tonoProy]
+  ];
+  const kw = (CW - 8) / 3, kh = 22;
+  hace(kh * 2 + 14);
+  kpis.forEach((k, i) => {
+    const x = M + (i % 3) * (kw + 4), yy = y + Math.floor(i / 3) * (kh + 4);
+    doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.3); doc.setFillColor(255, 255, 255); doc.roundedRect(x, yy, kw, kh, 2.5, 2.5, "FD");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(100, 116, 139); doc.text(k[0], x + 4, yy + 6);
+    doc.setFontSize(14); doc.setTextColor(...(k[3] === "none" ? [15, 23, 42] : COL[k[3]])); doc.text(tx(k[1]), x + 4, yy + 14);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(100, 116, 139); doc.text(tx(k[2]), x + 4, yy + 19.5);
+  });
+  y += kh * 2 + 12;
+
+  // ── Cobertura de reporte y población ──
+  titulo("Reporte de la última semana y población");
+  const pctCob = d.unidadesConMeta ? d.reportaron * 100 / d.unidadesConMeta : 0;
+  const tCob = pctCob >= 90 ? "good" : (pctCob >= 70 ? "warn" : "bad");
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(51, 65, 85);
+  doc.text(tx(d.ultimaSemana ? `Semana del ${corta(d.ultimaSemana)}: ${d.reportaron} de ${d.unidadesConMeta} ${d.unidadesConMeta === 1 ? "unidad reportó" : "unidades reportaron"}.` : "La campaña aún no tiene semanas vencidas."), M, y + 3);
+  if (d.ultimaSemana) barra(M, y + 6, CW, 4, pctCob, tCob);
+  y += 16;
+  const pobl = (t, o) => { const p = o.meta ? o.apl * 100 / o.meta : null; return [t, o.meta ? fmt(o.meta) : "Sin meta", fmt(o.apl), p == null ? "-" : `${f1(p)}%`]; };
+  tabla(["Población", "Meta", "Aplicadas", "Avance"], [pobl("Población blanco", d.blanco), pobl("Población de riesgo", d.riesgo)],
+    { columnStyles: { 0: { halign: "left", fontStyle: "bold" }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" } } });
+
+  // ── Por revisar ──
+  const lista = (arr) => arr.slice(0, 8).join(", ") + (arr.length > 8 ? ` y ${arr.length - 8} más` : "");
+  const alertas = [];
+  if (d.sinReporte.length) alertas.push(`No reportaron la última semana (${d.sinReporte.length}): ${lista(d.sinReporte.map(u => u.unidad))}.`);
+  if (d.revisar.nunca.length && d.semanaN >= 2) alertas.push(`Sin ningún reporte en la campaña (${d.revisar.nunca.length}): ${lista(d.revisar.nunca)}.`);
+  if (d.revisar.rebasan.length) alertas.push(`Rebasan su meta en algún grupo (${d.revisar.rebasan.length}): ${lista(d.revisar.rebasan)}.`);
+  if (d.revisar.sinMeta.length && d.ranking.length) alertas.push(`Unidades activas sin meta asignada (${d.revisar.sinMeta.length}): ${lista(d.revisar.sinMeta)}.`);
+  if (d.abasto.exceden.length) alertas.push(`Aplicaron más de lo repartido (${d.abasto.exceden.length}): ${lista(d.abasto.exceden)}.`);
+  if (alertas.length) {
+    titulo("Por revisar");
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(120, 53, 15);
+    alertas.forEach(a => {
+      const ls = doc.splitTextToSize("- " + tx(a), CW - 4);
+      hace(ls.length * 4 + 2);
+      doc.text(ls, M + 2, y + 3);
+      y += ls.length * 4 + 2;
+    });
+    y += 4;
+  }
+
+  // ── Avance por municipio / unidad ──
+  if (d.ranking.length) {
+    titulo(`Avance por ${d.porUnidad ? "unidad" : "municipio / hospital"}`, "Primero quienes van más atrasados contra lo esperado");
+    tabla([d.porUnidad ? "Unidad" : "Municipio / hospital", "Meta", "Aplicadas", "Avance", "Contra lo esperado", "Último reporte"],
+      d.ranking.map(o => [o.nombre + (d.porUnidad ? "" : `  (${o.n} ${o.n === 1 ? "unidad" : "unidades"})`), fmt(o.meta), fmt(o.apl), `${f1(o.p)}%`, `${o.d >= 0 ? "+" : "-"}${f1(Math.abs(o.d))} pts`, o.ultima ? corta(o.ultima) : "Sin reporte"]),
+      { columnStyles: { 0: { halign: "left", fontStyle: "bold", cellWidth: 62 }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center", fontStyle: "bold" }, 5: { halign: "center" } },
+        didParseCell: (h) => { if (h.section === "body" && h.column.index === 4) { const t = tonoDe(d.ranking[h.row.index].d); h.cell.styles.fillColor = FON[t]; h.cell.styles.textColor = COL[t]; } } });
+  }
+
+  // ── Dosis por semana ──
+  titulo("Dosis aplicadas por semana", d.necesario != null ? `Línea punteada: ritmo necesario (${fmt(d.necesario)} por semana)` : undefined);
+  if (d.semanas.length) {
+    const gh = 44, gw = CW - 14, gx = M + 12, gy = y + 2;
+    const maxV = Math.max(1, ...d.semanas.map(s => s.dosis), d.necesario || 0);
+    hace(gh + 16);
+    const gy2 = y + 2;
+    doc.setDrawColor(203, 213, 225); doc.setLineWidth(0.3);
+    doc.line(gx, gy2 + gh, gx + gw, gy2 + gh); doc.line(gx, gy2, gx, gy2 + gh);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(100, 116, 139);
+    doc.text(fmt(maxV), gx - 2, gy2 + 2, { align: "right" }); doc.text("0", gx - 2, gy2 + gh, { align: "right" });
+    const paso = gw / d.semanas.length, bw = Math.max(1.2, Math.min(9, paso * 0.7));
+    const cada = Math.max(1, Math.ceil(d.semanas.length / 14));
+    d.semanas.forEach((s, i) => {
+      const bh = s.dosis / maxV * gh, x = gx + i * paso + (paso - bw) / 2;
+      doc.setFillColor(124, 58, 237); if (bh > 0) doc.rect(x, gy2 + gh - bh, bw, bh, "F");
+      if (i % cada === 0 || i === d.semanas.length - 1) { doc.setFontSize(6.5); doc.setTextColor(100, 116, 139); doc.text(corta(s.fecha), x + bw / 2, gy2 + gh + 4, { align: "center" }); }
+    });
+    if (d.necesario != null) {
+      const ny = gy2 + gh - d.necesario / maxV * gh;
+      doc.setDrawColor(217, 119, 6); doc.setLineWidth(0.5); doc.setLineDashPattern([2, 1.5], 0); doc.line(gx, ny, gx + gw, ny); doc.setLineDashPattern([], 0);
+    }
+    y = gy2 + gh + 10;
+    let ac = 0;
+    tabla(["Semana", "Dosis", "Acumulado", "% de la meta"], d.semanas.map(s => { ac += s.dosis; return [corta(s.fecha), fmt(s.dosis), fmt(ac), `${f1(d.meta ? ac * 100 / d.meta : 0)}%`]; }),
+      { columnStyles: { 0: { halign: "left", fontStyle: "bold" }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" } } });
+  } else {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(100, 116, 139);
+    doc.text("La campaña aún no tiene semanas vencidas.", M, y + 3); y += 10;
+  }
+
+  // ── Abasto de frascos ──
+  titulo("Abasto de frascos", "Lo repartido a las unidades contra lo que han aplicado");
+  if (d.abasto.frascos) {
+    tabla(["Concepto", "Valor"], [
+      ["Frascos repartidos", fmt(d.abasto.frascos)], ["Dosis repartidas", fmt(d.abasto.dosis)],
+      ["Dosis aplicadas (unidades con reparto)", fmt(d.abasto.apl)], ["Existencia estimada (dosis)", fmt(Math.max(0, d.abasto.dosis - d.abasto.apl))],
+      ["Unidades con reparto registrado", fmt(d.abasto.conReparto)], ["Unidades que aplicaron más de lo repartido", fmt(d.abasto.exceden.length)]
+    ], { columnStyles: { 0: { halign: "left", fontStyle: "bold" }, 1: { halign: "center" } } });
+  } else {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(100, 116, 139);
+    doc.text("Todavía no hay reparto de frascos registrado por unidad para este ámbito.", M, y + 3); y += 10;
+  }
+
+  // ── Por grupo y por edad ──
+  titulo("Avance por grupo de población", "La última columna compara con lo esperado a hoy");
+  const filasG = d.grupos.map(g => { const p = g.meta ? g.apl * 100 / g.meta : null; return { g, p, diff: p == null ? null : p - d.esperadoPct }; });
+  tabla(["Grupo", "Meta", "Aplicadas", "Avance", "Contra lo esperado"],
+    filasG.map(r => [r.g.titulo, fmt(r.g.meta), fmt(r.g.apl), r.p == null ? "Sin meta" : `${f1(r.p)}%`, r.diff == null ? "-" : `${r.diff >= 0 ? "+" : "-"}${f1(Math.abs(r.diff))} pts`])
+      .concat([["TOTAL", fmt(d.meta), fmt(d.apl), `${f1(d.pct)}%`, `${d.diff >= 0 ? "+" : "-"}${f1(Math.abs(d.diff))} pts`]]),
+    { columnStyles: { 0: { halign: "left", fontStyle: "bold", cellWidth: 74 }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center", fontStyle: "bold" } },
+      didParseCell: (h) => {
+        if (h.section !== "body") return;
+        const esTotal = h.row.index === filasG.length;
+        const diff = esTotal ? d.diff : filasG[h.row.index].diff;
+        if (h.column.index === 4 && diff != null) { const t = tonoDe(diff); h.cell.styles.fillColor = FON[t]; h.cell.styles.textColor = COL[t]; }
+        if (esTotal) { h.cell.styles.fontStyle = "bold"; if (h.column.index !== 4) h.cell.styles.fillColor = [241, 245, 249]; }
+      } });
+
+  titulo("Detalle por grupo y edad");
+  d.grupos.forEach(g => {
+    // Cada grupo es su propia tabla (con su título como cabecera): nunca queda un título solo al pie de una página.
+    tabla(null, g.edades.map(e => [e.edad, fmt(e.meta), fmt(e.apl), e.meta ? `${f1(e.apl * 100 / e.meta)}%` : "-"]), {
+      cabeceras: 2,
+      headRows: [
+        [{ content: tx(g.titulo), colSpan: 4, styles: { halign: "left", fillColor: [245, 243, 255], textColor: [76, 29, 149], fontStyle: "bold" } }],
+        ["Edad", "Meta", "Aplicadas", "Avance"].map(c => ({ content: c, styles: { fillColor: [30, 41, 59], textColor: 255, halign: "center", fontStyle: "bold" } }))
+      ],
+      columnStyles: { 0: { halign: "left" }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" } }
+    });
+    y -= 3;
+  });
+
+  // ── Nota y pie de página ──
+  hace(22);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(71, 85, 105);
+  const nota = doc.splitTextToSize(tx(`Cómo leerlo: el avance es dosis aplicadas / meta de la campaña (${d.campana}). "Esperado a hoy" es la proporción de la campaña que ya transcurrió; verde si va de 5 puntos de ella, ámbar hasta 15 y rojo si está más atrás. La proyección supone que se mantiene el ritmo de las últimas 4 semanas.`), CW);
+  doc.text(nota, M, y + 3);
+  const n = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(148, 163, 184);
+    doc.text(tx(`REPORTE GENERADO EL ${new Date().toLocaleString("es-MX")} - INTELIGENCIA OPERATIVA JS1`), M, PH - 8);
+    doc.text(`Página ${i} de ${n}`, PW - M, PH - 8, { align: "right" });
+  }
+  if (devolverBlob) return doc.output("blob");
+  doc.save(nombreArchivo);
+  return true;
+}
+window.influenzaPdfVectorial = influenzaPdfVectorial;
 
 let _editingCampaignId = null;
 

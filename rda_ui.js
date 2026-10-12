@@ -746,7 +746,8 @@ async function renderDashboard() {
 
     if (esquema === 'meta_logro_influenza') {
         if (typeof renderInfluenzaIndicatorsDashboard === 'function') {
-            renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter);
+            // Se espera: la exportación masiva (ZIP) necesita el tablero ya pintado antes de capturar cada unidad.
+            await renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter);
         }
         return;
     }
@@ -2421,6 +2422,12 @@ async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob =
                     doc.save(nombreArchivo);
                     return resolve(true);
                 }
+            }
+            if (!tablaOriginal && _rdaState.esquema === 'meta_logro_influenza' && window._infIndicadoresDatos
+                && typeof window.influenzaPdfVectorial === 'function') {
+                // Meta-Logro Influenza: PDF vectorial (texto seleccionable y tablas reales) con las cifras del tablero.
+                const blobInf = await window.influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob);
+                return resolve(blobInf);
             }
             if (!tablaOriginal) {
                 // Vistas sin tabla de detalle (Meta-Logro Influenza, Deserción de Esquema): el PDF se arma
