@@ -21,7 +21,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
 <script defer src="requisiciones_rutas_excel.js"></script>
-<script defer src="requisiciones_ui.js?v=13"></script>
+<script defer src="requisiciones_ui.js?v=14"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -399,6 +399,18 @@
   .modal-fondo { position: fixed; inset: 0; background: rgba(15,23,42,.5); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 20px; }
   /* Las confirmaciones y el cuadro de texto se abren desde otros modales (Traer reparto, Asignar lotes...): van por encima. */
   #modalConfirmar, #modalTexto { z-index: 1200; }
+  /* Pantalla de carga de las exportaciones (mismo diseño que el overlay de Biovac, con avance en vivo). */
+  .export-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.5); display: none; align-items: center; justify-content: center; z-index: 1300; padding: 20px; }
+  .export-overlay.abierto { display: flex; }
+  .export-caja { background: var(--surface); border-radius: 20px; padding: 26px 30px; width: 100%; max-width: 380px; box-shadow: 0 16px 48px rgba(15,23,42,.28); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+  .export-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3.5px solid var(--outline-variant); border-top-color: var(--secondary); animation: export-girar .8s linear infinite; }
+  @keyframes export-girar { to { transform: rotate(360deg); } }
+  .export-titulo { font-size: 15px; font-weight: 800; color: var(--primary); margin: 0; }
+  .export-texto { font-size: 13px; font-weight: 600; color: var(--text); min-height: 36px; margin: 0; line-height: 1.4; }
+  .export-barra { width: 100%; height: 8px; border-radius: 99px; background: var(--outline-variant); overflow: hidden; }
+  .export-barra > i { display: block; height: 100%; width: 0; background: var(--secondary); border-radius: 99px; transition: width .25s ease; }
+  .export-pie { display: flex; justify-content: space-between; width: 100%; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .export-spinner { animation-duration: 2.4s; } .export-barra > i { transition: none; } }
   .modal-hoja { background: var(--surface); border-radius: 22px; width: 100%; max-width: 760px; max-height: min(88vh, 760px); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 16px 48px rgba(15,23,42,.28); }
   .modal-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 18px 20px 6px; }
   .modal-cab h3 { margin: 0; font: 800 16px/1.3 'Poppins', sans-serif; color: var(--primary); }
@@ -872,6 +884,15 @@
   </div>
 
   <!-- Confirmación propia (reemplaza al confirm del navegador) -->
+  <div class="export-overlay" id="exportOverlay" role="alertdialog" aria-modal="true" aria-labelledby="exportTitulo" aria-describedby="exportTexto" aria-busy="true">
+    <div class="export-caja">
+      <div class="export-spinner" aria-hidden="true"></div>
+      <h3 class="export-titulo" id="exportTitulo">Generando Excel</h3>
+      <p class="export-texto" id="exportTexto" role="status" aria-live="polite">Preparando…</p>
+      <div class="export-barra" aria-hidden="true"><i id="exportBarra"></i></div>
+      <div class="export-pie"><span id="exportDetalle">No cierres esta ventana.</span><span id="exportPct">0%</span></div>
+    </div>
+  </div>
   <div class="modal-fondo" id="modalConfirmar" style="display:none;">
     <div class="modal-hoja confirmar-hoja" role="alertdialog" aria-modal="true" aria-labelledby="confirmarTitulo" aria-describedby="confirmarMensaje" data-tono="aviso" style="max-width:440px;">
       <div class="confirmar-cuerpo">

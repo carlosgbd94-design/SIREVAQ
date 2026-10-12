@@ -1405,6 +1405,29 @@ async function guardarLoteSurtido(biologicoId, numeroLote, caducidad, cantidad) 
     existentes.push(nuevoLote);
   }
 
+  // Si el biológico ya tenía cantidad "por definir" (p. ej. influenza traída del reparto) y llega su
+  // lote real, el lote se ASIGNA a ese renglón: el reparto de pasos 2 y 3 pasa al lote real. Guardarlo
+  // como renglón aparte dejaba todo el reparto en "POR DEFINIR" y así salía en el Excel.
+  const pendiente = numeroLote !== LOTE_PENDIENTE && !itemDe(biologicoId, loteId)
+    ? estado.items.find((i) => i.requi_biologico_id === biologicoId && esPendiente(i) && Number(i.cantidad_surtida) > 0)
+    : null;
+  if (pendiente) {
+    const aAsignar = Math.min(Number(cantidad), Number(pendiente.cantidad_surtida));
+    const { error: errAsig } = await estado.db.rpc('requi_asignar_lotes', {
+      p_item_id: pendiente.id, p_lotes: [{ numero_lote: numeroLote, caducidad, cantidad: aAsignar }]
+    });
+    if (errAsig) { toast('No se pudo asignar el lote: ' + String(errAsig.message || errAsig).replace(/^.*?ERROR:\s*/, ''), true); return false; }
+    if (Number(cantidad) > aAsignar) {
+      // Lo capturado rebasa lo "por definir": el excedente es surtido adicional de ese mismo lote.
+      const { error: errExtra } = await estado.db.from('requi_items_jurisdiccion')
+        .update({ cantidad_surtida: Number(cantidad) })
+        .eq('requisicion_id', estado.requisicion.id).eq('requi_biologico_id', biologicoId).eq('lote_id', loteId);
+      if (errExtra) { toast('No se pudo guardar lo surtido: ' + errExtra.message, true); return false; }
+    }
+    await cargarDatosRequisicion();
+    return true;
+  }
+
   const { data: itemGuardado, error: errItem } = await estado.db.from('requi_items_jurisdiccion')
     .upsert({ requisicion_id: estado.requisicion.id, requi_biologico_id: biologicoId, lote_id: loteId, cantidad_surtida: cantidad },
       { onConflict: 'requisicion_id,requi_biologico_id,lote_id' })
@@ -2833,9 +2856,32 @@ function renderPaso3() {
 async function obtenerPlantillaBuffer() {
   if (!estado.plantillaBuffer) {
     const resp = await fetch('./Formatos/requisiciones_plantilla.xlsx', { cache: 'no-cache' });
+    if (!resp.ok) throw new Error('no se pudo descargar la plantilla oficial (' + resp.status + ')');
     estado.plantillaBuffer = await resp.arrayBuffer();
   }
   return estado.plantillaBuffer;
+}
+
+// Pantalla de carga de las exportaciones: avance en vivo (texto + barra). Se cede un cuadro
+// de pintura en cada aviso para que el navegador la muestre aunque el armado del Excel bloquee.
+function cargaAbrir(titulo, texto) {
+  $('exportTitulo').textContent = titulo;
+  $('exportOverlay').classList.add('abierto');
+  return cargaAvance(texto, 0);
+}
+
+function cargaAvance(texto, fraccion, detalle) {
+  const pct = Math.max(0, Math.min(100, Math.round((fraccion || 0) * 100)));
+  $('exportTexto').textContent = texto;
+  $('exportBarra').style.width = pct + '%';
+  $('exportPct').textContent = pct + '%';
+  if (detalle !== undefined) $('exportDetalle').textContent = detalle;
+  return new Promise((res) => requestAnimationFrame(() => setTimeout(res, 0)));
+}
+
+function cargaCerrar() {
+  $('exportOverlay').classList.remove('abierto');
+  $('exportDetalle').textContent = 'No cierres esta ventana.';
 }
 
 // Construye los datos (encabezado/firmas/renglones) de UN destino, sin
@@ -2963,16 +3009,27 @@ function avisosExportacion(sinRenglon) {
 
 // Un municipio = UN solo archivo: una pestaña por cada unidad con reparto (si se pide) y, al final, la
 // pestaña municipal. Los hospitales no tienen unidades: llevan solo su hoja.
-async function generarLibroMunicipio(destino, incluirUnidades) {
+// `avance(texto, fraccion)` (opcional) informa cada paso a la pantalla de carga.
+async function generarLibroMunicipio(destino, incluirUnidades, avance) {
   const hojas = [];
   const unidades = (incluirUnidades && !esHospital(destino))
     ? estado.unidades.filter((u) => u.municipio === destino && estado.distUnidad.some((d) => d.unidad_id === u.id && Number(d.cantidad) > 0))
     : [];
-  for (const u of unidades) hojas.push({ ...(await construirDatosDestino('UNIDAD', u.id)), nombreHoja: u.nombre });
+  const n = unidades.length;
+  const total = n + 4;
+  const av = async (texto, i) => { if (avance) await avance(texto, i / total); };
+  for (let i = 0; i < n; i++) {
+    await av(`Armando la hoja de ${unidades[i].nombre} (${i + 1} de ${n})…`, i);
+    hojas.push({ ...(await construirDatosDestino('UNIDAD', unidades[i].id)), nombreHoja: unidades[i].nombre });
+  }
+  await av('Armando la hoja municipal…', n);
   const municipal = await construirDatosDestino('MUNICIPAL', destino);
   hojas.push({ ...municipal, nombreHoja: unidades.length ? 'MUNICIPAL' : 'GENERAL' });
+  await av('Cargando la plantilla oficial…', n + 1);
   const plantillaBuffer = await obtenerPlantillaBuffer();
+  await av('Generando el archivo Excel…', n + 2);
   const { buffer, sinRenglon } = await RequiExportExcel.generarLibro({ plantillaBuffer, hojas });
+  await av('Registrando la exportación…', n + 3);
   for (const u of unidades) await registrarExportacion('UNIDAD', u.id, COPIAS_SUGERIDAS.UNIDAD);
   await registrarExportacion('MUNICIPAL', destino, COPIAS_SUGERIDAS.MUNICIPAL);
   return { buffer, sinRenglon, nombreArchivo: municipal.nombreArchivo, unidades: unidades.length };
@@ -2980,29 +3037,42 @@ async function generarLibroMunicipio(destino, incluirUnidades) {
 
 async function exportarUno(nivel, destino) {
   if (!estado.requisicion) { toast('Guarda primero la cabecera de la requisición.', true); return; }
+  if (estado.exportando) { toast('Ya se está generando un archivo; espera a que termine.', true); return; }
   if (!(await confirmarExportarConPendientes())) return;
-  toast('Generando Excel…');
+  estado.exportando = true;
+  await cargaAbrir('Generando Excel', 'Preparando la requisición…');
   try {
+    if (window.ensureLibsLoaded) await window.ensureLibsLoaded('exceljs');
     const tipoXlsx = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     let sinRenglon, resumen;
     if (nivel === 'MUNICIPAL') {
-      const libro = await generarLibroMunicipio(destino, $('chkIncluirUnidades').checked);
+      const libro = await generarLibroMunicipio(destino, $('chkIncluirUnidades').checked, cargaAvance);
+      await cargaAvance('Descargando el archivo…', 0.98, libro.nombreArchivo);
       descargarBlob(new Blob([libro.buffer], { type: tipoXlsx }), libro.nombreArchivo);
       sinRenglon = libro.sinRenglon;
       resumen = libro.unidades ? `Excel generado: ${plural(libro.unidades, 'pestaña de unidad', 'pestañas de unidades')} y la municipal al final.` : 'Excel generado.';
     } else {
+      await cargaAvance('Leyendo el reparto y las firmas…', 0.15);
       const datos = await construirDatosDestino(nivel, destino);
+      await cargaAvance('Cargando la plantilla oficial…', 0.4);
       const plantillaBuffer = await obtenerPlantillaBuffer();
+      await cargaAvance('Generando el archivo Excel…', 0.6);
       const resultado = await RequiExportExcel.generar({ plantillaBuffer, ...datos });
+      await cargaAvance('Descargando el archivo…', 0.9, datos.nombreArchivo);
       descargarBlob(new Blob([resultado.buffer], { type: tipoXlsx }), datos.nombreArchivo);
       sinRenglon = resultado.sinRenglon;
       resumen = 'Excel generado.';
       await registrarExportacion(nivel, destino, COPIAS_SUGERIDAS[nivel] || 1);
     }
+    await cargaAvance('Listo.', 1);
+    cargaCerrar();
     const avisos = avisosExportacion(sinRenglon);
     toast(avisos.length ? `${resumen} Ojo: ${avisos.join(' ')}` : resumen, !!avisos.length);
   } catch (e) {
+    cargaCerrar();
     toast('No se pudo generar el Excel: ' + e.message, true);
+  } finally {
+    estado.exportando = false;
   }
 }
 
@@ -3044,29 +3114,43 @@ async function exportarMasivo() {
   const seleccionados = [...document.querySelectorAll('.chk-destino-masivo:checked')].map((c) => c.value);
   if (!seleccionados.length) { toast('Selecciona al menos un destino.', true); return; }
   const incluirUnidades = $('chkIncluirUnidades').checked;
+  if (estado.exportando) { toast('Ya se está generando un archivo; espera a que termine.', true); return; }
   if (!(await confirmarExportarConPendientes())) return;
 
-  toast('Generando paquete…');
+  estado.exportando = true;
+  await cargaAbrir('Generando paquete', 'Preparando la exportación…');
   try {
     if (window.ensureLibsLoaded) await window.ensureLibsLoaded('jszip');
     const zip = new JSZip();
     const sinRenglonTotal = new Set();
     let pestanas = 0;
+    const nombreDe = (d) => (MUNICIPIOS_REALES.find((m) => m.v === d) || {}).l || NOMBRE_DESTINO_EXPORT[d] || d;
 
     // Un archivo por municipio/hospital; las unidades de cada municipio van dentro, una por pestaña.
-    for (const destino of seleccionados) {
-      const libro = await generarLibroMunicipio(destino, incluirUnidades);
+    // La barra reparte 90% entre los archivos y el resto para comprimir el .zip.
+    for (let k = 0; k < seleccionados.length; k++) {
+      const destino = seleccionados[k];
+      const prefijo = `Archivo ${k + 1} de ${seleccionados.length} · ${nombreDe(destino)}: `;
+      const libro = await generarLibroMunicipio(destino, incluirUnidades,
+        (texto, f) => cargaAvance(prefijo + texto, ((k + f) / seleccionados.length) * 0.9));
       zip.file(libro.nombreArchivo, libro.buffer);
       libro.sinRenglon.forEach((x) => sinRenglonTotal.add(x));
       pestanas += libro.unidades + 1;
     }
 
+    await cargaAvance('Comprimiendo el paquete .zip…', 0.92);
     const zipBlob = await zip.generateAsync({ type: 'blob' });
+    await cargaAvance('Descargando el paquete…', 0.99);
     descargarBlob(zipBlob, `Requisiciones_${estado.requisicion.anio}-${String(estado.requisicion.mes).padStart(2, '0')}${sufijoEntregaArchivo()}.zip`);
+    await cargaAvance('Listo.', 1);
+    cargaCerrar();
     toast(`Listo: ${plural(seleccionados.length, 'archivo', 'archivos')} (${plural(pestanas, 'pestaña', 'pestañas')}) en el paquete.`
       + (sinRenglonTotal.size ? ` Sin renglón en el formato oficial (no salió): ${[...sinRenglonTotal].join(', ')}.` : ''), !!sinRenglonTotal.size);
   } catch (e) {
+    cargaCerrar();
     toast('No se pudo generar el paquete: ' + e.message, true);
+  } finally {
+    estado.exportando = false;
   }
 }
 

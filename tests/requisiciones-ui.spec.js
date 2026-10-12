@@ -922,6 +922,27 @@ test('Requisiciones: traer el reparto de influenza llena los pasos 1-3 con lote 
   expect(errores).toEqual([]);
 });
 
+test('Requisiciones: capturar el lote real de lo traído "por definir" lo ASIGNA (el reparto pasa al lote real, no queda duplicado)', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__FAKE_INFLUENZA__ = true;
+    window.__FAKE_INFLUENZA_UNI__ = [{ unidad_id: 'un-q1', cantidad: 40 }, { unidad_id: 'un-q2', cantidad: 20 }];
+  });
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.evaluate(() => { window.__AUTO_CONFIRMAR__ = true; });
+  await page.click('#btnTraerInfluenza');
+  await page.click('#infTraer');
+  await expect(page.locator('#modalInfluenza')).toBeHidden();
+
+  const ok = await page.evaluate(() => guardarLoteSurtido('bio-flu', 'GAZ00030', null, 100));
+  expect(ok).toBe(true);
+  const lotes = "Object.fromEntries(db.requi_lotes.map((l) => [l.id, l.numero_lote]))";
+  expect(await db(page, `db.requi_items_jurisdiccion.filter((i) => i.requi_biologico_id === 'bio-flu').map((i) => [${lotes}[i.lote_id], i.cantidad_surtida])`)).toEqual([['GAZ00030', 100]]);
+  expect(await db(page, `[...new Set(db.requi_distribucion_municipio.filter((d) => d.requi_biologico_id === 'bio-flu').map((d) => ${lotes}[d.lote_id]))]`)).toEqual(['GAZ00030']);
+  expect(await db(page, `[...new Set(db.requi_distribucion_unidad.filter((d) => d.requi_biologico_id === 'bio-flu').map((d) => ${lotes}[d.lote_id]))]`)).toEqual(['GAZ00030']);
+  expect(errores).toEqual([]);
+});
+
 test('Requisiciones: la entrega de influenza ya vinculada a otra requisición no se puede traer', async ({ page }) => {
   await page.addInitScript(() => { window.__FAKE_INFLUENZA__ = true; });
   const errores = await preparar(page, { conReq: true });
