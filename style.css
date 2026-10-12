@@ -15065,3 +15065,18 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
 
 .iinf-dos { align-items: start; }
 .iinf-sub b { color: #b45309; font-weight: 800; }
+
+/* Tablas del tablero: columnas repartidas con ancho fijo (los nombres largos de grupo se parten, no ensanchan la tabla) */
+.iinf-scroll { max-height: none; overflow-y: visible; }
+.iinf-tabla { table-layout: fixed; width: 100%; }
+.iinf-tabla thead th:first-child { width: 40%; }
+.iinf-tabla thead th, .iinf-tabla tbody th, .iinf-tabla tbody td, .iinf-tabla tfoot th, .iinf-tabla tfoot td { white-space: normal; overflow-wrap: anywhere; }
+.iinf-tabla thead th { padding-left: 10px; padding-right: 10px; }
+.iinf-tabla td, .iinf-tabla tbody th, .iinf-tabla tfoot th { padding-left: 10px; padding-right: 10px; }
+.iinf-avance { min-width: 0; }
+.iinf-tabla--mini { table-layout: auto; }
+@media (max-width: 720px) {
+  .iinf-scroll { overflow-x: auto; }
+  .iinf-tabla { table-layout: auto; min-width: 560px; }
+  .iinf-tabla thead th:first-child { width: auto; min-width: 150px; }
+}

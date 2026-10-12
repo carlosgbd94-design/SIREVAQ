@@ -23,13 +23,13 @@ function construir() {
   unidades.push({ clues: 'QTSSA002901', unidad: 'NUEVO HOSPITAL GENERAL', municipio: 'QUERETARO', activo: 'SI' });
   unidades.push({ clues: 'QTSSA009999', unidad: 'UNIDAD SIN META', municipio: 'CORREGIDORA', activo: 'SI' });
 
-  const rubros = ['r1', 'r2', 'r3', 'r6', 'r7', 'r16', 'r20'];
+  const rubros = Array.from({ length: 46 }, (_, k) => `r${k + 1}`);   // los 46 rubros reales (con sus nombres largos)
   const metas = [], capturas = [], frascos = [];
   const semanas = ['2026-10-16', '2026-10-23', '2026-10-30', '2026-11-06', '2026-11-13', '2026-11-20', '2026-11-27', '2026-12-04', '2026-12-11', '2026-12-18'];
   unidades.forEach((u, idx) => {
     if (u.clues === 'QTSSA009999') return;   // activa pero sin meta
     const m = {};
-    rubros.forEach((k) => { m[k] = Math.round(60 + r() * 900); });
+    rubros.forEach((k) => { m[k] = Math.round(20 + r() * 300); });
     metas.push({ anio_campana: CAMP, clues: u.clues, municipio: u.municipio, metas: m });
     // La unidad 5 nunca reporta; la 9 dejó de reportar; la 12 rebasa su meta en r1; el resto con avance variable
     semanas.forEach((f, si) => {
@@ -38,7 +38,7 @@ function construir() {
       if (idx % 7 === 3 && si === semanas.length - 1) return;      // algunas no reportaron la última semana
       const v = {};
       rubros.forEach((k) => { v[k] = Math.round(m[k] * (0.02 + r() * 0.06)); });
-      if (idx === 11 && si === 0) v.r1 = m.r1 + 25;
+      if (idx === 11 && si === 0) v.r1 = m.r1 + 25;   // rebasa su meta
       capturas.push({ anio_campana: CAMP, clues: u.clues, municipio: u.municipio, fecha: f, valores: v, sin_movimiento: false });
     });
     if (idx % 3 !== 2) frascos.push({ anio_campana: CAMP, clues: u.clues, municipio: u.municipio, cantidad_frascos: Math.round(10 + r() * 90), fecha_entrega: '2026-10-05' });
@@ -160,6 +160,10 @@ test.describe('Indicadores de influenza con una jurisdicción completa', () => {
     await expect(rev).toContainText('rebasa su meta');
     await expect(rev).toContainText('no tiene meta');
     await expect(rev).toContainText('no ha reportado nunca');
+    // Ninguna tabla del tablero se desborda dentro de su tarjeta (con nombres largos reales de grupo)
+    const tablas = await page.evaluate(() => [...document.querySelectorAll('#rdaDashboardContent .iinf-scroll')].map((s) => ({ ancho: s.scrollWidth - s.clientWidth, cols: s.querySelectorAll('thead th').length })));
+    expect(tablas.length).toBeGreaterThanOrEqual(3);
+    tablas.forEach((x) => expect(x.ancho).toBeLessThanOrEqual(1));
     // La página no se rompe: sin desbordes horizontales dentro del tablero
     const desborde = await page.evaluate(() => { const c = document.querySelector('#rdaDashboardContent'); return c.scrollWidth - c.clientWidth; });
     expect(desborde).toBeLessThanOrEqual(1);
