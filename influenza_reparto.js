@@ -29,28 +29,64 @@
       }
     });
 
-    const auto = items.filter(it => !Object.prototype.hasOwnProperty.call(manual, it.id));
-    const restante = Math.max(0, total - fijado);
-    const metas = auto.map(it => Math.max(0, Math.round(Number(it.meta) || 0)));
-    const sumaMetas = metas.reduce((a, b) => a + b, 0);
+    // `tope` (opcional) = lo máximo que aún le cabe a ese renglón (meta en frascos menos lo ya recibido en
+    // otras entregas). Si la cuota proporcional lo rebasa se queda en el tope y el sobrante se reparte
+    // entre los demás; si ya no cabe en nadie, queda por asignar (porAsignar > 0) y el guardado se bloquea.
+    const tieneTope = it => it.tope !== undefined && it.tope !== null && Number.isFinite(Number(it.tope));
+    const topeDe = it => Math.max(0, Math.floor(Number(it.tope)));
 
-    if (sumaMetas === 0) {
-      auto.forEach(it => { out[it.id] = 0; });
-    } else {
-      const partes = auto.map((it, i) => {
+    let libres = items.filter(it => !Object.prototype.hasOwnProperty.call(manual, it.id));
+    let restante = Math.max(0, total - fijado);
+
+    for (;;) {
+      const metas = libres.map(it => Math.max(0, Math.round(Number(it.meta) || 0)));
+      const sumaMetas = metas.reduce((a, b) => a + b, 0);
+      if (sumaMetas === 0) {
+        libres.forEach(it => { out[it.id] = 0; });
+        break;
+      }
+      const partes = libres.map((it, i) => {
         const cuota = restante * metas[i];
-        return { id: it.id, base: Math.floor(cuota / sumaMetas), resto: cuota % sumaMetas, orden: i };
+        return { it, id: it.id, base: Math.floor(cuota / sumaMetas), resto: cuota % sumaMetas, orden: i };
       });
       let sobran = restante - partes.reduce((a, p) => a + p.base, 0);
       partes
         .slice()
         .sort((a, b) => (b.resto - a.resto) || (a.orden - b.orden))
         .forEach(p => { if (sobran > 0) { p.base += 1; sobran -= 1; } });
-      partes.forEach(p => { out[p.id] = p.base; });
+
+      const pasados = partes.filter(p => tieneTope(p.it) && p.base > topeDe(p.it));
+      if (!pasados.length) {
+        partes.forEach(p => { out[p.id] = p.base; });
+        break;
+      }
+      pasados.forEach(p => {
+        const t = topeDe(p.it);
+        out[p.id] = t;
+        restante -= t;
+      });
+      libres = libres.filter(it => !pasados.some(p => p.id === it.id));
+      restante = Math.max(0, restante);
+      if (!libres.length) break;
     }
 
     const asignado = items.reduce((s, it) => s + (out[it.id] || 0), 0);
     return { frascos: out, asignado, porAsignar: total - asignado };
+  }
+
+  /**
+   * Renglones cuyo valor rebasa su tope (meta en frascos menos lo ya recibido en otras entregas).
+   * Devuelve [{ id, valor, tope }]; vacío si todo cabe.
+   */
+  function excedenTope(items, frascos) {
+    const out = [];
+    items.forEach(it => {
+      if (it.tope === undefined || it.tope === null || !Number.isFinite(Number(it.tope))) return;
+      const tope = Math.max(0, Math.floor(Number(it.tope)));
+      const valor = Math.max(0, Math.floor(Number((frascos || {})[it.id]) || 0));
+      if (valor > tope) out.push({ id: it.id, valor, tope });
+    });
+    return out;
   }
 
   /**
@@ -93,7 +129,7 @@
     return { ok: true, frascos: rep, libres: libres.map(it => it.id), restante };
   }
 
-  const api = { repartirFrascos, repartoLibre, cuadrarResto };
+  const api = { repartirFrascos, repartoLibre, cuadrarResto, excedenTope };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.InfluenzaReparto = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -21,7 +21,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
 <script defer src="requisiciones_rutas_excel.js"></script>
-<script defer src="requisiciones_ui.js?v=12"></script>
+<script defer src="requisiciones_ui.js?v=13"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -645,7 +645,7 @@
       </div>
     </div>
 
-    <div class="barra" style="margin-top:16px; align-items:center;">
+    <div class="barra" style="margin-top:16px; align-items:flex-end; flex-wrap:wrap; gap:12px;">
       <div class="campo">
         <label>Año</label>
         <select id="selAnio" aria-label="Año"></select>
@@ -653,10 +653,6 @@
       <div class="campo">
         <label>Mes</label>
         <select id="selMes" aria-label="Mes"></select>
-      </div>
-      <div class="grupo-acciones">
-        <button class="btn-icono solo-edicion" id="btnCargar" title="Cargar la requisición ya guardada de este año/mes"><span class="material-symbols-rounded">folder_open</span></button>
-        <button class="btn-icono solo-edicion" id="btnGuardarCabecera" title="Guardar (crea la requisición del mes si no existe)"><span class="material-symbols-rounded">save</span></button>
       </div>
       <span id="badgesEstadoRequisicion" style="display:none; gap:6px; align-items:center;"></span>
       <div class="barra-entregas" id="barraEntregas">
@@ -666,7 +662,7 @@
         <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnNuevaEntrega" title="Llegó otra entrega este mes: se captura y reparte por separado"><span class="material-symbols-rounded" style="font-size:15px">add</span> Nueva entrega</button>
         <div class="fecha-recepcion" id="campoFechaRecepcion" style="display:none;">
           <label for="inpFechaRecepcion"><span class="material-symbols-rounded" aria-hidden="true">event</span>Recibida el</label>
-          <input type="date" id="inpFechaRecepcion" title="Fecha en que se recibió esta entrega: es la que sale en el Excel">
+          <input type="date" id="inpFechaRecepcion" min="2000-01-01" max="2100-12-31" title="Fecha en que se recibió esta entrega: es la que sale en el Excel">
         </div>
       </div>
     </div>

@@ -229,7 +229,7 @@ test('Requisiciones: el perfil municipal solo ve lo de su municipio (sin jurisdi
   await expect(page.locator('#panelPaso1')).toBeHidden();
   await expect(page.locator('#panelPaso2')).toBeHidden();
   await expect(page.locator('.stepper-tarjeta')).toBeHidden();
-  await expect(page.locator('#btnCargar')).toBeHidden();
+  await expect(page.locator('#btnCargar, #btnGuardarCabecera')).toHaveCount(0);   // ya no existen: cambiar de mes carga solo
   await page.click('#btnAbrirExportar');
   await expect(page.locator('#seccionJuris')).toBeHidden();
   await expect(page.locator('.destino-masivo-fila')).toHaveCount(1);
@@ -502,7 +502,7 @@ test('Requisiciones: exportar un municipio da UN archivo con una pestaña por un
     db.requi_distribucion_municipio.push({ id: 'm1', ...base, municipio: 'CORREGIDORA', cantidad: 50 });
     db.requi_distribucion_unidad.push({ id: 'u1', ...base, unidad_id: 'un-c1', cantidad: 30 }, { id: 'u2', ...base, unidad_id: 'un-c2', cantidad: 20 });
   });
-  await page.click('#btnCargar');
+  await page.locator('#selMes').dispatchEvent('change');
   await expect(page.locator('#pildoraPaso1')).toHaveText('1');
   await page.click('#btnAbrirExportar');
   await expect(page.locator('#chkIncluirUnidades')).toBeChecked();
@@ -696,15 +696,15 @@ test('Requisiciones: si falla la lectura NO se muestra la requisición vacía y 
 
   // Se cae la lectura de lo surtido al recargar: lo que ya estaba en pantalla no se borra y se avisa
   await page.evaluate(() => { window.__FAKE_FALLAR__ = ['requi_items_jurisdiccion']; });
-  await page.click('#btnCargar');
+  await page.locator('#selMes').dispatchEvent('change');
   await expect(page.locator('#toast')).toContainText('No se pudo cargar la requisición');
   await expect(page.locator('#hintCabecera')).toBeVisible();
-  await expect(page.locator('#hintCabecera')).toContainText('no captures nada');
+  await expect(page.locator('#hintCabecera')).toContainText(/no captures nada/i);
   await expect(page.locator('#tbodyBiologicos')).toContainText('LEER1');
 
-  // Al volver la conexión, "Cargar" reintenta y quita el aviso
+  // Al volver la conexión, "Reintentar" (dentro del mismo aviso) carga de nuevo y quita el aviso
   await page.evaluate(() => { window.__FAKE_FALLAR__ = []; });
-  await page.click('#btnCargar');
+  await page.click('#btnReintentarCarga');
   await expect(page.locator('#hintCabecera')).toBeHidden();
   await expect(page.locator('#tbodyBiologicos')).toContainText('LEER1');
   expect(errores).toEqual([]);

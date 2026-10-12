@@ -35,7 +35,7 @@ const DATOS = `
   var _adminMetasArray = ${JSON.stringify([
     meta(null, 'QUERETARO', 6000), meta(null, 'CORREGIDORA', 900), meta(null, 'MARQUES', 700),
     meta(null, 'HUIMILPAN', 300), meta(null, 'HENM', 500), meta(null, 'NHG', 400),
-    meta('Q1', 'QUERETARO', 3000), meta('Q2', 'QUERETARO', 2000), meta('Q3', 'QUERETARO', 1000)
+    meta('Q1', 'QUERETARO', 30000), meta('Q2', 'QUERETARO', 20000), meta('Q3', 'QUERETARO', 10000)
   ])};
   var _llamadas = [];
   var AppService = {
@@ -260,7 +260,7 @@ test('Municipal con dos municipios (Corregidora y Huimilpan): puede cambiar de m
   await page.evaluate(() => {
     document.getElementById('adminInfluenzaMuni').innerHTML = '<option value="CORREGIDORA">CORREGIDORA</option><option value="HUIMILPAN">HUIMILPAN</option>';
     _allUnidades.push({ clues: 'C1', unidad: 'CS CORREGIDORA UNO', municipio: 'CORREGIDORA' }, { clues: 'H1', unidad: 'CS HUIMILPAN UNO', municipio: 'HUIMILPAN' }, { clues: 'H2', unidad: 'CS HUIMILPAN DOS', municipio: 'HUIMILPAN' });
-    _adminMetasArray.push({ clues: 'C1', municipio: 'CORREGIDORA', metas: { r1: 500 } }, { clues: 'H1', municipio: 'HUIMILPAN', metas: { r1: 300 } }, { clues: 'H2', municipio: 'HUIMILPAN', metas: { r1: 100 } });
+    _adminMetasArray.push({ clues: 'C1', municipio: 'CORREGIDORA', metas: { r1: 5000 } }, { clues: 'H1', municipio: 'HUIMILPAN', metas: { r1: 3000 } }, { clues: 'H2', municipio: 'HUIMILPAN', metas: { r1: 1000 } });
     _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 377, asignacion: { CORREGIDORA: 247, HUIMILPAN: 130 }, manual: [] }];
     renderFrascosDistribution();
   });
@@ -742,4 +742,68 @@ test('Metas: al desplazar quedan fijos el encabezado, la franja del bloque, Grup
     return { w: w.left, c: document.querySelector('#influenzaMetasTbody tr[data-rb] td').getBoundingClientRect().left };
   });
   expect(Math.abs(izq.c - izq.w)).toBeLessThan(3);
+});
+
+test('Tope duro: lo recibido en todas las entregas no puede rebasar la meta en frascos (Jurisdicción)', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  // Meta HENM = 500 dosis = 50 frascos; ya recibió 40 en la 1ª entrega: en la 2ª solo caben 10.
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 40, asignacion: { HENM: 40 }, manual: [] }];
+    renderFrascosDistribution();
+    _remesaState.numero = 2;
+    cargarRemesaSeleccionada();
+    window.__toasts = []; window.__llamadas = [];
+  });
+  await page.fill('#remesaTotalInput', '400');
+  // El reparto automático respeta el tope de HENM (10) y manda el sobrante a los demás
+  expect(await page.evaluate(() => document.getElementById('rem_inp_HENM').value)).toBe('10');
+
+  // Editarlo a mano por arriba del tope: rojo, mensaje y no guarda
+  await page.fill('#rem_inp_HENM', '11');
+  await expect(page.locator('#rem_inp_HENM')).toHaveClass(/frs-num--excede/);
+  await expect(page.locator('#remesaResumen')).toContainText('Rebasa la meta de frascos');
+  await page.click('#btnRemesaCuadrar');
+  await page.click('#btnSaveRemesa');
+  expect(await page.evaluate(() => window.__llamadas.filter((l) => l[0] === 'saveinfluenza_remesa').length)).toBe(0);
+  expect(await page.evaluate(() => window.__toasts[window.__toasts.length - 1] || '')).toContain('rebasa la meta de frascos');
+});
+
+test('Tope duro: si el total ya no cabe en la meta de la campaña, no guarda', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate(() => {
+    // Metas totales = 6000+900+700+300+500+400 dosis = 880 frascos
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 870, asignacion: { QUERETARO: 600, CORREGIDORA: 90, MARQUES: 70, HUIMILPAN: 30, HENM: 50, NHG: 30 }, manual: [] }];
+    renderFrascosDistribution();
+    _remesaState.numero = 2;
+    cargarRemesaSeleccionada();
+    window.__toasts = []; window.__llamadas = [];
+  });
+  await page.fill('#remesaTotalInput', '200');
+  await expect(page.locator('#remesaResumen')).toContainText('ya no caben');
+  await page.click('#btnSaveRemesa');
+  expect(await page.evaluate(() => window.__llamadas.filter((l) => l[0] === 'saveinfluenza_remesa').length)).toBe(0);
+});
+
+test('Tope duro: el municipio no puede dar a una unidad más de su meta contando entregas anteriores', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    // Q1 meta 30000 dosis = 3000 frascos, ya recibió 2990 en la entrega 1
+    _adminFrascosArray = [{ clues: 'Q1', municipio: 'QUERETARO', numero_entrega: 1, cantidad_frascos: 2990 }];
+    _adminRemesasArray = [
+      { numero_entrega: 1, fecha: '2026-10-05', total_frascos: 2990, asignacion: { QUERETARO: 2990 }, manual: [] },
+      { numero_entrega: 2, fecha: '2026-10-09', total_frascos: 300, asignacion: { QUERETARO: 300 }, manual: [] }];
+    renderFrascosDistribution();
+    _muniRepartoState.numero = 2;
+    renderFrascosMunicipal('QUERETARO');
+    window.__toasts = []; window.__llamadas = [];
+  });
+  // Por meta le tocarían ~150 a Q1, pero solo le caben 10: el resto va a Q2 y Q3
+  expect(await page.evaluate(() => document.getElementById('batch_frascos_Q1').value)).toBe('10');
+  await page.fill('#batch_frascos_Q1', '20');
+  await expect(page.locator('#batch_frascos_Q1')).toHaveClass(/frs-num--excede/);
+  await page.fill('#batch_frascos_Q2', '180');
+  await page.fill('#batch_frascos_Q3', '100');
+  await page.click('#btnSaveFrascoEntrega');
+  expect(await page.evaluate(() => window.__llamadas.filter((l) => l[0] === 'guardarinfluenza_reparto').length)).toBe(0);
+  expect(await page.evaluate(() => window.__toasts[window.__toasts.length - 1] || '')).toContain('rebasa la meta de frascos');
 });

@@ -4930,6 +4930,45 @@ function frascoMetaUnidad(clues) {
   return rec ? frascoSumaMetas(rec.metas) : 0;
 }
 
+// Tope duro del reparto: lo recibido en TODAS las entregas de la campaña no puede rebasar la meta en frascos
+// (meta en dosis / 10, hacia arriba porque el último frasco puede quedar abierto). El servidor lo impone igual
+// (influenza_remesas_tope_meta.sql); aquí solo se anticipa para mostrarlo y bloquear antes de guardar.
+function frascoTopeMeta(metaDosis) {
+  return Math.ceil((Number(metaDosis) || 0) / DOSIS_POR_FRASCO);
+}
+
+function frascoRecibidoOtrasDestino(id, numero) {
+  return _adminRemesasArray
+    .filter(r => r.numero_entrega !== numero)
+    .reduce((s, r) => s + Number((r.asignacion || {})[id] || 0), 0);
+}
+
+function frascoRecibidoOtrasUnidad(clues, numero) {
+  return _adminFrascosArray
+    .filter(d => d.clues === clues && d.numero_entrega !== numero)
+    .reduce((s, d) => s + Number(d.cantidad_frascos || 0), 0);
+}
+
+// Agrega `tope` (lo que aún le cabe al renglón en esta entrega) y `otras` (lo ya recibido). Sin ninguna meta
+// capturada no hay tope: ese caso ya lo bloquea el aviso «sin meta».
+function frascoConTope(items, otrasFn) {
+  const hayMetas = items.some(i => i.meta > 0);
+  return items.map(i => {
+    const otras = otrasFn(i.id);
+    return { ...i, otras, tope: hayMetas ? Math.max(0, frascoTopeMeta(i.meta) - otras) : undefined };
+  });
+}
+
+function frascoTextoExceso(excesos, etiquetaFn, items) {
+  const por = {};
+  items.forEach(i => { por[i.id] = i; });
+  const lista = excesos.map(e => {
+    const it = por[e.id] || {};
+    return `${etiquetaFn(e.id)}: ${frascoFmt(e.valor)} frascos y solo le caben ${frascoFmt(e.tope)} (meta ${frascoFmt(frascoTopeMeta(it.meta))}, ya recibió ${frascoFmt(it.otras || 0)})`;
+  });
+  return lista.join("; ");
+}
+
 // Unidades que reparten frascos dentro de un municipio (sin los hospitales, que son destino propio).
 function frascoUnidadesMunicipio(muni) {
   return _allUnidades.filter(u =>
@@ -5055,6 +5094,30 @@ function frascoBloquearGuardado(porAsignar, sinMeta, ids) {
   return msg;
 }
 
+// Pinta el bloqueo por tope de meta sobre lo ya pintado: renglones que rebasan en rojo (con su motivo) y el
+// resumen. Devuelve los excesos (vacío si todo cabe) para que el guardado se bloquee con la misma lista.
+function frascoAplicarTope(items, res, total, resumenEl, prefInput, prefMark, etiquetaFn) {
+  const excesos = InfluenzaReparto.excedenTope(items, res.frascos);
+  const ids = new Set(excesos.map(e => e.id));
+  items.forEach(it => {
+    const inp = document.getElementById(`${prefInput}${it.id}`);
+    if (inp && ids.has(it.id)) inp.classList.add("frs-num--excede");
+    const mk = document.getElementById(`${prefMark}${it.id}`);
+    if (mk && ids.has(it.id)) mk.textContent = `rebasa su meta: tope ${frascoFmt(it.tope)} (ya recibió ${frascoFmt(it.otras || 0)} en otras entregas)`;
+  });
+  if (excesos.length) {
+    frascoPintarResumen(resumenEl, "bad",
+      `⛔ <b>Rebasa la meta de frascos de la campaña</b> y no se puede guardar. ${frascoTextoExceso(excesos, etiquetaFn, items)}. Baja esas cantidades.`);
+  } else if (total > 0 && res.porAsignar > 0 && items.length && items.every(i => i.tope !== undefined)) {
+    const cabe = items.reduce((s, i) => s + i.tope, 0);
+    if (total > cabe) {
+      frascoPintarResumen(resumenEl, "bad",
+        `⛔ <b>Estos ${frascoFmt(total)} frascos ya no caben en la meta de la campaña</b>: solo hay lugar para ${frascoFmt(cabe)}. No se puede guardar; revisa el total capturado.`);
+    }
+  }
+  return excesos;
+}
+
 // Marca en rojo (se pasa) o ámbar (falta) SOLO los renglones que el usuario tocó; no mueve ningún otro.
 function frascoMarcarInputs(ids, prefijo, res, total, tocados) {
   const exceso = res.porAsignar < 0;
@@ -5178,10 +5241,29 @@ function cargarRemesaSeleccionada() {
 
 function calcularRemesa() {
   const total = frascoEntero(document.getElementById("remesaTotalInput").value);
-  const items = FRASCO_DESTINOS.map(d => ({ id: d.id, meta: frascoMetaDestino(d.id) }));
+  const items = frascoConTope(
+    FRASCO_DESTINOS.map(d => ({ id: d.id, meta: frascoMetaDestino(d.id) })),
+    id => frascoRecibidoOtrasDestino(id, _remesaState.numero));
   const res = InfluenzaReparto.repartoLibre(total, items, _remesaState.fijos);
   const porMeta = res.base;
   return { total, items, res, porMeta, sumaMeta: items.reduce((s, i) => s + i.meta, 0) };
+}
+
+// Renglones del reparto municipal (una por unidad) con su tope por meta de la campaña.
+function frascoItemsMunicipal(muni) {
+  const numero = _muniRepartoState.numero;
+  return frascoConTope(
+    frascoUnidadesMunicipio(muni).map(u => ({ id: u.clues, meta: frascoMetaUnidad(u.clues) })),
+    clues => frascoRecibidoOtrasUnidad(clues, numero));
+}
+
+function frascoEtiquetaUnidad(clues) {
+  const u = _allUnidades.find(x => x.clues === clues);
+  return u ? u.unidad : clues;
+}
+
+function frascoEtiquetaDestino(id) {
+  return (FRASCO_DESTINOS.find(d => d.id === id) || { label: id }).label;
 }
 
 function refreshRemesa(enfocado) {
@@ -5205,6 +5287,7 @@ function refreshRemesa(enfocado) {
   if (filaTotal) filaTotal.dataset.estado = !total ? "" : res.porAsignar === 0 ? "ok" : res.porAsignar > 0 ? "falta" : "excede";
   frascoMarcarInputs(items.map(i => i.id), "rem_inp_", res, total, _remesaState.tocados);
   frascoResumenReparto(document.getElementById("remesaResumen"), total, res, sumaMeta > 0);
+  frascoAplicarTope(items, res, total, document.getElementById("remesaResumen"), "rem_inp_", "rem_mark_", frascoEtiquetaDestino);
 }
 
 async function saveRemesa() {
@@ -5213,6 +5296,13 @@ async function saveRemesa() {
   const numero = _remesaState.numero;
   if (!total || !fecha) {
     showToast("Captura la fecha y el total de frascos recibidos.", false, "bad");
+    return;
+  }
+  const excesos = InfluenzaReparto.excedenTope(items, res.frascos);
+  if (excesos.length) {
+    showToast(`No se puede guardar: rebasa la meta de frascos de la campaña. ${frascoTextoExceso(excesos, frascoEtiquetaDestino, items)}.`, false, "bad");
+    const caja = document.getElementById("remesaResumen");
+    if (caja) { caja.classList.remove("frs-shake"); void caja.offsetWidth; caja.classList.add("frs-shake"); }
     return;
   }
   if (res.porAsignar !== 0) {
@@ -5358,7 +5448,7 @@ function renderFrascosMunicipal(muni) {
     btnCuadrar.addEventListener("click", () => {
       const m = document.getElementById("adminInfluenzaMuni").value;
       const tot = frascosRecibidosMunicipio(m, _muniRepartoState.numero);
-      const its = frascoUnidadesMunicipio(m).map(x => ({ id: x.clues, meta: frascoMetaUnidad(x.clues) }));
+      const its = frascoItemsMunicipal(m);
       if (frascoCuadrar(tot, its, _muniRepartoState)) refreshRepartoMunicipal(m);
     });
     btnReset.addEventListener("click", () => {
@@ -5375,7 +5465,7 @@ function refreshRepartoMunicipal(muni, enfocado) {
   const numero = _muniRepartoState.numero;
   const total = frascosRecibidosMunicipio(muni, numero);
   const units = frascoUnidadesMunicipio(muni);
-  const items = units.map(u => ({ id: u.clues, meta: frascoMetaUnidad(u.clues) }));
+  const items = frascoItemsMunicipal(muni);
   const sumaMeta = items.reduce((s, i) => s + i.meta, 0);
   const res = InfluenzaReparto.repartoLibre(total, items, _muniRepartoState.fijos);
   const porMeta = res.base;
@@ -5389,6 +5479,7 @@ function refreshRepartoMunicipal(muni, enfocado) {
   });
   frascoResumenReparto(document.getElementById("frascosMuniResumen"), total, res, sumaMeta > 0);
   frascoMarcarInputs(items.map(i => i.id), "batch_frascos_", res, total, _muniRepartoState.tocados);
+  frascoAplicarTope(items, res, total, document.getElementById("frascosMuniResumen"), "batch_frascos_", "mr_mark_", frascoEtiquetaUnidad);
 
   // Renglón TOTAL de la tabla: lo repartido contra lo asignado, con el color del estado.
   const sumaOtras = units.reduce((s, u) => s + _adminFrascosArray
@@ -5430,8 +5521,17 @@ async function saveFrascosDelivery() {
   }
   const total = frascosRecibidosMunicipio(muni, numero);
   const units = frascoUnidadesMunicipio(muni);
-  const res = InfluenzaReparto.repartoLibre(
-    total, units.map(u => ({ id: u.clues, meta: frascoMetaUnidad(u.clues) })), _muniRepartoState.fijos);
+  const items = frascoItemsMunicipal(muni);
+  const res = InfluenzaReparto.repartoLibre(total, items, _muniRepartoState.fijos);
+  const excesos = InfluenzaReparto.excedenTope(items, res.frascos);
+  if (excesos.length) {
+    showToast(`No se puede guardar: rebasa la meta de frascos de la campaña. ${frascoTextoExceso(excesos, frascoEtiquetaUnidad, items)}.`, false, "bad");
+    ["kpiRepBox", "kpiPorBox", "frascosMuniResumen"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.classList.remove("frs-shake"); void el.offsetWidth; el.classList.add("frs-shake"); }
+    });
+    return;
+  }
   if (res.porAsignar !== 0) {
     frascoBloquearGuardado(res.porAsignar, units.every(u => !frascoMetaUnidad(u.clues)), ["kpiRepBox", "kpiPorBox", "frascosMuniResumen"]);
     document.getElementById("frascosMuniKpis")?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -5574,11 +5674,15 @@ async function exportFrascosExcel() {
       const rMetaF = ultima + 2;
       const rTot = ultima + 3;
       etiqueta(rMeta, "META (dosis)");
+      etiqueta(rMetaF, "META (frascos)");
       etiqueta(rTot, "TOTAL ENTREGADO");
       columnas.forEach((c, i) => {
         const col = letra(i + 2);
         const m = ws.getCell(rMeta, i + 2);
         m.value = meta(c.key) || null;
+        // Meta en frascos = dosis / 10 hacia arriba (el último frasco puede quedar abierto); es la que se compara.
+        const mf = ws.getCell(rMetaF, i + 2);
+        mf.value = { formula: `IF(${col}${rMeta}>0,ROUNDUP(${col}${rMeta}/${DOSIS_POR_FRASCO},0),"")` };
         const t = ws.getCell(rTot, i + 2);
         t.value = { formula: `IF(SUM(${col}${primera}:${col}${ultima})=0,"-",SUM(${col}${primera}:${col}${ultima}))` };
       });
@@ -5595,6 +5699,22 @@ async function exportFrascosExcel() {
           cell.alignment = { horizontal: "center" };
         }
       });
+      // Formato condicional del TOTAL ENTREGADO contra la META (frascos): verde = meta cubierta al 100 %,
+      // rojo = rebasa la meta, ámbar = entrega en curso (aún no la cubre). Sin meta o sin entregas no se pinta.
+      const verde = { type: "pattern", pattern: "solid", bgColor: { argb: "FFC6EFCE" } };
+      const rojo = { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFC7CE" } };
+      const ambar = { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFEB9C" } };
+      const ref = `B${rTot}:${cl}${rTot}`;
+      const ini = `B${rTot}`, mini = `B${rMetaF}`;
+      ws.addConditionalFormatting({ ref, rules: [
+        { type: "expression", priority: 1, formulae: [`AND(ISNUMBER(${ini}),N(${mini})>0,${ini}=${mini})`], style: { fill: verde, font: { bold: true, color: { argb: "FF006100" } } } },
+        { type: "expression", priority: 2, formulae: [`AND(ISNUMBER(${ini}),N(${mini})>0,${ini}>${mini})`], style: { fill: rojo, font: { bold: true, color: { argb: "FF9C0006" } } } },
+        { type: "expression", priority: 3, formulae: [`AND(ISNUMBER(${ini}),N(${mini})>0,${ini}<${mini})`], style: { fill: ambar, font: { bold: true, color: { argb: "FF9C5700" } } } }
+      ] });
+      // Leyenda para quien abre el archivo
+      const ley = ws.getCell(rTot + 2, 1);
+      ley.value = "Verde: meta cubierta al 100 % · Ámbar: entrega en curso · Rojo: rebasa la meta (frascos)";
+      ley.font = { ...fuente, size: 10, italic: true, color: { argb: "FF555555" } };
       ws.views = [{ state: "frozen", xSplit: 1, ySplit: hRow }];
     });
 
@@ -5676,15 +5796,11 @@ function frascoFechaCorta(f) {
 
 // Tabla «Reparto vs. captura semanal», por unidad. Municipal: las unidades de su municipio (todas);
 // Jurisdicción: toda unidad que ya tenga reparto o captura.
-      etiqueta(rMetaF, "META (frascos)");
 function renderFrascosBalance() {
   const tbody = document.getElementById("frascosBalanceTbody");
   if (!tbody) return;
   const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";
   const muni = document.getElementById("adminInfluenzaMuni")?.value;
-        // Meta en frascos = dosis / 10 hacia arriba (el último frasco puede quedar abierto); es la que se compara.
-        const mf = ws.getCell(rMetaF, i + 2);
-        mf.value = { formula: `IF(${col}${rMeta}>0,ROUNDUP(${col}${rMeta}/${DOSIS_POR_FRASCO},0),"")` };
   const unidades = esJuris ? _allUnidades.slice() : frascoUnidadesMunicipio(muni || "");
   const orden = FRASCO_DESTINOS.map(d => d.id);
   let filas = unidades.map(u => {
@@ -5699,22 +5815,6 @@ function renderFrascosBalance() {
   if (col) col.style.display = esJuris ? "" : "none";
   tbody.innerHTML = filas.length ? filas.map(({ u, destino, b }) => {
     const dest = FRASCO_DESTINOS.find(d => d.id === destino);
-      // Formato condicional del TOTAL ENTREGADO contra la META (frascos): verde = meta cubierta al 100 %,
-      // rojo = rebasa la meta, ámbar = entrega en curso (aún no la cubre). Sin meta o sin entregas no se pinta.
-      const verde = { type: "pattern", pattern: "solid", bgColor: { argb: "FFC6EFCE" } };
-      const rojo = { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFC7CE" } };
-      const ambar = { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFEB9C" } };
-      const ref = `B${rTot}:${cl}${rTot}`;
-      const ini = `B${rTot}`, mini = `B${rMetaF}`;
-      ws.addConditionalFormatting({ ref, rules: [
-        { type: "expression", priority: 1, formulae: [`AND(ISNUMBER(${ini}),N(${mini})>0,${ini}=${mini})`], style: { fill: verde, font: { bold: true, color: { argb: "FF006100" } } } },
-        { type: "expression", priority: 2, formulae: [`AND(ISNUMBER(${ini}),N(${mini})>0,${ini}>${mini})`], style: { fill: rojo, font: { bold: true, color: { argb: "FF9C0006" } } } },
-        { type: "expression", priority: 3, formulae: [`AND(ISNUMBER(${ini}),N(${mini})>0,${ini}<${mini})`], style: { fill: ambar, font: { bold: true, color: { argb: "FF9C5700" } } } }
-      ] });
-      // Leyenda para quien abre el archivo
-      const ley = ws.getCell(rTot + 2, 1);
-      ley.value = "Verde: meta cubierta al 100 % · Ámbar: entrega en curso · Rojo: rebasa la meta (frascos)";
-      ley.font = { ...fuente, size: 10, italic: true, color: { argb: "FF555555" } };
     return `<tr class="frs-row" data-estado="${b.estado}">
       <td><b>${u.unidad}</b><br><span class="frs-sub">${u.clues}</span></td>
       <td class="c" style="${esJuris ? "" : "display:none"}">${dest ? dest.label : destino}</td>

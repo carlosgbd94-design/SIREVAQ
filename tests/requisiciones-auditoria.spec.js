@@ -110,6 +110,16 @@ test('la fecha de recepción capturada es la que se queda al cerrar y no el últ
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
   const campo = page.locator('#inpFechaRecepcion');
   await expect(campo).toBeVisible();
+  // Al ir tecleando el año aparece 0002, 0020…: eso no es una fecha y no se guarda
+  await campo.fill('0002-07-06');
+  await campo.dispatchEvent('change');
+  await page.waitForTimeout(150);
+  expect(await db(page, 'db.requi_requisiciones[db.requi_requisiciones.length-1].fecha_envio || null')).toBeNull();
+  // La barra del mes ya no trae botones de «cargar» ni «guardar» (cargar es automático y Guardar vive abajo)
+  await expect(page.locator('#btnCargar, #btnGuardarCabecera')).toHaveCount(0);
+  // Todo el control de entrega cabe en una sola fila de la barra cuando hay espacio
+  const filas = await page.evaluate(() => new Set([...document.querySelectorAll('#selAnio, #selMes, #barraEntregas, #campoFechaRecepcion')].map((e) => Math.round(e.getBoundingClientRect().top / 20))).size);
+  expect(filas).toBe(1);
   await campo.fill('2026-10-07');
   await campo.dispatchEvent('change');
   await expect.poll(() => db(page, 'db.requi_requisiciones[db.requi_requisiciones.length-1].fecha_envio')).toBe('2026-10-07');

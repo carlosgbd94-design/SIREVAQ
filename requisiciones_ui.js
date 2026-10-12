@@ -134,8 +134,14 @@ function flashGuardado(el) {
 // ---------------------------------------------------------------------------
 
 // Fecha de recepción de la requisición (columna fecha_envio): la que se captura; si no, la del pedido que se trajo.
+function fechaRecepcionValida(f) {
+  const a = Number(String(f || '').slice(0, 4));
+  return a >= 2000 && a <= 2100;
+}
+
 function fechaRecepcionDe(r) {
-  return (r && (r.fecha_envio || r.pedido_fecha)) || '';
+  if (!r) return '';
+  return [r.fecha_envio, r.pedido_fecha].find(fechaRecepcionValida) || '';
 }
 
 function hoyIso() {
@@ -944,6 +950,8 @@ async function guardarFechaRecepcion() {
   const f = $('inpFechaRecepcion');
   if (!estado.puedeEditar || !estado.requisicion) return;
   const nueva = f.value || null;
+  // Mientras se teclea el año (0002, 0020, 0202…) todavía no es una fecha: no se guarda hasta que quede completa.
+  if (nueva && !fechaRecepcionValida(nueva)) return;
   if ((nueva || '') === (estado.requisicion.fecha_envio || '')) return;
   const { data, error } = await estado.db.from('requi_requisiciones')
     .update({ fecha_envio: nueva }).eq('id', estado.requisicion.id).select().single();
@@ -1061,7 +1069,7 @@ async function cargarDatosRequisicion() {
   const fallo = rItems.error || rDm.error || (du.incompleto ? { message: 'la lectura del reparto a unidades quedó incompleta' } : null);
   if (fallo) {
     toast(`No se pudo cargar la requisición: ${fallo.message}. Revisa tu conexión y vuelve a cargarla.`, true);
-    $('hintCabecera').textContent = 'La requisición no se pudo leer completa. Revisa tu conexión y ' + (estado.puedeEditar ? 'toca "Cargar" (la carpeta)' : 'vuelve a elegir el mes o recarga la página') + ' para reintentar' + (estado.puedeEditar ? '; no captures nada hasta que cargue.' : '.');
+    $('hintCabecera').innerHTML = 'La requisición no se pudo leer completa. Revisa tu conexión y toca <button type="button" class="btn btn-outline btn-sm" id="btnReintentarCarga">Reintentar</button>' + (estado.puedeEditar ? ' No captures nada hasta que cargue.' : '');
     $('hintCabecera').style.display = 'block';
     return;
   }
@@ -3308,7 +3316,7 @@ function instalarEventos() {
   });
 
   // Cabecera
-  $('btnCargar').addEventListener('click', () => cargarRequisicion());
+  $('hintCabecera').addEventListener('click', (ev) => { if (ev.target.closest('#btnReintentarCarga')) cargarRequisicion(); });
   $('selAnio').addEventListener('change', () => cargarRequisicion());
   $('selMes').addEventListener('change', () => cargarRequisicion());
   $('barraEntregas').addEventListener('click', (ev) => {
@@ -3317,8 +3325,11 @@ function instalarEventos() {
   });
   $('btnNuevaEntrega').addEventListener('click', nuevaEntrega);
   $('btnRenombrarEntrega').addEventListener('click', renombrarEntrega);
-  $('btnGuardarCabecera').addEventListener('click', guardarCabecera);
   $('inpFechaRecepcion').addEventListener('change', guardarFechaRecepcion);
+  $('inpFechaRecepcion').addEventListener('blur', () => {   // si quedó a medias, regresa a la fecha guardada
+    const f = $('inpFechaRecepcion');
+    if (f.value && !fechaRecepcionValida(f.value)) f.value = fechaRecepcionDe(estado.requisicion);
+  });
   $('btnCrearRequisicion').addEventListener('click', guardarCabecera);
   $('btnPdfJurisdiccional').addEventListener('click', () => exportarUno('JURISDICCIONAL', ''));
   $('btnGuardarFirmasJuris').addEventListener('click', guardarFirmasJurisdiccionales);
