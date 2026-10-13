@@ -3175,13 +3175,45 @@ function uuidSeguro() {
   return [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 
-function nombreTransferencia(anio, mes) {
+// Una transferencia por entrada (entrega) del mes: la 1 conserva el nombre de siempre
+// y las demás llevan sufijo _E2, _E3… (igual que los Excel de cada entrega).
+function nombreTransferencia(anio, mes, entrega) {
   const m = MESES.find((x) => x.v === Number(mes));
-  return `Transferencias_${m ? m.l : mes}_${anio}.pdf`;
+  const e = Number(entrega) || 1;
+  return `Transferencias_${m ? m.l : mes}_${anio}${e > 1 ? '_E' + e : ''}.pdf`;
 }
 
 function actualizarNombreTransferencia() {
-  $('transNombre').textContent = nombreTransferencia($('transAnio').value, $('transMes').value);
+  $('transNombre').textContent = nombreTransferencia($('transAnio').value, $('transMes').value, $('transEntrega').value);
+}
+
+// Entregas ofrecidas para el mes elegido: las que ya tienen requisición o transferencia, más la siguiente.
+async function llenarEntregasTransferencia() {
+  const anio = Number($('transAnio').value);
+  const mes = Number($('transMes').value);
+  const previa = Number($('transEntrega').value) || 1;
+  const sel = $('transEntrega');
+  const { data } = await estado.db.from('requi_requisiciones').select('entrega,etiqueta')
+    .eq('anio', anio).eq('mes', mes).order('entrega');
+  // El usuario pudo cambiar de mes mientras llegaba la respuesta.
+  if (anio !== Number($('transAnio').value) || mes !== Number($('transMes').value)) return;
+  const etiquetas = new Map((data || []).map((r) => [r.entrega, r.etiqueta]));
+  const maxExistente = Math.max(0, ...etiquetas.keys(),
+    ...estado.transferencias.filter((t) => t.anio === anio && t.mes === mes).map((t) => t.entrega || 1));
+  const total = Math.min(12, maxExistente + 1);
+  let html = '';
+  for (let e = 1; e <= total; e++) {
+    const et = etiquetas.get(e);
+    html += `<option value="${e}">Entrega ${e}${et ? ' · ' + esc(et) : ''}</option>`;
+  }
+  sel.innerHTML = html;
+  sel.value = String(Math.min(previa, total));
+  actualizarNombreTransferencia();
+}
+
+async function cambioPeriodoTransferencia() {
+  actualizarNombreTransferencia();
+  await llenarEntregasTransferencia();
 }
 
 async function abrirTransferencias() {
@@ -3196,10 +3228,12 @@ async function abrirTransferencias() {
   $('transArchivo').value = '';
   $('transArchivoNombre').textContent = 'Ningún PDF elegido';
   $('transSubir').disabled = true;
+  $('transEntrega').innerHTML = '<option value="1">Entrega 1</option>';
   actualizarNombreTransferencia();
   $('modalTransferencias').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   await cargarTransferencias();
+  await llenarEntregasTransferencia();
 }
 
 function cerrarTransferencias() {
@@ -3209,14 +3243,14 @@ function cerrarTransferencias() {
 
 async function cargarTransferencias() {
   const { data, error } = await estado.db.from('requi_transferencias').select('*')
-    .order('anio', { ascending: false }).order('mes', { ascending: false });
+    .order('anio', { ascending: false }).order('mes', { ascending: false }).order('entrega', { ascending: true });
   if (error) { toast('No se pudieron cargar las transferencias: ' + error.message, true); return; }
   estado.transferencias = data || [];
   const kb = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
   $('transLista').innerHTML = estado.transferencias.map((t) => {
     const m = MESES.find((x) => x.v === t.mes);
     return `<tr>
-      <td><strong>${esc(m ? m.l : t.mes)} ${t.anio}</strong></td>
+      <td><strong>${esc(m ? m.l : t.mes)} ${t.anio}</strong><br><small style="color:var(--muted)">Entrega ${t.entrega || 1}</small></td>
       <td><a class="trans-ver" href="${esc(t.public_url)}" target="_blank" rel="noopener"><span class="material-symbols-rounded" style="font-size:16px">picture_as_pdf</span>${esc(t.nombre_archivo)}</a></td>
       <td>${t.tamano_bytes ? kb(t.tamano_bytes) : '—'}</td>
       <td>${esc(t.subido_por || '—')}<br><small style="color:var(--muted)">${esc(new Date(t.subido_en).toLocaleDateString('es-MX'))}</small></td>
@@ -3231,13 +3265,14 @@ async function subirTransferencia() {
   if (file.size > MAX_PDF_BYTES) { toast('El PDF pesa más de 40 MB.', true); return; }
   const anio = Number($('transAnio').value);
   const mes = Number($('transMes').value);
-  const nombre = nombreTransferencia(anio, mes);
-  const previa = estado.transferencias.find((t) => t.anio === anio && t.mes === mes);
+  const entrega = Number($('transEntrega').value) || 1;
+  const nombre = nombreTransferencia(anio, mes, entrega);
+  const previa = estado.transferencias.find((t) => t.anio === anio && t.mes === mes && (t.entrega || 1) === entrega);
   if (previa && !(await confirmar({
-    titulo: 'Ya hay una transferencia de ese mes', tono: 'aviso', aceptar: 'Reemplazar',
-    mensaje: `Ya hay una transferencia de ${etiquetaMes({ anio, mes })}. ¿Reemplazarla con este archivo?`
+    titulo: 'Ya hay una transferencia de esa entrega', tono: 'aviso', aceptar: 'Reemplazar',
+    mensaje: `Ya hay una transferencia de ${etiquetaMes({ anio, mes })}, entrega ${entrega}. ¿Reemplazarla con este archivo?`
   }))) return;
-  // Mismo mes = misma ruta (se sobrescribe); mes nuevo = token nuevo.
+  // Misma entrega del mismo mes = misma ruta (se sobrescribe); entrega nueva = token nuevo.
   const ruta = previa ? previa.ruta : `Requisiciones/Transferencias/${uuidSeguro()}/${nombre}`;
 
   $('transSubir').disabled = true;
@@ -3256,9 +3291,9 @@ async function subirTransferencia() {
 
     const publicUrl = `${R2_PUBLIC_URL}/${ruta}`;
     const { error } = await estado.db.from('requi_transferencias').upsert({
-      anio, mes, nombre_archivo: nombre, ruta, public_url: publicUrl, tamano_bytes: file.size,
+      anio, mes, entrega, nombre_archivo: nombre, ruta, public_url: publicUrl, tamano_bytes: file.size,
       subido_por: estado.perfil.usuario, subido_en: new Date().toISOString()
-    }, { onConflict: 'anio,mes' });
+    }, { onConflict: 'anio,mes,entrega' });
     if (error) throw error;
     // Registro en r2_objects para que cuente en el límite de almacenamiento.
     await estado.db.from('r2_objects').upsert({
@@ -3600,8 +3635,9 @@ function instalarEventos() {
   $('transCerrar').addEventListener('click', cerrarTransferencias);
   $('transCerrar2').addEventListener('click', cerrarTransferencias);
   $('modalTransferencias').addEventListener('click', (ev) => { if (ev.target === $('modalTransferencias')) cerrarTransferencias(); });
-  $('transMes').addEventListener('change', actualizarNombreTransferencia);
-  $('transAnio').addEventListener('change', actualizarNombreTransferencia);
+  $('transMes').addEventListener('change', cambioPeriodoTransferencia);
+  $('transAnio').addEventListener('change', cambioPeriodoTransferencia);
+  $('transEntrega').addEventListener('change', actualizarNombreTransferencia);
   $('transArchivo').addEventListener('change', () => {
     const f = $('transArchivo').files[0];
     $('transArchivoNombre').textContent = f ? f.name : 'Ningún PDF elegido';

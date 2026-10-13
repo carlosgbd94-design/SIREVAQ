@@ -21,7 +21,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
 <script defer src="requisiciones_rutas_excel.js"></script>
-<script defer src="requisiciones_ui.js?v=14"></script>
+<script defer src="requisiciones_ui.js?v=15"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -1011,13 +1011,14 @@
   <div class="modal-fondo" id="modalTransferencias" style="display:none;">
     <div class="modal-hoja" role="dialog" aria-modal="true" aria-labelledby="transTitulo">
       <div class="modal-cab">
-        <div><h3 id="transTitulo">Transferencias</h3><p>PDF de las transferencias de cada mes. Solo lo ven los perfiles Jurisdiccional y Admin.</p></div>
+        <div><h3 id="transTitulo">Transferencias</h3><p>PDF de la transferencia de cada entrega del mes. Solo lo ven los perfiles Jurisdiccional y Admin.</p></div>
         <button type="button" class="icon-btn-pure" id="transCerrar" title="Cerrar"><span class="material-symbols-rounded">close</span></button>
       </div>
       <div class="modal-cuerpo">
         <div class="trans-subir">
           <div class="campo"><label for="transMes">Mes</label><select id="transMes"></select></div>
           <div class="campo"><label for="transAnio">Año</label><select id="transAnio"></select></div>
+          <div class="campo"><label for="transEntrega">Entrega</label><select id="transEntrega"><option value="1">Entrega 1</option></select></div>
           <label class="btn btn-outline btn-sm" style="cursor:pointer;"><span class="material-symbols-rounded" style="font-size:15px">upload_file</span> Elegir PDF
             <input type="file" id="transArchivo" accept="application/pdf,.pdf" style="display:none;"></label>
           <span class="trans-archivo" id="transArchivoNombre">Ningún PDF elegido</span>
@@ -1026,7 +1027,7 @@
         </div>
         <div class="tbl-scroll" style="max-height:320px;">
           <table class="tbl">
-            <thead><tr><th>Mes</th><th>Archivo</th><th>Tamaño</th><th>Subió</th></tr></thead>
+            <thead><tr><th>Mes / entrega</th><th>Archivo</th><th>Tamaño</th><th>Subió</th></tr></thead>
             <tbody id="transLista"></tbody>
           </table>
         </div>
