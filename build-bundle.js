@@ -32,6 +32,7 @@ const GROUP_HEAD = [
   'dock_glass.js',
   'influenza_reglas.js',
   'influenza_reparto.js',
+  'covid_frascos.js',
   'influenza_metas_export.js',
   'influenza_module.js',
   'sis_csv.js',

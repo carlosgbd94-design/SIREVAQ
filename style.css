@@ -15080,3 +15080,19 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
   .iinf-tabla { table-layout: auto; min-width: 560px; }
   .iinf-tabla thead th:first-child { width: auto; min-width: 150px; }
 }
+
+/* Selector de vacuna (Influenza | COVID-19) en Distribución de Metas y Control de Frascos. Plano, sin relieve. */
+.vac-seg { display: inline-flex; padding: 3px; gap: 2px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px; }
+#secInfluenzaMetas .vac-seg .vac-btn,
+#secInfluenzaFrascos .vac-seg .vac-btn {
+  height: 34px !important; min-height: 34px !important; padding: 0 16px !important;
+  border: 0 !important; border-radius: 9px !important; background: transparent !important;
+  font-family: inherit !important; font-size: 12px !important; font-weight: 800 !important;
+  color: #64748b !important; cursor: pointer; box-shadow: none !important; transform: none !important;
+}
+#secInfluenzaMetas .vac-seg .vac-btn.activo,
+#secInfluenzaFrascos .vac-seg .vac-btn.activo { background: #4c1d95 !important; color: #ffffff !important; }
+#secInfluenzaMetas .vac-seg .vac-btn:focus-visible,
+#secInfluenzaFrascos .vac-seg .vac-btn:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
+#secInfluenzaFrascos .vac-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+#secInfluenzaFrascos .vac-bar .vac-marca { width: auto !important; min-width: 280px; }

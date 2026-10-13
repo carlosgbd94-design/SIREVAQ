@@ -8397,6 +8397,83 @@ async function supabaseRequest(action = "", payload, options = {}) {
         return { ok: true, count: data };
       }
 
+      // ── COVID-19: metas por rubro y reparto de frascos por marca (supabase/covid_metas_frascos.sql)
+      case "getcovid_metas": {
+        const { anio_campana } = payload;
+        const { data, error } = await supabase
+          .from('covid_metas')
+          .select('*')
+          .eq('anio_campana', anio_campana);
+        if (error) throw error;
+        return { ok: true, data: data || [] };
+      }
+
+      case "savecovid_metas": {
+        const { rows } = payload;
+        if (!rows || !rows.length) return { ok: true };
+        const { error } = await supabase
+          .from('covid_metas')
+          .upsert(rows, { onConflict: 'anio_campana,municipio,clues' });
+        if (error) throw error;
+        return { ok: true };
+      }
+
+      case "getcovid_distribucion": {
+        const { anio_campana } = payload;
+        const { data, error } = await supabase
+          .from('covid_distribucion_frascos')
+          .select('*')
+          .eq('anio_campana', anio_campana)
+          .order('fecha_entrega', { ascending: false });
+        if (error) throw error;
+        return { ok: true, data: data || [] };
+      }
+
+      case "getcovid_remesas": {
+        const { anio_campana } = payload;
+        const { data, error } = await supabase
+          .from('covid_remesas')
+          .select('*')
+          .eq('anio_campana', anio_campana)
+          .order('numero_entrega', { ascending: true });
+        if (error) throw error;
+        return { ok: true, data: data || [] };
+      }
+
+      case "savecovid_remesa": {
+        const { anio_campana, marca, numero_entrega, fecha, total_frascos, asignacion, manual } = payload;
+        const { error } = await supabase
+          .from('covid_remesas')
+          .upsert({
+            anio_campana,
+            marca,
+            numero_entrega: Number(numero_entrega),
+            fecha,
+            total_frascos: Number(total_frascos),
+            asignacion: asignacion || {},
+            manual: manual || [],
+            creado_por: String(USER?.usuario || "").toUpperCase(),
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'anio_campana,marca,numero_entrega' });
+        if (error) throw error;
+        return { ok: true };
+      }
+
+      case "guardarcovid_reparto": {
+        const { anio_campana, marca, municipio, numero_entrega, fecha, rows } = payload;
+        const { data, error } = await supabase.rpc('covid_guardar_reparto', {
+          p_campana: anio_campana,
+          p_marca: marca,
+          p_municipio: municipio,
+          p_numero: Number(numero_entrega),
+          p_fecha: fecha,
+          p_entregado_por: String(USER?.usuario || ""),
+          p_rows: rows || []
+        });
+        if (error) throw error;
+        return { ok: true, count: data };
+      }
+
       case "getinfluenza_config": {
         const { data, error } = await supabase
           .from('campanas')

@@ -14,6 +14,13 @@ const seccion = html.slice(
 const bloque = modulo.slice(
   modulo.indexOf('function updateFlaskCalculationMuni'),
   modulo.indexOf('// --- ═══════════ INDICADORES'));
+// Vacuna activa (Influenza / COVID-19): estado y accesores que usa el bloque de frascos.
+const iVac = modulo.indexOf('// ─── Vacuna activa en Distribución de Metas');
+const iPeso = modulo.indexOf('function metaPesoRubro');
+const vacuna = modulo.slice(iVac, modulo.indexOf('}', iPeso) + 1);
+const vacunaFns = modulo.slice(
+  modulo.indexOf('async function loadCovidAdminData'),
+  modulo.indexOf('async function populateInfluenzaAdminFilters'));
 
 const meta = (clues, municipio, n) => ({ clues, municipio, metas: { r1: n } });
 const DATOS = `
@@ -58,7 +65,9 @@ async function montar(page, rol) {
     document.getElementById('secInfluenzaFrascos').classList.remove('hidden');
   }, [seccion, rol]);
   await page.addScriptTag({ path: path.join(raiz, 'influenza_reparto.js') });
+  await page.addScriptTag({ path: path.join(raiz, 'covid_frascos.js') });
   await page.addScriptTag({ content: DATOS });
+  await page.addScriptTag({ content: vacuna + vacunaFns });
   await page.addScriptTag({ content: bloque });
 }
 
@@ -559,8 +568,10 @@ async function montarMetas(page, rol, metas) {
     document.getElementById('secInfluenzaMetas').classList.remove('hidden');
   }, [seccionMetas, rol]);
   await page.addScriptTag({ content: DATOS.replace(/var _adminMetasArray = [\s\S]*?\];/, `var _adminMetasArray = ${JSON.stringify(metas)};`) });
+  await page.addScriptTag({ path: path.join(raiz, 'covid_frascos.js') });
+  await page.addScriptTag({ content: rubros + vacuna + vacunaFns });
   await page.addScriptTag({ content: bloque });
-  await page.addScriptTag({ content: rubros + gridFn + 'window.__render = renderMetasConfigurationGrid;' });
+  await page.addScriptTag({ content: gridFn + 'window.__render = renderMetasConfigurationGrid;' });
   await page.evaluate(() => { window.syncTabGroupIndicator = () => {}; window.__render(); });
 }
 
@@ -806,4 +817,149 @@ test('Tope duro: el municipio no puede dar a una unidad más de su meta contando
   await page.click('#btnSaveFrascoEntrega');
   expect(await page.evaluate(() => window.__llamadas.filter((l) => l[0] === 'guardarinfluenza_reparto').length)).toBe(0);
   expect(await page.evaluate(() => window.__toasts[window.__toasts.length - 1] || '')).toContain('rebasa la meta de frascos');
+});
+
+// ─── COVID-19: metas por rubro y frascos por marca (Moderna 10 dosis, Pfizer 6; pediátricas valen la mitad) ───
+const metasCovid = [
+  { clues: null, municipio: 'QUERETARO', metas: { c1: 200, c2: 200, c3: 600, c4: 200, c5: 0, c6: 0 } },
+  { clues: null, municipio: 'CORREGIDORA', metas: { c1: 0, c2: 0, c3: 500, c4: 0, c5: 0, c6: 0 } }
+];
+
+test('COVID: la meta se calcula en dosis de 0.5 mL y Pfizer solo cubre la parte adulta', async ({ page }) => {
+  await page.goto('/reference.html');
+  await page.addScriptTag({ path: path.join(raiz, 'covid_frascos.js') });
+  const r = await page.evaluate(() => {
+    const m = { c1: 200, c2: 200, c3: 600, c4: 200, c5: 0, c6: 0 };
+    return {
+      equiv: CovidFrascos.metaEquivalente(m),
+      adulta: CovidFrascos.metaAdulta(m),
+      impar: CovidFrascos.metaEquivalente({ c1: 1, c2: 0, c3: 0 }),            // 0.5 → sube a 1
+      modernaLibre: CovidFrascos.topeFrascos({ total: 1000, adulto: 800, marca: 'MODERNA', propiasOtras: 0, otraMarca: 0 }),
+      pfizerLibre: CovidFrascos.topeFrascos({ total: 1000, adulto: 800, marca: 'PFIZER', propiasOtras: 0, otraMarca: 0 }),
+      // 40 frascos de Moderna (400 dosis) ya entregados: a Pfizer le caben (1000-400)/6 = 100
+      pfizerTrasModerna: CovidFrascos.topeFrascos({ total: 1000, adulto: 800, marca: 'PFIZER', propiasOtras: 0, otraMarca: 40 }),
+      // 100 frascos de Pfizer (600 dosis): a Moderna le caben (1000-600)/10 = 40
+      modernaTrasPfizer: CovidFrascos.topeFrascos({ total: 1000, adulto: 800, marca: 'MODERNA', propiasOtras: 0, otraMarca: 100 })
+    };
+  });
+  expect(r).toEqual({ equiv: 1000, adulta: 800, impar: 1, modernaLibre: 100, pfizerLibre: 134,
+    pfizerTrasModerna: 100, modernaTrasPfizer: 40 });
+});
+
+test('COVID Jurisdicción: reparte Moderna por la meta equivalente y Pfizer descuenta lo ya entregado de Moderna', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate((metas) => {
+    _vacuna = 'COVID'; _marcaCovid = 'MODERNA';
+    _covidMetasArray = metas; _covidRemesasAll = []; _covidFrascosAll = [];
+    renderFrascosDistribution();
+  }, metasCovid);
+
+  // Moderna: 150 frascos en proporción 1000 : 500 → 100 y 50 (cada uno justo en su tope)
+  await page.fill('#remesaTotalInput', '150');
+  expect(await valores(page, ['QUERETARO', 'CORREGIDORA'])).toEqual(['100', '50']);
+  await expect(page.locator('#rem_dos_QUERETARO')).toHaveText('1,000');       // 100 frascos × 10 dosis
+
+  // Guarda como COVID/MODERNA (acción y marca propias) y sin tocar las tablas de influenza
+  await page.fill('#rem_inp_QUERETARO', '40');
+  await page.fill('#rem_inp_CORREGIDORA', '20');
+  await page.fill('#remesaTotalInput', '60');
+  await page.click('#btnSaveRemesa');
+  const guardada = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'savecovid_remesa'));
+  expect(guardada[1].marca).toBe('MODERNA');
+  expect(guardada[1].total_frascos).toBe(60);
+  expect(guardada[1].asignacion.QUERETARO).toBe(40);
+  expect(await page.evaluate(() => window.__llamadas.some((l) => l[0] === 'saveinfluenza_remesa'))).toBe(false);
+
+  // Pfizer con esa Moderna ya entregada: QUERETARO (1000-400)/6 = 100; CORREGIDORA (500-200)/6 = 50
+  const topes = await page.evaluate(() => {
+    _covidRemesasAll = [{ marca: 'MODERNA', numero_entrega: 1, fecha: '2026-10-05', total_frascos: 60, asignacion: { QUERETARO: 40, CORREGIDORA: 20 }, manual: [] }];
+    _marcaCovid = 'PFIZER';
+    _remesaState.numero = null;
+    renderFrascosDistribution();
+    return calcularRemesa().items.filter((i) => ['QUERETARO', 'CORREGIDORA'].includes(i.id)).map((i) => [i.id, i.meta, i.tope]);
+  });
+  expect(topes).toEqual([['QUERETARO', 800, 100], ['CORREGIDORA', 500, 50]]);   // meta Pfizer = solo adulta
+  await page.fill('#remesaTotalInput', '200');
+  await expect(page.locator('#remesaResumen')).toContainText('ya no caben');       // 150 máx. entre los dos
+});
+
+test('COVID Metas: 6 rubros del formato, renglón EQUIV. 0.5 mL (pediátricas = mitad)', async ({ page }) => {
+  await montarMetas(page, 'JURISDICCIONAL', []);
+  await page.evaluate((metas) => {
+    _vacuna = 'COVID'; _covidMetasArray = metas;
+    document.getElementById('metaCampaignSelect') || document.body.insertAdjacentHTML('beforeend', '<select id="metaCampaignSelect"><option value="2026-2027">x</option></select>');
+    window.__render();
+  }, metasCovid);
+  await expect(page.locator('#influenzaMetasTbody tr[data-rb]')).toHaveCount(6);
+  await expect(page.locator('input[data-rb="c1"][data-muni="QUERETARO"]')).toHaveValue('200');
+  await expect(page.locator('#frs_QUERETARO')).toHaveText(/1,?000 dosis/);          // 200/2 + 200/2 + 600 + 200
+  await expect(page.locator('#frs_CORREGIDORA')).toHaveText(/500 dosis/);
+  await expect(page.locator('.meta-frascos-row td').first()).toContainText('EQUIV. 0.5 mL');
+
+  await page.fill('input[data-rb="c5"][data-muni="QUERETARO"]', '50');
+  await expect(page.locator('#frs_QUERETARO')).toHaveText(/1,?050 dosis/);
+});
+
+test('COVID Metas: predistribuir con % de influenza reparte exacto y NHGQ queda solo con adultos', async ({ page }) => {
+  const inf = (municipio, r) => ({ clues: null, municipio, metas: r });
+  await montarMetas(page, 'JURISDICCIONAL', [
+    inf('QUERETARO', { r1: 6000, r15: 3000, r16: 500, r17: 100, r18: 2000 }),
+    inf('CORREGIDORA', { r1: 2000, r15: 1000, r16: 300, r17: 100, r18: 1000 }),
+    inf('MARQUES', { r1: 2000, r15: 1000, r16: 200, r17: 100, r18: 1000 }),
+    inf('HUIMILPAN', { r1: 0, r15: 0 }),
+    inf('HENM', { r1: 300, r15: 1000 }),
+    inf('NHG', { r1: 0, r15: 996, r17: 504 })
+  ]);
+  await page.evaluate(() => {
+    _vacuna = 'COVID'; _covidMetasArray = [];
+    window.__render();
+  });
+  const total = { c1: 1000, c2: 1000, c3: 100, c4: 200, c5: 50, c6: 40 };
+  for (const [k, v] of Object.entries(total)) await page.fill(`input[data-rb="${k}"][data-juris]`, String(v));
+  await page.click('#btnCovidPredistribuir');
+  for (const [k, v] of Object.entries(total)) {
+    const suma = await page.evaluate((rb) => [...document.querySelectorAll(`input[data-rb="${rb}"][data-muni]`)]
+      .reduce((s, i) => s + (parseInt(i.value, 10) || 0), 0), k);
+    expect(suma).toBe(v);                                     // lo repartido suma justo la meta de Jurisdicción
+  }
+  await expect(page.locator('input[data-rb="c1"][data-muni="NHG"]')).toHaveValue('0');   // NHGQ sin meta pediátrica
+  await expect(page.locator('input[data-rb="c2"][data-muni="NHG"]')).toHaveValue('0');
+  await expect(page.locator('input[data-rb="c4"][data-muni="NHG"]')).not.toHaveValue('0');
+  await expect(page.locator('input[data-rb="c3"][data-muni="NHG"]')).not.toHaveValue('0');   // NHGQ: riesgo 5-59 y 60+
+  await expect(page.locator('input[data-rb="c5"][data-muni="NHG"]')).toHaveValue('0');
+  await expect(page.locator('input[data-rb="c6"][data-muni="NHG"]')).not.toHaveValue('0');  // y personal de salud
+  await expect(page.locator('input[data-rb="c1"][data-muni="HENM"]')).toHaveValue('0');     // HENM: sin pediátrica
+  await expect(page.locator('input[data-rb="c5"][data-muni="HENM"]')).toHaveValue('0');
+  await expect(page.locator('input[data-rb="c3"][data-muni="HENM"]')).not.toHaveValue('0');
+  await expect(page.locator('input[data-rb="c6"][data-muni="HENM"]')).not.toHaveValue('0');
+  await expect(page.locator('input[data-rb="c1"][data-muni="HUIMILPAN"]')).toHaveValue('0'); // sin meta en influenza = sin % 
+  await expect(page.locator('#cmp_c1')).toHaveAttribute('data-estado', 'ok');             // Comparación en verde
+});
+
+test('COVID Metas: «Predistribuir por unidades» guarda destinos y unidades con los % de influenza de cada unidad', async ({ page }) => {
+  const f = (municipio, clues, r) => ({ clues, municipio, metas: r });
+  await montarMetas(page, 'JURISDICCIONAL', [
+    f('QUERETARO', null, { r1: 6000, r15: 3000, r18: 2000 }),
+    f('QUERETARO', 'Q1', { r1: 3000, r15: 1500, r18: 1000 }),
+    f('QUERETARO', 'Q2', { r1: 2000, r15: 1000, r18: 800 }),
+    f('QUERETARO', 'Q3', { r1: 1000, r15: 500, r18: 200 }),
+    f('CORREGIDORA', null, { r1: 2000, r15: 1000, r18: 1000 }),
+    f('MARQUES', null, { r1: 2000, r15: 1000, r18: 1000 }),
+    f('HUIMILPAN', null, { r1: 1000, r15: 500, r18: 500 })
+  ]);
+  await page.evaluate(() => { window.__llamadas = []; window.__errores = []; window.__toasts = []; _vacuna = 'COVID'; _covidMetasArray = []; window.__render(); });
+  const total = { c1: 1200, c2: 1200, c3: 100, c4: 200, c5: 0, c6: 0 };
+  for (const [k, v] of Object.entries(total)) await page.fill(`input[data-rb="${k}"][data-juris]`, String(v));
+  await page.click('#btnCovidPredistribuirUnidades');
+  await page.click('#btnSaveInfluenzaMetas');
+  const rows = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'savecovid_metas')[1].rows);
+  const q = rows.find((r) => r.municipio === 'QUERETARO' && !r.clues).metas;
+  const unidades = rows.filter((r) => r.municipio === 'QUERETARO' && ['Q1', 'Q2', 'Q3'].includes(r.clues));
+  expect(unidades).toHaveLength(3);
+  for (const c of ['c1', 'c2', 'c3', 'c4']) {
+    expect(unidades.reduce((s, u) => s + u.metas[c], 0)).toBe(q[c]);           // las unidades suman el destino exacto
+  }
+  const por = Object.fromEntries(unidades.map((u) => [u.clues, u.metas.c1]));
+  expect(por.Q1 / q.c1).toBeCloseTo(0.5, 1);                                   // 3000 / 6000 de influenza
+  expect(por.Q2 / q.c1).toBeCloseTo(1 / 3, 1);
 });
