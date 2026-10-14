@@ -15300,3 +15300,9 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
 #secInfluenzaFrascos .tinv-fila #frascosVacunaNota { flex: 1 1 100%; margin: 0; padding: 0; }
 #secInfluenzaFrascos > .hint { margin: 0; }
 #secInfluenzaMetas .hint { margin: 0; }
+/* Control de Frascos (municipal): acciones en la misma fila que los campos; el estado de lotes ocupa su propia
+   fila y los avisos vacíos no dejan huecos. */
+#secInfluenzaFrascos .frs-lotesestado { flex: 1 1 100%; }
+#secInfluenzaFrascos .frs-lotesestado:empty,
+#secInfluenzaFrascos .frs-box:empty { display: none; }
+#secInfluenzaFrascos .frs-formrow .frs-acciones { align-self: flex-end; }
