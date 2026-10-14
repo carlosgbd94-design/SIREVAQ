@@ -1680,7 +1680,6 @@ async function vacunaElegir(vacuna, marca) {
   if (marca) _marcaCovid = marca;
   _remesaState = { numero: null, fijos: {}, editados: new Set(), tocados: new Set() };
   _muniRepartoState = { numero: null, fijos: {}, editados: new Set(), tocados: new Set() };
-  _covidUnidadesAlGuardar = false;
   if (esCovid() && cambioVacuna) await loadCovidAdminData();
   vacunaPintarSelectores();
   renderActiveAdminSection();
@@ -4682,7 +4681,7 @@ function renderMetasConfigurationGrid() {
           return `<td class="p-2 text-center">${inputMeta(`data-rb="${rb.id}" data-clues="${u.clues}"`, v, "clues-meta-input")}</td>`;
         }).join("")
         + `<td class="meta-cmp-cell p-3 text-center align-middle" id="cmp_${rb.id}"><b class="meta-cmp-num"></b><div class="meta-cmp-msg"></div>
-          <span class="meta-split-btn material-symbols-rounded" role="button" tabindex="0" title="Repartir la meta de este renglón en partes iguales entre las unidades" style="font-size:18px;cursor:pointer;color:#7c3aed;user-select:none">call_split</span></td>`;
+          <span class="meta-split-btn material-symbols-rounded" role="button" tabindex="0" aria-label="Repartir la meta de este renglón en partes iguales entre las unidades" title="Repartir la meta de este renglón en partes iguales entre las unidades" style="font-size:18px;cursor:pointer;color:#7c3aed;user-select:none">call_split</span></td>`;
       tbody.appendChild(row);
     });
 
@@ -4774,11 +4773,10 @@ function renderMetasConfigurationGrid() {
   if (btnPre) {
     btnPre.style.display = esCovid() ? "" : "none";
     btnPre.onclick = covidPredistribuir;
-  }
-  const btnPreU = document.getElementById("btnCovidPredistribuirUnidades");
-  if (btnPreU) {
-    btnPreU.style.display = esCovid() && USER.rol !== "MUNICIPAL" ? "" : "none";
-    btnPreU.onclick = covidPredistribuirUnidades;
+    // Jerarquía: Jurisdicción reparte entre municipios y hospitales; el municipal, entre sus unidades.
+    btnPre.title = USER.rol === "MUNICIPAL"
+      ? "Reparte la meta COVID-19 de tu municipio entre tus unidades con los porcentajes de la meta de influenza de cada una. No guarda hasta que presiones Guardar."
+      : "Reparte la meta COVID-19 de la Jurisdicción entre los municipios y hospitales con los porcentajes de influenza (HENM y NHGQ solo adultos/personal). No guarda hasta que presiones Guardar.";
   }
 
   // Enlazar guardado
@@ -4842,34 +4840,6 @@ function covidPredistribuir() {
     ? "Predistribuido parejo: no hay metas de influenza en esta campaña para tomar porcentajes. Revisa y guarda."
     : "Predistribuido con los porcentajes de influenza. Revisa y presiona Guardar.", true, "good");
   return true;
-}
-
-// Jurisdicción: además de los destinos, deja listo el desglose por unidad (mismos porcentajes de influenza de
-// cada unidad) y lo guarda junto con las metas al presionar Guardar. Cada municipal puede ajustarlo después.
-let _covidUnidadesAlGuardar = false;
-function covidPredistribuirUnidades() {
-  if (!covidPredistribuir()) return;
-  _covidUnidadesAlGuardar = true;
-  showToast("Predistribuido por destino y por unidad con los porcentajes de influenza. Al presionar Guardar se guardan también las metas de cada unidad.", true, "good");
-}
-
-// Filas de covid_metas por unidad a partir de las metas de cada municipio (rows ya armados al guardar).
-function covidFilasUnidades(rows, campana) {
-  const out = [];
-  ["QUERETARO", "CORREGIDORA", "MARQUES", "HUIMILPAN"].forEach(m => {
-    const dest = rows.find(r => r.municipio === m && !r.clues);
-    const units = frascoUnidadesMunicipio(m);
-    if (!dest || !units.length) return;
-    const items = units.map(u => {
-      const rec = _adminMetasArray.find(x => x.clues === u.clues);   // influenza
-      return { id: u.clues, metas: (rec && rec.metas) || {} };
-    });
-    const res = CovidFrascos.predistribuir(dest.metas, items);
-    units.forEach(u => out.push({
-      anio_campana: campana, municipio: m, clues: u.clues, metas: res[u.clues], modificado_por: USER.usuario
-    }));
-  });
-  return out;
 }
 
 // Rubros donde la suma de las unidades no coincide con la meta municipal.
@@ -4938,11 +4908,6 @@ async function saveInfluenzaMetasConfig() {
         });
       }
     });
-
-    // COVID: desglose por unidad predistribuido con los porcentajes de influenza (botón «por unidades»).
-    if (esCovid() && _covidUnidadesAlGuardar) {
-      rows.push(...covidFilasUnidades(rows, campana));
-    }
 
     // Si Jurisdicción cambia la meta de un municipio y las metas por unidad ya capturadas dejan de
     // sumarla exacta, se guarda igual pero se avisa (el municipal es quien debe reajustar sus unidades).
@@ -5014,7 +4979,6 @@ async function saveInfluenzaMetasConfig() {
     eventMsg: "Actualización de catálogo de metas anuales",
     action: async () => {
       const res = await AppService.call(esCovid() ? "savecovid_metas" : "saveinfluenza_metas", { rows });
-      _covidUnidadesAlGuardar = false;
       await loadInfluenzaAdminData();
       renderMetasConfigurationGrid();
       if (avisoFaltantes) showToast(avisoFaltantes, false, "warn");

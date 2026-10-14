@@ -109,9 +109,10 @@
   /**
    * totales: {c1..c6} a repartir. items: [{ id, metas (de influenza), permitidos }].
    * `permitidos` (opcional) = rubros que ese destino puede recibir; el resto queda en 0 (p. ej. un hospital
-   * solo de adultos). Un destino permitido en un rubro donde su meta de influenza es 0 entra con el peso de
-   * un peso estimado desde su meta de 60+ (o adulta) con la razón del rubro en los demás destinos (si no, nunca recibiría nada). Si ningún destino tiene peso en un rubro se
-   * reparte por su meta total de influenza y, al final, parejo entre los permitidos.
+   * solo de adultos). Un destino permitido en un rubro donde su meta de influenza es 0 entra con un peso estimado
+   * desde su meta de 60+ (o adulta) y la razón de ese rubro contra 60+ en los demás destinos (si no, nunca
+   * recibiría nada). Si ningún destino tiene peso en un rubro se reparte por su meta total de influenza y, al
+   * final, parejo entre los permitidos.
    */
   function predistribuir(totales, items) {
     const pesos = items.map(it => pesosInfluenza(it.metas));

@@ -78,10 +78,12 @@ create policy "covid_metas_write_juris" on public.covid_metas
 drop policy if exists "covid_metas_write_municipal" on public.covid_metas;
 create policy "covid_metas_write_municipal" on public.covid_metas
   for all to authenticated
-  using (exists (select 1 from perfiles p where p.id = (select auth.uid())
+  -- Jerarquía: el municipal solo escribe metas de UNIDAD (clues no nulo) de sus municipios; la meta del
+  -- destino (clues nulo) y la de la Jurisdicción son de ADMIN/JURISDICCIONAL.
+  using (covid_metas.clues is not null and exists (select 1 from perfiles p where p.id = (select auth.uid())
                   and p.activo = 'SI' and upper(p.rol) = 'MUNICIPAL'
                   and covid_metas.municipio = any (p.municipios_allowed)))
-  with check (exists (select 1 from perfiles p where p.id = (select auth.uid())
+  with check (covid_metas.clues is not null and exists (select 1 from perfiles p where p.id = (select auth.uid())
                   and p.activo = 'SI' and upper(p.rol) = 'MUNICIPAL'
                   and covid_metas.municipio = any (p.municipios_allowed)));
 

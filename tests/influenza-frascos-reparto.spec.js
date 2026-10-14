@@ -936,30 +936,38 @@ test('COVID Metas: predistribuir con % de influenza reparte exacto y NHGQ queda 
   await expect(page.locator('#cmp_c1')).toHaveAttribute('data-estado', 'ok');             // Comparación en verde
 });
 
-test('COVID Metas: «Predistribuir por unidades» guarda destinos y unidades con los % de influenza de cada unidad', async ({ page }) => {
-  const f = (municipio, clues, r) => ({ clues, municipio, metas: r });
+test('COVID Metas: Jurisdicción solo guarda destinos (municipios y hospitales), nunca filas por unidad', async ({ page }) => {
   await montarMetas(page, 'JURISDICCIONAL', [
-    f('QUERETARO', null, { r1: 6000, r15: 3000, r18: 2000 }),
-    f('QUERETARO', 'Q1', { r1: 3000, r15: 1500, r18: 1000 }),
-    f('QUERETARO', 'Q2', { r1: 2000, r15: 1000, r18: 800 }),
-    f('QUERETARO', 'Q3', { r1: 1000, r15: 500, r18: 200 }),
-    f('CORREGIDORA', null, { r1: 2000, r15: 1000, r18: 1000 }),
-    f('MARQUES', null, { r1: 2000, r15: 1000, r18: 1000 }),
-    f('HUIMILPAN', null, { r1: 1000, r15: 500, r18: 500 })
+    { clues: null, municipio: 'QUERETARO', metas: { r1: 6000, r15: 3000, r18: 2000 } },
+    { clues: 'Q1', municipio: 'QUERETARO', metas: { r1: 3000, r15: 1500, r18: 1000 } }
   ]);
   await page.evaluate(() => { window.__llamadas = []; window.__errores = []; window.__toasts = []; _vacuna = 'COVID'; _covidMetasArray = []; window.__render(); });
-  const total = { c1: 1200, c2: 1200, c3: 100, c4: 200, c5: 0, c6: 0 };
-  for (const [k, v] of Object.entries(total)) await page.fill(`input[data-rb="${k}"][data-juris]`, String(v));
-  await page.click('#btnCovidPredistribuirUnidades');
+  await expect(page.locator('#btnCovidPredistribuir')).toBeVisible();
+  expect(await page.locator('#btnCovidPredistribuirUnidades').count()).toBe(0);     // no existe botón «por unidades»
+  await page.fill('input[data-rb="c4"][data-juris]', '100');
+  await page.click('#btnCovidPredistribuir');
   await page.click('#btnSaveInfluenzaMetas');
   const rows = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'savecovid_metas')[1].rows);
-  const q = rows.find((r) => r.municipio === 'QUERETARO' && !r.clues).metas;
-  const unidades = rows.filter((r) => r.municipio === 'QUERETARO' && ['Q1', 'Q2', 'Q3'].includes(r.clues));
-  expect(unidades).toHaveLength(3);
-  for (const c of ['c1', 'c2', 'c3', 'c4']) {
-    expect(unidades.reduce((s, u) => s + u.metas[c], 0)).toBe(q[c]);           // las unidades suman el destino exacto
-  }
-  const por = Object.fromEntries(unidades.map((u) => [u.clues, u.metas.c1]));
-  expect(por.Q1 / q.c1).toBeCloseTo(0.5, 1);                                   // 3000 / 6000 de influenza
-  expect(por.Q2 / q.c1).toBeCloseTo(1 / 3, 1);
+  const conClues = rows.filter((r) => r.clues).map((r) => r.clues).sort();
+  expect(conClues).toEqual(['QTSSA001740', 'QTSSA002901']);                        // solo las CLUES de los hospitales
+});
+
+test('COVID Metas: el municipal predistribuye SU meta entre sus unidades con el % de influenza de cada una', async ({ page }) => {
+  const f = (clues, r) => ({ clues, municipio: 'QUERETARO', metas: r });
+  await montarMetas(page, 'MUNICIPAL', [
+    f('Q1', { r1: 3000, r15: 1500 }), f('Q2', { r1: 2000, r15: 1000 }), f('Q3', { r1: 1000, r15: 500 })
+  ]);
+  await page.evaluate(() => {
+    window.__llamadas = []; _vacuna = 'COVID';
+    _covidMetasArray = [{ clues: null, municipio: 'QUERETARO', metas: { c1: 600, c2: 600, c3: 0, c4: 120, c5: 0, c6: 0 } }];
+    window.__render();
+  });
+  await page.click('#btnCovidPredistribuir');
+  const v = (rb, c) => page.locator(`input[data-rb="${rb}"][data-clues="${c}"]`).inputValue();
+  expect([await v('c1', 'Q1'), await v('c1', 'Q2'), await v('c1', 'Q3')]).toEqual(['300', '200', '100']);   // 50 / 33 / 17 %
+  expect([await v('c4', 'Q1'), await v('c4', 'Q2'), await v('c4', 'Q3')]).toEqual(['60', '40', '20']);
+  await expect(page.locator('#cmp_c1')).toHaveAttribute('data-estado', 'ok');
+  await page.click('#btnSaveInfluenzaMetas');
+  const rows = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'savecovid_metas')[1].rows);
+  expect(rows.map((r) => r.clues).sort()).toEqual(['Q1', 'Q2', 'Q3']);          // el municipal solo escribe unidades
 });
