@@ -6378,24 +6378,6 @@ html.dark button.notifDigestOpenBtn { color: #fb7185; }
   width: 5px !important;
 }
 
-/* Pista con margen: el pulgar ya no choca con las esquinas redondeadas */
-#profileDropdown { scrollbar-width: thin; scrollbar-color: rgba(14, 165, 233, 0.25) transparent; overscroll-behavior: contain; }
-#profileDropdown::-webkit-scrollbar-track { background: transparent; margin: 24px 0; }
-
-/* Desvanecido en los bordes al hacer scroll (data-fade-* lo marca perfil_cuenta.js) */
-#profileDropdown[data-fade-top] {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
-}
-#profileDropdown[data-fade-bottom] {
-  -webkit-mask-image: linear-gradient(to top, transparent 0, #000 28px);
-  mask-image: linear-gradient(to top, transparent 0, #000 28px);
-}
-#profileDropdown[data-fade-top][data-fade-bottom] {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
-}
-
 #profileDropdown::-webkit-scrollbar-thumb {
   background: rgba(14, 165, 233, 0.2) !important;
   border-radius: 10px !important;
@@ -15135,3 +15117,164 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
 #panelINFLUENZAADMIN .tinv-vacuna { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; }
 #panelINFLUENZAADMIN .tinv-vacuna-lbl { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #64748b; }
 #panelINFLUENZAADMIN #influenzaAdminTabsContainer .nav-tab.tinv-oculta { display: none !important; }
+
+/* ==========================================================================
+   TARJETA DE PERFIL (#profileDropdown)
+   Tres zonas: cabecera fija (identidad + pestanas) / cuerpo con scroll /
+   pie fijo (Biometria + Salir). Lista agrupada tipo ajustes: una sola
+   superficie con filas separadas por lineas finas, en vez de una tarjeta
+   por dato. Las reglas llevan #profileDropdown para ganarle a los resets
+   globales de button.
+   ========================================================================== */
+#profileDropdown {
+  --pf-line: rgba(100, 116, 139, 0.14);
+  --pf-fill: color-mix(in srgb, var(--md-sys-color-on-surface, #0f172a) 3.5%, var(--md-sys-color-surface, #fff));
+  --pf-hover: color-mix(in srgb, var(--md-sys-color-on-surface, #0f172a) 6%, var(--md-sys-color-surface, #fff));
+}
+#profileDropdown:not(.hidden) {
+  display: flex !important;
+  flex-direction: column;
+  overflow: hidden !important;
+  max-height: min(80vh, calc(100vh - 96px)) !important;
+  max-height: min(80dvh, calc(100dvh - 96px)) !important;
+  border-radius: 24px !important;
+}
+
+/* Cabecera */
+#profileDropdown .pf-head { flex: none; display: flex; align-items: center; gap: 12px; padding: 16px 16px 12px; }
+#profileDropdown .pf-avatar {
+  flex: none; width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+  background: linear-gradient(135deg, var(--md-sys-color-primary, #003366), #005bb5);
+  box-shadow: 0 0 0 3px var(--md-sys-color-surface-container-high, #f1f5f9);
+}
+#profileDropdown .pf-avatar .material-symbols-rounded { font-size: 24px; }
+#profileDropdown .pf-ident { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#profileDropdown .pf-eyebrow {
+  font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant, #64748b);
+}
+#profileDropdown .pf-name {
+  font-size: 15px; font-weight: 800; line-height: 1.25; color: var(--md-sys-color-on-surface, #0f172a);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
+}
+
+/* Pestanas */
+#profileDropdown .pf-tabs {
+  flex: none; display: flex; gap: 2px; margin: 0 16px 12px; padding: 3px; border-radius: 12px;
+  background: var(--pf-fill);
+}
+#profileDropdown .pf-tabs .profile-card-tab {
+  flex: 1; min-height: 34px; height: 34px; padding: 0 8px; margin: 0; border: 0; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+  background: transparent; color: var(--md-sys-color-on-surface-variant, #64748b);
+  font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0; text-transform: none;
+  transition: background-color .2s, color .2s, box-shadow .2s;
+}
+#profileDropdown .pf-tabs .material-symbols-rounded { font-size: 16px; }
+
+/* Cuerpo con scroll */
+#profileDropdown .pf-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 2px 16px 14px;
+  scrollbar-width: thin; scrollbar-color: rgba(14, 165, 233, 0.28) transparent;
+}
+#profileDropdown .pf-body::-webkit-scrollbar { width: 6px !important; }
+#profileDropdown .pf-body::-webkit-scrollbar-track { background: transparent; margin: 4px 0; }
+#profileDropdown .pf-body::-webkit-scrollbar-thumb { background: rgba(14, 165, 233, 0.28) !important; border-radius: 10px !important; }
+#profileDropdown .pf-body[data-fade-top] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
+}
+#profileDropdown .pf-body[data-fade-bottom] {
+  -webkit-mask-image: linear-gradient(to top, transparent 0, #000 16px);
+  mask-image: linear-gradient(to top, transparent 0, #000 16px);
+}
+#profileDropdown .pf-body[data-fade-top][data-fade-bottom] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+}
+
+/* Lista agrupada */
+#profileDropdown .pf-group {
+  border: 0; border-radius: 16px; overflow: hidden;
+  background: var(--pf-fill);
+}
+#profileDropdown .pf-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; margin: 0;
+  padding: 10px 14px; border: 0; border-radius: 0; box-sizing: border-box; text-align: left;
+  background: transparent; color: inherit; font-family: inherit; text-transform: none; letter-spacing: 0;
+}
+#profileDropdown .pf-group { position: relative; }
+#profileDropdown .pf-group .pf-row {
+  background-image: linear-gradient(var(--pf-line), var(--pf-line));
+  background-repeat: no-repeat;
+  background-position: left 58px bottom 0;
+  background-size: calc(100% - 58px) 1px;
+}
+/* tapa la linea inferior de la ultima fila visible (el borde del grupo ya cierra) */
+#profileDropdown .pf-group::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; pointer-events: none;
+  background: var(--pf-fill);
+}
+#profileDropdown .pf-row--btn { cursor: pointer; transition: background-color .15s; }
+#profileDropdown .pf-row--btn:hover { background-color: var(--pf-hover); }
+#profileDropdown .pf-row--btn:focus-visible,
+#profileDropdown .pf-link:focus-visible,
+#profileDropdown .pf-iconbtn:focus-visible,
+#profileDropdown .pf-action:focus-visible,
+#profileDropdown .pf-tabs .profile-card-tab:focus-visible {
+  outline: 2px solid #0ea5e9; outline-offset: -2px;
+}
+#profileDropdown .pf-ico {
+  flex: none; width: 32px; height: 32px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--md-sys-color-surface, #fff); color: var(--md-sys-color-on-surface-variant, #475569);
+}
+#profileDropdown .pf-ico--warm { color: #f97316; }
+#profileDropdown .pf-ico--plain { background: transparent; }
+#profileDropdown .pf-ico .material-symbols-rounded { font-size: 20px; }
+#profileDropdown .pf-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+#profileDropdown .pf-lab {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant, #64748b);
+}
+#profileDropdown .pf-val {
+  font-size: 13px; font-weight: 700; line-height: 1.3; color: var(--md-sys-color-on-surface, #0f172a);
+  overflow-wrap: anywhere;
+}
+#profileDropdown .pf-chev { flex: none; font-size: 20px; color: var(--md-sys-color-on-surface-variant, #94a3b8); opacity: .7; }
+
+/* Fila con enlace + boton QR */
+#profileDropdown .pf-row--split { padding: 0; gap: 0; }
+#profileDropdown .pf-link {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 8px 10px 14px;
+  text-decoration: none; color: inherit; transition: background-color .15s;
+}
+#profileDropdown .pf-link:hover { background: var(--pf-hover); }
+#profileDropdown .pf-iconbtn {
+  flex: none; width: 44px; align-self: stretch; min-height: 56px; margin: 0; padding: 0; border: 0;
+  border-left: 1px solid var(--pf-line); border-radius: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; background: transparent;
+  color: var(--md-sys-color-on-surface-variant, #475569); transition: background-color .15s;
+}
+#profileDropdown .pf-iconbtn:hover { background: var(--pf-hover); }
+#profileDropdown .pf-iconbtn .material-symbols-rounded { font-size: 22px; }
+
+/* Pie fijo */
+#profileDropdown #profileActionsRow {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 16px 16px;
+  border-top: 1px solid var(--pf-line);
+}
+#profileDropdown #profileActionsRow > div { flex: 1; min-width: 0; }
+#profileDropdown .pf-action {
+  width: 100%; height: 40px; min-height: 40px; margin: 0; padding: 0 12px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 0; text-transform: none;
+}
+#profileDropdown .pf-action .material-symbols-rounded { font-size: 18px; }
+
+@media (prefers-reduced-motion: reduce) {
+  #profileDropdown:not(.hidden) { animation: none !important; }
+  #profileDropdown * { transition: none !important; }
+}

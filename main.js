@@ -27169,6 +27169,8 @@ window.switchProfileCardTab = function(tab) {
       if (c === tab) {
         el.style.display = 'block';
         if (btn) {
+          btn.setAttribute('aria-selected', 'true');
+          btn.tabIndex = 0;
           btn.style.background = tabsConfig[c].activeBg;
           btn.style.color = tabsConfig[c].activeColor;
           btn.style.boxShadow = '0 3px 8px rgba(0, 0, 0, 0.04)';
@@ -27176,6 +27178,8 @@ window.switchProfileCardTab = function(tab) {
       } else {
         el.style.display = 'none';
         if (btn) {
+          btn.setAttribute('aria-selected', 'false');
+          btn.tabIndex = -1;
           btn.style.background = 'transparent';
           btn.style.color = 'var(--md-sys-color-on-surface-variant, #64748b)';
           btn.style.boxShadow = 'none';
@@ -27185,6 +27189,22 @@ window.switchProfileCardTab = function(tab) {
   });
 };
 
+
+// Pestañas del perfil: flechas izquierda/derecha, Inicio y Fin (patrón WAI-ARIA tabs)
+document.addEventListener("keydown", (e) => {
+  const tab = e.target && e.target.closest && e.target.closest("#profileCardTabSwitcher [role=tab]");
+  if (!tab) return;
+  const tabs = Array.from(document.querySelectorAll("#profileCardTabSwitcher [role=tab]"));
+  let i = tabs.indexOf(tab);
+  if (e.key === "ArrowRight") i = (i + 1) % tabs.length;
+  else if (e.key === "ArrowLeft") i = (i - 1 + tabs.length) % tabs.length;
+  else if (e.key === "Home") i = 0;
+  else if (e.key === "End") i = tabs.length - 1;
+  else return;
+  e.preventDefault();
+  tabs[i].focus();
+  tabs[i].click();
+});
 
 // Listener global para cerrar el selector de semana de Influenza con la tecla Escape
 document.addEventListener("keydown", (e) => {

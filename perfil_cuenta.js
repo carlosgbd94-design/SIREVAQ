@@ -365,3 +365,34 @@
     _formatPhone: formatPhone
   };
 })();
+
+/* Tarjeta de perfil: el cuerpo con scroll (el panel de la pestana activa) se
+   desvanece en el borde donde hay mas contenido. Marca cada panel con
+   data-fade-top / data-fade-bottom; el pie con Biometria/Salir no se desvanece. */
+(function () {
+  'use strict';
+  function marcar(el) {
+    const arriba = el.scrollTop > 4;
+    const abajo = el.scrollHeight - el.clientHeight - el.scrollTop > 4;
+    el.toggleAttribute('data-fade-top', arriba);
+    el.toggleAttribute('data-fade-bottom', abajo);
+  }
+  function instalar() {
+    const raiz = document.getElementById('profileDropdown');
+    if (!raiz || raiz.dataset.fadeScroll === '1') return;
+    raiz.dataset.fadeScroll = '1';
+    const paneles = Array.from(raiz.querySelectorAll(':scope > [id^="profileTabContent_"]'));
+    const act = () => paneles.forEach(marcar);
+    paneles.forEach((p) => p.addEventListener('scroll', () => marcar(p), { passive: true }));
+    window.addEventListener('resize', act);
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(act);
+      ro.observe(raiz);
+      paneles.forEach((p) => ro.observe(p));
+    }
+    new MutationObserver(act).observe(raiz, { attributes: true, attributeFilter: ['class', 'style'], subtree: true, childList: true });
+    act();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', instalar);
+  else instalar();
+})();

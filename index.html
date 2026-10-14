@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.131" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.134" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -676,208 +676,157 @@
           <div id="profileDropdown"
             class="hidden absolute right-0 mt-4 w-[300px] sm:w-[360px] bg-surface border border-outline-variant/40 rounded-[32px] shadow-[0_32px_64px_-12px_rgba(0,51,102,0.2)] z-[5000] transform origin-top-right transition-all animate-dropdownIn gpu-accelerated">
 
-            <!-- 👤 PREMIUM IDENTITY HUB -->
-            <div class="p-5 sm:p-6 flex flex-col items-center text-center">
-              <div class="relative mb-4">
-                <div
-                  class="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-primary to-[#005bb5] text-primary-on flex items-center justify-center shadow-[0_12px_24px_rgba(0,51,102,0.3)] ring-4 ring-white relative z-10">
-                  <span class="material-symbols-rounded text-[32px] sm:text-[40px]">person</span>
-                </div>
-                <div class="absolute inset-0 bg-primary/20 blur-xl rounded-full scale-110 opacity-30"></div>
+            <!-- Cabecera: identidad en una fila compacta -->
+            <div class="pf-head">
+              <div class="pf-avatar" aria-hidden="true">
+                <span class="material-symbols-rounded">person</span>
               </div>
-
-              <span class="text-[10px] font-black text-primary/40 uppercase tracking-[0.25em] mb-2">Usuario
-                Activo</span>
-              <div id="userNameFull"
-                class="text-[16px] sm:text-[18px] font-black text-primary leading-tight break-words w-full px-2"
-                style="text-wrap: balance;">
-                Cargando...
+              <div class="pf-ident">
+                <span class="pf-eyebrow">Usuario activo</span>
+                <div id="userNameFull" class="pf-name">Cargando...</div>
               </div>
             </div>
-            <!-- Tabs segmentados dentro del perfil (Notion/iOS Style Inset) -->
-            <div class="mx-6 my-4 p-1 flex items-center justify-around" id="profileCardTabSwitcher"
-              style="display: flex; gap: 4px; background: var(--md-sys-color-surface-container-high, #f1f5f9); border-radius: 14px; border: 1px solid rgba(0, 0, 0, 0.03);">
+
+            <!-- Pestañas segmentadas -->
+            <div class="pf-tabs" id="profileCardTabSwitcher" role="tablist" aria-label="Secciones del perfil">
               <button type="button" class="profile-card-tab active" onclick="window.switchProfileCardTab('datos')"
-                style="flex: 1; padding: 7px 0; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; color: #0ea5e9; background: #f0f9ff; border-radius: 10px; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.04); transition: all 0.2s;"
-                id="profileTabBtn_datos">
-                <span class="material-symbols-rounded" style="font-size: 18px;">info</span>
-                <span style="font-size: 11px; font-weight: 800;">Datos</span>
+                style="color: #0ea5e9; background: #f0f9ff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);"
+                id="profileTabBtn_datos" role="tab" aria-controls="profileTabContent_datos" aria-selected="true" tabindex="0">
+                <span class="material-symbols-rounded">info</span>
+                <span>Datos</span>
               </button>
               <button type="button" class="profile-card-tab" onclick="window.switchProfileCardTab('cuenta')"
-                style="flex: 1; padding: 7px 0; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--md-sys-color-on-surface-variant, #64748b); background: transparent; border-radius: 10px; transition: all 0.2s;"
-                id="profileTabBtn_cuenta">
-                <span class="material-symbols-rounded" style="font-size: 18px;">settings</span>
-                <span style="font-size: 11px; font-weight: 800;">Cuenta</span>
+                id="profileTabBtn_cuenta" role="tab" aria-controls="profileTabContent_cuenta" aria-selected="false" tabindex="-1">
+                <span class="material-symbols-rounded">settings</span>
+                <span>Cuenta</span>
               </button>
               <button type="button" class="profile-card-tab" onclick="window.switchProfileCardTab('mas')"
-                style="flex: 1; padding: 7px 0; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--md-sys-color-on-surface-variant, #64748b); background: transparent; border-radius: 10px; transition: all 0.2s;"
-                id="profileTabBtn_mas">
-                <span class="material-symbols-rounded" style="font-size: 18px;">more_horiz</span>
-                <span style="font-size: 11px; font-weight: 800;">Más</span>
+                id="profileTabBtn_mas" role="tab" aria-controls="profileTabContent_mas" aria-selected="false" tabindex="-1">
+                <span class="material-symbols-rounded">more_horiz</span>
+                <span>Más</span>
               </button>
             </div>
 
-            <!-- CONTENIDO DE TABS -->
-            <div id="profileTabContent_datos" class="p-4 sm:p-5 space-y-4">
-              <!-- DATA BLOCKS (Adaptive & Clean) -->
-              <div
-                class="flex items-center gap-4 p-4 bg-surface rounded-2xl border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:border-primary/20 group">
-                <div
-                  class="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
-                  <span class="material-symbols-rounded text-primary/60 text-[20px]">apartment</span>
+            <!-- DATOS -->
+            <div id="profileTabContent_datos" role="tabpanel" aria-labelledby="profileTabBtn_datos" class="pf-body">
+              <div class="pf-group">
+                <div class="pf-row">
+                  <span class="pf-ico"><span class="material-symbols-rounded">apartment</span></span>
+                  <span class="pf-txt">
+                    <span class="pf-lab">Unidad / CLUES</span>
+                    <span id="who" class="pf-val">Cargando...</span>
+                  </span>
                 </div>
-                <div class="flex flex-col min-w-0">
-                  <span class="text-[9px] font-black text-primary/30 uppercase tracking-widest mb-0.5">Unidad /
-                    CLUES</span>
-                  <span id="who" class="text-[12px] font-bold text-primary leading-tight break-words">Cargando...</span>
-                </div>
-              </div>
-
-              <div
-                class="flex items-center gap-4 p-4 bg-surface rounded-2xl border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:border-orange-200 group">
-                <div
-                  class="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0 group-hover:bg-orange-100 transition-colors">
-                  <span class="material-symbols-rounded text-orange-400 text-[20px]">location_on</span>
-                </div>
-                <div class="flex flex-col min-w-0">
-                  <span class="text-[9px] font-black text-orange-400/40 uppercase tracking-widest mb-0.5">Municipio
-                    Asignado</span>
-                  <span id="munTxt" class="text-[12px] font-bold text-primary leading-tight">Cargando...</span>
+                <div class="pf-row">
+                  <span class="pf-ico pf-ico--warm"><span class="material-symbols-rounded">location_on</span></span>
+                  <span class="pf-txt">
+                    <span class="pf-lab">Municipio asignado</span>
+                    <span id="munTxt" class="pf-val">Cargando...</span>
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div id="profileTabContent_cuenta" class="p-4 sm:p-5 space-y-4" style="display: none;">
-              <!-- Tema de la App (Relocalizado en Cuenta) -->
-              <div
-                class="flex items-center justify-between p-4 bg-surface rounded-2xl border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:border-primary/20 group cursor-pointer"
-                role="button" tabindex="0" aria-label="Cambiar tema de apariencia" onclick="toggleTheme()"
-                onkeydown="if(event.key==='Enter') toggleTheme()">
-                <div class="flex items-center gap-4 min-w-0">
-                  <div
-                    class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors bg-primary/5 group-hover:bg-primary/10">
-                    <span class="material-symbols-rounded text-primary/60 text-[20px] light-only">dark_mode</span>
-                    <span class="material-symbols-rounded text-amber-500 text-[20px] dark-only">light_mode</span>
-                  </div>
-                  <div class="flex flex-col min-w-0">
-                    <span
-                      class="text-[9px] font-black text-primary/30 uppercase tracking-widest mb-0.5">Apariencia</span>
-                    <span class="text-[12px] font-bold text-primary leading-tight"><span class="light-only">Modo
-                        Claro</span><span class="dark-only">Modo Oscuro</span></span>
-                  </div>
+            <!-- CUENTA -->
+            <div id="profileTabContent_cuenta" role="tabpanel" aria-labelledby="profileTabBtn_cuenta" class="pf-body" style="display: none;">
+              <div class="pf-group">
+                <div class="pf-row pf-row--btn" role="button" tabindex="0" aria-label="Cambiar tema de apariencia"
+                  onclick="toggleTheme()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleTheme()}">
+                  <span class="pf-ico">
+                    <span class="material-symbols-rounded light-only">dark_mode</span>
+                    <span class="material-symbols-rounded dark-only" style="color:#f59e0b">light_mode</span>
+                  </span>
+                  <span class="pf-txt">
+                    <span class="pf-lab">Apariencia</span>
+                    <span class="pf-val"><span class="light-only">Modo claro</span><span class="dark-only">Modo oscuro</span></span>
+                  </span>
+                  <span class="theme-toggle-switch"></span>
                 </div>
-                <div class="theme-toggle-switch"></div>
-              </div>
-
-              <!-- Datos de contacto (nombre y teléfono) -->
-              <div
-                class="flex items-center justify-between p-4 bg-surface rounded-2xl border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:border-primary/20 group cursor-pointer"
-                role="button" tabindex="0" id="btnProfileContact" aria-label="Editar nombre y teléfono de contacto"
-                onclick="window.openContactoModal()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openContactoModal()}">
-                <div class="flex items-center gap-4 min-w-0">
-                  <div
-                    class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors bg-primary/5 group-hover:bg-primary/10">
-                    <span class="material-symbols-rounded text-primary/60 text-[20px]">badge</span>
-                  </div>
-                  <div class="flex flex-col min-w-0">
-                    <span class="text-[9px] font-black text-primary/30 uppercase tracking-widest mb-0.5">Datos de contacto</span>
-                    <span id="profileContactSummary" class="text-[12px] font-bold text-primary leading-tight break-words">Agrega tu nombre y teléfono</span>
-                  </div>
+                <div class="pf-row pf-row--btn" role="button" tabindex="0" id="btnProfileContact"
+                  aria-label="Editar nombre y teléfono de contacto" onclick="window.openContactoModal()"
+                  onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openContactoModal()}">
+                  <span class="pf-ico"><span class="material-symbols-rounded">badge</span></span>
+                  <span class="pf-txt">
+                    <span class="pf-lab">Datos de contacto</span>
+                    <span id="profileContactSummary" class="pf-val">Agrega tu nombre y teléfono</span>
+                  </span>
+                  <span class="material-symbols-rounded pf-chev" aria-hidden="true">chevron_right</span>
                 </div>
-                <span class="material-symbols-rounded text-primary/30 text-[20px]">chevron_right</span>
-              </div>
-
-              <!-- Cambiar contraseña (con código por correo) -->
-              <div
-                class="flex items-center justify-between p-4 bg-surface rounded-2xl border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:border-primary/20 group cursor-pointer"
-                role="button" tabindex="0" id="btnProfileChangePassword" aria-label="Cambiar contraseña"
-                onclick="window.openChangePasswordFlow()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openChangePasswordFlow()}">
-                <div class="flex items-center gap-4 min-w-0">
-                  <div
-                    class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors bg-primary/5 group-hover:bg-primary/10">
-                    <span class="material-symbols-rounded text-primary/60 text-[20px]">lock_reset</span>
-                  </div>
-                  <div class="flex flex-col min-w-0">
-                    <span class="text-[9px] font-black text-primary/30 uppercase tracking-widest mb-0.5">Seguridad</span>
-                    <span class="text-[12px] font-bold text-primary leading-tight">Cambiar contraseña</span>
-                  </div>
+                <div class="pf-row pf-row--btn" role="button" tabindex="0" id="btnProfileChangePassword"
+                  aria-label="Cambiar contraseña" onclick="window.openChangePasswordFlow()"
+                  onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openChangePasswordFlow()}">
+                  <span class="pf-ico"><span class="material-symbols-rounded">lock_reset</span></span>
+                  <span class="pf-txt">
+                    <span class="pf-lab">Seguridad</span>
+                    <span class="pf-val">Cambiar contraseña</span>
+                  </span>
+                  <span class="material-symbols-rounded pf-chev" aria-hidden="true">chevron_right</span>
                 </div>
-                <span class="material-symbols-rounded text-primary/30 text-[20px]">chevron_right</span>
               </div>
+            </div>
 
-              <!-- Acciones del perfil (Biometría y Salir) -->
-              <div
-                style="padding: 0 !important; display: flex !important; align-items: center !important; justify-content: space-between !important; gap: 8px;"
-                id="profileActionsRow">
-                <div id="passkeyRegContainer" style="display: none; flex: 1;">
-                  <button id="btnRegisterPasskey"
-                    class="profile-action-btn btn-biometric-minimal w-full btn-parallax-tilt"
-                    style="height: 38px; border-radius: 12px;">
-                    <span class="btn-parallax-tilt-inner"
-                      style="display: flex; align-items: center; justify-content: center; gap: 6px;">
-                      <span class="material-symbols-rounded fingerprint-icon"
-                        style="font-size: 18px;">fingerprint</span>
-                      <span style="font-size: 13px; font-weight: 700;">Biometría</span>
+            <!-- MÁS -->
+            <div id="profileTabContent_mas" role="tabpanel" aria-labelledby="profileTabBtn_mas" class="pf-body" style="display: none;">
+              <div class="pf-group">
+                <div id="profileBCGSection" style="display: contents;">
+                  <button type="button" id="btnSetBCG" class="pf-row pf-row--btn" style="display: none;">
+                    <span class="pf-ico"><span class="material-symbols-rounded">vaccines</span></span>
+                    <span class="pf-txt"><span class="pf-val">Establecer apertura BCG</span></span>
+                    <span class="material-symbols-rounded pf-chev" aria-hidden="true">chevron_right</span>
+                  </button>
+                  <button type="button" id="btnDirBCG" class="pf-row pf-row--btn" style="display: flex;">
+                    <span class="pf-ico"><span class="material-symbols-rounded">menu_book</span></span>
+                    <span class="pf-txt"><span class="pf-val">Directorio BCG</span></span>
+                    <span class="material-symbols-rounded pf-chev" aria-hidden="true">chevron_right</span>
+                  </button>
+                </div>
+                <div class="pf-row pf-row--split" id="profileDriveSection">
+                  <a href="https://drive.google.com/drive/folders/1YUldgn8gpb18OYcbyp1sBG6BRJ2hvy4D?usp=sharing"
+                    target="_blank" rel="noopener noreferrer" class="pf-link">
+                    <span class="pf-ico pf-ico--plain"><img src="assets/Google-Drive-New-Icon-2026-PNG.png" alt="" width="20" height="20"></span>
+                    <span class="pf-txt">
+                      <span class="pf-lab">Repositorio</span>
+                      <span id="profileDriveTitle" class="pf-val">Repositorio vacunas 2026</span>
                     </span>
+                  </a>
+                  <button type="button" id="btnOpenDriveQR" onclick="window.openDriveQRModal(event)"
+                    class="pf-iconbtn" title="Ver código QR" aria-label="Ver código QR del repositorio">
+                    <span class="material-symbols-rounded">qr_code_2</span>
                   </button>
                 </div>
-                <div style="flex: 1;">
-                  <button id="btnLogout" class="profile-action-btn btn-logout-minimal w-full"
-                    style="height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                    <span class="material-symbols-rounded" style="font-size: 18px;">logout</span>
-                    <span style="font-size: 13px; font-weight: 700;">Salir</span>
+                <div id="profileCalCapSection" style="display: contents;">
+                  <button type="button" id="btnProfileCalendarioCap" onclick="openCalendarioCapacitaciones()" class="pf-row pf-row--btn">
+                    <span class="pf-ico"><span class="material-symbols-rounded" style="color:#0b5cad">event</span></span>
+                    <span class="pf-txt"><span class="pf-val">Calendario de capacitaciones</span></span>
+                    <span data-cal-cap-badge style="display:none; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#d97706; color:#fff; font-size:10.5px; font-weight:800; align-items:center; justify-content:center;"></span>
+                    <span class="material-symbols-rounded pf-chev" aria-hidden="true">chevron_right</span>
                   </button>
                 </div>
+              </div>
+              <div id="calCapBanner" style="display:none; align-items:flex-start; gap:8px; margin-top:10px; padding:8px 10px; border-radius:12px; background:rgba(245,158,11,.14); color:#92400e; font-size:11.5px; font-weight:700; line-height:1.35;">
+                <span class="material-symbols-rounded" style="font-size:16px; flex:none; margin-top:1px;">notifications_active</span>
+                <span data-cal-cap-text></span>
               </div>
             </div>
 
-            <div id="profileTabContent_mas" class="p-4 sm:p-5 space-y-4" style="display: none;">
-              <!-- 🛡️ SECCIÓN BCG (Establecer apertura y Directorio) -->
-              <div class="flex flex-col" id="profileBCGSection" style="padding: 0 !important;">
-                <button id="btnSetBCG" class="profile-action-btn w-full"
-                  style="display: none; height: 38px; border-radius: 12px; font-weight: 700; font-size: 13px; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid #0ea5e9; background: transparent; color: #0ea5e9; cursor: pointer; transition: all 0.2s;">
-                  <span class="material-symbols-rounded" style="font-size: 18px;">vaccines</span>
-                  <span>Establecer apertura BCG</span>
-                </button>
-                <button id="btnDirBCG" class="profile-action-btn w-full"
-                  style="display: flex; height: 38px; border-radius: 12px; font-weight: 700; font-size: 13px; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid #cbd5e1; background: transparent; color: #475569; cursor: pointer; margin-top: 6px; transition: all 0.2s;">
-                  <span class="material-symbols-rounded" style="font-size: 18px;">menu_book</span>
-                  <span>Directorio BCG</span>
+            <!-- Pie fijo: Biometría y Salir siempre visibles, fuera del área con scroll -->
+            <div id="profileActionsRow">
+              <div id="passkeyRegContainer" style="display: none;">
+                <button type="button" id="btnRegisterPasskey" class="pf-action btn-biometric-minimal btn-parallax-tilt">
+                  <span class="btn-parallax-tilt-inner" style="display:flex; align-items:center; justify-content:center; gap:6px;">
+                    <span class="material-symbols-rounded fingerprint-icon">fingerprint</span>
+                    <span>Biometría</span>
+                  </span>
                 </button>
               </div>
-
-              <!-- 📁 GOOGLE DRIVE REPOSITORIO & QR BUTTON -->
-              <div class="flex items-center gap-2 w-full" id="profileDriveSection"
-                style="margin-top: 14px !important; padding-top: 14px !important; border-top: 1px solid rgba(203, 213, 225, 0.8) !important;">
-                <a href="https://drive.google.com/drive/folders/1YUldgn8gpb18OYcbyp1sBG6BRJ2hvy4D?usp=sharing"
-                  target="_blank" rel="noopener noreferrer" class="flex-1 no-underline"
-                  style="display: flex; height: 38px; min-height: 38px; max-height: 38px; border-radius: 12px; font-weight: 700; font-size: 11px; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid #cbd5e1; background: transparent; color: #475569; cursor: pointer; transition: all 0.2s; min-width: 0; box-sizing: border-box; padding: 0 10px; margin: 0;">
-                  <img
-                    src="assets/Google-Drive-New-Icon-2026-PNG.png"
-                    alt="Google Drive" class="w-5 h-5 object-contain flex-none">
-                  <span id="profileDriveTitle" class="truncate uppercase tracking-wider">REPOSITORIO VACUNAS 2026</span>
-                </a>
-                <button type="button" id="btnOpenDriveQR" onclick="window.openDriveQRModal(event)" title="Ver Código QR"
-                  class="flex-none"
-                  style="display: flex; width: 38px; min-width: 38px; max-width: 38px; height: 38px; min-height: 38px; max-height: 38px; border-radius: 12px; align-items: center; justify-content: center; border: 1.5px solid #cbd5e1; background: transparent; color: #475569; cursor: pointer; transition: all 0.2s; box-sizing: border-box; padding: 0; margin: 0;">
-                  <span class="material-symbols-rounded" style="font-size: 20px;">qr_code_2</span>
+              <div>
+                <button type="button" id="btnLogout" class="pf-action btn-logout-minimal">
+                  <span class="material-symbols-rounded">logout</span>
+                  <span>Salir</span>
                 </button>
-              </div>
-
-              <!-- 📅 CALENDARIO DE CAPACITACIONES -->
-              <div id="profileCalCapSection" class="flex flex-col gap-2 w-full" style="margin-top: 10px !important;">
-                <button type="button" id="btnProfileCalendarioCap" onclick="openCalendarioCapacitaciones()"
-                  style="display: flex; width: 100%; height: 38px; min-height: 38px; border-radius: 12px; font-weight: 700; font-size: 11px; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid #cbd5e1; background: transparent; color: #475569; cursor: pointer; transition: all 0.2s; box-sizing: border-box; padding: 0 10px; margin: 0;">
-                  <span class="material-symbols-rounded" style="font-size: 20px; color: #0b5cad;">event</span>
-                  <span class="uppercase tracking-wider">Calendario de capacitaciones</span>
-                  <span data-cal-cap-badge style="display:none; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#d97706; color:#fff; font-size:10.5px; font-weight:800; align-items:center; justify-content:center;"></span>
-                </button>
-                <div id="calCapBanner" style="display:none; align-items:flex-start; gap:8px; padding:8px 10px; border-radius:12px; background:rgba(245,158,11,.14); color:#92400e; font-size:11.5px; font-weight:700; line-height:1.35;">
-                  <span class="material-symbols-rounded" style="font-size:16px; flex:none; margin-top:1px;">notifications_active</span>
-                  <span data-cal-cap-text></span>
-                </div>
               </div>
             </div>
+
           </div>
         </div>
       </div>
@@ -2158,7 +2107,7 @@
 
           <a class="nav-tab" id="tabOPS_BIOVAC_JURISDICCION" data-role-gate="ADMIN,JURISDICCIONAL" style="text-decoration:none"
             href="biovac_jurisdiccion.html">
-            <span class="material-symbols-rounded">lab_profile</span>
+            <span class="material-symbols-rounded">biotech</span>
             <span>Concentrado Biológico</span>
           </a>
 
