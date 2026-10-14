@@ -15278,3 +15278,8 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
   #profileDropdown:not(.hidden) { animation: none !important; }
   #profileDropdown * { transition: none !important; }
 }
+
+/* Las pestañas que son <a> (SINBA-SIS, Concentrado Biologico, Requisiciones) medían 48px
+   y los <button> 52px (min-height global de button): sus iconos quedaban 2px mas arriba.
+   Misma altura para todas. */
+.nav-container > .nav-tab { height: 52px; min-height: 52px; box-sizing: border-box; }
