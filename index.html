@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.135" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.136" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -2865,6 +2865,7 @@
         </div>
 
         <!-- Vacuna de la temporada invernal: Influenza o COVID-19. Cada una tiene su espacio y sus subpestañas. -->
+        <div class="tinv-cab">
         <div class="tinv-vacuna" id="temporadaVacunaBar">
           <span class="tinv-vacuna-lbl">Vacuna</span>
           <span class="vac-seg" role="group" aria-label="Vacuna de la temporada invernal">
@@ -2874,7 +2875,7 @@
         </div>
 
         <!-- Subtítulo de navegación interna -->
-        <div class="w-full mb-8 flex justify-start">
+        <div class="tinv-nav">
           <div class="nav-container relative" id="influenzaAdminTabsContainer">
             <!-- Indicador de cristal líquido -->
             <div id="influenzaAdminTabIndicator" class="nav-indicator nav-indicator-premium"></div>
@@ -2904,6 +2905,7 @@
               <span>Fechas Campaña</span>
             </button>
           </div>
+        </div>
         </div>
 
         <!-- SECCIÓN 1: CONCENTRADO DE AVANCES -->
@@ -3445,15 +3447,7 @@
 
         <!-- SECCIÓN 3: CONTROL DE FRASCOS -->
         <div id="secInfluenzaFrascos" class="hidden flex flex-col gap-6" data-frs-sub="repartir">
-          <!-- Marca de la vacuna COVID-19 (la vacuna se elige en la barra superior del panel) -->
-          <div class="vac-bar" id="frascosMarcaBar" style="display:none">
-            <label for="frascoMarcaSelect" class="frs-lbl">Marca</label>
-            <select id="frascoMarcaSelect" class="vac-marca frs-field" aria-label="Marca de la vacuna COVID-19">
-              <option value="MODERNA">Moderna (pediátrica y adulto · 10 dosis/frasco)</option>
-              <option value="PFIZER">Pfizer (solo adultos · 6 dosis/frasco)</option>
-            </select>
-          </div>
-          <div class="hint" id="frascosVacunaNota" style="display:none"></div>
+          <div class="tinv-fila">
           <!-- Barra de subpaneles, arriba y en flujo normal (estilo de dock_glass.css) -->
           <nav class="dock-sis" id="dockFrascos" aria-label="Subpaneles de Control de Frascos">
             <div class="dock-hojas" id="dockFrascosTabs" role="tablist">
@@ -3472,6 +3466,16 @@
               </button>
             </div>
           </nav>
+          <!-- Marca de la vacuna COVID-19 (la vacuna se elige en la barra superior del panel) -->
+          <div class="vac-bar" id="frascosMarcaBar" style="display:none">
+            <label for="frascoMarcaSelect" class="frs-lbl">Marca</label>
+            <select id="frascoMarcaSelect" class="vac-marca frs-field" aria-label="Marca de la vacuna COVID-19">
+              <option value="MODERNA">Moderna (pediátrica y adulto · 10 dosis/frasco)</option>
+              <option value="PFIZER">Pfizer (solo adultos · 6 dosis/frasco)</option>
+            </select>
+          </div>
+          <div class="hint" id="frascosVacunaNota" style="display:none"></div>
+          </div>
           <div class="hint" id="frascosHint">
             Reparte los frascos de cada entrega en proporción a la meta. Los frascos no se entregan abiertos: el
             redondeo nunca rebasa el total recibido.

@@ -15283,3 +15283,20 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
    y los <button> 52px (min-height global de button): sus iconos quedaban 2px mas arriba.
    Misma altura para todas. */
 .nav-container > .nav-tab { height: 52px; min-height: 52px; box-sizing: border-box; }
+
+/* Panel «Temporada invernal»: diseño compacto (sin huecos entre cabecera, vacuna, subpestañas y secciones). */
+#panelINFLUENZAADMIN > .border-b { margin-bottom: 14px; padding-bottom: 12px; }
+#panelINFLUENZAADMIN .tinv-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 0 0 16px; }
+#panelINFLUENZAADMIN .tinv-cab .tinv-vacuna { margin: 0; }
+#panelINFLUENZAADMIN .tinv-nav { margin: 0; min-width: 0; max-width: 100%; }
+#panelINFLUENZAADMIN .tinv-nav .nav-container { margin: 0; }
+#panelINFLUENZAADMIN > [id^="secInfluenza"] { gap: 14px; }
+#panelINFLUENZAADMIN #secInfluenzaMetas > .flex-1 { gap: 14px; }
+#secInfluenzaFrascos .frs-panel { gap: 16px; }
+#secInfluenzaFrascos .tinv-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+#secInfluenzaFrascos .tinv-fila #dockFrascos { align-self: auto; max-width: 100%; }
+#secInfluenzaFrascos .tinv-fila .vac-bar { margin: 0; }
+#secInfluenzaFrascos .tinv-fila .vac-bar .frs-lbl { margin: 0; }
+#secInfluenzaFrascos .tinv-fila #frascosVacunaNota { flex: 1 1 100%; margin: 0; padding: 0; }
+#secInfluenzaFrascos > .hint { margin: 0; }
+#secInfluenzaMetas .hint { margin: 0; }
