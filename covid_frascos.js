@@ -356,9 +356,36 @@
     return { valores, abiertos };
   }
 
+  // ─── Avance: dosis aplicadas (SIS) contra la meta ──────────────────────────────────────────────────────
+  // Variable SIS (clave general, igual que los indicadores RDA) de cada rubro de meta.
+  const VARIABLE_SIS = { c1: "VCV38", c2: "VCV39", c3: "VCV28", c4: "VCV16", c5: "VCV20", c6: "VCV21" };
+
+  /**
+   * metas y aplicadas: { c1..c6 } en dosis tal como se capturan (c1/c2 son de 0.25 mL). Devuelve el detalle por
+   * rubro y los totales en dosis equivalentes de 0.5 mL (los niños valen la mitad, igual que la meta).
+   */
+  function avanceRubros(metas, aplicadas) {
+    const m = metas || {};
+    const a = aplicadas || {};
+    const rubros = RUBROS.map((r) => {
+      const meta = n(m[r.id]);
+      const apl = n(a[r.id]);
+      return { id: r.id, meta, aplicadas: apl, pct: meta > 0 ? (apl * 100) / meta : null, pendiente: Math.max(0, meta - apl) };
+    });
+    const peso = (id) => (PEDIATRICOS.has(id) ? 0.5 : 1);
+    const metaEq = rubros.reduce((s, r) => s + r.meta * peso(r.id), 0);
+    const aplEq = rubros.reduce((s, r) => s + r.aplicadas * peso(r.id), 0);
+    return {
+      rubros, metaEq, aplEq,
+      pct: metaEq > 0 ? (aplEq * 100) / metaEq : null,
+      pendienteEq: Math.max(0, metaEq - aplEq)
+    };
+  }
+
   const api = { RUBROS, MARCAS, dosisPorFrasco, metaPediatrica, metaAdulta, metaEquivalente, metaMarca, topeFrascos,
     pesosInfluenza, repartirEntero, predistribuir, factorPerdida, metaMarcaConPerdida,
-    razonPerdida, recibirDosis, esCerrado, candidatosCerrados, cerrarLado, predistribuirCerrado, DPF_MODERNA, DPF_PFIZER };
+    razonPerdida, recibirDosis, esCerrado, candidatosCerrados, cerrarLado, predistribuirCerrado, DPF_MODERNA, DPF_PFIZER,
+    VARIABLE_SIS, avanceRubros };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.CovidFrascos = api;
 })(typeof window !== "undefined" ? window : globalThis);

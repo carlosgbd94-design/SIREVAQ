@@ -1538,7 +1538,7 @@ async function refreshInfluenzaAdminPanel() {
 }
 
 function initInfluenzaSubtabs() {
-  const tabs = ["subtabInfluenzaAvances", "subtabInfluenzaValidacion", "subtabInfluenzaConciliacion", "subtabInfluenzaMetas", "subtabInfluenzaFrascos", "subtabInfluenzaConfig"];
+  const tabs = ["subtabInfluenzaAvances", "subtabInfluenzaValidacion", "subtabInfluenzaConciliacion", "subtabCovidAvance", "subtabInfluenzaMetas", "subtabInfluenzaFrascos", "subtabInfluenzaConfig"];
   
   // Inicializar estado de visibilidad
   tabs.forEach(t => {
@@ -1566,7 +1566,7 @@ function initInfluenzaSubtabs() {
         el.classList.add("active");
 
         // Ocultar todas las secciones
-        const sections = ["secInfluenzaAvances", "secInfluenzaValidacion", "secInfluenzaConciliacion", "secInfluenzaMetas", "secInfluenzaFrascos", "secInfluenzaConfig"];
+        const sections = ["secInfluenzaAvances", "secInfluenzaValidacion", "secInfluenzaConciliacion", "secCovidAvance", "secInfluenzaMetas", "secInfluenzaFrascos", "secInfluenzaConfig"];
         sections.forEach(s => {
           const sec = document.getElementById(s);
           if (sec) sec.style.setProperty("display", "none", "important");
@@ -1750,10 +1750,15 @@ function temporadaAplicarVacuna() {
     const el = document.getElementById(id);
     if (el) el.classList.toggle("tinv-oculta", esCovid());
   });
-  // Si estaba en una subpestaña que COVID no tiene, pasa a Distribución de Metas.
+  const avanceCovid = document.getElementById("subtabCovidAvance");
+  if (avanceCovid) avanceCovid.classList.toggle("tinv-oculta", !esCovid());
+  // Si estaba en una subpestaña que la vacuna elegida no tiene, pasa a su primera (Avance COVID-19 / Concentrado).
   if (esCovid() && TEMPORADA_SOLO_INFLUENZA.some(id => document.getElementById(id)?.classList.contains("active"))) {
-    const metas = document.getElementById("subtabInfluenzaMetas");
-    if (metas) metas.click();
+    const destino = document.getElementById("subtabCovidAvance") || document.getElementById("subtabInfluenzaMetas");
+    if (destino) destino.click();
+  } else if (!esCovid() && avanceCovid && avanceCovid.classList.contains("active")) {
+    const av = document.getElementById("subtabInfluenzaAvances");
+    if (av) av.click();
   }
   if (typeof syncTabGroupIndicator === "function" && document.getElementById("influenzaAdminTabsContainer")) {
     syncTabGroupIndicator("#influenzaAdminTabsContainer");
@@ -1836,8 +1841,11 @@ function renderActiveAdminSection() {
   const metasTab = document.getElementById("subtabInfluenzaMetas");
   const frascosTab = document.getElementById("subtabInfluenzaFrascos");
   const configTab = document.getElementById("subtabInfluenzaConfig");
+  const covidAvanceTab = document.getElementById("subtabCovidAvance");
 
-  if (advancesTab && advancesTab.classList.contains("active")) {
+  if (covidAvanceTab && covidAvanceTab.classList.contains("active")) {
+    renderCovidAvance();
+  } else if (advancesTab && advancesTab.classList.contains("active")) {
     renderAvancesAndConcentrados();
   } else if (validationTab && validationTab.classList.contains("active")) {
     initValidationTab();
@@ -2747,7 +2755,7 @@ function renderUnitDetail(clues, unidadNombre, minFecha, maxFecha) {
   Object.entries(groups).forEach(([groupTitle, rubros]) => {
     // Un grupo donde la unidad no tiene meta en ningún renglón no se captura: va en un solo aviso al final,
     // no como una tabla entera de guiones.
-    if (rubros.every(rb => !Number(_influenzaMetasCache[rb.id] || 0))) {
+    if (rubros.every(rb => !Number(metas[rb.id] || 0))) {
       gruposSinMeta.push(groupTitle);
       return;
     }
@@ -3055,7 +3063,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
   Object.entries(groups).forEach(([groupTitle, rubros]) => {
     // Un grupo donde la unidad no tiene meta en ningún renglón no se captura: va en un solo aviso al final,
     // no como una tabla entera de guiones.
-    if (rubros.every(rb => !Number(_influenzaMetasCache[rb.id] || 0))) {
+    if (rubros.every(rb => !Number(metas[rb.id] || 0))) {
       gruposSinMeta.push(groupTitle);
       return;
     }
@@ -4882,6 +4890,188 @@ function covidRazonDeGrid(tbody, esMunicipal) {
     ? (Number(rec && rec.metas.perdida) || 0)
     : (parseInt((document.getElementById("covidPerdidaInput") || {}).value, 10) || 0);
   return CovidFrascos.razonPerdida(CovidFrascos.factorPerdida({ ...juris, perdida: p }));
+}
+
+// ─── Avance de COVID-19: dosis aplicadas (SIS, validadas) contra la meta ────────────────────────────────
+// Las dosis salen de registros_sis (mensuales) mediante covid_avance; la meta, de covid_metas. Jurisdicción ve
+// la Jurisdicción, cada municipio/hospital y sus unidades; el municipal, sus municipios y sus unidades.
+let _covidAvance = { filas: [], ult: null, hasta: null, cargado: false };
+
+const COVID_MESES_NOMBRE = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+// Meses de la campaña (de su inicio a su fin), como [{ valor: "2026-10", etiqueta: "Octubre 2026" }].
+function covidAvanceMeses() {
+  const ini = _campaignConfig && _campaignConfig.fecha_inicio;
+  const fin = _campaignConfig && _campaignConfig.fecha_fin;
+  if (!ini || !fin) return [];
+  const out = [];
+  const d = new Date(ini + "T12:00:00");
+  const tope = new Date(fin + "T12:00:00");
+  let y = d.getFullYear(), m = d.getMonth();
+  while (y < tope.getFullYear() || (y === tope.getFullYear() && m <= tope.getMonth())) {
+    out.push({ valor: `${y}-${String(m + 1).padStart(2, "0")}`, etiqueta: `${COVID_MESES_NOMBRE[m]} ${y}` });
+    m += 1;
+    if (m > 11) { m = 0; y += 1; }
+  }
+  return out;
+}
+
+function covidAvanceAmbitos() {
+  const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL" || USER.rol === "VISUALIZADOR_JURISDICCIONAL";
+  if (esJuris) return [{ id: "JURIS", label: "Jurisdicción" }, ...FRASCO_DESTINOS.map(d => ({ id: d.id, label: d.label + (d.hospital ? " (hospital)" : "") }))];
+  const general = document.getElementById("adminInfluenzaMuni");
+  const munis = general ? [...general.options].map(o => String(o.value).toUpperCase()).filter(Boolean) : [String(USER.municipio || "").toUpperCase()];
+  return [...new Set(munis)].map(m => ({ id: m, label: (FRASCO_DESTINOS.find(d => d.id === m) || { label: m }).label }));
+}
+
+async function covidAvanceCargar() {
+  const ini = _campaignConfig && _campaignConfig.fecha_inicio;
+  const corte = document.getElementById("cavCorte");
+  const mes = corte && corte.value ? corte.value : null;
+  if (!ini || !mes) { _covidAvance = { filas: [], ult: null, hasta: mes, cargado: true }; return; }
+  const [y, m] = mes.split("-").map(Number);
+  const hasta = `${y}-${String(m).padStart(2, "0")}-01`;
+  try {
+    const res = await AppService.call("getcovid_avance", { desde: ini, hasta }, { silent: true });
+    const filas = res.data || [];
+    const ult = filas.reduce((mx, f) => (f.ult && (!mx || f.ult > mx) ? f.ult : mx), null);
+    _covidAvance = { filas, ult, hasta, cargado: true };
+  } catch (err) {
+    console.error("Error al cargar el avance de COVID-19:", err);
+    _covidAvance = { filas: [], ult: null, hasta, cargado: true, error: true };
+  }
+}
+
+// Dosis aplicadas por CLUES y rubro: { clues: { c1..c6 } }
+function covidAvanceAplicadasPorClues() {
+  const inversa = {};
+  Object.keys(CovidFrascos.VARIABLE_SIS).forEach(r => { inversa[CovidFrascos.VARIABLE_SIS[r]] = r; });
+  const out = {};
+  _covidAvance.filas.forEach(f => {
+    const r = inversa[f.variable_sis];
+    if (!r) return;
+    (out[f.clues] = out[f.clues] || {})[r] = (out[f.clues][r] || 0) + Number(f.dosis || 0);
+  });
+  return out;
+}
+
+function covidAvanceSumar(lista) {
+  const t = { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0 };
+  lista.forEach(x => Object.keys(t).forEach(r => { t[r] += Number((x || {})[r]) || 0; }));
+  return t;
+}
+
+// Resultado del ámbito elegido: { titulo, nombreCol, filas:[{ nombre, sub, meta, apl, calc }], total }
+function covidAvanceCalcular(ambito) {
+  const aplPorClues = covidAvanceAplicadasPorClues();
+  const metaDestino = (id) => {
+    const rec = _covidMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === id);
+    return (rec && rec.metas) || {};
+  };
+  const metaUnidad = (clues) => {
+    const rec = _covidMetasArray.find(m => m.clues === clues);
+    return rec ? rec.metas : null;
+  };
+  const unidadesDe = (id) => {
+    const hosp = FRASCO_DESTINOS.find(d => d.id === id && d.hospital);
+    if (hosp) return _allUnidades.filter(u => u.clues === hosp.clues);
+    return frascoUnidadesMunicipio(id);
+  };
+  const aplDestino = (id) => covidAvanceSumar(unidadesDe(id).map(u => aplPorClues[u.clues]));
+  const fila = (nombre, sub, metas, apl) => ({ nombre, sub, metas, apl, calc: CovidFrascos.avanceRubros(metas || {}, apl) });
+
+  if (ambito === "JURIS") {
+    const filas = FRASCO_DESTINOS.map(d => fila(d.label, d.hospital ? "hospital" : "municipio", metaDestino(d.id), aplDestino(d.id)));
+    const metas = covidAvanceSumar(FRASCO_DESTINOS.map(d => metaDestino(d.id)));
+    const apl = covidAvanceSumar(FRASCO_DESTINOS.map(d => aplDestino(d.id)));
+    return { titulo: "Avance por municipio y hospital", nombreCol: "Municipio / hospital", filas, total: fila("Jurisdicción", "", metas, apl) };
+  }
+  const unidades = unidadesDe(ambito);
+  const filas = unidades.map(u => {
+    const m = metaUnidad(u.clues);
+    return { ...fila(u.unidad, u.clues, m || {}, aplPorClues[u.clues] || {}), sinMeta: !m };
+  }).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es"));
+  const nombre = (FRASCO_DESTINOS.find(d => d.id === ambito) || { label: ambito }).label;
+  return { titulo: `Avance por unidad · ${nombre}`, nombreCol: "Unidad", filas,
+    total: fila(nombre, "", metaDestino(ambito), aplDestino(ambito)) };
+}
+
+function covidAvanceFmt(n) {
+  const v = Math.round(Number(n) * 10) / 10;
+  return Number.isInteger(v) ? v.toLocaleString("es-MX") : v.toLocaleString("es-MX", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+function covidAvanceBarra(pct) {
+  if (pct === null || pct === undefined) return '<span class="frs-muted">sin meta</span>';
+  const w = Math.max(0, Math.min(100, pct));
+  return `<div class="cav-barra${pct >= 100 ? " cav-completo" : ""}"><i style="width:${w}%"></i></div><span class="cav-pct">${pct.toFixed(1)} %</span>`;
+}
+
+async function renderCovidAvance() {
+  const sel = document.getElementById("cavAmbito");
+  const corte = document.getElementById("cavCorte");
+  if (!sel || !corte) return;
+
+  // Selectores (se conservan al volver a pintar)
+  const ambitos = covidAvanceAmbitos();
+  const previoAmb = sel.value;
+  sel.innerHTML = ambitos.map(a => `<option value="${a.id}">${a.label}</option>`).join("");
+  if (ambitos.some(a => a.id === previoAmb)) sel.value = previoAmb;
+  const meses = covidAvanceMeses();
+  const previoMes = corte.value;
+  corte.innerHTML = meses.map(m => `<option value="${m.valor}">${m.etiqueta}</option>`).join("");
+  if (previoMes && meses.some(m => m.valor === previoMes)) corte.value = previoMes;
+  else {
+    // por omisión: el mes en curso o, si la campaña ya terminó / aún no empieza, el más cercano
+    const hoy = new Date();
+    const claveHoy = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
+    corte.value = meses.some(m => m.valor === claveHoy) ? claveHoy : (meses.length ? meses[meses.length - 1].valor : "");
+  }
+  if (!sel.dataset.bound) {
+    sel.dataset.bound = "1";
+    sel.addEventListener("change", () => renderCovidAvance());
+    corte.addEventListener("change", () => { _covidAvance.cargado = false; renderCovidAvance(); });
+  }
+
+  if (!_covidAvance.cargado || _covidAvance.hasta !== `${corte.value}-01`) {
+    document.getElementById("cavTbody").innerHTML = '<tr><td colspan="5" class="cav-vacio">Calculando avance…</td></tr>';
+    await covidAvanceCargar();
+  }
+
+  const r = covidAvanceCalcular(sel.value || "JURIS");
+  document.getElementById("cavTituloAmbito").textContent = r.titulo;
+  document.getElementById("cavThNombre").textContent = r.nombreCol;
+
+  const T = r.total.calc;
+  const hayDatos = _covidAvance.filas.length > 0;
+  const fuente = document.getElementById("cavFuente");
+  if (_covidAvance.error) fuente.textContent = "No se pudo leer el SIS; intenta con Actualizar.";
+  else if (!hayDatos) fuente.textContent = "Aún no hay dosis de COVID-19 publicadas del SIS en este periodo.";
+  else fuente.textContent = `Fuente: SIS (dosis validadas) · último mes con datos: ${_covidAvance.ult ? COVID_MESES_NOMBRE[Number(String(_covidAvance.ult).slice(5, 7)) - 1] + " " + String(_covidAvance.ult).slice(0, 4) : "—"}`;
+
+  document.getElementById("cavKpis").innerHTML = `
+    <div class="cav-kpi cav-kpi--main"><span class="cav-kpi-lbl">Avance</span><b>${T.pct === null ? "—" : T.pct.toFixed(1) + " %"}</b><small>${covidAvanceFmt(T.aplEq)} de ${covidAvanceFmt(T.metaEq)} dosis (0.5 mL)</small></div>
+    <div class="cav-kpi"><span class="cav-kpi-lbl">Meta</span><b>${covidAvanceFmt(T.metaEq)}</b><small>dosis equivalentes de 0.5 mL</small></div>
+    <div class="cav-kpi"><span class="cav-kpi-lbl">Aplicadas</span><b>${covidAvanceFmt(T.aplEq)}</b><small>según SIS validado</small></div>
+    <div class="cav-kpi"><span class="cav-kpi-lbl">Por aplicar</span><b>${covidAvanceFmt(T.pendienteEq)}</b><small>para cubrir la meta</small></div>`;
+
+  const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const filaHtml = (f, total) => `<tr class="${total ? "cav-total" : ""}">
+      <td><b>${esc(f.nombre)}</b>${f.sub ? `<span class="cav-sub">${esc(f.sub)}</span>` : ""}</td>
+      <td class="c">${f.sinMeta ? '<span class="frs-muted">sin meta</span>' : covidAvanceFmt(f.calc.metaEq)}</td>
+      <td class="c">${covidAvanceFmt(f.calc.aplEq)}</td>
+      <td class="c">${covidAvanceBarra(f.calc.pct)}</td>
+      <td class="c">${f.sinMeta ? "—" : covidAvanceFmt(f.calc.pendienteEq)}</td></tr>`;
+  document.getElementById("cavTbody").innerHTML = r.filas.length
+    ? r.filas.map(f => filaHtml(f, false)).join("") + filaHtml(r.total, true)
+    : '<tr><td colspan="5" class="cav-vacio">No hay unidades para este ámbito.</td></tr>';
+
+  document.getElementById("cavRubros").innerHTML = T.rubros.map(x => {
+    const rb = CovidFrascos.RUBROS.find(q => q.id === x.id);
+    return `<tr><td><b>${esc(rb.grupo)}</b><span class="cav-sub">${esc(rb.edad)}</span></td>
+      <td class="c">${covidAvanceFmt(x.meta)}</td><td class="c">${covidAvanceFmt(x.aplicadas)}</td>
+      <td class="c">${covidAvanceBarra(x.pct)}</td><td class="c">${covidAvanceFmt(x.pendiente)}</td></tr>`;
+  }).join("");
 }
 
 // Caja «Factor de pérdida»: Jurisdicción la captura (dosis de 0.5 mL) y el municipal solo la ve. Muestra el %

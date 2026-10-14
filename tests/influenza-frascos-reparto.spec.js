@@ -1142,6 +1142,7 @@ async function montarPanel(page) {
     ['Avances', 'Validacion', 'Conciliacion', 'Metas', 'Frascos', 'Config'].forEach((n) => {
       document.getElementById(`subtabInfluenza${n}`).addEventListener('click', () => window.__clicks.push(n));
     });
+    document.getElementById('subtabCovidAvance').addEventListener('click', () => window.__clicks.push('CovidAvance'));
   }, panelTemporada);
   await page.addScriptTag({ path: path.join(raiz, 'covid_frascos.js') });
   await page.addScriptTag({ content: `
@@ -1161,21 +1162,21 @@ test('Temporada invernal: título, barra de vacuna a nivel de panel y un solo se
   await expect(page.locator('#panelINFLUENZAADMIN h3')).toContainText('Temporada invernal — Panel de Control');
   await expect(page.locator('#temporadaVacunaBar .vac-btn')).toHaveCount(2);
   await expect(page.locator('.vac-seg')).toHaveCount(1);                 // ya no hay un selector repetido en cada pestaña
-  expect(await page.locator('#influenzaAdminTabsContainer .nav-tab').count()).toBe(6);
+  expect(await page.locator('#influenzaAdminTabsContainer .nav-tab').count()).toBe(7);   // 6 de influenza + Avance COVID-19
 });
 
 test('Temporada invernal: COVID-19 muestra solo Metas y Frascos; Influenza conserva todas sus subpestañas', async ({ page }) => {
   await montarPanel(page);
   const visibles = () => page.evaluate(() => [...document.querySelectorAll('#influenzaAdminTabsContainer .nav-tab')]
-    .filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id.replace('subtabInfluenza', '')));
+    .filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id.replace('subtabInfluenza', '').replace('subtabCovid', 'Covid')));
   expect(await visibles()).toEqual(['Avances', 'Validacion', 'Conciliacion', 'Metas', 'Frascos', 'Config']);
 
   await page.click('#temporadaVacunaBar [data-vac="COVID"]');
-  await expect.poll(visibles).toEqual(['Metas', 'Frascos']);
+  await expect.poll(visibles).toEqual(['CovidAvance', 'Metas', 'Frascos']);
   expect(await page.evaluate(() => window.__llamadas.map((l) => l[0]).sort()))
     .toEqual(['getcovid_distribucion', 'getcovid_lotes_entregas', 'getcovid_metas', 'getcovid_remesas']);   // carga lo de COVID, no lo de influenza
-  // estaba en «Concentrado de Avances» (activa): pasa sola a Distribución de Metas
-  expect(await page.evaluate(() => window.__clicks)).toEqual(['Metas']);
+  // estaba en «Concentrado de Avances» (activa): pasa sola a la primera de COVID-19, Avance COVID-19
+  expect(await page.evaluate(() => window.__clicks)).toEqual(['CovidAvance']);
 
   await page.click('#temporadaVacunaBar [data-vac="INFLUENZA"]');
   await expect.poll(visibles).toEqual(['Avances', 'Validacion', 'Conciliacion', 'Metas', 'Frascos', 'Config']);
@@ -1264,4 +1265,103 @@ test('COVID frascos cerrados: sin absorbedor (otro municipio) las unidades cierr
   });
   expect(r.sumas).toEqual([1000, 1000, 60, 120, 36, 24]);
   expect(r.abiertos.length === 0 ? r.cerrados.every(Boolean) : true).toBe(true);   // o cierra todo, o avisa cuál quedó abierto
+});
+
+// ─── Avance de COVID-19: dosis aplicadas (SIS) contra la meta ───
+test('COVID Avance: equivalentes de 0.5 mL (los niños valen la mitad), por rubro y total', async ({ page }) => {
+  await page.goto('/reference.html');
+  await page.addScriptTag({ path: path.join(raiz, 'covid_frascos.js') });
+  const r = await page.evaluate(() => {
+    const metas = { c1: 200, c2: 200, c3: 100, c4: 300, c5: 20, c6: 30 };           // equivalente = 200 + 450 = 650
+    const apl = { c1: 100, c2: 50, c3: 100, c4: 150, c5: 0, c6: 45 };               // equivalente = 75 + 295 = 370
+    const a = CovidFrascos.avanceRubros(metas, apl);
+    return { metaEq: a.metaEq, aplEq: a.aplEq, pct: Math.round(a.pct * 10) / 10, pend: a.pendienteEq,
+      c3: a.rubros.find((x) => x.id === 'c3').pct, c6: a.rubros.find((x) => x.id === 'c6').pct,
+      vars: CovidFrascos.VARIABLE_SIS, sinMeta: CovidFrascos.avanceRubros({}, { c1: 5 }).pct };
+  });
+  expect(r.metaEq).toBe(650);
+  expect(r.aplEq).toBe(370);
+  expect(r.pct).toBe(56.9);
+  expect(r.pend).toBe(280);
+  expect(r.c3).toBe(100);
+  expect(r.c6).toBe(150);                                   // puede rebasar 100 %
+  expect(r.vars).toEqual({ c1: 'VCV38', c2: 'VCV39', c3: 'VCV28', c4: 'VCV16', c5: 'VCV20', c6: 'VCV21' });
+  expect(r.sinMeta).toBeNull();                             // sin meta no hay porcentaje
+});
+
+const avanceFns = modulo.slice(
+  modulo.indexOf('// ─── Avance de COVID-19: dosis aplicadas (SIS, validadas) contra la meta'),
+  modulo.indexOf('// Caja «Factor de pérdida»: Jurisdicción la captura'));
+
+const seccionAvance = html.slice(
+  html.indexOf('<!-- AVANCE DE COVID-19: dosis aplicadas (SIS) contra la meta -->'),
+  html.indexOf('<!-- SECCIÓN 2: DISTRIBUCIÓN DE METAS -->'));
+
+async function montarAvance(page, rol, filasSis) {
+  await page.goto('/reference.html');
+  await page.evaluate(() => { document.body.innerHTML = ''; });
+  await page.addStyleTag({ path: path.join(raiz, 'style.css') });
+  await page.evaluate(([h]) => {
+    window.__llamadas = [];
+    document.body.innerHTML = `${h}<select id="adminInfluenzaMuni"><option value="QUERETARO">Q</option></select>`;
+    document.getElementById('secCovidAvance').classList.remove('hidden');
+  }, [seccionAvance]);
+  await page.addScriptTag({ path: path.join(raiz, 'covid_frascos.js') });
+  await page.addScriptTag({ content: DATOS.replace(/var _adminMetasArray = [\s\S]*?\];/, 'var _adminMetasArray = [];') });
+  await page.addScriptTag({ content: `
+    var _campaignConfig = { fecha_inicio: '2026-10-03', fecha_fin: '2027-03-31' };
+    AppService.call = async function (a, p) { window.__llamadas.push([a, p]); return { ok: true, data: ${JSON.stringify(filasSis)} }; };` });
+  await page.evaluate((r) => { window.USER.rol = r; }, rol);
+  await page.addScriptTag({ content: vacuna + vacunaFns });
+  await page.addScriptTag({ content: bloque });
+  await page.addScriptTag({ content: avanceFns });
+  await page.evaluate(() => {
+    _vacuna = 'COVID';
+    _covidMetasArray = [
+      { clues: null, municipio: 'QUERETARO', metas: { c1: 200, c2: 200, c3: 100, c4: 300, c5: 20, c6: 30 } },
+      { clues: null, municipio: 'HENM', metas: { c3: 50, c4: 100, c6: 10 } },
+      { clues: 'Q1', municipio: 'QUERETARO', metas: { c1: 100, c2: 100, c3: 50, c4: 150, c5: 10, c6: 15 } },
+      { clues: 'Q2', municipio: 'QUERETARO', metas: { c1: 100, c2: 100, c3: 50, c4: 150, c5: 10, c6: 15 } }
+    ];
+  });
+}
+
+test('COVID Avance (Jurisdicción): meta vs aplicadas por municipio/hospital con las dosis del SIS', async ({ page }) => {
+  const sis = [
+    { clues: 'Q1', variable_sis: 'VCV38', dosis: 60, ult: '2026-11-01' }, { clues: 'Q1', variable_sis: 'VCV39', dosis: 40, ult: '2026-11-01' },
+    { clues: 'Q1', variable_sis: 'VCV16', dosis: 75, ult: '2026-11-01' }, { clues: 'Q2', variable_sis: 'VCV16', dosis: 25, ult: '2026-10-01' },
+    { clues: 'QTSSA001740', variable_sis: 'VCV28', dosis: 50, ult: '2026-11-01' }
+  ];
+  await montarAvance(page, 'JURISDICCIONAL', sis);
+  await page.evaluate(() => { document.getElementById('cavCorte').innerHTML = ''; return renderCovidAvance(); });
+  // el corte por omisión existe y se pide el SIS desde el inicio de la campaña
+  const llamada = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'getcovid_avance'));
+  expect(llamada[1].desde).toBe('2026-10-03');
+  await expect(page.locator('#cavTituloAmbito')).toContainText('municipio y hospital');
+  // Querétaro: aplicadas equiv = (60+40)/2 + 75 + 25 = 150; meta = 200 + 450 = 650
+  const filaQ = page.locator('#cavTbody tr', { hasText: 'Querétaro' }).first();
+  await expect(filaQ).toContainText('650');
+  await expect(filaQ).toContainText('150');
+  await expect(filaQ).toContainText('23.1 %');
+  // HENM (hospital): 50 de 160 = 31.3 %
+  await expect(page.locator('#cavTbody tr', { hasText: 'HENM' })).toContainText('31.3 %');
+  await expect(page.locator('#cavKpis')).toContainText('Avance');
+  await expect(page.locator('#cavFuente')).toContainText('último mes con datos');
+});
+
+test('COVID Avance: por unidad al elegir un municipio y aviso cuando el SIS aún no publica', async ({ page }) => {
+  await montarAvance(page, 'ADMIN', []);
+  await page.evaluate(() => { _allUnidades.push({ clues: 'Q9', unidad: 'SIN META', municipio: 'QUERETARO' }); return renderCovidAvance(); });
+  await expect(page.locator('#cavFuente')).toContainText('Aún no hay dosis de COVID-19 publicadas');
+  await page.selectOption('#cavAmbito', 'QUERETARO');
+  await expect(page.locator('#cavTituloAmbito')).toContainText('unidad');
+  await expect(page.locator('#cavTbody tr', { hasText: 'UMQ UNO' })).toContainText('0.0 %');
+  await expect(page.locator('#cavTbody tr', { hasText: 'Q9' })).toContainText('sin meta');   // unidad aún sin meta
+  await expect(page.locator('#cavRubros tr')).toHaveCount(6);
+});
+
+test('COVID Avance (municipal): solo ofrece sus municipios, no la Jurisdicción', async ({ page }) => {
+  await montarAvance(page, 'MUNICIPAL', []);
+  await page.evaluate(() => renderCovidAvance());
+  expect(await page.locator('#cavAmbito option').allTextContents()).toEqual(['Querétaro']);
 });

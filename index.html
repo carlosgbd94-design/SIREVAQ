@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.137" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.138" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.144" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.145" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -2892,6 +2892,10 @@
               <span class="material-symbols-rounded">compare_arrows</span>
               <span>Conciliación vs CSV</span>
             </button>
+            <button id="subtabCovidAvance" class="nav-tab tinv-oculta">
+              <span class="material-symbols-rounded">analytics</span>
+              <span>Avance COVID-19</span>
+            </button>
             <button id="subtabInfluenzaMetas" class="nav-tab">
               <span class="material-symbols-rounded">query_stats</span>
               <span>Distribución de Metas</span>
@@ -3382,6 +3386,44 @@
           </div>
           <div id="conciliacionDrawerBackdrop"
             class="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-40 hidden transition-opacity duration-300 opacity-0">
+          </div>
+        </div>
+
+        <!-- AVANCE DE COVID-19: dosis aplicadas (SIS) contra la meta -->
+        <div id="secCovidAvance" class="hidden flex flex-col gap-6">
+          <div class="meta-camp-bar">
+            <label for="cavAmbito" class="meta-camp-lbl">Ámbito</label>
+            <select id="cavAmbito" class="meta-camp-select"></select>
+            <label for="cavCorte" class="meta-camp-lbl">Acumulado hasta</label>
+            <select id="cavCorte" class="meta-camp-select"></select>
+            <span class="cav-fuente" id="cavFuente"></span>
+          </div>
+          <div class="cav-kpis" id="cavKpis"></div>
+          <div class="cav-card">
+            <h4 class="cav-titulo" id="cavTituloAmbito">Avance por ámbito</h4>
+            <div class="cav-scroll">
+              <table class="cav-table">
+                <thead><tr>
+                  <th id="cavThNombre">Ámbito</th>
+                  <th class="c" title="Meta en dosis de 0.5 mL equivalentes (los niños de 0.25 mL valen la mitad)">Meta (dosis)</th>
+                  <th class="c">Aplicadas</th>
+                  <th class="c">Avance</th>
+                  <th class="c">Por aplicar</th>
+                </tr></thead>
+                <tbody id="cavTbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="cav-card">
+            <h4 class="cav-titulo">Detalle por grupo</h4>
+            <div class="cav-scroll">
+              <table class="cav-table">
+                <thead><tr>
+                  <th>Grupo</th><th class="c">Meta</th><th class="c">Aplicadas</th><th class="c">Avance</th><th class="c">Por aplicar</th>
+                </tr></thead>
+                <tbody id="cavRubros"></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
