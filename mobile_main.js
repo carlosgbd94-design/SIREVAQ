@@ -1628,15 +1628,19 @@
                     document.getElementById('hdrClima').textContent = `${temp}°C`;
                     
                     const code = data.current_weather.weathercode;
-                    let emoji = "🌤️";
-                    if (code === 0) emoji = "☀️";
-                    else if (code >= 1 && code <= 3) emoji = "🌤️";
-                    else if (code >= 45 && code <= 48) emoji = "🌫️";
-                    else if (code >= 51 && code <= 67) emoji = "🌧️";
-                    else if (code >= 71 && code <= 77) emoji = "❄️";
-                    else if (code >= 80 && code <= 82) emoji = "🌦️";
-                    
-                    document.getElementById('lblClimaEmoji').textContent = emoji;
+                    const isDay = data.current_weather.is_day !== 0;
+                    // Meteocons locales (assets/weather), mismo mapeo que el escritorio (getWeatherDetails).
+                    let icon = 'partly-cloudy-day';
+                    if (code === 0) icon = isDay ? 'clear-day' : 'clear-night';
+                    else if (code === 1 || code === 2) icon = isDay ? 'partly-cloudy-day' : 'partly-cloudy-night';
+                    else if (code === 3) icon = 'overcast';
+                    else if (code === 45 || code === 48) icon = 'fog';
+                    else if (code >= 51 && code <= 57) icon = 'drizzle';
+                    else if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) icon = 'rain';
+                    else if ((code >= 71 && code <= 77) || code === 85 || code === 86) icon = 'snow';
+                    else if (code >= 95) icon = 'thunderstorms';
+                    const img = document.getElementById('lblClimaIcon');
+                    if (img) img.src = `assets/weather/${icon}.svg`;
                 }
             }
         } catch (e) {
@@ -1731,6 +1735,15 @@
         if (score > 100) score = 100;
 
         document.getElementById('lblCumplimientoVal').textContent = `${score}%`;
+
+        // Insignia del rango vigente en lugar del ícono genérico (mismos cortes que el escritorio).
+        const tier = score === 100 ? 'diamante' : score >= 90 ? 'oro' : score >= 80 ? 'plata'
+            : score >= 70 ? 'bronce' : score >= 60 ? 'acero' : score >= 50 ? 'jade' : '';
+        const iconHost = document.getElementById('lblCumplimientoIcon');
+        if (iconHost && window.MedalBadges && tier) {
+            iconHost.innerHTML = window.MedalBadges.svg(tier, 34);
+            iconHost.setAttribute('title', `Rango ${window.MedalBadges.label(tier)}`);
+        }
     };
 
     // --- Biometric Passkey Functions ---

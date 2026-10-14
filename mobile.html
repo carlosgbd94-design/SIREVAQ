@@ -176,7 +176,7 @@
     <div class="px-6 pt-4 grid grid-cols-2 gap-4 max-w-md mx-auto w-full">
       <!-- Weather widget -->
       <div class="kpi-chip liquid-glass">
-        <span class="text-2xl" id="lblClimaEmoji">🌤️</span>
+        <img id="lblClimaIcon" src="assets/weather/partly-cloudy-day.svg" width="40" height="40" alt="" style="flex-shrink:0;margin:-6px -4px -6px -6px">
         <div class="flex flex-col">
           <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Clima</span>
           <span class="text-xs font-black" id="hdrClima">Cargando...</span>
@@ -184,7 +184,7 @@
       </div>
       <!-- Compliance widget -->
       <div class="kpi-chip liquid-glass">
-        <span class="material-symbols-rounded text-emerald-500 text-xl">leaderboard</span>
+        <span id="lblCumplimientoIcon" class="inline-flex items-center justify-center" style="min-width:28px;line-height:0"><span class="material-symbols-rounded text-emerald-500 text-xl">leaderboard</span></span>
         <div class="flex flex-col">
           <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Cumplimiento</span>
           <span class="text-xs font-black text-emerald-600" id="lblCumplimientoVal">—</span>
@@ -779,6 +779,7 @@
   <!-- Confetti script -->
   <script defer src="https://unpkg.com/canvas-confetti@1.6.0/dist/confetti.browser.js"></script>
   <!-- Lógica Principal Móvil -->
+  <script src="medal_badges.js?v=1" defer></script>
   <script src="feedback_autoreply.js?v=2026.2" defer></script>
   <script src="perfil_cuenta.js?v=2026.2" defer></script>
   <script src="calendario_capacitaciones.js?v=2026.4" defer></script>
@@ -789,6 +790,6 @@
   <script src="influenza_rubros.js?v=1" defer></script>
   <script src="mobile_influenza_validacion.js?v=2" defer></script>
   <script src="mobile_influenza_captura.js?v=4" defer></script>
-  <script src="mobile_main.js?v=2026.40" defer></script>
+  <script src="mobile_main.js?v=2026.41" defer></script>
 </body>
 </html>

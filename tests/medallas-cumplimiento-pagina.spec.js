@@ -45,24 +45,27 @@ test('UNIDAD: la tarjeta real pinta una chip por mes con su nivel, sin errores d
   await expect(chips).toHaveCount(7);
 
   const r = await page.evaluate(() => [...document.querySelectorAll('#bCumplimientoMedals > .chip-medal-icon')].map((e) => {
-    const cs = getComputedStyle(e);
-    return { icon: e.textContent, tier: [...e.classList].find((c) => c.startsWith('tier-')), title: e.title, size: cs.fontSize, filter: cs.filter, bg: cs.backgroundImage, anim: cs.animationName, fill: cs.webkitTextFillColor };
+    const svg = e.querySelector('svg.mb-svg');
+    const use = svg && svg.querySelector('use');
+    return {
+      tier: [...e.classList].find((c) => c.startsWith('tier-')),
+      title: e.title,
+      w: svg ? svg.getAttribute('width') : null,
+      ref: use ? use.getAttribute('href') : null,
+      latest: e.classList.contains('is-latest'),
+      glyph: e.textContent.trim()
+    };
   }));
   // Meses cerrados exigen pedido: Ene 100 diamante, Feb 80 (sin pedido) plata, Mar 90 oro, Abr 80 plata, May 70 bronce, Jun 60 acero, Jul 100 diamante
   expect(r.map((x) => x.tier)).toEqual(['tier-diamante', 'tier-plata', 'tier-oro', 'tier-plata', 'tier-bronze', 'tier-steel', 'tier-diamante']);
   expect(r[0].title).toBe('Medalla de cumplimiento Diamante - Enero (100%)');
-  expect(r.every((x) => x.size === '20px')).toBe(true);
-  // Sombra doble original (dos drop-shadow) en todas
-  expect(r.every((x) => (x.filter.match(/drop-shadow/g) || []).length === 2)).toBe(true);
-  // Degradados por nivel: cada tier con su color
-  expect(r[0].bg).toContain('rgb(0, 242, 254)');   // diamante
-  expect(r[2].bg).toContain('rgb(246, 211, 101)'); // oro
-  expect(r[3].bg).toContain('rgb(148, 163, 184)'); // plata
-  expect(r[4].bg).toContain('rgb(217, 119, 6)');   // bronce
-  expect(r[5].bg).toContain('rgb(71, 85, 105)');   // acero
-  expect(r.every((x) => x.fill.includes('0, 0, 0, 0') || x.fill === 'rgba(0, 0, 0, 0)' || x.fill === 'transparent')).toBe(true);
-  // El destello continuo solo lo lleva la última diamante
-  expect(r.map((x) => x.anim)).toEqual(['none', 'none', 'none', 'none', 'none', 'none', 'shimmer-medal']);
+  // Insignia SVG del sprite, una silueta por rango, sin glifos de fuente
+  expect(r.map((x) => x.ref)).toEqual(['#mb-diamante', '#mb-plata', '#mb-oro', '#mb-plata', '#mb-bronce', '#mb-acero', '#mb-diamante']);
+  expect(r.every((x) => x.w === '26' && x.glyph === '')).toBe(true);
+  // Solo la más reciente lleva la marca de "última"
+  expect(r.map((x) => x.latest)).toEqual([false, false, false, false, false, false, true]);
+  // El sprite define cada rango con su gradiente
+  expect(await page.evaluate(() => ['diamante', 'oro', 'plata', 'bronce', 'acero', 'jade'].every((t) => !!document.querySelector(`#mb-sprite symbol#mb-${t}`) && !!document.querySelector(`#mb-${t}-o`)))).toBe(true);
 
   // Una sola petición a la base para todo el año
   const llamadas = await page.evaluate(() => window.__llamadas);

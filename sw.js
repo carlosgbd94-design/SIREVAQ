@@ -4,7 +4,7 @@
  * Versión: 2026.4
  */
 
-const CACHE_NAME = 'js1-reportes-v2026-201';
+const CACHE_NAME = 'js1-reportes-v2026-202';
 
 // IMPORTANTE: index.html YA NO carga main.js/rda_ui.js/etc. sueltos -- desde que existe
 // build-bundle.js carga dist/bundle-head.js y dist/bundle-body.js (empaquetados). Antes
@@ -26,6 +26,18 @@ const STATIC_ASSETS = [
   './mobile.html',
   './mobile_style.css',
   './mobile_main.js',
+  './medal_badges.js',
+  './assets/weather/clear-day.svg',
+  './assets/weather/clear-night.svg',
+  './assets/weather/partly-cloudy-day.svg',
+  './assets/weather/partly-cloudy-night.svg',
+  './assets/weather/overcast.svg',
+  './assets/weather/fog.svg',
+  './assets/weather/drizzle.svg',
+  './assets/weather/rain.svg',
+  './assets/weather/snow.svg',
+  './assets/weather/thunderstorms.svg',
+  './assets/weather/thermometer.svg',
   './feedback_autoreply.js',
   './perfil_cuenta.js',
   './calendario_capacitaciones.js',

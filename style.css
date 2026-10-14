@@ -8895,56 +8895,109 @@ body[data-role="UNIDAD"] .panelCaptureSummary {
    GAMIFICATION & LEADERBOARD (TIERS)
    ========================================================== */
 
-.medal-icon {
-  font-size: 24px;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
-  display: inline-block;
-  vertical-align: middle;
-}
-
+/* Medallas: insignias SVG (medal_badges.js); el color y la silueta los pone el sprite, no el CSS. */
+.medal-icon,
 .chip-medal-icon {
-  font-size: 20px !important;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)) drop-shadow(0 4px 8px rgba(0,0,0,0.25)) !important;
-  display: inline-block;
+  display: inline-flex;
   vertical-align: middle;
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  line-height: 0;
+}
+.chip-medal-icon {
   cursor: help;
+  transition: transform 0.18s ease;
 }
-
+.mb-svg { display: block; }
+.chip-medal-icon.is-latest .mb-svg { filter: drop-shadow(0 2px 3px rgba(15, 23, 42, 0.25)); }
 @media (hover: hover) and (pointer: fine) {
-  .chip-medal-icon:hover {
-    transform: scale(1.35) rotate(5deg) !important;
-  }
-}
-
-.tier-diamante { background-image: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%); background-size: 200% auto; }
-/* El destello es continuo: solo la medalla más reciente lo lleva para no repintar 10 iconos por fotograma */
-.tier-diamante.is-latest { animation: shimmer-medal 2s infinite linear; }
-/* Ranking: puede haber decenas de diamantes; el destello solo corre al pasar el cursor sobre uno */
-@media (hover: hover) and (pointer: fine) {
-  .medal-icon.tier-diamante:hover { animation: shimmer-medal 2s infinite linear; }
+  .chip-medal-icon:hover { transform: translateY(-2px) scale(1.12); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tier-diamante.is-latest,
-  .medal-icon.tier-diamante:hover { animation: none; }
+  .chip-medal-icon { transition: none; }
+  .chip-medal-icon:hover { transform: none; }
 }
-.tier-oro { background-image: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
-.tier-plata { background-image: linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%); }
-.tier-bronze { background-image: linear-gradient(135deg, #d97706 0%, #b45309 100%); }
-.tier-steel { background-image: linear-gradient(135deg, #94a3b8 0%, #475569 100%); }
-.tier-emerald { background-image: linear-gradient(135deg, #34d399 0%, #059669 100%); }
-.tier-riesgo { background-image: linear-gradient(135deg, #ff0844 0%, #ffb199 100%); }
+.tier-riesgo.material-symbols-rounded { color: #dc2626; font-size: 24px; }
 
-@keyframes shimmer-medal {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 200% 50%; }
+/* Medalla del rango vigente en la tarjeta de cumplimiento (reemplaza el ícono genérico). */
+.cmp-medal-big { display: none; line-height: 0; }
+#bCumplimiento #bCumplimientoIconBg.has-medal {
+  width: 56px !important;
+  height: 56px !important;
+  background: transparent !important;
+  border: 0 !important;
+  overflow: visible !important;
 }
+#bCumplimiento #bCumplimientoIconBg.has-medal #bCumplimientoIconBase,
+#bCumplimiento #bCumplimientoIconBg.has-medal #bCumplimientoIconSnake { display: none !important; }
+#bCumplimiento #bCumplimientoIconBg.has-medal .cmp-medal-big { display: flex; }
+
+/* Clima: tono plano por estado del cielo + ícono Meteocons (sin foto externa). */
+.weather-hero-block[data-sky]::before,
+.weather-hero-block[data-sky]::after { display: none !important; }
+.weather-hero-block[data-sky] {
+  box-shadow: none;
+  border: 1px solid var(--sky-bd, #C7D9EE);
+  background: var(--sky-bg, #EAF2FB);
+}
+.weather-hero-block[data-sky="clear-day"] { --sky-bg: #EEF6FF; --sky-bd: #CFE3FA; }
+.weather-hero-block[data-sky="cloudy-day"] { --sky-bg: #EAF2FB; --sky-bd: #C7D9EE; }
+.weather-hero-block[data-sky="overcast"] { --sky-bg: #E7EAEF; --sky-bd: #CDD3DB; }
+.weather-hero-block[data-sky="fog"] { --sky-bg: #F1F3F5; --sky-bd: #D8DDE2; }
+.weather-hero-block[data-sky="rain"] { --sky-bg: #DEE6F0; --sky-bd: #BAC6D6; }
+.weather-hero-block[data-sky="snow"] { --sky-bg: #EFF6FB; --sky-bd: #D3E3F0; }
+.weather-hero-block[data-sky="thunder"] { --sky-bg: #1F2937; --sky-bd: #374151; }
+.weather-hero-block[data-sky="night"] { --sky-bg: #1E1B4B; --sky-bd: #3730A3; }
+.weather-hero-icon { flex-shrink: 0; width: 76px; height: 76px; margin: -12px -6px; }
+
+/* Consejo del día */
+.fc-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 120px;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 24px;
+  border: 1px solid var(--md-sys-color-outline-variant, #e2e8f0);
+  background: var(--md-sys-color-surface, #fff);
+  transition: opacity 0.18s ease;
+}
+.fc-card.fc-swap { opacity: 0.35; }
+.fc-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.fc-tile {
+  width: 44px; height: 44px; flex-shrink: 0;
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  background: #F1EFE8;
+}
+.fc-tile .material-symbols-rounded { font-size: 24px; }
+.fc-titles { display: flex; flex-direction: column; min-width: 0; }
+.fc-tag { font-size: 10px; font-weight: 800; letter-spacing: 0.1em; line-height: 1.2; }
+.fc-title {
+  font-size: 15px; font-weight: 800; line-height: 1.25; letter-spacing: -0.01em;
+  color: var(--md-sys-color-on-surface, #0f172a);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fc-body {
+  margin: 0;
+  font-size: 12px; font-weight: 600; line-height: 1.45;
+  color: var(--md-sys-color-on-surface-variant, #475569);
+}
+.fc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fc-counter { font-size: 10px; font-weight: 700; color: #94a3b8; }
+.fc-nav { display: inline-flex; gap: 4px; }
+.fc-btn {
+  width: 28px; height: 28px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; color: #64748b; cursor: pointer;
+}
+.fc-btn .material-symbols-rounded { font-size: 18px; }
+@media (hover: hover) and (pointer: fine) {
+  .fc-btn:hover { background: rgba(100, 116, 139, 0.12); color: var(--md-sys-color-on-surface, #0f172a); }
+}
+.fc-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .fc-card { transition: none; } }
+
 
 .lb-progress-wrap { width: 100%; height: 6px; background-color: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 6px; }
 .lb-progress-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }

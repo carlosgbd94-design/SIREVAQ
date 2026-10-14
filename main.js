@@ -328,79 +328,93 @@ const FACTS = [
 ];
 let factIdx = Math.floor(Math.random() * FACTS.length);
 let FACTS_TIMER = null;
+const FACT_HISTORY = [];
+let factHistPos = -1;
+let factNavBound = false;
 
 const tagThemes = {
-  "Cadena fría": { bg: "#f0f9ff", border: "#e0f2fe", icon: "#0284c7", text: "#0c4a6e", title: "#0ea5e9" }, // Light blue
-  "Frascos": { bg: "#f5f3ff", border: "#ede9fe", icon: "#7c3aed", text: "#4c1d95", title: "#8b5cf6" }, // Violet
-  "Aplicación": { bg: "#ecfdf5", border: "#d1fae5", icon: "#059669", text: "#064e3b", title: "#10b981" }, // Emerald
-  "Seguridad": { bg: "#fef2f2", border: "#fee2e2", icon: "#dc2626", text: "#7f1d1d", title: "#ef4444" }, // Red
-  "Inventario": { bg: "#fff7ed", border: "#ffedd5", icon: "#ea580c", text: "#7c2d12", title: "#f97316" }, // Orange
-  "Planeación": { bg: "#f0fdf4", border: "#dcfce7", icon: "#16a34a", text: "#14532d", title: "#22c55e" }, // Green
-  "Registro": { bg: "#f8fafc", border: "#f1f5f9", icon: "#475569", text: "#0f172a", title: "#64748b" }, // Slate
-  "Cobertura": { bg: "#eff6ff", border: "#dbeafe", icon: "#2563eb", text: "#1e3a8a", title: "#3b82f6" }, // Blue
-  "Operación": { bg: "#faf5ff", border: "#f3e8ff", icon: "#9333ea", text: "#3b0764", title: "#a855f7" }, // Purple
-  "Innovación": { bg: "#fefce8", border: "#fef08a", icon: "#ca8a04", text: "#713f12", title: "#eab308" }, // Yellow
-  "Inmunidad": { bg: "#f0fdfa", border: "#ccfbf1", icon: "#0d9488", text: "#134e4a", title: "#14b8a6" }, // Teal
-  "Salud Global": { bg: "#fdf4ff", border: "#fae8ff", icon: "#c026d3", text: "#701a75", title: "#d946ef" }, // Fuchsia
-  "Calidad": { bg: "#f0f9ff", border: "#e0f2fe", icon: "#0284c7", text: "#0c4a6e", title: "#0ea5e9" }
+  "Cadena fría": { bg: "#E6F1FB", icon: "#185FA5" },
+  "Frascos": { bg: "#EEEDFE", icon: "#534AB7" },
+  "Aplicación": { bg: "#E1F5EE", icon: "#0F6E56" },
+  "Seguridad": { bg: "#FAECE7", icon: "#993C1D" },
+  "Inventario": { bg: "#FAEEDA", icon: "#854F0B" },
+  "Planeación": { bg: "#EAF3DE", icon: "#3B6D11" },
+  "Registro": { bg: "#F1EFE8", icon: "#5F5E5A" },
+  "Cobertura": { bg: "#E6F1FB", icon: "#0C447C" },
+  "Operación": { bg: "#EEEDFE", icon: "#3C3489" },
+  "Innovación": { bg: "#FAEEDA", icon: "#633806" },
+  "Inmunidad": { bg: "#E1F5EE", icon: "#085041" },
+  "Salud Global": { bg: "#FBEAF0", icon: "#993556" },
+  "Calidad": { bg: "#E6F1FB", icon: "#185FA5" }
 };
-const defaultTheme = { bg: "#f8fafc", border: "#f1f5f9", icon: "#475569", text: "#0f172a", title: "#64748b" };
+const defaultTheme = { bg: "#F1EFE8", icon: "#5F5E5A" };
 
-function renderFact() {
-  if (!FACTS || !FACTS.length) return;
+/** Pinta el consejo FACTS[idx] en la tarjeta (ícono en mosaico tintado por categoría, sin degradados). */
+function paintFact(idx) {
   const card = document.getElementById("factCard"),
         iconCont = document.getElementById("factIconContainer"),
         iconEl = document.getElementById("factIcon"),
         titleEl = document.getElementById("factTitle"),
         bodyEl = document.getElementById("factBody"),
-        tagEl = document.getElementById("factTag");
+        tagEl = document.getElementById("factTag"),
+        counterEl = document.getElementById("factCounter");
   if (!card || !iconCont || !iconEl || !titleEl || !bodyEl || !tagEl) return;
 
-  const f = FACTS[factIdx % FACTS.length];
+  const f = FACTS[idx % FACTS.length];
   const tagIconMap = { "Cadena fría": "ac_unit", "Frascos": "science", "Inventario": "inventory_2", "Planeación": "analytics", "Registro": "edit_note", "Cobertura": "query_stats", "Operación": "settings" };
-  const curIcon = tagIconMap[f.tag] || f.icon || "syringe";
   const theme = tagThemes[f.tag] || defaultTheme;
 
-  // 1. Fade out body & shrink rotate icon
-  bodyEl.style.opacity = 0;
-  iconEl.style.transform = "scale(0.3) rotate(-45deg)";
-  iconEl.style.opacity = 0;
-
+  card.classList.add("fc-swap");
   setTimeout(() => {
-    // 2. Update Content & Colors
-    card.style.background = `linear-gradient(135deg, ${theme.bg} 0%, #ffffff 100%)`;
-    card.style.borderColor = theme.border;
-    card.style.boxShadow = `0 12px 24px -10px ${theme.border}, 0 2px 4px rgba(0,0,0,0.02)`;
-    iconCont.style.backgroundColor = `${theme.bg}`;
-    iconCont.style.borderColor = theme.border;
+    iconCont.style.backgroundColor = theme.bg;
     iconEl.style.color = theme.icon;
-    
-    // Set title and body text color using the theme text colors
-    titleEl.style.color = theme.text;
-    bodyEl.style.color = "var(--md-sys-color-on-surface-variant)"; 
-    
+    tagEl.style.color = theme.icon;
     tagEl.textContent = (f.tag || "").toUpperCase();
     titleEl.textContent = f.title || "";
     bodyEl.textContent = f.body || "";
-    iconEl.textContent = curIcon;
-
-    // 3. Pop icon in & fade text
-    bodyEl.style.opacity = 1;
-    iconEl.style.transform = "scale(1.2) rotate(10deg)";
-    iconEl.style.opacity = 1;
-
-    // Settle icon
-    setTimeout(() => { iconEl.style.transform = "scale(1) rotate(0deg)"; }, 250);
-  }, 300);
-
-  // Selección 100% aleatoria para mayor dinamismo
-  factIdx = Math.floor(Math.random() * FACTS.length);
+    iconEl.textContent = tagIconMap[f.tag] || f.icon || "syringe";
+    if (counterEl) counterEl.textContent = `Consejo ${(idx % FACTS.length) + 1} de ${FACTS.length}`;
+    card.classList.remove("fc-swap");
+  }, 180);
 }
+
+/** delta > 0: siguiente (al azar si no hay uno ya visto adelante); delta < 0: el anterior de la sesión. */
+function stepFact(delta) {
+  if (!FACTS || !FACTS.length) return;
+  if (delta < 0) {
+    if (factHistPos <= 0) return;
+    factHistPos--;
+  } else if (factHistPos < FACT_HISTORY.length - 1) {
+    factHistPos++;
+  } else {
+    let next = Math.floor(Math.random() * FACTS.length);
+    if (FACTS.length > 1 && next === FACT_HISTORY[factHistPos]) next = (next + 1) % FACTS.length;
+    FACT_HISTORY.push(next);
+    if (FACT_HISTORY.length > 60) FACT_HISTORY.shift();
+    factHistPos = FACT_HISTORY.length - 1;
+  }
+  paintFact(FACT_HISTORY[factHistPos]);
+}
+
+function renderFact() { stepFact(1); }
 
 function startFactsRotation() {
   stopFactsRotation();
-  renderFact();
-  FACTS_TIMER = setInterval(() => { if (!document.hidden) renderFact(); }, 9000);
+  if (!factNavBound) {
+    factNavBound = true;
+    const bind = (id, d) => {
+      const b = document.getElementById(id);
+      if (b) b.addEventListener("click", () => {
+        stepFact(d);
+        stopFactsRotation();
+        FACTS_TIMER = setInterval(() => { if (!document.hidden) stepFact(1); }, 12000);
+      });
+    };
+    bind("factPrev", -1);
+    bind("factNext", 1);
+  }
+  if (factHistPos < 0) stepFact(1); else paintFact(FACT_HISTORY[factHistPos]);
+  FACTS_TIMER = setInterval(() => { if (!document.hidden) stepFact(1); }, 12000);
 }
 
 function stopFactsRotation() {
@@ -14685,25 +14699,17 @@ function updateDynamicGreeting(timeGreeting = null, customSubtitle = null) {
   const colorDivider = isDarkText ? 'rgba(30, 41, 59, 0.2)' : 'rgba(255, 255, 255, 0.2)';
 
   const weatherEmoji = CURRENT_WEATHER.emoji || "";
-  const weatherIconHTML = CURRENT_WEATHER.iconSvg 
-    ? `<span class="material-symbols-rounded ml-2 drop-shadow-md transition-transform duration-500 hover:scale-110" style="font-size: 42px; animation: floatIcon 3s ease-in-out infinite;">${CURRENT_WEATHER.iconSvg}</span>
-       <style>
-         @keyframes floatIcon {
-           0% { transform: translateY(0px); }
-           50% { transform: translateY(-4px); }
-           100% { transform: translateY(0px); }
-         }
-       </style>`
+  const weatherIconHTML = CURRENT_WEATHER.iconUrl
+    ? `<img class="weather-hero-icon" src="${CURRENT_WEATHER.iconUrl}" width="76" height="76" alt="" decoding="async">`
     : weatherEmoji;
   const weatherTemp = CURRENT_WEATHER.temp !== null ? `${CURRENT_WEATHER.temp}°C` : "";
   const weatherText = CURRENT_WEATHER.text || "";
-  const weatherBg = CURRENT_WEATHER.bg || "";
 
   const parentEl = welcomeEl.parentElement;
   if (parentEl) {
     parentEl.classList.add("weather-hero-block");
     parentEl.setAttribute("data-theme", theme);
-    parentEl.style.setProperty('--weather-bg', `url('${weatherBg}')`);
+    parentEl.setAttribute("data-sky", CURRENT_WEATHER.sky || "clear-day");
 
     const resumenSpan = parentEl.querySelector("span.uppercase");
     if (resumenSpan) {
@@ -20088,12 +20094,13 @@ function renderUnitMedals(medals) {
   }
 
   const lastIdx = medals.length - 1;
-  // Un solo innerHTML; solo la medalla diamante más reciente lleva el destello animado (ver .chip-medal-icon.is-latest).
+  // Un solo innerHTML; solo la medalla diamante más reciente lleva el destello (ver .chip-medal-icon.is-latest).
   container.innerHTML = medals.map((m, i) => {
-    const ui = MEDAL_TIER_UI[String(m.tier || "").trim().toLowerCase()] || { icon: "military_tech", cls: "tier-riesgo", label: "Cumplimiento" };
+    const key = String(m.tier || "").trim().toLowerCase();
+    const ui = MEDAL_TIER_UI[key] || { cls: "tier-riesgo", label: "Cumplimiento" };
     const mm = String(m.month).split("-")[1];
     const title = `Medalla de cumplimiento ${ui.label} - ${MEDAL_MONTH_NAMES[mm] || mm} (${m.score}%)`;
-    return `<span class="material-symbols-rounded chip-medal-icon ${ui.cls}${i === lastIdx ? " is-latest" : ""}" title="${title}">${ui.icon}</span>`;
+    return `<span class="chip-medal-icon ${ui.cls}${i === lastIdx ? " is-latest" : ""}" title="${title}" role="img" aria-label="${title}">${window.MedalBadges ? window.MedalBadges.svg(key, 26) : ""}</span>`;
   }).join("");
 }
 
@@ -20109,6 +20116,15 @@ function updateCumplimientoMedalTone(userRank, userTier = "") {
   }
 
   const normalizedTier = String(userTier || "").trim().toLowerCase();
+
+  // La medalla del rango vigente sustituye al ícono genérico de la tarjeta (si no hay rango, vuelve el ícono).
+  const bigMedal = $("bCumplimientoMedalBig");
+  const iconBg = $("bCumplimientoIconBg");
+  if (bigMedal && iconBg) {
+    const has = !!(window.MedalBadges && window.MedalBadges.has(normalizedTier));
+    bigMedal.innerHTML = has ? window.MedalBadges.svg(normalizedTier, 52) : "";
+    iconBg.classList.toggle("has-medal", has);
+  }
 
   if (badge && normalizedTier) {
     badge.classList.remove("hidden");
@@ -20153,6 +20169,11 @@ function updateCumplimientoMedalTone(userRank, userTier = "") {
   }
 }
 window.updateCumplimientoMedalTone = updateCumplimientoMedalTone;
+
+/** Medalla grande del podio (misma insignia SVG que la tarjeta de cumplimiento). */
+function podiumMedal(tier) {
+  return window.MedalBadges ? window.MedalBadges.svg(tier, 44) : "";
+}
 
 function renderHistoryMetrics(data) {
   const getProgressBg = (pct) => {
@@ -20253,17 +20274,17 @@ function renderHistoryMetrics(data) {
         $("adminPodiumArea").innerHTML = `
           <div class="podium-container">
             <div class="podium-step p-2">
-              <div class="podium-medal"><span class="material-symbols-rounded" style="color: #94a3b8">military_tech</span></div>
+              <div class="podium-medal">${podiumMedal("plata")}</div>
               <div class="podium-score">${muniArr[1].avg}%</div>
               <div class="podium-name">${muniArr[1].municipio}</div>
             </div>
             <div class="podium-step p-1">
-              <div class="podium-medal"><span class="material-symbols-rounded" style="color: #f59e0b">workspace_premium</span></div>
+              <div class="podium-medal">${podiumMedal("oro")}</div>
               <div class="podium-score">${muniArr[0].avg}%</div>
               <div class="podium-name">${muniArr[0].municipio}</div>
             </div>
             <div class="podium-step p-3">
-              <div class="podium-medal"><span class="material-symbols-rounded" style="color: #d97706">military_tech</span></div>
+              <div class="podium-medal">${podiumMedal("bronce")}</div>
               <div class="podium-score">${muniArr[2].avg}%</div>
               <div class="podium-name">${muniArr[2].municipio}</div>
             </div>
@@ -20282,17 +20303,10 @@ function renderHistoryMetrics(data) {
         if (top5[i]) {
           const item = top5[i];
           const place = i + 1;
-          let medalColor = "";
-          let medalIcon = "military_tech";
-          if (place === 1) { medalColor = "#ffd700"; medalIcon = "workspace_premium"; }
-          else if (place === 2) { medalColor = "#cbd5e1"; }
-          else if (place === 3) { medalColor = "#fed7aa"; }
-          else if (place === 4) { medalColor = "#99f6e4"; medalIcon = "workspace_premium"; }
-          else if (place === 5) { medalColor = "#bbf7d0"; }
-
+          const placeTier = ["oro", "plata", "bronce", "acero", "jade"][place - 1];
           podiumHtml += `
             <div class="podium-step p-${place}">
-              <div class="podium-medal"><span class="material-symbols-rounded" style="color: ${medalColor}">${medalIcon}</span></div>
+              <div class="podium-medal">${podiumMedal(placeTier)}</div>
               <div class="podium-score">${item.score}%</div>
               <div class="podium-name" title="${escapeHtml(item.unidad)}">${escapeHtml(item.unidad)}</div>
               <div class="text-[9px] text-slate-400 mt-1 uppercase truncate max-w-[120px]" title="${escapeHtml(item.municipio)}">${escapeHtml(item.municipio)}</div>
@@ -20312,15 +20326,18 @@ function renderHistoryMetrics(data) {
     $("adminPodiumArea").style.display = "none";
   }
 
+  const _medalSpan = (tier, cls, label) =>
+    `<span class="medal-icon ${cls}" title="${label}" role="img" aria-label="${label}">${window.MedalBadges ? window.MedalBadges.svg(tier, 26) : ""}</span>`;
   const tierIcons = {
-    diamante: '<span class="material-symbols-rounded medal-icon tier-diamante" title="Diamante">diamond</span>',
-    oro: '<span class="material-symbols-rounded medal-icon tier-oro" title="Oro">workspace_premium</span>',
-    plata: '<span class="material-symbols-rounded medal-icon tier-plata" title="Plata">military_tech</span>',
-    bronce: '<span class="material-symbols-rounded medal-icon tier-bronze" style="color: #b45309 !important;" title="Bronce">military_tech</span>',
-    acero: '<span class="material-symbols-rounded medal-icon tier-steel" style="color: #0d9488 !important;" title="Acero">workspace_premium</span>',
-    jade: '<span class="material-symbols-rounded medal-icon tier-emerald" style="color: #059669 !important;" title="Jade">military_tech</span>',
+    diamante: _medalSpan("diamante", "tier-diamante", "Diamante"),
+    oro: _medalSpan("oro", "tier-oro", "Oro"),
+    plata: _medalSpan("plata", "tier-plata", "Plata"),
+    bronce: _medalSpan("bronce", "tier-bronze", "Bronce"),
+    acero: _medalSpan("acero", "tier-steel", "Acero"),
+    jade: _medalSpan("jade", "tier-emerald", "Jade"),
     riesgo: '<span class="material-symbols-rounded medal-icon tier-riesgo" title="En Riesgo">warning</span>'
   };
+
 
   if (separarMuni) {
     // Group units by municipality and render groups
@@ -20831,6 +20848,8 @@ async function initWeather() {
         temp,
         emoji: details.emoji,
         iconSvg: details.iconSvg,
+        iconUrl: details.iconUrl,
+        sky: details.sky,
         text: details.text,
         bg: details.bg,
         theme: details.theme,
@@ -20851,41 +20870,33 @@ async function initWeather() {
     }
   } catch (e) {
     console.warn("initWeather failed:", e);
-    CURRENT_WEATHER = { temp: 24, emoji: "🌤️", text: "Despejado", bg: "https://images.unsplash.com/photo-1601297183305-6df142704ea2?auto=format&fit=crop&q=80&w=600", theme: "light-bg", code: 1 };
+    CURRENT_WEATHER = { temp: 24, emoji: "🌤️", text: "Despejado", iconUrl: WEATHER_ICON_BASE + "clear-day.svg", sky: "clear-day", bg: "", theme: "light-bg", code: 1 };
     if (USER) updateDynamicGreeting();
   }
 }
 
+const WEATHER_ICON_BASE = "assets/weather/";
+
+/**
+ * Ícono (Meteocons, MIT, local en assets/weather) + tono plano de la tarjeta según el código WMO de Open-Meteo.
+ * sky: clear-day | cloudy-day | overcast | fog | rain | snow | thunder | night (ver .weather-hero-block[data-sky]).
+ */
 function getWeatherDetails(code, isDay) {
-  if (code === null) return { emoji: "🌡️", iconSvg: "device_thermostat", text: "Desconocido", bg: "", theme: "dark-bg" };
-
-  const bgs = {
-    clearDay: "https://images.unsplash.com/photo-1601297183305-6df142704ea2?auto=format&fit=crop&q=80&w=600",
-    clearNight: "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?auto=format&fit=crop&q=80&w=600",
-    cloudyDay: "https://images.unsplash.com/photo-1534088568595-a066f410bcda?auto=format&fit=crop&q=80&w=600",
-    cloudyNight: "https://images.unsplash.com/photo-1534088568595-a066f410bcda?auto=format&fit=crop&q=80&w=600",
-    rain: "https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?auto=format&fit=crop&q=80&w=600",
-    snow: "https://images.unsplash.com/photo-1478265409131-1f65c88f965c?auto=format&fit=crop&q=80&w=600",
-    thunder: "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?auto=format&fit=crop&q=80&w=600",
-    fog: "https://images.unsplash.com/photo-1487621167305-5d248087c724?auto=format&fit=crop&q=80&w=600"
-  };
-
-  let theme = "dark-bg";
-  if (isDay && [0, 1, 2, 3].includes(code)) {
-    theme = "light-bg";
-  }
-
-  if (code === 0) return { emoji: isDay ? "☀️" : "🌙", iconSvg: isDay ? "sunny" : "clear_night", text: isDay ? "Despejado" : "Noche clara", bg: isDay ? bgs.clearDay : bgs.clearNight, theme };
-  if ([1, 2].includes(code)) return { emoji: isDay ? "🌤️" : "☁️", iconSvg: isDay ? "partly_cloudy_day" : "partly_cloudy_night", text: isDay ? "Parcialmente nublado" : "Nubes dispersas", bg: isDay ? bgs.cloudyDay : bgs.cloudyNight, theme };
-  if (code === 3) return { emoji: "☁️", iconSvg: "cloud", text: "Nublado", bg: isDay ? bgs.cloudyDay : bgs.cloudyNight, theme };
-  if ([45, 48].includes(code)) return { emoji: "🌫️", iconSvg: "foggy", text: "Niebla", bg: bgs.fog, theme };
-  if ([51, 53, 55].includes(code)) return { emoji: "🌦️", iconSvg: "rainy", text: "Llovizna", bg: bgs.rain, theme };
-  if ([61, 63, 65].includes(code)) return { emoji: "🌧️", iconSvg: "rainy", text: "Lluvia", bg: bgs.rain, theme };
-  if ([71, 73, 75].includes(code)) return { emoji: "❄️", iconSvg: "weather_snowy", text: "Nieve", bg: bgs.snow, theme };
-  if ([80, 81, 82].includes(code)) return { emoji: "🌦️", iconSvg: "rainy", text: "Chubascos", bg: bgs.rain, theme };
-  if ([95, 96, 99].includes(code)) return { emoji: "⛈️", iconSvg: "thunderstorm", text: "Tormenta", bg: bgs.thunder, theme };
-
-  return { emoji: "🌤️", iconSvg: "partly_cloudy_day", text: "Clima", bg: bgs.clearDay, theme: "light-bg" };
+  const mk = (icon, sky, text, emoji, iconSvg) => ({
+    emoji, iconSvg, text, sky, iconUrl: WEATHER_ICON_BASE + icon + ".svg", bg: "",
+    theme: (sky === "night" || sky === "thunder") ? "dark-bg" : "light-bg"
+  });
+  if (code === null || code === undefined) return mk("thermometer", "overcast", "Desconocido", "🌡️", "device_thermostat");
+  if (code === 0) return isDay ? mk("clear-day", "clear-day", "Despejado", "☀️", "sunny") : mk("clear-night", "night", "Noche clara", "🌙", "clear_night");
+  if (code === 1 || code === 2) return isDay ? mk("partly-cloudy-day", "cloudy-day", "Parcialmente nublado", "🌤️", "partly_cloudy_day") : mk("partly-cloudy-night", "night", "Nubes dispersas", "☁️", "partly_cloudy_night");
+  if (code === 3) return mk("overcast", isDay ? "overcast" : "night", "Nublado", "☁️", "cloud");
+  if (code === 45 || code === 48) return mk("fog", "fog", "Niebla", "🌫️", "foggy");
+  if (code >= 51 && code <= 57) return mk("drizzle", "rain", "Llovizna", "🌦️", "rainy");
+  if (code >= 61 && code <= 67) return mk("rain", "rain", "Lluvia", "🌧️", "rainy");
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return mk("snow", "snow", "Nieve", "❄️", "weather_snowy");
+  if (code >= 80 && code <= 82) return mk("rain", "rain", "Chubascos", "🌦️", "rainy");
+  if (code >= 95) return mk("thunderstorms", "thunder", "Tormenta", "⛈️", "thunderstorm");
+  return mk("partly-cloudy-day", "cloudy-day", "Clima", "🌤️", "partly_cloudy_day");
 }
 
 // Esperar a que el DOM esté listo antes de arrancar

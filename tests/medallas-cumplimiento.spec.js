@@ -19,6 +19,7 @@ const bloque =
 async function montar(page, { rows, capturas = [], campana } = {}) {
   await page.route('**/__blank_med', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body><div id="bCumplimientoMedals"></div></body></html>' }));
   await page.goto('/__blank_med');
+  await page.addScriptTag({ path: path.join(__dirname, '..', 'medal_badges.js') });
   await page.evaluate(({ code, rows, capturas, campana }) => {
     window.__rpc = 0; window.__cap = 0; window.__rpcArgs = null;
     window.__rows = rows; window.__capturas = capturas;
@@ -201,11 +202,11 @@ test('el HTML: misma chip, icono y color por nivel, tooltip y solo la última ma
       { month: '2026-06', score: 55, tier: 'jade' },
       { month: '2026-07', score: 100, tier: 'diamante' }
     ]);
-    return [...document.querySelectorAll('#bCumplimientoMedals > span')].map((e) => ({ cls: e.className, icon: e.textContent, title: e.title }));
+    return [...document.querySelectorAll('#bCumplimientoMedals > span')].map((e) => ({ cls: e.className, icon: e.querySelector('use').getAttribute('href'), title: e.title }));
   });
-  expect(r.map((x) => x.icon)).toEqual(['diamond', 'workspace_premium', 'military_tech', 'military_tech', 'workspace_premium', 'military_tech', 'diamond']);
+  expect(r.map((x) => x.icon)).toEqual(['#mb-diamante', '#mb-oro', '#mb-plata', '#mb-bronce', '#mb-acero', '#mb-jade', '#mb-diamante']);
   expect(r.map((x) => x.cls.split(' ').find((c) => c.startsWith('tier-')))).toEqual(['tier-diamante', 'tier-oro', 'tier-plata', 'tier-bronze', 'tier-steel', 'tier-emerald', 'tier-diamante']);
-  expect(r.every((x) => x.cls.startsWith('material-symbols-rounded chip-medal-icon'))).toBe(true);
+  expect(r.every((x) => x.cls.startsWith('chip-medal-icon'))).toBe(true);
   expect(r.filter((x) => x.cls.includes('is-latest')).length).toBe(1);
   expect(r[6].cls).toContain('is-latest');
   expect(r[1].title).toBe('Medalla de cumplimiento Oro - Febrero (92%)');
@@ -281,9 +282,8 @@ test('admin con municipio elegido: historial y tablero piden lo mismo y las meda
   expect(r).toEqual(['Medalla de cumplimiento Oro - Junio (92%)']);
 });
 
-test('estilos: sombra doble original, brillo solo en la última y sin brillo permanente en el ranking', async () => {
+test('estilos: las medallas son SVG del sprite, sin degradados de texto ni destello permanente', async () => {
   const css = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8').split('\r\n').join('\n');
-  expect(css).toMatch(/\.chip-medal-icon \{[^}]*drop-shadow\(0 2px 4px rgba\(0,0,0,0\.3\)\) drop-shadow\(0 4px 8px rgba\(0,0,0,0\.25\)\) !important/);
-  expect(css).toMatch(/\.tier-diamante\.is-latest \{ animation: shimmer-medal/);
-  expect(css).not.toMatch(/\.tier-diamante \{[^}]*animation:/);
+  expect(css).toMatch(/\.chip-medal-icon \{[^}]*display: inline-flex/);
+  expect(css).not.toMatch(/\.tier-diamante[^{]*\{[^}]*animation:/);
 });

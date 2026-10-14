@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.142" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.144" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.154" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.155" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -1232,6 +1232,7 @@
                     <span
                       class="material-symbols-rounded text-[20px] absolute opacity-0 scale-50 transition-all duration-500 text-current select-none pointer-events-none"
                       id="bCumplimientoIconSnake">moving</span>
+                    <span id="bCumplimientoMedalBig" class="cmp-medal-big"></span>
                   </div>
 
                   <div class="flex flex-col leading-tight min-w-0">
@@ -1259,40 +1260,24 @@
                 class="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/10 opacity-0 transition-opacity pointer-events-none">
               </div>
             </div>
-            <!-- ✨ CRYSTALLINE INSIGHT HUB (Dato Curioso - Dynamic) -->
-            <div id="factCard"
-              class="flex flex-col justify-between rounded-[24px] py-4 px-6 border border-outline-variant/50 shadow-sm transition-all hover:shadow-md group relative overflow-hidden w-full chip-equal-width"
-              style="transition: background 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease;">
-
-              <!-- Top Row: Icon & Title Area -->
-              <div class="flex items-center gap-3 min-w-0 relative z-10 w-full">
-                <!-- Icon container matching bCumplimiento style -->
-                <div id="factIconContainer" style="transition: border-color 0.5s ease;"
-                  class="w-10 h-10 rounded-xl bg-primary/5 border flex items-center justify-center shrink-0 shadow-sm">
-                  <span class="material-symbols-rounded text-[20px]" id="factIcon"
-                    style="transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);">auto_awesome</span>
+            <!-- 💡 CONSEJO DEL DÍA (rota solo; flechas para ir y volver) -->
+            <div id="factCard" class="fc-card chip-equal-width" aria-live="off">
+              <div class="fc-head">
+                <div id="factIconContainer" class="fc-tile">
+                  <span class="material-symbols-rounded" id="factIcon">auto_awesome</span>
                 </div>
-
-                <div class="flex flex-col leading-tight min-w-0">
-                  <span class="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1"
-                    id="factTag">Cargando...</span>
-                  <div class="flex items-baseline gap-1">
-                    <span id="factTitle" class="text-[14px] font-black tracking-tighter text-primary truncate"
-                      style="transition: color 0.5s ease;">...</span>
-                  </div>
+                <div class="fc-titles">
+                  <span id="factTag" class="fc-tag">Cargando...</span>
+                  <span id="factTitle" class="fc-title">...</span>
                 </div>
               </div>
-
-              <!-- Bottom Row: Fact Body (separated by dashed border) -->
-              <div
-                class="min-w-0 flex flex-col items-start border-t border-dashed border-outline-variant/30 pt-2 mt-2 relative z-10">
-                <span id="factBody" class="text-[11px] font-bold leading-relaxed text-slate-500"
-                  style="transition: opacity 0.3s ease, color 0.5s ease;">...</span>
-              </div>
-
-              <!-- Glass Reflection Effect -->
-              <div
-                class="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/10 opacity-30 transition-opacity pointer-events-none">
+              <p id="factBody" class="fc-body">...</p>
+              <div class="fc-foot">
+                <span id="factCounter" class="fc-counter"></span>
+                <span class="fc-nav">
+                  <button type="button" id="factPrev" class="fc-btn" aria-label="Consejo anterior"><span class="material-symbols-rounded">arrow_back</span></button>
+                  <button type="button" id="factNext" class="fc-btn" aria-label="Consejo siguiente"><span class="material-symbols-rounded">arrow_forward</span></button>
+                </span>
               </div>
             </div>
           </div>
@@ -8517,14 +8502,6 @@
 
       // Inject medals (custom dynamic medals list or standard set) using standard Material Symbols
       if (medalsEl) {
-        const iconNameMap = {
-          diamante: "diamond",
-          oro: "workspace_premium",
-          plata: "military_tech",
-          bronce: "military_tech",
-          acero: "workspace_premium",
-          jade: "military_tech"
-        };
         const classMap = {
           diamante: "tier-diamante",
           oro: "tier-oro",
@@ -8542,25 +8519,14 @@
           jade: "Jade"
         };
 
+        const chip = (key, month) => {
+          const label = titleMap[key] || "Cumplimiento";
+          return `<span class="chip-medal-icon ${classMap[key] || "tier-riesgo"}" title="Medalla de cumplimiento ${label} - ${month}">${window.MedalBadges ? window.MedalBadges.svg(key, 26) : ""}</span>`;
+        };
         if (customMedals && Array.isArray(customMedals)) {
-          medalsEl.innerHTML = "";
-          customMedals.forEach(m => {
-            const tierKey = String(m.type || "").trim().toLowerCase();
-            const iconName = iconNameMap[tierKey] || "military_tech";
-            const tierClass = classMap[tierKey] || "tier-riesgo";
-            const label = titleMap[tierKey] || "Cumplimiento";
-            const title = `Medalla de cumplimiento ${label} - ${m.month}`;
-            medalsEl.innerHTML += `
-              <span class="material-symbols-rounded chip-medal-icon ${tierClass}" title="${title}">${iconName}</span>
-            `;
-          });
+          medalsEl.innerHTML = customMedals.map(m => chip(String(m.type || "").trim().toLowerCase(), m.month)).join("");
         } else {
-          medalsEl.innerHTML = `
-            <span class="material-symbols-rounded chip-medal-icon tier-diamante" title="Medalla de cumplimiento Diamante - Enero">diamond</span>
-            <span class="material-symbols-rounded chip-medal-icon tier-oro" title="Medalla de cumplimiento Oro - Febrero">workspace_premium</span>
-            <span class="material-symbols-rounded chip-medal-icon tier-plata" title="Medalla de cumplimiento Plata - Marzo">military_tech</span>
-            <span class="material-symbols-rounded chip-medal-icon tier-diamante" title="Medalla de cumplimiento Diamante - Mayo">diamond</span>
-          `;
+          medalsEl.innerHTML = [["diamante", "Enero"], ["oro", "Febrero"], ["plata", "Marzo"], ["diamante", "Mayo"]].map(x => chip(x[0], x[1])).join("");
         }
       }
 

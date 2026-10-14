@@ -21,6 +21,7 @@ const DIST_DIR = path.join(__dirname, 'dist');
 // se exporta ese PDF, en vez de pesar en el bundle de cada carga de la app.
 const GROUP_HEAD = [
   'offline_db.js',
+  'medal_badges.js',
   'stock_predictor.js',
   'export_manager.js',
   'pinol_assets.js',
