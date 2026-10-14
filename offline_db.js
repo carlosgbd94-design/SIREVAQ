@@ -184,11 +184,41 @@
     const { actionType, payload } = record;
 
     if (actionType === 'UPSERT_INFLUENZA_CAPTURA') {
+      // Mismo formato que el guardado en línea (saveinfluenza_captura), incluido el historial de ediciones.
+      let historial = [];
+      let valoresPrevios = null;
+      try {
+        const { data: previo } = await supabaseClient.from('influenza_capturas')
+          .select('valores, historial_ediciones').eq('clues', payload.clues).eq('fecha', payload.fecha).maybeSingle();
+        if (previo) {
+          valoresPrevios = previo.valores || null;
+          const h = previo.historial_ediciones;
+          historial = Array.isArray(h) ? h.slice() : (typeof h === 'string' ? JSON.parse(h || '[]') : []);
+        }
+      } catch (_) { /* sin historial previo legible: se registra solo esta edición */ }
+      historial.push({
+        fecha_edicion: new Date().toISOString(),
+        editado_por: payload.editado_por || 'UNIDAD',
+        usuario: String(payload.capturado_por || 'DESCONOCIDO').toUpperCase(),
+        valores_anteriores: valoresPrevios,
+        sin_conexion: true
+      });
+      const registro = Object.assign({}, payload, {
+        capturado_por: String(payload.capturado_por || '').toUpperCase(),
+        historial_ediciones: historial,
+        updated_at: new Date().toISOString()
+      });
       const { data, error } = await supabaseClient
         .from('influenza_capturas')
-        .upsert(payload, { onConflict: 'clues,fecha' });
+        .upsert(registro, { onConflict: 'clues,fecha' });
       if (error) {
         console.error('[OfflineDB Sync Error]', error);
+        // Rechazo de negocio del servidor (ventana de captura, meta rebasada, SIS ya enviado):
+        // reintentar no lo arregla y la captura quedaría atorada en la cola sin aviso. Se descarta y se avisa.
+        if (error.code === 'P0001') {
+          showSyncToast('🔴 Una captura de Influenza guardada sin conexión no se pudo registrar: ' + (error.message || 'el servidor la rechazó') + ' Vuelve a capturarla.', 'error');
+          return true;
+        }
         return false;
       }
       return true;
