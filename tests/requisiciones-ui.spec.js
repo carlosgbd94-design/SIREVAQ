@@ -1268,3 +1268,37 @@ test('Requisiciones COVID (jurisdicción): ve a todos los municipios con Moderna
   expect(await db(page, porBio)).toEqual({ 'bio-mod': 70, 'bio-pfz': 10 });
   expect(errores).toEqual([]);
 });
+
+test('Requisiciones COVID (municipal): el Excel de su municipio trae Moderna y Pfizer en frascos, por unidad y en la municipal', async ({ page }, testInfo) => {
+  const ExcelJS = require('exceljs');
+  const JSZip = require('jszip');
+  await page.addInitScript(() => { window.__FAKE_COVID__ = true; window.__FAKE_COVID_REPARTIDO__ = true; });
+  const errores = await preparar(page, { rol: 'MUNICIPAL', conReq: true, muni: 'QUERETARO', libs: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#btnAbrirExportar');
+  const descarga = page.waitForEvent('download');
+  await page.click('#btnExportarMasivo');
+  const archivo = await descarga;
+  const ruta = testInfo.outputPath('covid.zip');
+  await archivo.saveAs(ruta);
+  const zip = await JSZip.loadAsync(require('fs').readFileSync(ruta));
+  const nombres = Object.keys(zip.files);
+  expect(nombres).toHaveLength(1);
+  expect(nombres[0]).toMatch(/^Requisicion_MUNICIPAL_MUNICIPIO_QUER[EÉ]TARO_/);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await zip.files[nombres[0]].async('nodebuffer'));
+  expect(wb.worksheets.map((w) => w.name)).toEqual(['C.S. Cuatro', 'C.S. Cinco', 'MUNICIPAL']);   // nada de Corregidora
+
+  // Cantidad (columna G) del renglón de una vacuna, buscándola por su código de artículo (columna B)
+  const cantidad = (hoja, codigo) => {
+    for (let r = 12; r <= 120; r++) {
+      if (String(hoja.getCell(`B${r}`).value || '') === codigo) return hoja.getCell(`G${r}`).value;
+    }
+    return undefined;
+  };
+  const [q1, q2, mun] = wb.worksheets;
+  expect([cantidad(q1, '6502'), cantidad(q1, '6506')]).toEqual([30, 10]);          // Moderna y Pfizer por separado
+  expect([cantidad(q2, '6502'), cantidad(q2, '6506') || 0]).toEqual([20, 0]);
+  expect([cantidad(mun, '6502'), cantidad(mun, '6506')]).toEqual([50, 10]);        // total del municipio (sin Corregidora)
+  expect(errores).toEqual([]);
+});
