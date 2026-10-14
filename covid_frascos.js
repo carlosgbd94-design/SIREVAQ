@@ -144,8 +144,30 @@
     return out;
   }
 
+  // ─── Factor de pérdida (dosis de 0.5 mL a nivel Jurisdicción) ──────────────────────────────────────────
+  // No forma parte de la meta de aplicación: solo sube lo que se debe RECIBIR. Se aplica en la misma proporción
+  // a cada destino y unidad: recibir = meta * (J + P) / J, con J la meta equivalente de la Jurisdicción y P la
+  // pérdida. Aritmética entera (todo x2 por las pediátricas de 0.25 mL) para no depender de decimales:
+  //   total  = ceil((ped + 2*adulto) * (J2 + 2P) / (2*J2))     adulto' = ceil(adulto * (J2 + 2P) / J2)
+  function factorPerdida(metasJuris) {
+    const m = metasJuris || {};
+    const j2 = metaPediatrica(m) + 2 * metaAdulta(m);
+    const p = Math.max(0, Math.round(Number(m.perdida) || 0));
+    return { j2, p, activo: j2 > 0 && p > 0 };
+  }
+
+  /** Dosis (0.5 mL) a recibir de la marca para unas metas, con la pérdida de la Jurisdicción. */
+  function metaMarcaConPerdida(metas, marca, factor) {
+    const ped = metaPediatrica(metas), ad = metaAdulta(metas);
+    const f = factor || { activo: false };
+    if (marca === "PFIZER") return f.activo ? Math.ceil(ad * (f.j2 + 2 * f.p) / f.j2) : ad;
+    return f.activo
+      ? Math.ceil((ped + 2 * ad) * (f.j2 + 2 * f.p) / (2 * f.j2))
+      : Math.ceil((ped + 2 * ad) / 2);
+  }
+
   const api = { RUBROS, MARCAS, dosisPorFrasco, metaPediatrica, metaAdulta, metaEquivalente, metaMarca, topeFrascos,
-    pesosInfluenza, repartirEntero, predistribuir };
+    pesosInfluenza, repartirEntero, predistribuir, factorPerdida, metaMarcaConPerdida };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.CovidFrascos = api;
 })(typeof window !== "undefined" ? window : globalThis);

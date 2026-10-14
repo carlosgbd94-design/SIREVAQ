@@ -971,3 +971,77 @@ test('COVID Metas: el municipal predistribuye SU meta entre sus unidades con el 
   const rows = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'savecovid_metas')[1].rows);
   expect(rows.map((r) => r.clues).sort()).toEqual(['Q1', 'Q2', 'Q3']);          // el municipal solo escribe unidades
 });
+
+// ─── COVID: factor de pérdida (dosis de 0.5 mL, a nivel Jurisdicción; no es parte de la meta) ───
+const JURIS_COVID = { c1: 65604, c2: 65604, c3: 4135, c4: 6288, c5: 948, c6: 859, perdida: 3900 };
+
+test('COVID pérdida: Moderna 68,891 + Pfizer 12,843 = 81,734 (Moderna cubre el 100% de niños) y la meta sigue en 77,834', async ({ page }) => {
+  await page.goto('/reference.html');
+  await page.addScriptTag({ path: path.join(raiz, 'covid_frascos.js') });
+  const r = await page.evaluate((j) => {
+    const f = CovidFrascos.factorPerdida(j);
+    const mod = CovidFrascos.metaMarcaConPerdida(j, 'MODERNA', f);
+    const pf = CovidFrascos.metaMarcaConPerdida(j, 'PFIZER', f);
+    return {
+      meta: CovidFrascos.metaEquivalente(j), adulta: CovidFrascos.metaAdulta(j), modernaTotal: mod, pfizerAdultos: pf,
+      pedConPerdida: CovidFrascos.metaMarcaConPerdida({ c1: 65604, c2: 65604 }, 'MODERNA', f),
+      sinFactor: CovidFrascos.metaMarcaConPerdida(j, 'MODERNA', CovidFrascos.factorPerdida({ ...j, perdida: 0 }))
+    };
+  }, JURIS_COVID);
+  expect(r.meta).toBe(77834);                     // la pérdida no se suma a la meta
+  expect(r.modernaTotal).toBe(81734);             // Moderna (meta completa) + pérdida = lo que se debe recibir
+  expect(r.pfizerAdultos).toBe(12843);            // adultos 12,230 + su parte de pérdida
+  expect(r.pedConPerdida).toBe(68892);            // niños 65,604 + 3,287.3 (se redondea hacia arriba)
+  expect(r.pedConPerdida + r.pfizerAdultos - 81734).toBeLessThanOrEqual(1);   // solo difiere por el redondeo
+  expect(r.sinFactor).toBe(77834);
+});
+
+test('COVID pérdida: el tope de frascos y los topes del municipio usan la meta + pérdida; guarda la pérdida en la fila JURISDICCION', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate((j) => {
+    _vacuna = 'COVID'; _marcaCovid = 'MODERNA';
+    // Querétaro con toda la meta: recibe 81,734 dosis → 8,174 frascos de Moderna (ceil de 8,173.4)
+    _covidMetasArray = [
+      { clues: null, municipio: 'JURISDICCION', metas: j },
+      { clues: null, municipio: 'QUERETARO', metas: { c1: 65604, c2: 65604, c3: 4135, c4: 6288, c5: 948, c6: 859 } }
+    ];
+    _covidRemesasAll = []; _covidFrascosAll = [];
+    renderFrascosDistribution();
+  }, JURIS_COVID);
+  const q = await page.evaluate(() => calcularRemesa().items.find((i) => i.id === 'QUERETARO'));
+  expect(q.meta).toBe(81734);
+  expect(q.tope).toBe(8174);
+  expect(q.metaFrascos).toBe(8174);
+  // Pfizer: solo adultos con pérdida = 12,843 → 2,141 frascos
+  const pf = await page.evaluate(() => { _marcaCovid = 'PFIZER'; _remesaState.numero = null; renderFrascosDistribution();
+    return calcularRemesa().items.find((i) => i.id === 'QUERETARO'); });
+  expect(pf.meta).toBe(12843);
+  expect(pf.tope).toBe(2141);
+});
+
+test('COVID pérdida (Metas): Jurisdicción captura la pérdida; el municipal la ve sin poder cambiarla', async ({ page }) => {
+  await montarMetas(page, 'JURISDICCIONAL', []);
+  await page.evaluate((j) => {
+    window.__llamadas = []; window.__errores = []; window.__toasts = [];
+    _vacuna = 'COVID'; _covidMetasArray = [{ clues: null, municipio: 'JURISDICCION', metas: j }];
+    window.__render();
+  }, { ...JURIS_COVID, perdida: 0 });
+  await expect(page.locator('#covidPerdidaBox')).toBeVisible();
+  await expect(page.locator('#covidPerdidaInput')).toBeEnabled();
+  await page.fill('#covidPerdidaInput', '3900');
+  await expect(page.locator('#covidPerdidaTxt')).toContainText('5.01 %');
+  await expect(page.locator('#covidPerdidaTxt')).toContainText('81,734');
+  await page.click('#btnSaveInfluenzaMetas');
+  const juris = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'savecovid_metas')[1].rows.find((r) => r.municipio === 'JURISDICCION').metas);
+  expect(juris.perdida).toBe(3900);
+});
+
+test('COVID pérdida (Metas): el municipal ve el factor pero no lo puede editar', async ({ page }) => {
+  await montarMetas(page, 'MUNICIPAL', []);
+  await page.evaluate((j) => {
+    _vacuna = 'COVID'; _covidMetasArray = [{ clues: null, municipio: 'JURISDICCION', metas: j }];
+    window.__render();
+  }, JURIS_COVID);
+  await expect(page.locator('#covidPerdidaInput')).toBeDisabled();
+  await expect(page.locator('#covidPerdidaInput')).toHaveValue('3900');
+});

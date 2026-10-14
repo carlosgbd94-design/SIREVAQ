@@ -141,19 +141,46 @@ returns integer language sql immutable as $$
   select case upper(p_marca) when 'MODERNA' then 10 when 'PFIZER' then 6 else null end;
 $$;
 
--- Meta de un destino (clues nulo, municipio = destino) o de una unidad (clues):
--- total en dosis de 0.5 mL equivalentes (redondeado hacia arriba) y meta adulta (c3..c6).
+-- Dosis de 0.5 mL que un destino (clues nulo, municipio = destino) o una unidad (clues) debe RECIBIR:
+-- su meta equivalente ((c1+c2)/2 + c3..c6) más la parte proporcional del factor de pérdida de la Jurisdicción
+-- (fila JURISDICCION: metas.perdida = dosis de 0.5 mL, sobre la meta equivalente de esa misma fila). La
+-- pérdida NO forma parte de la meta de aplicación. adulto = meta adulta (c3..c6) con su pérdida.
+-- Aritmética entera: total = ceil((ped + 2*adulto) * (J2 + 2P) / (2*J2)), adulto' = ceil(adulto * (J2 + 2P) / J2),
+-- con J2 = ped_juris + 2*adulto_juris y P = pérdida.
 create or replace function public.covid_meta_dosis(p_campana text, p_municipio text, p_clues text)
 returns table (total numeric, adulto numeric)
-language sql stable set search_path = public as $$
-  select ceil(coalesce(sum(case when e.key in ('c1', 'c2') then v / 2.0 else v end), 0)),
-         coalesce(sum(case when e.key in ('c3', 'c4', 'c5', 'c6') then v else 0 end), 0)
-    from (select m.metas from covid_metas m
-           where m.anio_campana = p_campana
-             and ((p_clues is not null and m.clues = p_clues)
-               or (p_clues is null and m.clues is null and upper(m.municipio) = upper(p_municipio)))) mm,
-         lateral (select e2.key, coalesce(nullif(e2.value, '')::numeric, 0) as v
-                    from jsonb_each_text(mm.metas) e2) e;
+language plpgsql stable set search_path = public as $$
+declare
+  v_ped numeric := 0;
+  v_adulto numeric := 0;
+  v_j2 numeric := 0;
+  v_p numeric := 0;
+begin
+  select coalesce(sum(case when e.key in ('c1', 'c2') then coalesce(nullif(e.value, '')::numeric, 0) else 0 end), 0),
+         coalesce(sum(case when e.key in ('c3', 'c4', 'c5', 'c6') then coalesce(nullif(e.value, '')::numeric, 0) else 0 end), 0)
+    into v_ped, v_adulto
+    from covid_metas m, jsonb_each_text(m.metas) e
+   where m.anio_campana = p_campana
+     and ((p_clues is not null and m.clues = p_clues)
+       or (p_clues is null and m.clues is null and upper(m.municipio) = upper(p_municipio)));
+
+  select coalesce(sum(case when e.key in ('c1', 'c2') then coalesce(nullif(e.value, '')::numeric, 0)
+                           when e.key in ('c3', 'c4', 'c5', 'c6') then 2 * coalesce(nullif(e.value, '')::numeric, 0)
+                           else 0 end), 0),
+         coalesce(max(case when e.key = 'perdida' then coalesce(nullif(e.value, '')::numeric, 0) end), 0)
+    into v_j2, v_p
+    from covid_metas m, jsonb_each_text(m.metas) e
+   where m.anio_campana = p_campana and m.clues is null and upper(m.municipio) = 'JURISDICCION';
+
+  if v_j2 > 0 and v_p > 0 then
+    total := ceil((v_ped + 2 * v_adulto) * (v_j2 + 2 * v_p) / (2 * v_j2));
+    adulto := ceil(v_adulto * (v_j2 + 2 * v_p) / v_j2);
+  else
+    total := ceil((v_ped + 2 * v_adulto) / 2);
+    adulto := v_adulto;
+  end if;
+  return next;
+end;
 $$;
 
 -- ---- Tope por destino (remesas)

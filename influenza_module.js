@@ -1605,6 +1605,12 @@ let _covidRemesasAll = [];
 let _covidFrascosAll = [];
 
 function esCovid() { return _vacuna === "COVID"; }
+// Factor de pérdida de COVID (dosis de 0.5 mL, fila JURISDICCION de covid_metas): sube lo que se debe RECIBIR
+// en cada destino/unidad en la misma proporción; no cambia la meta de aplicación.
+function covidFactor() {
+  const rec = _covidMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === "JURISDICCION");
+  return CovidFrascos.factorPerdida((rec && rec.metas) || {});
+}
 function rubrosMetas() { return esCovid() ? CovidFrascos.RUBROS : INFLUENZA_RUBROS; }
 function metasVista() { return esCovid() ? _covidMetasArray : _adminMetasArray; }
 function remesasVista() { return esCovid() ? _covidRemesasAll.filter(r => r.marca === _marcaCovid) : _adminRemesasArray; }
@@ -1680,6 +1686,8 @@ async function vacunaElegir(vacuna, marca) {
   if (marca) _marcaCovid = marca;
   _remesaState = { numero: null, fijos: {}, editados: new Set(), tocados: new Set() };
   _muniRepartoState = { numero: null, fijos: {}, editados: new Set(), tocados: new Set() };
+  const perdidaInp = document.getElementById("covidPerdidaInput");
+  if (perdidaInp) delete perdidaInp.dataset.sucio;
   if (esCovid() && cambioVacuna) await loadCovidAdminData();
   vacunaPintarSelectores();
   renderActiveAdminSection();
@@ -1704,6 +1712,10 @@ function vacunaPintarSelectores() {
       sel.dataset.bound = "1";
       sel.addEventListener("change", () => vacunaElegir("COVID", sel.value));
     }
+  });
+  ["#frascosJurisPanel thead th:nth-child(2)", "#influenzaFrascosDeliveryForm thead th:nth-child(2)"].forEach(sel => {
+    const th = document.querySelector(sel);
+    if (th) th.textContent = esCovid() ? "Meta + pérdida (dosis)" : "Meta (dosis)";
   });
   const nota = document.getElementById("frascosVacunaNota");
   if (nota) {
@@ -4769,6 +4781,7 @@ function renderMetasConfigurationGrid() {
   const grupoExp = document.querySelector("#secInfluenzaMetas .meta-exp-grupo");
   if (grupoExp) grupoExp.style.display = esCovid() ? "none" : "";
   vacunaPintarSelectores();
+  covidPintarPerdida();
   const btnPre = document.getElementById("btnCovidPredistribuir");
   if (btnPre) {
     btnPre.style.display = esCovid() ? "" : "none";
@@ -4783,6 +4796,51 @@ function renderMetasConfigurationGrid() {
   document.getElementById("btnSaveInfluenzaMetas").onclick = async () => {
     await saveInfluenzaMetasConfig();
   };
+}
+
+// Caja «Factor de pérdida»: Jurisdicción la captura (dosis de 0.5 mL) y el municipal solo la ve. Muestra el %
+// y lo que se debe recibir (meta + pérdida); los topes de frascos usan ese total.
+function covidPintarPerdida() {
+  const caja = document.getElementById("covidPerdidaBox");
+  if (!caja) return;
+  caja.style.display = esCovid() ? "" : "none";
+  if (!esCovid()) return;
+  const isMuni = USER.rol === "MUNICIPAL";
+  const inp = document.getElementById("covidPerdidaInput");
+  const txt = document.getElementById("covidPerdidaTxt");
+  const tbody = document.getElementById("influenzaMetasTbody");
+  inp.disabled = isMuni;
+  if (tbody && !tbody.dataset.perdidaBound) {
+    // Al cambiar la meta de Jurisdicción se recalcula el % y el total a recibir.
+    tbody.dataset.perdidaBound = "1";
+    tbody.addEventListener("input", (e) => { if (e.target.matches("input[data-juris]")) covidPintarPerdida(); });
+  }
+  if (!inp.dataset.bound) {
+    inp.dataset.bound = "1";
+    inp.addEventListener("input", () => {
+      const limpio = inp.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+      if (inp.value !== limpio) inp.value = limpio;
+      inp.dataset.sucio = "1";
+      covidPintarPerdida();
+    });
+  }
+  const rec = _covidMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === "JURISDICCION");
+  const guardada = Number(rec && rec.metas.perdida) || 0;
+  if (!inp.dataset.sucio) inp.value = String(guardada);
+  const juris = {};
+  CovidFrascos.RUBROS.forEach(r => {
+    if (!isMuni) {
+      const c = tbody && tbody.querySelector(`input[data-rb="${r.id}"][data-juris]`);
+      juris[r.id] = c ? (parseInt(c.value, 10) || 0) : 0;
+    } else {
+      juris[r.id] = Number(rec && rec.metas[r.id]) || 0;
+    }
+  });
+  const p = isMuni ? guardada : (parseInt(inp.value, 10) || 0);
+  const eq = CovidFrascos.metaEquivalente(juris);
+  txt.textContent = eq > 0
+    ? `${(p * 100 / eq).toFixed(2)} % de la meta (${eq.toLocaleString("es-MX")}) · total a recibir ${(eq + p).toLocaleString("es-MX")} dosis de 0.5 mL`
+    : "Captura la meta de la Jurisdicción para ver el total a recibir.";
 }
 
 // Predistribucion de la meta COVID-19 con los porcentajes de la meta de influenza de la misma campana.
@@ -4881,6 +4939,10 @@ async function saveInfluenzaMetasConfig() {
       const input = document.querySelector(`input[data-rb="${rb.id}"][data-juris]`);
       jurisMetas[rb.id] = input ? (parseInt(input.value, 10) || 0) : 0;
     });
+    if (esCovid()) {
+      const pi = document.getElementById("covidPerdidaInput");
+      jurisMetas.perdida = pi ? (parseInt(pi.value, 10) || 0) : 0;   // dosis de 0.5 mL; no es parte de la meta
+    }
     rows.push({ anio_campana: campana, municipio: "JURISDICCION", clues: null, metas: jurisMetas, modificado_por: USER.usuario });
     munis.forEach(m => {
       const metasObj = {};
@@ -4979,6 +5041,8 @@ async function saveInfluenzaMetasConfig() {
     eventMsg: "Actualización de catálogo de metas anuales",
     action: async () => {
       const res = await AppService.call(esCovid() ? "savecovid_metas" : "saveinfluenza_metas", { rows });
+      const perdidaInp = document.getElementById("covidPerdidaInput");
+      if (perdidaInp) delete perdidaInp.dataset.sucio;
       await loadInfluenzaAdminData();
       renderMetasConfigurationGrid();
       if (avisoFaltantes) showToast(avisoFaltantes, false, "warn");
@@ -5085,7 +5149,7 @@ let _remesaState = { numero: null, fijos: {}, editados: new Set(), tocados: new 
 let _muniRepartoState = { numero: null, fijos: {}, editados: new Set(), tocados: new Set() };
 
 function frascoSumaMetas(metas) {
-  if (esCovid()) return CovidFrascos.metaMarca(metas, _marcaCovid);
+  if (esCovid()) return CovidFrascos.metaMarcaConPerdida(metas, _marcaCovid, covidFactor());
   return Object.values(metas || {}).reduce((a, v) => a + (Number(v) || 0), 0);
 }
 
@@ -5139,7 +5203,8 @@ function frascoConTope(items, otrasFn, nivel) {
       : _covidRemesasAll.filter(r => r.marca !== _marcaCovid)
           .reduce((s, r) => s + Number((r.asignacion || {})[i.id] || 0), 0);
     const tope = CovidFrascos.topeFrascos({
-      total: CovidFrascos.metaEquivalente(metas), adulto: CovidFrascos.metaAdulta(metas),
+      total: CovidFrascos.metaMarcaConPerdida(metas, "MODERNA", covidFactor()),
+      adulto: CovidFrascos.metaMarcaConPerdida(metas, "PFIZER", covidFactor()),
       marca: _marcaCovid, propiasOtras: otras, otraMarca
     });
     return { ...i, otras, otraMarca, metaFrascos: frascoTopeMeta(i.meta), tope: hayMetas ? tope : undefined };
@@ -5795,7 +5860,7 @@ function renderFrascosMatrix(ambito) {
   const entregado = k => numeros.reduce((s, n) => s + (k === null ? suma(kk => valor(n, kk)) : valor(n, k)), 0);
   table.innerHTML = `<thead><tr><th></th>${cab}<th class="c">TOTAL</th></tr></thead>
     <tbody>${cuerpo}
-    ${fila("META (dosis)", k => frascoFmt(k === null ? suma(meta) : meta(k)), true)}
+    ${fila(esCovid() ? "META + PÉRDIDA (dosis)" : "META (dosis)", k => frascoFmt(k === null ? suma(meta) : meta(k)), true)}
     ${fila("TOTAL ENTREGADO", k => { const v = entregado(k); return v ? frascoFmt(v) : "-"; }, true)}
     ${fila("DOSIS EQUIV. / META", k => {
       const m = k === null ? suma(meta) : meta(k);
@@ -5868,7 +5933,7 @@ async function exportFrascosExcel() {
       const rMeta = ultima + 1;
       const rMetaF = ultima + 2;
       const rTot = ultima + 3;
-      etiqueta(rMeta, esCovid() ? "META (dosis 0.5 mL)" : "META (dosis)");
+      etiqueta(rMeta, esCovid() ? "META + PÉRDIDA (dosis 0.5 mL)" : "META (dosis)");
       etiqueta(rMetaF, "META (frascos)");
       etiqueta(rTot, "TOTAL ENTREGADO");
       columnas.forEach((c, i) => {

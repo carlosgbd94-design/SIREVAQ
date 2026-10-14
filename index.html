@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.128" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.129" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.140" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.141" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3442,6 +3442,12 @@
                 title="Reparte la meta de COVID-19 con los mismos porcentajes de la meta de influenza (NHGQ solo adultos). No guarda hasta que presiones Guardar.">
                 <span class="material-symbols-rounded" style="font-size:18px">auto_fix_high</span> Predistribuir con % de influenza
               </button>
+              <span id="covidPerdidaBox" class="vac-perdida" style="display:none">
+                <label for="covidPerdidaInput" class="meta-camp-lbl">Factor de pérdida (dosis 0.5 mL)</label>
+                <input id="covidPerdidaInput" type="text" inputmode="numeric" autocomplete="off" class="vac-perdida-inp"
+                  title="Dosis de pérdida de la Jurisdicción. No se suma a la meta de aplicación: solo sube lo que se debe recibir, en la misma proporción en cada destino y unidad.">
+                <span id="covidPerdidaTxt" class="vac-perdida-txt"></span>
+              </span>
               <label for="metaCampaignSelect" class="meta-camp-lbl">Campaña</label>
               <select id="metaCampaignSelect" class="meta-camp-select">
                 <option value="2025-2026">Campaña 2025-2026</option>

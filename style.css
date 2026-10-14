@@ -15096,3 +15096,12 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
 #secInfluenzaFrascos .vac-seg .vac-btn:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
 #secInfluenzaFrascos .vac-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 #secInfluenzaFrascos .vac-bar .vac-marca { width: auto !important; min-width: 280px; }
+#secInfluenzaMetas .vac-perdida { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#secInfluenzaMetas .vac-perdida-inp {
+  width: 84px !important; height: 34px !important; padding: 0 8px !important; text-align: center !important;
+  border: 1px solid #cbd5e1 !important; border-radius: 10px !important; font-size: 12px !important; font-weight: 800 !important;
+  color: #334155 !important; background-color: #ffffff !important; outline: none;
+}
+#secInfluenzaMetas .vac-perdida-inp:focus { border-color: #7c3aed !important; }
+#secInfluenzaMetas .vac-perdida-inp:disabled { background-color: #f1f5f9 !important; color: #64748b !important; }
+#secInfluenzaMetas .vac-perdida-txt { font-size: 11px; font-weight: 700; color: #64748b; }
