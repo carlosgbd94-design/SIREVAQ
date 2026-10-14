@@ -21955,6 +21955,17 @@ window.getBiologicoColor = function(name) {
   return "#0f172a";
 };
 
+// Color de texto accesible para un biológico: oscurece el color de marca hasta 4.5:1 sobre blanco
+window.getBiologicoTextColor = function(name) {
+  const hex = String(window.getBiologicoColor(name) || "#0f172a").replace("#", "");
+  const full = hex.length === 3 ? hex.split("").map(c => c + c).join("") : hex;
+  let rgb = [0, 2, 4].map(i => parseInt(full.substr(i, 2), 16));
+  if (rgb.some(isNaN)) return "#0f172a";
+  const lum = c => { const [r, g, b] = c.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  for (let i = 0; i < 20 && 1.05 / (lum(rgb) + 0.05) < 5.5; i++) rgb = rgb.map(v => Math.round(v * 0.88));
+  return "#" + rgb.map(v => v.toString(16).padStart(2, "0")).join("");
+};
+
 // ✅ VISTA EN VIVO LOGIC
 window.activeLiveViewFilter = null; // { type: 'semaforo'|'caducidad'|'insumo'|'dosis'|'pedido'|'biologico', value: string }
 window.currentLiveViewParams = null; // Para refrescar { clues, unidad, municipio }
@@ -22053,9 +22064,11 @@ async function openLiveView(clues, unidad, municipio) {
     /* CSS handled externally: #bCumplimiento.good, #bCumplimiento[data-tone="good"] { ... } */
 
     // 1. Mostrar modal inmediatamente con estado de carga (Esqueletos Shimmer)
+    if (!overlay.classList.contains("show")) window.__liveViewOpener = document.activeElement;
     overlay.classList.add("show");
     overlay.style.display = "flex";
     overlay.ariaHidden = "false";
+    window.focusLiveViewDialog();
 
     if (!document.getElementById("liveViewSkeletonStyle")) {
       const style = document.createElement("style");
@@ -22115,12 +22128,14 @@ async function openLiveView(clues, unidad, municipio) {
       const btnExistencia = $("btnLiveTabExistencia");
       const btnMovimiento = $("btnLiveTabMovimiento");
       if (btnExistencia && btnMovimiento) {
-        btnExistencia.style.background = "var(--md-sys-color-surface)";
-        btnExistencia.style.color = "var(--md-sys-color-on-surface)";
-        btnExistencia.style.boxShadow = "0 2px 4px rgba(0,0,0,0.05)";
+        btnExistencia.style.background = "#0c4a6e";
+        btnExistencia.style.color = "#ffffff";
+        btnExistencia.style.boxShadow = "none";
         btnMovimiento.style.background = "transparent";
-        btnMovimiento.style.color = "var(--md-sys-color-on-surface-variant)";
+        btnMovimiento.style.color = "#0c4a6e";
         btnMovimiento.style.boxShadow = "none";
+        btnExistencia.setAttribute("aria-selected", "true");
+        btnMovimiento.setAttribute("aria-selected", "false");
       }
     }
 
@@ -22152,6 +22167,7 @@ async function openLiveView(clues, unidad, municipio) {
     if (window.renderLiveViewTimeline) {
       window.renderLiveViewTimeline();
     }
+    window.focusLiveViewDialog();
 
     // Asociar botones del encabezado
     const refreshBtn = document.getElementById("btnLiveViewRefresh");
@@ -22221,7 +22237,7 @@ window.openBioEditModal = function() {
 
   tbody.innerHTML = res.data.map((r) => {
     const bioName = r.biologico || "—";
-    const color = window.getBiologicoColor(bioName);
+    const color = window.getBiologicoTextColor(bioName);
     const existQty = r.existencia_actual_frascos ?? r.existencia ?? 0;
     const pedQty = r.pedido_frascos ?? r.solicitud ?? 0;
 
@@ -22397,14 +22413,7 @@ function getSemaforoStatus(val) {
   return { key: "lejana", label: "Vigente", color: "#10b981" };
 }
 
-function setupChartFilter(chart, type) {
-  if (!chart) return;
-  chart.off('click');
-  chart.on('click', (params) => {
-    let filterVal = params.name || params.value;
-    if (!filterVal && params.componentType === 'series') {
-      filterVal = params.name;
-    }
+window.applyLiveViewFilter = function(type, filterVal, shownLabel) {
     if (!filterVal) return;
 
     window.activeLiveViewFilter = { type: type, value: filterVal };
@@ -22413,11 +22422,19 @@ function setupChartFilter(chart, type) {
     const txt = document.getElementById("liveViewActiveFilterText");
     if (bar && txt) {
       const typeLabel = type === 'semaforo' ? 'Vigencia' : type === 'caducidad' ? 'Periodo' : type === 'insumo' ? 'Insumo' : type === 'biologico' ? 'Biológico' : type === 'pedido' ? 'Inventario' : 'Filtro';
-      txt.textContent = `${typeLabel}: ${filterVal}`;
+      txt.textContent = `${typeLabel}: ${shownLabel || filterVal}`;
       bar.style.display = "block";
     }
 
+    document.querySelectorAll('.live-legend-chip').forEach(c => c.setAttribute('aria-pressed', (c.dataset.ftype === type && c.dataset.fval === filterVal) ? 'true' : 'false'));
     renderLiveViewTableContent();
+};
+
+function setupChartFilter(chart, type) {
+  if (!chart) return;
+  chart.off('click');
+  chart.on('click', (params) => {
+    window.applyLiveViewFilter(type, params.name || params.value);
   });
 }
 
@@ -22425,7 +22442,11 @@ window.clearLiveViewFilter = function() {
   window.activeLiveViewFilter = null;
   const bar = document.getElementById("liveViewActiveFilterBar");
   if (bar) bar.style.display = "none";
+  document.querySelectorAll('.live-legend-chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
   renderLiveViewTableContent();
+  // El botón desaparece al quitar el filtro: devolver el foco a un lugar útil
+  const target = document.querySelector('.live-legend-chip') || document.getElementById("btnLiveViewClose");
+  if (target) target.focus();
 };
 
 // ✅ EXPANDIR/COLAPSAR TODOS LOS BIOLÓGICOS CON MÚLTIPLES LOTES (pestaña Existencia)
@@ -22456,7 +22477,7 @@ function renderLiveCharts(tipo, leftData, rightData) {
     // Influenza: resumen en HTML accesible (sin canvas) en lugar de las dos gráficas pequeñas
     const rowEl = $("liveViewChartsRow");
     const infEl = $("liveInfSummary");
-    if (rowEl) rowEl.style.display = tipo === "INF" ? "none" : "";
+    if (rowEl) rowEl.style.display = tipo === "INF" ? "none" : "grid";
     if (infEl) {
       if (tipo === "INF") {
         const esc = escapeHtml;
@@ -22474,18 +22495,18 @@ function renderLiveCharts(tipo, leftData, rightData) {
                 <span style="font-weight:700;">${esc(k)}</span>
                 <span style="font-weight:800; font-variant-numeric:tabular-nums;">${num(v)} <span style="font-weight:600; color:#475569;">· ${pct}%</span></span>
               </div>
-              <div style="height:8px; border-radius:4px; background:#e2e8f0; margin-top:6px; overflow:hidden;">
+              <div style="height:8px; border-radius:4px; background:#fdf2ee; border:1px solid #f1bdad; margin-top:6px; overflow:hidden;">
                 <div style="height:100%; width:${Math.max(3, Math.round((v / max) * 100))}%; background:${color}; border-radius:4px;"></div>
               </div>
             </li>`;
           }).join("") + `</ul>`;
         };
-        const card = (kicker, inner) => `<section style="background:var(--md-sys-color-surface); border:1px solid var(--md-sys-color-outline-variant); border-radius:20px; padding:20px;">
-            <h3 style="margin:0 0 14px; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#334155;">${kicker}</h3>${inner}</section>`;
+        const card = (kicker, inner) => `<section style="background:var(--md-sys-color-surface); border:1px solid #f1bdad; border-top:4px solid #f1bdad; border-radius:20px; padding:20px;">
+            <h3 style="margin:0 0 14px; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7a2a16;">${kicker}</h3>${inner}</section>`;
         infEl.innerHTML = `<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px;">
-          ${card("Total de la semana", `<div style="font-size:44px; line-height:1; font-weight:900; color:#5b21b6; font-variant-numeric:tabular-nums;">${num(total)}</div><p style="margin:8px 0 0; font-size:13px; color:#475569;">dosis de influenza aplicadas</p>`)}
-          ${card("Por población", barras(leftData, "#6d28d9"))}
-          ${card("Por esquema", barras(rightData, "#0369a1"))}
+          ${card("Total de la semana", `<div style="font-size:44px; line-height:1; font-weight:900; color:#9a3a22; font-variant-numeric:tabular-nums;">${num(total)}</div><p style="margin:8px 0 0; font-size:13px; color:#475569;">dosis de influenza aplicadas</p>`)}
+          ${card("Por población", barras(leftData, "#c9563a"))}
+          ${card("Por esquema", barras(rightData, "#2f7f86"))}
         </div>`;
         infEl.style.display = "block";
       } else {
@@ -22504,10 +22525,37 @@ function renderLiveCharts(tipo, leftData, rightData) {
       if ($("liveChartRightDesc")) $("liveChartRightDesc").textContent = dR;
     };
 
+    // Leyenda con cifras y filtro por clic (en lugar de depender solo de la gráfica)
+    const setLegend = (side, type, items) => {
+      const el = $(side === 'L' ? 'liveChartLeftDesc' : 'liveChartRightDesc');
+      if (!el) return;
+      const total = items.reduce((a, i) => a + Number(i.value || 0), 0);
+      if (!total) { el.textContent = 'Sin datos'; return; }
+      el.innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">` + items.map(i =>
+        `<button type="button" class="live-legend-chip" data-ftype="${type}" data-fval="${escapeHtml(i.name)}" data-flabel="${escapeHtml(i.label)}" title="Filtrar la tabla por ${escapeHtml(i.label)}" aria-pressed="false"><span style="color:${i.color}; font-weight:900;">${Number(i.value || 0).toLocaleString("es-MX", { maximumFractionDigits: 1 })}</span>${escapeHtml(i.label)}</button>`
+      ).join("") + `</div>`;
+      const act = window.activeLiveViewFilter;
+      el.querySelectorAll('.live-legend-chip').forEach(b => {
+        if (act && act.type === b.dataset.ftype && act.value === b.dataset.fval) b.setAttribute('aria-pressed', 'true');
+        b.onclick = () => window.applyLiveViewFilter(b.dataset.ftype, b.dataset.fval, b.dataset.flabel);
+      });
+    };
+
     if (tipo === "SR") {
       setDOM("Salud del Inventario", "Estado Semafórico", "Distribución por vigencia", "Riesgo de Caducidad", "Próximos Vencimientos", "Análisis de tiempo");
       let sem = leftData || { pronto: 0, normal: 0, lejana: 0 };
       let cad = rightData || { m3: 0, m6: 0, m12: 0, more: 0 };
+      setLegend('L', 'semaforo', [
+        { name: 'Cad. Próxima', label: 'Próxima', value: sem.pronto, color: '#b91c1c' },
+        { name: 'Cad. Media', label: 'Media', value: sem.normal, color: '#b45309' },
+        { name: 'Vigente', label: 'Vigente', value: sem.lejana, color: '#047857' }
+      ]);
+      setLegend('R', 'caducidad', [
+        { name: '< 3m', label: '< 3 meses', value: cad.m3, color: '#b91c1c' },
+        { name: '3-6m', label: '3-6 meses', value: cad.m6, color: '#b45309' },
+        { name: '6-12m', label: '6-12 meses', value: cad.m12, color: '#1d4ed8' },
+        { name: '> 12m', label: '> 12 meses', value: cad.more, color: '#047857' }
+      ]);
 
       window.CHART_SEM = echarts.init(ctxLeft);
       window.CHART_SEM.setOption({
@@ -22520,7 +22568,7 @@ function renderLiveCharts(tipo, leftData, rightData) {
           emphasis: { scale: true, scaleSize: 6 },
           data: [
             {
-              value: sem.pronto, name: 'Próxima',
+              value: sem.pronto, name: 'Cad. Próxima',
               itemStyle: {
                 color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
                   { offset: 0, color: '#f87171' },
@@ -22529,7 +22577,7 @@ function renderLiveCharts(tipo, leftData, rightData) {
               }
             },
             {
-              value: sem.normal, name: 'Media',
+              value: sem.normal, name: 'Cad. Media',
               itemStyle: {
                 color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
                   { offset: 0, color: '#fbbf24' },
@@ -22555,7 +22603,7 @@ function renderLiveCharts(tipo, leftData, rightData) {
         animationDuration: 1000, animationEasing: 'exponentialOut',
         tooltip: { trigger: 'axis', axisPointer: { type: 'none' }, backgroundColor: 'rgba(15, 23, 42, 0.95)', textStyle: { color: '#fff', fontSize: 10 }, borderWidth: 0, borderRadius: 8, padding: [4, 8] },
         grid: { left: '0%', right: '0%', top: '15%', bottom: '5%', containLabel: true },
-        xAxis: { type: 'category', data: ['< 3m', '3-6m', '6-12m', '> 12m'], axisLabel: { fontSize: 9, fontWeight: 'bold', color: '#64748b' }, axisLine: { show: false }, axisTick: { show: false } },
+        xAxis: { type: 'category', data: ['< 3m', '3-6m', '6-12m', '> 12m'], axisLabel: { fontSize: 9, fontWeight: 'bold', color: '#475569', interval: 0 }, axisLine: { show: false }, axisTick: { show: false } },
         yAxis: { type: 'value', show: false },
         series: [{
           name: 'Lotes', type: 'bar', data: [cad.m3, cad.m6, cad.m12, cad.more],
@@ -22578,6 +22626,11 @@ function renderLiveCharts(tipo, leftData, rightData) {
       let ex = leftData?.existencia || 0;
       let pd = leftData?.pedido || 0;
       let top = rightData || [];
+      setLegend('L', 'pedido', [
+        { name: 'Existencia Actual', label: 'Existencia (frascos)', value: ex, color: '#475569' },
+        { name: 'Pedido Solicitado', label: 'Pedido (frascos)', value: pd, color: '#6d28d9' }
+      ]);
+      setLegend('R', 'biologico', top.slice(0, 6).map(t => ({ name: t.bio, label: t.bio, value: t.cant, color: '#6d28d9' })));
 
       window.CHART_SEM = echarts.init(ctxLeft);
       window.CHART_SEM.setOption({
@@ -22619,7 +22672,7 @@ function renderLiveCharts(tipo, leftData, rightData) {
         animationDuration: 1000, animationEasing: 'exponentialOut',
         tooltip: { trigger: 'axis', axisPointer: { type: 'none' }, backgroundColor: 'rgba(15, 23, 42, 0.95)', textStyle: { color: '#fff', fontSize: 10 }, borderWidth: 0, borderRadius: 8, padding: [4, 8] },
         grid: { left: '0%', right: '0%', top: '15%', bottom: '5%', containLabel: true },
-        xAxis: { type: 'category', data: topLabels, axisLabel: { fontSize: 8, fontWeight: 'bold', color: '#64748b', interval: 0, rotate: 45 }, axisLine: { show: false }, axisTick: { show: false } },
+        xAxis: { type: 'category', data: topLabels, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
         yAxis: { type: 'value', show: false },
         series: [{
           name: 'Frascos', type: 'bar', data: topCant,
@@ -22681,6 +22734,15 @@ function renderLiveCharts(tipo, leftData, rightData) {
       setDOM("Distribución", "Insumos Reportados", "Proporción de material", "Dosis Reportadas", "Existencia Dosis", "SRP vs SR");
       let j5 = leftData?.j5 || 0, j05 = leftData?.j05 || 0, ag = leftData?.ag || 0;
       let srp = rightData?.srp || 0, sr = rightData?.sr || 0;
+      setLegend('L', 'insumo', [
+        { name: 'Jeringa de 5 ml', label: 'Jeringa 5 ml', value: j5, color: '#0369a1' },
+        { name: 'Jeringa de 0.5 ml', label: 'Jeringa 0.5 ml', value: j05, color: '#0369a1' },
+        { name: 'Aguja', label: 'Aguja', value: ag, color: '#0369a1' }
+      ]);
+      setLegend('R', 'insumo', [
+        { name: 'Existencia SRP', label: 'SRP', value: srp, color: '#047857' },
+        { name: 'Existencia SR (', label: 'SR', value: sr, color: '#047857' }
+      ]);
 
       window.CHART_SEM = echarts.init(ctxLeft);
       window.CHART_SEM.setOption({
@@ -22693,7 +22755,7 @@ function renderLiveCharts(tipo, leftData, rightData) {
           emphasis: { scale: true, scaleSize: 6 },
           data: [
             {
-              value: j5, name: 'Jeringa 5ml',
+              value: j5, name: 'Jeringa de 5 ml',
               itemStyle: {
                 color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
                   { offset: 0, color: '#7dd3fc' },
@@ -22702,7 +22764,7 @@ function renderLiveCharts(tipo, leftData, rightData) {
               }
             },
             {
-              value: j05, name: 'Jeringa 0.5ml',
+              value: j05, name: 'Jeringa de 0.5 ml',
               itemStyle: {
                 color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
                   { offset: 0, color: '#38bdf8' },
@@ -22750,11 +22812,44 @@ function renderLiveCharts(tipo, leftData, rightData) {
   }
 }
 
+window.focusLiveViewDialog = function() {
+  const btn = $("btnLiveViewClose");
+  if (!btn) return;
+  [60, 250, 600].forEach(ms => setTimeout(() => {
+    const ov = $("liveViewOverlay");
+    if (ov && ov.classList.contains("show") && !ov.contains(document.activeElement)) btn.focus({ preventScroll: true });
+  }, ms));
+};
+
+// Escape cierra la vista y Tab queda atrapado dentro del diálogo mientras está abierto
+document.addEventListener("keydown", (e) => {
+  const ov = $("liveViewOverlay");
+  if (!ov || !ov.classList.contains("show")) return;
+  const edit = $("modalBioEditOverlay");
+  if (edit && edit.classList.contains("show")) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    $("btnLiveViewClose")?.click();
+    return;
+  }
+  if (e.key !== "Tab") return;
+  const focusables = Array.from(ov.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+    .filter(el => !el.disabled && el.offsetParent !== null);
+  if (!focusables.length) return;
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  if (!ov.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+  else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+
 if ($("btnLiveViewClose")) {
   $("btnLiveViewClose").onclick = () => {
     $("liveViewOverlay").classList.remove("show");
     $("liveViewOverlay").style.display = "none";
     $("liveViewOverlay").ariaHidden = "true";
+    const opener = window.__liveViewOpener;
+    window.__liveViewOpener = null;
+    if (opener && document.contains(opener) && typeof opener.focus === "function") opener.focus({ preventScroll: true });
     $("liveChartLeftContainer")?.classList.remove("loaded");
     $("liveChartRightContainer")?.classList.remove("loaded");
   };
@@ -22769,20 +22864,22 @@ window.switchLiveViewTab = function(tab) {
   const btnMovimiento = document.getElementById("btnLiveTabMovimiento");
   if (btnExistencia && btnMovimiento) {
     if (tab === 'existencia') {
-      btnExistencia.style.background = "#0ea5e9";
+      btnExistencia.style.background = "#0c4a6e";
       btnExistencia.style.color = "#ffffff";
-      btnExistencia.style.boxShadow = "0 4px 12px rgba(14, 165, 233, 0.25)";
+      btnExistencia.style.boxShadow = "none";
       btnMovimiento.style.background = "transparent";
-      btnMovimiento.style.color = "#0284c7";
+      btnMovimiento.style.color = "#0c4a6e";
       btnMovimiento.style.boxShadow = "none";
     } else {
-      btnMovimiento.style.background = "#0ea5e9";
+      btnMovimiento.style.background = "#0c4a6e";
       btnMovimiento.style.color = "#ffffff";
-      btnMovimiento.style.boxShadow = "0 4px 12px rgba(14, 165, 233, 0.25)";
+      btnMovimiento.style.boxShadow = "none";
       btnExistencia.style.background = "transparent";
-      btnExistencia.style.color = "#0284c7";
+      btnExistencia.style.color = "#0c4a6e";
       btnExistencia.style.boxShadow = "none";
     }
+    btnExistencia.setAttribute("aria-selected", tab === 'existencia' ? "true" : "false");
+    btnMovimiento.setAttribute("aria-selected", tab === 'movimiento' ? "true" : "false");
   }
   renderLiveViewTableContent();
 };
@@ -23171,7 +23268,7 @@ window.refreshLiveViewCurrentData = async function() {
 };
 
 function getPermanenciaStatusHelper(recepcionIso) {
-  if (!recepcionIso) return { html: `<span style="color:#94a3b8; font-size:11px;">Sin fecha</span>` };
+  if (!recepcionIso) return { html: `<span style="color:#475569; font-size:11px;">Sin fecha</span>` };
   const dRec = new Date(recepcionIso);
   const now = new Date();
   dRec.setHours(0, 0, 0, 0); now.setHours(0, 0, 0, 0);
@@ -23190,13 +23287,13 @@ function getPermanenciaStatusHelper(recepcionIso) {
   else if (diffDays >= 60) { tone = "warn"; icon = "warning"; text = "Alerta: " + text; }
 
   let bg = tone === "bad" ? "#fef2f2" : tone === "warn" ? "#fffbeb" : "#f0fdf4";
-  let color = tone === "bad" ? "#ef4444" : tone === "warn" ? "#d97706" : "#10b981";
+  let color = tone === "bad" ? "#b91c1c" : tone === "warn" ? "#92400e" : "#047857";
 
   return {
     html: `
       <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
         <span style="font-size:11px; color:#64748b; font-weight:700; white-space: nowrap;">${formatAppDate(recepcionIso)}</span>
-        <span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px; background:${bg}; color:${color}; font-size:10px; font-weight:800; border: 1px solid ${color}40; white-space: nowrap;">
+        <span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px; background:${bg}; color:${color}; font-size:11px; font-weight:800; border: 1px solid ${color}80; white-space: nowrap;">
           <span class="material-symbols-rounded" style="font-size:12px;">${icon}</span> ${text}
         </span>
       </div>
@@ -23544,7 +23641,10 @@ window.renderLiveViewTableContent = function() {
         if (window.activeLiveViewFilter) {
           const filter = window.activeLiveViewFilter;
           if (filter.type === 'semaforo') {
-            displayItems = items.filter(r => getSemaforoStatus(r.caducidad).label === filter.value);
+            displayItems = items.filter(r => {
+              const st = getSemaforoStatus(r.caducidad);
+              return filter.value === 'Cad. Próxima' ? (st.key === 'pronto' || st.key === 'expired') : st.label === filter.value;
+            });
           } else if (filter.type === 'caducidad') {
             displayItems = items.filter(r => {
               const diffMonths = getMonthsTo(r.caducidad);
@@ -23564,7 +23664,7 @@ window.renderLiveViewTableContent = function() {
           const diffMonths = getMonthsTo(r.caducidad);
           const perm = getPermanenciaStatusHelper(r.fecha_recepcion);
           const bioName = r.biologico || "—";
-          const color = getBiologicoColor(bioName);
+          const color = getBiologicoTextColor(bioName);
 
           let tipoBadge = "";
           if (r.tipo === "PRESTAMO_DESABASTO" || r.tipo === "Préstamo por desabasto") {
@@ -23581,7 +23681,7 @@ window.renderLiveViewTableContent = function() {
           return `
                 <tr class="live-view-row" style="${rowStyle}" data-type="sr" data-status="${status.label}" data-months="${diffMonths}" data-bio-name="${escapeHtml(bioName)}">
                   <td style="padding:${bioCellPadding}; font-weight:${nested ? 700 : 900}; color:${color}; font-size:${nested ? "13px" : "14px"}; white-space: nowrap;">
-                    ${nested ? `<span class="material-symbols-rounded" style="font-size:14px; color:#cbd5e1; vertical-align:middle; margin-right:4px;">subdirectory_arrow_right</span>` : ""}
+                    ${nested ? `<span class="material-symbols-rounded" aria-hidden="true" style="font-size:14px; color:#64748b; vertical-align:middle; margin-right:4px;">subdirectory_arrow_right</span>` : ""}
                     <span style="vertical-align: middle;">${escapeHtml(bioName)}</span>${tipoBadge}
                   </td>
                   <td style="padding:${nested ? "10px 24px" : "14px 24px"}; font-weight:600; color:#475569;">${escapeHtml(r.lote || "—")}</td>
@@ -23602,7 +23702,7 @@ window.renderLiveViewTableContent = function() {
 
         // Renderiza la fila agregada de un biológico con 2+ lotes/fechas + su bloque de detalle desplegable
         const renderSrGroupRow = (g) => {
-          const color = getBiologicoColor(g.bioName);
+          const color = getBiologicoTextColor(g.bioName);
           const isExpanded = window.liveViewExpandedGroups.has(g.bioKey);
           const slug = String(g.bioKey).replace(/[^a-zA-Z0-9_-]/g, "_") || "g";
 
@@ -23615,23 +23715,23 @@ window.renderLiveViewTableContent = function() {
           const loanTypesArr = Array.from(g.loanTypes);
           let loanBadgesHtml = loanTypesArr.slice(0, 2).map(t => loanBadgeTemplates[t] || "").join("");
           if (loanTypesArr.length > 2) {
-            loanBadgesHtml += `<span style="font-size:10px; color:#94a3b8; font-weight:700; margin-left:4px;">+${loanTypesArr.length - 2} más</span>`;
+            loanBadgesHtml += `<span style="font-size:11px; color:#475569; font-weight:700; margin-left:4px;">+${loanTypesArr.length - 2} más</span>`;
           }
 
           const multiCadFlag = g.hasMultipleDistinctCaducidad
-            ? `<span class="material-symbols-rounded" title="Múltiples fechas de caducidad — se muestra la más próxima" style="font-size:14px; color:#94a3b8; vertical-align:middle; margin-left:2px; cursor:help;">more_horiz</span>`
+            ? `<span class="material-symbols-rounded" title="Múltiples fechas de caducidad — se muestra la más próxima" role="img" aria-label="Múltiples fechas de caducidad; se muestra la más próxima" style="font-size:14px; color:#475569; vertical-align:middle; margin-left:2px; cursor:help;">more_horiz</span>`
             : "";
 
           return `
                 <tr class="live-view-row live-view-group-row" data-type="sr" data-group-key="${escapeHtml(g.bioKey)}" data-bio-name="${escapeHtml(g.bioName)}" data-expanded="${isExpanded}" style="border-bottom: 1px solid #f1f5f9; transition: all 0.2s ease; cursor: pointer;">
                   <td style="padding:14px 24px; font-weight:900; color:${color}; font-size:14px; white-space: nowrap;">
-                    <button type="button" class="live-view-expand-toggle" aria-expanded="${isExpanded}" aria-controls="live-view-detail-${slug}" title="Ver detalle por lote" style="background:none; border:none; padding:0; margin-right:6px; cursor:pointer; vertical-align:middle; display:inline-flex; align-items:center;">
-                      <span class="material-symbols-rounded" style="font-size:20px; color:#94a3b8;">expand_more</span>
+                    <button type="button" class="live-view-expand-toggle" aria-expanded="${isExpanded}" aria-controls="live-view-detail-${slug}" title="Ver detalle por lote" aria-label="Ver detalle por lote de ${escapeHtml(g.bioName)}" style="background:none; border:none; padding:0; margin-right:6px; cursor:pointer; vertical-align:middle; display:inline-flex; align-items:center;">
+                      <span class="material-symbols-rounded" aria-hidden="true" style="font-size:20px; color:#475569;">expand_more</span>
                     </button>
                     <span style="vertical-align: middle;">${escapeHtml(g.bioName)}</span>${loanBadgesHtml}
-                    <span class="live-view-lote-count-badge" style="display:inline-flex; align-items:center; margin-left:8px; padding:1px 9px; border-radius:20px; background:#f1f5f9; color:#64748b; font-size:10px; font-weight:800; vertical-align:middle; white-space:nowrap;">${g.rows.length} lotes</span>
+                    <span class="live-view-lote-count-badge" style="display:inline-flex; align-items:center; margin-left:8px; padding:1px 9px; border-radius:20px; background:#e2e8f0; color:#334155; font-size:11px; font-weight:800; vertical-align:middle; white-space:nowrap;">${g.rows.length} lotes</span>
                   </td>
-                  <td style="padding:14px 24px; font-weight:600; color:#94a3b8; font-style:italic; font-size:12px;">Varios (${g.rows.length})</td>
+                  <td style="padding:14px 24px; font-weight:600; color:#475569; font-style:italic; font-size:12px;">Varios (${g.rows.length})</td>
                   <td style="padding:14px 24px; text-align:center;">
                     <span class="live-view-count-badge" style="color:${color}; font-weight:900;">${escapeHtml(g.totalCantidad)}</span>
                     ${g.worstApertura ? `<div style="margin-top:4px;">${g.worstApertura.html}</div>` : ""}
@@ -23735,17 +23835,17 @@ window.renderLiveViewTableContent = function() {
           if (prevQty > currQty) {
             apps = Math.round((prevQty - currQty) * dosesPerVial);
             statusText = "Aplicación";
-            statusColor = "#0ea5e9";
+            statusColor = "#075985";
             statusBg = "#e0f2fe";
           } else if (currQty > prevQty) {
             apps = 0;
             statusText = "Ingreso / Recarga";
-            statusColor = "#10b981";
+            statusColor = "#047857";
             statusBg = "#d1fae5";
           } else {
             apps = 0;
             statusText = "Sin cambio";
-            statusColor = "#64748b";
+            statusColor = "#475569";
             statusBg = "#f1f5f9";
           }
 
@@ -23772,12 +23872,12 @@ window.renderLiveViewTableContent = function() {
             <td style="padding:14px 24px; text-align:center; font-weight:700; color:#64748b;">${r.prevQty}</td>
             <td style="padding:14px 24px; text-align:center; font-weight:700; color:#0f172a;">${r.currQty}</td>
             <td style="padding:14px 24px; text-align:center;">
-              <span class="live-view-count-badge" style="background:${r.apps > 0 ? '#e0f2fe' : '#f1f5f9'}; color:${r.apps > 0 ? '#0369a1' : '#64748b'}; border:1px solid ${r.apps > 0 ? '#bae6fd' : '#cbd5e1'}; font-weight:900;">
+              <span class="live-view-count-badge" style="background:${r.apps > 0 ? '#e0f2fe' : '#f1f5f9'}; color:${r.apps > 0 ? '#075985' : '#475569'}; border:1px solid ${r.apps > 0 ? '#bae6fd' : '#cbd5e1'}; font-weight:900;">
                 ${r.apps} dosis
               </span>
             </td>
             <td style="padding:14px 24px; text-align:center;">
-              <span style="display:inline-block; padding:3px 10px; border-radius:12px; font-size:10px; font-weight:800; background:${r.statusBg}; color:${r.statusColor}; text-transform:uppercase; border:1px solid ${r.statusColor}30; white-space:nowrap;">
+              <span style="display:inline-block; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:800; background:${r.statusBg}; color:${r.statusColor}; text-transform:uppercase; border:1px solid ${r.statusColor}60; white-space:nowrap;">
                 ${r.statusText}
               </span>
             </td>
@@ -23791,8 +23891,8 @@ window.renderLiveViewTableContent = function() {
            <th style="padding: 16px 24px; text-align: left;">Biológico</th>
            <th style="padding: 16px 24px; text-align: center;">Existencia (Frascos)</th>
            <th style="padding: 16px 24px; text-align: center;">Pedido (Frascos)</th>
-           <th style="padding: 16px 24px; text-align: center;">Promedio</th>
-           <th style="padding: 16px 24px; text-align: center;">Dosis Mín/Máx</th>
+           <th style="padding: 16px 24px; text-align: center;" title="Consumo mensual promedio, en frascos">Promedio mensual (frascos)</th>
+           <th style="padding: 16px 24px; text-align: center;" title="Mínimo y máximo de dosis">Mín / Máx (dosis)</th>
          `;
     }
 
@@ -23838,7 +23938,7 @@ window.renderLiveViewTableContent = function() {
 
       tbody.innerHTML = displayItems.map(r => {
         const bioName = r.biologico || "—";
-        const color = window.getBiologicoColor(bioName);
+        const color = window.getBiologicoTextColor(bioName);
         const existQty = r.existencia_actual_frascos ?? r.existencia ?? 0;
         const pedQty = r.pedido_frascos ?? r.solicitud ?? 0;
 
@@ -23888,30 +23988,46 @@ window.renderLiveViewTableContent = function() {
         const esquema = ["Primera dosis", "Segunda dosis", "Revacunación"].includes(grp) ? grp : "Grupos de riesgo";
         porGrupo[esquema] = (porGrupo[esquema] || 0) + n;
       });
-      let lastCat = null;
-      tbody.innerHTML = res.data.map(r => {
-        const m = String(r.rubro || "").match(/^(.*?) - (.*)$/);
-        const cat = m ? m[1] : "Otros";
-        const label = m ? m[2] : String(r.rubro || "");
+      // Estructura: Población > Esquema/Grupo de riesgo > rango de edad, con subtotales
+      const pops = [];
+      const popMap = {};
+      res.data.forEach(r => {
+        const m = String(r.rubro || "").match(/^(.*?) - (.*) \(([^()]*)\)$/);
+        const pop = m ? m[1] : "Otros";
+        const grp = m ? m[2] : String(r.rubro || "");
+        const det = m ? m[3] : "";
+        if (!popMap[pop]) { popMap[pop] = { name: pop, groups: [], gmap: {}, total: 0 }; pops.push(popMap[pop]); }
+        const P = popMap[pop];
+        if (!P.gmap[grp]) { P.gmap[grp] = { name: grp, rows: [], total: 0 }; P.groups.push(P.gmap[grp]); }
         const n = Number(r.cantidad || 0);
-        let head = "";
-        if (cat !== lastCat) {
-          lastCat = cat;
-          head = `<tr><th colspan="2" scope="colgroup" style="padding:12px 24px; text-align:left; background:#f1f5f9; color:#334155; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; border-top:1px solid #e2e8f0;">${escapeHtml(cat)}</th></tr>`;
-        }
-        const badge = n > 0
-          ? `<span style="display:inline-block; min-width:44px; padding:4px 12px; border-radius:999px; background:#ede9fe; color:#4c1d95; font-weight:800; font-size:14px; font-variant-numeric:tabular-nums;">${n.toLocaleString("es-MX")}</span>`
-          : `<span style="display:inline-block; min-width:44px; padding:4px 12px; color:#64748b; font-weight:600; font-size:14px;">0</span>`;
-        return head + `
-           <tr class="live-view-row" style="border-bottom: 1px solid #f1f5f9;">
-             <td style="padding:12px 24px 12px 36px; font-weight:${n > 0 ? 700 : 500}; color:${n > 0 ? "#0f172a" : "#475569"}; font-size:14px;">${escapeHtml(label)}</td>
-             <td style="padding:12px 24px; text-align:right;">${badge}</td>
-           </tr>`;
-      }).join("") + `
-           <tr style="background:#f8fafc; border-top:2px solid #cbd5e1;">
+        P.gmap[grp].rows.push({ det, n });
+        P.gmap[grp].total += n;
+        P.total += n;
+      });
+      const fmt = n => Number(n || 0).toLocaleString("es-MX");
+      const numCell = (n, strong) => n > 0
+        ? `<span style="display:inline-block; min-width:44px; padding:4px 12px; border-radius:999px; background:#fbe0d7; color:#7a2a16; font-weight:800; font-size:14px; font-variant-numeric:tabular-nums;">${fmt(n)}</span>`
+        : `<span style="display:inline-block; min-width:44px; padding:4px 12px; color:#57534e; font-weight:${strong ? 800 : 600}; font-size:14px;">0</span>`;
+      let html = "";
+      pops.forEach(P => {
+        html += `<tr><th colspan="2" scope="colgroup" style="padding:14px 24px; text-align:left; background:#7a2a16; color:#ffffff; font-size:13px; font-weight:800; letter-spacing:.05em; text-transform:uppercase;">
+            <span style="display:flex; justify-content:space-between; gap:16px;"><span>${escapeHtml(P.name)}</span><span style="font-variant-numeric:tabular-nums;">${fmt(P.total)} dosis</span></span></th></tr>`;
+        P.groups.forEach(G => {
+          html += `<tr><th colspan="2" scope="colgroup" style="padding:10px 24px 10px 32px; text-align:left; background:#fdf2ee; color:#7a2a16; font-size:13px; font-weight:800; border-top:1px solid #f1bdad;">
+              <span style="display:flex; justify-content:space-between; gap:16px;"><span>${escapeHtml(G.name)}</span><span style="font-variant-numeric:tabular-nums;">Subtotal: ${fmt(G.total)}</span></span></th></tr>`;
+          G.rows.forEach(R => {
+            html += `<tr class="live-view-row" style="border-bottom:1px solid #f4dcd3;">
+              <td style="padding:10px 24px 10px 52px; font-weight:${R.n > 0 ? 700 : 500}; color:${R.n > 0 ? "#1c1917" : "#57534e"}; font-size:14px;">${escapeHtml(R.det || "—")}</td>
+              <td style="padding:10px 24px; text-align:right;">${numCell(R.n, false)}</td>
+            </tr>`;
+          });
+        });
+      });
+      html += `<tr style="background:#fdf2ee; border-top:2px solid #7a2a16;">
              <td style="padding:16px 24px; font-weight:900; color:#0f172a; font-size:14px;">Total de dosis aplicadas</td>
-             <td style="padding:16px 24px; text-align:right; font-weight:900; color:#0f172a; font-size:16px; font-variant-numeric:tabular-nums;">${total.toLocaleString("es-MX")}</td>
+             <td style="padding:16px 24px; text-align:right; font-weight:900; color:#0f172a; font-size:16px; font-variant-numeric:tabular-nums;">${fmt(total)}</td>
            </tr>`;
+      tbody.innerHTML = html;
       renderLiveCharts("INF", porCat, porGrupo);
     }
   } else {
@@ -23924,7 +24040,7 @@ window.renderLiveViewTableContent = function() {
     }
 
     if (!res.data || !res.data.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="muted" style="padding:40px; text-align:center;">No hay reporte de consumibles hoy.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="muted" style="padding:40px; text-align:center;">No hay reporte de consumibles para esta fecha.</td></tr>';
       renderLiveCharts("CONS", null, null);
     } else {
       const c = res.data[0];
@@ -23979,7 +24095,7 @@ window.renderLiveViewTimeline = function() {
     desc: isSystem ? "El sistema heredó las existencias de la jornada activa previa." : `Información capturada por el operador: ${user}.`,
     time: fecha,
     icon: isSystem ? "cloud_sync" : "person_edit",
-    color: isSystem ? "#0284c7" : "#8b5cf6"
+    color: isSystem ? "#075985" : "#6d28d9"
   });
 
   if (tipo === "SR" && res.data && res.data.length > 0) {
@@ -23995,7 +24111,7 @@ window.renderLiveViewTimeline = function() {
         desc: `Se identificaron ${ceros.length} vacuna(s) sin existencia física.`,
         time: "Verificación de Stock",
         icon: "warning",
-        color: "#f43f5e"
+        color: "#be123c"
       });
     } else {
       logs.push({
@@ -24003,7 +24119,7 @@ window.renderLiveViewTimeline = function() {
         desc: "Todos los biológicos activos cuentan con existencias registradas.",
         time: "Verificación de Stock",
         icon: "verified",
-        color: "#10b981"
+        color: "#047857"
       });
     }
 
@@ -24022,7 +24138,7 @@ window.renderLiveViewTimeline = function() {
         desc: `${Number(r.cantidad || 0)} frasco(s) del lote ${escapeHtml(r.lote || "—")}, prestados por ${origen}.`,
         time: esDesabasto ? "Motivo: Desabasto" : "Motivo: A.R.F.",
         icon: "handshake",
-        color: esDesabasto ? "#d97706" : "#0284c7"
+        color: esDesabasto ? "#92400e" : "#075985"
       });
     });
   }
@@ -24038,7 +24154,7 @@ window.renderLiveViewTimeline = function() {
       <div style="padding-bottom: 8px;">
         <div style="font-size: 13px; font-weight: 850; color: var(--md-sys-color-on-surface);">${escapeHtml(l.title)}</div>
         <div style="font-size: 11px; color: var(--md-sys-color-on-surface-variant); margin-top: 2px;">${escapeHtml(l.desc)}</div>
-        <div style="font-size: 10px; font-weight: 700; color: #94a3b8; margin-top: 4px; text-transform: uppercase;">${escapeHtml(l.time)}</div>
+        <div style="font-size: 11px; font-weight: 700; color: #475569; margin-top: 4px; text-transform: uppercase;">${escapeHtml(l.time)}</div>
       </div>
     </div>
   `).join("");

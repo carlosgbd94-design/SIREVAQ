@@ -15367,3 +15367,48 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
 #validationCardsContainer .tableWrap:focus-visible { outline: 3px solid #0f172a; outline-offset: 2px; }
 @media (max-width: 640px) { .vl-leyenda dl { grid-template-columns: 1fr; } .vl-leyenda dd { margin-bottom: 6px; } }
 #validationCardsContainer td, #validationCardsContainer th { vertical-align: middle; }
+
+/* ===== Live View: accesibilidad (contraste, foco, objetivos táctiles) ===== */
+#liveViewUnidad { margin: 0; }
+#liveViewTableTitle { margin: 0; }
+#liveViewOverlay :focus-visible {
+  outline: 3px solid #1d4ed8;
+  outline-offset: 2px;
+}
+#liveViewOverlay .modal:focus { outline: none; }
+#liveViewOverlay .premium-icon-btn { min-width: 44px; min-height: 44px; }
+#liveViewOverlay #btnLiveTabExistencia,
+#liveViewOverlay #btnLiveTabMovimiento { min-height: 36px; font-size: 12px !important; }
+#liveViewOverlay .live-view-expand-all-btn { color: #0c4a6e; border-color: #0369a1; font-size: 12px; min-height: 36px; }
+#liveViewOverlay .status-pill-pro.lejana { color: #065f46; }
+#liveViewOverlay .status-pill-pro.normal { color: #92400e; }
+#liveViewOverlay .status-pill-pro.pronto { color: #b91c1c; }
+
+.live-filter-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  background: #ffffff; color: #0f172a;
+  border: 2px solid #0369a1; border-radius: 16px; padding: 10px 16px;
+  font-size: 14px; font-weight: 600;
+}
+.live-filter-bar__text { display: flex; align-items: center; gap: 8px; }
+.live-filter-bar__clear {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 16px;
+  border-radius: 999px; border: 2px solid #0c4a6e; background: #0c4a6e; color: #ffffff;
+  font-size: 13px; font-weight: 800; cursor: pointer;
+}
+.live-filter-bar__clear:hover { background: #082f49; border-color: #082f49; }
+html.dark .live-filter-bar { background: #0f172a; color: #f1f5f9; border-color: #7dd3fc; }
+html.dark .live-filter-bar__clear { background: #e0f2fe; color: #0c4a6e; border-color: #e0f2fe; }
+
+.live-legend-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 12px;
+  border-radius: 999px; border: 1.5px solid #64748b; background: #ffffff; color: #0f172a;
+  font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+.live-legend-chip:hover { background: #f1f5f9; }
+.live-legend-chip[aria-pressed="true"] { background: #0c4a6e; border-color: #0c4a6e; color: #ffffff; }
+.live-legend-chip[aria-pressed="true"] span { color: #ffffff !important; }
+html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color: #94a3b8; }
+@media (prefers-reduced-motion: reduce) {
+  #liveViewOverlay *, #liveViewOverlay *::before, #liveViewOverlay *::after { animation: none !important; transition: none !important; }
+}
