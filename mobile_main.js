@@ -403,6 +403,28 @@
         initNotificationsRealtime();
         initPinolRealtimeMobile();
         
+        // Validación de Influenza (solo supervisión): muestra la pestaña y prepara el módulo
+        if (window.MobileInfluenzaVal) {
+            window.MobileInfluenzaVal.init({
+                getClient: () => supabaseClient,
+                getProfile: () => currentProfile,
+                toast: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'success')
+            });
+            const dockInf = document.getElementById('dockItemINF');
+            if (dockInf) dockInf.hidden = !window.MobileInfluenzaVal.puedeUsar();
+        }
+
+        // Captura semanal de Influenza (solo perfil UNIDAD)
+        if (window.MobileInfluenzaCap) {
+            window.MobileInfluenzaCap.init({
+                getClient: () => supabaseClient,
+                getProfile: () => currentProfile,
+                toast: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'success')
+            });
+            const dockInfC = document.getElementById('dockItemINFC');
+            if (dockInfC) dockInfC.hidden = !window.MobileInfluenzaCap.puedeUsar();
+        }
+
         switchPanel('SR');
         initDockBehavior();
     };
@@ -1458,6 +1480,15 @@
     const syncCommandHub = () => {
         const hub = document.getElementById('globalCommandHub');
         if (!hub) return;
+
+        // Influenza: el módulo es dueño del estado del hub (chip, contador y guardar)
+        if (activePanel === 'INFC') {
+            if (window.MobileInfluenzaCap) window.MobileInfluenzaCap.sincronizarHub();
+            return;
+        }
+        if (activePanel === 'INF') return;
+        const contador = document.getElementById('hubCounter');
+        if (contador) contador.hidden = true;
 
         const saveBtn = document.getElementById('hubSaveBtn');
         const editBtn = document.getElementById('hubEditBtn');
@@ -2549,6 +2580,20 @@
         // Cada panel abre desde arriba (antes quedaba a media página del panel anterior).
         if (changed) window.scrollTo({ top: 0, behavior: 'auto' });
 
+        // Validación de Influenza: panel propio, sin barra de guardado de captura ni candados de formularios
+        if (panelId === 'INF' || panelId === 'INFC') {
+            // La captura de Influenza usa el command hub (guardar + contador); la validación no lo necesita
+            const hubInf = document.getElementById('globalCommandHub');
+            if (hubInf) hubInf.classList.toggle('visible', panelId === 'INFC');
+            if (panelId === 'INF') {
+                const c = document.getElementById('hubCounter');
+                if (c) c.hidden = true;
+                if (window.MobileInfluenzaVal) window.MobileInfluenzaVal.abrir();
+            }
+            if (panelId === 'INFC' && window.MobileInfluenzaCap) window.MobileInfluenzaCap.abrir();
+            return;
+        }
+
         const hub = document.getElementById('globalCommandHub');
         if (hub) {
             hub.classList.add('visible');
@@ -2874,6 +2919,11 @@
 
     // --- Guardar Reportes ---
     const saveReport = async () => {
+        // Captura semanal de Influenza: el módulo valida y guarda; el hub solo dispara y refleja el estado
+        if (activePanel === 'INFC') {
+            if (window.MobileInfluenzaCap) await window.MobileInfluenzaCap.guardar();
+            return;
+        }
         if (!currentUser || !currentProfile) {
             showToast("No autorizado o sesión expirada.", "error");
             return;
@@ -3801,7 +3851,8 @@
             const diffY = touchStartY - e.changedTouches[0].screenY;
             const panels = ['SR', 'CONS', 'BIO', 'PINOL'];
             const curIdx = panels.indexOf(activePanel);
-            if (!touchOnField && Math.abs(diffX) > 90 && Math.abs(diffX) > Math.abs(diffY) * 2) {
+            // En el panel de validación de Influenza no se cambia de panel deslizando (se confundiría con el desplazamiento)
+            if (curIdx >= 0 && !touchOnField && Math.abs(diffX) > 90 && Math.abs(diffX) > Math.abs(diffY) * 2) {
                 if (diffX > 0 && curIdx < panels.length - 1) switchPanel(panels[curIdx + 1]);
                 else if (diffX < 0 && curIdx > 0) switchPanel(panels[curIdx - 1]);
             }

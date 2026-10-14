@@ -1447,3 +1447,184 @@ html.dark .liquid-glass .text-amber-600 { color: #fbbf24 !important; }
 html.dark .liquid-glass .text-purple-600 { color: #c4b5fd !important; }
 html.dark .liquid-glass .text-emerald-600 { color: #34d399 !important; }
 html.dark .panel-section .biologic-card.liquid-glass :is(h4, p) { color: #f1f5f9; }
+
+/* ===== Influenza: validación de reportes (mobile_influenza_validacion.js) ===== */
+#panelINF .iv-wrap { display: flex; flex-direction: column; gap: 14px; color: #0f172a; }
+#panelINF .iv-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+#panelINF .iv-titulo h2 { font-size: 20px; font-weight: 900; margin: 0; outline: none; }
+#panelINF .iv-titulo p { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: #475569; }
+#panelINF .iv-filtros { display: flex; flex-direction: column; gap: 10px; }
+#panelINF .iv-campo { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: .04em; }
+#panelINF .iv-campo select, #panelINF .iv-campo input { height: 48px; border: 1px solid #94a3b8; border-radius: 14px; background: #fff; padding: 0 14px; font-size: 15px; font-weight: 700; color: #0f172a; text-transform: none; letter-spacing: 0; }
+#panelINF .iv-municipio-fijo { font-size: 13px; font-weight: 600; color: #334155; margin: 0; }
+#panelINF .iv-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+#panelINF .iv-chip { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid #94a3b8; background: #fff; font-size: 13px; font-weight: 800; color: #1e293b; }
+#panelINF .iv-chip[aria-pressed="true"] { background: #0f172a; border-color: #0f172a; color: #fff; }
+#panelINF .iv-resumen { font-size: 13px; font-weight: 700; color: #334155; margin: 0; }
+#panelINF .iv-lista { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+#panelINF .iv-unidad { width: 100%; min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; padding: 12px 14px; border-radius: 18px; border: 1px solid #cbd5e1; background: #fff; }
+#panelINF .iv-unidad-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+#panelINF .iv-clues { font-size: 11px; font-weight: 900; letter-spacing: .06em; color: #475569; }
+#panelINF .iv-nombre { font-size: 14px; font-weight: 800; color: #0f172a; overflow-wrap: anywhere; }
+#panelINF .iv-dosis { font-size: 12px; font-weight: 600; color: #334155; }
+#panelINF .iv-unidad-estado { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+#panelINF .iv-flecha { color: #475569; }
+#panelINF .iv-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; border: 1px solid; white-space: nowrap; }
+#panelINF .iv-badge .material-symbols-rounded { font-size: 15px; }
+#panelINF .iv-badge--ok { background: #f5f3ff; color: #4c1d95; border-color: #c4b5fd; }
+#panelINF .iv-badge--info { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+#panelINF .iv-badge--warn { background: #fffbeb; color: #78350f; border-color: #fcd34d; }
+#panelINF .iv-vacio, #panelINF .iv-cargando { padding: 24px 12px; text-align: center; font-weight: 700; color: #334155; margin: 0; }
+#panelINF button:focus-visible, #panelINF input:focus-visible, #panelINF select:focus-visible, #panelINF summary:focus-visible { outline: 3px solid #0f172a; outline-offset: 2px; }
+#panelINF .iv-volver { align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; border-radius: 14px; border: 1px solid #94a3b8; background: #fff; font-size: 14px; font-weight: 800; color: #0f172a; }
+#panelINF .iv-card { background: #fff; border: 1px solid #cbd5e1; border-radius: 18px; padding: 14px; }
+#panelINF .iv-card h3, #panelINF .iv-grupo h3 { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; margin: 0 0 10px; color: #1e293b; }
+#panelINF .iv-vivo { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#panelINF .iv-vivo dt { font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; }
+#panelINF .iv-vivo dd { margin: 2px 0 0; font-size: 14px; font-weight: 800; color: #0f172a; overflow-wrap: anywhere; }
+#panelINF .iv-vivo-vacio { margin: 0; font-size: 14px; font-weight: 600; color: #334155; }
+#panelINF .iv-leyenda { border: 1px solid #cbd5e1; border-radius: 14px; background: #f8fafc; padding: 10px 14px; font-size: 13px; color: #1e293b; }
+#panelINF .iv-leyenda summary { min-height: 32px; font-weight: 800; cursor: pointer; }
+#panelINF .iv-leyenda p { margin: 8px 0 0; }
+#panelINF .iv-aviso { padding: 12px 14px; border-radius: 14px; border: 1px solid #fcd34d; background: #fffbeb; color: #78350f; font-size: 13px; font-weight: 600; line-height: 1.45; }
+#panelINF .iv-aviso--info { border-color: #cbd5e1; background: #f1f5f9; color: #1e293b; }
+#panelINF .iv-grupo { background: #fff; border: 1px solid #cbd5e1; border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+#panelINF .iv-rubro { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px dashed #cbd5e1; }
+#panelINF .iv-rubro:first-of-type { border-top: 0; padding-top: 0; }
+#panelINF .iv-rubro--bloq { background: #f1f5f9; border-radius: 12px; padding: 10px; }
+#panelINF .iv-rubro-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#panelINF .iv-edad { font-size: 14px; font-weight: 900; }
+#panelINF .iv-pill { padding: 3px 10px; border-radius: 999px; background: #fef3c7; color: #78350f; font-size: 12px; font-weight: 800; }
+#panelINF .iv-pill--gris { background: #e2e8f0; color: #1e293b; }
+#panelINF .iv-rubro-datos { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; font-weight: 600; color: #334155; }
+#panelINF .iv-rubro-datos b { color: #0f172a; font-weight: 900; }
+#panelINF .iv-rubro-input { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#panelINF .iv-rubro-input label { font-size: 13px; font-weight: 800; color: #1e293b; }
+#panelINF .iv-rubro-input input { width: 104px; height: 48px; text-align: center; border: 1px solid #64748b; border-radius: 12px; background: #fff; font-size: 17px; font-weight: 900; color: #0f172a; }
+#panelINF .iv-rubro-input input:disabled { background: #e2e8f0; color: #334155; }
+#panelINF .iv-avance { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; font-size: 12px; font-weight: 600; color: #334155; }
+#panelINF .iv-over { color: #b91c1c; font-weight: 900; }
+#panelINF input[aria-invalid="true"] { border: 2px solid #b91c1c !important; background: #fef2f2 !important; }
+#panelINF .iv-cambios { margin: 0; padding: 10px 14px; border-radius: 14px; background: #f1f5f9; border: 1px solid #cbd5e1; font-size: 14px; font-weight: 700; color: #1e293b; }
+#panelINF .iv-error { padding: 12px 14px; border-radius: 14px; border: 2px solid #b91c1c; background: #fef2f2; color: #7f1d1d; font-size: 14px; font-weight: 700; }
+#panelINF .iv-error[hidden] { display: none; }
+#panelINF .iv-error ul { margin: 6px 0 0 18px; list-style: disc; font-weight: 600; }
+#panelINF .iv-acciones { display: flex; gap: 10px; padding-bottom: 8px; }
+#panelINF .iv-btn { flex: 1; min-height: 52px; border-radius: 16px; font-size: 15px; font-weight: 900; border: 1px solid #0f172a; }
+#panelINF .iv-btn--pri { background: #0f172a; color: #fff; }
+#panelINF .iv-btn--sec { background: #fff; color: #0f172a; border-color: #94a3b8; }
+#panelINF .iv-btn:disabled { opacity: .7; }
+@media (prefers-reduced-motion: reduce) { #panelINF * { transition: none !important; animation: none !important; } }
+.dock-item[hidden] { display: none !important; }
+/* Con la pestaña de Influenza (supervisión) la barra pasa a 5 columnas */
+.dock-container { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+
+/* ===== Influenza: captura semanal de la unidad (mobile_influenza_captura.js) ===== */
+#panelINFC .ic-wrap { display: flex; flex-direction: column; gap: 14px; color: #0f172a; }
+#panelINFC .ic-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+#panelINFC .ic-titulo h2 { font-size: 22px; font-weight: 900; margin: 0; outline: none; }
+#panelINFC .ic-titulo p { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: #475569; }
+#panelINFC button:focus-visible, #panelINFC input:focus-visible, #panelINFC select:focus-visible, #panelINFC summary:focus-visible { outline: 3px solid #0f172a; outline-offset: 2px; }
+#panelINFC .ic-exito { display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: 18px; border: 1px solid #6ee7b7; background: #ecfdf5; color: #064e3b; outline: none; }
+#panelINFC .ic-exito .material-symbols-rounded { font-size: 30px; color: #047857; }
+#panelINFC .ic-exito b { display: block; font-size: 15px; }
+#panelINFC .ic-exito span span { font-size: 13px; font-weight: 600; }
+#panelINFC .ic-semana { display: grid; grid-template-columns: 52px 1fr 52px; gap: 8px; align-items: center; }
+#panelINFC .ic-nav { height: 52px; border-radius: 16px; border: 1px solid #94a3b8; background: #fff; display: flex; align-items: center; justify-content: center; color: #0f172a; }
+#panelINFC .ic-nav:disabled { opacity: .4; }
+#panelINFC .ic-sel select { width: 100%; height: 52px; border: 1px solid #94a3b8; border-radius: 16px; background: #fff; padding: 0 12px; font-size: 15px; font-weight: 800; color: #0f172a; text-align: center; text-align-last: center; }
+#panelINFC .ic-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 700; color: #334155; }
+#panelINFC .ic-chip { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 900; border: 1px solid; }
+#panelINFC .ic-chip--guardado { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+#panelINFC .ic-chip--pendiente { background: #fffbeb; color: #78350f; border-color: #fcd34d; }
+#panelINFC .ic-chip--cerrada { background: #f1f5f9; color: #334155; border-color: #94a3b8; }
+#panelINFC .ic-aviso { padding: 12px 14px; border-radius: 14px; border: 1px solid #fcd34d; background: #fffbeb; color: #78350f; font-size: 13px; font-weight: 600; line-height: 1.45; }
+#panelINFC .ic-aviso--info { border-color: #cbd5e1; background: #f1f5f9; color: #1e293b; }
+#panelINFC .ic-aviso--cerrada { display: flex; gap: 10px; align-items: flex-start; border-color: #94a3b8; background: #f1f5f9; color: #1e293b; }
+#panelINFC .ic-resumen { background: #fff; border: 1px solid #cbd5e1; border-radius: 20px; padding: 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 10px; }
+#panelINFC .ic-res-num { display: flex; flex-direction: column; gap: 2px; }
+#panelINFC .ic-res-num span { font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: .04em; }
+#panelINFC .ic-res-num b { font-size: 22px; font-weight: 900; color: #0f172a; }
+#panelINFC .ic-barra-total { grid-column: 1 / -1; height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+#panelINFC .ic-barra-total span { display: block; height: 100%; width: 0; background: #6d28d9; border-radius: 999px; transition: width .25s ease; }
+#panelINFC .ic-res-pie { grid-column: 1 / -1; margin: 0; font-size: 13px; font-weight: 700; color: #334155; }
+#panelINFC .ic-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border-radius: 18px; border: 1px solid #94a3b8; background: #fff; min-height: 64px; }
+#panelINFC .ic-switch--on { border-color: #6d28d9; background: #f5f3ff; }
+#panelINFC .ic-switch-txt { display: flex; flex-direction: column; gap: 2px; font-size: 12px; font-weight: 600; color: #334155; }
+#panelINFC .ic-switch-txt b { font-size: 15px; font-weight: 900; color: #0f172a; }
+#panelINFC .ic-switch input { width: 28px; height: 28px; accent-color: #6d28d9; flex: 0 0 auto; }
+#panelINFC .ic-nota { margin: -6px 0 0; font-size: 12px; font-weight: 600; color: #475569; }
+#panelINFC .ic-campo { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: .04em; }
+#panelINFC .ic-campo i { text-transform: none; font-style: normal; font-weight: 600; }
+#panelINFC .ic-campo input { height: 52px; border: 1px solid #94a3b8; border-radius: 14px; background: #fff; padding: 0 14px; font-size: 16px; font-weight: 700; color: #0f172a; text-transform: none; letter-spacing: 0; }
+#panelINFC .ic-grupo { background: #fff; border: 1px solid #cbd5e1; border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+#panelINFC .ic-grupo h3 { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; margin: 0; color: #1e293b; }
+#panelINFC .ic-rubro { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px dashed #cbd5e1; }
+#panelINFC .ic-rubro:first-of-type { border-top: 0; padding-top: 0; }
+#panelINFC .ic-rubro--bloq { background: #f1f5f9; border-radius: 14px; padding: 10px; }
+#panelINFC .ic-rubro-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#panelINFC .ic-edad { font-size: 15px; font-weight: 900; }
+#panelINFC .ic-pill { padding: 3px 10px; border-radius: 999px; background: #fef3c7; color: #78350f; font-size: 12px; font-weight: 800; }
+#panelINFC .ic-pill--gris { background: #e2e8f0; color: #1e293b; }
+#panelINFC .ic-rubro-fila { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#panelINFC .ic-datos { display: flex; flex-direction: column; gap: 2px; font-size: 12px; font-weight: 600; color: #334155; }
+#panelINFC .ic-datos b { color: #0f172a; font-weight: 900; }
+#panelINFC .ic-faltan { font-weight: 800; color: #065f46; }
+#panelINFC .ic-faltan--mal { color: #b91c1c; }
+#panelINFC .ic-stepper { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+#panelINFC .ic-mas-menos { width: 48px; height: 48px; border-radius: 14px; border: 1px solid #64748b; background: #fff; font-size: 24px; font-weight: 900; line-height: 1; color: #0f172a; }
+#panelINFC .ic-mas-menos:active:not(:disabled) { background: #e2e8f0; }
+#panelINFC .ic-mas-menos:disabled { opacity: .35; }
+#panelINFC .ic-stepper input { width: 64px; height: 48px; text-align: center; border: 1px solid #64748b; border-radius: 14px; background: #fff; font-size: 18px; font-weight: 900; color: #0f172a; }
+#panelINFC .ic-stepper input:disabled { background: #e2e8f0; color: #334155; }
+#panelINFC input[aria-invalid="true"] { border: 2px solid #b91c1c !important; background: #fef2f2 !important; }
+#panelINFC .ic-barra-av { height: 6px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+#panelINFC .ic-barra-av span { display: block; height: 100%; width: 0; background: #94a3b8; border-radius: 999px; transition: width .2s ease; }
+#panelINFC .ic-barra-av .ic-barra--ok, #panelINFC .ic-barra-av span.ic-barra--ok { background: #047857; }
+#panelINFC .ic-barra-av span.ic-barra--medio { background: #b45309; }
+#panelINFC .ic-barra-av span.ic-barra--mal { background: #b91c1c; }
+#panelINFC .ic-sinmeta { border: 1px solid #cbd5e1; border-radius: 14px; background: #f8fafc; padding: 10px 14px; font-size: 13px; color: #1e293b; }
+#panelINFC .ic-sinmeta summary { min-height: 32px; font-weight: 800; cursor: pointer; }
+#panelINFC .ic-sinmeta ul { margin: 6px 0 0 18px; list-style: disc; }
+#panelINFC .ic-error { padding: 12px 14px; border-radius: 14px; border: 2px solid #b91c1c; background: #fef2f2; color: #7f1d1d; font-size: 14px; font-weight: 700; }
+#panelINFC .ic-error[hidden] { display: none; }
+#panelINFC .ic-error ul { margin: 6px 0 0 18px; list-style: disc; font-weight: 600; }
+#panelINFC .ic-guardar { flex: 1; min-height: 52px; border-radius: 16px; border: 0; background: #0f172a; color: #fff; font-size: 16px; font-weight: 900; }
+#panelINFC .ic-guardar:disabled { background: #94a3b8; }
+#panelINFC .ic-historial { border: 1px solid #cbd5e1; border-radius: 14px; background: #fff; padding: 10px 14px; font-size: 13px; }
+#panelINFC .ic-historial[hidden] { display: none; }
+#panelINFC .ic-historial summary { min-height: 32px; font-weight: 800; cursor: pointer; }
+#panelINFC .ic-historial ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+#panelINFC .ic-hist-item { width: 100%; min-height: 48px; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; border: 1px solid #cbd5e1; background: #f8fafc; text-align: left; font-size: 13px; color: #0f172a; }
+#panelINFC .ic-vacio { padding: 24px 12px; text-align: center; font-weight: 700; color: #334155; margin: 0; }
+@media (prefers-reduced-motion: reduce) { #panelINFC * { transition: none !important; animation: none !important; } }
+
+/* Influenza móvil: texto que va directo sobre el fondo de la página (sin tarjeta) en modo oscuro */
+html.dark #panelINF :is(.iv-titulo h2, .iv-titulo p, .iv-campo, .iv-municipio-fijo, .iv-resumen, .iv-vacio, .iv-cargando),
+html.dark #panelINFC :is(.ic-titulo h2, .ic-titulo p, .ic-campo, .ic-estado, .ic-vacio, .ic-wrap > .ic-nota) { color: #e2e8f0; }
+html.dark #panelINFC .ic-campo input, html.dark #panelINF .iv-campo input, html.dark #panelINF .iv-campo select, html.dark #panelINFC .ic-sel select { color: #0f172a; }
+
+/* Influenza móvil: contador de dosis en el command hub y guía por pasos */
+.hub-counter { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 52px; padding: 4px 10px; border-radius: 14px; background: #0f172a; color: #ffffff; line-height: 1.05; box-shadow: 0 6px 16px rgba(15, 23, 42, .25); border: 1px solid rgba(255, 255, 255, .18); pointer-events: none; }
+.hub-counter[hidden] { display: none; }
+.hub-counter-num { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.hub-counter-etq { font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; opacity: .9; }
+html.dark .hub-counter { background: #f8fafc; color: #0f172a; border-color: rgba(15, 23, 42, .25); }
+#panelINFC .ic-pasos { background: #fff; border: 1px solid #cbd5e1; border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+#panelINFC .ic-pasos-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#panelINFC .ic-pasos-cab h3 { margin: 0; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; color: #1e293b; }
+#panelINFC .ic-ayuda { min-width: 44px; min-height: 44px; margin: -6px -6px -6px 0 !important; color: #4c1d95; }
+#panelINFC .ic-paso-actual { margin: 0; font-size: 14px; font-weight: 800; color: #0f172a; }
+#panelINFC .ic-pasos-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+#panelINFC .ic-paso { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 14px; border: 1px solid #e2e8f0; background: #f8fafc; }
+#panelINFC .ic-paso.is-active { border-color: #6d28d9; background: #f5f3ff; }
+#panelINFC .ic-paso.is-done { border-color: #a7f3d0; background: #ecfdf5; }
+#panelINFC .ic-paso.is-lock { opacity: 1; background: #f1f5f9; border-style: dashed; }
+#panelINFC .ic-paso-num { flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 900; background: #e2e8f0; color: #1e293b; }
+#panelINFC .ic-paso.is-active .ic-paso-num { background: #6d28d9; color: #fff; }
+#panelINFC .ic-paso.is-done .ic-paso-num { background: #047857; color: #fff; }
+#panelINFC .ic-paso-num .material-symbols-rounded { font-size: 18px; }
+#panelINFC .ic-paso-cuerpo { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 12px; font-weight: 600; color: #334155; overflow-wrap: anywhere; }
+#panelINFC .ic-paso-cuerpo b { font-size: 14px; font-weight: 900; color: #0f172a; }
+#panelINFC .ic-guardar-nota { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 700; color: #334155; }
+html.dark #panelINFC .ic-guardar-nota { color: #e2e8f0; }

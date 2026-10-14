@@ -39,7 +39,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1" rel="stylesheet">
 
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="mobile_style.css?v=2026.37">
+  <link rel="stylesheet" href="mobile_style.css?v=2026.43">
   <link rel="stylesheet" href="ayuda.css?v=1">
 </head>
 <body class="bg-[#f1f4f8] text-slate-800 min-h-[100dvh] flex flex-col relative overflow-x-hidden">
@@ -335,6 +335,16 @@
       </section>
 
       <!-- ==================== PINOL (PINOL) ==================== -->
+      <!-- ==================== INFLUENZA: CAPTURA SEMANAL (unidad) ==================== -->
+      <section id="panelINFC" class="panel-section hidden" role="region" aria-label="Captura de Influenza">
+        <div id="infCapRoot"><p class="ic-vacio" role="status">Cargando…</p></div>
+      </section>
+
+      <!-- ==================== INFLUENZA: VALIDACIÓN (supervisión) ==================== -->
+      <section id="panelINF" class="panel-section hidden" role="region" aria-label="Validación de Influenza">
+        <div id="infValRoot"><p class="iv-cargando" role="status">Cargando…</p></div>
+      </section>
+
       <section id="panelPINOL" class="panel-section hidden" role="region" aria-label="Solicitud de Pinol">
         <!-- ℹ️ Info Card for PINOL -->
         <div class="biologic-card liquid-glass flex gap-3.5 items-start mb-6">
@@ -384,6 +394,7 @@
         <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
         <span id="hubStatusText">Listo</span>
       </div>
+      <div id="hubCounter" class="hub-counter" hidden aria-hidden="true"><span class="hub-counter-num">0</span><span class="hub-counter-etq">dosis</span></div>
       <button id="hubSaveBtn" type="button" aria-label="Guardar" title="Guardar" class="w-14 h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
         <span class="material-symbols-rounded text-2xl">save</span>
       </button>
@@ -416,6 +427,14 @@
         <button class="dock-item" data-panel="PINOL" type="button" style="--hoja:#059669;">
           <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
           <span class="dock-label">Pinol</span>
+        </button>
+        <button class="dock-item" hidden id="dockItemINFC" data-panel="INFC" type="button" style="--hoja:#7c3aed;">
+          <span class="material-symbols-rounded" aria-hidden="true">ac_unit</span>
+          <span class="dock-label">Influenza</span>
+        </button>
+        <button class="dock-item" hidden id="dockItemINF" data-panel="INF" type="button" style="--hoja:#6d28d9;">
+          <span class="material-symbols-rounded" aria-hidden="true">fact_check</span>
+          <span class="dock-label">Influenza</span>
         </button>
       </div>
     </div>
@@ -763,8 +782,13 @@
   <script src="feedback_autoreply.js?v=2026.2" defer></script>
   <script src="perfil_cuenta.js?v=2026.2" defer></script>
   <script src="calendario_capacitaciones.js?v=2026.4" defer></script>
+  <script src="guias_contenido.js?v=3" defer></script>
   <script src="ayuda.js?v=13" defer></script>
 <script defer src="a11y_global.js?v=6"></script>
-  <script src="mobile_main.js?v=2026.37" defer></script>
+  <script src="influenza_reglas.js?v=1" defer></script>
+  <script src="influenza_rubros.js?v=1" defer></script>
+  <script src="mobile_influenza_validacion.js?v=2" defer></script>
+  <script src="mobile_influenza_captura.js?v=4" defer></script>
+  <script src="mobile_main.js?v=2026.40" defer></script>
 </body>
 </html>

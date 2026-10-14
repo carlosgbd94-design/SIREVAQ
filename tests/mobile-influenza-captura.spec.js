@@ -1,0 +1,177 @@
+// Captura semanal de Influenza para la unidad en móvil: semanas, meta en vivo, sin movimiento, reglas y guardado.
+// Mismo PostgREST simulado que mobile-dock-oneui.spec.js.
+const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const path = require('path');
+
+const RUIDO = /sentry|favicon|Failed to load resource|net::ERR|ERR_BLOCKED|Manifest|preload|fonts\.g|googleapis|unpkg|gstatic|cdn|posthog|ResizeObserver|DevTools|lucide|navigator\.vibrate/i;
+
+const srcDock = fs.readFileSync(path.join(__dirname, 'mobile-dock-oneui.spec.js'), 'utf8');
+const creaServidor = new Function(srcDock.slice(srcDock.indexOf('function creaServidor'), srcDock.indexOf('const idx =')) + '\nreturn creaServidor;')();
+
+const CAMP = 'Campaña Influenza 2026-2027';
+
+function estado({ rol = 'UNIDAD', metas = { r1: 100, r2: 12, r6: 40, r11: 20 }, capturas } = {}) {
+  return {
+    db: {
+      perfiles: [{ id: 'u1', usuario: 'ana', nombre: 'Ana Perez', rol, clues: 'QTSSA000001', unidad: 'CENTRO A', municipio: 'QUERETARO', activo: 'SI' }],
+      campanas: [{ id: 1, nombre: CAMP, activo: true, fecha_inicio: '2026-10-01', fecha_fin: '2027-04-30' }],
+      influenza_metas: metas ? [{ clues: 'QTSSA000001', municipio: 'QUERETARO', anio_campana: CAMP, metas }] : [],
+      influenza_capturas: capturas || [
+        { clues: 'QTSSA000001', unidad: 'CENTRO A', municipio: 'QUERETARO', fecha: '2026-10-09', anio_campana: CAMP, valores: { r1: 80 }, capturado_por: 'ANA', editado_por: 'UNIDAD', historial_ediciones: [], folio: 'INF-20261009-AAAA1111' }
+      ]
+    },
+    rpc: {}
+  };
+}
+
+async function abrir(page, st, ahora = '2026-10-14T12:00:00') {
+  const srv = creaServidor(st);
+  const errores = [];
+  page.on('pageerror', (e) => errores.push('PAGEERROR: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error' && !RUIDO.test(m.text())) errores.push('CONSOLE: ' + m.text().slice(0, 200)); });
+  page.on('dialog', (d) => d.accept());
+  await page.route(/\.supabase\.co\//, (r) => srv.manejar(r));
+  await page.clock.setFixedTime(new Date(ahora));
+  await page.addInitScript(() => {
+    localStorage.setItem('sb-utclfqjietlxzlorxhrs-auth-token', JSON.stringify({
+      access_token: 'aaa.bbb.ccc', token_type: 'bearer', expires_in: 31536000, expires_at: Math.floor(Date.now() / 1000) + 31536000, refresh_token: 'r',
+      user: { id: 'u1', email: 'ana@x.mx', user_metadata: {} }
+    }));
+  });
+  await page.goto('/mobile.html', { waitUntil: 'load' });
+  await page.waitForSelector('#mainApp:not(.hidden)', { timeout: 20000 });
+  return { srv, errores };
+}
+
+test.describe('Influenza: captura de la unidad en móvil', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('solo UNIDAD ve la pestaña; supervisión ve la de validación', async ({ page }) => {
+    await abrir(page, estado({ rol: 'ADMIN' }));
+    await expect(page.locator('#dockItemINFC')).toBeHidden();
+    await expect(page.locator('#dockItemINF')).toBeVisible();
+  });
+
+  test('semana en curso, resumen de meta en vivo, faltantes y reglas de calendario', async ({ page }) => {
+    const { errores } = await abrir(page, estado());
+    await page.click('#dockItemINFC');
+    await expect(page.locator('#icSemana')).toHaveValue('2026-10-16');
+    await expect(page.locator('.ic-chip')).toHaveText('Pendiente');
+    await expect(page.locator('#icMeta')).toHaveText('172');                       // 100 + 12 + 40 + 20
+    await expect(page.locator('#icAplicadas')).toHaveText('80');                   // acumulado anterior
+    // r1: meta 100, antes 80 → faltan 20; al capturar 5, faltan 15
+    await expect(page.locator('#icf_r1')).toHaveText('Faltan 20');
+    await page.click('.ic-mas-menos[data-rubro="r1"][data-paso="1"]');
+    await page.click('.ic-mas-menos[data-rubro="r1"][data-paso="1"]');
+    await expect(page.locator('#ic_r1')).toHaveValue('2');
+    await expect(page.locator('#icf_r1')).toHaveText('Faltan 18');
+    await expect(page.locator('#icAplicadas')).toHaveText('82');
+    await expect(page.locator('#hubCounter .hub-counter-num')).toHaveText('2');
+    await expect(page.locator('#hubSaveBtn')).toHaveAttribute('aria-label', /2 dosis esta semana/);
+    // 2ª dosis aún no disponible (1er mes de la campaña): campo deshabilitado
+    await expect(page.locator('#ic_r6')).toBeDisabled();
+    await expect(page.locator('.ic-aviso:not(.ic-aviso--info)').first()).toContainText('2ª dosis no disponible');
+    // Se pasa de la meta: aviso en vivo
+    await page.fill('#ic_r1', '30');
+    await expect(page.locator('#icf_r1')).toHaveText('Rebasa por 10');
+    await expect(page.locator('#ic_r1')).toHaveAttribute('aria-invalid', 'true');
+    expect(errores).toEqual([]);
+  });
+
+  test('usa el command hub (chip, contador y guardar) y la guía por pasos accesible', async ({ page }) => {
+    await abrir(page, estado());
+    await page.click('#dockItemINFC');
+    await expect(page.locator('#globalCommandHub')).toHaveClass(/visible/);
+    await expect(page.locator('#hubStatusText')).toHaveText('Listo');
+    await expect(page.locator('#hubCounter')).toBeVisible();
+    await expect(page.locator('#hubCounter .hub-counter-num')).toHaveText('0');
+    // Pasos: semana y nombre ya completos (nombre del perfil); el paso actual es «Captura las dosis»
+    await expect(page.locator('#icPasos li')).toHaveCount(4);
+    await expect(page.locator('#icPasos li[aria-current="step"]')).toContainText('Captura las dosis');
+    await expect(page.locator('#icPasoActual')).toHaveText('Paso 3 de 4: Captura las dosis');
+    await page.click('.ic-mas-menos[data-rubro="r1"][data-paso="1"]');
+    await expect(page.locator('#icPasoActual')).toHaveText('Paso 4 de 4: Guarda y recibe tu folio');
+    // Ayuda por pasos (Anterior / Siguiente)
+    await page.click('.ic-ayuda');
+    await expect(page.getByRole('button', { name: /Siguiente/i }).first()).toBeVisible();
+  });
+
+  test('semanas futuras: cerrada con motivo y sin guardar', async ({ page }) => {
+    await abrir(page, estado());
+    await page.click('#dockItemINFC');
+    await page.click('#icSig');
+    await expect(page.locator('.ic-chip')).toHaveText('Aún no abre');
+    await expect(page.locator('.ic-aviso--cerrada')).toContainText('aún no se puede capturar');
+    await expect(page.locator('#hubSaveBtn')).toBeDisabled();
+  });
+
+  test('guardar: pide nombre, valida la meta y manda el reporte con folio', async ({ page }) => {
+    const { srv, errores } = await abrir(page, estado());
+    await page.click('#dockItemINFC');
+    await page.fill('#ic_r1', '10');
+    await page.fill('#ic_r11', '4');
+    await page.fill('#icNombre', '');   // el nombre llega precargado del perfil
+    await page.click('#hubSaveBtn');
+    await expect(page.locator('#icError')).toContainText('nombre');
+    await expect(page.locator('#icNombre')).toBeFocused();
+
+    await page.fill('#icNombre', 'Ana Perez');
+    await page.fill('#ic_r1', '50');                                              // 80 + 50 > 100
+    await page.click('#hubSaveBtn');
+    await expect(page.locator('#icError')).toContainText('superas la meta');
+    await expect(page.locator('#ic_r1')).toBeFocused();
+    expect(srv.reqs.filter(r => r.nombre === 'influenza_capturas' && r.m === 'POST')).toHaveLength(0);
+
+    await page.fill('#ic_r1', '10');
+    await page.click('#hubSaveBtn');
+    await expect(page.locator('#icExito')).toBeVisible();
+    const post = srv.reqs.find(r => r.nombre === 'influenza_capturas' && r.m === 'POST');
+    const fila = Array.isArray(post.body) ? post.body[0] : post.body;
+    expect(fila).toMatchObject({ clues: 'QTSSA000001', fecha: '2026-10-16', anio_campana: CAMP, editado_por: 'UNIDAD', sin_movimiento: false, capturado_por: 'ANA PEREZ' });
+    expect(fila.valores.r1).toBe(10);
+    expect(fila.valores.r11).toBe(4);
+    expect(errores).toEqual([]);
+  });
+
+  test('sin movimiento guarda todo en cero y no exige cantidades', async ({ page }) => {
+    const { srv } = await abrir(page, estado());
+    await page.click('#dockItemINFC');
+    await page.fill('#icNombre', 'Ana Perez');
+    await page.check('#icSinMov');
+    await expect(page.locator('#hubCounter .hub-counter-etq')).toHaveText('sin mov.');
+    await expect(page.locator('.ic-grupo')).toHaveCount(0);
+    await page.click('#hubSaveBtn');
+    await expect(page.locator('#icExito')).toBeVisible();
+    const post = srv.reqs.find(r => r.nombre === 'influenza_capturas' && r.m === 'POST');
+    const fila = Array.isArray(post.body) ? post.body[0] : post.body;
+    expect(fila.sin_movimiento).toBe(true);
+    expect(Object.values(fila.valores).every(v => v === 0)).toBe(true);
+  });
+
+  test('unidad sin meta: avisa y solo permite sin movimiento', async ({ page }) => {
+    await abrir(page, estado({ metas: null }));
+    await page.click('#dockItemINFC');
+    await expect(page.locator('.ic-aviso').first()).toContainText('no tiene meta asignada');
+    await expect(page.locator('.ic-grupo')).toHaveCount(0);
+    await expect(page.locator('#icSinMov')).toBeEnabled();
+  });
+
+  test('móvil: sin desbordes y objetivos táctiles de 44 px', async ({ page }) => {
+    await abrir(page, estado());
+    await page.click('#dockItemINFC');
+    const r = await page.evaluate(() => ({
+      desborde: document.documentElement.scrollWidth > window.innerWidth,
+      chicos: [...document.querySelectorAll('#panelINFC button:not([disabled]), #panelINFC input:not([disabled]):not([type=checkbox]), #panelINFC select')].filter(e => e.getBoundingClientRect().height < 44).map(e => e.id || e.className)
+    }));
+    expect(r.desborde).toBe(false);
+    expect(r.chicos).toEqual([]);
+    if (process.env.IC_SHOT) {
+      await page.waitForTimeout(3500);
+      await page.screenshot({ path: process.env.IC_SHOT, fullPage: false });
+      await page.evaluate(() => window.scrollTo(0, 560));
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: process.env.IC_SHOT.replace('.png', '2.png'), fullPage: false });
+    }
+  });
+});
