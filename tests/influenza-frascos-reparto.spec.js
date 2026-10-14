@@ -1045,3 +1045,63 @@ test('COVID pérdida (Metas): el municipal ve el factor pero no lo puede editar'
   await expect(page.locator('#covidPerdidaInput')).toBeDisabled();
   await expect(page.locator('#covidPerdidaInput')).toHaveValue('3900');
 });
+
+test('COVID: recorrido completo (metas y frascos, Jurisdicción y municipal, ambas marcas) sin errores de consola', async ({ page }) => {
+  const errores = [];
+  // reference.html (el lienzo de la prueba) trae su propio bucle de animación que falla al vaciar el <body>:
+  // no es de la app, se ignora cuando la pila no pasa por código de influenza/COVID.
+  page.on('pageerror', (e) => {
+    const pila = String(e.stack || '');
+    if (!/reference\.html/.test(pila) || /influenza|covid/i.test(pila)) errores.push(`pageerror: ${e.message} @ ${pila}`);
+  });
+  page.on('console', (m) => { if (m.type() === 'error') errores.push(`console: ${m.text()}`); });
+  const metasInf = [
+    { clues: null, municipio: 'QUERETARO', metas: { r1: 6000, r15: 3000, r16: 500, r17: 100, r18: 2000 } },
+    { clues: 'Q1', municipio: 'QUERETARO', metas: { r1: 3000, r15: 1500, r18: 1000 } },
+    { clues: 'Q2', municipio: 'QUERETARO', metas: { r1: 2000, r15: 1000, r18: 800 } },
+    { clues: 'Q3', municipio: 'QUERETARO', metas: { r1: 1000, r15: 500, r18: 200 } }
+  ];
+  for (const rol of ['JURISDICCIONAL', 'MUNICIPAL']) {
+    await montarMetas(page, rol, metasInf);
+    await page.evaluate(([j]) => {
+      window.__llamadas = []; window.__errores = []; window.__toasts = [];
+      _vacuna = 'COVID'; _marcaCovid = 'MODERNA';
+      _covidMetasArray = [
+        { clues: null, municipio: 'JURISDICCION', metas: j },
+        { clues: null, municipio: 'QUERETARO', metas: { c1: 600, c2: 600, c3: 100, c4: 120, c5: 10, c6: 10 } }
+      ];
+      _covidRemesasAll = []; _covidFrascosAll = [];
+      window.__render();
+    }, [JURIS_COVID]);
+    await page.click('#btnCovidPredistribuir');
+    if (rol === 'JURISDICCIONAL') await page.fill('#covidPerdidaInput', '100');   // el municipal solo la ve
+    await page.click('#btnSaveInfluenzaMetas');
+  }
+  // Frascos: ambas marcas, ambos roles
+  for (const rol of ['JURISDICCIONAL', 'MUNICIPAL']) {
+    await montar(page, rol);
+    await page.evaluate(() => {
+      _vacuna = 'COVID'; _marcaCovid = 'MODERNA';
+      _covidMetasArray = [
+        { clues: null, municipio: 'JURISDICCION', metas: { c1: 600, c2: 600, c3: 100, c4: 120, c5: 10, c6: 10, perdida: 50 } },
+        { clues: null, municipio: 'QUERETARO', metas: { c1: 600, c2: 600, c3: 100, c4: 120, c5: 10, c6: 10 } },
+        { clues: 'Q1', municipio: 'QUERETARO', metas: { c1: 300, c2: 300, c3: 50, c4: 60, c5: 5, c6: 5 } },
+        { clues: 'Q2', municipio: 'QUERETARO', metas: { c1: 300, c2: 300, c3: 50, c4: 60, c5: 5, c6: 5 } }
+      ];
+      _covidRemesasAll = [{ marca: 'MODERNA', numero_entrega: 1, fecha: '2026-10-05', total_frascos: 20, asignacion: { QUERETARO: 20 }, manual: [] }];
+      _covidFrascosAll = [];
+      renderFrascosDistribution();
+    });
+    await page.evaluate(() => { _marcaCovid = 'PFIZER'; _remesaState.numero = null; _muniRepartoState.numero = null; renderFrascosDistribution(); });
+    await page.evaluate(() => { _marcaCovid = 'MODERNA'; renderFrascosDistribution(); });
+    if (rol === 'JURISDICCIONAL') {
+      await page.fill('#remesaTotalInput', '10');
+      await page.click('#btnSaveRemesa');
+    } else {
+      await page.click('#btnSaveFrascoEntrega');
+    }
+    // Volver a influenza no debe romper nada
+    await page.evaluate(() => { _vacuna = 'INFLUENZA'; renderFrascosDistribution(); });
+  }
+  expect(errores).toEqual([]);
+});
