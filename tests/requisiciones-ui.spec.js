@@ -1230,3 +1230,41 @@ test('Requisiciones: la entrega de COVID-19 ya vinculada a otra requisición no 
   await expect(page.locator('#covTraer')).toBeDisabled();
   expect(errores).toEqual([]);
 });
+
+test('Requisiciones COVID (municipal): ve Moderna y Pfizer por separado solo de sus unidades, sin «Traer reparto» ni edición', async ({ page }) => {
+  await page.addInitScript(() => { window.__FAKE_COVID__ = true; window.__FAKE_COVID_REPARTIDO__ = true; });
+  const errores = await preparar(page, { rol: 'MUNICIPAL', conReq: true, muni: 'QUERETARO' });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await expect(page.locator('#panelPaso3')).toHaveClass(/activo/);
+
+  // La jurisdicción trae el reparto; el municipal no tiene esos botones ni la edición
+  await expect(page.locator('#btnTraerCovid')).toBeHidden();
+  await expect(page.locator('#btnTraerInfluenza')).toBeHidden();
+
+  // Paso 3 (reparto a unidades): Moderna y Pfizer en columnas/renglones separados, en frascos
+  const matriz = page.locator('#matrizUnidad');
+  await expect(matriz).toContainText('MODERNA');
+  await expect(matriz).toContainText('PFIZER');
+  const celda = (unidad, lote) => page.locator(`#matrizUnidad input.celda[data-unidad="${unidad}"][data-lote="${lote}"]`);
+  await expect(celda('un-q1', 'lote-mod')).toHaveValue('30');
+  await expect(celda('un-q1', 'lote-pfz')).toHaveValue('10');
+  await expect(celda('un-q2', 'lote-mod')).toHaveValue('20');
+  await expect(celda('un-q1', 'lote-mod')).toBeHidden();              // solo lectura: la captura no se ve...
+  const lectura = (unidad, lote) => celda(unidad, lote).locator('xpath=..').locator('.solo-lectura');
+  await expect(lectura('un-q1', 'lote-mod')).toHaveText('30');        // ...y el número se muestra como texto
+  await expect(lectura('un-q1', 'lote-pfz')).toHaveText('10');
+  // Corregidora (un-c1) no es suya: no aparece
+  await expect(matriz).not.toContainText('C.S. Uno');
+  expect(await page.locator('#matrizUnidad input.celda[data-unidad="un-c1"]').count()).toBe(0);
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones COVID (jurisdicción): ve a todos los municipios con Moderna y Pfizer separados', async ({ page }) => {
+  await page.addInitScript(() => { window.__FAKE_COVID__ = true; window.__FAKE_COVID_REPARTIDO__ = true; });
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await expect(page.locator('#btnTraerCovid')).toBeVisible();
+  const porBio = "Object.fromEntries(db.requi_items_jurisdiccion.map((i) => [i.requi_biologico_id, i.cantidad_surtida]))";
+  expect(await db(page, porBio)).toEqual({ 'bio-mod': 70, 'bio-pfz': 10 });
+  expect(errores).toEqual([]);
+});

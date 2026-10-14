@@ -52,6 +52,21 @@
     const hoy = new Date();
     db.requi_requisiciones.push({ id: 'req-hoy', anio: hoy.getFullYear(), mes: hoy.getMonth() + 1, entrega: 1, etiqueta: null, estado: 'BORRADOR', fue_corregido: false, creado_por: 'x', fecha_envio: null });
   }
+  // COVID ya repartido a unidades (opcional, con __FAKE_COVID__ y requisición): Moderna 70 y Pfizer 10, por
+  // lote POR DEFINIR; Querétaro (un-q1 30+10, un-q2 20) y Corregidora (un-c1 20, ajena a un municipal de Querétaro).
+  if (window.__FAKE_COVID__ && window.__FAKE_COVID_REPARTIDO__ && window.__FAKE_CON_REQ__) {
+    const hoy2 = new Date();
+    const lm = { id: 'lote-mod', requi_biologico_id: 'bio-mod', numero_lote: 'POR DEFINIR', caducidad: null };
+    const lp = { id: 'lote-pfz', requi_biologico_id: 'bio-pfz', numero_lote: 'POR DEFINIR', caducidad: null };
+    db.requi_lotes.push(lm, lp);
+    db.requi_items_jurisdiccion.push(
+      { id: uid(), requisicion_id: 'req-hoy', requi_biologico_id: 'bio-mod', lote_id: 'lote-mod', cantidad_surtida: 70 },
+      { id: uid(), requisicion_id: 'req-hoy', requi_biologico_id: 'bio-pfz', lote_id: 'lote-pfz', cantidad_surtida: 10 });
+    [['QUERETARO', 'bio-mod', 'lote-mod', 50], ['CORREGIDORA', 'bio-mod', 'lote-mod', 20], ['QUERETARO', 'bio-pfz', 'lote-pfz', 10]]
+      .forEach(([municipio, b, l, cantidad]) => db.requi_distribucion_municipio.push({ id: uid(), requisicion_id: 'req-hoy', municipio, requi_biologico_id: b, lote_id: l, cantidad }));
+    [['un-q1', 'bio-mod', 'lote-mod', 30], ['un-q2', 'bio-mod', 'lote-mod', 20], ['un-c1', 'bio-mod', 'lote-mod', 20], ['un-q1', 'bio-pfz', 'lote-pfz', 10]]
+      .forEach(([unidad_id, b, l, cantidad]) => db.requi_distribucion_unidad.push({ id: uid(), requisicion_id: 'req-hoy', unidad_id, requi_biologico_id: b, lote_id: l, cantidad }));
+  }
   // Mes anterior (base de "Sugerir"): SRP 60/20/10/30 y HEXA 50/50 entre municipios;
   // en Corregidora, SRP y HEXA se repartían 30/30/0 entre sus unidades.
   const dmPrev = (municipio, b, cantidad) => db.requi_distribucion_municipio.push({ id: uid(), requisicion_id: 'req-prev', municipio, requi_biologico_id: b, lote_id: 'lote-prev', cantidad });
