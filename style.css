@@ -6378,6 +6378,24 @@ html.dark button.notifDigestOpenBtn { color: #fb7185; }
   width: 5px !important;
 }
 
+/* Pista con margen: el pulgar ya no choca con las esquinas redondeadas */
+#profileDropdown { scrollbar-width: thin; scrollbar-color: rgba(14, 165, 233, 0.25) transparent; overscroll-behavior: contain; }
+#profileDropdown::-webkit-scrollbar-track { background: transparent; margin: 24px 0; }
+
+/* Desvanecido en los bordes al hacer scroll (data-fade-* lo marca perfil_cuenta.js) */
+#profileDropdown[data-fade-top] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
+}
+#profileDropdown[data-fade-bottom] {
+  -webkit-mask-image: linear-gradient(to top, transparent 0, #000 28px);
+  mask-image: linear-gradient(to top, transparent 0, #000 28px);
+}
+#profileDropdown[data-fade-top][data-fade-bottom] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
+}
+
 #profileDropdown::-webkit-scrollbar-thumb {
   background: rgba(14, 165, 233, 0.2) !important;
   border-radius: 10px !important;
@@ -7964,11 +7982,22 @@ input, textarea, select, [contenteditable] {
   gap: 0;
 }
 
-.nav-container.nav-compact .nav-tab span:not(.material-symbols-rounded) {
+.nav-container.nav-compact .nav-tab span:not(.material-symbols-rounded):not([data-cal-cap-badge]) {
   opacity: 0;
   width: 0;
   margin: 0;
   display: inline-block;
+}
+
+/* Insignia de recordatorios (Capacitaciones): en modo compacto no ocupa espacio
+   en la fila (dejaba un hueco antes de Seguridad); queda como globito en la
+   esquina del icono. */
+.nav-tab[id="tabOPS_CALENDARIO"] [data-cal-cap-badge] { flex: none; }
+.nav-container.nav-compact .nav-tab [data-cal-cap-badge] {
+  position: absolute; top: 4px; right: 2px;
+  min-width: 16px !important; height: 16px !important; padding: 0 4px !important;
+  font-size: 9.5px !important; line-height: 1; margin: 0 !important;
+  pointer-events: none;
 }
 
 /* ==========================================================================
@@ -15083,17 +15112,14 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
 
 /* Selector de vacuna (Influenza | COVID-19) en Distribución de Metas y Control de Frascos. Plano, sin relieve. */
 .vac-seg { display: inline-flex; padding: 3px; gap: 2px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px; }
-#secInfluenzaMetas .vac-seg .vac-btn,
-#secInfluenzaFrascos .vac-seg .vac-btn {
+#panelINFLUENZAADMIN .vac-seg .vac-btn {
   height: 34px !important; min-height: 34px !important; padding: 0 16px !important;
   border: 0 !important; border-radius: 9px !important; background: transparent !important;
   font-family: inherit !important; font-size: 12px !important; font-weight: 800 !important;
   color: #64748b !important; cursor: pointer; box-shadow: none !important; transform: none !important;
 }
-#secInfluenzaMetas .vac-seg .vac-btn.activo,
-#secInfluenzaFrascos .vac-seg .vac-btn.activo { background: #4c1d95 !important; color: #ffffff !important; }
-#secInfluenzaMetas .vac-seg .vac-btn:focus-visible,
-#secInfluenzaFrascos .vac-seg .vac-btn:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
+#panelINFLUENZAADMIN .vac-seg .vac-btn.activo { background: #4c1d95 !important; color: #ffffff !important; }
+#panelINFLUENZAADMIN .vac-seg .vac-btn:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
 #secInfluenzaFrascos .vac-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 #secInfluenzaFrascos .vac-bar .vac-marca { width: auto !important; min-width: 280px; }
 #secInfluenzaMetas .vac-perdida { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -15105,3 +15131,7 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
 #secInfluenzaMetas .vac-perdida-inp:focus { border-color: #7c3aed !important; }
 #secInfluenzaMetas .vac-perdida-inp:disabled { background-color: #f1f5f9 !important; color: #64748b !important; }
 #secInfluenzaMetas .vac-perdida-txt { font-size: 11px; font-weight: 700; color: #64748b; }
+/* Panel «Temporada invernal»: barra de vacuna a nivel de panel y subpestañas que solo son de Influenza. */
+#panelINFLUENZAADMIN .tinv-vacuna { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; }
+#panelINFLUENZAADMIN .tinv-vacuna-lbl { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #64748b; }
+#panelINFLUENZAADMIN #influenzaAdminTabsContainer .nav-tab.tinv-oculta { display: none !important; }

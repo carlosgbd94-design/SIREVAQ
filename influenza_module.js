@@ -114,19 +114,24 @@ function deriveCampaignName(startStr, endStr) {
 /** Puebla todos los selectores de campaña en el DOM */
 function populateCampaignSelectors() {
   const infCampanas = _allCampaigns.filter(c => c.nombre && c.nombre.startsWith("Campaña Influenza"));
-  
-  let html = "";
+  // El panel «Temporada invernal» cubre influenza y COVID-19: ahí se muestra «Temporada invernal 2026-2027»
+  // (el valor sigue siendo el nombre de la campaña, que es la llave de los datos).
+  const etiquetaTemporada = (n) => String(n).replace(/^Campaña Influenza\s*/i, "Temporada invernal ");
+
+  let html = "", htmlTemporada = "";
   if (infCampanas.length > 0) {
     html = infCampanas.map(c => `<option value="${c.nombre}">${c.nombre}</option>`).join("");
+    htmlTemporada = infCampanas.map(c => `<option value="${c.nombre}">${etiquetaTemporada(c.nombre)}</option>`).join("");
   } else {
     const name = deriveCampaignName(_campaignConfig.fecha_inicio, _campaignConfig.fecha_fin);
     html = `<option value="Campaña Influenza ${name}">Campaña Influenza ${name}</option>`;
+    htmlTemporada = `<option value="Campaña Influenza ${name}">Temporada invernal ${name}</option>`;
   }
 
   ["influenza_campana", "metaCampaignSelect"].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
-      el.innerHTML = html;
+      el.innerHTML = id === "metaCampaignSelect" ? htmlTemporada : html;
       if (_selectedCampaign) {
         el.value = _selectedCampaign.nombre;
       }
@@ -1511,6 +1516,7 @@ async function saveInfluenzaReport() {
 async function refreshInfluenzaAdminPanel() {
   // Manejador de subpestañas
   initInfluenzaSubtabs();
+  vacunaPintarSelectores();   // respeta la vacuna elegida: con COVID-19 solo Metas y Frascos
 
   // Cargar configuración de fechas
   await loadCampaignConfig();
@@ -1662,7 +1668,7 @@ async function loadInfluenzaAdminData() {
 }
 
 async function loadCovidAdminData(campana) {
-  const camp = campana || document.getElementById("metaCampaignSelect").value;
+  const camp = campana || document.getElementById("metaCampaignSelect")?.value || "";
   try {
     const [m, d, r] = await Promise.all([
       AppService.call("getcovid_metas", { anio_campana: camp }),
@@ -1705,8 +1711,9 @@ function vacunaPintarSelectores() {
       }
     });
   });
+  const barraMarca = document.getElementById("frascosMarcaBar");
+  if (barraMarca) barraMarca.style.display = esCovid() ? "" : "none";
   document.querySelectorAll(".vac-marca").forEach(sel => {
-    sel.style.display = esCovid() ? "" : "none";
     sel.value = _marcaCovid;
     if (!sel.dataset.bound) {
       sel.dataset.bound = "1";
@@ -1723,6 +1730,25 @@ function vacunaPintarSelectores() {
     nota.innerHTML = _marcaCovid === "PFIZER"
       ? "<b>COVID-19 · Pfizer</b>: solo adultos (0.5 mL); 1 frasco = 6 dosis. Se reparte en proporción a la meta de adultos (5-59 años con riesgo, 60+, embarazadas y personal de salud)."
       : "<b>COVID-19 · Moderna</b>: pediátrica (0.25 mL) y adulto (0.5 mL); 1 frasco = 10 dosis de 0.5 mL (las pediátricas cuentan la mitad). Lo entregado de Pfizer también descuenta de la misma meta.";
+  }
+  temporadaAplicarVacuna();
+}
+
+// Subpestañas que solo existen para Influenza (captura semanal, validación, conciliación con el CSV y fechas de
+// campaña). Con COVID-19 el panel muestra únicamente lo suyo: Distribución de Metas y Control de Frascos.
+const TEMPORADA_SOLO_INFLUENZA = ["subtabInfluenzaAvances", "subtabInfluenzaValidacion", "subtabInfluenzaConciliacion", "subtabInfluenzaConfig"];
+function temporadaAplicarVacuna() {
+  TEMPORADA_SOLO_INFLUENZA.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("tinv-oculta", esCovid());
+  });
+  // Si estaba en una subpestaña que COVID no tiene, pasa a Distribución de Metas.
+  if (esCovid() && TEMPORADA_SOLO_INFLUENZA.some(id => document.getElementById(id)?.classList.contains("active"))) {
+    const metas = document.getElementById("subtabInfluenzaMetas");
+    if (metas) metas.click();
+  }
+  if (typeof syncTabGroupIndicator === "function" && document.getElementById("influenzaAdminTabsContainer")) {
+    syncTabGroupIndicator("#influenzaAdminTabsContainer");
   }
 }
 
@@ -4781,6 +4807,7 @@ function renderMetasConfigurationGrid() {
   const grupoExp = document.querySelector("#secInfluenzaMetas .meta-exp-grupo");
   if (grupoExp) grupoExp.style.display = esCovid() ? "none" : "";
   vacunaPintarSelectores();
+  if (esCovid() && hints && !hints.textContent.startsWith("COVID-19")) hints.textContent = `COVID-19 · ${hints.textContent}`;
   covidPintarPerdida();
   const btnPre = document.getElementById("btnCovidPredistribuir");
   if (btnPre) {

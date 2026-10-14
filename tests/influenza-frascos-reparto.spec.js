@@ -1105,3 +1105,78 @@ test('COVID: recorrido completo (metas y frascos, Jurisdicción y municipal, amb
   }
   expect(errores).toEqual([]);
 });
+
+// ─── Panel «Temporada invernal»: vacuna a nivel de panel, cada vacuna con su espacio ───
+const panelTemporada = html.slice(
+  html.indexOf('<!-- META LOGRO INFLUENZA ADMIN/MUNICIPAL -->'),
+  html.indexOf('<!-- SECCIÓN 1: CONCENTRADO DE AVANCES -->'));
+
+async function montarPanel(page) {
+  await page.goto('/reference.html');
+  await page.evaluate(() => { document.body.innerHTML = ''; });
+  await page.addStyleTag({ path: path.join(raiz, 'style.css') });
+  await page.evaluate((h) => {
+    window.__llamadas = []; window.__clicks = [];
+    document.body.innerHTML = h;
+    document.getElementById('panelINFLUENZAADMIN').style.display = '';
+    ['Avances', 'Validacion', 'Conciliacion', 'Metas', 'Frascos', 'Config'].forEach((n) => {
+      document.getElementById(`subtabInfluenza${n}`).addEventListener('click', () => window.__clicks.push(n));
+    });
+  }, panelTemporada);
+  await page.addScriptTag({ path: path.join(raiz, 'covid_frascos.js') });
+  await page.addScriptTag({ content: `
+    var USER = { rol: 'JURISDICCIONAL' };
+    var _adminMetasArray = [], _adminRemesasArray = [], _adminFrascosArray = [];
+    var AppService = { call: async function (a, p) { window.__llamadas.push([a, p]); return { ok: true, data: [] }; } };
+    var showToast = function () {};
+    var renderActiveAdminSection = function () {};
+    var syncTabGroupIndicator = function () {};
+    var _remesaState = {}, _muniRepartoState = {};` });
+  await page.addScriptTag({ content: vacuna + vacunaFns });
+  await page.evaluate(() => vacunaPintarSelectores());   // como al abrir el panel (refreshInfluenzaAdminPanel)
+}
+
+test('Temporada invernal: título, barra de vacuna a nivel de panel y un solo selector de vacuna', async ({ page }) => {
+  await montarPanel(page);
+  await expect(page.locator('#panelINFLUENZAADMIN h3')).toContainText('Temporada invernal — Panel de Control');
+  await expect(page.locator('#temporadaVacunaBar .vac-btn')).toHaveCount(2);
+  await expect(page.locator('.vac-seg')).toHaveCount(1);                 // ya no hay un selector repetido en cada pestaña
+  expect(await page.locator('#influenzaAdminTabsContainer .nav-tab').count()).toBe(6);
+});
+
+test('Temporada invernal: COVID-19 muestra solo Metas y Frascos; Influenza conserva todas sus subpestañas', async ({ page }) => {
+  await montarPanel(page);
+  const visibles = () => page.evaluate(() => [...document.querySelectorAll('#influenzaAdminTabsContainer .nav-tab')]
+    .filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id.replace('subtabInfluenza', '')));
+  expect(await visibles()).toEqual(['Avances', 'Validacion', 'Conciliacion', 'Metas', 'Frascos', 'Config']);
+
+  await page.click('#temporadaVacunaBar [data-vac="COVID"]');
+  await expect.poll(visibles).toEqual(['Metas', 'Frascos']);
+  expect(await page.evaluate(() => window.__llamadas.map((l) => l[0]).sort()))
+    .toEqual(['getcovid_distribucion', 'getcovid_metas', 'getcovid_remesas']);   // carga lo de COVID, no lo de influenza
+  // estaba en «Concentrado de Avances» (activa): pasa sola a Distribución de Metas
+  expect(await page.evaluate(() => window.__clicks)).toEqual(['Metas']);
+
+  await page.click('#temporadaVacunaBar [data-vac="INFLUENZA"]');
+  await expect.poll(visibles).toEqual(['Avances', 'Validacion', 'Conciliacion', 'Metas', 'Frascos', 'Config']);
+  await expect(page.locator('#temporadaVacunaBar [data-vac="INFLUENZA"]')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('Temporada invernal: el selector de temporada se muestra neutro, pero su valor sigue siendo el nombre de la campaña', async ({ page }) => {
+  await page.goto('/reference.html');
+  const fn = modulo.slice(modulo.indexOf('function populateCampaignSelectors()'), modulo.indexOf('async function selectCampaignByName'));
+  const r = await page.evaluate((codigo) => {
+    document.body.innerHTML = '<select id="metaCampaignSelect"></select><select id="influenza_campana"></select>';
+    window._allCampaigns = [{ nombre: 'Campaña Influenza 2026-2027' }];
+    window._selectedCampaign = { nombre: 'Campaña Influenza 2026-2027' };
+    window._campaignConfig = {};
+    window.deriveCampaignName = () => '2026-2027';
+    window.populateConciliacionMonths = () => {};
+    // eslint-disable-next-line no-new-func
+    new Function(`${codigo}; populateCampaignSelectors();`)();
+    const o = (id) => { const s = document.getElementById(id); return [s.value, s.options[0].textContent]; };
+    return { meta: o('metaCampaignSelect'), captura: o('influenza_campana') };
+  }, fn);
+  expect(r.meta).toEqual(['Campaña Influenza 2026-2027', 'Temporada invernal 2026-2027']);
+  expect(r.captura[1]).toBe('Campaña Influenza 2026-2027');   // la captura de la unidad sigue con el nombre de influenza
+});
