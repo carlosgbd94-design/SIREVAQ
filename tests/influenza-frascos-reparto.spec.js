@@ -1388,3 +1388,76 @@ test('COVID Avance (municipal): un solo municipio sin selector de ámbito, solo 
   const llamada = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'getcovid_avance'));
   expect(llamada[1].desde).toBe('2026-10-03');
 });
+
+// ─── COVID-19 · Control de Frascos en modo MUNICIPAL ───
+async function montarMunicipalCovid(page) {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    _vacuna = 'COVID'; _marcaCovid = 'MODERNA';
+    _covidMetasArray = [
+      { clues: null, municipio: 'QUERETARO', metas: { c1: 3000, c2: 3000, c3: 1000, c4: 0, c5: 0, c6: 0 } },
+      { clues: 'Q1', municipio: 'QUERETARO', metas: { c1: 2000, c2: 2000, c3: 600 } },     // equiv 2,600 · adulta 600
+      { clues: 'Q2', municipio: 'QUERETARO', metas: { c1: 1000, c2: 1000, c3: 300 } },     // equiv 1,300 · adulta 300
+      { clues: 'Q3', municipio: 'QUERETARO', metas: { c3: 100 } }                          // equiv 100 · adulta 100
+    ];
+    _covidRemesasAll = [
+      { marca: 'MODERNA', numero_entrega: 1, fecha: '2026-10-05', total_frascos: 40, asignacion: { QUERETARO: 40 }, manual: [] },
+      { marca: 'PFIZER', numero_entrega: 1, fecha: '2026-10-05', total_frascos: 5, asignacion: { QUERETARO: 5 }, manual: [] }
+    ];
+    _covidFrascosAll = [];
+    _covidLotesAll = [{ marca: 'MODERNA', numero_entrega: 1, clues: 'Q1', lote: 'GAZ00031', caducidad: '2027-06-30', cantidad: 26 }];
+    renderFrascosDistribution();
+  });
+}
+
+test('COVID municipal: reparte los frascos de la marca por la meta de cada unidad (con su lote) y guarda con la marca', async ({ page }) => {
+  await montarMunicipalCovid(page);
+  const v = (c) => page.locator(`#batch_frascos_${c}`).inputValue();
+  // Moderna 40 frascos por meta equivalente 2,600 : 1,300 : 100 → 26 / 13 / 1
+  expect([await v('Q1'), await v('Q2'), await v('Q3')]).toEqual(['26', '13', '1']);
+  await expect(page.locator('#kpiDosis')).toContainText('400 dosis');                 // 40 frascos x 10 dosis
+  await expect(page.locator('#frascosBatchTbody tr', { hasText: 'UMQ UNO' })).toContainText('GAZ00031');   // lote real de Moderna
+  await expect(page.locator('#frascosJurisPanel')).toBeHidden();                      // jerarquía: el reparto jurisdiccional no es del municipal
+
+  await page.click('#btnSaveFrascoEntrega');
+  const g = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'guardarcovid_reparto'));
+  expect(g[1].marca).toBe('MODERNA');
+  expect(g[1].municipio).toBe('QUERETARO');
+  expect(g[1].rows.reduce((a, r) => a + r.cantidad_frascos, 0)).toBe(40);
+  expect(await page.evaluate(() => window.__llamadas.some((l) => l[0] === 'guardarinfluenza_reparto'))).toBe(false);
+});
+
+test('COVID municipal: Pfizer solo llega a unidades con meta adulta y el tope descuenta lo que ya tiene de la otra marca', async ({ page }) => {
+  await montarMunicipalCovid(page);
+  // Q3 ya recibió 10 frascos de Pfizer (60 dosis de su meta de 100): a Moderna solo le caben ceil((100-60)/10) = 4
+  const topes = await page.evaluate(() => {
+    _covidFrascosAll = [{ marca: 'PFIZER', clues: 'Q3', municipio: 'QUERETARO', numero_entrega: 1, cantidad_frascos: 10 }];
+    _muniRepartoState.numero = null;
+    renderFrascosDistribution();
+    return frascoItemsMunicipal('QUERETARO').map((i) => [i.id, i.tope]);
+  });
+  expect(topes).toEqual([['Q1', 260], ['Q2', 130], ['Q3', 4]]);
+  await expect(page.locator('#frascosBatchTbody tr', { hasText: 'UMQ TRES' })).toContainText('Pfizer: 10');   // lo de la otra marca se ve
+
+  // Pfizer: meta adulta 600 / 300 / 100 → topes 100 / 50 / 17 frascos (ceil de dosis/6), sin sobrepasar la adulta
+  const pf = await page.evaluate(() => {
+    _covidFrascosAll = [];
+    _marcaCovid = 'PFIZER'; _muniRepartoState.numero = null;
+    renderFrascosDistribution();
+    return frascoItemsMunicipal('QUERETARO').map((i) => [i.id, i.meta, i.tope]);
+  });
+  expect(pf).toEqual([['Q1', 600, 100], ['Q2', 300, 50], ['Q3', 100, 17]]);
+  await expect(page.locator('#kpiDosis')).toContainText('30 dosis');                  // 5 frascos x 6 dosis
+});
+
+test('COVID municipal: no deja repartir más de lo que le cabe a una unidad (aunque el total cuadre)', async ({ page }) => {
+  await montarMunicipalCovid(page);
+  await page.evaluate(() => { window.__toasts = []; window.__llamadas = []; });
+  // Q3 solo admite 10 frascos de Moderna (meta 100 dosis): se le ponen 15 y se compensa en Q1
+  await page.fill('#batch_frascos_Q3', '15');
+  await page.fill('#batch_frascos_Q1', '12');
+  await page.fill('#batch_frascos_Q2', '13');
+  await page.click('#btnSaveFrascoEntrega');
+  expect(await page.evaluate(() => window.__llamadas.some((l) => l[0] === 'guardarcovid_reparto'))).toBe(false);
+  expect(await page.evaluate(() => window.__toasts[window.__toasts.length - 1] || '')).toContain('rebasa la meta');
+});

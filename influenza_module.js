@@ -5908,6 +5908,16 @@ async function saveRemesa() {
 
 // ─── Reparto municipal entre unidades ──────────────────────────────────────
 
+// COVID: el tope de una unidad cuenta lo recibido de las DOS marcas contra la misma meta; en «Otras entregas» se
+// ve lo de la marca elegida y, debajo, lo ya recibido de la otra marca (para que el tope no sorprenda).
+function frascoOtraMarcaHtml(clues) {
+  if (!esCovid()) return "";
+  const otra = _marcaCovid === "MODERNA" ? "PFIZER" : "MODERNA";
+  const n = _covidFrascosAll.filter(d => d.marca === otra && d.clues === clues)
+    .reduce((s, d) => s + Number(d.cantidad_frascos || 0), 0);
+  return n ? `<span class="frs-sub" style="display:block">${otra === "PFIZER" ? "Pfizer" : "Moderna"}: ${frascoFmt(n)}</span>` : "";
+}
+
 function frascosRecibidosMunicipio(muni, numero) {
   const r = remesasVista().find(x => x.numero_entrega === numero);
   return r ? Number((r.asignacion || {})[muni] || 0) : 0;
@@ -5981,7 +5991,7 @@ function renderFrascosMunicipal(muni) {
       <td><b>${u.unidad}</b><br><span class="frs-sub">${u.clues}</span></td>
       <td class="c" id="mr_meta_${u.clues}"></td>
       <td class="c frs-muted" id="mr_pct_${u.clues}"></td>
-      <td class="c frs-muted">${frascoFmt(otras)}</td>
+      <td class="c frs-muted">${frascoFmt(otras)}${frascoOtraMarcaHtml(u.clues)}</td>
       <td class="c">
         <input type="text" inputmode="numeric" autocomplete="off" id="batch_frascos_${u.clues}" class="frs-num">
         <div class="frs-mark" id="mr_mark_${u.clues}"></div>
