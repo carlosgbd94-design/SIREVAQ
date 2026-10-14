@@ -892,7 +892,7 @@ test('COVID Jurisdicción: reparte Moderna por la meta equivalente y Pfizer desc
   await expect(page.locator('#remesaResumen')).toContainText('ya no caben');       // 150 máx. entre los dos
 });
 
-test('COVID Metas: 6 rubros del formato, renglón EQUIV. 0.5 mL (pediátricas = mitad)', async ({ page }) => {
+test('COVID Metas: 6 rubros del formato y renglón de frascos Moderna (niños, 10) / Pfizer (adultos, 6)', async ({ page }) => {
   await montarMetas(page, 'JURISDICCIONAL', []);
   await page.evaluate((metas) => {
     _vacuna = 'COVID'; _covidMetasArray = metas;
@@ -901,12 +901,19 @@ test('COVID Metas: 6 rubros del formato, renglón EQUIV. 0.5 mL (pediátricas = 
   }, metasCovid);
   await expect(page.locator('#influenzaMetasTbody tr[data-rb]')).toHaveCount(6);
   await expect(page.locator('input[data-rb="c1"][data-muni="QUERETARO"]')).toHaveValue('200');
-  await expect(page.locator('#frs_QUERETARO')).toHaveText(/1,?000 dosis/);          // 200/2 + 200/2 + 600 + 200
-  await expect(page.locator('#frs_CORREGIDORA')).toHaveText(/500 dosis/);
-  await expect(page.locator('.meta-frascos-row td').first()).toContainText('EQUIV. 0.5 mL');
+  // Querétaro: niños 200 (c1+c2 = 400 dosis de 0.25 mL = 200 de 0.5 mL) → 20 frascos Moderna; adultos 800 → 133.3 Pfizer
+  await expect(page.locator('#frs_QUERETARO')).toContainText('Moderna 20 fr. ✓');
+  await expect(page.locator('#frs_QUERETARO')).toContainText('Pfizer 133.3 fr. abierto');
+  await expect(page.locator('#frs_QUERETARO')).toHaveAttribute('data-estado', 'aviso');   // Querétaro sí puede quedar abierto
+  // Corregidora: solo adultos 500 → 83.3 frascos Pfizer: abierto y NO es Querétaro → rojo
+  await expect(page.locator('#frs_CORREGIDORA')).toContainText('Pfizer 83.3 fr. abierto');
+  await expect(page.locator('#frs_CORREGIDORA')).toHaveAttribute('data-estado', 'mal');
+  await expect(page.locator('.meta-frascos-row td').first()).toContainText('FRASCOS (Moderna · Pfizer)');
 
-  await page.fill('input[data-rb="c5"][data-muni="QUERETARO"]', '50');
-  await expect(page.locator('#frs_QUERETARO')).toHaveText(/1,?050 dosis/);
+  // Cerrarlo: adultos de Corregidora en 504 (84 frascos) y ya queda en verde
+  await page.fill('input[data-rb="c3"][data-muni="CORREGIDORA"]', '504');
+  await expect(page.locator('#frs_CORREGIDORA')).toContainText('Pfizer 84 fr. ✓');
+  await expect(page.locator('#frs_CORREGIDORA')).toHaveAttribute('data-estado', 'ok');
 });
 
 test('COVID Metas: predistribuir con % de influenza reparte exacto y NHGQ queda solo con adultos', async ({ page }) => {
@@ -974,7 +981,11 @@ test('COVID Metas: el municipal predistribuye SU meta entre sus unidades con el 
   await page.click('#btnCovidPredistribuir');
   const v = (rb, c) => page.locator(`input[data-rb="${rb}"][data-clues="${c}"]`).inputValue();
   expect([await v('c1', 'Q1'), await v('c1', 'Q2'), await v('c1', 'Q3')]).toEqual(['300', '200', '100']);   // 50 / 33 / 17 %
-  expect([await v('c4', 'Q1'), await v('c4', 'Q2'), await v('c4', 'Q3')]).toEqual(['60', '40', '20']);
+  // Adultos: 120 repartido en frascos cerrados de Pfizer (múltiplos de 6) y sumando exacto
+  const ad = (await Promise.all(['Q1', 'Q2', 'Q3'].map((c) => v('c4', c)))).map(Number);
+  expect(ad.reduce((a, b) => a + b, 0)).toBe(120);
+  ad.forEach((n) => expect(n % 6).toBe(0));
+  expect(ad[0]).toBeGreaterThanOrEqual(ad[1]);                                                        // el orden de influenza se respeta
   await expect(page.locator('#cmp_c1')).toHaveAttribute('data-estado', 'ok');
   await page.click('#btnSaveInfluenzaMetas');
   const rows = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'savecovid_metas')[1].rows);
@@ -1188,4 +1199,69 @@ test('Temporada invernal: el selector de temporada se muestra neutro, pero su va
   }, fn);
   expect(r.meta).toEqual(['Campaña Influenza 2026-2027', 'Temporada invernal 2026-2027']);
   expect(r.captura[1]).toBe('Campaña Influenza 2026-2027');   // la captura de la unidad sigue con el nombre de influenza
+});
+
+// ─── COVID: frascos cerrados (Moderna niños ×10, Pfizer adultos ×6), con la pérdida incluida ───
+test('COVID frascos cerrados: con las cifras de Jurisdicción todos cierran salvo Querétaro (que absorbe el abierto) y suman exacto', async ({ page }) => {
+  await page.goto('/reference.html');
+  await page.addScriptTag({ path: path.join(raiz, 'covid_frascos.js') });
+  const r = await page.evaluate(() => {
+    const mk = (ped, m60, emb, pers, ries) => ({ r1: ped, r15: m60, r16: emb, r17: pers, r18: ries });
+    const items = [
+      { id: 'QUERETARO', metas: mk(50340, 23691, 4674, 627, 20505) },
+      { id: 'CORREGIDORA', metas: mk(6340, 2203, 620, 250, 3177) },
+      { id: 'MARQUES', metas: mk(8099, 2557, 1000, 300, 3934) },
+      { id: 'HUIMILPAN', metas: mk(3030, 1267, 350, 150, 1833) },
+      { id: 'HENM', metas: mk(300, 1000, 0, 0, 0), permitidos: ['c3', 'c4', 'c6'] },
+      { id: 'NHG', metas: mk(0, 996, 0, 504, 0), permitidos: ['c3', 'c4', 'c6'] }
+    ];
+    const tot = { c1: 65604, c2: 65604, c3: 4135, c4: 6288, c5: 948, c6: 859 };
+    const out = CovidFrascos.predistribuirCerrado(tot, items, { perdida: 3900, absorbedor: 'QUERETARO' });
+    const raz = CovidFrascos.razonPerdida(CovidFrascos.factorPerdida({ ...tot, perdida: 3900 }));
+    const filas = items.map((it) => {
+      const v = out.valores[it.id];
+      const ad = v.c3 + v.c4 + v.c5 + v.c6;
+      return { id: it.id, v, ped: v.c1, ad, modCerrado: CovidFrascos.esCerrado(v.c1, 10, raz), pfCerrado: CovidFrascos.esCerrado(ad, 6, raz),
+        mod: CovidFrascos.recibirDosis(v.c1, raz) / 10, pf: CovidFrascos.recibirDosis(ad, raz) / 6 };
+    });
+    const suma = (rb) => items.reduce((a, it) => a + out.valores[it.id][rb], 0);
+    return { filas, sumas: ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'].map(suma), abiertos: out.abiertos };
+  });
+  expect(r.sumas).toEqual([65604, 65604, 4135, 6288, 948, 859]);       // suma exacta contra Jurisdicción
+  expect(r.abiertos).toEqual([]);
+  r.filas.filter((f) => f.id !== 'QUERETARO').forEach((f) => {
+    expect(f.modCerrado, `${f.id} Moderna`).toBe(true);                   // frascos completos de Moderna
+    expect(f.pfCerrado, `${f.id} Pfizer`).toBe(true);                     // frascos completos de Pfizer
+    expect(Number.isInteger(f.mod) && Number.isInteger(f.pf)).toBe(true);
+  });
+  const hosp = r.filas.filter((f) => ['HENM', 'NHG'].includes(f.id));
+  hosp.forEach((f) => { expect(f.v.c1).toBe(0); expect(f.v.c2).toBe(0); expect(f.v.c5).toBe(0); });   // sin niños ni embarazadas
+  expect(r.filas.find((f) => f.id === 'NHG').v.c6).toBeGreaterThan(0);
+});
+
+test('COVID frascos cerrados: sin absorbedor (otro municipio) las unidades cierran y suman exacto la meta municipal', async ({ page }) => {
+  await page.goto('/reference.html');
+  await page.addScriptTag({ path: path.join(raiz, 'covid_frascos.js') });
+  const r = await page.evaluate(() => {
+    const mk = (ped, m60, emb, pers, ries) => ({ r1: ped, r15: m60, r16: emb, r17: pers, r18: ries });
+    const items = [
+      { id: 'U1', metas: mk(3000, 900, 100, 40, 500) }, { id: 'U2', metas: mk(2000, 700, 60, 30, 300) },
+      { id: 'U3', metas: mk(1000, 400, 40, 20, 200) }, { id: 'U4', metas: mk(500, 200, 20, 10, 100) }
+    ];
+    // municipio ya cerrado con pérdida: niños 1,000 (c1=c2), adultos 240
+    const tot = { c1: 1000, c2: 1000, c3: 60, c4: 120, c5: 36, c6: 24 };
+    const jur = { c1: 65604, c2: 65604, c3: 4135, c4: 6288, c5: 948, c6: 859 };
+    const out = CovidFrascos.predistribuirCerrado(tot, items, { perdida: 3900, jurisTotales: jur });
+    const raz = CovidFrascos.razonPerdida(CovidFrascos.factorPerdida({ ...jur, perdida: 3900 }));
+    const suma = (rb) => items.reduce((a, it) => a + out.valores[it.id][rb], 0);
+    return {
+      sumas: ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'].map(suma), abiertos: out.abiertos,
+      cerrados: items.map((it) => {
+        const v = out.valores[it.id];
+        return CovidFrascos.esCerrado(v.c1, 10, raz) && CovidFrascos.esCerrado(v.c3 + v.c4 + v.c5 + v.c6, 6, raz);
+      })
+    };
+  });
+  expect(r.sumas).toEqual([1000, 1000, 60, 120, 36, 24]);
+  expect(r.abiertos.length === 0 ? r.cerrados.every(Boolean) : true).toBe(true);   // o cierra todo, o avisa cuál quedó abierto
 });

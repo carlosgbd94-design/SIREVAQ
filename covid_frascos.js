@@ -166,8 +166,199 @@
       : Math.ceil((ped + 2 * ad) / 2);
   }
 
+  // ─── Frascos cerrados (con la pérdida incluida) ───────────────────────────────────────────────────────
+  // Regla: cada destino y cada unidad debe recibir frascos COMPLETOS; el sobrante (frasco abierto) se lo queda
+  // Querétaro, en la unidad Pedro Escobedo. Con dos marcas, «cerrado» se define así:
+  //   Moderna (niños, 10 dosis de 0.5 mL): la meta pediátrica equivalente + su pérdida es múltiplo de 10.
+  //   Pfizer  (adultos,  6 dosis de 0.5 mL): la meta adulta + su pérdida es múltiplo de 6.
+  // «+ su pérdida» = recibir = ceil(dosis * num / den), con num/den = (J2 + 2P) / J2 (ver factorPerdida).
+  const DPF_MODERNA = 10;
+  const DPF_PFIZER = 6;
+
+  function razonPerdida(factor) {
+    const f = factor || {};
+    return f.activo ? { num: f.j2 + 2 * f.p, den: f.j2 } : { num: 1, den: 1 };
+  }
+
+  /** Dosis (0.5 mL) a recibir por unas dosis de meta, con pérdida; siempre entero y hacia arriba. */
+  function recibirDosis(dosis, razon) {
+    const r = razon || { num: 1, den: 1 };
+    return Math.ceil((Math.max(0, Math.round(dosis)) * r.num) / r.den);
+  }
+
+  function esCerrado(dosis, dpf, razon) {
+    return dosis === 0 || recibirDosis(dosis, razon) % dpf === 0;
+  }
+
+  /** Valores cerrados cercanos a `ideal` (hasta `cuantos`), del más cercano al más lejano. */
+  function candidatosCerrados(ideal, dpf, razon, cuantos) {
+    const centro = Math.max(0, Math.round(ideal));
+    const salida = [];
+    const alcance = dpf * 3 + 4;
+    for (let d = 0; d <= alcance && salida.length < (cuantos || 5); d++) {
+      const arriba = centro + d;
+      const abajo = centro - d;
+      if (esCerrado(arriba, dpf, razon)) salida.push(arriba);
+      if (d > 0 && abajo >= 0 && esCerrado(abajo, dpf, razon)) salida.push(abajo);
+    }
+    return salida;
+  }
+
+  /**
+   * Reparte `total` dosis entre `pesos.length` renglones dejando cerrados a todos menos al `absorbedor` (índice),
+   * que se queda con lo que sobre. Sin absorbedor busca, con programación dinámica, la combinación cerrada que suma
+   * exacto; si no existe, el renglón de mayor peso absorbe (queda abierto) y se reporta en `abierto`.
+   * Devuelve { valores:[], abierto: índice|null }.
+   */
+  function cerrarLado(total, pesos, dpf, razon, absorbedor, elegibles) {
+    total = Math.max(0, Math.round(total));
+    const n = pesos.length;
+    const ok = (i) => !elegibles || elegibles[i];
+    const sumaPesos = pesos.reduce((a, w, i) => a + (ok(i) ? w : 0), 0);
+    const ideal = pesos.map((w, i) => (ok(i) && sumaPesos > 0 ? (total * w) / sumaPesos : 0));
+    const valores = new Array(n).fill(0);
+    const sinAbs = (absorbedor === null || absorbedor === undefined || absorbedor < 0);
+
+    if (!sinAbs) {
+      let usado = 0;
+      for (let i = 0; i < n; i++) {
+        if (i === absorbedor || !ok(i)) continue;
+        // el más cercano por debajo del ideal (así el absorbedor nunca queda en negativo)
+        const cands = candidatosCerrados(Math.floor(ideal[i]), dpf, razon, 12).filter(c => c <= Math.ceil(ideal[i]));
+        valores[i] = cands.length ? cands.reduce((a, b) => (Math.abs(b - ideal[i]) < Math.abs(a - ideal[i]) ? b : a)) : 0;
+        usado += valores[i];
+      }
+      // si por redondeo se pasó del total, se baja a los de mayor valor
+      while (usado > total) {
+        let k = -1;
+        for (let i = 0; i < n; i++) if (i !== absorbedor && valores[i] > 0 && (k < 0 || valores[i] > valores[k])) k = i;
+        if (k < 0) break;
+        const menores = candidatosCerrados(valores[k] - 1, dpf, razon, 12).filter(c => c < valores[k]);
+        const nuevo = menores.length ? menores[0] : 0;
+        usado -= valores[k] - nuevo;
+        valores[k] = nuevo;
+      }
+      valores[absorbedor] = total - usado;
+      return { valores, abierto: null };
+    }
+
+    // Sin absorbedor: DP sobre los candidatos de cada renglón (suma exacta, mínima desviación)
+    const idx = [];
+    for (let i = 0; i < n; i++) if (ok(i)) idx.push(i);
+    let capas = [new Map([[0, { costo: 0, prev: null, val: 0 }]])];
+    for (const i of idx) {
+      const cands = candidatosCerrados(ideal[i], dpf, razon, 7);
+      const sig = new Map();
+      capas[capas.length - 1].forEach((estado, suma) => {
+        cands.forEach(c => {
+          const s = suma + c;
+          if (s > total) return;
+          const costo = estado.costo + Math.abs(c - ideal[i]);
+          const previo = sig.get(s);
+          if (!previo || costo < previo.costo) sig.set(s, { costo, prev: suma, val: c });
+        });
+      });
+      capas.push(sig);
+    }
+    const final = capas[capas.length - 1].get(total);
+    if (final) {
+      let suma = total;
+      for (let k = idx.length - 1; k >= 0; k--) {
+        const est = capas[k + 1].get(suma);
+        valores[idx[k]] = est.val;
+        suma = est.prev;
+      }
+      return { valores, abierto: null };
+    }
+    // No hay combinación cerrada exacta: el de mayor peso absorbe y queda abierto
+    let mayor = idx[0];
+    idx.forEach(i => { if (pesos[i] > pesos[mayor]) mayor = i; });
+    const r = cerrarLado(total, pesos, dpf, razon, mayor, elegibles);
+    return { valores: r.valores, abierto: mayor };
+  }
+
+  /**
+   * Predistribución con FRASCOS CERRADOS. Parte de los porcentajes de influenza (predistribuir) y los acomoda para que
+   * todo renglón menos el `absorbedor` (id) reciba frascos completos de Moderna (niños) y de Pfizer (adultos), ya con
+   * la pérdida. opts: { perdida (dosis 0.5 mL de la Jurisdicción), absorbedor (id), jurisTotales ({c1..c6} de la
+   * Jurisdicción, para la razón de pérdida; por omisión `totales`) }.
+   * Devuelve { valores: {id:{c1..c6}}, abiertos: [ids] } (abiertos = los que no se pudieron cerrar sin absorbedor).
+   */
+  function predistribuirCerrado(totales, items, opts) {
+    const o = opts || {};
+    const base = predistribuir(totales, items);
+    const jur = o.jurisTotales || totales;
+    const razon = razonPerdida(factorPerdida({ ...jur, perdida: o.perdida || 0 }));
+    const n = items.length;
+    const abs = o.absorbedor ? items.findIndex(it => it.id === o.absorbedor) : -1;
+    const permite = (it, r) => !it.permitidos || it.permitidos.includes(r);
+    const valores = {};
+    items.forEach(it => { valores[it.id] = { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0 }; });
+    const abiertos = [];
+
+    // Niños: c1 = c2 = v (cada renglón cerrado en múltiplos de Moderna); el absorbedor se queda con lo demás
+    const pedTotal = Math.min(Number(totales.c1) || 0, Number(totales.c2) || 0);
+    const pedElegible = items.map(it => permite(it, "c1") && permite(it, "c2"));
+    if (pedTotal > 0 && pedElegible.some(Boolean)) {
+      const pesos = items.map(it => (base[it.id].c1 + base[it.id].c2) / 2);
+      const r = cerrarLado(pedTotal, pesos, DPF_MODERNA, razon, abs, pedElegible);
+      items.forEach((it, i) => { if (pedElegible[i]) { valores[it.id].c1 = r.valores[i]; valores[it.id].c2 = r.valores[i]; } });
+      if (r.abierto !== null && r.abierto !== undefined) abiertos.push(items[r.abierto].id);
+    }
+    // lo que c1 o c2 tienen de más que el mínimo (c1 != c2 en la meta jurídica) lo absorbe el absorbedor / el mayor
+    const resto = (rub) => (Number(totales[rub]) || 0) - items.reduce((a, it) => a + valores[it.id][rub], 0);
+    ["c1", "c2"].forEach(rub => {
+      const sobra = resto(rub);
+      if (sobra > 0) {
+        const dest = abs >= 0 ? abs : items.reduce((m, it, i) => (pedElegible[i] && (m < 0 || base[it.id][rub] > base[items[m].id][rub]) ? i : m), -1);
+        if (dest >= 0) valores[items[dest].id][rub] += sobra;
+      }
+    });
+
+    // Adultos: cada renglón cerrado en múltiplos de Pfizer; después se reparte entre c3..c6 y se ajustan columnas
+    const ADULTO = ["c3", "c4", "c5", "c6"];
+    const adultoTotal = ADULTO.reduce((a, r) => a + (Number(totales[r]) || 0), 0);
+    const adElegible = items.map(it => ADULTO.some(r => permite(it, r)));
+    if (adultoTotal > 0 && adElegible.some(Boolean)) {
+      const pesos = items.map(it => ADULTO.reduce((a, r) => a + base[it.id][r], 0));
+      const r = cerrarLado(adultoTotal, pesos, DPF_PFIZER, razon, abs, adElegible);
+      if (r.abierto !== null && r.abierto !== undefined && !abiertos.includes(items[r.abierto].id)) abiertos.push(items[r.abierto].id);
+      // fila: reparto de cada renglón entre sus rubros adultos (proporcional a lo predistribuido)
+      items.forEach((it, i) => {
+        if (!adElegible[i] || i === abs) return;
+        const rubros = ADULTO.filter(rb => permite(it, rb));
+        let w = rubros.map(rb => base[it.id][rb]);
+        if (!w.some(x => x > 0)) w = rubros.map(() => 1);
+        repartirEntero(r.valores[i], w).forEach((v, k) => { valores[it.id][rubros[k]] = v; });
+      });
+      if (abs >= 0) {
+        // el absorbedor se queda con lo que falta en cada columna
+        ADULTO.forEach(rb => {
+          const falta = (Number(totales[rb]) || 0) - items.reduce((a, it, i) => a + (i === abs ? 0 : valores[it.id][rb]), 0);
+          valores[items[abs].id][rb] = Math.max(0, falta);
+        });
+      } else {
+        // sin absorbedor: cuadrar columnas moviendo dosis entre rubros dentro de un mismo renglón (no cambia su total)
+        let guardia = 100000;
+        for (;;) {
+          const dif = {};
+          ADULTO.forEach(rb => { dif[rb] = (Number(totales[rb]) || 0) - items.reduce((a, it) => a + valores[it.id][rb], 0); });
+          const falta = ADULTO.find(rb => dif[rb] > 0);
+          const sobra = ADULTO.find(rb => dif[rb] < 0);
+          if (!falta || !sobra || guardia-- <= 0) break;
+          const it = items.find(x => valores[x.id][sobra] > 0 && permite(x, falta));
+          if (!it) break;
+          valores[it.id][sobra] -= 1;
+          valores[it.id][falta] += 1;
+        }
+      }
+    }
+    return { valores, abiertos };
+  }
+
   const api = { RUBROS, MARCAS, dosisPorFrasco, metaPediatrica, metaAdulta, metaEquivalente, metaMarca, topeFrascos,
-    pesosInfluenza, repartirEntero, predistribuir, factorPerdida, metaMarcaConPerdida };
+    pesosInfluenza, repartirEntero, predistribuir, factorPerdida, metaMarcaConPerdida,
+    razonPerdida, recibirDosis, esCerrado, candidatosCerrados, cerrarLado, predistribuirCerrado, DPF_MODERNA, DPF_PFIZER };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.CovidFrascos = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -4474,11 +4474,23 @@ const CLUES_FRASCO_ABIERTO = "QTSSA001863";
 function metaPintarFrascos(td, total, permiteAbierto, soloInformar) {
   if (!td) return "ok";
   if (esCovid()) {
-    // COVID: el renglón inferior muestra la meta en dosis de 0.5 mL equivalentes (las pediátricas valen la mitad).
-    td.dataset.estado = "ok";
-    td.style.color = "#475569";
-    td.innerHTML = `${Math.ceil(total).toLocaleString("es-MX")} dosis`;
-    return "ok";
+    // COVID: frascos que se reciben por marca, con la pérdida. Moderna cubre a los niños (10 dosis) y Pfizer a los
+    // adultos (6 dosis). Cerrado = frascos completos; el abierto solo lo admite Querétaro / Pedro Escobedo.
+    const o = (total && typeof total === "object") ? total : { ped: 0, adulto: Number(total) || 0, razon: null };
+    const mod = CovidFrascos.recibirDosis(o.ped, o.razon) / CovidFrascos.DPF_MODERNA;
+    const pf = CovidFrascos.recibirDosis(o.adulto, o.razon) / CovidFrascos.DPF_PFIZER;
+    const cerrado = Number.isInteger(mod) && Number.isInteger(pf);
+    const fmt = (n) => (Number.isInteger(n) ? n.toLocaleString("es-MX") : n.toFixed(1));
+    let estado = "ok", color = "#16a34a";
+    if (!cerrado) {
+      if (soloInformar) { estado = "info"; color = "#64748b"; }
+      else if (permiteAbierto) { estado = "aviso"; color = "#d97706"; }
+      else { estado = "mal"; color = "#dc2626"; }
+    } else if (soloInformar) color = "#64748b";
+    td.dataset.estado = estado;
+    td.style.color = color;
+    td.innerHTML = `Moderna ${fmt(mod)} fr.${Number.isInteger(mod) ? " ✓" : " abierto"}<br>Pfizer ${fmt(pf)} fr.${Number.isInteger(pf) ? " ✓" : " abierto"}`;
+    return estado;
   }
   const resto = total % 10;
   const f = total / 10;
@@ -4653,7 +4665,7 @@ function renderMetasConfigurationGrid() {
 
     const pieFr = document.createElement("tr");
     pieFr.className = "meta-total-row meta-frascos-row";
-    pieFr.innerHTML = `<td class="p-3 text-xs font-black" colspan="2" title="${esCovid() ? "Dosis equivalentes de 0.5 mL: las pediátricas (0.25 mL) valen la mitad" : "Un frasco = 10 dosis"}">${esCovid() ? "EQUIV. 0.5 mL" : "FRASCOS"}</td>`
+    pieFr.innerHTML = `<td class="p-3 text-xs font-black" colspan="2" title="${esCovid() ? "Frascos que se reciben con la pérdida: Moderna (niños, 10 dosis) y Pfizer (adultos, 6 dosis)" : "Un frasco = 10 dosis"}">${esCovid() ? "FRASCOS (Moderna · Pfizer)" : "FRASCOS"}</td>`
       + ids.map(id => `<td class="p-3 text-center text-[11px] font-black" id="frs_${id}"></td>`).join("")
       + `<td class="p-3 text-center text-[11px] font-black" id="frs_J"></td><td class="meta-cmp-cell p-3"></td>`;
     tbody.appendChild(pieFr);
@@ -4666,10 +4678,11 @@ function renderMetasConfigurationGrid() {
       msg.textContent = suma > ref ? `Sobran ${suma - ref}` : `Faltan ${ref - suma}`;
     };
     const recalcular = () => {
-      let granJ = 0, granRef = 0, granEq = 0;
+      let granJ = 0, granRef = 0, granEq = 0, granPed = 0, granAd = 0;
       const porDestino = {};
       const eqDestino = {};   // en dosis de 0.5 mL equivalentes (COVID: las pediátricas valen la mitad)
-      ids.forEach(id => { porDestino[id] = 0; eqDestino[id] = 0; });
+      const pedDestino = {}, adDestino = {};   // COVID: niños (c1+c2) y adultos (c3..c6) por destino
+      ids.forEach(id => { porDestino[id] = 0; eqDestino[id] = 0; pedDestino[id] = 0; adDestino[id] = 0; });
       tbody.querySelectorAll("tr[data-rb]").forEach(tr => {
         let suma = 0;
         ids.forEach(id => {
@@ -4677,24 +4690,30 @@ function renderMetasConfigurationGrid() {
           suma += v;
           porDestino[id] += v;
           eqDestino[id] += v * metaPesoRubro(tr.dataset.rb);
+          if (metaPesoRubro(tr.dataset.rb) === 0.5) pedDestino[id] += v; else adDestino[id] += v;
         });
         granEq += suma * metaPesoRubro(tr.dataset.rb);
+        if (metaPesoRubro(tr.dataset.rb) === 0.5) granPed += suma; else granAd += suma;
         const ref = leer(tr.querySelector("input[data-juris]"));
         document.getElementById(`total_j_${tr.dataset.rb}`).textContent = suma;
         pintar(document.getElementById(`cmp_${tr.dataset.rb}`), ref, suma);
         granJ += suma;
         granRef += ref;
       });
+      const razon = esCovid() ? covidRazonDeGrid(tbody, false) : null;
       ids.forEach(id => {
         document.getElementById(`tot_${id}`).textContent = porDestino[id];
-        metaPintarFrascos(document.getElementById(`frs_${id}`), esCovid() ? eqDestino[id] : porDestino[id], id === "QUERETARO");
+        const valor = esCovid() ? { ped: Math.ceil(pedDestino[id] / 2), adulto: adDestino[id], razon } : porDestino[id];
+        metaPintarFrascos(document.getElementById(`frs_${id}`), valor, id === "QUERETARO");
       });
       document.getElementById("tot_J").textContent = granJ;
-      metaPintarFrascos(document.getElementById("frs_J"), esCovid() ? granEq : granJ, true, true);
+      metaPintarFrascos(document.getElementById("frs_J"),
+        esCovid() ? { ped: Math.ceil(granPed / 2), adulto: granAd, razon } : granJ, true, true);
       document.getElementById("tot_juris").textContent = granRef;
       pintar(document.getElementById("cmp_TOTAL"), granRef, granJ);
     };
     metaEnlazarInputs(tbody, recalcular);
+    _gridRecalcular = recalcular;
     recalcular();
 
   } else {
@@ -4759,10 +4778,11 @@ function renderMetasConfigurationGrid() {
       msg.textContent = suma > ref ? `Sobran ${suma - ref}` : `Faltan ${ref - suma}`;
     };
     const recalcular = () => {
-      let granRef = 0, granSuma = 0, granRefEq = 0;
+      let granRef = 0, granSuma = 0, granRefEq = 0, refPed = 0, refAd = 0;
       const porUnidad = {};
       const eqUnidad = {};   // dosis de 0.5 mL equivalentes (COVID)
-      muniUnits.forEach(u => { porUnidad[u.clues] = 0; eqUnidad[u.clues] = 0; });
+      const pedUnidad = {}, adUnidad = {};   // COVID: niños (c1+c2) y adultos (c3..c6) por unidad
+      muniUnits.forEach(u => { porUnidad[u.clues] = 0; eqUnidad[u.clues] = 0; pedUnidad[u.clues] = 0; adUnidad[u.clues] = 0; });
       tbody.querySelectorAll("tr[data-rb]").forEach(tr => {
         let suma = 0;
         muniUnits.forEach(u => {
@@ -4770,27 +4790,34 @@ function renderMetasConfigurationGrid() {
           suma += v;
           porUnidad[u.clues] += v;
           eqUnidad[u.clues] += v * metaPesoRubro(tr.dataset.rb);
+          if (metaPesoRubro(tr.dataset.rb) === 0.5) pedUnidad[u.clues] += v; else adUnidad[u.clues] += v;
         });
         const ref = Number(tr.dataset.meta) || 0;
         granRefEq += ref * metaPesoRubro(tr.dataset.rb);
+        if (metaPesoRubro(tr.dataset.rb) === 0.5) refPed += ref; else refAd += ref;
         pintar(document.getElementById(`cmp_${tr.dataset.rb}`), ref, suma);
         granRef += ref;
         granSuma += suma;
       });
       let abiertas = 0;
+      const razonCovid = esCovid() ? covidRazonDeGrid(tbody, true) : null;
       muniUnits.forEach(u => {
         document.getElementById(`tot_${u.clues}`).textContent = porUnidad[u.clues];
         const puedeAbrir = permiteAbierto && u.clues === CLUES_FRASCO_ABIERTO;
-        if (metaPintarFrascos(document.getElementById(`frs_${u.clues}`), esCovid() ? eqUnidad[u.clues] : porUnidad[u.clues], puedeAbrir) !== "ok" && !puedeAbrir) abiertas++;
+        const valor = esCovid() ? { ped: Math.ceil(pedUnidad[u.clues] / 2), adulto: adUnidad[u.clues], razon: razonCovid } : porUnidad[u.clues];
+        if (metaPintarFrascos(document.getElementById(`frs_${u.clues}`), valor, puedeAbrir) !== "ok" && !puedeAbrir) abiertas++;
       });
-      if (esCovid()) document.getElementById("frs_label").textContent = "EQUIV. 0.5 mL";
+      if (esCovid()) document.getElementById("frs_label").innerHTML = (permiteAbierto && abiertas > 0)
+        ? `FRASCOS (Moderna · Pfizer)<div style="font-size:10px;font-weight:600;color:#dc2626;text-transform:none">${abiertas} ${abiertas === 1 ? "unidad" : "unidades"} con frasco abierto: solo Pedro Escobedo puede quedar abierta</div>` : "FRASCOS (Moderna · Pfizer)";
       else document.getElementById("frs_label").innerHTML = (permiteAbierto && abiertas > 0)
         ? `FRASCOS<div style="font-size:10px;font-weight:600;color:#dc2626;text-transform:none">${abiertas} ${abiertas === 1 ? "unidad" : "unidades"} con frasco abierto: solo Pedro Escobedo puede quedar abierta</div>` : "FRASCOS";
-      metaPintarFrascos(document.getElementById("frs_meta"), esCovid() ? granRefEq : granRef, permiteAbierto, true);
+      metaPintarFrascos(document.getElementById("frs_meta"),
+        esCovid() ? { ped: Math.ceil(refPed / 2), adulto: refAd, razon: razonCovid } : granRef, permiteAbierto, true);
       document.getElementById("tot_meta").textContent = granRef;
       pintar(document.getElementById("cmp_TOTAL"), granRef, granSuma);
     };
     metaEnlazarInputs(tbody, recalcular);
+    _gridRecalcular = recalcular;
     // Repartir en partes iguales la meta del renglón (el residuo va a las primeras unidades).
     const repartirParejo = (tr) => {
       const campos = [...tr.querySelectorAll("input.clues-meta-input")];
@@ -4837,6 +4864,26 @@ function renderMetasConfigurationGrid() {
   };
 }
 
+// Razón de pérdida con la que se evalúa el cierre de frascos en la cuadrícula: Jurisdicción usa lo que está
+// capturando (Comparación + pérdida); el municipal, lo guardado en la fila JURISDICCION.
+let _gridRecalcular = null;
+function covidRazonDeGrid(tbody, esMunicipal) {
+  const rec = _covidMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === "JURISDICCION");
+  const juris = {};
+  CovidFrascos.RUBROS.forEach(r => {
+    if (!esMunicipal) {
+      const c = tbody && tbody.querySelector(`input[data-rb="${r.id}"][data-juris]`);
+      juris[r.id] = c ? (parseInt(c.value, 10) || 0) : 0;
+    } else {
+      juris[r.id] = Number(rec && rec.metas[r.id]) || 0;
+    }
+  });
+  const p = esMunicipal
+    ? (Number(rec && rec.metas.perdida) || 0)
+    : (parseInt((document.getElementById("covidPerdidaInput") || {}).value, 10) || 0);
+  return CovidFrascos.razonPerdida(CovidFrascos.factorPerdida({ ...juris, perdida: p }));
+}
+
 // Caja «Factor de pérdida»: Jurisdicción la captura (dosis de 0.5 mL) y el municipal solo la ve. Muestra el %
 // y lo que se debe recibir (meta + pérdida); los topes de frascos usan ese total.
 function covidPintarPerdida() {
@@ -4852,7 +4899,7 @@ function covidPintarPerdida() {
   if (tbody && !tbody.dataset.perdidaBound) {
     // Al cambiar la meta de Jurisdicción se recalcula el % y el total a recibir.
     tbody.dataset.perdidaBound = "1";
-    tbody.addEventListener("input", (e) => { if (e.target.matches("input[data-juris]")) covidPintarPerdida(); });
+    tbody.addEventListener("input", (e) => { if (e.target.matches("input[data-juris]")) { covidPintarPerdida(); if (typeof _gridRecalcular === "function") _gridRecalcular(); } });
   }
   if (!inp.dataset.bound) {
     inp.dataset.bound = "1";
@@ -4861,6 +4908,7 @@ function covidPintarPerdida() {
       if (inp.value !== limpio) inp.value = limpio;
       inp.dataset.sucio = "1";
       covidPintarPerdida();
+      if (typeof _gridRecalcular === "function") _gridRecalcular();   // los frascos cerrados dependen de la pérdida
     });
   }
   const rec = _covidMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === "JURISDICCION");
@@ -4928,14 +4976,34 @@ function covidPredistribuir() {
   }
   if (!items.length) { showToast("No hay unidades para predistribuir.", false, "bad"); return false; }
   const sinInfluenza = items.every(it => !Object.keys(it.metas).length);
-  const res = CovidFrascos.predistribuir(totales, items);
+  // Frascos cerrados con la pérdida incluida: Moderna (niños, 10) y Pfizer (adultos, 6). El sobrante abierto se lo
+  // queda Querétaro (Jurisdicción) o la unidad Pedro Escobedo (municipal de Querétaro).
+  const recJuris = _covidMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === "JURISDICCION");
+  const perdida = isMuni
+    ? (Number(recJuris && recJuris.metas.perdida) || 0)
+    : (parseInt((document.getElementById("covidPerdidaInput") || {}).value, 10) || 0);
+  const jurisTotales = {};
+  CovidFrascos.RUBROS.forEach(r => {
+    jurisTotales[r.id] = isMuni ? (Number(recJuris && recJuris.metas[r.id]) || 0) : totales[r.id];
+  });
+  const muniActual = isMuni ? String(document.getElementById("adminInfluenzaMuni").value).toUpperCase() : "";
+  const absorbedor = isMuni
+    ? (muniActual === "QUERETARO" && items.some(it => it.id === CLUES_FRASCO_ABIERTO) ? CLUES_FRASCO_ABIERTO : null)
+    : "QUERETARO";
+  const cerrado = CovidFrascos.predistribuirCerrado(totales, items, { perdida, absorbedor, jurisTotales });
+  const res = cerrado.valores;
   items.forEach(it => ids.forEach(rb => {
     const inp = tbody.querySelector(selector(rb, it.id));
     if (inp) { inp.value = String(res[it.id][rb] || 0); inp.dispatchEvent(new Event("input", { bubbles: true })); }
   }));
-  showToast(sinInfluenza
-    ? "Predistribuido parejo: no hay metas de influenza en esta campaña para tomar porcentajes. Revisa y guarda."
-    : "Predistribuido con los porcentajes de influenza. Revisa y presiona Guardar.", true, "good");
+  if (cerrado.abiertos.length) {
+    const nombre = (id) => (FRASCO_DESTINOS.find(d => d.id === id) || {}).label || frascoEtiquetaUnidad(id);
+    showToast(`Predistribuido, pero no se pudo cerrar en frascos completos: ${cerrado.abiertos.map(nombre).join(", ")}. Ajusta a mano.`, false, "warn");
+  } else {
+    showToast(sinInfluenza
+      ? "Predistribuido parejo (no hay metas de influenza para tomar porcentajes) en frascos cerrados. Revisa y guarda."
+      : "Predistribuido con los porcentajes de influenza en frascos cerrados (con la pérdida). Revisa y presiona Guardar.", true, "good");
+  }
   return true;
 }
 
