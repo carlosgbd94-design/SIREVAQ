@@ -21,7 +21,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
 <script defer src="requisiciones_rutas_excel.js"></script>
-<script defer src="requisiciones_ui.js?v=15"></script>
+<script defer src="requisiciones_ui.js?v=16"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -800,6 +800,7 @@
           <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSyncLotes" style="margin-left:auto;" title="Revisa que los lotes repartidos este mes estén dados de alta en el panel Lotes (nunca duplica ni borra)"><span class="material-symbols-rounded" style="font-size:15px">sync</span> Sincronizar lotes</button>
           <button type="button" class="btn btn-outline btn-sm" id="btnPrellenar" style="margin-left:8px;" title="Capturar solo cuánto llegó de cada biológico; los lotes se asignan después"><span class="material-symbols-rounded" style="font-size:15px">format_list_numbered</span> Prellenar cantidades</button>
           <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnTraerInfluenza" style="margin-left:8px;" title="Llenar la influenza con el reparto de frascos que ya hicieron Jurisdicción y los municipios"><span class="material-symbols-rounded" style="font-size:15px">vaccines</span> Traer reparto de influenza</button>
+          <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnTraerCovid" style="margin-left:8px;" title="Llenar COVID-19 (Moderna y Pfizer, por separado) con el reparto de frascos que ya hicieron Jurisdicción y los municipios"><span class="material-symbols-rounded" style="font-size:15px">vaccines</span> Traer reparto de COVID-19</button>
           <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnTraerPedido" style="margin-left:8px;" title="Llenar las cantidades de esta requisición con el pedido de biológico que capturaron las unidades (ordinario o extraordinario)"><span class="material-symbols-rounded" style="font-size:15px">request_quote</span> Traer pedido de biológico</button>
           <button type="button" class="btn btn-outline btn-sm" id="btnPegarSurtido"><span class="material-symbols-rounded" style="font-size:15px">content_paste</span> Pegar desde Excel</button>
         </h2>
@@ -958,6 +959,27 @@
         <span id="infResumen" class="modal-resumen"></span>
         <button type="button" class="btn btn-outline" id="infCancelar">Cancelar</button>
         <button type="button" class="btn btn-primary" id="infTraer" disabled>Traer reparto</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Traer el reparto de frascos de COVID-19, por marca (Temporada invernal > COVID-19 > Control de frascos) -->
+  <div class="modal-fondo" id="modalCovid" style="display:none;">
+    <div class="modal-hoja" role="dialog" aria-modal="true" aria-labelledby="covTitulo" style="max-width:600px;">
+      <div class="modal-cab">
+        <div><h3 id="covTitulo">Traer reparto de COVID-19</h3><p>Llena la vacuna COVID-19 de esta requisición con lo que ya repartieron Jurisdicción y los municipios. Moderna y Pfizer quedan en renglones separados, en frascos. Los lotes se asignan después con "Asignar lotes".</p></div>
+        <button type="button" class="icon-btn-pure" id="covCerrar" title="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="modal-cuerpo">
+        <div class="campo"><label for="covModerna">Moderna · entrega del reparto</label><select id="covModerna"></select></div>
+        <p class="hint" id="covDetalleModerna" style="margin:6px 0 12px;"></p>
+        <div class="campo"><label for="covPfizer">Pfizer · entrega del reparto</label><select id="covPfizer"></select></div>
+        <p class="hint" id="covDetallePfizer" style="margin:6px 0 0;"></p>
+      </div>
+      <div class="modal-pie">
+        <span id="covResumen" class="modal-resumen"></span>
+        <button type="button" class="btn btn-outline" id="covCancelar">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="covTraer" disabled>Traer reparto</button>
       </div>
     </div>
   </div>

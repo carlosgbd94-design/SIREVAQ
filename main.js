@@ -8374,6 +8374,13 @@ async function supabaseRequest(action = "", payload, options = {}) {
         return { ok: true, data };
       }
 
+      case "getcovid_lotes_entregas": {
+        const { anio_campana } = payload;
+        const { data, error } = await supabase.rpc('covid_lotes_entregas', { p_campana: anio_campana || "" });
+        if (error) throw error;
+        return { ok: true, data: data || [] };
+      }
+
       case "getinfluenza_remesas": {
         const { anio_campana } = payload;
         const { data, error } = await supabase

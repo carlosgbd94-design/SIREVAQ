@@ -1609,6 +1609,7 @@ let _marcaCovid = "MODERNA";        // "MODERNA" | "PFIZER"
 let _covidMetasArray = [];
 let _covidRemesasAll = [];
 let _covidFrascosAll = [];
+let _covidLotesAll = [];   // lotes reales por marca/unidad/entrega (los asigna Requisiciones)
 
 function esCovid() { return _vacuna === "COVID"; }
 // Factor de pérdida de COVID (dosis de 0.5 mL, fila JURISDICCION de covid_metas): sube lo que se debe RECIBIR
@@ -1621,6 +1622,7 @@ function rubrosMetas() { return esCovid() ? CovidFrascos.RUBROS : INFLUENZA_RUBR
 function metasVista() { return esCovid() ? _covidMetasArray : _adminMetasArray; }
 function remesasVista() { return esCovid() ? _covidRemesasAll.filter(r => r.marca === _marcaCovid) : _adminRemesasArray; }
 function frascosVista() { return esCovid() ? _covidFrascosAll.filter(d => d.marca === _marcaCovid) : _adminFrascosArray; }
+function lotesVista() { return esCovid() ? _covidLotesAll.filter(l => l.marca === _marcaCovid) : _adminLotesEntregas; }
 function dosisFrasco() { return esCovid() ? CovidFrascos.dosisPorFrasco(_marcaCovid) : DOSIS_POR_FRASCO; }
 function vacunaEtiqueta() {
   return esCovid() ? `COVID-19 ${_marcaCovid === "PFIZER" ? "Pfizer" : "Moderna"}` : "influenza";
@@ -1678,6 +1680,12 @@ async function loadCovidAdminData(campana) {
     _covidMetasArray = m.data || [];
     _covidFrascosAll = d.data || [];
     _covidRemesasAll = r.data || [];
+    try {
+      const l = await AppService.call("getcovid_lotes_entregas", { anio_campana: camp }, { silent: true });
+      _covidLotesAll = l.data || [];
+    } catch (eLotes) {
+      _covidLotesAll = [];
+    }
   } catch (err) {
     console.error("Error al cargar datos de COVID-19:", err);
     _covidMetasArray = []; _covidFrascosAll = []; _covidRemesasAll = [];
@@ -4460,6 +4468,9 @@ function metaSincronizarSelectorMuni() {
 // Un frasco rinde 10 dosis: la meta total de una unidad/destino debería cerrar en frascos completos. Solo
 // avisa (no bloquea): Querétaro municipio puede tener una unidad con frasco abierto (p. ej. Pedro Escobedo);
 // en los demás municipios y en los hospitales una meta abierta se marca en rojo.
+// Regla: la meta de cada destino y unidad cierra en frascos completos; el único frasco que puede quedar abierto
+// es el de Querétaro municipio y se le adjudica a la unidad Pedro Escobedo (QTSSA001863).
+const CLUES_FRASCO_ABIERTO = "QTSSA001863";
 function metaPintarFrascos(td, total, permiteAbierto, soloInformar) {
   if (!td) return "ok";
   if (esCovid()) {
@@ -4769,11 +4780,12 @@ function renderMetasConfigurationGrid() {
       let abiertas = 0;
       muniUnits.forEach(u => {
         document.getElementById(`tot_${u.clues}`).textContent = porUnidad[u.clues];
-        if (metaPintarFrascos(document.getElementById(`frs_${u.clues}`), esCovid() ? eqUnidad[u.clues] : porUnidad[u.clues], permiteAbierto) !== "ok") abiertas++;
+        const puedeAbrir = permiteAbierto && u.clues === CLUES_FRASCO_ABIERTO;
+        if (metaPintarFrascos(document.getElementById(`frs_${u.clues}`), esCovid() ? eqUnidad[u.clues] : porUnidad[u.clues], puedeAbrir) !== "ok" && !puedeAbrir) abiertas++;
       });
       if (esCovid()) document.getElementById("frs_label").textContent = "EQUIV. 0.5 mL";
-      else document.getElementById("frs_label").innerHTML = (permiteAbierto && abiertas > 1)
-        ? `FRASCOS<div style="font-size:10px;font-weight:600;color:#d97706;text-transform:none">${abiertas} unidades con frasco abierto (lo habitual es 1)</div>` : "FRASCOS";
+      else document.getElementById("frs_label").innerHTML = (permiteAbierto && abiertas > 0)
+        ? `FRASCOS<div style="font-size:10px;font-weight:600;color:#dc2626;text-transform:none">${abiertas} ${abiertas === 1 ? "unidad" : "unidades"} con frasco abierto: solo Pedro Escobedo puede quedar abierta</div>` : "FRASCOS";
       metaPintarFrascos(document.getElementById("frs_meta"), esCovid() ? granRefEq : granRef, permiteAbierto, true);
       document.getElementById("tot_meta").textContent = granRef;
       pintar(document.getElementById("cmp_TOTAL"), granRef, granSuma);
@@ -5313,12 +5325,11 @@ function frascoMmmAa(fechaIso) {
 
 // Lotes de una unidad en una entrega, tal como están en Requisiciones.
 function frascoLotesDe(numero, clues) {
-  return _adminLotesEntregas.filter(l => Number(l.numero_entrega) === Number(numero) && l.clues === clues);
+  return lotesVista().filter(l => Number(l.numero_entrega) === Number(numero) && l.clues === clues);
 }
 
 // Celda de lote (solo lectura): "Pendiente" si aún no llega, o lote(s) con caducidad.
 function frascoLoteHtml(numero, clues) {
-  if (esCovid()) return '<span class="frs-muted" title="El lote de COVID-19 se registra en Requisiciones">—</span>';
   const lotes = frascoLotesDe(numero, clues);
   if (!lotes.length) return '<span class="frs-muted" title="Aún no está en Requisiciones">—</span>';
   return lotes.map(l => l.lote === "POR DEFINIR"
@@ -5328,9 +5339,8 @@ function frascoLoteHtml(numero, clues) {
 
 // Resumen para la barra de la entrega: cuántos frascos ya tienen lote real.
 function frascoEstadoLotes(numero, units) {
-  if (esCovid()) return { tono: "info", html: '<span class="material-symbols-rounded">vaccines</span> COVID-19: aquí se reparten los frascos por marca; el lote se maneja en Requisiciones.' };
   const claves = new Set(units.map(u => u.clues));
-  const filas = _adminLotesEntregas.filter(l => Number(l.numero_entrega) === Number(numero) && claves.has(l.clues));
+  const filas = lotesVista().filter(l => Number(l.numero_entrega) === Number(numero) && claves.has(l.clues));
   if (!filas.length) return { tono: "info", html: '<span class="material-symbols-rounded">inventory_2</span> Los lotes se asignan en <b>Requisiciones</b> cuando llegue la entrega.' };
   const total = filas.reduce((s, l) => s + Number(l.cantidad || 0), 0);
   const conLote = filas.filter(l => l.lote !== "POR DEFINIR").reduce((s, l) => s + Number(l.cantidad || 0), 0);

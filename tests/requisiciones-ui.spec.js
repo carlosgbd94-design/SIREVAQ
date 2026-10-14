@@ -1170,3 +1170,63 @@ test('Requisiciones: los extraordinarios hechos en el mes de la requisición se 
   expect(await db(page, "db.requi_items_jurisdiccion.map((i) => i.cantidad_surtida)")).toEqual([77]);
   expect(errores).toEqual([]);
 });
+
+test('Requisiciones: traer el reparto de COVID-19 trae Moderna y Pfizer en renglones separados de la MISMA requisición (frascos)', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__FAKE_COVID__ = true;
+    window.__FAKE_COVID_UNI__ = {
+      MODERNA: [{ unidad_id: 'un-q1', cantidad: 30 }, { unidad_id: 'un-q2', cantidad: 20 }, { unidad_id: 'un-c1', cantidad: 20 }],
+      PFIZER: [{ unidad_id: 'un-q1', cantidad: 10 }]
+    };
+  });
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.evaluate(() => { window.__AUTO_CONFIRMAR__ = false; });
+
+  await page.click('#btnTraerCovid');
+  await expect(page.locator('#modalCovid')).toBeVisible();
+  await expect(page.locator('#covDetalleModerna')).toContainText('70 frascos recibidos');
+  await expect(page.locator('#covDetalleModerna')).toContainText('Querétaro 50');
+  await expect(page.locator('#covDetallePfizer')).toContainText('10 frascos recibidos');
+  await expect(page.locator('#covTraer')).toBeEnabled();
+
+  await page.click('#covTraer');
+  await expect(page.locator('#modalCovid')).toBeHidden();
+
+  // UNA requisición, dos vacunas con sus propias cantidades (frascos)
+  const porBio = "Object.fromEntries(db.requi_items_jurisdiccion.map((i) => [i.requi_biologico_id, i.cantidad_surtida]))";
+  expect(await db(page, porBio)).toEqual({ 'bio-mod': 70, 'bio-pfz': 10 });
+  expect(await db(page, "db.requi_distribucion_municipio.filter((d) => d.requi_biologico_id === 'bio-mod').reduce((a, d) => a + d.cantidad, 0)")).toBe(70);
+  expect(await db(page, "db.requi_distribucion_municipio.filter((d) => d.requi_biologico_id === 'bio-pfz').reduce((a, d) => a + d.cantidad, 0)")).toBe(10);
+  expect(await db(page, "db.requi_distribucion_unidad.filter((d) => d.requi_biologico_id === 'bio-mod').reduce((a, d) => a + d.cantidad, 0)")).toBe(70);
+  expect(await db(page, "db.requi_distribucion_unidad.filter((d) => d.requi_biologico_id === 'bio-pfz').reduce((a, d) => a + d.cantidad, 0)")).toBe(10);
+  expect(await db(page, "db.requi_lotes.filter((l) => ['bio-mod', 'bio-pfz'].includes(l.requi_biologico_id)).map((l) => l.numero_lote)")).toEqual(['POR DEFINIR', 'POR DEFINIR']);
+  const req = await db(page, "db.requi_requisiciones.find((r) => r.id === 'req-hoy')");
+  expect([req.covid_moderna_entrega, req.covid_pfizer_entrega]).toEqual([1, 1]);
+  expect(await db(page, "db.requi_requisiciones.filter((r) => r.covid_moderna_entrega).length")).toBe(1);
+
+  // Volver a abrir: ya están vinculadas a esta requisición y se avisa el reemplazo por marca
+  await page.click('#btnTraerCovid');
+  await expect(page.locator('#covDetalleModerna')).toContainText('se reemplazan');
+  await expect(page.locator('#covDetallePfizer')).toContainText('se reemplazan');
+  // Se puede traer solo una marca: «No traer» en Pfizer
+  await page.selectOption('#covPfizer', '');
+  await expect(page.locator('#covDetallePfizer')).toHaveText('');
+  await page.click('#covCancelar');
+  await expect(page.locator('#modalCovid')).toBeHidden();
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: la entrega de COVID-19 ya vinculada a otra requisición no se puede traer', async ({ page }) => {
+  await page.addInitScript(() => { window.__FAKE_COVID__ = true; });
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.evaluate(() => {
+    window.__FAKE_DB__.requi_requisiciones.push({ id: 'req-otra', anio: 2026, mes: 8, entrega: 1, etiqueta: null, estado: 'CERRADA',
+      covid_campana: 'Campaña Influenza 2026-2027', covid_moderna_entrega: 1, covid_pfizer_entrega: 1 });
+  });
+  await page.click('#btnTraerCovid');
+  await expect(page.locator('#covDetalleModerna')).toContainText('ya está vinculada');
+  await expect(page.locator('#covTraer')).toBeDisabled();
+  expect(errores).toEqual([]);
+});

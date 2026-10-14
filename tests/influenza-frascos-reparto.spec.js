@@ -686,24 +686,33 @@ test('Metas: Tab va a la derecha, Enter baja; al terminar fila/columna salta a l
   await expect(inp('r1', 'QUERETARO')).toHaveValue('10');
 });
 
-test('Metas municipales: fila de frascos (Querétaro admite abierto), repartir parejo y pegado desde Excel', async ({ page }) => {
+test('Metas municipales: fila de frascos (solo Pedro Escobedo admite abierto), repartir parejo y pegado desde Excel', async ({ page }) => {
   await montarMetas(page, 'MUNICIPAL', [meta(null, 'QUERETARO', 100)]);
   const q1 = page.locator('input[data-rb="r1"][data-clues="Q1"]');
-  await q1.fill('215');
-  await expect(page.locator('#frs_Q1')).toHaveAttribute('data-estado', 'aviso');   // Querétaro: abierto = ámbar
-  await expect(page.locator('#frs_Q1')).toContainText('21.5');
-  await q1.fill('220');
-  await expect(page.locator('#frs_Q1')).toHaveAttribute('data-estado', 'ok');
+  // Q2 (otra unidad de Querétaro) con frasco abierto: en rojo, aunque sea Querétaro
+  await page.locator('input[data-rb="r1"][data-clues="Q2"]').fill('215');
+  await expect(page.locator('#frs_Q2')).toHaveAttribute('data-estado', 'mal');
+  await expect(page.locator('#frs_label')).toContainText('solo Pedro Escobedo');
+  await page.locator('input[data-rb="r1"][data-clues="Q2"]').fill('220');
+  // Pedro Escobedo (QTSSA001863) sí puede quedar con frasco abierto: ámbar
+  await page.evaluate(() => { _allUnidades[0].clues = 'QTSSA001863'; _allUnidades[0].unidad = 'PEDRO ESCOBEDO'; window.__render(); });
+  const pe = page.locator('input[data-rb="r1"][data-clues="QTSSA001863"]');
+  await pe.fill('215');
+  await expect(page.locator('#frs_QTSSA001863')).toHaveAttribute('data-estado', 'aviso');
+  await expect(page.locator('#frs_QTSSA001863')).toContainText('21.5');
+  await pe.fill('220');
+  await expect(page.locator('#frs_QTSSA001863')).toHaveAttribute('data-estado', 'ok');
+  const q1x = pe;
 
   // Repartir parejo: 100 entre 3 unidades -> 34/33/33
   await page.locator('tr[data-rb="r1"] .meta-split-btn').click();
-  await expect(q1).toHaveValue('34');
+  await expect(q1x).toHaveValue('34');
   await expect(page.locator('input[data-rb="r1"][data-clues="Q3"]')).toHaveValue('33');
 
   // Pegado de bloque (2 filas x 2 columnas) desde Q1/r1
-  await q1.focus();
+  await q1x.focus();
   await page.evaluate(() => {
-    const el = document.querySelector('input[data-rb="r1"][data-clues="Q1"]');
+    const el = document.querySelector('input[data-rb="r1"][data-clues="QTSSA001863"]');
     const dt = new DataTransfer(); dt.setData('text/plain', '10\t20\n30\t40\n');
     el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
   });
@@ -1153,7 +1162,7 @@ test('Temporada invernal: COVID-19 muestra solo Metas y Frascos; Influenza conse
   await page.click('#temporadaVacunaBar [data-vac="COVID"]');
   await expect.poll(visibles).toEqual(['Metas', 'Frascos']);
   expect(await page.evaluate(() => window.__llamadas.map((l) => l[0]).sort()))
-    .toEqual(['getcovid_distribucion', 'getcovid_metas', 'getcovid_remesas']);   // carga lo de COVID, no lo de influenza
+    .toEqual(['getcovid_distribucion', 'getcovid_lotes_entregas', 'getcovid_metas', 'getcovid_remesas']);   // carga lo de COVID, no lo de influenza
   // estaba en «Concentrado de Avances» (activa): pasa sola a Distribución de Metas
   expect(await page.evaluate(() => window.__clicks)).toEqual(['Metas']);
 

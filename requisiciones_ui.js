@@ -2031,6 +2031,134 @@ async function traerRepartoInfluenza() {
 }
 
 // ---------------------------------------------------------------------------
+// COVID-19: se trae el reparto de frascos por MARCA (Moderna 6502, Pfizer 6506) en la misma requisición, con
+// las cantidades separadas por marca (todo en frascos). Cada marca tiene su propia entrega en Control de
+// frascos; aquí se elige cuál traer de cada una y se pueden traer una, otra o ambas.
+// ---------------------------------------------------------------------------
+
+const COVID_MARCAS = [
+  { id: 'MODERNA', codigo: '6502', etiqueta: 'Moderna', select: 'covModerna', detalle: 'covDetalleModerna', col: 'covid_moderna_entrega' },
+  { id: 'PFIZER', codigo: '6506', etiqueta: 'Pfizer', select: 'covPfizer', detalle: 'covDetallePfizer', col: 'covid_pfizer_entrega' }
+];
+
+function bioCovid(marca) { return estado.catalogo.find((b) => String(b.codigo_articulo) === marca.codigo) || null; }
+
+function opcionesCovid(marca) {
+  return (estado.covidRemesas || []).filter((r) => r.marca === marca.id).map((r) => {
+    const otra = (estado.covidVinculos || []).find((v) => v.covid_campana === r.anio_campana
+      && v[marca.col] === r.numero_entrega && v.id !== estado.requisicion.id);
+    return { ...r, valor: `${r.numero_entrega}|${r.anio_campana}`, otra };
+  });
+}
+
+function seleccionCovid(marca) {
+  const v = $(marca.select).value;
+  return v ? opcionesCovid(marca).find((o) => o.valor === v) || null : null;
+}
+
+function actualizarDetalleCovid() {
+  let hayQueTraer = false;
+  COVID_MARCAS.forEach((m) => {
+    const op = seleccionCovid(m);
+    const bio = bioCovid(m);
+    const el = $(m.detalle);
+    if (!bio) { el.textContent = `La vacuna COVID-19 ${m.etiqueta} no está en el catálogo de esta requisición.`; return; }
+    if (!op) { el.textContent = ''; return; }
+    const propios = estado.items.filter((i) => i.requi_biologico_id === bio.id && Number(i.cantidad_surtida) > 0);
+    const conLote = propios.filter((i) => !esPendiente(i));
+    const actual = propios.reduce((acc, i) => acc + Number(i.cantidad_surtida || 0), 0);
+    let aviso = '';
+    let bloquea = false;
+    if (op.otra) { aviso = `Esta entrega ya está vinculada a la requisición de ${etiquetaMes(op.otra)} · Entrega ${op.otra.entrega}.`; bloquea = true; }
+    else if (conLote.length) { aviso = `${m.etiqueta} ya tiene lotes asignados en esta requisición; para no pisarlos, corrige su reparto directo en los pasos 2 y 3.`; bloquea = true; }
+    else if (actual > 0) aviso = `Esta requisición ya tiene ${actual.toLocaleString('es-MX')} frascos de ${m.etiqueta}: se reemplazan por el reparto.`;
+    el.innerHTML = `<b>${Number(op.total_frascos).toLocaleString('es-MX')} frascos recibidos</b> · ${esc(textoDestinos(op.asignacion || {}))}${aviso ? `<br><span style="color:#b45309;font-weight:700">${esc(aviso)}</span>` : ''}`;
+    if (!bloquea) hayQueTraer = true;
+  });
+  $('covTraer').disabled = !hayQueTraer;
+}
+
+async function abrirTraerCovid() {
+  if (!estado.puedeEditar || !estado.requisicion) return;
+  if (!COVID_MARCAS.some((m) => bioCovid(m))) { toast('La vacuna COVID-19 no está en el catálogo de esta requisición.', true); return; }
+  COVID_MARCAS.forEach((m) => { $(m.select).innerHTML = '<option value="">Cargando…</option>'; $(m.detalle).textContent = ''; });
+  $('covTraer').disabled = true;
+  $('modalCovid').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  const [rem, vinc] = await Promise.all([
+    estado.db.from('covid_remesas').select('anio_campana, marca, numero_entrega, fecha, total_frascos, asignacion')
+      .order('anio_campana', { ascending: false }).order('numero_entrega'),
+    estado.db.from('requi_requisiciones').select('id, anio, mes, entrega, covid_campana, covid_moderna_entrega, covid_pfizer_entrega').not('covid_campana', 'is', null)
+  ]);
+  if (rem.error || vinc.error) { cerrarTraerCovid(); toast('No se pudo leer el reparto de COVID-19: ' + (rem.error || vinc.error).message, true); return; }
+  estado.covidRemesas = rem.data || [];
+  estado.covidVinculos = vinc.data || [];
+  let alguna = false;
+  COVID_MARCAS.forEach((m) => {
+    const ops = opcionesCovid(m);
+    if (!ops.length) { $(m.select).innerHTML = '<option value="">Sin entregas repartidas</option>'; return; }
+    alguna = true;
+    $(m.select).innerHTML = '<option value="">— No traer —</option>' + ops.map((o) =>
+      `<option value="${esc(o.valor)}">${esc(o.anio_campana)} · ${ordinalEntrega(o.numero_entrega)} · ${Number(o.total_frascos).toLocaleString('es-MX')} frascos${o.otra ? ' (ya vinculada)' : ''}</option>`).join('');
+    const propia = ops.find((o) => !o.otra && estado.requisicion[m.col] === o.numero_entrega && estado.requisicion.covid_campana === o.anio_campana);
+    const libre = ops.find((o) => !o.otra && !estado.covidVinculos.some((v) => v.covid_campana === o.anio_campana && v[m.col] === o.numero_entrega));
+    const elegida = propia || libre || ops[0];   // sin libres se muestra la primera para explicar por qué no se puede
+    $(m.select).value = elegida ? elegida.valor : '';
+  });
+  if (!alguna) $('covDetalleModerna').textContent = 'Jurisdicción todavía no registra ninguna entrega de COVID-19 en Temporada invernal > COVID-19 > Control de frascos.';
+  actualizarDetalleCovid();
+  $('covModerna').focus();
+}
+
+function cerrarTraerCovid() {
+  $('modalCovid').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function traerRepartoCovid() {
+  const elegidas = COVID_MARCAS.map((m) => ({ m, op: seleccionCovid(m), bio: bioCovid(m) })).filter((x) => x.op && x.bio && !x.op.otra);
+  if (!elegidas.length || !estado.requisicion) return;
+  const campanas = new Set(elegidas.map((x) => x.op.anio_campana));
+  if (campanas.size > 1) { toast('Moderna y Pfizer deben ser de la misma campaña.', true); return; }
+  const reemplazos = elegidas.map((x) => ({
+    ...x, actual: estado.items.filter((i) => i.requi_biologico_id === x.bio.id).reduce((acc, i) => acc + Number(i.cantidad_surtida || 0), 0)
+  })).filter((x) => x.actual > 0);
+  if (reemplazos.length && !(await confirmar({
+    titulo: 'Reemplazar COVID-19 de esta requisición', tono: 'aviso', aceptar: 'Reemplazar',
+    mensaje: reemplazos.map((x) => `${x.m.etiqueta}: hoy tiene ${x.actual.toLocaleString('es-MX')} frascos; se reemplazan por la ${ordinalEntrega(x.op.numero_entrega)} (${Number(x.op.total_frascos).toLocaleString('es-MX')} frascos).`).join(' ')
+  }))) return;
+  $('covTraer').disabled = true;
+  const resultados = [];
+  try {
+    for (const x of elegidas) {
+      const { data, error } = await estado.db.rpc('requi_traer_reparto_covid', {
+        p_requisicion: estado.requisicion.id, p_campana: x.op.anio_campana, p_marca: x.m.id, p_numero: x.op.numero_entrega
+      });
+      if (error) { toast(`${x.m.etiqueta}: ${error.message.replace(/^.*?ERROR:\s*/, '')}`, true); break; }
+      estado.requisicion.covid_campana = x.op.anio_campana;
+      estado.requisicion[x.m.col] = x.op.numero_entrega;
+      delete estado.lotesPorBiologico[x.bio.id];
+      resultados.push({ m: x.m, data });
+    }
+    if (!resultados.length) return;
+    cerrarTraerCovid();
+    await cargarDatosRequisicion();
+    const base = 'Se trajo COVID-19: ' + resultados.map((r) => `${r.m.etiqueta} ${Number(r.data.frascos).toLocaleString('es-MX')} frascos (${plural(r.data.destinos, 'destino', 'destinos')} y ${plural(r.data.unidades, 'unidad', 'unidades')})`).join(' · ') + '. Los lotes quedan por definir.';
+    const avisos = [];
+    resultados.forEach((r) => {
+      const sinReparto = (r.data.destinos_sin_reparto_a_unidades || []).map(etiquetaMunicipio);
+      const sinUnidad = r.data.clues_sin_unidad || [];
+      if (sinReparto.length) avisos.push(`${r.m.etiqueta}: todavía no reparten entre sus unidades ${sinReparto.join(', ')}`);
+      if (sinUnidad.length) avisos.push(`${r.m.etiqueta}: CLUES sin unidad en Requisiciones ${sinUnidad.join(', ')}`);
+    });
+    if (avisos.length) await confirmar({ titulo: 'Reparto de COVID-19 traído', tono: 'aviso', aceptar: 'Entendido', cancelar: 'Cerrar', mensaje: base + ' Ojo: ' + avisos.join('; ') + '.' });
+    else toast(base);
+  } finally {
+    $('covTraer').disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Traer el pedido de biológico: lo que capturaron las unidades (Pedido de biológico) se trae a esta
 // requisición solo si se pide con el botón. El pedido se hace un mes antes (el de octubre se hizo
 // el 22 de septiembre), así que se propone el mes anterior. Si ese mes tiene más de un pedido, el
@@ -3567,6 +3695,13 @@ function instalarEventos() {
   $('infCancelar').addEventListener('click', cerrarTraerInfluenza);
   $('infTraer').addEventListener('click', traerRepartoInfluenza);
   $('infEntrega').addEventListener('change', actualizarDetalleInfluenza);
+  $('btnTraerCovid').addEventListener('click', abrirTraerCovid);
+  $('covCerrar').addEventListener('click', cerrarTraerCovid);
+  $('covCancelar').addEventListener('click', cerrarTraerCovid);
+  $('covTraer').addEventListener('click', traerRepartoCovid);
+  $('covModerna').addEventListener('change', actualizarDetalleCovid);
+  $('covPfizer').addEventListener('change', actualizarDetalleCovid);
+  $('modalCovid').addEventListener('click', (ev) => { if (ev.target === $('modalCovid')) cerrarTraerCovid(); });
   $('modalInfluenza').addEventListener('click', (ev) => { if (ev.target === $('modalInfluenza')) cerrarTraerInfluenza(); });
   $('btnTraerPedido').addEventListener('click', abrirTraerPedido);
   $('pedCerrar').addEventListener('click', cerrarTraerPedido);
@@ -3673,6 +3808,7 @@ function instalarEventos() {
     else if ($('modalAsignar').style.display !== 'none') cerrarAsignarLotes();
     else if ($('modalCantidades').style.display !== 'none') cerrarCantidades();
     else if ($('modalInfluenza').style.display !== 'none') cerrarTraerInfluenza();
+    else if ($('modalCovid').style.display !== 'none') cerrarTraerCovid();
     else if ($('modalPedido').style.display !== 'none') cerrarTraerPedido();
     else if ($('modalTransferencias').style.display !== 'none') cerrarTransferencias();
     else if (estado.bioRapido) { seleccionarBioRapido(null); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
