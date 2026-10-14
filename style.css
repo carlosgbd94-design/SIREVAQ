@@ -15331,3 +15331,15 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
 #secCovidAvance .cav-barra.cav-completo > i { background: #16a34a; }
 #secCovidAvance .cav-pct { display: block; margin-top: 4px; font-weight: 900; }
 #secCovidAvance .cav-vacio { padding: 22px; text-align: center; color: #64748b; font-weight: 700; }
+/* Barra de ámbito/corte del Avance COVID-19: mismo diseño compacto que la de Distribución de Metas (una fila). */
+#secCovidAvance .meta-camp-bar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;
+}
+#secCovidAvance .meta-camp-lbl { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #64748b; }
+#secCovidAvance .meta-camp-select {
+  width: auto !important; min-width: 220px; height: 40px !important; padding: 0 40px 0 16px !important;
+  border-radius: 12px !important; font-size: 13px !important; font-weight: 700 !important;
+  background-position: right 14px center !important; text-overflow: ellipsis;
+}
+#secCovidAvance { gap: 14px; }

@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.138" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.139" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.145" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.146" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3100,7 +3100,7 @@
           <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-4 items-end">
             <div class="flex-none" style="width: 220px;">
               <label for="validationInfluenzaSemana"
-                class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Semana a Validar</label>
+                class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Semana a Validar</label>
               <select id="validationInfluenzaSemana"
                 class="w-full bg-surface border border-slate-300 rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 outline-none"
                 style="height: 38px;">
@@ -3108,14 +3108,26 @@
               </select>
             </div>
             <!-- Buscador dinámico de unidades -->
+            <div class="flex-none" style="width: 220px;">
+              <label for="validationEstadoFiltro"
+                class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Estado del reporte</label>
+              <select id="validationEstadoFiltro"
+                class="w-full bg-surface border border-slate-300 rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 outline-none"
+                style="height: 38px;">
+                <option value="todas">Todas las unidades</option>
+                <option value="pendiente">Pendientes (sin reporte)</option>
+                <option value="reportado">Reportadas por revisar</option>
+                <option value="corregido">Ya revisadas por supervisión</option>
+              </select>
+            </div>
             <div class="flex-1 min-w-[200px]" id="validationUnitSearchBox">
               <label for="validationUnitSearch"
-                class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Buscar Unidad</label>
+                class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Buscar Unidad</label>
               <div class="relative w-full">
-                <span
-                  class="material-symbols-rounded absolute text-slate-400 text-[18px] pointer-events-none select-none left-3 top-1/2 -translate-y-1/2">search</span>
-                <input type="text" id="validationUnitSearch"
-                  placeholder="Buscar por CLUES o nombre de la unidad médica..."
+                <span aria-hidden="true"
+                  class="material-symbols-rounded absolute text-slate-500 text-[18px] pointer-events-none select-none left-3 top-1/2 -translate-y-1/2">search</span>
+                <input type="text" id="validationUnitSearch" autocomplete="off"
+                  placeholder="CLUES o nombre de la unidad médica"
                   class="w-full bg-surface border border-slate-300 rounded-xl pr-4 py-2 text-sm font-semibold text-slate-700 outline-none"
                   style="padding-left: 36px !important; height: 38px;" />
               </div>
@@ -3129,9 +3141,10 @@
           <!-- SUB-PANEL 1: CONTROL DE ENTREGAS (DASHBOARD) -->
           <div id="validationDashboard" class="flex flex-col gap-4">
             <div class="flex items-center justify-between">
-              <h4 class="text-sm font-black text-violet-950 uppercase tracking-wider m-0">Estado de Reportes Semanales
+              <h4 class="text-sm font-black text-violet-950 uppercase tracking-wider m-0" id="validationDashboardTitle"
+                tabindex="-1">Estado de Reportes Semanales
               </h4>
-              <div
+              <div role="status"
                 class="flex gap-2 text-xs font-black text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full"
                 id="validationStatsSummary">
                 <!-- JS insertará contadores del estado de captura de la semana -->
@@ -3148,9 +3161,10 @@
           <div id="validationReportContent" class="hidden flex flex-col gap-6">
             <div class="flex items-center justify-between border-b border-slate-200 pb-4">
               <div>
-                <h4 class="text-sm font-black text-primary m-0 uppercase tracking-wider" id="validationReportTitle">
+                <h4 class="text-sm font-black text-primary m-0 uppercase tracking-wider" id="validationReportTitle"
+                  tabindex="-1">
                   Reporte de Validación</h4>
-                <div class="text-xs text-slate-500 mt-1" id="validationReportSubtitle">—</div>
+                <div class="text-xs text-slate-600 mt-1" id="validationReportSubtitle">—</div>
               </div>
               <div class="flex items-center gap-3">
                 <div id="validationReportEditBadge"
@@ -3163,7 +3177,7 @@
                   style="background-color: #f1f5f9 !important; color: #334155 !important; cursor: pointer;"
                   onmouseenter="this.style.setProperty('background-color', '#0f172a', 'important'); this.style.setProperty('color', '#ffffff', 'important'); this.querySelector('.material-symbols-rounded').style.setProperty('color', '#ffffff', 'important');"
                   onmouseleave="this.style.setProperty('background-color', '#f1f5f9', 'important'); this.style.setProperty('color', '#334155', 'important'); this.querySelector('.material-symbols-rounded').style.setProperty('color', '#334155', 'important');">
-                  <span
+                  <span aria-hidden="true"
                     class="material-symbols-rounded text-[18px] transition-transform duration-300 group-hover:-translate-x-1"
                     style="color: #334155 !important;">arrow_back</span>
                   <span>Volver al listado</span>
@@ -3172,21 +3186,42 @@
             </div>
 
             <div class="bg-surface border border-slate-200 rounded-[24px] p-6" style="background-color: #ffffff;">
-              <div class="modern-input-group max-w-md mb-6">
-                <span class="input-icon material-symbols-rounded">person</span>
-                <input id="validationNombreResponsable" placeholder=" "
+              <p class="text-sm text-slate-700 m-0 mb-4" id="validationAyudaIntro">
+                Revisa las dosis que reportó la unidad. Si son correctas, firma con tu nombre y elige
+                <b>Validar sin cambios</b>. Si necesitas ajustar alguna cifra, cámbiala en la columna
+                <b>Valor validado</b> y guarda la corrección.
+              </p>
+              <details class="vl-leyenda mb-6">
+                <summary>¿Qué significa cada columna?</summary>
+                <dl>
+                  <dt>Meta anual</dt><dd>Dosis que debe aplicar la unidad en toda la campaña.</dd>
+                  <dt>Capturado por la unidad</dt><dd>Cifra original que envió la unidad esta semana. No cambia.</dd>
+                  <dt>Acumulado otras semanas</dt><dd>Dosis aplicadas en las demás semanas, sin contar esta.</dd>
+                  <dt>Valor validado</dt><dd>Cifra de esta semana que queda registrada. Es el único campo editable.</dd>
+                  <dt>Avance con este valor</dt><dd>(Acumulado + valor validado) entre la meta anual.</dd>
+                </dl>
+              </details>
+
+              <div class="modern-input-group max-w-md mb-6" id="validationNombreGrupo">
+                <span class="input-icon material-symbols-rounded" aria-hidden="true">person</span>
+                <input id="validationNombreResponsable" placeholder=" " autocomplete="name" required
+                  aria-required="true" aria-describedby="validationNombreAyuda"
                   class="w-full h-[58px] rounded-2xl pr-6 text-[15px] font-bold outline-none shadow-md">
                 <label for="validationNombreResponsable">Nombre de quien realiza/autoriza la corrección</label>
               </div>
+              <p class="sr-only" id="validationNombreAyuda">Obligatorio. Este nombre queda firmado en el historial del reporte.</p>
 
               <!-- Contenedor dinámico de tarjetas de captura -->
               <div id="validationCardsContainer" class="flex flex-col gap-6">
                 <!-- JS renderizará los rubros agrupados en tarjetas con inputs numéricos -->
               </div>
 
+              <div id="validationCambiosResumen" class="vl-resumen mt-6" role="status" aria-live="polite"></div>
+              <div id="validationFormError" class="vl-error hidden mt-4" role="alert" tabindex="-1"></div>
+
               <div class="flex gap-4 mt-6">
-                <button class="ghostBtn flex-1 h-[48px]" id="btnCancelValidation">Cancelar y Volver</button>
-                <button class="btn flex-1 h-[48px]" id="btnSaveValidation">Guardar Corrección del Supervisor</button>
+                <button type="button" class="ghostBtn flex-1 h-[48px]" id="btnCancelValidation">Cancelar y volver</button>
+                <button type="button" class="btn flex-1 h-[48px]" id="btnSaveValidation">Guardar corrección del supervisor</button>
               </div>
             </div>
           </div>
@@ -3392,7 +3427,7 @@
         <!-- AVANCE DE COVID-19: dosis aplicadas (SIS) contra la meta -->
         <div id="secCovidAvance" class="hidden flex flex-col gap-6">
           <div class="meta-camp-bar">
-            <label for="cavAmbito" class="meta-camp-lbl">Ámbito</label>
+            <label for="cavAmbito" id="cavAmbitoLbl" class="meta-camp-lbl">Ámbito</label>
             <select id="cavAmbito" class="meta-camp-select"></select>
             <label for="cavCorte" class="meta-camp-lbl">Acumulado hasta</label>
             <select id="cavCorte" class="meta-camp-select"></select>

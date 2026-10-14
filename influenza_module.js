@@ -5017,6 +5017,17 @@ async function renderCovidAvance() {
   const previoAmb = sel.value;
   sel.innerHTML = ambitos.map(a => `<option value="${a.id}">${a.label}</option>`).join("");
   if (ambitos.some(a => a.id === previoAmb)) sel.value = previoAmb;
+  else if (!ambitos.some(a => a.id === "JURIS")) {
+    // Municipal: arranca en el municipio que ya tiene elegido en el resto del panel (Jurisdicción arranca en JURIS)
+    const general = document.getElementById("adminInfluenzaMuni");
+    const actual = general ? String(general.value || "").toUpperCase() : "";
+    if (ambitos.some(a => a.id === actual)) sel.value = actual;
+  }
+  // Con un solo ámbito (municipal de un municipio) el selector sobra: se oculta para no dejar hueco.
+  const unico = ambitos.length <= 1;
+  sel.style.display = unico ? "none" : "";
+  const lblAmb = document.getElementById("cavAmbitoLbl");
+  if (lblAmb) lblAmb.style.display = unico ? "none" : "";
   const meses = covidAvanceMeses();
   const previoMes = corte.value;
   corte.innerHTML = meses.map(m => `<option value="${m.valor}">${m.etiqueta}</option>`).join("");

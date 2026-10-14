@@ -1365,3 +1365,26 @@ test('COVID Avance (municipal): solo ofrece sus municipios, no la Jurisdicción'
   await page.evaluate(() => renderCovidAvance());
   expect(await page.locator('#cavAmbito option').allTextContents()).toEqual(['Querétaro']);
 });
+
+test('COVID Avance (municipal): un solo municipio sin selector de ámbito, solo sus unidades y su total', async ({ page }) => {
+  const sis = [
+    { clues: 'Q1', variable_sis: 'VCV16', dosis: 75, ult: '2026-11-01' },
+    { clues: 'Q2', variable_sis: 'VCV38', dosis: 20, ult: '2026-11-01' }, { clues: 'Q2', variable_sis: 'VCV39', dosis: 20, ult: '2026-11-01' }
+  ];
+  await montarAvance(page, 'MUNICIPAL', sis);
+  await page.evaluate(() => renderCovidAvance());
+  await expect(page.locator('#cavAmbito')).toBeHidden();                 // un solo municipio: no se ofrece elegir
+  await expect(page.locator('#cavAmbitoLbl')).toBeHidden();
+  await expect(page.locator('#cavTituloAmbito')).toContainText('unidad');
+  // Q1: aplicadas equiv 75 de 400 (50+150+10+15 + 100) ; Q2: (20+20)/2 = 20 de 400
+  await expect(page.locator('#cavTbody tr', { hasText: 'UMQ UNO' })).toContainText('75');
+  await expect(page.locator('#cavTbody tr', { hasText: 'UMQ DOS' })).toContainText('20');
+  // el total del ámbito usa la meta del municipio y suma lo de sus unidades
+  const total = page.locator('#cavTbody tr.cav-total');
+  await expect(total).toContainText('Querétaro');
+  await expect(total).toContainText('95');
+  expect(await page.locator('#cavRubros tr').count()).toBe(6);
+  // el SIS se pide con el mismo rango y el servidor ya filtra por municipio
+  const llamada = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'getcovid_avance'));
+  expect(llamada[1].desde).toBe('2026-10-03');
+});
