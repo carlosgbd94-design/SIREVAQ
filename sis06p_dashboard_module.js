@@ -522,9 +522,11 @@
 
   async function renderComparativoAplicado(cont, municipio, mes, anio) {
     try {
-      const { data, error } = await estado.db.rpc('sis06p_comparativo', { p_mes: mes, p_anio: anio });
+      // La función devuelve una fila por unidad x grupo con movimiento (> 1000 para todo el estado) y PostgREST
+      // corta en 1000: se pide por bloques (la función ya ordena por clues, etiqueta) para no perder unidades.
+      const { data, error } = await window.rpcPorBloques(estado.db, 'sis06p_comparativo', { p_mes: mes, p_anio: anio });
       if (error) throw error;
-      const filas = (data || []).filter((f) => f.municipio === municipio);
+      const filas = data.filter((f) => f.municipio === municipio);
       const porUnidad = new Map();
       filas.forEach((f) => {
         if (!porUnidad.has(f.clues)) porUnidad.set(f.clues, { unidad: f.unidad, filas: [] });
@@ -765,3 +767,19 @@
 
   window.SIS06PDashboard = { render, cargarFilas, renderBannerVentana, renderComparativoAplicado, exportarCSVOficialMunicipio, publicarMunicipio, pintarEstadoPublicacion, MUNICIPIO_LABEL };
 })();
+
+// PostgREST corta cada respuesta en 1000 filas: las funciones que devuelven TABLE se piden por bloques
+// (.range) y se juntan. Tolera clientes simulados sin .range (una sola respuesta).
+if (typeof window !== 'undefined') window.rpcPorBloques = window.rpcPorBloques || async function rpcPorBloques(db, nombre, args) {
+  const todo = [];
+  for (let desde = 0; ; desde += 1000) {
+    const q = db.rpc(nombre, args);
+    const paginable = q && typeof q.range === 'function';
+    const r = await (paginable ? q.range(desde, desde + 999) : q);
+    if (r.error) return { data: null, error: r.error };
+    if (!Array.isArray(r.data)) return r;
+    todo.push(...r.data);
+    if (!paginable || r.data.length < 1000) break;
+  }
+  return { data: todo, error: null };
+};

@@ -763,7 +763,15 @@
     };
 
     const fetchLotes = async () => {
-        const { data: lotesData, error } = await supabaseClient.from('lotes').select('*');
+        // PostgREST corta en 1000 filas: el catálogo de lotes se pide por bloques.
+        let lotesData = [];
+        let error = null;
+        for (let desde = 0; ; desde += 1000) {
+            const r = await supabaseClient.from('lotes').select('*').order('id').range(desde, desde + 999);
+            if (r.error) { error = r.error; break; }
+            lotesData = lotesData.concat(r.data || []);
+            if ((r.data || []).length < 1000) break;
+        }
         if (error) {
             console.error("fetchLotes error:", error);
             showToast("Error lotes: " + error.message, "error");

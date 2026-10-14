@@ -719,7 +719,7 @@
       db.from('biovac_bloques_catalogo').select('*').order('pagina').order('orden'),
       db.from('biovac_catalogo_biologicos').select('*').order('orden_en_bloque')
     ]);
-    const { data: concentrado } = await db.rpc('biovac_concentrado_jurisdiccion', {
+    const { data: concentrado } = await window.rpcPorBloques(db, 'biovac_concentrado_jurisdiccion', {
       p_jurisdiccion_id: jurisdiccion.id, p_anio: anio, p_mes: mes
     });
     const renglonesDb = (concentrado || []).map((f) => ({
@@ -761,3 +761,19 @@
 
   return { exportarExcel, construirWorkbook, exportarExcelJurisdiccional, construirWorkbookJurisdiccional, construirWorkbookDesdeDatos };
 });
+
+// PostgREST corta cada respuesta en 1000 filas: las funciones que devuelven TABLE se piden por bloques
+// (.range) y se juntan. Tolera clientes simulados sin .range (una sola respuesta).
+if (typeof window !== 'undefined') window.rpcPorBloques = window.rpcPorBloques || async function rpcPorBloques(db, nombre, args) {
+  const todo = [];
+  for (let desde = 0; ; desde += 1000) {
+    const q = db.rpc(nombre, args);
+    const paginable = q && typeof q.range === 'function';
+    const r = await (paginable ? q.range(desde, desde + 999) : q);
+    if (r.error) return { data: null, error: r.error };
+    if (!Array.isArray(r.data)) return r;
+    todo.push(...r.data);
+    if (!paginable || r.data.length < 1000) break;
+  }
+  return { data: todo, error: null };
+};

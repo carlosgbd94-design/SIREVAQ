@@ -2099,9 +2099,22 @@
     try {
       await asegurarVariablesSIS();
       const lista = unidades.map((f) => f.clues);
+      // PostgREST corta en 1000 filas: Influenza (unidades x semanas) se pide por bloques para no perder semanas.
+      const pedirInfluenza = async () => {
+        const todo = [];
+        for (let desde = 0; ; desde += 1000) {
+          const { data, error } = await estado.db.from('influenza_capturas')
+            .select('clues, fecha, valores, sin_movimiento, capturado_por').in('clues', lista)
+            .order('fecha', { ascending: true }).order('clues', { ascending: true }).range(desde, desde + 999);
+          if (error) return { data: null, error };
+          todo.push(...(data || []));
+          if ((data || []).length < 1000) break;
+        }
+        return { data: todo, error: null };
+      };
       const [{ data: capturas, error: e1 }, { data: influenza, error: e2 }] = await Promise.all([
         estado.db.from('sis06p_capturas').select('*').in('clues', lista).eq('mes', mes).eq('anio', anio),
-        estado.db.from('influenza_capturas').select('clues, fecha, valores, sin_movimiento, capturado_por').in('clues', lista)
+        pedirInfluenza()
       ]);
       if (e1) throw e1;
       if (e2) throw e2;

@@ -86,7 +86,16 @@
       return {
         auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 'm@test.mx' } } } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) },
         from: constructor,
-        rpc: (nombre, args) => new Promise((r) => setTimeout(r, 0)).then(() => ({ data: rpc[nombre] ? rpc[nombre](args || {}) : [], error: null })),
+        rpc: (nombre, args) => {
+          // Como PostgREST: awaitable y con .range(desde, hasta) para las funciones que se piden por bloques.
+          const leer = (desde, hasta) => new Promise((r) => setTimeout(r, 0)).then(() => {
+            const d = rpc[nombre] ? rpc[nombre](args || {}) : [];
+            return { data: (desde == null || !Array.isArray(d)) ? d : d.slice(desde, hasta + 1), error: null };
+          });
+          const q = leer();
+          q.range = (desde, hasta) => leer(desde, hasta);
+          return q;
+        },
         channel: () => ({ on() { return this; }, subscribe() { return this; } }),
         removeChannel() {}
       };

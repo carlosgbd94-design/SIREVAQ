@@ -71,8 +71,8 @@
       estado.db.from('biovac_unidades').select('id, clues, nombre').eq('municipio', municipio).eq('activo', true).not('clues', 'like', 'JS1-%').order('clues'),
       estado.db.from('sis_variables').select('*').eq('activo', true).order('orden'),
       estado.db.from('sis06p_capturas').select('clues, estado, valores').eq('municipio', municipio).eq('mes', mes).eq('anio', anio),
-      estado.db.rpc('sis06p_seguimiento_biologico', { p_municipio: municipio, p_mes: mes, p_anio: anio }),
-      estado.db.rpc('sis06p_recibido_vs_requisicion', { p_mes: mes, p_anio: anio, p_municipio: municipio })
+      window.rpcPorBloques(estado.db, 'sis06p_seguimiento_biologico', { p_municipio: municipio, p_mes: mes, p_anio: anio }),
+      window.rpcPorBloques(estado.db, 'sis06p_recibido_vs_requisicion', { p_mes: mes, p_anio: anio, p_municipio: municipio })
     ]);
     [uRes, vRes, cRes, sRes, rRes].forEach((r) => { if (r.error) throw r.error; });
 
@@ -636,3 +636,19 @@
 
   window.SIS06PConcentradoMunicipal = { render, ORDEN_BIOLOGICOS };
 })();
+
+// PostgREST corta cada respuesta en 1000 filas: las funciones que devuelven TABLE se piden por bloques
+// (.range) y se juntan. Tolera clientes simulados sin .range (una sola respuesta).
+if (typeof window !== 'undefined') window.rpcPorBloques = window.rpcPorBloques || async function rpcPorBloques(db, nombre, args) {
+  const todo = [];
+  for (let desde = 0; ; desde += 1000) {
+    const q = db.rpc(nombre, args);
+    const paginable = q && typeof q.range === 'function';
+    const r = await (paginable ? q.range(desde, desde + 999) : q);
+    if (r.error) return { data: null, error: r.error };
+    if (!Array.isArray(r.data)) return r;
+    todo.push(...r.data);
+    if (!paginable || r.data.length < 1000) break;
+  }
+  return { data: todo, error: null };
+};

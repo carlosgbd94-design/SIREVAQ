@@ -366,8 +366,8 @@ async function cargarConcentrado(opciones) {
   const [{ data: unidades, error: eU }, { data: validaciones, error: eV },
     { data: concentrado, error: eC }, { data: informes, error: eI }, { data: cfg }] = await Promise.all([
     estado.db.from('biovac_unidades').select('*').eq('jurisdiccion_id', jurisdiccionId).eq('activo', true).order('nombre'),
-    estado.db.rpc('biovac_validar_concentrado', { p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes }),
-    estado.db.rpc('biovac_concentrado_jurisdiccion', { p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes, p_incluir_borrador: true }),
+    window.rpcPorBloques(estado.db, 'biovac_validar_concentrado', { p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes }),
+    window.rpcPorBloques(estado.db, 'biovac_concentrado_jurisdiccion', { p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes, p_incluir_borrador: true }),
     estado.db.from('biovac_informes_jurisdiccionales').select('*').eq('jurisdiccion_id', jurisdiccionId).eq('anio', anio).eq('mes', mes).order('generado_en', { ascending: false }),
     estado.db.from('sis_config').select('clave, valor').in('clave', ['inicio_captura_por_unidad', 'inicio_captura_hospitales'])
   ]);
@@ -1269,3 +1269,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await cargarConcentrado();
 });
+
+// PostgREST corta cada respuesta en 1000 filas: las funciones que devuelven TABLE se piden por bloques
+// (.range) y se juntan. Tolera clientes simulados sin .range (una sola respuesta).
+if (typeof window !== 'undefined') window.rpcPorBloques = window.rpcPorBloques || async function rpcPorBloques(db, nombre, args) {
+  const todo = [];
+  for (let desde = 0; ; desde += 1000) {
+    const q = db.rpc(nombre, args);
+    const paginable = q && typeof q.range === 'function';
+    const r = await (paginable ? q.range(desde, desde + 999) : q);
+    if (r.error) return { data: null, error: r.error };
+    if (!Array.isArray(r.data)) return r;
+    todo.push(...r.data);
+    if (!paginable || r.data.length < 1000) break;
+  }
+  return { data: todo, error: null };
+};

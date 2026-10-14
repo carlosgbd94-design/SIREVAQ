@@ -5482,6 +5482,25 @@ async function fetchAllRpc(rpcName, params) {
   return allData;
 }
 
+// PostgREST corta cada respuesta en 1000 filas (max_rows). Las tablas por semana x unidad
+// (influenza_capturas) lo rebasan a media temporada: se pide por bloques hasta agotarlas.
+// `armar` debe devolver una consulta NUEVA con orden estable (para que los bloques no se traslapen).
+async function fetchAllRows(armar) {
+  const todo = [];
+  for (let desde = 0; ; desde += 1000) {
+    const q = armar();
+    const paginable = q && typeof q.range === 'function';
+    const { data, error } = await (paginable ? q.range(desde, desde + 999) : q);
+    if (error) throw error;
+    const filas = data || [];
+    todo.push(...filas);
+    if (!paginable || filas.length < 1000) break;
+  }
+  return todo;
+}
+
+window.fetchAllRows = fetchAllRows;
+
 /**
  * INTERCEPTOR SUPABASE
  * Reemplaza la lógica de GAS por llamadas directas a Supabase.
@@ -5542,7 +5561,12 @@ async function supabaseRequest(action = "", payload, options = {}) {
         const nombreResp = String(payload.nombre || USER.nombre || USER.usuario || "").toUpperCase();
 
         // 1. Obtener catálogo de lotes para autocompletado de caducidad
-        const { data: catLotes } = await supabase.from('lotes').select('biologico, lote, caducidad');
+        let catLotes = [];
+        try {
+          catLotes = await fetchAllRows(() => supabase.from('lotes').select('biologico, lote, caducidad').order('id'));
+        } catch (eLotes) {
+          console.warn("[SR] No se pudo leer el catálogo de lotes:", eLotes);
+        }
         const loteMap = {};
         if (catLotes) {
           catLotes.forEach(l => {
@@ -5692,10 +5716,11 @@ async function supabaseRequest(action = "", payload, options = {}) {
         // --- Auto-Resolución y Desduplicación Inteligente de Alertas ---
         // 1. Auto-resolver alertas previas si las vacunas que estaban en desabasto ahora tienen existencia (>0)
         try {
-          const { data: activeNotifs } = await supabase
+          const activeNotifs = await fetchAllRows(() => supabase
             .from('notificaciones')
             .select('id, meta_json')
-            .eq('type', 'ALERTA_DESABASTO');
+            .eq('type', 'ALERTA_DESABASTO')
+            .order('id'));
 
           if (activeNotifs && activeNotifs.length > 0) {
             for (const n of activeNotifs) {
@@ -5967,10 +5992,11 @@ async function supabaseRequest(action = "", payload, options = {}) {
         // 1. Consultar estado personal de lectura/eliminación en notificaciones_perfil para el usuario actual
         let perfilMap = new Map();
         try {
-          const { data: myPerfilRows } = await supabase
+          const myPerfilRows = await fetchAllRows(() => supabase
             .from('notificaciones_perfil')
             .select('notificacion_id, status, read_ts, deleted')
-            .eq('usuario', usuario);
+            .eq('usuario', usuario)
+            .order('notificacion_id'));
 
           (myPerfilRows || []).forEach(p => perfilMap.set(p.notificacion_id, p));
         } catch (ePerfil) {
@@ -6425,15 +6451,12 @@ async function supabaseRequest(action = "", payload, options = {}) {
           fechaFin = dateToLocalYmd(date);
         }
 
-        const [resBio, resCons, resPedidos] = await Promise.all([
-          supabase.from('biologicos_existencia').select('clues, fecha').gte('fecha', fechaInicio).lte('fecha', fechaFin),
-          supabase.from('consumibles').select('clues, fecha').gte('fecha', fechaInicio).lte('fecha', fechaFin),
-          supabase.from('biologicos_pedido').select('clues').gte('fecha_captura', fechaInicio).lte('fecha_captura', fechaFin).eq('tipo_pedido', 'MENSUAL')
+        // Por bloques: biologicos_pedido trae un renglón por biológico y unidad (> 1000 al mes).
+        const [rawBioAll, rawConsAll, rawPedidosAll] = await Promise.all([
+          fetchAllRows(() => supabase.from('biologicos_existencia').select('id, clues, fecha').gte('fecha', fechaInicio).lte('fecha', fechaFin).order('id')),
+          fetchAllRows(() => supabase.from('consumibles').select('id, clues, fecha').gte('fecha', fechaInicio).lte('fecha', fechaFin).order('id')),
+          fetchAllRows(() => supabase.from('biologicos_pedido').select('id, clues').gte('fecha_captura', fechaInicio).lte('fecha_captura', fechaFin).eq('tipo_pedido', 'MENSUAL').order('id'))
         ]);
-
-        const rawBioAll = resBio.data || [];
-        const rawConsAll = resCons.data || [];
-        const rawPedidosAll = resPedidos.data || [];
 
         const rawBio = rawBioAll.filter(r => unitCluesSet.has(r.clues));
         const rawCons = rawConsAll.filter(r => unitCluesSet.has(r.clues));
@@ -6709,17 +6732,14 @@ async function supabaseRequest(action = "", payload, options = {}) {
           const totalExpectedPerUnit = expectedSR + expectedCons;
 
           // Fetch all active units and their captures for the month
-          const [resUnits, resBio, resCons, resPedidos] = await Promise.all([
+          const [resUnits, rawBio, rawCons, rawPedidos] = await Promise.all([
             supabase.from('unidades').select('clues, unidad, municipio').eq('activo', 'SI'),
-            supabase.from('biologicos_existencia').select('clues, fecha').gte('fecha', monthStartStr).lte('fecha', today),
-            supabase.from('consumibles').select('clues, fecha').gte('fecha', monthStartStr).lte('fecha', today),
-            supabase.from('biologicos_pedido').select('clues').gte('fecha_captura', monthStartStr).eq('tipo_pedido', 'MENSUAL')
+            fetchAllRows(() => supabase.from('biologicos_existencia').select('id, clues, fecha').gte('fecha', monthStartStr).lte('fecha', today).order('id')),
+            fetchAllRows(() => supabase.from('consumibles').select('id, clues, fecha').gte('fecha', monthStartStr).lte('fecha', today).order('id')),
+            fetchAllRows(() => supabase.from('biologicos_pedido').select('id, clues').gte('fecha_captura', monthStartStr).eq('tipo_pedido', 'MENSUAL').order('id'))
           ]);
 
           const units = resUnits.data || [];
-          const rawBio = resBio.data || [];
-          const rawCons = resCons.data || [];
-          const rawPedidos = resPedidos.data || [];
 
           // Helper to count the total Thursdays (CONS) and Fridays (BIO) in the current month
           function getMonthTotalExpectedWeeks(dateStr) {
@@ -8026,9 +8046,8 @@ async function supabaseRequest(action = "", payload, options = {}) {
       }
 
       case "getlotesbymunicipio": {
-        const { data, error } = await supabase.from('lotes').select('*');
-        if (error) throw error;
-        return { ok: true, data: data || [] };
+        const data = await fetchAllRows(() => supabase.from('lotes').select('*').order('id'));
+        return { ok: true, data };
       }
 
       case "savelotes": {
@@ -8141,11 +8160,12 @@ async function supabaseRequest(action = "", payload, options = {}) {
         }
 
         // 2. Obtener parámetros existentes para estas CLUES y biológicos
-        const { data: existingParams } = await supabase
+        const existingParams = await fetchAllRows(() => supabase
           .from('biologicos_params')
           .select('id, clues, biologico')
           .in('clues', cluesList)
-          .in('biologico', vaccinesList);
+          .in('biologico', vaccinesList)
+          .order('id'));
 
         const existingMap = {};
         if (existingParams) {
@@ -8219,15 +8239,16 @@ async function supabaseRequest(action = "", payload, options = {}) {
       case "getinfluenza_capturas": {
         const { clues, municipio, anio_campana } = payload;
         const camp = anio_campana || (await getActiveCampaign()).data?.nombre || "";
-        let query = supabase.from('influenza_capturas').select('*').eq('anio_campana', camp);
-        if (clues) {
-          query = query.eq('clues', clues);
-        } else if (municipio) {
-          query = query.eq('municipio', municipio);
-        }
-        const { data, error } = await query.order('fecha', { ascending: false });
-        if (error) throw error;
-        return { ok: true, data: data || [] };
+        const data = await fetchAllRows(() => {
+          let query = supabase.from('influenza_capturas').select('*').eq('anio_campana', camp);
+          if (clues) {
+            query = query.eq('clues', clues);
+          } else if (municipio) {
+            query = query.eq('municipio', municipio);
+          }
+          return query.order('fecha', { ascending: false }).order('clues', { ascending: true });
+        });
+        return { ok: true, data };
       }
 
       case "saveinfluenza_captura": {
@@ -8306,16 +8327,17 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
       case "getinfluenza_distribucion": {
         const { clues, municipio, anio_campana } = payload;
-        let query = supabase.from('influenza_distribucion_frascos').select('*');
-        if (anio_campana) query = query.eq('anio_campana', anio_campana);
-        if (clues) {
-          query = query.eq('clues', clues);
-        } else if (municipio) {
-          query = query.eq('municipio', municipio);
-        }
-        const { data, error } = await query.order('fecha_entrega', { ascending: false });
-        if (error) throw error;
-        return { ok: true, data: data || [] };
+        const data = await fetchAllRows(() => {
+          let query = supabase.from('influenza_distribucion_frascos').select('*');
+          if (anio_campana) query = query.eq('anio_campana', anio_campana);
+          if (clues) {
+            query = query.eq('clues', clues);
+          } else if (municipio) {
+            query = query.eq('municipio', municipio);
+          }
+          return query.order('fecha_entrega', { ascending: false }).order('id', { ascending: true });
+        });
+        return { ok: true, data };
       }
 
       case "saveinfluenza_distribucion": {
@@ -8345,11 +8367,11 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
       case "getinfluenza_lotes_entregas": {
         const { anio_campana } = payload;
-        const { data, error } = await supabase.rpc('influenza_lotes_entregas', {
-          p_campana: anio_campana || (await getActiveCampaign()).data?.nombre || ""
-        });
-        if (error) throw error;
-        return { ok: true, data: data || [] };
+        const campLotes = anio_campana || (await getActiveCampaign()).data?.nombre || "";
+        // La función devuelve una fila por entrega x unidad x lote: pasa de 1000 con la temporada (ver
+        // supabase/rpc_orden_estable_paginacion.sql: ORDER BY estable para que los bloques no se traslapen).
+        const data = await fetchAllRows(() => supabase.rpc('influenza_lotes_entregas', { p_campana: campLotes }));
+        return { ok: true, data };
       }
 
       case "getinfluenza_remesas": {
@@ -16585,25 +16607,27 @@ async function generarPDFResguardoSR(municipios, fIni, fFin, isUnitExport = fals
 
     } else {
       // Exportación administrativa (Rango de fechas y Municipios)
-      let query = window.supabase
-        .from('existencia_detalle')
-        .select('*')
-        .gte('fecha', fIni)
-        .lte('fecha', fFin);
+      // Un corte semanal de 72 unidades ya trae >1000 renglones (unidad x biológico): se pide por bloques.
+      const armarExistencias = () => {
+        let query = window.supabase
+          .from('existencia_detalle')
+          .select('*')
+          .gte('fecha', fIni)
+          .lte('fecha', fFin);
 
-      if (municipios && municipios.length > 0) {
-        query = query.in('municipio', exportMunicipiosReales_(municipios));
-      }
+        if (municipios && municipios.length > 0) {
+          query = query.in('municipio', exportMunicipiosReales_(municipios));
+        }
 
-      if (USER && USER.rol === "UNIDAD") {
-        query = query.eq('clues', USER.clues);
-      } else if (USER && USER.rol === "MUNICIPAL" && USER.municipio) {
-        const userMuns = String(USER.municipio).split(",").map(m => m.trim());
-        query = query.in('municipio', userMuns);
-      }
-
-      const { data: recordsAll, error } = await query.order('fecha').order('unidad').order('biologico');
-      if (error) throw error;
+        if (USER && USER.rol === "UNIDAD") {
+          query = query.eq('clues', USER.clues);
+        } else if (USER && USER.rol === "MUNICIPAL" && USER.municipio) {
+          const userMuns = String(USER.municipio).split(",").map(m => m.trim());
+          query = query.in('municipio', userMuns);
+        }
+        return query.order('fecha').order('unidad').order('biologico').order('id');
+      };
+      const recordsAll = await fetchAllRows(armarExistencias);
       const records = (recordsAll || []).filter(r => exportRowEnSeleccion_(r.clues, r.municipio, municipios));
 
       if (!records || records.length === 0) {
@@ -19904,13 +19928,20 @@ async function getYearMedals(year, { clues = null, municipio = null } = {}) {
     shouldCache: (d) => Array.isArray(d),
     fetcher: async () => {
       try {
-        const { data, error } = await window.supabase.rpc("get_year_medal_inputs_rpc", {
-          p_anio: y,
-          p_clues: clues || null,
-          p_municipio: clues ? null : (municipio || null)
-        });
-        if (error) { console.error("RPC Error in getYearMedals:", error); return null; }
-        const rows = data || [];
+        // meses x unidades (ya ordenado por mes, clues): pasa de 1000 con más de ~83 unidades.
+        const rows = [];
+        for (let desde = 0; ; desde += 1000) {
+          const q = window.supabase.rpc("get_year_medal_inputs_rpc", {
+            p_anio: y,
+            p_clues: clues || null,
+            p_municipio: clues ? null : (municipio || null)
+          });
+          const paginable = q && typeof q.range === "function";
+          const { data, error } = await (paginable ? q.range(desde, desde + 999) : q);
+          if (error) { console.error("RPC Error in getYearMedals:", error); return null; }
+          rows.push(...(data || []));
+          if (!paginable || (data || []).length < 1000) break;
+        }
         if (!rows.length) return [];
 
         // Influenza: una sola lectura (solo clues/fecha) de las capturas de las unidades involucradas.

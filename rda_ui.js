@@ -5427,12 +5427,22 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                 const keysSrAdol = ['VAC83','VDV01','VDV02','VDV03','VDV04','VDV05','VDV06'];
                 const allKeysQuery = [...new Set([...keysTdComplete, ...keysNeumoAm, ...keysNeumo23, ...keysSrAdol])];
 
-                const { data: rawSis2025 } = await window.supabase
-                    .from('registros_sis')
-                    .select('clues, variable_sis, valor')
-                    .eq('anio', 2025)
-                    .lte('mes', maxMes2025)
-                    .in('variable_sis', allKeysQuery);
+                // registros_sis tiene miles de renglones por año (unidad x variable x mes): PostgREST corta en 1000,
+                // así que se pide por bloques con orden estable para no perder unidades.
+                let rawSis2025 = [];
+                for (let desde = 0; ; desde += 1000) {
+                    const { data: bloque, error: errBloque } = await window.supabase
+                        .from('registros_sis')
+                        .select('id, clues, variable_sis, valor')
+                        .eq('anio', 2025)
+                        .lte('mes', maxMes2025)
+                        .in('variable_sis', allKeysQuery)
+                        .order('id')
+                        .range(desde, desde + 999);
+                    if (errBloque) { console.warn('[RDA] registros_sis 2025:', errBloque); break; }
+                    rawSis2025 = rawSis2025.concat(bloque || []);
+                    if ((bloque || []).length < 1000) break;
+                }
                 
                 if (rawSis2025 && rawSis2025.length > 0) {
                     const sisByClues = {};

@@ -225,7 +225,7 @@ async function cargarYRenderizarJurisdiccion() {
   const [{ data: bloques }, { data: biologicos }, { data: concentrado }] = await Promise.all([
     db.from('biovac_bloques_catalogo').select('*').order('pagina').order('orden'),
     db.from('biovac_catalogo_biologicos').select('*').order('orden_en_bloque'),
-    db.rpc('biovac_concentrado_jurisdiccion', { p_jurisdiccion_id: jurisdiccionActual, p_anio: anio, p_mes: mes })
+    window.rpcPorBloques(db, 'biovac_concentrado_jurisdiccion', { p_jurisdiccion_id: jurisdiccionActual, p_anio: anio, p_mes: mes })
   ]);
   if (!concentrado || concentrado.length === 0) {
     document.getElementById('contenedorHojas').innerHTML = '<p style="padding:20px">No hay movimientos CERRADOS de esta jurisdicción para el periodo seleccionado.</p>';
@@ -277,3 +277,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnCargar').addEventListener('click', cargarYRenderizar);
   document.getElementById('btnImprimir').addEventListener('click', () => window.print());
 });
+
+// PostgREST corta cada respuesta en 1000 filas: las funciones que devuelven TABLE se piden por bloques
+// (.range) y se juntan. Tolera clientes simulados sin .range (una sola respuesta).
+if (typeof window !== 'undefined') window.rpcPorBloques = window.rpcPorBloques || async function rpcPorBloques(db, nombre, args) {
+  const todo = [];
+  for (let desde = 0; ; desde += 1000) {
+    const q = db.rpc(nombre, args);
+    const paginable = q && typeof q.range === 'function';
+    const r = await (paginable ? q.range(desde, desde + 999) : q);
+    if (r.error) return { data: null, error: r.error };
+    if (!Array.isArray(r.data)) return r;
+    todo.push(...r.data);
+    if (!paginable || r.data.length < 1000) break;
+  }
+  return { data: todo, error: null };
+};
