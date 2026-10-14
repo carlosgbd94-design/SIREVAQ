@@ -1556,14 +1556,58 @@ function initInfluenzaSubtabs() {
     }
   });
 
+  // Semántica de pestañas para lectores de pantalla (el estado activo ya no es solo visual)
+  const contTabs = document.getElementById("influenzaAdminTabsContainer");
+  if (contTabs) {
+    contTabs.setAttribute("role", "tablist");
+    contTabs.setAttribute("aria-label", "Secciones de Temporada invernal");
+  }
+  const syncAriaTabs = () => {
+    tabs.forEach(x => {
+      const b = document.getElementById(x);
+      if (!b) return;
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", b.classList.contains("active") ? "true" : "false");
+      b.setAttribute("aria-controls", x.replace("subtab", "sec"));
+      b.tabIndex = b.classList.contains("active") ? 0 : -1;
+      b.querySelectorAll(".material-symbols-rounded").forEach(i => i.setAttribute("aria-hidden", "true"));
+      const panel = document.getElementById(x.replace("subtab", "sec"));
+      if (panel) {
+        panel.setAttribute("role", "tabpanel");
+        panel.setAttribute("aria-labelledby", x);
+      }
+    });
+  };
+  syncAriaTabs();
+  if (contTabs && window.MutationObserver && !contTabs.dataset.ariaObs) {
+    contTabs.dataset.ariaObs = "1";
+    new MutationObserver(syncAriaTabs).observe(contTabs, { attributes: true, subtree: true, attributeFilter: ["class"] });
+  }
+
   tabs.forEach(t => {
     const el = document.getElementById(t);
     if (el) {
+      // Flechas izquierda/derecha, Inicio y Fin entre pestañas visibles
+      el.addEventListener("keydown", (ev) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(ev.key)) return;
+        const visibles = tabs.map(x => document.getElementById(x)).filter(b => b && b.offsetParent !== null);
+        const i = visibles.indexOf(el);
+        if (i < 0) return;
+        let j = i;
+        if (ev.key === "ArrowRight") j = (i + 1) % visibles.length;
+        if (ev.key === "ArrowLeft") j = (i - 1 + visibles.length) % visibles.length;
+        if (ev.key === "Home") j = 0;
+        if (ev.key === "End") j = visibles.length - 1;
+        ev.preventDefault();
+        visibles[j].focus();
+        visibles[j].click();
+      });
       el.onclick = () => {
         tabs.forEach(x => {
           document.getElementById(x)?.classList.remove("active");
         });
         el.classList.add("active");
+        syncAriaTabs();
 
         // Ocultar todas las secciones
         const sections = ["secInfluenzaAvances", "secInfluenzaValidacion", "secInfluenzaConciliacion", "secCovidAvance", "secInfluenzaMetas", "secInfluenzaFrascos", "secInfluenzaConfig"];
@@ -2841,7 +2885,9 @@ function initValidationTab() {
     const weeks = generateCampaignWeeks();
     valSemanaSelect.innerHTML = weeks.map(w => `<option value="${w.fecha}">${w.label}</option>`).join("");
     // Select last week by default or current week
-    const today = new Date().toISOString().split("T")[0];
+    // Fecha LOCAL (toISOString usa UTC y de noche en México adelantaría un día).
+    const hoy = new Date();
+    const today = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
     const matchingWeek = weeks.find(w => w.fecha >= today);
     if (matchingWeek) {
       valSemanaSelect.value = matchingWeek.fecha;
@@ -2865,15 +2911,94 @@ function initValidationTab() {
     });
   }
 
+  const estadoSelect = document.getElementById("validationEstadoFiltro");
+  if (estadoSelect && !estadoSelect.dataset.listened) {
+    estadoSelect.dataset.listened = "true";
+    estadoSelect.addEventListener("change", () => renderValidationDashboard());
+  }
+
   if (backBtn) {
-    backBtn.onclick = () => {
-      document.getElementById("validationReportContent").classList.add("hidden");
-      document.getElementById("validationDashboard").classList.remove("hidden");
-      renderValidationDashboard();
-    };
+    backBtn.onclick = () => volverAlListadoValidacion();
   }
 
   renderValidationDashboard();
+}
+
+// Estado del reporte de una unidad en la semana: "pendiente" | "reportado" | "corregido"
+function estadoValidacion(report) {
+  if (!report) return "pendiente";
+  return report.editado_por !== "UNIDAD" ? "corregido" : "reportado";
+}
+
+function historialDeReporte(report) {
+  try {
+    const h = report && report.historial_ediciones;
+    return Array.isArray(h) ? h : JSON.parse(h || "[]");
+  } catch (_) { return []; }
+}
+
+// Última edición del supervisor fue «validar sin cambios»
+function validadoSinCambios(report) {
+  if (!report || report.editado_por === "UNIDAD") return false;
+  const hist = historialDeReporte(report);
+  const last = hist[hist.length - 1];
+  return !!(last && last.sin_cambios);
+}
+
+// Nombre que firmó la última corrección/validación (si el historial lo trae)
+function firmaDeReporte(report) {
+  const hist = historialDeReporte(report);
+  const last = hist[hist.length - 1];
+  return (last && last.firmado_por) || "";
+}
+
+// Valores tal como los capturó la unidad: lo que había antes de la primera edición de supervisión
+// (el servidor guarda `valores_anteriores`; los reportes viejos pudieron traer `valores_previos`).
+function valoresOriginalesUnidad(report) {
+  const hist = historialDeReporte(report);
+  const primera = hist.find(h => h && h.editado_por && h.editado_por !== "UNIDAD");
+  if (primera) return primera.valores_anteriores || primera.valores_previos || null;
+  return null;
+}
+
+let _valUltimaClues = null;
+
+// Texto legible de la semana seleccionada («Semana 42 (12 al 18 oct)») en vez de la fecha ISO.
+function etiquetaSemanaValidacion(fecha) {
+  const sel = document.getElementById("validationInfluenzaSemana");
+  const opt = sel && [...sel.options].find(o => o.value === fecha);
+  return opt ? opt.textContent.trim() : fecha;
+}
+
+function anunciarValidacion(msg) {
+  const el = document.getElementById("validationStatsSummary");
+  if (!el) return;
+  let live = document.getElementById("validationLiveStatus");
+  if (!live) {
+    live = document.createElement("div");
+    live.id = "validationLiveStatus";
+    live.className = "vl-sr";
+    live.setAttribute("role", "status");
+    live.setAttribute("aria-live", "polite");
+    el.parentElement.appendChild(live);
+  }
+  live.textContent = "";
+  setTimeout(() => { live.textContent = msg; }, 50);
+}
+
+// Regresa al listado devolviendo el foco a la unidad que se estaba revisando.
+function volverAlListadoValidacion(mensaje) {
+  document.getElementById("validationReportContent").classList.add("hidden");
+  document.getElementById("validationDashboard").classList.remove("hidden");
+  renderValidationDashboard();
+  const clues = _valUltimaClues;
+  const btn = clues ? document.querySelector(`#validationUnitsGrid button[data-clues="${clues}"]`) : null;
+  const destino = btn || document.getElementById("validationDashboardTitle");
+  if (destino) {
+    destino.focus({ preventScroll: false });
+    if (destino.scrollIntoView) destino.scrollIntoView({ block: "center" });
+  }
+  if (mensaje) anunciarValidacion(mensaje);
 }
 
 function renderValidationDashboard() {
@@ -2891,99 +3016,113 @@ function renderValidationDashboard() {
   // Get units in selected municipality
   const muniUnits = _allUnidades.filter(u => u.municipio.toUpperCase() === muniVal.toUpperCase());
 
-  // Filter based on search text
-  const filteredUnits = muniUnits.filter(u => {
-    if (!filterText) return true;
-    return u.unidad.toLowerCase().includes(filterText) || u.clues.toLowerCase().includes(filterText);
-  });
+  const esc = (s) => (typeof escapeHtml === "function" ? escapeHtml(String(s ?? "")) : String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])));
+  const estadoFiltro = document.getElementById("validationEstadoFiltro")?.value || "todas";
 
-  // Calculate status statistics
+  // Estadísticas de TODO el municipio (no dependen de la búsqueda ni del filtro de estado)
   let totalCount = muniUnits.length;
   let reportedCount = 0;
   let validatedCount = 0;
+  muniUnits.forEach(u => {
+    const rep = _adminCapturasArray.find(r => r.clues === u.clues && r.fecha === selectedFecha);
+    if (rep) {
+      reportedCount++;
+      if (rep.editado_por !== "UNIDAD") validatedCount++;
+    }
+  });
+
+  const filteredUnits = muniUnits.filter(u => {
+    if (filterText && !(u.unidad.toLowerCase().includes(filterText) || u.clues.toLowerCase().includes(filterText))) return false;
+    if (estadoFiltro !== "todas") {
+      const rep = _adminCapturasArray.find(r => r.clues === u.clues && r.fecha === selectedFecha);
+      if (estadoValidacion(rep) !== estadoFiltro) return false;
+    }
+    return true;
+  });
 
   grid.innerHTML = "";
+  grid.setAttribute("role", "list");
 
   if (filteredUnits.length === 0) {
-    grid.innerHTML = `<div class="col-span-full text-center text-sm text-slate-400 font-medium p-8 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">No se encontraron unidades que coincidan con la búsqueda.</div>`;
+    grid.innerHTML = `<div class="col-span-full text-center text-sm text-slate-700 font-medium p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-300">No hay unidades que coincidan con la búsqueda o el estado elegido.</div>`;
   }
 
   filteredUnits.forEach(u => {
     const report = _adminCapturasArray.find(r => r.clues === u.clues && r.fecha === selectedFecha);
-    
+    const estado = estadoValidacion(report);
+
     let statusBadge = "";
-    let actionText = "Cargar y reportar";
-    let cardBorder = "border-slate-200 hover:border-violet-300 hover:shadow-md";
-    let btnBg = "";
-    let btnHoverBg = "";
+    let actionText = "";
+    let cardBorder = "";
     let totalDosis = 0;
+    const badgeBase = "px-2.5 py-1 rounded-full text-[12px] font-black flex items-center gap-1 border";
 
-    if (report) {
-      reportedCount++;
-      if (report.valores) {
-        Object.values(report.valores).forEach(v => totalDosis += Number(v || 0));
-      }
-
-      if (report.editado_por !== "UNIDAD") {
-        validatedCount++;
-        statusBadge = `<span class="bg-violet-50 text-violet-700 border border-violet-200 px-2.5 py-1 rounded-full text-[10px] font-black flex items-center gap-0.5"><span class="material-symbols-rounded text-xs">verified</span>Corregido</span>`;
-        actionText = "Editar corrección";
-        cardBorder = "border-violet-200 hover:border-violet-300 hover:bg-violet-50/10";
-        btnBg = "#0f172a";
-        btnHoverBg = "#1e293b";
-      } else {
-        reportedCount; // No-op
-        statusBadge = `<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full text-[10px] font-black flex items-center gap-0.5"><span class="material-symbols-rounded text-xs">check_circle</span>Reportado</span>`;
-        actionText = "Validar / Corregir";
-        cardBorder = "border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50/10";
-        btnBg = "#0f172a";
-        btnHoverBg = "#1e293b";
-      }
-    } else {
-      statusBadge = `<span class="bg-amber-50 text-amber-600 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-black flex items-center gap-0.5"><span class="material-symbols-rounded text-xs">error</span>Pendiente</span>`;
-      actionText = "Iniciar captura";
-      cardBorder = "border-amber-200 hover:border-amber-300 hover:bg-amber-50/10";
-      btnBg = "#0f172a";
-      btnHoverBg = "#1e293b";
+    if (report && report.valores) {
+      Object.values(report.valores).forEach(v => totalDosis += Number(v || 0));
     }
 
+    if (estado === "corregido") {
+      const sinCambios = validadoSinCambios(report);
+      statusBadge = `<span class="bg-violet-50 text-violet-900 border-violet-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">verified</span>${sinCambios ? "Validado" : "Corregido"}</span>`;
+      actionText = "Revisar de nuevo";
+      cardBorder = "border-violet-200 hover:border-violet-300";
+    } else if (estado === "reportado") {
+      statusBadge = `<span class="bg-emerald-50 text-emerald-900 border-emerald-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">check_circle</span>Por validar</span>`;
+      actionText = "Validar reporte";
+      cardBorder = "border-emerald-200 hover:border-emerald-300";
+    } else {
+      statusBadge = `<span class="bg-amber-50 text-amber-900 border-amber-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">error</span>Sin reporte</span>`;
+      actionText = "Capturar por la unidad";
+      cardBorder = "border-amber-200 hover:border-amber-300";
+    }
+    const btnBg = "#0f172a";
+    const btnHoverBg = "#1e293b";
+
     const card = document.createElement("div");
+    card.setAttribute("role", "listitem");
     card.className = `p-4 rounded-2xl border bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all shadow-sm hover:shadow-md cursor-pointer ${cardBorder}`;
     card.style.backgroundColor = "#ffffff";
     card.innerHTML = `
       <div class="flex items-start gap-3 min-w-0">
-        <div class="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 mt-0.5">
-          <span class="material-symbols-rounded text-[22px] text-slate-500">domain</span>
+        <div class="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5" aria-hidden="true">
+          <span class="material-symbols-rounded text-[22px] text-slate-600" aria-hidden="true">domain</span>
         </div>
         <div class="min-w-0">
-          <div class="text-[10px] font-black text-slate-400 tracking-wider uppercase mb-0.5">${u.clues}</div>
-          <h5 class="text-sm font-extrabold text-slate-800 leading-tight truncate" title="${u.unidad}">${u.unidad}</h5>
-          <div class="text-xs font-bold text-slate-500 flex items-center gap-1.5 mt-1.5">
-            <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-            Dosis reportadas: <strong class="text-slate-700">${totalDosis}</strong>
+          <div class="text-[12px] font-black text-slate-600 tracking-wider uppercase mb-0.5">${esc(u.clues)}</div>
+          <h5 class="text-sm font-extrabold text-slate-900 leading-tight" style="overflow-wrap:anywhere;">${esc(u.unidad)}</h5>
+          <div class="text-xs font-bold text-slate-700 mt-1.5">
+            Dosis reportadas: <strong class="text-slate-900">${report ? totalDosis : "—"}</strong>
           </div>
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-3 shrink-0 self-end sm:self-center">
         ${statusBadge}
-        <button class="transition-all h-[36px] px-4 rounded-xl text-xs font-black flex items-center justify-center gap-1 shadow-sm border-0"
+        <button type="button" data-clues="${esc(u.clues)}" aria-label="${esc(actionText)}: ${esc(u.unidad)}, ${esc(u.clues)}"
+          class="transition-all h-[40px] px-4 rounded-xl text-xs font-black flex items-center justify-center gap-1 shadow-sm border-0"
           style="background-color: ${btnBg} !important; color: #ffffff !important; cursor: pointer;"
           onmouseenter="this.style.setProperty('background-color', '${btnHoverBg}', 'important');"
           onmouseleave="this.style.setProperty('background-color', '${btnBg}', 'important');">
-          <span class="material-symbols-rounded text-[18px]" style="color: #ffffff !important;">find_in_page</span>
-          <span style="color: #ffffff !important;">${actionText}</span>
+          <span class="material-symbols-rounded text-[18px]" aria-hidden="true" style="color: #ffffff !important;">find_in_page</span>
+          <span style="color: #ffffff !important;">${esc(actionText)}</span>
         </button>
       </div>
     `;
 
     card.onclick = () => {
+      _valUltimaClues = u.clues;
       document.getElementById("validationDashboard").classList.add("hidden");
       document.getElementById("validationReportContent").classList.remove("hidden");
-      
+
       const valCluesSelect = document.getElementById("validationInfluenzaClues");
       if (valCluesSelect) valCluesSelect.value = u.clues;
 
       renderValidacionEdicionGrid(u.clues, selectedFecha);
+
+      const titulo = document.getElementById("validationReportTitle");
+      if (titulo) {
+        titulo.focus();
+        titulo.scrollIntoView({ block: "start" });
+      }
     };
 
     grid.appendChild(card);
@@ -2991,11 +3130,72 @@ function renderValidationDashboard() {
 
   if (summary) {
     summary.innerHTML = `
-      <span>${reportedCount} de ${totalCount} Reportadas</span>
-      <span class="text-slate-300 font-normal">|</span>
-      <span class="text-violet-700">${validatedCount} Validadas</span>
+      <span>${reportedCount} de ${totalCount} reportadas</span>
+      <span class="text-slate-400 font-normal" aria-hidden="true">|</span>
+      <span class="text-violet-900">${validatedCount} revisadas por supervisión</span>
     `;
   }
+  anunciarValidacion(`Mostrando ${filteredUnits.length} de ${totalCount} unidades.`);
+}
+
+// Mensaje de error en línea (role="alert") + campos marcados; mueve el foco al primero con problema.
+function mostrarErroresValidacion(items) {
+  const box = document.getElementById("validationFormError");
+  if (!box || !items.length) return;
+  const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  box.innerHTML = `<strong>${items.length === 1 ? "Hay 1 problema" : `Hay ${items.length} problemas`} que corregir antes de guardar:</strong><ul>${items.map(i => `<li>${esc(i.msg)}</li>`).join("")}</ul>`;
+  box.classList.remove("hidden");
+  items.forEach(i => {
+    if (!i.el) return;
+    i.el.setAttribute("aria-invalid", "true");
+    if (i.el.id === "validationNombreResponsable") document.getElementById("validationNombreGrupo")?.classList.add("vl-invalido");
+  });
+  const primero = items.find(i => i.el && !i.el.disabled)?.el || box;
+  primero.focus();
+  if (primero.scrollIntoView) primero.scrollIntoView({ block: "center" });
+}
+
+function limpiarErroresValidacion() {
+  const box = document.getElementById("validationFormError");
+  if (box) { box.classList.add("hidden"); box.innerHTML = ""; }
+  document.getElementById("validationNombreGrupo")?.classList.remove("vl-invalido");
+  document.querySelectorAll("#secInfluenzaValidacion [aria-invalid='true']").forEach(el => el.removeAttribute("aria-invalid"));
+}
+
+// Cambios del supervisor frente a lo que capturó la unidad (solo campos editables).
+function contarCambiosValidacion() {
+  const orig = _currentValidationReport?.valores || null;
+  let n = 0;
+  document.querySelectorAll("#validationCardsContainer input[data-rubro]:not([disabled])").forEach(inp => {
+    const actual = parseInt(inp.value, 10) || 0;
+    const previo = orig ? Number(orig[inp.dataset.rubro] || 0) : 0;
+    if (actual !== previo) n++;
+  });
+  return n;
+}
+
+function actualizarResumenValidacion() {
+  const resumen = document.getElementById("validationCambiosResumen");
+  const btn = document.getElementById("btnSaveValidation");
+  const n = contarCambiosValidacion();
+  const hayReporte = !!_currentValidationReport;
+  let texto, etiqueta;
+  if (hayReporte && n === 0) {
+    texto = "Sin cambios: el reporte se validará tal como lo capturó la unidad.";
+    etiqueta = "Validar sin cambios";
+  } else if (hayReporte) {
+    texto = n === 1 ? "1 rubro modificado respecto a lo capturado por la unidad." : `${n} rubros modificados respecto a lo capturado por la unidad.`;
+    etiqueta = "Guardar corrección del supervisor";
+  } else {
+    texto = n === 0 ? "La unidad no tiene reporte esta semana. Captura las dosis para registrarlo." : `Se registrará un reporte nuevo con ${n} rubro${n === 1 ? "" : "s"} capturado${n === 1 ? "" : "s"} por supervisión.`;
+    etiqueta = "Guardar captura del supervisor";
+  }
+  if (resumen) {
+    resumen.textContent = texto;
+    resumen.classList.toggle("vl-hay-cambios", n > 0);
+  }
+  if (btn && !btn.disabled) btn.textContent = etiqueta;
+  return n;
 }
 
 function renderValidacionEdicionGrid(clues, fecha) {
@@ -3008,9 +3208,11 @@ function renderValidacionEdicionGrid(clues, fecha) {
 
   if (!content || !cardsContainer) return;
 
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const report = _adminCapturasArray.find(r => r.clues === clues && r.fecha === fecha);
   _currentValidationReport = report;
   nombreInput.value = "";
+  limpiarErroresValidacion();
 
   content.classList.remove("hidden");
 
@@ -3029,17 +3231,21 @@ function renderValidacionEdicionGrid(clues, fecha) {
 
   if (report) {
     title.textContent = `Reporte de ${report.unidad}`;
-    subtitle.textContent = `Semana: ${report.fecha} | Capturado por: ${report.capturado_por}`;
-    
+    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} | Capturado por: ${report.capturado_por}`;
+
     if (report.editado_por !== "UNIDAD") {
       badge.classList.remove("hidden");
-      badge.innerHTML = `<span class="material-symbols-rounded text-xs mr-1">history</span> Corregido por Supervisor (${report.editado_por})`;
+      const firma = firmaDeReporte(report) || report.editado_por;
+      badge.textContent = validadoSinCambios(report)
+        ? `Validado sin cambios por ${firma}`
+        : `Corregido por ${firma}`;
     } else {
       badge.classList.add("hidden");
     }
   } else {
-    title.textContent = `Sin captura registrada`;
-    subtitle.textContent = `No hay un reporte guardado para esta semana. Se creará un nuevo registro.`;
+    const unidad = _allUnidades.find(u => u.clues === clues);
+    title.textContent = `Sin reporte: ${unidad ? unidad.unidad : clues}`;
+    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} | La unidad no ha enviado su reporte. Al guardar se creará uno nuevo.`;
     badge.classList.add("hidden");
   }
 
@@ -3079,20 +3285,11 @@ function renderValidacionEdicionGrid(clues, fecha) {
       const reglaCal = reglaDosisRubro(rb, fecha);
       const isLocked = meta === 0 || !!reglaCal;
 
-      // Extract original captured value from first edit in history, or fallback to current val
+      // Valor original capturado por la unidad: el primero del historial, o el actual si nunca se editó
       let originalVal = "—";
       if (report) {
-        let hist = [];
-        if (report.historial_ediciones) {
-          hist = Array.isArray(report.historial_ediciones)
-            ? report.historial_ediciones
-            : JSON.parse(report.historial_ediciones || "[]");
-        }
-        if (hist.length > 0 && hist[0].valores_previos && hist[0].valores_previos[rb.id] !== undefined) {
-          originalVal = hist[0].valores_previos[rb.id];
-        } else {
-          originalVal = report.valores[rb.id] !== undefined ? report.valores[rb.id] : "0";
-        }
+        const orig = valoresOriginalesUnidad(report);
+        originalVal = orig && orig[rb.id] !== undefined ? orig[rb.id] : (report.valores[rb.id] !== undefined ? report.valores[rb.id] : "0");
       }
 
       const currentVal = Number(val || 0);
@@ -3100,38 +3297,45 @@ function renderValidacionEdicionGrid(clues, fecha) {
       const cappedPct = Math.min(pct, 100);
 
       let barColor;
-      if (!meta) barColor = '#cbd5e1';
-      else if (pct >= 85) barColor = '#10b981';
-      else if (pct >= 50) barColor = '#f59e0b';
-      else barColor = '#ef4444';
+      if (!meta) barColor = '#94a3b8';
+      else if (pct >= 85) barColor = '#047857';
+      else if (pct >= 50) barColor = '#b45309';
+      else barColor = '#b91c1c';
+
+      const etiqueta = esc(`${rb.grupo || rb.categoria || ""} · ${rb.edad || ""}`);
+      const motivoBloqueo = reglaCal
+        ? `<span class="inf-pill-regla">${esc(reglaCal.etiqueta)}</span>`
+        : (isLocked ? '<span class="ml-2 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-200 text-slate-800">Sin meta</span>' : '');
 
       rowsHtml += `
-        <tr class="border-b border-slate-100 last:border-0" style="${isLocked ? 'opacity: 0.72; background-color:#f8fafc;' : ''}">
-          <td class="p-3 text-xs font-semibold text-slate-700">
-            ${rb.edad}
-            ${reglaCal ? `<span class="inf-pill-regla">${reglaCal.etiqueta}</span>` : (isLocked ? '<span class="ml-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-slate-200 text-slate-400">Sin Meta</span>' : '')}
-          </td>
-          <td class="p-3 text-center text-xs font-bold text-slate-500">${meta || '—'}</td>
-          <td class="p-3 text-center text-xs font-bold text-slate-400">${originalVal}</td>
+        <tr class="border-b border-slate-100 last:border-0 ${isLocked ? 'vl-bloqueada' : ''}">
+          <th scope="row" class="p-3 text-xs font-semibold text-slate-800 text-left">
+            ${esc(rb.edad)}
+            ${motivoBloqueo}
+          </th>
+          <td class="p-3 text-center text-xs font-bold text-slate-700">${meta || '—'}</td>
+          <td class="p-3 text-center text-xs font-bold text-slate-700">${originalVal}</td>
           <td class="p-3 text-center text-xs font-bold text-violet-950">${acum}</td>
           <td class="p-3 text-center">
-            <input type="number" min="0" step="1"
-              id="val_input_inf_${rb.id}"
-              aria-label="${String(rb.grupo || rb.categoria || '').replace(/"/g, '&quot;')} · ${String(rb.edad || '').replace(/"/g, '&quot;')}: dosis a validar"
-              class="w-16 h-8 text-center font-bold text-xs bg-slate-50 border border-slate-300 rounded-lg outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all"
+            <input type="number" min="0" step="1" inputmode="numeric"
+              id="val_input_inf_${rb.id}" data-rubro="${rb.id}"
+              aria-label="${etiqueta}: valor validado de esta semana${isLocked ? (reglaCal ? ' (no disponible esta semana)' : ' (la unidad no tiene meta)') : ''}"
+              aria-describedby="val_over_inf_${rb.id}"
+              class="text-center font-bold bg-slate-50 border border-slate-400 rounded-lg outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-200 transition-all"
               value="${val}"
               ${isLocked ? 'disabled placeholder="—"' : 'placeholder="0"'}
             />
           </td>
-          <td class="p-3" style="min-width: 120px;">
+          <td class="p-3" style="min-width: 130px;">
             <div class="flex flex-col gap-1">
-              <div class="flex justify-between w-full text-[10px] font-black text-slate-500">
+              <div class="flex justify-between w-full text-[12px] font-black text-slate-700">
                 <span>Avance</span>
                 <span id="val_pct_inf_${rb.id}">${meta > 0 ? `${pct}%` : 'N/A'}</span>
               </div>
-              <div style="width:100%; height:6px; background:#e2e8f0; border-radius:6px; overflow:hidden;">
+              <div aria-hidden="true" style="width:100%; height:8px; background:#e2e8f0; border-radius:6px; overflow:hidden;">
                 <div id="val_bar_inf_${rb.id}" style="width:${cappedPct}%; height:100%; background:${barColor}; border-radius:6px; transition: width 0.3s ease;"></div>
               </div>
+              <span id="val_over_inf_${rb.id}" class="vl-over" aria-live="polite">${meta > 0 && pct > 100 ? 'Supera la meta anual' : ''}</span>
             </div>
           </td>
         </tr>
@@ -3140,18 +3344,19 @@ function renderValidacionEdicionGrid(clues, fecha) {
 
     card.innerHTML = `
       <div class="pb-2 border-b border-slate-100 mb-2">
-        <h4 class="text-xs font-black text-violet-950 uppercase tracking-wider m-0">${groupTitle}</h4>
+        <h4 class="text-xs font-black text-violet-950 uppercase tracking-wider m-0">${esc(groupTitle)}</h4>
       </div>
-      <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200">
+      <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200" tabindex="0" role="region" aria-label="Tabla: ${esc(groupTitle)}">
         <table class="w-full border-collapse text-left text-xs text-slate-700">
+          <caption class="vl-sr">${esc(groupTitle)}: dosis por rango de edad, con meta, captura de la unidad, acumulado, valor validado y avance.</caption>
           <thead>
-            <tr class="bg-slate-50 border-b border-slate-200 font-bold text-slate-500">
-              <th class="p-3">Edad</th>
-              <th class="p-3 text-center">Meta Anual</th>
-              <th class="p-3 text-center">Original (Unidad)</th>
-              <th class="p-3 text-center">Logro Previo</th>
-              <th class="p-3 text-center">Corrección</th>
-              <th class="p-3">Progreso</th>
+            <tr class="bg-slate-50 border-b border-slate-200 font-bold text-slate-700">
+              <th scope="col" class="p-3">Edad</th>
+              <th scope="col" class="p-3 text-center">Meta anual</th>
+              <th scope="col" class="p-3 text-center">Capturado por la unidad</th>
+              <th scope="col" class="p-3 text-center">Acumulado otras semanas</th>
+              <th scope="col" class="p-3 text-center">Valor validado</th>
+              <th scope="col" class="p-3">Avance con este valor</th>
             </tr>
           </thead>
           <tbody>
@@ -3161,36 +3366,48 @@ function renderValidacionEdicionGrid(clues, fecha) {
       </div>
     `;
 
-    rubros.forEach(rb => {
-      const meta = Number(metas[rb.id] || 0);
-      if (meta === 0) return;
-      const input = card.querySelector(`#val_input_inf_${rb.id}`);
-      if (input) {
-        input.addEventListener("input", () => {
-          const val = parseInt(input.value) || 0;
-          const total = acumuladosPrevios[rb.id] + val;
-          const pct = Math.round((total / meta) * 100);
-          const pctEl = card.querySelector(`#val_pct_inf_${rb.id}`);
-          const barEl = card.querySelector(`#val_bar_inf_${rb.id}`);
-
-          if (pctEl) pctEl.textContent = `${pct}%`;
-          if (barEl) {
-            barEl.style.width = `${Math.min(pct, 100)}%`;
-            if (pct >= 85) barEl.style.background = '#10b981';
-            else if (pct >= 50) barEl.style.background = '#f59e0b';
-            else barEl.style.background = '#ef4444';
-          }
-        });
-      }
-    });
-
     cardsContainer.appendChild(card);
   });
 
+  if (gruposSinMeta.length) {
+    const sinMeta = document.createElement("div");
+    sinMeta.className = "inf-aviso inf-aviso--info";
+    sinMeta.textContent = `Sin meta para esta unidad (no se capturan): ${gruposSinMeta.join("; ")}.`;
+    cardsContainer.appendChild(sinMeta);
+  }
+
+  // Un solo manejador para todos los campos: porcentaje, aviso de meta rebasada y resumen de cambios
+  cardsContainer.oninput = (ev) => {
+    const input = ev.target;
+    if (!input || !input.matches || !input.matches("input[data-rubro]")) return;
+    const id = input.dataset.rubro;
+    const meta = Number(metas[id] || 0);
+    const val = parseInt(input.value, 10) || 0;
+    const pct = meta > 0 ? Math.round(((acumuladosPrevios[id] + val) / meta) * 100) : 0;
+    const pctEl = document.getElementById(`val_pct_inf_${id}`);
+    const barEl = document.getElementById(`val_bar_inf_${id}`);
+    const overEl = document.getElementById(`val_over_inf_${id}`);
+    if (pctEl) pctEl.textContent = meta > 0 ? `${pct}%` : "N/A";
+    if (barEl) {
+      barEl.style.width = `${Math.min(pct, 100)}%`;
+      barEl.style.background = pct >= 85 ? "#047857" : pct >= 50 ? "#b45309" : "#b91c1c";
+    }
+    const rebasa = meta > 0 && pct > 100;
+    if (overEl) overEl.textContent = rebasa ? "Supera la meta anual" : "";
+    if (rebasa) input.setAttribute("aria-invalid", "true"); else input.removeAttribute("aria-invalid");
+    actualizarResumenValidacion();
+  };
+  nombreInput.oninput = () => {
+    nombreInput.removeAttribute("aria-invalid");
+    document.getElementById("validationNombreGrupo")?.classList.remove("vl-invalido");
+  };
+
+  actualizarResumenValidacion();
+
   document.getElementById("btnCancelValidation").onclick = () => {
-    content.classList.add("hidden");
-    document.getElementById("validationDashboard").classList.remove("hidden");
-    renderValidationDashboard();
+    const sucio = contarCambiosValidacion() > 0 || nombreInput.value.trim() !== "";
+    if (sucio && !window.confirm("Tienes cambios sin guardar. ¿Descartarlos y volver al listado?")) return;
+    volverAlListadoValidacion();
   };
 
   document.getElementById("btnSaveValidation").onclick = () => {
@@ -3202,9 +3419,11 @@ async function saveValidationReport(clues, fecha) {
   const nombreInput = document.getElementById("validationNombreResponsable");
   const nombre = nombreInput ? nombreInput.value.trim() : "";
 
+  limpiarErroresValidacion();
+  const errores = [];
+
   if (!nombre) {
-    showToast("Por favor, introduce el nombre del supervisor para firmar la corrección.", false, "bad");
-    return;
+    errores.push({ msg: "Escribe el nombre de quien realiza o autoriza la corrección; queda firmado en el historial.", el: nombreInput });
   }
 
   const unitMeta = _adminMetasArray.find(r => r.clues === clues);
@@ -3221,54 +3440,42 @@ async function saveValidationReport(clues, fecha) {
   });
 
   const valores = {};
-  let hasOverMetaError = false;
-  let reglaError = null;
 
   for (const rb of INFLUENZA_RUBROS) {
     const input = document.getElementById(`val_input_inf_${rb.id}`);
-    const val = input ? parseInt(input.value) || 0 : 0;
+    const nombreRubro = `${rb.grupo || rb.categoria} · ${rb.edad}`;
+    const raw = input ? String(input.value).trim() : "";
+    if (input && !input.disabled && raw !== "" && !/^\d+$/.test(raw)) {
+      errores.push({ msg: `${nombreRubro}: escribe un número entero de 0 en adelante.`, el: input });
+    }
+    const val = input ? parseInt(input.value, 10) || 0 : 0;
     valores[rb.id] = val;
 
     const meta = Number(metas[rb.id] || 0);
     const previo = Number(_currentValidationReport?.valores?.[rb.id] || 0);
     if (val > previo) {
-      if (!meta) reglaError = reglaError || `${rb.grupo} ${rb.edad}: la unidad no tiene meta asignada en este rubro.`;
+      if (!meta) errores.push({ msg: `${nombreRubro}: la unidad no tiene meta asignada en este rubro.`, el: input });
       const cal = reglaDosisRubro(rb, fecha);
-      if (cal) reglaError = reglaError || `${rb.grupo} ${rb.edad}: ${cal.texto}`;
+      if (cal) errores.push({ msg: `${nombreRubro}: ${cal.texto}`, el: input });
     }
     const acum = acumuladosPrevios[rb.id];
     if (meta > 0 && (acum + val) > meta) {
-      hasOverMetaError = true;
+      errores.push({ msg: `${nombreRubro}: con ${val} dosis el acumulado (${acum + val}) supera la meta anual de ${meta}. Máximo para esta semana: ${Math.max(0, meta - acum)}.`, el: input });
     }
   }
 
-  if (reglaError) {
-    showToast(reglaError, false, "bad");
+  if (errores.length) {
+    mostrarErroresValidacion(errores);
     return;
   }
 
-  if (hasOverMetaError) {
-    showToast("No se puede guardar. Uno o más rubros superan la meta anual de la unidad.", false, "bad");
-    return;
-  }
+  const sinCambios = !!_currentValidationReport && contarCambiosValidacion() === 0;
 
   const unitData = _allUnidades.find(u => u.clues === clues);
   const unidadNombre = unitData ? unitData.unidad : "Unidad Médica";
   const municipio = unitData ? unitData.municipio : USER.municipio;
 
-  let historial = [];
-  if (_currentValidationReport && _currentValidationReport.historial_ediciones) {
-    historial = Array.isArray(_currentValidationReport.historial_ediciones)
-      ? _currentValidationReport.historial_ediciones
-      : JSON.parse(_currentValidationReport.historial_ediciones || "[]");
-  }
-  historial.push({
-    fecha_edicion: new Date().toISOString(),
-    editado_por: nombre,
-    rol: USER.rol,
-    valores_previos: _currentValidationReport ? _currentValidationReport.valores : null
-  });
-
+  // El historial lo arma el servidor (saveinfluenza_captura): aquí solo se manda quién firma y si fue sin cambios.
   const payload = {
     clues,
     unidad: unidadNombre,
@@ -3278,22 +3485,21 @@ async function saveValidationReport(clues, fecha) {
     anio_campana: document.getElementById("metaCampaignSelect").value,
     capturado_por: _currentValidationReport ? _currentValidationReport.capturado_por : nombre,
     editado_por: USER.rol.toUpperCase(),
-    historial_ediciones: historial
+    firmado_por: nombre,
+    sin_cambios: sinCambios
   };
 
   await AppService.runCapture({
     btnId: "btnSaveValidation",
-    title: "Guardando corrección",
-    msg: "Registrando la corrección firmada por el supervisor...",
-    successMsg: "Reporte de validación guardado correctamente.",
+    title: sinCambios ? "Validando reporte" : "Guardando corrección",
+    msg: sinCambios ? "Registrando la validación firmada por el supervisor..." : "Registrando la corrección firmada por el supervisor...",
+    successMsg: sinCambios ? "Reporte validado sin cambios." : "Reporte de validación guardado correctamente.",
     eventTitle: "Influenza",
-    eventMsg: `Edición de reporte de ${unidadNombre} por supervisor ${nombre}`,
+    eventMsg: `${sinCambios ? "Validación" : "Edición"} de reporte de ${unidadNombre} por supervisor ${nombre}`,
     action: async () => {
       const res = await AppService.call("saveinfluenza_captura", payload);
       await loadInfluenzaAdminData();
-      document.getElementById("validationReportContent").classList.add("hidden");
-      document.getElementById("validationDashboard").classList.remove("hidden");
-      renderValidationDashboard();
+      volverAlListadoValidacion(sinCambios ? `Reporte de ${unidadNombre} validado sin cambios.` : `Corrección de ${unidadNombre} guardada.`);
       const sinMovimientoVisual = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       if (typeof confetti === 'function' && !sinMovimientoVisual) {
         confetti({

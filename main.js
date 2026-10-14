@@ -7566,16 +7566,40 @@ async function supabaseRequest(action = "", payload, options = {}) {
           }
           return { ok: true, data: filteredData, meta: { fecha: filteredData.length ? filteredData[0].fecha_pedido_programada : targetFecha, tipo } };
         } else if (tipo === "INF") {
+          // Los reportes de Influenza son SEMANALES (lunes a domingo, fechados el viernes): se busca la captura
+          // de la semana que contiene la fecha elegida, no una fecha exacta.
+          const diaSem = dateObj.getDay();
+          const lunes = new Date(dateObj);
+          lunes.setDate(dateObj.getDate() + (diaSem === 0 ? -6 : 1 - diaSem));
+          const domingo = new Date(lunes);
+          domingo.setDate(lunes.getDate() + 6);
+          const semIni = dateToLocalYmd(lunes);
+          const semFin = dateToLocalYmd(domingo);
+
           const { data: activeCamp } = await getActiveCampaign();
-          const camp = activeCamp ? activeCamp.nombre : "";
-          const { data, error } = await window.supabase
-            .from('influenza_capturas')
-            .select('*')
-            .eq('clues', payload.clues)
-            .eq('fecha', fIniStr)
-            .eq('anio_campana', camp)
-            .maybeSingle();
-          if (error) throw error;
+          const campSel = document.getElementById("metaCampaignSelect")?.value || "";
+          const campanas = [...new Set([campSel, activeCamp ? activeCamp.nombre : ""].filter(Boolean))];
+
+          const buscar = async (camp) => {
+            let q = window.supabase
+              .from('influenza_capturas')
+              .select('*')
+              .eq('clues', payload.clues)
+              .gte('fecha', semIni)
+              .lte('fecha', semFin)
+              .order('fecha', { ascending: false })
+              .limit(1);
+            if (camp) q = q.eq('anio_campana', camp);
+            const { data: d, error: e } = await q;
+            if (e) throw e;
+            return d && d.length ? d[0] : null;
+          };
+          let data = null;
+          for (const camp of campanas) {
+            data = await buscar(camp);
+            if (data) break;
+          }
+          if (!data) data = await buscar("");
 
           let rows = [];
           if (data && data.valores) {
@@ -7585,11 +7609,12 @@ async function supabaseRequest(action = "", payload, options = {}) {
                 rubro: `${rb.categoria} - ${rb.grupo} (${rb.edad})`,
                 cantidad: val,
                 capturado_por: data.capturado_por || "SISTEMA",
+                editado_por: data.editado_por && data.editado_por !== "UNIDAD" ? data.editado_por : "",
                 fecha: data.fecha
               });
             });
           }
-          return { ok: true, data: rows, meta: { fecha: data ? data.fecha : fIniStr, tipo } };
+          return { ok: true, data: rows, meta: { fecha: data ? data.fecha : semIni, tipo, semana: `${semIni} / ${semFin}` } };
         } else {
           let query = window.supabase
             .from('consumibles')
@@ -8273,6 +8298,9 @@ async function supabaseRequest(action = "", payload, options = {}) {
           fecha_edicion: new Date().toISOString(),
           editado_por: edPor,
           usuario: String(USER?.usuario || "DESCONOCIDO").toUpperCase(),
+          // Quien firma la corrección (nombre escrito por el supervisor) y si fue «validar sin cambios»
+          ...(payload.firmado_por ? { firmado_por: String(payload.firmado_por).trim().slice(0, 120) } : {}),
+          ...(payload.sin_cambios === undefined ? {} : { sin_cambios: payload.sin_cambios === true }),
           valores_anteriores: prev ? prev.valores : null
         });
 
@@ -22425,7 +22453,49 @@ function renderLiveCharts(tipo, leftData, rightData) {
     if (window.CHART_SEM) { window.CHART_SEM.dispose(); window.CHART_SEM = null; }
     if (window.CHART_CAD) { window.CHART_CAD.dispose(); window.CHART_CAD = null; }
 
-    const setDOM = (kL, tL, dL, kR, tR, dR) => {
+    // Influenza: resumen en HTML accesible (sin canvas) en lugar de las dos gráficas pequeñas
+    const rowEl = $("liveViewChartsRow");
+    const infEl = $("liveInfSummary");
+    if (rowEl) rowEl.style.display = tipo === "INF" ? "none" : "";
+    if (infEl) {
+      if (tipo === "INF") {
+        const esc = escapeHtml;
+        const num = n => Number(n || 0).toLocaleString("es-MX");
+        const total = Object.values(leftData || {}).reduce((a, b) => a + Number(b || 0), 0);
+        const barras = (obj, color) => {
+          const keys = Object.keys(obj || {}).filter(k => Number(obj[k]) > 0);
+          if (!keys.length) return `<p style="margin:0; font-size:13px; color:#475569;">Sin dosis registradas.</p>`;
+          const max = Math.max(...keys.map(k => Number(obj[k])));
+          return `<ul style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px;">` + keys.map(k => {
+            const v = Number(obj[k]);
+            const pct = total ? Math.round((v / total) * 100) : 0;
+            return `<li>
+              <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; font-size:13px; color:#0f172a;">
+                <span style="font-weight:700;">${esc(k)}</span>
+                <span style="font-weight:800; font-variant-numeric:tabular-nums;">${num(v)} <span style="font-weight:600; color:#475569;">· ${pct}%</span></span>
+              </div>
+              <div style="height:8px; border-radius:4px; background:#e2e8f0; margin-top:6px; overflow:hidden;">
+                <div style="height:100%; width:${Math.max(3, Math.round((v / max) * 100))}%; background:${color}; border-radius:4px;"></div>
+              </div>
+            </li>`;
+          }).join("") + `</ul>`;
+        };
+        const card = (kicker, inner) => `<section style="background:var(--md-sys-color-surface); border:1px solid var(--md-sys-color-outline-variant); border-radius:20px; padding:20px;">
+            <h3 style="margin:0 0 14px; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#334155;">${kicker}</h3>${inner}</section>`;
+        infEl.innerHTML = `<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px;">
+          ${card("Total de la semana", `<div style="font-size:44px; line-height:1; font-weight:900; color:#5b21b6; font-variant-numeric:tabular-nums;">${num(total)}</div><p style="margin:8px 0 0; font-size:13px; color:#475569;">dosis de influenza aplicadas</p>`)}
+          ${card("Por población", barras(leftData, "#6d28d9"))}
+          ${card("Por esquema", barras(rightData, "#0369a1"))}
+        </div>`;
+        infEl.style.display = "block";
+      } else {
+        infEl.style.display = "none";
+        infEl.innerHTML = "";
+      }
+    }
+    if (tipo === "INF") return;
+
+    const setDOM =(kL, tL, dL, kR, tR, dR) => {
       if ($("liveChartLeftKicker")) $("liveChartLeftKicker").textContent = kL;
       if ($("liveChartLeftTitle")) $("liveChartLeftTitle").textContent = tL;
       if ($("liveChartLeftDesc")) $("liveChartLeftDesc").textContent = dL;
@@ -22566,6 +22636,46 @@ function renderLiveCharts(tipo, leftData, rightData) {
 
       setupChartFilter(window.CHART_SEM, 'pedido');
       setupChartFilter(window.CHART_CAD, 'biologico');
+
+    } else if (tipo === "INF") {
+      setDOM("Población", "Dosis por población", "Proporción de la semana", "Esquema", "Dosis por esquema", "Primera, segunda, única…");
+      const porCat = leftData || {};
+      const porGrupo = rightData || {};
+      const paleta = ['#7c3aed', '#0284c7', '#059669', '#d97706', '#db2777', '#475569'];
+      const tooltip = { backgroundColor: 'rgba(15, 23, 42, 0.95)', textStyle: { color: '#fff', fontSize: 10 }, borderWidth: 0, borderRadius: 8, padding: [4, 8] };
+
+      window.CHART_SEM = echarts.init(ctxLeft);
+      window.CHART_SEM.setOption({
+        animationDuration: 1000, animationEasing: 'exponentialOut',
+        tooltip: { trigger: 'item', ...tooltip },
+        series: [{
+          type: 'pie', radius: ['60%', '90%'], avoidLabelOverlap: false,
+          itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 },
+          label: { show: false },
+          emphasis: { scale: true, scaleSize: 6 },
+          data: Object.keys(porCat).filter(k => porCat[k] > 0).map((k, i) => ({ value: porCat[k], name: k, itemStyle: { color: paleta[i % paleta.length] } }))
+        }]
+      });
+
+      const gruposKeys = Object.keys(porGrupo);
+      window.CHART_CAD = echarts.init(ctxRight);
+      window.CHART_CAD.setOption({
+        animationDuration: 1000, animationEasing: 'exponentialOut',
+        tooltip: { trigger: 'axis', axisPointer: { type: 'none' }, ...tooltip },
+        grid: { left: '0%', right: '0%', top: '15%', bottom: '5%', containLabel: true },
+        xAxis: { type: 'category', data: gruposKeys, axisLabel: { fontSize: 9, fontWeight: 'bold', color: '#475569', interval: 0, width: 56, overflow: 'break' }, axisLine: { show: false }, axisTick: { show: false } },
+        yAxis: { type: 'value', show: false },
+        series: [{
+          name: 'Dosis', type: 'bar', data: gruposKeys.map(k => porGrupo[k]),
+          itemStyle: {
+            borderRadius: [8, 8, 0, 0],
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#a78bfa' },
+              { offset: 1, color: '#6d28d9' }
+            ])
+          }
+        }]
+      });
 
     } else if (tipo === "CONS") {
       setDOM("Distribución", "Insumos Reportados", "Proporción de material", "Dosis Reportadas", "Existencia Dosis", "SRP vs SR");
@@ -23358,6 +23468,9 @@ window.renderLiveViewTableContent = function() {
   const tbody = $("liveViewTbody");
   const headRow = $("liveViewTable")?.querySelector("thead tr");
   if (!tbody) return;
+  // Influenza usa diseño fijo (2 columnas); los demás tipos vuelven al automático
+  const liveTbl = $("liveViewTable");
+  if (liveTbl) liveTbl.style.tableLayout = (($("summaryTipo") && $("summaryTipo").value) === "INF") ? "fixed" : "";
 
   // Limpiar alerta de desabasto/cero por defecto al renderizar
   const zeroAlertEl = $("liveViewZeroAlert");
@@ -23752,21 +23865,54 @@ window.renderLiveViewTableContent = function() {
     if (headRow) {
       headRow.innerHTML = `
            <th style="padding: 16px 24px; text-align: left;">Grupo de Edad / Rubro</th>
-           <th style="padding: 16px 24px; text-align: center;">Dosis Aplicadas</th>
+           <th style="padding: 16px 24px; text-align: right; width: 170px;">Dosis Aplicadas</th>
          `;
     }
 
     if (!res.data || !res.data.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="muted" style="padding:40px; text-align:center;">No hay reporte de Influenza para esta fecha.</td></tr>';
+      const semana = res.meta && res.meta.semana ? res.meta.semana.split(" / ").map(formatAppDate).join(" al ") : "";
+      tbody.innerHTML = `<tr><td colspan="6" class="muted" style="padding:40px; text-align:center;">La unidad no tiene reporte de Influenza${semana ? " en la semana del " + escapeHtml(semana) : " en esta semana"}.</td></tr>`;
+      renderLiveCharts("INF", null, null);
     } else {
-      tbody.innerHTML = res.data.map(r => `
-           <tr class="live-view-row" style="border-bottom: 1px solid #f1f5f9; transition: all 0.2s ease;">
-             <td style="padding:14px 24px; font-weight:800; color:#0f172a;">${escapeHtml(r.rubro)}</td>
-             <td style="padding:14px 24px; text-align:center;">
-               <span class="live-view-count-badge" style="background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe;">${r.cantidad || 0}</span>
-             </td>
-           </tr>
-         `).join("");
+      const porCat = {};
+      const porGrupo = {};
+      let total = 0;
+      res.data.forEach(r => {
+        const m = String(r.rubro || "").match(/^(.*?) - (.*?) \(/);
+        const cat = m ? m[1] : "Otros";
+        const grp = m ? m[2] : "Otros";
+        const n = Number(r.cantidad || 0);
+        total += n;
+        porCat[cat] = (porCat[cat] || 0) + n;
+        // Gráfica de esquema: los grupos de riesgo (nombres largos) se agrupan en una sola barra
+        const esquema = ["Primera dosis", "Segunda dosis", "Revacunación"].includes(grp) ? grp : "Grupos de riesgo";
+        porGrupo[esquema] = (porGrupo[esquema] || 0) + n;
+      });
+      let lastCat = null;
+      tbody.innerHTML = res.data.map(r => {
+        const m = String(r.rubro || "").match(/^(.*?) - (.*)$/);
+        const cat = m ? m[1] : "Otros";
+        const label = m ? m[2] : String(r.rubro || "");
+        const n = Number(r.cantidad || 0);
+        let head = "";
+        if (cat !== lastCat) {
+          lastCat = cat;
+          head = `<tr><th colspan="2" scope="colgroup" style="padding:12px 24px; text-align:left; background:#f1f5f9; color:#334155; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; border-top:1px solid #e2e8f0;">${escapeHtml(cat)}</th></tr>`;
+        }
+        const badge = n > 0
+          ? `<span style="display:inline-block; min-width:44px; padding:4px 12px; border-radius:999px; background:#ede9fe; color:#4c1d95; font-weight:800; font-size:14px; font-variant-numeric:tabular-nums;">${n.toLocaleString("es-MX")}</span>`
+          : `<span style="display:inline-block; min-width:44px; padding:4px 12px; color:#64748b; font-weight:600; font-size:14px;">0</span>`;
+        return head + `
+           <tr class="live-view-row" style="border-bottom: 1px solid #f1f5f9;">
+             <td style="padding:12px 24px 12px 36px; font-weight:${n > 0 ? 700 : 500}; color:${n > 0 ? "#0f172a" : "#475569"}; font-size:14px;">${escapeHtml(label)}</td>
+             <td style="padding:12px 24px; text-align:right;">${badge}</td>
+           </tr>`;
+      }).join("") + `
+           <tr style="background:#f8fafc; border-top:2px solid #cbd5e1;">
+             <td style="padding:16px 24px; font-weight:900; color:#0f172a; font-size:14px;">Total de dosis aplicadas</td>
+             <td style="padding:16px 24px; text-align:right; font-weight:900; color:#0f172a; font-size:16px; font-variant-numeric:tabular-nums;">${total.toLocaleString("es-MX")}</td>
+           </tr>`;
+      renderLiveCharts("INF", porCat, porGrupo);
     }
   } else {
     // Tipo CONSUMIBLES

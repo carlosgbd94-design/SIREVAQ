@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.139" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.142" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.153" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.154" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3209,7 +3209,7 @@
                   class="w-full h-[58px] rounded-2xl pr-6 text-[15px] font-bold outline-none shadow-md">
                 <label for="validationNombreResponsable">Nombre de quien realiza/autoriza la corrección</label>
               </div>
-              <p class="sr-only" id="validationNombreAyuda">Obligatorio. Este nombre queda firmado en el historial del reporte.</p>
+              <p class="vl-sr" id="validationNombreAyuda">Obligatorio. Este nombre queda firmado en el historial del reporte.</p>
 
               <!-- Contenedor dinámico de tarjetas de captura -->
               <div id="validationCardsContainer" class="flex flex-col gap-6">
@@ -8283,7 +8283,8 @@
         style="flex: 1; overflow-y: auto; padding: 24px 32px; background: var(--md-sys-color-surface-container);">
 
         <!-- Summary Metrics & Resumen Visual Compacto -->
-        <div
+        <div id="liveInfSummary" style="display:none; margin-bottom: 24px;"></div>
+        <div id="liveViewChartsRow"
           style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px;">
 
           <div

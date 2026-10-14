@@ -15343,3 +15343,27 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
   background-position: right 14px center !important; text-overflow: ellipsis;
 }
 #secCovidAvance { gap: 14px; }
+
+/* Validación y Edición (Influenza): accesibilidad y claridad */
+.vl-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+#secInfluenzaValidacion [tabindex="-1"]:focus { outline: none; }
+#secInfluenzaValidacion :is(a, button, input, select, summary, [tabindex="0"]):focus-visible { outline: 3px solid #0f172a; outline-offset: 2px; border-radius: 8px; }
+#validationNombreResponsable ~ label { opacity: 1; color: #334155; }
+#validationNombreGrupo.vl-invalido input { border: 2px solid #b91c1c !important; }
+.vl-leyenda { border: 1px solid #cbd5e1; border-radius: 14px; background: #f8fafc; padding: 10px 14px; font-size: 13px; color: #1e293b; }
+.vl-leyenda > summary { cursor: pointer; font-weight: 800; }
+.vl-leyenda dl { margin: 10px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; }
+.vl-leyenda dt { font-weight: 800; }
+.vl-leyenda dd { margin: 0; }
+.vl-resumen { font-size: 14px; font-weight: 700; color: #1e293b; padding: 10px 14px; border-radius: 14px; background: #f1f5f9; border: 1px solid #cbd5e1; }
+.vl-resumen.vl-hay-cambios { background: #eff6ff; border-color: #93c5fd; color: #1e3a8a; }
+.vl-error { padding: 12px 14px; border-radius: 14px; border: 2px solid #b91c1c; background: #fef2f2; color: #7f1d1d; font-size: 14px; font-weight: 700; }
+.vl-error ul { margin: 6px 0 0 18px; list-style: disc; font-weight: 600; }
+.vl-over { display: block; font-size: 12px; font-weight: 800; color: #b91c1c; }
+#validationCardsContainer input[aria-invalid="true"] { border: 2px solid #b91c1c !important; background: #fef2f2 !important; }
+#validationCardsContainer input[type="number"] { width: 88px !important; min-width: 0 !important; height: 44px !important; font-size: 14px !important; padding: 0 8px !important; margin: 0 auto; display: block; }
+#validationCardsContainer .vl-bloqueada { background-color: #f1f5f9; }
+#validationCardsContainer .vl-bloqueada td { color: #334155; }
+#validationCardsContainer .tableWrap:focus-visible { outline: 3px solid #0f172a; outline-offset: 2px; }
+@media (max-width: 640px) { .vl-leyenda dl { grid-template-columns: 1fr; } .vl-leyenda dd { margin-bottom: 6px; } }
+#validationCardsContainer td, #validationCardsContainer th { vertical-align: middle; }
