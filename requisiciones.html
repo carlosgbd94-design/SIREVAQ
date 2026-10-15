@@ -425,6 +425,9 @@
   table.vista-pegado td { padding: 6px 8px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
   table.vista-pegado tr.fila-error td { background: var(--error-bg); }
   table.vista-pegado select { padding: 4px 6px; font-size: 12px; max-width: 200px; }
+  /* Barra de «Captura rápida»: los botones no se parten en dos líneas; si no caben, la barra baja de renglón. */
+  #panelPaso1 .tarjeta > h2 { flex-wrap: wrap; row-gap: 8px; }
+  #panelPaso1 .tarjeta > h2 .btn { white-space: nowrap; }
   /* Traer pedido de biológico: un recuadro por pedido del mes (ordinario / extraordinarios) */
   .ped-grupo { border: 0; margin: 12px 0 0; padding: 0; min-width: 0; }
   .ped-grupo legend { font-size: 10px; color: var(--primary); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; padding: 0; margin-bottom: 6px; }

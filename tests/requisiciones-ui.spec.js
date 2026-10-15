@@ -1311,3 +1311,15 @@ test('Requisiciones: la entrega de COVID-19 se nombra «Temporada 2026-2027» (n
   await expect(page.locator('#modalCovid')).not.toContainText('Campaña Influenza');
   await expect(page.locator('#modalCovid')).not.toContainText('Temporada invernal >');
 });
+
+test('Requisiciones (jurisdicción): los botones de la captura rápida no se parten en dos líneas', async ({ page }) => {
+  await page.addInitScript(() => { window.__FAKE_COVID__ = true; });
+  await preparar(page, { conReq: true });
+  const r = await page.evaluate(() => {
+    const h = document.querySelector('#panelPaso1 .tarjeta > h2');
+    return { wrap: getComputedStyle(h).flexWrap, ws: [...h.querySelectorAll('.btn')].map((b) => getComputedStyle(b).whiteSpace) };
+  });
+  expect(r.wrap).toBe('wrap');
+  expect(r.ws.every((v) => v === 'nowrap')).toBe(true);
+  expect(r.ws.length).toBeGreaterThanOrEqual(5);
+});
