@@ -396,6 +396,7 @@
 
         await fetchLotes();
         await loadCompliance();
+        loadYearMedals();
         await checkCapturesState();
         await loadNotifications();
         await loadFiles();
@@ -1740,9 +1741,112 @@
         const tier = score === 100 ? 'diamante' : score >= 90 ? 'oro' : score >= 80 ? 'plata'
             : score >= 70 ? 'bronce' : score >= 60 ? 'acero' : score >= 50 ? 'jade' : '';
         const iconHost = document.getElementById('lblCumplimientoIcon');
+        const chip = document.getElementById('chipCumplimiento');
+        const rango = document.getElementById('lblCumplimientoRango');
         if (iconHost && window.MedalBadges && tier) {
-            iconHost.innerHTML = window.MedalBadges.svg(tier, 34);
+            iconHost.innerHTML = window.MedalBadges.svg(tier, 36);
             iconHost.setAttribute('title', `Rango ${window.MedalBadges.label(tier)}`);
+            if (chip) chip.setAttribute('data-tier', tier);
+            if (rango) { rango.textContent = `Rango ${window.MedalBadges.label(tier)}`; rango.hidden = false; }
+        }
+    };
+
+    // --- Logros del año: una medalla por mes (mismos pesos y cortes que el escritorio) ---
+    const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const tierFromScore = (s) => s === 100 ? 'diamante' : s >= 90 ? 'oro' : s >= 80 ? 'plata'
+        : s >= 70 ? 'bronce' : s >= 60 ? 'acero' : s >= 50 ? 'jade' : '';
+
+    const complianceScore = ({ bio, cons, eBio, eCons, pedido, isRequired, influenzaPct }) => {
+        const bPct = ((bio || 0) / (eBio || 4)) * 100;
+        const cPct = ((cons || 0) / (eCons || 4)) * 100;
+        const pPct = pedido ? 100 : 0;
+        let score;
+        if (influenzaPct != null) {
+            score = isRequired
+                ? Math.round(bPct * 0.3 + cPct * 0.3 + pPct * 0.15 + influenzaPct * 0.25)
+                : Math.round(bPct * 0.35 + cPct * 0.35 + influenzaPct * 0.30);
+        } else {
+            score = isRequired ? Math.round(bPct * 0.4 + cPct * 0.4 + pPct * 0.2) : Math.round(bPct * 0.5 + cPct * 0.5);
+        }
+        return Math.min(score, 100);
+    };
+
+    const influenzaFechasDelMes = (camp, m) => {
+        const out = [];
+        const [y, mn] = m.split('-').map(Number);
+        const t = new Date(y, mn - 1, 1, 12, 0, 0);
+        while (t.getMonth() === mn - 1) {
+            if (t.getDay() === 5) {
+                const ymd = dateToLocalYmd(t);
+                if (ymd >= camp.fecha_inicio && ymd <= camp.fecha_fin) out.push(ymd);
+            }
+            t.setDate(t.getDate() + 1);
+        }
+        if (window.InfluenzaReglas) {
+            window.InfluenzaReglas.cortes(camp.fecha_inicio, camp.fecha_fin).filter(ymd => ymd.startsWith(m)).forEach(ymd => out.push(ymd));
+        }
+        return [...new Set(out)].sort();
+    };
+
+    const loadYearMedals = async () => {
+        const card = document.getElementById('cardLogrosAnio');
+        const grid = document.getElementById('rowLogrosAnio');
+        if (!card || !grid || !currentProfile || !window.MedalBadges) return;
+        const role = currentProfile.rol;
+        const clues = currentProfile.clues;
+        if (!clues || role === 'ADMIN' || role === 'JURISDICCIONAL') { card.hidden = true; return; }
+
+        const year = new Date().getFullYear();
+        try {
+            const { data: rows, error } = await supabaseClient.rpc('get_year_medal_inputs_rpc', { p_anio: year, p_clues: clues, p_municipio: null });
+            if (error) throw error;
+            if (!rows || !rows.length) { card.hidden = true; return; }
+
+            // Influenza: solo si la campaña activa toca este año; sin ella el puntaje no la incluye.
+            let camp = null;
+            let hits = new Set();
+            const { data: activa } = await supabaseClient.from('campanas').select('*').eq('activo', true).ilike('nombre', 'Campaña Influenza%').maybeSingle();
+            if (activa && activa.fecha_inicio <= `${year}-12-31` && activa.fecha_fin >= `${year}-01-01`) {
+                camp = activa;
+                const todas = [...new Set(rows.flatMap(r => influenzaFechasDelMes(camp, r.mes)))];
+                if (todas.length) {
+                    const { data: h, error: hErr } = await supabaseClient.rpc('influenza_capture_hits_rpc', { p_campana: camp.nombre, p_fechas: todas, p_clues: [clues] });
+                    if (hErr) throw hErr;
+                    hits = new Set((h && h[clues]) || []);
+                }
+            }
+
+            const todayYmd = dateToLocalYmd(new Date());
+            const porMes = new Map();
+            rows.forEach(r => {
+                const [y, mn] = r.mes.split('-').map(Number);
+                const ventana = calculateBioIntelligentWindow(y, mn - 1);
+                const isRequired = !todayYmd.startsWith(r.mes) || todayYmd >= dateToLocalYmd(ventana.start);
+                const esperadas = camp ? influenzaFechasDelMes(camp, r.mes) : [];
+                const influenzaPct = esperadas.length ? (esperadas.filter(f => hits.has(f)).length / esperadas.length) * 100 : null;
+                const score = complianceScore({ bio: r.bio_semanas_ok, cons: r.cons_semanas_ok, eBio: r.ebio, eCons: r.econs, pedido: r.pedido_mensual, isRequired, influenzaPct });
+                porMes.set(r.mes, { score, tier: tierFromScore(score) });
+            });
+
+            let ganadas = 0;
+            grid.innerHTML = MESES_CORTOS.map((nombre, i) => {
+                const m = `${year}-${String(i + 1).padStart(2, '0')}`;
+                const info = porMes.get(m);
+                if (info && info.tier) {
+                    ganadas++;
+                    const label = `${window.MedalBadges.label(info.tier)} - ${MESES_LARGOS[i]} (${info.score}%)`;
+                    return `<div class="logro" title="${label}" role="img" aria-label="Medalla ${label}">${window.MedalBadges.svg(info.tier, 34)}<span>${nombre}</span></div>`;
+                }
+                return `<div class="logro" aria-label="${MESES_LARGOS[i]}: sin medalla"><span class="logro-vacio"></span><span>${nombre}</span></div>`;
+            }).join('');
+
+            document.getElementById('lblLogrosTitulo').textContent = `Logros ${year}`;
+            document.getElementById('lblLogrosCount').textContent = ganadas ? `${ganadas} ${ganadas === 1 ? 'medalla' : 'medallas'}` : '';
+            card.hidden = false;
+        } catch (e) {
+            console.warn('loadYearMedals:', e);
+            card.hidden = true;
         }
     };
 

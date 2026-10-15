@@ -39,7 +39,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1" rel="stylesheet">
 
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="mobile_style.css?v=2026.43">
+  <link rel="stylesheet" href="mobile_style.css?v=2026.45">
   <link rel="stylesheet" href="ayuda.css?v=1">
 </head>
 <body class="bg-[#f1f4f8] text-slate-800 min-h-[100dvh] flex flex-col relative overflow-x-hidden">
@@ -176,19 +176,31 @@
     <div class="px-6 pt-4 grid grid-cols-2 gap-4 max-w-md mx-auto w-full">
       <!-- Weather widget -->
       <div class="kpi-chip liquid-glass">
-        <img id="lblClimaIcon" src="assets/weather/partly-cloudy-day.svg" width="40" height="40" alt="" style="flex-shrink:0;margin:-6px -4px -6px -6px">
+        <img id="lblClimaIcon" src="assets/weather/partly-cloudy-day.svg" width="48" height="48" alt="" style="flex-shrink:0;margin:-8px -4px -8px -8px">
         <div class="flex flex-col">
           <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Clima</span>
           <span class="text-xs font-black" id="hdrClima">Cargando...</span>
         </div>
       </div>
-      <!-- Compliance widget -->
-      <div class="kpi-chip liquid-glass">
+      <!-- Compliance widget: color y medalla según el rango vigente -->
+      <div class="kpi-chip liquid-glass" id="chipCumplimiento">
         <span id="lblCumplimientoIcon" class="inline-flex items-center justify-center" style="min-width:28px;line-height:0"><span class="material-symbols-rounded text-emerald-500 text-xl">leaderboard</span></span>
         <div class="flex flex-col">
           <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Cumplimiento</span>
           <span class="text-xs font-black text-emerald-600" id="lblCumplimientoVal">—</span>
+          <span id="lblCumplimientoRango" class="logro-rango" hidden></span>
         </div>
+      </div>
+    </div>
+
+    <!-- 🏅 Logros del año (medallas por mes) -->
+    <div id="cardLogrosAnio" class="px-6 pt-3 max-w-md mx-auto w-full" hidden>
+      <div class="kpi-chip liquid-glass logros-card">
+        <div class="logros-head">
+          <span class="text-[9px] font-black uppercase tracking-widest text-slate-400" id="lblLogrosTitulo">Logros del año</span>
+          <span class="logros-count" id="lblLogrosCount"></span>
+        </div>
+        <div id="rowLogrosAnio" class="logros-grid"></div>
       </div>
     </div>
 
@@ -790,6 +802,6 @@
   <script src="influenza_rubros.js?v=1" defer></script>
   <script src="mobile_influenza_validacion.js?v=2" defer></script>
   <script src="mobile_influenza_captura.js?v=4" defer></script>
-  <script src="mobile_main.js?v=2026.41" defer></script>
+  <script src="mobile_main.js?v=2026.42" defer></script>
 </body>
 </html>
