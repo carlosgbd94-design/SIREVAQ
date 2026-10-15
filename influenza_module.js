@@ -5043,7 +5043,7 @@ async function exportInfluenzaMetasExcel() {
     showToast("Metas exportadas con lo último guardado.", true, "good");
   } catch (err) {
     console.error("Error al exportar las metas de Influenza:", err);
-    showToast("No se pudo generar el Excel de metas.", false, "bad");
+    showToast("No se pudo generar el Excel de metas" + (err && err.message ? ": " + err.message : ".") , false, "bad");
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -7257,7 +7257,7 @@ async function exportCovidMetaUnidadExcel() {
     showToast("Meta de COVID-19 de tu unidad descargada.", true, "good");
   } catch (err) {
     console.error("Error al exportar la meta de COVID-19 de la unidad:", err);
-    showToast("No se pudo generar el Excel de tu meta de COVID-19.", false, "bad");
+    showToast("No se pudo generar el Excel de tu meta de COVID-19" + (err && err.message ? ": " + err.message : "."), false, "bad");
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -7299,7 +7299,7 @@ async function exportInfluenzaMetaUnidadExcel() {
     showToast("Meta de tu unidad descargada.", true, "good");
   } catch (err) {
     console.error("Error al exportar la meta de la unidad:", err);
-    showToast("No se pudo generar el Excel de tu meta.", false, "bad");
+    showToast("No se pudo generar el Excel de tu meta" + (err && err.message ? ": " + err.message : "."), false, "bad");
   } finally {
     if (btn) btn.disabled = false;
   }
