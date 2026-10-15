@@ -8558,11 +8558,13 @@ async function supabaseRequest(action = "", payload, options = {}) {
       }
 
       case "getcovid_distribucion": {
-        const { anio_campana } = payload;
-        const { data, error } = await supabase
+        const { anio_campana, clues } = payload;
+        let q = supabase
           .from('covid_distribucion_frascos')
           .select('*')
-          .eq('anio_campana', anio_campana)
+          .eq('anio_campana', anio_campana);
+        if (clues) q = q.eq('clues', clues);
+        const { data, error } = await q
           .order('fecha_entrega', { ascending: false });
         if (error) throw error;
         return { ok: true, data: data || [] };

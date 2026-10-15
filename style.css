@@ -15573,3 +15573,12 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 .cvc-seg-btn:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
 .cvc-tabla-wrap { overflow:visible; max-height:none; }
 #covidCapturaContainer[hidden] { display:none; }
+
+/* Menú «Exportar meta» del resumen de la unidad. */
+.ip-exp { position:relative; display:inline-block; }
+.ip-exp-menu { position:absolute; right:0; top:calc(100% + 6px); z-index:30; min-width:210px; padding:6px; background:#fff; border:1px solid #cbd5e1; border-radius:12px; box-shadow:0 8px 24px rgba(15,23,42,.14); display:flex; flex-direction:column; gap:2px; }
+.ip-exp-menu[hidden], .ip-exp-menu [hidden] { display:none; }
+.ip-exp-menu button { text-align:left; min-height:40px; padding:0 12px; border:0; border-radius:8px; background:transparent; color:#1e293b; font-weight:600; font-size:13px; cursor:pointer; }
+.ip-exp-menu button:hover { background:#f1f5f9; }
+.ip-exp-menu button:focus-visible { outline:3px solid #2563eb; outline-offset:-2px; }
+#resumenVacunaSel[hidden] { display:none; }

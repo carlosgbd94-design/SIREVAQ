@@ -120,7 +120,7 @@
         I('history', '#d97706', 'Avisos sobre la tabla', 'Aparecen solo cuando importan: si algún grupo rebasa su meta y si te falta capturar alguna semana anterior, con un acceso directo.'),
         T('Resumen de meta'),
         I('insights', '#7c3aed', 'Tu avance de un vistazo', 'La pestaña «Resumen de meta» muestra tu meta, las dosis aplicadas, el avance contra lo esperado a la fecha, las semanas reportadas, tu ritmo y el detalle por grupo. Ahí también están el abasto de frascos y el pronóstico de autonomía.'),
-        I('table_view', '#16a34a', 'Descargar mi meta (Excel)', 'Genera el archivo oficial de metas con solo tu unidad: tu columna con la meta de cada rubro y tu distribución de jeringa.'),
+        I('table_view', '#16a34a', 'Exportar meta (Excel)', 'Elige Influenza, COVID-19 o ambas y genera el archivo oficial de metas con solo tu unidad: tu columna con la meta de cada rubro y, en Influenza, tu distribución de jeringa.'),
         T('Rubros bloqueados'),
         I('block', '#d97706', 'Sin meta', 'Si tu unidad no tiene meta en un renglón, aparece atenuado con «Sin meta» y no se captura. Los grupos completos sin meta se reúnen en un aviso al final de la página.'),
         I('schedule', '#d97706', '2ª y 1ª dosis', 'No hay 2ª dosis durante el 1er mes de la campaña ni 1ª dosis durante el último mes.'),

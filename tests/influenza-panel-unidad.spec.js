@@ -36,7 +36,7 @@ function servidor(db) {
   };
 }
 
-async function abrirPanel(page, { metas = true, fecha = '2026-10-20T12:00:00', extra = {} } = {}) {
+async function abrirPanel(page, { metas = true, fecha = '2026-10-20T12:00:00', extra = {}, covid = false } = {}) {
   const meta = Object.fromEntries(Array.from({ length: 46 }, (_, k) => [`r${k + 1}`, 0]));
   Object.assign(meta, { r1: 100, r2: 60, r3: 40 }, extra);
   const db = {
@@ -49,6 +49,14 @@ async function abrirPanel(page, { metas = true, fecha = '2026-10-20T12:00:00', e
     influenza_distribucion_frascos: [{ anio_campana: CAMP, clues: CLUES, municipio: 'QUERETARO', cantidad_frascos: 15, fecha_entrega: '2026-10-05' }],
     unidades: [{ clues: CLUES, unidad: 'JOFRITO', municipio: 'QUERETARO', activo: 'SI' }]
   };
+  if (covid) {
+    db.covid_metas = [{ anio_campana: CAMP, clues: CLUES, municipio: 'QUERETARO', metas: { c1: 100, c2: 100, c3: 50, c4: 200, c5: 10, c6: 20 } }];
+    db.covid_capturas = [{ id: 'v1', anio_campana: CAMP, clues: CLUES, municipio: 'QUERETARO', fecha: '2026-10-09', capturado_por: 'ANA PEREZ',
+      valores: { MODERNA: { c1: 20, c3: 10, c4: 40 }, PFIZER: { c4: 20, c6: 5 } } }];
+    db.covid_distribucion_frascos = [
+      { anio_campana: CAMP, marca: 'MODERNA', clues: CLUES, municipio: 'QUERETARO', cantidad_frascos: 10, fecha_entrega: '2026-10-05' },
+      { anio_campana: CAMP, marca: 'PFIZER', clues: CLUES, municipio: 'QUERETARO', cantidad_frascos: 5, fecha_entrega: '2026-10-05' }];
+  }
   const errores = [];
   page.on('pageerror', (e) => errores.push('PAGEERROR: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !RUIDO.test(m.text())) errores.push('CONSOLE: ' + m.text().slice(0, 200)); });
@@ -178,11 +186,32 @@ test.describe('Panel de Influenza (unidad)', () => {
     expect(errores).toEqual([]);
   });
 
+  test('COVID-19: el resumen tiene selector, avance por grupo, abasto por marca y el menú exporta ambas metas', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { covid: true });
+    await page.locator('#subtabUnitResumen').click();
+    await expect(page.locator('#resumenVacunaSel')).toBeVisible();
+    await page.locator('#resumenVacunaSel [data-vac="COVID"]').click();
+    const kpis = page.locator('#influenzaResumenKpis');
+    // meta equivalente = (100+100)/2 + 50+200+10+20 = 380; aplicadas = 20/2 + 10+40+20+5 = 85
+    await expect(kpis.locator('.ip-kpi').filter({ hasText: 'Meta de la campaña' })).toContainText('380');
+    await expect(kpis.locator('.ip-kpi').filter({ hasText: 'Dosis aplicadas' })).toContainText('85');
+    await expect(kpis.locator('.ip-kpi').filter({ hasText: 'Pfizer' })).toContainText('25');
+    await expect(page.locator('#influenzaResumenGrupos tfoot')).toContainText('22.4%');
+    await expect(page.locator('#influenzaBalanceUnidad')).toContainText('Moderna: 10 frascos');
+    await expect(page.locator('#influenzaBalanceUnidad')).toContainText('Pfizer: 5 frascos');
+    await page.locator('#resumenVacunaSel [data-vac="INFLUENZA"]').click();
+    await expect(page.locator('#influenzaResumenGrupos caption')).toHaveText(/Meta y dosis aplicadas por grupo/);
+    // Menú único de exportación: con meta de ambas vacunas aparecen las tres opciones
+    await page.locator('#btnExportMeta').click();
+    await expect(page.locator('#ipExpMetaMenu [data-exp]:visible')).toHaveCount(3);
+    expect(errores).toEqual([]);
+  });
+
   test('sin meta asignada el resumen lo explica y el Excel no se genera', async ({ page }) => {
     const { errores } = await abrirPanel(page, { metas: false });
     await page.locator('#subtabUnitResumen').click();
     await expect(page.locator('#influenzaResumenKpis')).toContainText('aún no tiene meta asignada');
-    await page.locator('#btnExportMetaUnidad').click();
+    await page.locator('#btnExportMeta').click().then(() => page.locator('#ipExpMetaMenu [data-exp=INFLUENZA]').click());
     await expect(page.locator('.toast-new').last()).toContainText('aún no tiene meta asignada');
     expect(errores).toEqual([]);
   });
@@ -190,7 +219,7 @@ test.describe('Panel de Influenza (unidad)', () => {
   test('«Descargar mi meta»: Excel oficial solo de la unidad, con su columna, su meta y su jeringa', async ({ page }) => {
     const { errores } = await abrirPanel(page);
     await page.locator('#subtabUnitResumen').click();
-    const [descarga] = await Promise.all([page.waitForEvent('download'), page.locator('#btnExportMetaUnidad').click()]);
+    const [descarga] = await Promise.all([page.waitForEvent('download'), page.locator('#btnExportMeta').click().then(() => page.locator('#ipExpMetaMenu [data-exp=INFLUENZA]').click())]);
     expect(descarga.suggestedFilename()).toBe('Metas Influenza JOFRITO 2026-2027.xlsx');
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(await descarga.path());

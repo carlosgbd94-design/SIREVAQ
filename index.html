@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.205" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.206" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -390,9 +390,9 @@
        Generado por build-bundle.js. Los archivos originales siguen en el repo
        (sin borrar) por si hace falta revertir este cambio. -->
   <script defer src="guias_contenido.js?v=3"></script>
-  <script defer src="ayuda.js?v=20"></script>
+  <script defer src="ayuda.js?v=21"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.265" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.266" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -1332,7 +1332,7 @@
             <button class="nav-tab" id="tabINFLUENZA" data-role-gate="UNIDAD" style="display:none"
               onclick="activateCapture('INFLUENZA')">
               <span class="material-symbols-rounded">vaccines</span>
-              <span>Influenza</span>
+              <span>Temporada invernal</span>
             </button>
 
             <button class="nav-tab" id="tabBIOVAC" data-role-gate="UNIDAD" style="display:none"
@@ -1794,13 +1794,23 @@
                   <h3 class="cp-card-title" id="ipResTitle">Resumen de tu meta</h3>
                   <p class="cp-sub" id="influenzaResumenSub">Tu avance contra la meta de la campaña.</p>
                 </div>
-                <button type="button" id="btnExportMetaUnidad" class="ip-btn" onclick="exportInfluenzaMetaUnidadExcel()">
-                  <span class="material-symbols-rounded" aria-hidden="true">table_view</span>Descargar mi meta (Excel)
-                </button>
-                <button type="button" id="btnExportMetaCovidUnidad" class="ip-btn" style="display:none" onclick="exportCovidMetaUnidadExcel()">
-                  <span class="material-symbols-rounded" aria-hidden="true">table_view</span>Meta de COVID-19 (Excel)
-                </button>
+                <div class="ip-exp" id="ipExpMeta">
+                  <button type="button" id="btnExportMeta" class="ip-btn" aria-haspopup="true" aria-expanded="false" aria-controls="ipExpMetaMenu">
+                    <span class="material-symbols-rounded" aria-hidden="true">table_view</span>Exportar meta (Excel)
+                    <span class="material-symbols-rounded" aria-hidden="true">expand_more</span>
+                  </button>
+                  <div class="ip-exp-menu" id="ipExpMetaMenu" role="menu" aria-label="Meta que vas a exportar" hidden>
+                    <button type="button" role="menuitem" data-exp="INFLUENZA">Meta de Influenza</button>
+                    <button type="button" role="menuitem" data-exp="COVID">Meta de COVID-19</button>
+                    <button type="button" role="menuitem" data-exp="AMBAS">Ambas (2 archivos)</button>
+                  </div>
+                </div>
               </section>
+
+              <div id="resumenVacunaSel" class="cvc-seg" role="group" aria-label="Vacuna del resumen" hidden>
+                <button type="button" class="cvc-seg-btn" data-vac="INFLUENZA" aria-pressed="true">Influenza</button>
+                <button type="button" class="cvc-seg-btn" data-vac="COVID" aria-pressed="false">COVID-19</button>
+              </div>
 
               <section class="cp-card" aria-labelledby="ipResS1">
                 <div class="cp-card-head">
