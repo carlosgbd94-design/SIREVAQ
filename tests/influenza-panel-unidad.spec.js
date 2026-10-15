@@ -423,3 +423,44 @@ test.describe('Panel de Influenza (unidad)', () => {
     expect(errores).toEqual([]);
   });
 });
+
+test.describe('Paso a CeNSIA', () => {
+  test.use({ viewport: { width: 1280, height: 1000 } });
+
+  test('fecha de aplicación acotada al mes reportado y 46 códigos únicos', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-11-03T11:00:00' });
+    const r = await page.evaluate(() => ({
+      sinTope: censiaFechaAplicacion('2026-10-30', '2026-10-30'),
+      conTope: censiaFechaAplicacion('2026-10-30', '2026-11-03'),
+      mismoMes: censiaFechaAplicacion('2026-10-16', '2026-10-17'),
+      codigos: CENSIA_CODIGOS.length === INFLUENZA_RUBROS.length && new Set(CENSIA_CODIGOS).size === 46
+    }));
+    expect(r.sinTope).toBe('2026-10-30');
+    expect(r.conTope).toBe('2026-10-31');
+    expect(r.mismoMes).toBe('2026-10-17');
+    expect(r.codigos).toBe(true);
+    expect(errores).toEqual([]);
+  });
+
+  test('la tarjeta aparece con enlace a CeNSIA y, con el complemento, entrega el paquete', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-17T11:00:00' });
+    await expect(page.locator('.inf-censia')).toBeVisible();
+    const href = await page.locator('#infCensiaAbrir').getAttribute('href');
+    expect(href).toContain('siscensia.salud.gob.mx/influenza26/ssa/captura.php#sirevaq=');
+    // simula el complemento instalado y escucha el paquete
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-sirevaq-censia-ext', '1');
+      window.__paq = null;
+      window.addEventListener('message', (e) => { if (e.data && e.data.type === 'censia-payload') window.__paq = e.data.payload; });
+      renderCaptureGrid();
+    });
+    await expect(page.locator('.inf-censia__ok')).toBeVisible();
+    await page.locator('#infCensiaAbrir').evaluate((a) => { a.target = '_self'; a.addEventListener('click', (e) => e.preventDefault()); });
+    await page.locator('#infCensiaAbrir').click();
+    const paq = await page.evaluate(() => window.__paq);
+    expect(paq.v).toBe(1);
+    expect(Object.keys(paq.valores)).toHaveLength(46);
+    expect(paq.clues).toBe('QTSSA001904');
+    expect(errores).toEqual([]);
+  });
+});

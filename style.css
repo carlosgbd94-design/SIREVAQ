@@ -15541,3 +15541,21 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 /* Avance COVID: unidad que aplicó dosis sin tener meta asignada (sus dosis cuentan en el total, no en su fila). */
 #secCovidAvance .cav-sinmeta { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; background: #fbf9f3; border: 1px solid #ebe1c9; color: #8c6d2c; }
 #secCovidAvance .cav-fila-alerta td:first-child { box-shadow: inset 3px 0 0 #d9c58f; }
+
+/* Paso a CeNSIA (captura de Influenza): tarjeta neutra, contraste AA */
+.inf-censia { background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:14px 16px; color:#334155; font-size:13px; line-height:1.5; }
+.inf-censia p { margin:6px 0 0; }
+.inf-censia__tit { display:flex; align-items:center; gap:8px; color:#0f172a; font-size:14px; }
+.inf-censia__tit .material-symbols-rounded { font-size:20px; width:20px; height:20px; overflow:hidden; color:#475569; }
+.inf-censia__aviso { display:flex; gap:6px; align-items:flex-start; color:#92400e; background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:6px 10px; }
+.inf-censia__aviso .material-symbols-rounded { font-size:18px; width:18px; height:18px; overflow:hidden; }
+.inf-censia__acciones { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.inf-censia__btn { display:inline-flex; align-items:center; min-height:40px; padding:0 16px; border-radius:12px; border:1px solid #1e293b; background:#1e293b; color:#fff; font-weight:700; font-size:13px; text-decoration:none; cursor:pointer; }
+.inf-censia__btn.is-sec { background:#fff; color:#1e293b; border-color:#cbd5e1; }
+.inf-censia__btn:focus-visible, .inf-censia__marcador:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+.inf-censia__pasos { margin:10px 0 0; padding-left:20px; }
+.inf-censia__pasos[hidden] { display:none; }
+.inf-censia__marcador { display:inline-block; padding:1px 8px; border:1px dashed #64748b; border-radius:8px; color:#0f172a; font-weight:700; text-decoration:none; }
+.inf-censia__ok { display:flex; gap:6px; align-items:flex-start; color:#14532d; }
+.inf-censia__ok .material-symbols-rounded { font-size:18px; width:18px; height:18px; overflow:hidden; }
+.inf-censia__enlace { color:#1d4ed8; font-weight:700; text-decoration:underline; }

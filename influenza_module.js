@@ -807,6 +807,143 @@ function actualizarControlMetaInfluenza() {
   });
 }
 
+// --- Paso a CeNSIA (plataforma federal): relleno asistido, la persona revisa y pulsa GUARDAR ---
+
+// Código de casilla de CeNSIA por rubro r1..r46 (mismo orden que INFLUENZA_RUBROS).
+const CENSIA_CODIGOS = [
+  "BIE01", "BIE28", "BIE29", "BIE30", "BIE31",
+  "BIE04", "BIE32", "BIE33", "BIE34", "BIE35",
+  "BIE36", "BIE37", "BIE38", "BIE39", "BIE40",
+  "BIO96", "BIO97",
+  "BIE09", "BIE10", "BIE41", "BIE12", "BIE13", "BIE42", "BIE15", "BIE16", "BIE43",
+  "BIE18", "BIE19", "BIE44", "BIE48", "BIE49", "BIE50", "BIE24", "BIE25", "BIE46",
+  "BIE51", "BIE52", "BIE53", "BIE54", "BIE55", "BIE56", "BIE57", "BIE58", "BIE59", "BIE60", "BIE61"
+];
+const CENSIA_URL = "https://siscensia.salud.gob.mx/influenza26/ssa/captura.php";
+// Ficha del complemento en la Chrome Web Store (se llena al publicarlo); vacío = aún no disponible.
+const CENSIA_EXT_URL = "";
+const censiaExtInstalada = () => document.documentElement.hasAttribute("data-sirevaq-censia-ext");
+
+/** Fecha de aplicación para CeNSIA: hoy, pero nunca fuera del mes que se reporta (si ya es otro mes, el último día de ese mes). */
+function censiaFechaAplicacion(fechaSemana, hoy) {
+  const [a, m] = String(fechaSemana).split("-").map(Number);
+  const ultimo = new Date(a, m, 0).getDate();
+  const tope = `${a}-${String(m).padStart(2, "0")}-${String(ultimo).padStart(2, "0")}`;
+  return hoy > tope ? tope : hoy;
+}
+
+/** Código del marcador: corre dentro de CeNSIA (self-contained). Rellena casillas; NO guarda.
+ *  Lee los datos de la dirección (#sirevaq=) o, si el login los borró, del portapapeles («SIREVAQ1:…»). */
+function censiaMarcadorFn() {
+  var aviso = function (msg, ok) {
+    var b = document.getElementById("sirevaqAviso");
+    if (!b) { b = document.createElement("div"); b.id = "sirevaqAviso"; b.setAttribute("role", "status"); document.body.appendChild(b); }
+    b.style.cssText = "position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:99999;max-width:560px;padding:12px 18px;border-radius:14px;font:600 14px/1.4 system-ui,sans-serif;background:#fff;color:#0f172a;border:1px solid " + (ok ? "#cbd5e1" : "#fca5a5") + ";box-shadow:0 8px 24px rgba(15,23,42,.18)";
+    b.textContent = msg;
+  };
+  if (!document.getElementById("BIE01")) { aviso("SIREVAQ: abre primero la pantalla «Captura» de Dosis Aplicadas en CeNSIA y vuelve a pulsar el marcador.", false); return; }
+  var decodificar = function (tx) {
+    try {
+      var d = JSON.parse(decodeURIComponent(escape(atob(String(tx).replace(/^SIREVAQ1:/, "").trim()))));
+      return d && d.v ? d : null;
+    } catch (e) { return null; }
+  };
+  var rellenar = function (d) {
+    if (d.t && Date.now() - d.t > 12 * 3600 * 1000) { aviso("SIREVAQ: esos datos tienen más de 12 horas. Vuelve a pulsar «Abrir CeNSIA y rellenar» en SIREVAQ.", false); return; }
+    var ev = function (el, t) { el.dispatchEvent(new Event(t, { bubbles: true })); };
+    var notas = [];
+    var sel = document.querySelector("[name=s_clues]");
+    if (sel) { sel.value = d.clues; ev(sel, "change"); if (sel.value !== d.clues) notas.push("elige tu unidad (" + d.clues + ") en CeNSIA"); }
+    var f = document.querySelector("input[type=date]");
+    if (f) { f.value = d.fecha; ev(f, "input"); ev(f, "change"); }
+    var n = 0, total = 0;
+    Object.keys(d.valores).forEach(function (k) {
+      var el = document.getElementById(k);
+      if (!el || el.disabled) return;
+      var v = Number(d.valores[k]) || 0;
+      el.value = v; ev(el, "input"); ev(el, "change"); n++; total += v;
+    });
+    aviso("SIREVAQ rellenó " + n + " casillas · " + total + " dosis · fecha " + d.fecha.split("-").reverse().join("/") + ". "
+      + (notas.length ? "Falta: " + notas.join("; ") + ". " : "") + "Revisa y pulsa GUARDAR tú mismo.", !notas.length);
+  };
+  var manual = function () {
+    var t = window.prompt("Pega aquí el código que copió SIREVAQ (empieza con SIREVAQ1:)");
+    var d = t && decodificar(t);
+    if (d) rellenar(d); else aviso("SIREVAQ: no encontré datos válidos. Vuelve a pulsar «Abrir CeNSIA y rellenar» en SIREVAQ.", false);
+  };
+  var h = (location.hash || "").match(/sirevaq=([^&]+)/), d = null;
+  if (h) { try { d = decodificar(decodeURIComponent(h[1])); } catch (e) { } }
+  if (d) { rellenar(d); return; }
+  if (navigator.clipboard && navigator.clipboard.readText) {
+    navigator.clipboard.readText().then(function (t) {
+      var c = decodificar(t);
+      if (c) rellenar(c); else manual();
+    }, manual);
+  } else manual();
+}
+
+/** Tarjeta «Pasar a CeNSIA»: aparece cuando la semana ya está guardada en SIREVAQ. */
+function renderPasoCensia(container, fechaSemana, reporte) {
+  const hoy = influenzaHoy();
+  const fecha = censiaFechaAplicacion(fechaSemana, hoy);
+  const clave = `sirevaq_censia_${USER?.clues}_${fechaSemana}`;
+  const valores = {};
+  INFLUENZA_RUBROS.forEach((rb, i) => { valores[CENSIA_CODIGOS[i]] = Number(reporte.valores?.[rb.id] || 0); });
+  const total = Object.values(valores).reduce((a, b) => a + b, 0);
+  const armar = () => btoa(unescape(encodeURIComponent(JSON.stringify({ v: 1, t: Date.now(), clues: USER?.clues, fecha, valores }))));
+  const enlace = `${CENSIA_URL}#sirevaq=${encodeURIComponent(armar())}`;
+  let previo = null;
+  try { previo = localStorage.getItem(clave); } catch (e) { /* sin almacenamiento */ }
+  const fmtF = (s) => s.split("-").reverse().join("/");
+
+  const box = document.createElement("section");
+  box.className = "inf-censia";
+  box.setAttribute("aria-label", "Pasar este reporte a CeNSIA");
+  const instalada = censiaExtInstalada();
+  const avisoExt = instalada
+    ? `<p class="inf-censia__ok"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span>Complemento instalado: al entrar a <b>Dosis Aplicadas → Captura</b> las casillas se rellenan solas.</p>`
+    : (CENSIA_EXT_URL
+      ? `<p><a class="inf-censia__enlace" href="${CENSIA_EXT_URL}" target="_blank" rel="noopener">Instala el complemento de Chrome (1 clic)</a> para que CeNSIA se rellene solo.</p>`
+      : "");
+  box.innerHTML = `
+    <div class="inf-censia__tit"><span class="material-symbols-rounded" aria-hidden="true">cloud_upload</span><b>Siguiente paso: captura en CeNSIA</b></div>
+    <p>Este reporte (${total.toLocaleString("es-MX")} dosis) también se captura en la plataforma federal. SIREVAQ rellena las casillas con fecha <b>${fmtF(fecha)}</b>; tú revisas y pulsas <b>Guardar</b> allá.</p>
+    ${avisoExt}
+    ${previo ? `<p class="inf-censia__aviso"><span class="material-symbols-rounded" aria-hidden="true">info</span>Ya abriste CeNSIA con este reporte el ${previo}. En CeNSIA las capturas se suman: no lo guardes dos veces.</p>` : ""}
+    <div class="inf-censia__acciones">
+      <a class="inf-censia__btn" id="infCensiaAbrir" href="${enlace}" target="_blank" rel="noopener">Abrir CeNSIA y rellenar</a>
+      <button type="button" class="inf-censia__btn is-sec" id="infCensiaAyuda" aria-expanded="false" aria-controls="infCensiaPasos">Otra forma, sin instalar nada</button>
+    </div>
+    <ol id="infCensiaPasos" class="inf-censia__pasos" hidden>
+      <li>Una sola vez: arrastra <a href="#" id="infCensiaMarcador" class="inf-censia__marcador">Rellenar CeNSIA</a> a tu barra de marcadores.</li>
+      <li>Pulsa «Abrir CeNSIA y rellenar», inicia sesión si te lo pide y entra a <b>Dosis Aplicadas → Captura</b>.</li>
+      <li>Pulsa el marcador «Rellenar CeNSIA» (si Chrome pregunta por el portapapeles, permítelo). Revisa las cifras y pulsa GUARDAR.</li>
+    </ol>`;
+  container.appendChild(box);
+
+  const marc = box.querySelector("#infCensiaMarcador");
+  marc.href = "javascript:" + encodeURIComponent(`(${censiaMarcadorFn.toString()})()`);
+  marc.addEventListener("click", (e) => { e.preventDefault(); showToast("Arrastra este botón a tu barra de marcadores; se usa dentro de CeNSIA.", true, "warn"); });
+  const ayuda = box.querySelector("#infCensiaAyuda");
+  ayuda.addEventListener("click", () => {
+    const pasos = box.querySelector("#infCensiaPasos");
+    pasos.hidden = !pasos.hidden;
+    ayuda.setAttribute("aria-expanded", String(!pasos.hidden));
+  });
+  const abrir = box.querySelector("#infCensiaAbrir");
+  abrir.addEventListener("click", () => {
+    const token = armar();
+    abrir.href = `${CENSIA_URL}#sirevaq=${encodeURIComponent(token)}`;
+    // Con el complemento: el paquete se entrega directo (no depende de la dirección ni del portapapeles)
+    if (censiaExtInstalada()) {
+      window.postMessage({ source: "sirevaq", type: "censia-payload", payload: { v: 1, clues: USER?.clues, fecha, valores } }, location.origin);
+    }
+    // Respaldo para el marcador: CeNSIA borra el «#» al iniciar sesión, así que también va al portapapeles
+    try { navigator.clipboard?.writeText("SIREVAQ1:" + token).catch(() => { }); } catch (e) { /* sin portapapeles */ }
+    try { localStorage.setItem(clave, fmtF(influenzaHoy())); } catch (e) { /* sin almacenamiento */ }
+  });
+}
+
 function renderCaptureGrid() {
   const container = document.getElementById("influenzaCaptureGroupsContainer");
   if (!container) return;
@@ -851,6 +988,10 @@ function renderCaptureGrid() {
   control.className = "inf-ctl";
   control.setAttribute("aria-label", "Control de tu meta");
   container.appendChild(control);
+
+  // Reporte ya guardado: ofrecer el paso a CeNSIA (plataforma federal)
+  if (currentReport) renderPasoCensia(container, selectedFecha, currentReport);
+
 
   // Agrupar rubros por categoría y grupo para una presentación visual limpia y organizada
   const groups = {};
@@ -5032,8 +5173,7 @@ function renderMetasConfigurationGrid() {
       metaPintarFrascos(document.getElementById("frs_J"),
         esCovid() ? { ped: Math.ceil(granPed / 2), adulto: granAd, razon } : granJ, true, true);
       document.getElementById("tot_juris").textContent = esCovid() ? covidAvanceFmt(granRefEqJ) : granRef;
-      // COVID: el total se compara en dosis equivalentes de 0.5 mL (igual que el TOTAL de arriba y el formato)
-      pintar(document.getElementById("cmp_TOTAL"), esCovid() ? granRefEqJ : granRef, esCovid() ? granEq : granJ);
+      pintar(document.getElementById("cmp_TOTAL"), granRef, granJ);
       metaPintarPill();
     };
     metaEnlazarInputs(tbody, recalcular);
@@ -5140,8 +5280,7 @@ function renderMetasConfigurationGrid() {
       metaPintarFrascos(document.getElementById("frs_meta"),
         esCovid() ? { ped: Math.ceil(refPed / 2), adulto: refAd, razon: razonCovid } : granRef, permiteAbierto, true);
       document.getElementById("tot_meta").textContent = esCovid() ? covidAvanceFmt(granRefEq) : granRef;
-      const sumaEq = Object.values(eqUnidad).reduce((a, v) => a + v, 0);
-      pintar(document.getElementById("cmp_TOTAL"), esCovid() ? granRefEq : granRef, esCovid() ? sumaEq : granSuma);
+      pintar(document.getElementById("cmp_TOTAL"), granRef, granSuma);
       metaPintarPill();
     };
     metaEnlazarInputs(tbody, recalcular);
