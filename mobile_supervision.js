@@ -27,18 +27,22 @@
     VISUALIZADOR_JURISDICCIONAL: ["RES", "CAL", "MAS"]
   };
   // Disponibles en el móvil desde «Más» (abren su propio panel).
+  const TODOS = ROLES;
   const LISTOS = [
-    { panel: "RDA", icon: "stacked_bar_chart", label: "Indicadores RDA", nota: "Esquema básico" },
-    { panel: "MET", icon: "query_stats", label: "Métricas", nota: "Captura semanal" }
+    { panel: "RDA", icon: "stacked_bar_chart", label: "Indicadores RDA", nota: "Esquema básico", roles: TODOS },
+    { panel: "MET", icon: "query_stats", label: "Métricas", nota: "Captura semanal", roles: TODOS },
+    { panel: "ENV", icon: "send", label: "Enviar aviso", nota: "A tus unidades", roles: ["MUNICIPAL", "JURISDICCIONAL", "CARAVANAS", "ADMIN"] },
+    { panel: "PIN", icon: "sanitizer", label: "Pinol", nota: "Seguimiento", roles: ["MUNICIPAL", "ADMIN"] },
+    { panel: "PAR", icon: "tune", label: "Parámetros", nota: "Mín., máx. y promedio", roles: ["MUNICIPAL", "JURISDICCIONAL", "ADMIN"] },
+    { panel: "JER", icon: "vaccines", label: "Jeringas", nota: "Cajas por unidad", roles: ["MUNICIPAL", "JURISDICCIONAL", "ADMIN"] },
+    { panel: "SEG", icon: "admin_panel_settings", label: "Seguridad", nota: "Auditoría y aperturas", roles: ["ADMIN"] }
   ];
   // Pendientes de diseñar para móvil (se muestran en «Más» como próximamente).
-  const PROXIMAMENTE = [
-    { icon: "sanitizer", label: "Pinol", roles: ["MUNICIPAL", "ADMIN"] },
-    { icon: "tune", label: "Parámetros", roles: ["MUNICIPAL", "JURISDICCIONAL", "ADMIN"] },
-    { icon: "vaccines", label: "Jeringas", roles: ["MUNICIPAL", "JURISDICCIONAL", "ADMIN"] }
-  ];
+  const PROXIMAMENTE = [];
   // Paneles que cuelgan de «Más»: la barra resalta Más mientras están abiertos.
-  const SUBPANELES = { RDA: "MAS", MET: "MAS" };
+  const SUBPANELES = { RDA: "MAS", MET: "MAS", ENV: "MAS", PIN: "MAS", PAR: "MAS", JER: "MAS", SEG: "MAS" };
+  // Paneles registrados por mobile_supervision_ops.js: { abrir(root) }
+  const REG = {};
   // Solo escritorio: demasiado pesados para el celular.
   const SOLO_ESCRITORIO = [
     { icon: "medication_liquid", label: "SINBA-SIS", roles: ["MUNICIPAL", "ADMIN"] },
@@ -46,7 +50,7 @@
     { icon: "table_chart", label: "Concentrado", roles: ["JURISDICCIONAL", "VISUALIZADOR_JURISDICCIONAL", "ADMIN"] },
     { icon: "local_shipping", label: "Requisiciones", roles: ["MUNICIPAL", "JURISDICCIONAL", "ADMIN"] },
     { icon: "inventory_2", label: "Lotes", roles: ["JURISDICCIONAL", "ADMIN"] },
-    { icon: "admin_panel_settings", label: "Seguridad y catálogos", roles: ["ADMIN"] }
+    { icon: "inventory", label: "Catálogo, mapeador y evidencias", roles: ["ADMIN"] }
   ];
 
   const TIPOS = {
@@ -289,15 +293,16 @@
     if (!root) return;
     const r = rol();
     const prox = PROXIMAMENTE.filter((m) => m.roles.includes(r));
+    const listos = LISTOS.filter((m) => m.roles.includes(r));
     const desk = SOLO_ESCRITORIO.filter((m) => m.roles.includes(r));
     const fila = (m, nota) => `<li class="sv-mas-item"><span class="material-symbols-rounded" aria-hidden="true">${m.icon}</span><b>${esc(m.label)}</b><small>${nota}</small></li>`;
     root.innerHTML = `
       <p class="sv-sec">Disponible</p>
-      <ul class="sv-mas">${LISTOS.map((m) => `<li><button type="button" class="sv-mas-item sv-mas-btn" data-ir="${m.panel}">
+      <ul class="sv-mas">${listos.map((m) => `<li><button type="button" class="sv-mas-item sv-mas-btn" data-ir="${m.panel}">
         <span class="material-symbols-rounded" aria-hidden="true">${m.icon}</span><b>${esc(m.label)}</b><small>${esc(m.nota)}</small>
         <span class="material-symbols-rounded sv-chev" aria-hidden="true">chevron_right</span></button></li>`).join("")}</ul>
-      <p class="sv-sec">En camino al móvil</p>
-      <ul class="sv-mas">${prox.map((m) => fila(m, "Próximamente")).join("")}</ul>
+      ${prox.length ? `<p class="sv-sec">En camino al móvil</p>
+      <ul class="sv-mas">${prox.map((m) => fila(m, "Próximamente")).join("")}</ul>` : ""}
       <p class="sv-sec">Solo en escritorio</p>
       <ul class="sv-mas sv-mas--desk">${desk.map((m) => fila(m, "Usa la versión de escritorio")).join("")}</ul>`;
     root.querySelectorAll("[data-ir]").forEach((b) => { b.onclick = () => irA(b.dataset.ir); });
@@ -529,6 +534,11 @@
     else if (panelId === "MAS") pintarMas();
     else if (panelId === "RDA") abrirRDA();
     else if (panelId === "MET") abrirMet();
+    else if (REG[panelId]) {
+      Object.keys(REG).forEach((k) => { if (k !== panelId && REG[k].cerrar) REG[k].cerrar(); });
+      const host = document.getElementById("supOps_" + panelId);
+      if (host) REG[panelId].abrir(host);
+    }
     else if (panelId === "CAL") {
       const host = document.getElementById("supCalRoot");
       if (global.CalendarioCap && host) global.CalendarioCap.mount(host);
@@ -550,6 +560,24 @@
     activo: () => document.body.classList.contains("sup-mode"),
     mostrar,
     panelInicial: () => "RES",
+    // Para mobile_supervision_ops.js: registra un panel de «Más» y crea su sección
+    registrar(id, etiqueta, def) {
+      REG[id] = def;
+      if (document.getElementById("panel" + id)) return;
+      const area = document.getElementById("captureContentArea");
+      if (!area) return;
+      const sec = document.createElement("section");
+      sec.id = "panel" + id;
+      sec.className = "panel-section hidden";
+      sec.setAttribute("role", "region");
+      sec.setAttribute("aria-label", etiqueta);
+      sec.innerHTML = '<div id="supOps_' + id + '"></div>';
+      area.appendChild(sec);
+    },
+    api: {
+      cfg: () => cfg, rol, enAlcance, esc, norm, irA, encabezadoSub, enlazarVolver, fmtCorta, puedeUsar,
+      municipiosPermitidos, esCaravana
+    },
     // Qué botón de la barra se resalta para un panel (los sub-paneles cuelgan de «Más»)
     dockKey: (panelId) => SUBPANELES[panelId] || panelId,
     // Para pruebas

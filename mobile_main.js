@@ -431,6 +431,7 @@
             window.MobileSupervision.init({
                 getClient: () => supabaseClient,
                 getProfile: () => currentProfile,
+                toast: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'success'),
                 irA: (id) => switchPanel(id)
             });
         }

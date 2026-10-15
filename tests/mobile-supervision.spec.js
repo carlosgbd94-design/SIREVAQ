@@ -111,7 +111,7 @@ test.describe('Móvil · supervisión', () => {
     await page.click('.dock-item[data-panel="MAS"]');
     await expect(page.locator('#panelMAS')).toBeVisible();
     await expect(page.locator('.sv-mas--desk')).toContainText('SINBA-SIS');
-    await expect(page.locator('.sv-mas').nth(1)).toContainText('Próximamente');
+    await expect(page.locator('[data-ir="SEG"]')).toBeVisible();
   });
 
   test('Indicadores RDA: cobertura básica, chip de municipio y regreso a Más', async ({ page }) => {
