@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.203" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.204" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.261" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.262" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -1773,6 +1773,11 @@
 
               <!-- Formulario de Captura -->
               <div class="flex-1 flex flex-col gap-6 w-full">
+                <!-- Vacuna que se reporta (solo si la unidad tiene meta de COVID-19); el guardado es el mismo botón azul -->
+                <div id="capVacunaSel" class="cvc-seg" role="group" aria-label="Vacuna que vas a reportar" hidden>
+                  <button type="button" class="cvc-seg-btn" data-vac="INFLUENZA" aria-pressed="true">Influenza</button>
+                  <button type="button" class="cvc-seg-btn" data-vac="COVID" aria-pressed="false">COVID-19</button>
+                </div>
                 <!-- Contenedor Dinámico Agrupado de Captura -->
                 <div id="influenzaCaptureGroupsContainer" class="flex flex-col gap-6 rounded-2xl relative z-0">
                   <!-- JS generará aquí las tarjetas y formularios agrupados -->

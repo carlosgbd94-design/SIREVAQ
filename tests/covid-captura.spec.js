@@ -60,41 +60,47 @@ test('Validación contra la meta: Moderna y Pfizer suman; lo ya guardado no bloq
   expect(r.error).toMatch(/no tiene meta/);
 });
 
-test('Panel: renderiza por marca, avisa excesos y guarda con el paquete validado', async ({ page }) => {
-  await page.setContent('<div id="covidCapturaContainer" hidden></div>');
+test('Panel: mismo diseño que Influenza, una tarjeta por marca, avisa excesos y valida al recoger', async ({ page }) => {
+  await page.setContent('<div id="covidCapturaContainer"></div>');
   await page.addScriptTag({ path: path.join(raiz, 'covid_captura.js') });
   await page.addScriptTag({ path: path.join(raiz, 'covid_captura_ui.js') });
-  await page.evaluate(() => {
-    window.__guardado = null; window.__avisos = []; window.__paquete = null;
-    window.CovidCapturaUI.render({
-      container: document.getElementById('covidCapturaContainer'),
-      metas: { c1: 20, c2: 20, c3: 10, c4: 30, c5: 5, c6: 10 },
-      capturas: [], fecha: '2026-10-30', cerrada: false, USER: { clues: 'QTIMB000001' },
-      nombre: () => 'Ana', aviso: (m) => window.__avisos.push(m),
-      guardar: async (p) => { window.__guardado = p; },
-      censia: { url: 'https://censia.test/', hoy: () => '2026-10-30', fechaAplicacion: (f) => f, enviarPaquete: (p) => { window.__paquete = p; return 'https://censia.test/#x'; } }
-    });
-  });
-  await expect(page.locator('.cvc-in')).toHaveCount(10);               // Moderna 6 + Pfizer 4 (sin 6-59 meses)
-  await expect(page.locator('#cvc_PFIZER_c1')).toHaveCount(0);
-  await page.locator('#cvc_MODERNA_c3').fill('8');
-  await page.locator('#cvc_PFIZER_c3').fill('5');
-  await expect(page.locator('#cvc_est_c3')).toContainText('Te pasas por 3');
-  await page.locator('#cvcGuardar').click();
-  expect(await page.evaluate(() => window.__avisos[0])).toMatch(/supera la meta/);
-  await page.locator('#cvc_PFIZER_c3').fill('2');
-  await page.locator('#cvc_MODERNA_c4').fill('12');
-  await page.locator('#cvcGuardar').click();
-  const g = await page.evaluate(() => window.__guardado);
+  const pintado = await page.evaluate(() => window.CovidCapturaUI.render({
+    container: document.getElementById('covidCapturaContainer'),
+    metas: { c1: 20, c2: 20, c3: 10, c4: 30, c5: 5, c6: 10 },
+    capturas: [], fecha: '2026-10-30', cerrada: false, USER: { clues: 'QTIMB000001' }
+  }));
+  expect(pintado).toBe(true);
+  await expect(page.locator('.inf-cap-tabla')).toHaveCount(2);        // Moderna y Pfizer
+  await expect(page.locator('.inf-input')).toHaveCount(10);           // Moderna 6 + Pfizer 4 (sin 6-59 meses)
+  await expect(page.locator('#input_cov_PFIZER_c1')).toHaveCount(0);
+  await page.locator('#input_cov_MODERNA_c3').fill('8');
+  await page.locator('#input_cov_PFIZER_c3').fill('5');
+  await expect(page.locator('#disp_cov_PFIZER_c3')).toContainText('Te pasas por 3');
+  const mal = await page.evaluate(() => window.CovidCapturaUI.recoger());
+  expect(mal.error).toMatch(/supera la meta/);
+  await page.locator('#input_cov_PFIZER_c3').fill('2');
+  await page.locator('#input_cov_MODERNA_c4').fill('12');
+  const g = await page.evaluate(() => window.CovidCapturaUI.recoger());
+  expect(g.error).toBeNull();
   expect(g.valores.MODERNA.c3).toBe(8);
   expect(g.valores.PFIZER.c3).toBe(2);
   expect(g.valores.MODERNA.c4).toBe(12);
-  expect(g.nombre).toBe('Ana');
   expect(g.sin_movimiento).toBe(false);
+  expect(await page.evaluate(() => window.CovidCapturaUI.totalActual())).toBe(22);
+});
+
+test('Sin meta de COVID-19 el panel no se pinta', async ({ page }) => {
+  await page.setContent('<div id="covidCapturaContainer"></div>');
+  await page.addScriptTag({ path: path.join(raiz, 'covid_captura.js') });
+  await page.addScriptTag({ path: path.join(raiz, 'covid_captura_ui.js') });
+  const r = await page.evaluate(() => window.CovidCapturaUI.render({
+    container: document.getElementById('covidCapturaContainer'), metas: null, capturas: [], fecha: '2026-10-30', cerrada: false, USER: {}
+  }));
+  expect(r).toBe(false);
 });
 
 test('Panel con reporte guardado: ofrece CeNSIA y entrega el paquete con casillas por marca', async ({ page }) => {
-  await page.setContent('<div id="covidCapturaContainer" hidden></div>');
+  await page.setContent('<div id="covidCapturaContainer"></div>');
   await page.addScriptTag({ path: path.join(raiz, 'covid_captura.js') });
   await page.addScriptTag({ path: path.join(raiz, 'covid_captura_ui.js') });
   await page.evaluate((v) => {
@@ -103,12 +109,13 @@ test('Panel con reporte guardado: ofrece CeNSIA y entrega el paquete con casilla
       container: document.getElementById('covidCapturaContainer'),
       metas: { c3: 50, c4: 50 },
       capturas: [{ fecha: '2026-10-30', valores: v, folio: 'COV-20261030-AAAA' }], fecha: '2026-10-30', cerrada: false,
-      USER: { clues: 'QTIMB000001' }, nombre: () => 'Ana', aviso() { }, guardar: async () => { },
+      USER: { clues: 'QTIMB000001' },
       censia: { url: 'https://censia.test/', hoy: () => '2026-11-02', fechaAplicacion: () => '2026-10-31', enviarPaquete: (p) => { window.__paquete = p; return 'https://censia.test/#x'; } }
     });
+    document.getElementById('cvcCensiaAbrir').addEventListener('click', (e) => e.preventDefault());
   }, valores);
-  await expect(page.locator('.cvc-ok')).toContainText('COV-20261030-AAAA');
-  await page.locator('#cvcCensiaAbrir').click({ modifiers: [] , noWaitAfter: true, trial: false }).catch(() => { });
+  await expect(page.locator('.inf-reemplazo')).toContainText('COV-20261030-AAAA');
+  await page.locator('#cvcCensiaAbrir').click();
   const p = await page.evaluate(() => window.__paquete);
   expect(p.fecha).toBe('2026-10-31');
   expect(p.valores.BIE200CM).toBe(10);

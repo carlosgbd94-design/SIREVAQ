@@ -721,6 +721,18 @@ let _hubDosisTimer = null;
 function actualizarContadorDosisHub() {
   const box = document.getElementById("hubDosis");
   if (!box) return;
+  if (_capturaVacuna === "COVID" && window.CovidCapturaUI) {
+    const t = window.CovidCapturaUI.totalActual();
+    const el = document.getElementById("hubDosisSemana");
+    if (el) el.textContent = t.toLocaleString("es-MX");
+    box.hidden = false;
+    clearTimeout(_hubDosisTimer);
+    _hubDosisTimer = setTimeout(() => {
+      const sr = document.getElementById("hubDosisSr");
+      if (sr) sr.textContent = `${t.toLocaleString("es-MX")} ${t === 1 ? "dosis capturada" : "dosis capturadas"} esta semana.`;
+    }, 700);
+    return;
+  }
   const grid = document.getElementById("influenzaCaptureGroupsContainer");
   const sinMov = !!document.getElementById("chkSinMovimientoINF")?.checked;
   let semana = 0, previo = 0;
@@ -1636,6 +1648,7 @@ function influenzaValidarCaptura(selectedFecha) {
 window.influenzaValidarCaptura = influenzaValidarCaptura;
 
 async function saveInfluenzaReport() {
+  if (_capturaVacuna === "COVID") return guardarCovidDesdePanel();
   const selectedFecha = document.getElementById("influenza_semana").value;
   const nombre = document.getElementById("nombreINFLUENZA").value.trim();
   const campana = document.getElementById("influenza_campana").value;
@@ -7270,13 +7283,41 @@ async function covidCargarMetaUnidad(campana) {
 // ─── COVID-19: reporte semanal por marca (covid_captura.js / covid_captura_ui.js) ────────────────────────
 let _covidCapturasCache = [];
 
+let _capturaVacuna = "INFLUENZA";   // "INFLUENZA" | "COVID": cuál de las dos se muestra y guarda el botón azul
+let _covidPanelListo = false;      // el panel de COVID-19 se pintó (la unidad tiene meta)
+
+function aplicarVacunaCaptura() {
+  const tiene = _covidPanelListo;
+  if (!tiene) _capturaVacuna = "INFLUENZA";
+  const sel = document.getElementById("capVacunaSel");
+  if (sel) {
+    sel.hidden = !tiene;
+    sel.querySelectorAll("[data-vac]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.vac === _capturaVacuna)));
+  }
+  const inf = document.getElementById("influenzaCaptureGroupsContainer");
+  const cov = document.getElementById("covidCapturaContainer");
+  if (inf) inf.hidden = _capturaVacuna === "COVID";
+  if (cov) cov.hidden = _capturaVacuna !== "COVID" || !tiene;
+  actualizarContadorDosisHub();
+}
+
+function elegirVacunaCaptura(vac) {
+  _capturaVacuna = vac === "COVID" ? "COVID" : "INFLUENZA";
+  aplicarVacunaCaptura();
+}
+
 function renderCovidCaptura() {
   const cont = document.getElementById("covidCapturaContainer");
   if (!cont || !window.CovidCapturaUI) return;
+  const sel = document.getElementById("capVacunaSel");
+  if (sel && !sel.dataset.listo) {
+    sel.dataset.listo = "1";
+    sel.addEventListener("click", (e) => { const b = e.target.closest("[data-vac]"); if (b) elegirVacunaCaptura(b.dataset.vac); });
+  }
   const fecha = document.getElementById("influenza_semana")?.value;
-  if (!fecha) { cont.hidden = true; return; }
+  if (!fecha) { _covidPanelListo = false; aplicarVacunaCaptura(); return; }
   const estado = influenzaEstadoCaptura(fecha);
-  window.CovidCapturaUI.render({
+  _covidPanelListo = window.CovidCapturaUI.render({
     container: cont,
     metas: _covidMetaUnidadCache ? _covidMetaUnidadCache.metas : null,
     capturas: _covidCapturasCache,
@@ -7284,9 +7325,7 @@ function renderCovidCaptura() {
     cerrada: !estado.abierta,
     motivo: estado.motivo,
     USER,
-    nombre: () => document.getElementById("nombreINFLUENZA")?.value || "",
-    aviso: (msg, tipo) => showToast(msg, false, tipo || "bad"),
-    guardar: (p) => guardarCapturaCovid(fecha, p),
+    alCambiar: actualizarContadorDosisHub,
     censia: {
       url: CENSIA_URL,
       hoy: influenzaHoy,
@@ -7299,6 +7338,18 @@ function renderCovidCaptura() {
       }
     }
   });
+  aplicarVacunaCaptura();
+}
+
+/** Botón azul de guardar con COVID-19 elegido: valida contra la meta y guarda el reporte de la semana. */
+async function guardarCovidDesdePanel() {
+  const fecha = document.getElementById("influenza_semana").value;
+  const nombre = (document.getElementById("nombreINFLUENZA")?.value || "").trim();
+  if (!nombre) { showToast("Por favor ingresa el nombre de quien reporta la captura.", false, "bad"); return; }
+  const r = window.CovidCapturaUI.recoger();
+  if (!r) { showToast("Tu unidad no tiene meta de COVID-19 asignada.", false, "bad"); return; }
+  if (r.error) { showToast(r.error, false, "bad"); return; }
+  await guardarCapturaCovid(fecha, { valores: r.valores, nombre, sin_movimiento: r.sin_movimiento });
 }
 
 async function guardarCapturaCovid(fecha, p) {
@@ -7307,7 +7358,7 @@ async function guardarCapturaCovid(fecha, p) {
   const campana = document.getElementById("influenza_campana").value;
   const total = window.CovidCaptura.totalDosis(p.valores);
   await AppService.runCapture({
-    btnId: "cvcGuardar",
+    btnId: "btnSaveINFLUENZA",
     title: "Guardando reporte",
     msg: "Registrando reporte semanal de COVID-19...",
     successMsg: `✅ Reporte de COVID-19 guardado · ${total} dosis esta semana`,
