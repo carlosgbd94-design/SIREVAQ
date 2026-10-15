@@ -5968,26 +5968,34 @@ function frascoTopeCeldaHtml(it, metasRec) {
   return `<span class="frs-tope${cero ? " frs-tope--cero" : ""}">${frascoFmt(it.tope)}</span><span class="frs-tope-sub">${sub}</span>`;
 }
 
-// Barra de estado fija del reparto: «Faltan N» / «Te pasaste por N» / «Reparto completo», siempre a la vista.
-function frascoPintarSticky(el, { total, asignado, porAsignar }) {
-  if (!el) return;
-  const barra = document.querySelector(".top");
-  document.documentElement.style.setProperty("--frs-top", `${(barra ? barra.offsetHeight : 56) + 8}px`);
+// Estado del reparto en una píldora compacta («faltan N» / «te pasaste N» / «completo»): se pinta en todos los
+// elementos dados (sobre el command hub, en línea en pantallas chicas o junto a «Guardar» en Jurisdicción).
+function frascoPintarPill(ids, { total, asignado, porAsignar }) {
   const marca = esCovid() ? `${_marcaCovid === "PFIZER" ? "Pfizer" : "Moderna"} · ` : "";
+  let estado, icono, valor, etiqueta, completo;
   if (!total && !asignado) {
-    el.dataset.estado = "vacio";
-    el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">inventory_2</span><b>${marca}Sin frascos por repartir en esta entrega</b>`;
-    return;
+    estado = "vacio"; icono = "inventory_2"; valor = "—"; etiqueta = "sin frascos";
+    completo = `${marca}Sin frascos por repartir en esta entrega`;
+  } else {
+    estado = porAsignar === 0 ? "ok" : porAsignar > 0 ? "falta" : "excede";
+    const abs = Math.abs(porAsignar);
+    const plural = abs === 1 ? "frasco" : "frascos";
+    icono = estado === "ok" ? "check_circle" : estado === "falta" ? "hourglass_top" : "error";
+    valor = estado === "ok" ? "OK" : frascoFmt(abs);
+    etiqueta = estado === "ok" ? "completo" : estado === "falta" ? "faltan" : "te pasaste";
+    completo = (estado === "ok" ? "Reparto completo"
+      : estado === "falta" ? `Faltan ${frascoFmt(abs)} ${plural} por repartir`
+        : `Te pasaste por ${frascoFmt(abs)} ${plural}`)
+      + ` · ${marca}${frascoFmt(asignado)} de ${frascoFmt(total)} frascos repartidos`;
   }
-  const estado = porAsignar === 0 ? "ok" : porAsignar > 0 ? "falta" : "excede";
-  const abs = Math.abs(porAsignar);
-  const icono = estado === "ok" ? "check_circle" : estado === "falta" ? "hourglass_top" : "error";
-  const titulo = estado === "ok" ? "Reparto completo"
-    : estado === "falta" ? `Faltan ${frascoFmt(abs)} ${abs === 1 ? "frasco" : "frascos"} por repartir`
-      : `Te pasaste por ${frascoFmt(abs)} ${abs === 1 ? "frasco" : "frascos"}`;
-  el.dataset.estado = estado;
-  el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">${icono}</span><b>${titulo}</b>`
-    + `<span class="frs-sticky-sub">${marca}${frascoFmt(asignado)} de ${frascoFmt(total)} frascos repartidos</span>`;
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.dataset.estado = estado;
+    el.setAttribute("aria-label", completo);
+    el.title = completo;
+    el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">${icono}</span><b>${valor}</b><small>${etiqueta}</small>`;
+  });
 }
 
 function renderRemesaPanel() {
@@ -6119,7 +6127,7 @@ function refreshRemesa(enfocado) {
   document.getElementById("rem_inp_T").textContent = total ? `${frascoFmt(res.asignado)} de ${frascoFmt(total)}` : frascoFmt(res.asignado);
   const sumaTope = items.reduce((a, i) => a + (i.tope === undefined ? 0 : i.tope), 0);
   document.getElementById("rem_tope_T").innerHTML = items.some(i => i.tope !== undefined) ? `<span class="frs-tope">${frascoFmt(sumaTope)}</span>` : "";
-  frascoPintarSticky(document.getElementById("remesaSticky"), { total, asignado: res.asignado, porAsignar: res.porAsignar });
+  frascoPintarPill(["remesaPill"], { total, asignado: res.asignado, porAsignar: res.porAsignar });
   document.getElementById("rem_dos_T").textContent = frascoFmt(res.asignado * dosisFrasco());
   const filaTotal = document.getElementById("rem_inp_T").closest("tr");
   if (filaTotal) filaTotal.dataset.estado = !total ? "" : res.porAsignar === 0 ? "ok" : res.porAsignar > 0 ? "falta" : "excede";
@@ -6210,8 +6218,7 @@ function renderFrascosMunicipal(muni) {
     sel.innerHTML = "";
     tbody.innerHTML = "";
     frascoPintarResumen(resumen, "info", "La Jurisdicción todavía no asigna frascos a este municipio. Cuando reparta una entrega aparecerá aquí.");
-    const stickyVacio = document.getElementById("frascosEstadoSticky");
-    if (stickyVacio) stickyVacio.innerHTML = "";
+    ["frascosHubEstado", "frascosEstadoInline"].forEach(id => { const p = document.getElementById(id); if (p) p.innerHTML = ""; });
     const kpisVacio = document.getElementById("frascosMuniKpis");
     if (kpisVacio) kpisVacio.style.display = "none";
     return;
@@ -6348,7 +6355,7 @@ function refreshRepartoMunicipal(muni, enfocado) {
     document.getElementById("mr_otras_T").textContent = frascoFmt(sumaOtras);
     const sumaTopeM = items.reduce((a, i) => a + (i.tope === undefined ? 0 : i.tope), 0);
     document.getElementById("mr_tope_T").innerHTML = items.some(i => i.tope !== undefined) ? `<span class="frs-tope">${frascoFmt(sumaTopeM)}</span>` : "";
-    frascoPintarSticky(document.getElementById("frascosEstadoSticky"), { total, asignado: res.asignado, porAsignar: res.porAsignar });
+    frascoPintarPill(["frascosHubEstado", "frascosEstadoInline"], { total, asignado: res.asignado, porAsignar: res.porAsignar });
     document.getElementById("mr_inp_T").textContent = `${frascoFmt(res.asignado)} de ${frascoFmt(total)}`;
     frascoPintarPctReal(document.getElementById("mr_real_T"), res.asignado, total, 100);
   }

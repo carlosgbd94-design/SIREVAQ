@@ -1563,6 +1563,40 @@ function setBtnBusy(id, busy, busyText = "Procesando…") {
   const btn = $(id);
   if (!btn) return;
 
+  // Botón redondo de solo ícono (command hub / chips de guardado): NO se le escribe texto encima; el ícono
+  // pasa a un indicador giratorio y el aviso va en aria-label/title (lectores de pantalla y tooltip).
+  const icono = btn.querySelector(":scope > .material-symbols-rounded");
+  const soloIcono = !!icono && btn.textContent.trim() === icono.textContent.trim() && btn.dataset.originalHtml === undefined;
+  if (soloIcono || btn.dataset.originalIcon !== undefined) {
+    if (busy) {
+      if (btn.dataset.originalIcon === undefined) {
+        btn.dataset.originalIcon = icono.textContent;
+        btn.dataset.originalLabel = btn.getAttribute("aria-label") || "";
+        btn.dataset.originalTitle = btn.getAttribute("title") || "";
+      }
+      icono.textContent = "progress_activity";
+      btn.classList.add("is-busy");
+      btn.setAttribute("aria-busy", "true");
+      btn.setAttribute("aria-label", busyText);
+      btn.setAttribute("title", busyText);
+      btn.disabled = true;
+      btn.dataset.busy = "1";
+    } else {
+      const ic = btn.querySelector(":scope > .material-symbols-rounded");
+      if (ic && btn.dataset.originalIcon !== undefined) ic.textContent = btn.dataset.originalIcon;
+      btn.classList.remove("is-busy");
+      btn.removeAttribute("aria-busy");
+      if (btn.dataset.originalLabel) btn.setAttribute("aria-label", btn.dataset.originalLabel); else btn.removeAttribute("aria-label");
+      if (btn.dataset.originalTitle) btn.setAttribute("title", btn.dataset.originalTitle); else btn.removeAttribute("title");
+      delete btn.dataset.originalIcon;
+      delete btn.dataset.originalLabel;
+      delete btn.dataset.originalTitle;
+      btn.disabled = false;
+      btn.dataset.busy = "0";
+    }
+    return;
+  }
+
   if (busy) {
     if (!btn.dataset.originalHtml) {
       btn.dataset.originalHtml = btn.innerHTML || "";

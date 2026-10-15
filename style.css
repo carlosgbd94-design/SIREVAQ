@@ -15467,15 +15467,29 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 #secInfluenzaFrascos .frs-tope--cero { color: #b91c1c; }
 #secInfluenzaFrascos .frs-tope-sub { display: block; margin-top: 2px; font-size: 10px; font-weight: 700; color: #475569; line-height: 1.25; }
 
-#secInfluenzaFrascos .frs-sticky {
-  position: sticky; top: var(--frs-top, 72px); z-index: 25; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px;
-  padding: 10px 16px; border-radius: 14px; border: 2px solid #94a3b8; background: #f8fafc; color: #0f172a;
-  font-size: 15px; box-shadow: 0 6px 16px rgba(15, 23, 42, .12);
+/* Estado del reparto: píldora compacta (sobre el command hub; en línea en pantallas chicas y en Jurisdicción) */
+#secInfluenzaFrascos .frs-pill {
+  display: flex; flex-direction: column; align-items: center; gap: 1px; width: 76px; margin: 0 auto 12px; padding: 8px 4px 7px;
+  border-radius: 22px; border: 2px solid #94a3b8; background: #f8fafc; color: #0f172a; text-align: center;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, .14);
 }
-#secInfluenzaFrascos .frs-sticky:empty { display: none; }
-#secInfluenzaFrascos .frs-sticky .material-symbols-rounded { font-size: 24px; }
-#secInfluenzaFrascos .frs-sticky b { font-weight: 900; font-size: 16px; }
-#secInfluenzaFrascos .frs-sticky-sub { font-size: 13px; font-weight: 700; margin-left: auto; }
-#secInfluenzaFrascos .frs-sticky[data-estado="ok"] { background: #d1fae5; border-color: #047857; color: #064e3b; }
-#secInfluenzaFrascos .frs-sticky[data-estado="falta"] { background: #fef3c7; border-color: #b45309; color: #78350f; }
-#secInfluenzaFrascos .frs-sticky[data-estado="excede"] { background: #b91c1c; border-color: #7f1d1d; color: #ffffff; }
+#secInfluenzaFrascos .frs-pill:empty { display: none; }
+#secInfluenzaFrascos .frs-pill .material-symbols-rounded { font-size: 20px; }
+#secInfluenzaFrascos .frs-pill b { font-size: 20px; font-weight: 900; line-height: 1.05; font-variant-numeric: tabular-nums; }
+#secInfluenzaFrascos .frs-pill small { font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; line-height: 1.1; }
+#secInfluenzaFrascos .frs-pill--inline { flex-direction: row; width: auto; margin: 0; padding: 5px 14px 5px 10px; gap: 8px; border-radius: 999px; box-shadow: none; }
+#secInfluenzaFrascos .frs-pill--inline b { font-size: 16px; }
+#secInfluenzaFrascos .frs-pill[data-estado="ok"] { background: #d1fae5; border-color: #047857; color: #064e3b; }
+#secInfluenzaFrascos .frs-pill[data-estado="falta"] { background: #fef3c7; border-color: #b45309; color: #78350f; }
+#secInfluenzaFrascos .frs-pill[data-estado="excede"] { background: #b91c1c; border-color: #7f1d1d; color: #ffffff; }
+#secInfluenzaFrascos .frs-solo-chico { display: none; }
+@media (max-width: 1023px) { #secInfluenzaFrascos .frs-solo-chico:not(:empty) { display: inline-flex; } }
+
+/* Botones redondos de solo ícono mientras guardan: el ícono gira, sin texto encima. */
+.save-chip-premium.is-busy, .save-chip-premium[data-busy="1"] {
+  background: #4c1d95 !important; color: #ffffff !important; border: none !important; opacity: 1 !important;
+  cursor: progress !important; transform: none !important; box-shadow: 0 4px 15px rgba(76, 29, 149, .35) !important;
+}
+.save-chip-premium.is-busy .material-symbols-rounded { animation: cmd-hub-giro 1s linear infinite; }
+@keyframes cmd-hub-giro { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .save-chip-premium.is-busy .material-symbols-rounded { animation: none; } }

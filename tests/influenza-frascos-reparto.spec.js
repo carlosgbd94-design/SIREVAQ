@@ -1420,7 +1420,7 @@ test('COVID municipal: reparte los frascos de la marca por la meta de cada unida
   await expect(page.locator('#mr_tope_Q1')).toContainText('520');                     // 2,600 dosis / 5
   await expect(page.locator('#mr_tope_Q1')).toContainText('Moderna 520');
   await expect(page.locator('#mr_tope_Q1')).toContainText('Pfizer 100');               // meta adulta 600 / 6
-  await expect(page.locator('#frascosEstadoSticky')).toContainText('Reparto completo');
+  await expect(page.locator('#frascosHubEstado')).toHaveAttribute('aria-label', /Reparto completo/);
   await expect(page.locator('#frascosBatchTbody tr', { hasText: 'UMQ UNO' })).toContainText('GAZ00031');   // lote real de Moderna
   await expect(page.locator('#frascosJurisPanel')).toBeHidden();                      // jerarquía: el reparto jurisdiccional no es del municipal
 
@@ -1462,7 +1462,7 @@ test('COVID municipal: no deja repartir más de lo que le cabe a una unidad (aun
   await page.fill('#batch_frascos_Q3', '25');
   await page.fill('#batch_frascos_Q1', '8');
   await page.fill('#batch_frascos_Q2', '7');
-  await expect(page.locator('#frascosEstadoSticky')).toHaveAttribute('data-estado', 'ok');   // el total cuadra...
+  await expect(page.locator('#frascosHubEstado')).toHaveAttribute('data-estado', 'ok');   // el total cuadra...
   await page.click('#btnSaveFrascoEntrega');
   expect(await page.evaluate(() => window.__llamadas.some((l) => l[0] === 'guardarcovid_reparto'))).toBe(false);
   expect(await page.evaluate(() => window.__toasts[window.__toasts.length - 1] || '')).toContain('rebasa la meta');
@@ -1484,12 +1484,46 @@ test('COVID frascos: la marca se elige con un control grande y accesible, y el e
   await page.focus('.marca-btn[data-marca="PFIZER"]');
   await page.keyboard.press('ArrowLeft');
   expect(await page.evaluate(() => _marcaCovid)).toBe('MODERNA');
-  // la barra de estado es fija (sticky) y dice si faltan o sobran frascos
-  const pos = await page.evaluate(() => getComputedStyle(document.getElementById('frascosEstadoSticky')).position);
-  expect(pos).toBe('sticky');
+  // el estado es una píldora compacta sobre el botón de guardar (dentro del command hub fijo): faltan / sobran
+  const pildora = page.locator('#frascosHubEstado');
+  await expect(pildora).toContainText('completo');
   await page.fill('#batch_frascos_Q1', '30');
-  await expect(page.locator('#frascosEstadoSticky')).toContainText('Te pasaste por 4 frascos');
-  await expect(page.locator('#frascosEstadoSticky')).toHaveAttribute('data-estado', 'excede');
+  await expect(pildora).toHaveAttribute('aria-label', /Te pasaste por 4 frascos/);
+  await expect(pildora).toHaveAttribute('data-estado', 'excede');
+  await expect(pildora).toContainText('4');
+  await expect(pildora).toContainText('te pasaste');
   await page.fill('#batch_frascos_Q1', '20');
-  await expect(page.locator('#frascosEstadoSticky')).toContainText('Faltan 6 frascos por repartir');
+  await expect(pildora).toHaveAttribute('aria-label', /Faltan 6 frascos por repartir/);
+  await expect(pildora).toContainText('faltan');
+});
+
+test('Botones redondos de guardado: mientras guardan solo gira el ícono (sin texto «Guardando…» encima)', async ({ page }) => {
+  await page.goto('/reference.html');
+  const main = require('fs').readFileSync(require('path').join(__dirname, '..', 'main.js'), 'utf8');
+  const fn = main.slice(main.indexOf('function setBtnBusy('), main.indexOf('function isBtnBusy('));
+  const r = await page.evaluate((codigo) => {
+    document.body.innerHTML = '<button id="b1" class="save-chip-premium" title="Guardar"><span class="material-symbols-rounded">save</span></button>'
+      + '<button id="b2">Guardar todo</button>';
+    window.$ = (id) => document.getElementById(id);
+    // eslint-disable-next-line no-new-func
+    const api = new Function(`${codigo}; return { setBtnBusy };`)();
+    const salida = {};
+    api.setBtnBusy('b1', true, 'Guardando reparto…');
+    salida.durante = { texto: $('b1').textContent.trim(), icono: $('b1').querySelector('.material-symbols-rounded').textContent,
+      label: $('b1').getAttribute('aria-label'), ocupado: $('b1').getAttribute('aria-busy'), desactivado: $('b1').disabled, giro: $('b1').classList.contains('is-busy') };
+    api.setBtnBusy('b1', false);
+    salida.despues = { texto: $('b1').textContent.trim(), title: $('b1').getAttribute('title'), label: $('b1').getAttribute('aria-label'),
+      desactivado: $('b1').disabled, giro: $('b1').classList.contains('is-busy') };
+    // un botón con texto sigue comportándose como antes
+    api.setBtnBusy('b2', true, 'Procesando…');
+    salida.conTexto = $('b2').textContent;
+    api.setBtnBusy('b2', false);
+    salida.conTextoDespues = $('b2').textContent;
+    return salida;
+  }, fn);
+  expect(r.durante).toEqual({ texto: 'progress_activity', icono: 'progress_activity', label: 'Guardando reparto…', ocupado: 'true', desactivado: true, giro: true });
+  expect(r.durante.texto).not.toContain('Guardando');                       // el texto largo no se escribe en el botón
+  expect(r.despues).toEqual({ texto: 'save', title: 'Guardar', label: null, desactivado: false, giro: false });
+  expect(r.conTexto).toBe('Procesando…');
+  expect(r.conTextoDespues).toBe('Guardar todo');
 });
