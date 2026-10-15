@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.151" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.152" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.163" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.164" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3474,10 +3474,21 @@
                 title="Reparte la meta COVID-19 con los porcentajes de la meta de influenza. No guarda hasta que presiones Guardar.">
                 <span class="material-symbols-rounded" style="font-size:18px">auto_fix_high</span> Predistribuir con % de influenza
               </button>
-              <span id="covidPerdidaBox" class="vac-perdida" style="display:none">
-                <label for="covidPerdidaInput" class="meta-camp-lbl">Factor de pérdida (dosis 0.5 mL)</label>
-                <input id="covidPerdidaInput" type="text" inputmode="numeric" autocomplete="off" class="vac-perdida-inp"
-                  title="Dosis de pérdida de la Jurisdicción. No se suma a la meta de aplicación: solo sube lo que se debe recibir, en la misma proporción en cada destino y unidad.">
+              <span id="covidPerdidaBox" class="vac-perdida" style="display:none" role="group" aria-label="Factor de pérdida">
+                <span class="meta-camp-lbl">Factor de pérdida</span>
+                <label class="vac-perdida-campo">
+                  <input id="covidPerdidaInput" type="text" inputmode="numeric" autocomplete="off" class="vac-perdida-inp"
+                    aria-label="Factor de pérdida en dosis de 0.5 mL"
+                    title="Dosis de pérdida de la Jurisdicción (por ejemplo 3,900). No se suma a la meta de aplicación: solo sube lo que se debe recibir, en la misma proporción en cada destino y unidad.">
+                  <span>dosis</span>
+                </label>
+                <span class="vac-perdida-igual" aria-hidden="true">=</span>
+                <label class="vac-perdida-campo">
+                  <input id="covidPerdidaPct" type="text" inputmode="decimal" autocomplete="off" class="vac-perdida-inp vac-perdida-inp--pct"
+                    aria-label="Factor de pérdida como porcentaje de la meta"
+                    title="El mismo factor expresado como porcentaje de la meta total. Puedes capturar la dosis o el porcentaje: el otro se calcula solo.">
+                  <span>% de la meta</span>
+                </label>
                 <span id="covidPerdidaTxt" class="vac-perdida-txt"></span>
               </span>
               <span class="meta-exp-grupo">

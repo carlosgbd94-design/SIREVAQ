@@ -5349,6 +5349,19 @@ function metaPintarPill() {
     : `<b>${valor}</b><small>${etiqueta}</small>`;
 }
 
+// Meta equivalente (dosis de 0.5 mL) de la Jurisdicción tal como está en pantalla (Comparación) o, en municipal,
+// la guardada: sirve para convertir el factor de pérdida de % a dosis.
+function covidMetaEquivalenteJuris() {
+  const tbody = document.getElementById("influenzaMetasTbody");
+  const rec = _covidMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === "JURISDICCION");
+  const juris = {};
+  CovidFrascos.RUBROS.forEach(r => {
+    const c = tbody && tbody.querySelector(`input[data-rb="${r.id}"][data-juris]`);
+    juris[r.id] = c ? (parseInt(c.value, 10) || 0) : (Number(rec && rec.metas[r.id]) || 0);
+  });
+  return CovidFrascos.metaEquivalente(juris);
+}
+
 // Caja «Factor de pérdida»: Jurisdicción la captura (dosis de 0.5 mL) y el municipal solo la ve. Muestra el %
 // y lo que se debe recibir (meta + pérdida); los topes de frascos usan ese total.
 function covidPintarPerdida() {
@@ -5366,6 +5379,8 @@ function covidPintarPerdida() {
     tbody.dataset.perdidaBound = "1";
     tbody.addEventListener("input", (e) => { if (e.target.matches("input[data-juris]")) { covidPintarPerdida(); if (typeof _gridRecalcular === "function") _gridRecalcular(); } });
   }
+  const pctInp = document.getElementById("covidPerdidaPct");
+  if (pctInp) pctInp.disabled = isMuni;
   if (!inp.dataset.bound) {
     inp.dataset.bound = "1";
     inp.addEventListener("input", () => {
@@ -5374,6 +5389,22 @@ function covidPintarPerdida() {
       inp.dataset.sucio = "1";
       covidPintarPerdida();
       if (typeof _gridRecalcular === "function") _gridRecalcular();   // los frascos cerrados dependen de la pérdida
+    });
+  }
+  if (pctInp && !pctInp.dataset.bound) {
+    pctInp.dataset.bound = "1";
+    pctInp.addEventListener("input", () => {
+      // porcentaje con hasta 2 decimales (acepta coma); las dosis salen de la meta equivalente de la Jurisdicción
+      const limpio = pctInp.value.replace(",", ".").replace(/[^0-9.]/g, "").replace(/^(\d*\.\d{0,2}).*$/, "$1");
+      if (pctInp.value !== limpio) pctInp.value = limpio;
+      const eqJ = covidMetaEquivalenteJuris();
+      const pct = parseFloat(limpio);
+      if (eqJ > 0 && Number.isFinite(pct)) {
+        inp.value = String(Math.round(eqJ * pct / 100));
+        inp.dataset.sucio = "1";
+        covidPintarPerdida();
+        if (typeof _gridRecalcular === "function") _gridRecalcular();
+      }
     });
   }
   const rec = _covidMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === "JURISDICCION");
@@ -5390,8 +5421,10 @@ function covidPintarPerdida() {
   });
   const p = isMuni ? guardada : (parseInt(inp.value, 10) || 0);
   const eq = CovidFrascos.metaEquivalente(juris);
+  // El porcentaje se actualiza solo (salvo mientras se está tecleando en él)
+  if (pctInp && document.activeElement !== pctInp) pctInp.value = eq > 0 && p > 0 ? (p * 100 / eq).toFixed(2) : (p > 0 ? "" : "0");
   txt.textContent = eq > 0
-    ? `${(p * 100 / eq).toFixed(2)} % de la meta (${eq.toLocaleString("es-MX")}) · total a recibir ${(eq + p).toLocaleString("es-MX")} dosis de 0.5 mL`
+    ? `Meta ${eq.toLocaleString("es-MX")} + pérdida ${p.toLocaleString("es-MX")} = total a recibir ${(eq + p).toLocaleString("es-MX")} dosis de 0.5 mL`
     : "Captura la meta de la Jurisdicción para ver el total a recibir.";
 }
 
@@ -5465,9 +5498,13 @@ function covidPredistribuir() {
     const nombre = (id) => (FRASCO_DESTINOS.find(d => d.id === id) || {}).label || frascoEtiquetaUnidad(id);
     showToast(`Predistribuido, pero no se pudo cerrar en frascos completos: ${cerrado.abiertos.map(nombre).join(", ")}. Ajusta a mano.`, false, "warn");
   } else {
-    showToast(sinInfluenza
-      ? "Predistribuido parejo (no hay metas de influenza para tomar porcentajes) en frascos cerrados. Revisa y guarda."
-      : "Predistribuido con los porcentajes de influenza en frascos cerrados (con la pérdida). Revisa y presiona Guardar.", true, "good");
+    const eqJ = CovidFrascos.metaEquivalente(jurisTotales);
+    const usada = perdida > 0
+      ? `con la pérdida de ${perdida.toLocaleString("es-MX")} dosis${eqJ > 0 ? ` (${(perdida * 100 / eqJ).toFixed(2)} %)` : ""}`
+      : "SIN factor de pérdida (captúralo arriba si quieres incluirlo y vuelve a predistribuir)";
+    showToast((sinInfluenza
+      ? "Predistribuido parejo (no hay metas de influenza para tomar porcentajes) en frascos cerrados, "
+      : "Predistribuido con los porcentajes de influenza en frascos cerrados, ") + usada + ". Revisa y presiona Guardar.", true, perdida > 0 ? "good" : "warn");
   }
   return true;
 }

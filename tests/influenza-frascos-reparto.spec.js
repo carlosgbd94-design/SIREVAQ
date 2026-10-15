@@ -1057,7 +1057,7 @@ test('COVID pérdida (Metas): Jurisdicción captura la pérdida; el municipal la
   await expect(page.locator('#covidPerdidaBox')).toBeVisible();
   await expect(page.locator('#covidPerdidaInput')).toBeEnabled();
   await page.fill('#covidPerdidaInput', '3900');
-  await expect(page.locator('#covidPerdidaTxt')).toContainText('5.01 %');
+  await expect(page.locator('#covidPerdidaPct')).toHaveValue('5.01');
   await expect(page.locator('#covidPerdidaTxt')).toContainText('81,734');
   await page.click('#btnSaveInfluenzaMetas');
   const juris = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'savecovid_metas')[1].rows.find((r) => r.municipio === 'JURISDICCION').metas);
@@ -1573,4 +1573,29 @@ test('Control de frascos (influenza): el verificador junto a «Guardar» tambié
   await page.fill('#batch_frascos_Q1', '90');
   await expect(pildora).toHaveAttribute('data-estado', 'excede');
   await expect(pildora).toHaveAttribute('aria-label', /Te pasaste por/);
+});
+
+test('COVID pérdida: se captura en dosis o en % (se calculan entre sí) y la predistribución usa esa pérdida', async ({ page }) => {
+  await montarMetas(page, 'JURISDICCIONAL', [
+    { clues: null, municipio: 'QUERETARO', metas: { r1: 6000, r15: 3000, r16: 500, r17: 100, r18: 2000 } },
+    { clues: null, municipio: 'CORREGIDORA', metas: { r1: 2000, r15: 1000, r16: 300, r17: 100, r18: 1000 } }
+  ]);
+  await page.evaluate(() => { window.__llamadas = []; _vacuna = 'COVID'; _covidMetasArray = []; window.__render(); });
+  const meta = { c1: 65604, c2: 65604, c3: 4135, c4: 6288, c5: 948, c6: 859 };      // meta equivalente 77,834
+  for (const [k, v] of Object.entries(meta)) await page.fill(`input[data-rb="${k}"][data-juris]`, String(v));
+  // dosis → porcentaje
+  await page.fill('#covidPerdidaInput', '3900');
+  await expect(page.locator('#covidPerdidaPct')).toHaveValue('5.01');
+  await expect(page.locator('#covidPerdidaTxt')).toContainText('total a recibir 81,734');
+  // porcentaje → dosis (5 % de 77,834 = 3,892)
+  await page.fill('#covidPerdidaPct', '5');
+  await expect(page.locator('#covidPerdidaInput')).toHaveValue('3892');
+  await expect(page.locator('#covidPerdidaTxt')).toContainText('total a recibir 81,726');
+  // la predistribución avisa la pérdida con que se calculó
+  await page.fill('#covidPerdidaInput', '3900');
+  await page.click('#btnCovidPredistribuir');
+  await expect(page.locator('body')).toContainText(/pérdida de 3,900 dosis \(5\.01 %\)/, { timeout: 5000 }).catch(() => {});
+  await page.click('#btnSaveInfluenzaMetas');
+  const j = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'savecovid_metas')[1].rows.find((r) => r.municipio === 'JURISDICCION').metas);
+  expect(j.perdida).toBe(3900);
 });

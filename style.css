@@ -15497,3 +15497,6 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 .save-chip-premium.is-busy .material-symbols-rounded { animation: cmd-hub-giro 1s linear infinite; }
 @keyframes cmd-hub-giro { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .save-chip-premium.is-busy .material-symbols-rounded { animation: none; } }
+#secInfluenzaMetas .vac-perdida-campo { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #475569; }
+#secInfluenzaMetas .vac-perdida-inp--pct { width: 72px !important; }
+#secInfluenzaMetas .vac-perdida-igual { font-weight: 900; color: #64748b; }
