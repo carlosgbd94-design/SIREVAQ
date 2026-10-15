@@ -4889,7 +4889,7 @@ function renderMetasConfigurationGrid() {
 
     const pie = document.createElement("tr");
     pie.className = "meta-total-row";
-    pie.innerHTML = `<td class="p-3 text-xs font-black" colspan="2">TOTAL</td>`
+    pie.innerHTML = `<td class="p-3 text-xs font-black" colspan="2" ${esCovid() ? 'title="Dosis equivalentes de 0.5 mL: las pediátricas (0.25 mL) valen la mitad"' : ""}>${esCovid() ? "TOTAL (dosis 0.5 mL)" : "TOTAL"}</td>`
       + ids.map(id => `<td class="p-3 text-center text-xs font-black" id="tot_${id}">0</td>`).join("")
       + `<td class="p-3 text-center text-xs font-black" id="tot_J">0</td>
          <td class="meta-cmp-cell p-3 text-center" id="cmp_TOTAL"><b id="tot_juris">0</b><div class="meta-cmp-msg"></div></td>`;
@@ -4910,7 +4910,7 @@ function renderMetasConfigurationGrid() {
       msg.textContent = suma > ref ? `Sobran ${suma - ref}` : `Faltan ${ref - suma}`;
     };
     const recalcular = () => {
-      let granJ = 0, granRef = 0, granEq = 0, granPed = 0, granAd = 0;
+      let granJ = 0, granRef = 0, granEq = 0, granPed = 0, granAd = 0, granRefEqJ = 0;
       _metaDesc = { hay: false, n: 0, falta: 0, sobra: 0 };
       const porDestino = {};
       const eqDestino = {};   // en dosis de 0.5 mL equivalentes (COVID: las pediátricas valen la mitad)
@@ -4928,6 +4928,7 @@ function renderMetasConfigurationGrid() {
         granEq += suma * metaPesoRubro(tr.dataset.rb);
         if (metaPesoRubro(tr.dataset.rb) === 0.5) granPed += suma; else granAd += suma;
         const ref = leer(tr.querySelector("input[data-juris]"));
+        granRefEqJ += ref * metaPesoRubro(tr.dataset.rb);
         document.getElementById(`total_j_${tr.dataset.rb}`).textContent = suma;
         pintar(document.getElementById(`cmp_${tr.dataset.rb}`), ref, suma);
         metaDescAcum(ref, suma);
@@ -4936,14 +4937,14 @@ function renderMetasConfigurationGrid() {
       });
       const razon = esCovid() ? covidRazonDeGrid(tbody, false) : null;
       ids.forEach(id => {
-        document.getElementById(`tot_${id}`).textContent = porDestino[id];
+        document.getElementById(`tot_${id}`).textContent = esCovid() ? covidAvanceFmt(eqDestino[id]) : porDestino[id];
         const valor = esCovid() ? { ped: Math.ceil(pedDestino[id] / 2), adulto: adDestino[id], razon } : porDestino[id];
         metaPintarFrascos(document.getElementById(`frs_${id}`), valor, id === "QUERETARO");
       });
-      document.getElementById("tot_J").textContent = granJ;
+      document.getElementById("tot_J").textContent = esCovid() ? covidAvanceFmt(granEq) : granJ;
       metaPintarFrascos(document.getElementById("frs_J"),
         esCovid() ? { ped: Math.ceil(granPed / 2), adulto: granAd, razon } : granJ, true, true);
-      document.getElementById("tot_juris").textContent = granRef;
+      document.getElementById("tot_juris").textContent = esCovid() ? covidAvanceFmt(granRefEqJ) : granRef;
       pintar(document.getElementById("cmp_TOTAL"), granRef, granJ);
       metaPintarPill();
     };
@@ -4990,7 +4991,7 @@ function renderMetasConfigurationGrid() {
 
     const pie = document.createElement("tr");
     pie.className = "meta-total-row";
-    pie.innerHTML = `<td class="p-3 text-xs font-black" colspan="2">TOTAL</td><td class="p-3 text-center text-xs font-black" id="tot_meta">0</td>`
+    pie.innerHTML = `<td class="p-3 text-xs font-black" colspan="2" ${esCovid() ? 'title="Dosis equivalentes de 0.5 mL: las pediátricas (0.25 mL) valen la mitad"' : ""}>${esCovid() ? "TOTAL (dosis 0.5 mL)" : "TOTAL"}</td><td class="p-3 text-center text-xs font-black" id="tot_meta">0</td>`
       + muniUnits.map(u => `<td class="p-3 text-center text-xs font-black" id="tot_${u.clues}">0</td>`).join("")
       + `<td class="meta-cmp-cell p-3 text-center" id="cmp_TOTAL"><b class="meta-cmp-num"></b><div class="meta-cmp-msg"></div></td>`;
     tbody.appendChild(pie);
@@ -5039,7 +5040,7 @@ function renderMetasConfigurationGrid() {
       let abiertas = 0;
       const razonCovid = esCovid() ? covidRazonDeGrid(tbody, true) : null;
       muniUnits.forEach(u => {
-        document.getElementById(`tot_${u.clues}`).textContent = porUnidad[u.clues];
+        document.getElementById(`tot_${u.clues}`).textContent = esCovid() ? covidAvanceFmt(eqUnidad[u.clues]) : porUnidad[u.clues];
         const puedeAbrir = permiteAbierto && u.clues === CLUES_FRASCO_ABIERTO;
         const valor = esCovid() ? { ped: Math.ceil(pedUnidad[u.clues] / 2), adulto: adUnidad[u.clues], razon: razonCovid } : porUnidad[u.clues];
         if (metaPintarFrascos(document.getElementById(`frs_${u.clues}`), valor, puedeAbrir) !== "ok" && !puedeAbrir) abiertas++;
@@ -5050,7 +5051,7 @@ function renderMetasConfigurationGrid() {
         ? `FRASCOS<div style="font-size:10px;font-weight:600;color:#dc2626;text-transform:none">${abiertas} ${abiertas === 1 ? "unidad" : "unidades"} con frasco abierto: solo Pedro Escobedo puede quedar abierta</div>` : "FRASCOS";
       metaPintarFrascos(document.getElementById("frs_meta"),
         esCovid() ? { ped: Math.ceil(refPed / 2), adulto: refAd, razon: razonCovid } : granRef, permiteAbierto, true);
-      document.getElementById("tot_meta").textContent = granRef;
+      document.getElementById("tot_meta").textContent = esCovid() ? covidAvanceFmt(granRefEq) : granRef;
       pintar(document.getElementById("cmp_TOTAL"), granRef, granSuma);
       metaPintarPill();
     };

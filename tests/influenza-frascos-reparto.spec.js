@@ -912,6 +912,11 @@ test('COVID Metas: 6 rubros del formato y renglón de frascos Moderna (niños, 1
   await expect(page.locator('#frs_CORREGIDORA')).toContainText('Pfizer 83.3 fr. abierto');
   await expect(page.locator('#frs_CORREGIDORA')).toHaveAttribute('data-estado', 'mal');
   await expect(page.locator('.meta-frascos-row td').first()).toContainText('FRASCOS (Moderna · Pfizer)');
+  // El TOTAL va en dosis de 0.5 mL (los niños valen la mitad), como en el formato: 200/2 + 200/2 + 600 + 200 = 1,000
+  await expect(page.locator('#tot_QUERETARO')).toHaveText('1,000');
+  await expect(page.locator('#tot_CORREGIDORA')).toHaveText('500');
+  await expect(page.locator('#tot_J')).toHaveText('1,500');
+  await expect(page.locator('.meta-total-row td').first()).toContainText('TOTAL (dosis 0.5 mL)');
 
   // Cerrarlo: adultos de Corregidora en 504 (84 frascos) y ya queda en verde
   await page.fill('input[data-rb="c3"][data-muni="CORREGIDORA"]', '504');
