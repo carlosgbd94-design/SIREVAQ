@@ -112,3 +112,17 @@ test('Municipio sin reparto a unidades: sale su meta completa en una sola column
   // sin ninguna meta (ni del municipio ni de unidades): no hay archivo
   await expect(construir('HUIMILPAN', [], [])).rejects.toThrow(/No hay unidades/);
 });
+
+test('El XML de cada hoja no trae DPI de impresora (Excel lo marcaba como archivo dañado y lo dejaba vacío)', async () => {
+  const JSZip = require('jszip');
+  const unidades = []; const metas = [];
+  for (let i = 1; i <= 25; i++) { unidades.push(unidad('Q' + i, 'UNIDAD ' + i, 'QUERETARO')); metas.push(meta('Q' + i, 'QUERETARO', { c1: i, c2: i, c3: 1 })); }
+  const wb = await construir('QUERETARO', metas, unidades);
+  const zip = await JSZip.loadAsync(await X.escribirLibro(wb));
+  const hojas = Object.keys(zip.files).filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n));
+  expect(hojas).toHaveLength(2);
+  for (const n of hojas) {
+    const xml = await zip.file(n).async('string');
+    expect(xml).not.toMatch(/horizontalDpi|verticalDpi|4294967295/);
+  }
+});

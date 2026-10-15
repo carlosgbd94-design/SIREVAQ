@@ -145,7 +145,8 @@
       const cell = ws.getCell(a);
       if (typeof cell.value === "string") cell.value = cell.value.replace(/2026-2027/g, ctx.campana);
     });
-    ws.pageSetup = Object.assign({}, ws.pageSetup, { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 1 });
+    // Sin los DPI de impresora que arrastra la plantilla (horizontalDpi=4294967295 hace que Excel «repare» la hoja)
+    ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 1, paperSize: 1 };
   }
 
   /**
