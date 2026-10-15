@@ -460,6 +460,10 @@ test.describe('Paso a CeNSIA', () => {
     const paq = await page.evaluate(() => window.__paq);
     expect(paq.v).toBe(1);
     expect(Object.keys(paq.valores)).toHaveLength(46);
+    if (process.env.GUARDAR_CAPTURAS) {
+      await page.locator('.inf-censia').scrollIntoViewIfNeeded();
+      await page.locator('.inf-censia').screenshot({ path: path.join(process.env.GUARDAR_CAPTURAS, 'sirevaq_tarjeta_censia.png') });
+    }
     expect(paq.clues).toBe('QTSSA001904');
     expect(errores).toEqual([]);
   });
