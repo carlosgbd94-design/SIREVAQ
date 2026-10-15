@@ -7,7 +7,7 @@
  *   TOTAL en dosis de 0.5 mL = (c1 + c2) / 2 + c3 + c4 + c5 + c6.
  *
  * Marcas:
- *   MODERNA: pediátrica y adulto; 1 frasco = 10 dosis de 0.5 mL.
+ *   MODERNA: pediátrica y adulto; 1 frasco = 5 dosis de 0.5 mL (10 pediátricas de 0.25 mL).
  *   PFIZER:  solo adultos (c3..c6); 1 frasco = 6 dosis.
  * El tope de frascos de un destino/unidad considera las dos marcas (en dosis de 0.5 mL) y limita a
  * Pfizer a la meta adulta. Debe coincidir con supabase/covid_metas_frascos.sql.
@@ -25,7 +25,7 @@
   ];
   const PEDIATRICOS = new Set(["c1", "c2"]);
   const MARCAS = [
-    { id: "MODERNA", label: "Moderna", dosisPorFrasco: 10 },
+    { id: "MODERNA", label: "Moderna", dosisPorFrasco: 5 },
     { id: "PFIZER", label: "Pfizer (solo adultos)", dosisPorFrasco: 6 }
   ];
 
@@ -169,10 +169,10 @@
   // ─── Frascos cerrados (con la pérdida incluida) ───────────────────────────────────────────────────────
   // Regla: cada destino y cada unidad debe recibir frascos COMPLETOS; el sobrante (frasco abierto) se lo queda
   // Querétaro, en la unidad Pedro Escobedo. Con dos marcas, «cerrado» se define así:
-  //   Moderna (niños, 10 dosis de 0.5 mL): la meta pediátrica equivalente + su pérdida es múltiplo de 10.
+  //   Moderna (niños, 5 dosis de 0.5 mL): la meta pediátrica equivalente + su pérdida es múltiplo de 5.
   //   Pfizer  (adultos,  6 dosis de 0.5 mL): la meta adulta + su pérdida es múltiplo de 6.
   // «+ su pérdida» = recibir = ceil(dosis * num / den), con num/den = (J2 + 2P) / J2 (ver factorPerdida).
-  const DPF_MODERNA = 10;
+  const DPF_MODERNA = 5;
   const DPF_PFIZER = 6;
 
   function razonPerdida(factor) {

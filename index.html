@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.147" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.148" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.158" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.159" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3537,12 +3537,16 @@
             </div>
           </nav>
           <!-- Marca de la vacuna COVID-19 (la vacuna se elige en la barra superior del panel) -->
-          <div class="vac-bar" id="frascosMarcaBar" style="display:none">
-            <label for="frascoMarcaSelect" class="frs-lbl">Marca</label>
-            <select id="frascoMarcaSelect" class="vac-marca frs-field" aria-label="Marca de la vacuna COVID-19">
-              <option value="MODERNA">Moderna (pediátrica y adulto · 10 dosis/frasco)</option>
-              <option value="PFIZER">Pfizer (solo adultos · 6 dosis/frasco)</option>
-            </select>
+          <div class="marca-bar" id="frascosMarcaBar" role="radiogroup" aria-labelledby="frascosMarcaLbl" style="display:none">
+            <span class="marca-lbl" id="frascosMarcaLbl">Marca de la vacuna</span>
+            <span class="marca-seg">
+              <button type="button" class="marca-btn activo" role="radio" aria-checked="true" data-marca="MODERNA">
+                <b>Moderna</b><small>Niños y adultos · 5 dosis por frasco</small>
+              </button>
+              <button type="button" class="marca-btn" role="radio" aria-checked="false" tabindex="-1" data-marca="PFIZER">
+                <b>Pfizer</b><small>Solo adultos · 6 dosis por frasco</small>
+              </button>
+            </span>
           </div>
           <div class="hint" id="frascosVacunaNota" style="display:none"></div>
           </div>
@@ -3575,6 +3579,7 @@
                   title="Descartar ediciones y repartir todo proporcional a la meta">Restablecer proporcional</button>
               </div>
             </div>
+            <div id="remesaSticky" class="frs-sticky" role="status" aria-live="polite"></div>
             <div class="frs-scroll">
               <table class="frs-table">
                 <thead>
@@ -3582,6 +3587,7 @@
                     <th>Destino</th>
                     <th class="c">Meta (dosis)</th>
                     <th class="c">% de la meta</th>
+                    <th class="c" title="Frascos que todavía le caben al destino sin rebasar su meta (descontado lo recibido en otras entregas y de la otra marca)">Te caben (frascos)</th>
                     <th class="c">Frascos</th>
                     <th class="c" title="Porcentaje de los frascos recibidos que realmente se asignó a este destino">% real</th>
                     <th class="c">Dosis equiv.</th>
@@ -3647,6 +3653,9 @@
                   <div id="frascosLotesEstado" class="frs-lotesestado" role="status"></div>
                 </div>
 
+                <!-- Estado del reparto: se queda a la vista al desplazarse por la tabla -->
+                <div id="frascosEstadoSticky" class="frs-sticky" role="status" aria-live="polite"></div>
+
                 <!-- Tabla de captura por unidad -->
                 <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200 shadow-sm mt-2">
                   <table class="w-full border-collapse text-left text-xs font-semibold text-slate-700"
@@ -3658,6 +3667,8 @@
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Meta (dosis)</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">% del municipio</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Otras entregas</th>
+                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center"
+                          title="Frascos que todavía le caben a la unidad en esta marca sin rebasar su meta (ya descontado lo recibido de ambas marcas)">Te caben (frascos)</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center frs-th-frascos">Frascos que le tocan</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center"
                           title="Porcentaje de los frascos de la entrega que realmente se asignó a esta unidad">% real</th>
@@ -3674,6 +3685,7 @@
                         <td class="p-3 text-center" id="mr_meta_T"></td>
                         <td class="p-3 text-center" id="mr_pct_T"></td>
                         <td class="p-3 text-center" id="mr_otras_T"></td>
+                        <td class="p-3 text-center" id="mr_tope_T"></td>
                         <td class="p-3 text-center frs-total-frascos" id="mr_inp_T"></td>
                         <td class="p-3 text-center frs-real" id="mr_real_T"></td>
                         <td class="p-3"></td>

@@ -10,7 +10,7 @@
 --  * covid_remesas / covid_distribucion_frascos: una entrega por MARCA (MODERNA o PFIZER).
 --
 -- Dosis (en equivalentes de 0.5 mL, como el formato: TOTAL = (c1+c2)/2 + c3+c4+c5+c6):
---   MODERNA: pediátrica 0.25 mL y adulto 0.5 mL; 1 frasco = 10 dosis de 0.5 mL.
+--   MODERNA: pediátrica 0.25 mL y adulto 0.5 mL; 1 frasco = 5 dosis de 0.5 mL (corregido 2026-10-15; antes 10).
 --   PFIZER:  solo adultos (c3..c6), 0.5 mL; 1 frasco = 6 dosis.
 -- Tope duro por destino y por unidad: lo recibido en todas las entregas y las dos marcas
 -- (en dosis de 0.5 mL) no rebasa la meta total (+ el frasco que pueda quedar abierto), y los
@@ -138,7 +138,7 @@ create trigger trg_covid_metas_clues_valida
 -- ---- Cálculo común
 create or replace function public.covid_dosis_por_frasco(p_marca text)
 returns integer language sql immutable as $$
-  select case upper(p_marca) when 'MODERNA' then 10 when 'PFIZER' then 6 else null end;
+  select case upper(p_marca) when 'MODERNA' then 5 when 'PFIZER' then 6 else null end;
 $$;
 
 -- Dosis de 0.5 mL que un destino (clues nulo, municipio = destino) o una unidad (clues) debe RECIBIR:
