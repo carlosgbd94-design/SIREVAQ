@@ -179,16 +179,27 @@
     if (!cols.length) throw new Error("No hay unidades con meta de COVID-19 en este municipio.");
 
     const grupos = trocear(cols, MAX_UNIDADES_HOJA);
+    const nombreBase = hoja.name;
     grupos.forEach((grupo, i) => {
-      const nombre = i === 0 ? "METAS COVID-19" : `METAS COVID-19 (${i + 1})`;
+      const nombre = i === 0 ? nombreBase : `${nombreBase} (${i + 1})`;
       const ws = i === 0 ? hoja : clonarHoja(wb, hoja, nombre);
       llenarHoja(ws, grupo, base);
     });
     return wb;
   }
 
-  async function escribirLibro(wb) {
-    return wb.xlsx.writeBuffer();
+  // ExcelJS en el navegador agrega entradas de carpeta («xl/», «_rels/»…) al .xlsx y Excel lo declara dañado.
+  // Se vuelve a empaquetar sin ellas, con [Content_Types].xml primero (igual que el exportador de influenza).
+  async function escribirLibro(wb, JSZip) {
+    const buffer = await wb.xlsx.writeBuffer();
+    const Z = JSZip || (typeof root !== "undefined" ? root.JSZip : null);
+    if (!Z) return buffer;
+    const origen = await Z.loadAsync(buffer);
+    const limpio = new Z();
+    const nombres = Object.keys(origen.files).filter((n) => !origen.files[n].dir)
+      .sort((a, b) => (a === "[Content_Types].xml" ? -1 : b === "[Content_Types].xml" ? 1 : 0));
+    for (const n of nombres) limpio.file(n, await origen.file(n).async("uint8array"), { createFolders: false });
+    return limpio.generateAsync({ type: "uint8array", compression: "DEFLATE" });
   }
 
   function nombreArchivo(muni, campana) {

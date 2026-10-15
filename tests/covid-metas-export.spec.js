@@ -22,7 +22,7 @@ test('Municipio: una columna por unidad con meta, TOTAL al final y los renglones
     meta('C1', 'CORREGIDORA', { c3: 99 })
   ];
   const wb = await construir('QUERETARO', metas, unidades);
-  expect(wb.worksheets.map((w) => w.name)).toEqual(['METAS COVID-19']);
+  expect(wb.worksheets.map((w) => w.name)).toEqual(['METAS POR UNIDAD COVID']);
   const ws = wb.worksheets[0];
   expect(ws.getCell('H10').value).toBe('UMQ DOS');            // orden alfabético
   expect(ws.getCell('I10').value).toBe('UMQ UNO');
@@ -54,7 +54,7 @@ test('Más de 20 unidades: continúan en una hoja (2) con su propio TOTAL', asyn
     metas.push(meta('Q' + i, 'QUERETARO', { c1: i, c2: i, c3: 1, c4: 1, c5: 1, c6: 1 }));
   }
   const wb = await construir('QUERETARO', metas, unidades);
-  expect(wb.worksheets.map((w) => w.name)).toEqual(['METAS COVID-19', 'METAS COVID-19 (2)']);
+  expect(wb.worksheets.map((w) => w.name)).toEqual(['METAS POR UNIDAD COVID', 'METAS POR UNIDAD COVID (2)']);
   expect(wb.worksheets[0].getCell('AB10').value).toBe('TOTAL');      // H..AA = 20 unidades, TOTAL en AB
   const seg = wb.worksheets[1];
   expect(seg.getCell('H10').value).toBe('UNIDAD 21');
@@ -134,4 +134,17 @@ test('El libro apunta a su primera hoja (firstSheet=0): con una hoja y firstShee
   const libro = await zip.file('xl/workbook.xml').async('string');
   expect(libro).not.toMatch(/firstSheet="[1-9]/);
   expect(libro).not.toMatch(/activeTab="[1-9]/);
+});
+
+test('El .xlsx no trae entradas de carpeta (Excel lo declaraba dañado) y [Content_Types].xml va primero', async () => {
+  const JSZip = require('jszip');
+  const wb = await construir('QUERETARO', [meta('Q1', 'QUERETARO', { c3: 5 })], [unidad('Q1', 'UMQ UNO', 'QUERETARO')], { soloClues: 'Q1' });
+  const datos = await X.escribirLibro(wb, JSZip);
+  const zip = await JSZip.loadAsync(datos);
+  const entradas = Object.keys(zip.files);
+  expect(entradas.filter((n) => n.endsWith('/'))).toEqual([]);
+  expect(entradas[0]).toBe('[Content_Types].xml');
+  const otro = new ExcelJS.Workbook();
+  await otro.xlsx.load(datos);
+  expect(otro.worksheets[0].getCell('H10').value).toBe('UMQ UNO');
 });

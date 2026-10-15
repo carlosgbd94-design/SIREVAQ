@@ -5013,7 +5013,7 @@ async function exportCovidMetasExcel() {
     for (const muni of munis) {
       try {
         const wb = await X.construirLibroCovid({ ExcelJS, plantilla, muni, campana, metas: _covidMetasArray, unidades: _allUnidades });
-        archivos.push({ nombre: X.nombreArchivo(muni, campana), datos: await X.escribirLibro(wb) });
+        archivos.push({ nombre: X.nombreArchivo(muni, campana), datos: await X.escribirLibro(wb, window.JSZip) });
       } catch (e) {
         if (munis.length === 1) throw e;     // «Todos»: el municipio sin metas simplemente no genera archivo
       }
@@ -7283,7 +7283,7 @@ async function exportCovidMetaUnidadExcel() {
       unidades: [{ clues: USER.clues, unidad: USER.unidad, municipio: USER.municipio }], soloClues: USER.clues,
       unidadEtiqueta: String(USER.unidad || "").toUpperCase()
     });
-    metaDescargar(await X.escribirLibro(wb), X.nombreArchivoUnidad(USER.unidad, campana), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    metaDescargar(await X.escribirLibro(wb, window.JSZip), X.nombreArchivoUnidad(USER.unidad, campana), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     showToast("Meta de COVID-19 de tu unidad descargada.", true, "good");
   } catch (err) {
     console.error("Error al exportar la meta de COVID-19 de la unidad:", err);
