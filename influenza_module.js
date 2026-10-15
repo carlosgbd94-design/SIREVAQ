@@ -6041,9 +6041,9 @@ function frascoTopeCeldaHtml(it, metasRec) {
   if (it.tope === undefined || it.tope === null) return '<span class="frs-muted">sin meta</span>';
   const cero = it.tope <= 0;
   const sub = esCovid()
-    ? `descontando ambas marcas`
+    ? ``
     : `ya recibió ${frascoFmt(it.otras || 0)}`;
-  return `<span class="frs-tope${cero ? " frs-tope--cero" : ""}">${frascoFmt(it.tope)}</span><span class="frs-tope-sub">${sub}</span>`;
+  return `<span class="frs-tope${cero ? " frs-tope--cero" : ""}" title="Le caben ${frascoFmt(it.tope)} frascos sin rebasar su meta (descontadas las dos marcas)">${frascoFmt(it.tope)}</span>${sub ? `<span class="frs-tope-sub">${sub}</span>` : ""}`;
 }
 
 // Celdas «Meta (frascos)» / «Meta Moderna» / «Meta Pfizer»: la meta de cada renglón en frascos, bien visible.
@@ -6401,7 +6401,7 @@ function renderFrascosMunicipal(muni) {
     tr.innerHTML = `
       <td><b>${u.unidad}</b><br><span class="frs-sub">${u.clues}</span></td>
       <td class="c" id="mr_meta_${u.clues}"></td>
-      <td class="c frs-muted" id="mr_pct_${u.clues}"></td>
+      <td class="c frs-muted col-pct" id="mr_pct_${u.clues}"></td>
       <td class="c frs-muted">${frascoFmt(otras)}${frascoOtraMarcaHtml(u.clues)}</td>
       <td class="c col-inf" id="mr_mfr_${u.clues}"></td>
       <td class="c col-mod" id="mr_mmod_${u.clues}"></td>
@@ -6458,7 +6458,7 @@ function refreshRepartoMunicipal(muni, enfocado) {
   const res = InfluenzaReparto.repartoLibre(total, items, _muniRepartoState.fijos);
   const porMeta = res.base;
   items.forEach(it => {
-    document.getElementById(`mr_meta_${it.id}`).textContent = frascoFmt(it.meta);
+    document.getElementById(`mr_meta_${it.id}`).innerHTML = `${frascoFmt(it.meta)}<span class="frs-meta-pct">${sumaMeta ? (it.meta * 100 / sumaMeta).toFixed(1) : "—"} % del municipio</span>`;
     document.getElementById(`mr_pct_${it.id}`).textContent = sumaMeta ? `${(it.meta * 100 / sumaMeta).toFixed(2)}%` : "—";
     const recUni = metasVista().find(m => m.clues === it.id);
     document.getElementById(`mr_tope_${it.id}`).innerHTML = frascoTopeCeldaHtml(it, recUni && recUni.metas);

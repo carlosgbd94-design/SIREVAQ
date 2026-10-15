@@ -15512,3 +15512,12 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 #secInfluenzaFrascos table[data-marca="MODERNA"] .col-mod, #secInfluenzaFrascos table[data-marca="PFIZER"] .col-pfz { background: #f5f3ff; }
 #secInfluenzaFrascos table[data-marca="MODERNA"] th.col-mod, #secInfluenzaFrascos table[data-marca="PFIZER"] th.col-pfz { background: #4c1d95 !important; color: #ffffff !important; }
 #secInfluenzaFrascos table[data-marca="MODERNA"] td.col-mod .frs-metafr, #secInfluenzaFrascos table[data-marca="PFIZER"] td.col-pfz .frs-metafr { color: #4c1d95; font-size: 19px; }
+
+/* Reparto municipal compacto: con las columnas de meta por marca la tabla debe caber sin desplazarse hacia los lados
+   (la columna donde se captura, «Frascos que le tocan», siempre a la vista). */
+#influenzaFrascosDeliveryForm .tableWrap th, #influenzaFrascosDeliveryForm .tableWrap td { padding: 8px 7px; }
+#influenzaFrascosDeliveryForm .tableWrap th { font-size: 10.5px; letter-spacing: .02em; line-height: 1.2; white-space: normal; vertical-align: bottom; }
+#influenzaFrascosDeliveryForm .tableWrap .frs-num { width: 76px !important; }
+#influenzaFrascosDeliveryForm table[data-vac="COVID"] .col-pct { display: none; }
+#influenzaFrascosDeliveryForm .frs-meta-pct { display: none; }
+#influenzaFrascosDeliveryForm table[data-vac="COVID"] .frs-meta-pct { display: block; font-size: 10px; font-weight: 700; color: #64748b; }

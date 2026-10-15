@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.170" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.185" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.180" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.190" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3681,7 +3681,7 @@
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider" style="width: 34%;">
                           Unidad / CLUES</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Meta (dosis)</th>
-                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">% del municipio</th>
+                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center col-pct">% del municipio</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Otras entregas</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center col-inf"
                           title="Meta de la unidad expresada en frascos (dosis ÷ 10, hacia arriba)">Meta (frascos)</th>
@@ -3705,7 +3705,7 @@
                       <tr id="mr_total_row" class="frs-total" data-estado="ok">
                         <td class="p-3 text-xs font-black">TOTAL</td>
                         <td class="p-3 text-center" id="mr_meta_T"></td>
-                        <td class="p-3 text-center" id="mr_pct_T"></td>
+                        <td class="p-3 text-center col-pct" id="mr_pct_T"></td>
                         <td class="p-3 text-center" id="mr_otras_T"></td>
                         <td class="p-3 text-center col-inf" id="mr_mfr_T"></td>
                         <td class="p-3 text-center col-mod" id="mr_mmod_T"></td>
