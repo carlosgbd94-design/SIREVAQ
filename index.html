@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.152" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.170" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.165" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.180" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3599,6 +3599,9 @@
                     <th>Destino</th>
                     <th class="c">Meta (dosis)</th>
                     <th class="c">% de la meta</th>
+                    <th class="c col-inf" title="Meta del destino expresada en frascos (dosis ÷ 10, hacia arriba)">Meta (frascos)</th>
+                    <th class="c col-mod" title="Frascos de Moderna que cubrirían toda la meta del destino (5 dosis por frasco). Es la misma meta que la de Pfizer: lo que recibe una marca descuenta de la otra.">Meta Moderna (frascos)</th>
+                    <th class="c col-pfz" title="Frascos de Pfizer que cubrirían la meta adulta del destino (6 dosis por frasco). Pfizer solo aplica a adultos.">Meta Pfizer (frascos)</th>
                     <th class="c" title="Frascos que todavía le caben al destino sin rebasar su meta (descontado lo recibido en otras entregas y de la otra marca)">Te caben (frascos)</th>
                     <th class="c">Frascos</th>
                     <th class="c" title="Porcentaje de los frascos recibidos que realmente se asignó a este destino">% real</th>
@@ -3680,6 +3683,12 @@
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Meta (dosis)</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">% del municipio</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Otras entregas</th>
+                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center col-inf"
+                          title="Meta de la unidad expresada en frascos (dosis ÷ 10, hacia arriba)">Meta (frascos)</th>
+                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center col-mod"
+                          title="Frascos de Moderna que cubrirían toda la meta de la unidad (5 dosis por frasco). Es la misma meta que la de Pfizer: lo que recibe una marca descuenta de la otra.">Meta Moderna (frascos)</th>
+                        <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center col-pfz"
+                          title="Frascos de Pfizer que cubrirían la meta adulta de la unidad (6 dosis por frasco). Pfizer solo aplica a adultos.">Meta Pfizer (frascos)</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center"
                           title="Frascos que todavía le caben a la unidad en esta marca sin rebasar su meta (ya descontado lo recibido de ambas marcas)">Te caben (frascos)</th>
                         <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center frs-th-frascos">Frascos que le tocan</th>
@@ -3698,6 +3707,9 @@
                         <td class="p-3 text-center" id="mr_meta_T"></td>
                         <td class="p-3 text-center" id="mr_pct_T"></td>
                         <td class="p-3 text-center" id="mr_otras_T"></td>
+                        <td class="p-3 text-center col-inf" id="mr_mfr_T"></td>
+                        <td class="p-3 text-center col-mod" id="mr_mmod_T"></td>
+                        <td class="p-3 text-center col-pfz" id="mr_mpfz_T"></td>
                         <td class="p-3 text-center" id="mr_tope_T"></td>
                         <td class="p-3 text-center frs-total-frascos" id="mr_inp_T"></td>
                         <td class="p-3 text-center frs-real" id="mr_real_T"></td>

@@ -1722,6 +1722,7 @@ async function loadCovidAdminData(campana) {
       AppService.call("getcovid_remesas", { anio_campana: camp })
     ]);
     _covidMetasArray = m.data || [];
+    if (typeof _covidAvance !== "undefined") _covidAvance.cargado = false;   // el Avance se vuelve a pedir al SIS
     _covidFrascosAll = d.data || [];
     _covidRemesasAll = r.data || [];
     try {
@@ -1762,6 +1763,10 @@ function vacunaPintarSelectores() {
         b.addEventListener("click", () => vacunaElegir(b.dataset.vac));
       }
     });
+  });
+  ["frascosBatchTbody", "remesaTbody"].forEach(id => {
+    const t = document.getElementById(id) && document.getElementById(id).closest("table");
+    if (t) { t.dataset.vac = esCovid() ? "COVID" : "INFLUENZA"; t.dataset.marca = _marcaCovid; }
   });
   const barraMarca = document.getElementById("frascosMarcaBar");
   if (barraMarca) barraMarca.style.display = esCovid() ? "" : "none";
@@ -6035,14 +6040,38 @@ function covidMetaFrascosDe(metas) {
 function frascoTopeCeldaHtml(it, metasRec) {
   if (it.tope === undefined || it.tope === null) return '<span class="frs-muted">sin meta</span>';
   const cero = it.tope <= 0;
-  let sub;
-  if (esCovid()) {
-    const m = covidMetaFrascosDe(metasRec);
-    sub = `Meta: Moderna ${frascoFmt(m.MODERNA)} · Pfizer ${frascoFmt(m.PFIZER)}`;
-  } else {
-    sub = `Meta ${frascoFmt(it.metaFrascos || 0)} · ya ${frascoFmt(it.otras || 0)}`;
-  }
+  const sub = esCovid()
+    ? `descontando ambas marcas`
+    : `ya recibió ${frascoFmt(it.otras || 0)}`;
   return `<span class="frs-tope${cero ? " frs-tope--cero" : ""}">${frascoFmt(it.tope)}</span><span class="frs-tope-sub">${sub}</span>`;
+}
+
+// Celdas «Meta (frascos)» / «Meta Moderna» / «Meta Pfizer»: la meta de cada renglón en frascos, bien visible.
+function frascoPintarMetaFr(pref, id, metas, it) {
+  const set = (suf, n) => {
+    const el = document.getElementById(`${pref}_${suf}_${id}`);
+    if (el) el.innerHTML = `<span class="frs-metafr">${frascoFmt(n)}</span><span class="frs-metafr-u">frascos</span>`;
+  };
+  if (esCovid()) {
+    const m = covidMetaFrascosDe(metas);
+    set("mmod", m.MODERNA);
+    set("mpfz", m.PFIZER);
+  } else {
+    set("mfr", (it && it.metaFrascos) || 0);
+  }
+}
+
+function frascoPintarMetaFrTotales(pref, lista) {
+  const set = (suf, n) => {
+    const el = document.getElementById(`${pref}_${suf}_T`);
+    if (el) el.innerHTML = `<span class="frs-metafr">${frascoFmt(n)}</span>`;
+  };
+  if (esCovid()) {
+    set("mmod", lista.reduce((a, x) => a + covidMetaFrascosDe(x.metas).MODERNA, 0));
+    set("mpfz", lista.reduce((a, x) => a + covidMetaFrascosDe(x.metas).PFIZER, 0));
+  } else {
+    set("mfr", lista.reduce((a, x) => a + ((x.it && x.it.metaFrascos) || 0), 0));
+  }
 }
 
 // Estado del reparto en una píldora compacta («faltan N» / «te pasaste N» / «completo»): se pinta en todos los
@@ -6135,6 +6164,9 @@ function cargarRemesaSeleccionada() {
       <td><b>${d.label}</b>${d.hospital ? ' <span class="frs-sub">hospital</span>' : ""}</td>
       <td class="c" id="rem_meta_${d.id}"></td>
       <td class="c frs-muted" id="rem_pct_${d.id}"></td>
+      <td class="c col-inf" id="rem_mfr_${d.id}"></td>
+      <td class="c col-mod" id="rem_mmod_${d.id}"></td>
+      <td class="c col-pfz" id="rem_mpfz_${d.id}"></td>
       <td class="c" id="rem_tope_${d.id}"></td>
       <td class="c">
         <input type="text" inputmode="numeric" autocomplete="off" id="rem_inp_${d.id}" class="frs-num" aria-describedby="rem_tope_${d.id}">
@@ -6160,7 +6192,7 @@ function cargarRemesaSeleccionada() {
   const tf = document.createElement("tr");
   tf.className = "frs-total";
   tf.innerHTML = `<td>TOTAL</td><td class="c" id="rem_meta_T"></td>
-    <td class="c" id="rem_pct_T"></td><td class="c" id="rem_tope_T"></td><td class="c" id="rem_inp_T"></td>
+    <td class="c" id="rem_pct_T"></td><td class="c col-inf" id="rem_mfr_T"></td><td class="c col-mod" id="rem_mmod_T"></td><td class="c col-pfz" id="rem_mpfz_T"></td><td class="c" id="rem_tope_T"></td><td class="c" id="rem_inp_T"></td>
     <td class="c" id="rem_real_T"></td><td class="c" id="rem_dos_T"></td>`;
   tbody.appendChild(tf);
   refreshRemesa();
@@ -6201,6 +6233,7 @@ function refreshRemesa(enfocado) {
     document.getElementById(`rem_pct_${it.id}`).textContent = sumaMeta ? `${(it.meta * 100 / sumaMeta).toFixed(2)}%` : "—";
     const recDest = metasVista().find(m => !m.clues && String(m.municipio).toUpperCase() === it.id);
     document.getElementById(`rem_tope_${it.id}`).innerHTML = frascoTopeCeldaHtml(it, recDest && recDest.metas);
+    frascoPintarMetaFr("rem", it.id, recDest && recDest.metas, it);
     const inp = document.getElementById(`rem_inp_${it.id}`);
     if (inp !== enfocado) inp.value = total || v ? String(v) : "";
     document.getElementById(`rem_mark_${it.id}`).textContent = frascoMarcaEditado(_remesaState.editados.has(it.id), porMeta[it.id]);
@@ -6211,6 +6244,10 @@ function refreshRemesa(enfocado) {
   document.getElementById("rem_meta_T").textContent = frascoFmt(sumaMeta);
   document.getElementById("rem_pct_T").textContent = sumaMeta ? "100%" : "—";
   document.getElementById("rem_inp_T").textContent = total ? `${frascoFmt(res.asignado)} de ${frascoFmt(total)}` : frascoFmt(res.asignado);
+  frascoPintarMetaFrTotales("rem", items.map(i => {
+    const r = metasVista().find(m => !m.clues && String(m.municipio).toUpperCase() === i.id);
+    return { metas: r && r.metas, it: i };
+  }));
   const sumaTope = items.reduce((a, i) => a + (i.tope === undefined ? 0 : i.tope), 0);
   document.getElementById("rem_tope_T").innerHTML = items.some(i => i.tope !== undefined) ? `<span class="frs-tope">${frascoFmt(sumaTope)}</span>` : "";
   frascoPintarPill(["remesaPill"], { total, asignado: res.asignado, porAsignar: res.porAsignar });
@@ -6366,6 +6403,9 @@ function renderFrascosMunicipal(muni) {
       <td class="c" id="mr_meta_${u.clues}"></td>
       <td class="c frs-muted" id="mr_pct_${u.clues}"></td>
       <td class="c frs-muted">${frascoFmt(otras)}${frascoOtraMarcaHtml(u.clues)}</td>
+      <td class="c col-inf" id="mr_mfr_${u.clues}"></td>
+      <td class="c col-mod" id="mr_mmod_${u.clues}"></td>
+      <td class="c col-pfz" id="mr_mpfz_${u.clues}"></td>
       <td class="c" id="mr_tope_${u.clues}"></td>
       <td class="c">
         <input type="text" inputmode="numeric" autocomplete="off" id="batch_frascos_${u.clues}" class="frs-num" aria-describedby="mr_tope_${u.clues}">
@@ -6422,6 +6462,7 @@ function refreshRepartoMunicipal(muni, enfocado) {
     document.getElementById(`mr_pct_${it.id}`).textContent = sumaMeta ? `${(it.meta * 100 / sumaMeta).toFixed(2)}%` : "—";
     const recUni = metasVista().find(m => m.clues === it.id);
     document.getElementById(`mr_tope_${it.id}`).innerHTML = frascoTopeCeldaHtml(it, recUni && recUni.metas);
+    frascoPintarMetaFr("mr", it.id, recUni && recUni.metas, it);
     const inp = document.getElementById(`batch_frascos_${it.id}`);
     if (inp !== enfocado) inp.value = String(res.frascos[it.id] || 0);
     document.getElementById(`mr_mark_${it.id}`).textContent = frascoMarcaEditado(_muniRepartoState.editados.has(it.id), porMeta[it.id]);
@@ -6441,6 +6482,10 @@ function refreshRepartoMunicipal(muni, enfocado) {
     document.getElementById("mr_meta_T").textContent = frascoFmt(sumaMeta);
     document.getElementById("mr_pct_T").textContent = sumaMeta ? "100%" : "—";
     document.getElementById("mr_otras_T").textContent = frascoFmt(sumaOtras);
+    frascoPintarMetaFrTotales("mr", items.map(i => {
+      const r = metasVista().find(m => m.clues === i.id);
+      return { metas: r && r.metas, it: i };
+    }));
     const sumaTopeM = items.reduce((a, i) => a + (i.tope === undefined ? 0 : i.tope), 0);
     document.getElementById("mr_tope_T").innerHTML = items.some(i => i.tope !== undefined) ? `<span class="frs-tope">${frascoFmt(sumaTopeM)}</span>` : "";
     frascoPintarPill(["frascosHubEstado", "frascosEstadoInline"], { total, asignado: res.asignado, porAsignar: res.porAsignar });

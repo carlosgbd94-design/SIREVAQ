@@ -869,7 +869,8 @@ test('COVID Jurisdicción: reparte Moderna por la meta equivalente y Pfizer desc
   await expect(page.locator('#rem_dos_QUERETARO')).toHaveText('500');         // 100 frascos × 5 dosis
   await expect(page.locator('#remesaPill')).toContainText('Reparto completo');   // estado en línea, junto a «Guardar»
   await expect(page.locator('#rem_tope_QUERETARO')).toContainText('200');         // le caben ceil(1,000 / 5) frascos de Moderna
-  await expect(page.locator('#rem_tope_QUERETARO')).toContainText('Pfizer 134');   // meta adulta 800 / 6
+  await expect(page.locator('#rem_mmod_QUERETARO')).toContainText('200');          // Meta Moderna en frascos
+  await expect(page.locator('#rem_mpfz_QUERETARO')).toContainText('134');          // Meta Pfizer: adulta 800 / 6
 
   // Guarda como COVID/MODERNA (acción y marca propias) y sin tocar las tablas de influenza
   await page.fill('#rem_inp_QUERETARO', '40');
@@ -1425,9 +1426,12 @@ test('COVID municipal: reparte los frascos de la marca por la meta de cada unida
   expect([await v('Q1'), await v('Q2'), await v('Q3')]).toEqual(['26', '13', '1']);
   await expect(page.locator('#kpiDosis')).toContainText('200 dosis');                 // 40 frascos x 5 dosis
   // Antes de teclear ya se ve cuántos frascos le caben a cada unidad y su meta en frascos de las dos marcas
-  await expect(page.locator('#mr_tope_Q1')).toContainText('520');                     // 2,600 dosis / 5
-  await expect(page.locator('#mr_tope_Q1')).toContainText('Moderna 520');
-  await expect(page.locator('#mr_tope_Q1')).toContainText('Pfizer 100');               // meta adulta 600 / 6
+  await expect(page.locator('#mr_tope_Q1')).toContainText('520');                     // le caben 520 de Moderna
+  await expect(page.locator('#mr_mmod_Q1')).toContainText('520');                     // Meta Moderna: 2,600 dosis / 5
+  await expect(page.locator('#mr_mpfz_Q1')).toContainText('100');                     // Meta Pfizer: adulta 600 / 6
+  await expect(page.locator('#mr_mmod_T')).toContainText('800');                      // 520 + 260 + 20
+  // las dos columnas de meta por marca se ven (influenza usa una sola) y la de la marca elegida va resaltada
+  expect(await page.locator('#frascosBatchTbody').evaluate((t) => t.closest('table').dataset.marca)).toBe('MODERNA')
   await expect(page.locator('#frascosHubEstado')).toHaveAttribute('aria-label', /Reparto completo/);
   await expect(page.locator('#frascosBatchTbody tr', { hasText: 'UMQ UNO' })).toContainText('GAZ00031');   // lote real de Moderna
   await expect(page.locator('#frascosJurisPanel')).toBeHidden();                      // jerarquía: el reparto jurisdiccional no es del municipal
@@ -1611,4 +1615,22 @@ test('COVID municipal: si solo hay asignación de una marca, el aviso de la otra
   await expect(page.locator('#frascosMuniResumen')).toContainText('cambiar de marca');
   await page.evaluate(() => { _marcaCovid = 'PFIZER'; _muniRepartoState.numero = null; renderFrascosDistribution(); });
   await expect(page.locator('#frascosHubEstado')).toHaveAttribute('data-estado', /ok|falta|excede/);   // con Pfizer sí hay reparto
+});
+
+test('Meta en frascos por marca: columnas visibles en COVID (resaltada la marca elegida) y una sola columna en influenza', async ({ page }) => {
+  await montarMunicipalCovid(page);
+  const vis = (sel) => page.evaluate((s) => [...document.querySelectorAll(s)].some((e) => getComputedStyle(e).display !== 'none'), sel);
+  expect(await vis('#secInfluenzaFrascos th.col-mod')).toBe(true);
+  expect(await vis('#secInfluenzaFrascos th.col-pfz')).toBe(true);
+  expect(await vis('#secInfluenzaFrascos th.col-inf')).toBe(false);
+  // influenza: columna «Meta (frascos)» = meta en dosis / 10
+  await page.evaluate(() => {
+    _vacuna = 'INFLUENZA';
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 100, asignacion: { QUERETARO: 100 }, manual: [] }];
+    _adminFrascosArray = [];
+    renderFrascosDistribution();
+  });
+  expect(await vis('#secInfluenzaFrascos th.col-inf')).toBe(true);
+  expect(await vis('#secInfluenzaFrascos th.col-mod')).toBe(false);
+  await expect(page.locator('#mr_mfr_Q1')).toContainText('3,000');                     // 30,000 dosis / 10
 });

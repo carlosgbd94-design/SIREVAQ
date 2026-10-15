@@ -15467,25 +15467,26 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 #secInfluenzaFrascos .frs-tope--cero { color: #b91c1c; }
 #secInfluenzaFrascos .frs-tope-sub { display: block; margin-top: 2px; font-size: 10px; font-weight: 700; color: #475569; line-height: 1.25; }
 
-/* Verificador (frascos y metas): cuadro de esquinas redondeadas, centrado sobre el botón de guardar; en línea, una píldora baja. */
+/* Verificador (frascos y metas): cuadro de esquinas redondeadas, centrado sobre el botón de guardar; en línea, una píldora baja.
+   Paleta sobria: fondo casi blanco, borde fino y solo el número/ícono en tono apagado (sin colores chillantes). */
 #panelINFLUENZAADMIN .frs-pill {
   box-sizing: border-box; min-width: 64px; max-width: 76px; margin: 0; padding: 7px 8px 6px; border-radius: 14px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; line-height: 1.1;
-  border: 1.5px solid #94a3b8; background: #f8fafc; color: #0f172a; text-align: center;
-  box-shadow: 0 3px 10px rgba(15, 23, 42, .10);
+  border: 1px solid #dfe5ec; background: #ffffff; color: #475569; text-align: center;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .07);
 }
 #panelINFLUENZAADMIN .frs-pill:empty { display: none; }
 #panelINFLUENZAADMIN .frs-pill .material-symbols-rounded { font-size: 22px; width: 22px; height: 22px; overflow: hidden; font-variation-settings: 'FILL' 1; }
-#panelINFLUENZAADMIN .frs-pill b { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
-#panelINFLUENZAADMIN .frs-pill small { font-size: 9px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
-#panelINFLUENZAADMIN .frs-pill[data-estado="ok"] { background: #d1fae5; border-color: #10b981; color: #065f46; }
-#panelINFLUENZAADMIN .frs-pill[data-estado="falta"] { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
-#panelINFLUENZAADMIN .frs-pill[data-estado="excede"] { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+#panelINFLUENZAADMIN .frs-pill b { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+#panelINFLUENZAADMIN .frs-pill small { font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; opacity: .85; }
+#panelINFLUENZAADMIN .frs-pill[data-estado="ok"] { background: #f5faf7; border-color: #d3e6da; color: #3f7d5e; }
+#panelINFLUENZAADMIN .frs-pill[data-estado="falta"] { background: #fbf9f3; border-color: #ebe1c9; color: #8c6d2c; }
+#panelINFLUENZAADMIN .frs-pill[data-estado="excede"] { background: #fbf5f5; border-color: #ecd5d5; color: #a24b4b; }
 #panelINFLUENZAADMIN .frs-pill--inline {
   flex-direction: row; max-width: none; padding: 6px 14px 6px 10px; gap: 8px; border-radius: 12px; box-shadow: none;
 }
 #panelINFLUENZAADMIN .frs-pill--inline .material-symbols-rounded { font-size: 20px; }
-#panelINFLUENZAADMIN .frs-pill--inline b { font-size: 13px; font-weight: 800; }
+#panelINFLUENZAADMIN .frs-pill--inline b { font-size: 13px; font-weight: 700; }
 #secInfluenzaFrascos .frs-solo-chico { display: none; }
 @media (max-width: 1023px) { #secInfluenzaFrascos .frs-solo-chico:not(:empty) { display: inline-flex; } }
 
@@ -15500,3 +15501,14 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 #secInfluenzaMetas .vac-perdida-campo { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #475569; }
 #secInfluenzaMetas .vac-perdida-inp--pct { width: 72px !important; }
 #secInfluenzaMetas .vac-perdida-igual { font-weight: 900; color: #64748b; }
+
+/* Meta en frascos por marca, bien visible junto a lo que se reparte. COVID: dos columnas (Moderna y Pfizer, la de la
+   marca elegida resaltada); influenza: una sola columna «Meta (frascos)». */
+#secInfluenzaFrascos table .col-mod, #secInfluenzaFrascos table .col-pfz { display: none; }
+#secInfluenzaFrascos table[data-vac="COVID"] .col-mod, #secInfluenzaFrascos table[data-vac="COVID"] .col-pfz { display: table-cell; }
+#secInfluenzaFrascos table[data-vac="COVID"] .col-inf { display: none; }
+#secInfluenzaFrascos .frs-metafr { display: block; font-size: 17px; font-weight: 900; color: #1e293b; line-height: 1.1; font-variant-numeric: tabular-nums; }
+#secInfluenzaFrascos .frs-metafr-u { display: block; font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #64748b; }
+#secInfluenzaFrascos table[data-marca="MODERNA"] .col-mod, #secInfluenzaFrascos table[data-marca="PFIZER"] .col-pfz { background: #f5f3ff; }
+#secInfluenzaFrascos table[data-marca="MODERNA"] th.col-mod, #secInfluenzaFrascos table[data-marca="PFIZER"] th.col-pfz { background: #4c1d95 !important; color: #ffffff !important; }
+#secInfluenzaFrascos table[data-marca="MODERNA"] td.col-mod .frs-metafr, #secInfluenzaFrascos table[data-marca="PFIZER"] td.col-pfz .frs-metafr { color: #4c1d95; font-size: 19px; }
