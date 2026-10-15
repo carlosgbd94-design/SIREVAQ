@@ -6118,7 +6118,7 @@ function frascoPintarPill(ids, { total, asignado, porAsignar }) {
   let estado, icono, valor, etiqueta, completo;
   if (!total && !asignado) {
     estado = "vacio"; icono = "inventory_2"; valor = "—"; etiqueta = "sin frascos";
-    completo = `${marca}Sin frascos por repartir en esta entrega`;
+    completo = `Sin frascos por repartir en esta entrega${marca ? ` · ${marca.replace(" · ", "")}` : ""}`;
   } else {
     estado = porAsignar === 0 ? "ok" : porAsignar > 0 ? "falta" : "excede";
     const abs = Math.abs(porAsignar);

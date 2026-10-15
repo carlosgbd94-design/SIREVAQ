@@ -1668,5 +1668,16 @@ test('COVID Avance (Jurisdicción): el destino sin meta dice «sin meta», no «
   const fila = page.locator('#cavTbody tr', { hasText: 'Corregidora' });
   await expect(fila).toContainText('sin meta');
   await expect(fila).not.toContainText('0.0 %');
-  await expect(page.locator('#cavTbody tr', { hasText: 'Querétaro' })).toContainText('23.1 %');
+  await expect(page.locator('#cavTbody tr', { hasText: 'Querétaro' })).toContainText('11.5 %');   // 75 de 650
+});
+
+test('Reparto jurisdiccional COVID: sin frascos, la píldora en línea dice «Sin frascos por repartir», no solo la marca', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate(() => {
+    _vacuna = 'COVID'; _marcaCovid = 'PFIZER';
+    document.body.insertAdjacentHTML('beforeend', '<div id="pillT" class="frs-pill frs-pill--inline"></div>');
+    frascoPintarPill(['pillT'], { total: 0, asignado: 0, porAsignar: 0 });
+  });
+  await expect(page.locator('#pillT')).toContainText('Sin frascos por repartir');
+  await expect(page.locator('#pillT')).toHaveAttribute('title', /Pfizer/);
 });
