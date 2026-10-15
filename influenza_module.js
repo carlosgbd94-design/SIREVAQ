@@ -5336,9 +5336,9 @@ async function renderCovidAvance() {
     <div class="cav-kpi"><span class="cav-kpi-lbl">Por aplicar</span><b>${covidAvanceFmt(T.pendienteEq)}</b><small>para cubrir la meta</small></div>`;
 
   const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const filaHtml = (f, total) => `<tr class="${total ? "cav-total" : ""}">
+  const filaHtml = (f, total) => `<tr class="${total ? "cav-total" : ""}${f.sinMeta && f.calc.aplEq > 0 ? " cav-fila-alerta" : ""}">
       <td><b>${esc(f.nombre)}</b>${f.sub ? `<span class="cav-sub">${esc(f.sub)}</span>` : ""}</td>
-      <td class="c">${f.sinMeta ? '<span class="frs-muted">sin meta</span>' : covidAvanceFmt(f.calc.metaEq)}</td>
+      <td class="c">${f.sinMeta ? (f.calc.aplEq > 0 ? '<span class="cav-sinmeta" title="Esta unidad aplicó dosis pero no tiene meta de COVID-19 asignada: esas dosis cuentan en el total del municipio">sin meta · con dosis</span>' : '<span class="frs-muted">sin meta</span>') : covidAvanceFmt(f.calc.metaEq)}</td>
       <td class="c">${covidAvanceFmt(f.calc.aplEq)}</td>
       <td class="c">${covidAvanceBarra(f.calc.pct)}</td>
       <td class="c">${f.sinMeta ? "—" : covidAvanceFmt(f.calc.pendienteEq)}</td></tr>`;

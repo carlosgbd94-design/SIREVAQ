@@ -15537,3 +15537,7 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 /* Reparto jurisdiccional compacto: la tabla (con meta por marca) cabe sin desplazarse hacia los lados. */
 #frascosJurisPanel .frs-table th, #frascosJurisPanel .frs-table td { padding: 8px 7px; }
 #frascosJurisPanel .frs-table th { font-size: 10.5px; letter-spacing: .02em; line-height: 1.2; white-space: normal; vertical-align: bottom; }
+
+/* Avance COVID: unidad que aplicó dosis sin tener meta asignada (sus dosis cuentan en el total, no en su fila). */
+#secCovidAvance .cav-sinmeta { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; background: #fbf9f3; border: 1px solid #ebe1c9; color: #8c6d2c; }
+#secCovidAvance .cav-fila-alerta td:first-child { box-shadow: inset 3px 0 0 #d9c58f; }

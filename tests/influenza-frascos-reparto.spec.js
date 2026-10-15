@@ -1651,3 +1651,13 @@ test('Reparto jurisdiccional compacto: la tabla cabe sin desplazarse y se ve la 
   const d = await page.evaluate(() => { const sc = document.querySelector('#remesaTbody').closest('.frs-scroll'); const t = sc.querySelector('table'); return { visible: sc.clientWidth, contenido: t.scrollWidth }; });
   expect(d.contenido).toBeLessThanOrEqual(d.visible + 1);
 });
+
+test('COVID Avance (municipal): la unidad que aplicó dosis sin tener meta se señala', async ({ page }) => {
+  const sis = [{ clues: 'Q9', variable_sis: 'VCV16', dosis: 12, ult: '2026-11-01' }];
+  await montarAvance(page, 'MUNICIPAL', sis);
+  await page.evaluate(() => { _allUnidades.push({ clues: 'Q9', unidad: 'SIN META', municipio: 'QUERETARO' }); return renderCovidAvance(); });
+  const fila = page.locator('#cavTbody tr', { hasText: 'Q9' });
+  await expect(fila).toContainText('sin meta · con dosis');
+  await expect(fila).toContainText('12');
+  await expect(page.locator('#cavTbody tr', { hasText: 'UMQ TRES' })).not.toContainText('con dosis');   // sin dosis: solo «sin meta»
+});

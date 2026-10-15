@@ -2315,9 +2315,9 @@ UMQ`,nombre:"UMME QUER\xC9TARO",clues:"QTSSA001764"},{label:"JURICA",nombre:"JUR
     <div class="cav-kpi cav-kpi--main"><span class="cav-kpi-lbl">Avance</span><b>${c.pct===null?"\u2014":c.pct.toFixed(1)+" %"}</b><small>${covidAvanceFmt(c.aplEq)} de ${covidAvanceFmt(c.metaEq)} dosis (0.5 mL)</small></div>
     <div class="cav-kpi"><span class="cav-kpi-lbl">Meta</span><b>${covidAvanceFmt(c.metaEq)}</b><small>dosis equivalentes de 0.5 mL</small></div>
     <div class="cav-kpi"><span class="cav-kpi-lbl">Aplicadas</span><b>${covidAvanceFmt(c.aplEq)}</b><small>seg\xFAn SIS validado</small></div>
-    <div class="cav-kpi"><span class="cav-kpi-lbl">Por aplicar</span><b>${covidAvanceFmt(c.pendienteEq)}</b><small>para cubrir la meta</small></div>`;const p=m=>String(m).replace(/[&<>"]/g,b=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[b]),f=(m,b)=>`<tr class="${b?"cav-total":""}">
+    <div class="cav-kpi"><span class="cav-kpi-lbl">Por aplicar</span><b>${covidAvanceFmt(c.pendienteEq)}</b><small>para cubrir la meta</small></div>`;const p=m=>String(m).replace(/[&<>"]/g,b=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[b]),f=(m,b)=>`<tr class="${b?"cav-total":""}${m.sinMeta&&m.calc.aplEq>0?" cav-fila-alerta":""}">
       <td><b>${p(m.nombre)}</b>${m.sub?`<span class="cav-sub">${p(m.sub)}</span>`:""}</td>
-      <td class="c">${m.sinMeta?'<span class="frs-muted">sin meta</span>':covidAvanceFmt(m.calc.metaEq)}</td>
+      <td class="c">${m.sinMeta?m.calc.aplEq>0?'<span class="cav-sinmeta" title="Esta unidad aplic\xF3 dosis pero no tiene meta de COVID-19 asignada: esas dosis cuentan en el total del municipio">sin meta \xB7 con dosis</span>':'<span class="frs-muted">sin meta</span>':covidAvanceFmt(m.calc.metaEq)}</td>
       <td class="c">${covidAvanceFmt(m.calc.aplEq)}</td>
       <td class="c">${covidAvanceBarra(m.calc.pct)}</td>
       <td class="c">${m.sinMeta?"\u2014":covidAvanceFmt(m.calc.pendienteEq)}</td></tr>`;document.getElementById("cavTbody").innerHTML=l.filas.length?l.filas.map(m=>f(m,!1)).join("")+f(l.total,!0):'<tr><td colspan="5" class="cav-vacio">No hay unidades para este \xE1mbito.</td></tr>',document.getElementById("cavRubros").innerHTML=c.rubros.map(m=>{const b=CovidFrascos.RUBROS.find(g=>g.id===m.id);return`<tr><td><b>${p(b.grupo)}</b><span class="cav-sub">${p(b.edad)}</span></td>
