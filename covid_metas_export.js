@@ -106,7 +106,7 @@
     columnas.forEach((u, i) => {
       const c = COL_PRIMERA + i;
       if (i > 0) poner(c);
-      ws.getColumn(c).width = 17;
+      ws.getColumn(c).width = 21;
       ws.getCell(FILA_ENCABEZADO, c).value = u.label;
       const m = metasDeColumna(ctx.metas, u) || {};
       RUBROS.forEach((id, k) => {
@@ -118,14 +118,14 @@
     if (!n) { ws.getCell(FILA_ENCABEZADO, COL_PRIMERA).value = "SIN META"; }
     if (conTotal) {
       poner(colTotal);
-      ws.getColumn(colTotal).width = 17;
+      ws.getColumn(colTotal).width = 21;
       ws.getCell(FILA_ENCABEZADO, colTotal).value = "TOTAL";
       const a = letra(COL_PRIMERA), b = letra(ultima);
       for (let r = FILA_PRIMER_RUBRO; r <= FILA_ULTIMO_RUBRO; r++) ws.getCell(r, colTotal).value = { formula: `SUM(${a}${r}:${b}${r})` };
       filaTotal(colTotal);
     }
     // El encabezado de unidad puede llevar nombres largos
-    ws.getRow(FILA_ENCABEZADO).height = n && columnas.some((u) => String(u.label).length > 18) ? 48 : 32;
+    ws.getRow(FILA_ENCABEZADO).height = n && columnas.some((u) => String(u.label).length > 20) ? 64 : 44;
     ws.getRow(FILA_ENCABEZADO).eachCell((cell) => { cell.alignment = Object.assign({}, cell.alignment, { wrapText: true, vertical: "middle", horizontal: "center" }); });
 
     // Datos del encabezado de la plantilla
@@ -133,8 +133,17 @@
       const c = ws.getCell(dir);
       c.value = valor;
       c.font = { name: "Noto Sans", size: 12, bold: true };
-      c.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+      c.alignment = { horizontal: "left", vertical: "middle", wrapText: true, indent: 1 };
     };
+    // Más aire: etiquetas y valores con sangría y renglones del encabezado más altos
+    const aire = (dir, h) => {
+      const c = ws.getCell(dir);
+      c.alignment = Object.assign({}, c.alignment, { horizontal: h, vertical: "middle", wrapText: true, indent: 1 });
+    };
+    ["B6", "B7"].forEach((d) => aire(d, "left"));
+    ["F6", "F7"].forEach((d) => aire(d, "right"));
+    ws.getRow(6).height = 34;
+    ws.getRow(7).height = 44;
     try { ws.mergeCells("D6:E6"); } catch (e) { /* ya combinada */ }
     try { ws.mergeCells("D7:E7"); } catch (e) { /* ya combinada */ }
     dato("D6", "QUERÉTARO");
