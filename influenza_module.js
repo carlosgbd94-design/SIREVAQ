@@ -6303,7 +6303,9 @@ function renderFrascosMunicipal(muni) {
   if (!remesas.length) {
     sel.innerHTML = "";
     tbody.innerHTML = "";
-    frascoPintarResumen(resumen, "info", "La Jurisdicción todavía no asigna frascos a este municipio. Cuando reparta una entrega aparecerá aquí.");
+    const deMarca = esCovid() ? ` de ${_marcaCovid === "PFIZER" ? "Pfizer" : "Moderna"}` : "";
+    frascoPintarResumen(resumen, "info", `La Jurisdicción todavía no asigna frascos${deMarca} a este municipio. Cuando reparta una entrega${deMarca} aparecerá aquí.`
+      + (esCovid() ? " Puedes cambiar de marca arriba." : ""));
     ["frascosHubEstado", "frascosEstadoInline"].forEach(id => { const p = document.getElementById(id); if (p) p.innerHTML = ""; });
     const kpisVacio = document.getElementById("frascosMuniKpis");
     if (kpisVacio) kpisVacio.style.display = "none";

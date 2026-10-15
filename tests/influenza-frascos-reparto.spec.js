@@ -1599,3 +1599,16 @@ test('COVID pérdida: se captura en dosis o en % (se calculan entre sí) y la pr
   const j = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'savecovid_metas')[1].rows.find((r) => r.municipio === 'JURISDICCION').metas);
   expect(j.perdida).toBe(3900);
 });
+
+test('COVID municipal: si solo hay asignación de una marca, el aviso de la otra dice de cuál marca habla', async ({ page }) => {
+  await montarMunicipalCovid(page);
+  await page.evaluate(() => {
+    _covidRemesasAll = [{ marca: 'PFIZER', numero_entrega: 1, fecha: '2026-10-05', total_frascos: 5, asignacion: { QUERETARO: 5 }, manual: [] }];
+    _marcaCovid = 'MODERNA'; _muniRepartoState.numero = null;
+    renderFrascosDistribution();
+  });
+  await expect(page.locator('#frascosMuniResumen')).toContainText('no asigna frascos de Moderna');
+  await expect(page.locator('#frascosMuniResumen')).toContainText('cambiar de marca');
+  await page.evaluate(() => { _marcaCovid = 'PFIZER'; _muniRepartoState.numero = null; renderFrascosDistribution(); });
+  await expect(page.locator('#frascosHubEstado')).toHaveAttribute('data-estado', /ok|falta|excede/);   // con Pfizer sí hay reparto
+});
