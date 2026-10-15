@@ -1302,3 +1302,12 @@ test('Requisiciones COVID (municipal): el Excel de su municipio trae Moderna y P
   expect([cantidad(mun, '6502'), cantidad(mun, '6506')]).toEqual([50, 10]);        // total del municipio (sin Corregidora)
   expect(errores).toEqual([]);
 });
+
+test('Requisiciones: la entrega de COVID-19 se nombra «Temporada 2026-2027» (no «Campaña Influenza») y sin «Temporada invernal >»', async ({ page }) => {
+  await page.addInitScript(() => { window.__FAKE_COVID__ = true; });
+  await preparar(page, { conReq: true });
+  await page.click('#btnTraerCovid');
+  await expect(page.locator('#covModerna option').nth(1)).toHaveText('Temporada 2026-2027 · 1ª entrega · 70 frascos');
+  await expect(page.locator('#modalCovid')).not.toContainText('Campaña Influenza');
+  await expect(page.locator('#modalCovid')).not.toContainText('Temporada invernal >');
+});

@@ -21,7 +21,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
 <script defer src="requisiciones_rutas_excel.js"></script>
-<script defer src="requisiciones_ui.js?v=16"></script>
+<script defer src="requisiciones_ui.js?v=17"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -944,7 +944,7 @@
     </div>
   </div>
 
-  <!-- Traer el reparto de frascos de influenza (Influenza > Control de frascos) -->
+  <!-- Traer el reparto de frascos de influenza (Control de Frascos, vacuna Influenza) -->
   <div class="modal-fondo" id="modalInfluenza" style="display:none;">
     <div class="modal-hoja" role="dialog" aria-modal="true" aria-labelledby="infTitulo" style="max-width:560px;">
       <div class="modal-cab">
@@ -963,11 +963,11 @@
     </div>
   </div>
 
-  <!-- Traer el reparto de frascos de COVID-19, por marca (Temporada invernal > COVID-19 > Control de frascos) -->
+  <!-- Traer el reparto de frascos de COVID-19, por marca (Control de Frascos, vacuna COVID-19) -->
   <div class="modal-fondo" id="modalCovid" style="display:none;">
     <div class="modal-hoja" role="dialog" aria-modal="true" aria-labelledby="covTitulo" style="max-width:600px;">
       <div class="modal-cab">
-        <div><h3 id="covTitulo">Traer reparto de COVID-19</h3><p>Llena la vacuna COVID-19 de esta requisición con lo que ya repartieron Jurisdicción y los municipios. Moderna y Pfizer quedan en renglones separados, en frascos. Los lotes se asignan después con "Asignar lotes".</p></div>
+        <div><h3 id="covTitulo">Traer reparto de COVID-19</h3><p>Elige la entrega de cada marca que ya repartieron Jurisdicción y los municipios en Control de Frascos. Moderna y Pfizer quedan en renglones separados, en frascos; los lotes se asignan después con "Asignar lotes".</p></div>
         <button type="button" class="icon-btn-pure" id="covCerrar" title="Cerrar"><span class="material-symbols-rounded">close</span></button>
       </div>
       <div class="modal-cuerpo">

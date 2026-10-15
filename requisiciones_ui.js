@@ -1932,6 +1932,11 @@ const INFLUENZA_CODIGO = '6317';
 function bioInfluenza() { return estado.catalogo.find((b) => String(b.codigo_articulo) === INFLUENZA_CODIGO) || null; }
 
 function ordinalEntrega(n) { return `${n}ª entrega`; }
+// «Campaña Influenza 2026-2027» es el nombre interno de la temporada; para COVID-19 se muestra solo «Temporada 2026-2027».
+function etiquetaTemporada(nombre) {
+  const m = /\d{4}\s*-\s*\d{4}/.exec(String(nombre || ''));
+  return m ? `Temporada ${m[0].replace(/\s+/g, '')}` : String(nombre || '');
+}
 
 function opcionesRemesas() {
   const vinculadas = estado.influenzaVinculos || [];
@@ -1981,7 +1986,7 @@ async function abrirTraerInfluenza() {
   const ops = opcionesRemesas();
   if (!ops.length) {
     $('infEntrega').innerHTML = '<option value="">Sin entregas repartidas</option>';
-    $('infDetalle').textContent = 'Jurisdicción todavía no registra ninguna entrega en Influenza > Control de frascos.';
+    $('infDetalle').textContent = 'Jurisdicción todavía no registra ninguna entrega de influenza. Se captura en Control de Frascos, con la vacuna Influenza elegida.';
     return;
   }
   $('infEntrega').innerHTML = ops.map((o) => `<option value="${esc(o.valor)}">${esc(o.anio_campana)} · ${ordinalEntrega(o.numero_entrega)} · ${Number(o.total_frascos).toLocaleString('es-MX')} frascos${o.otra ? ' (ya vinculada)' : ''}</option>`).join('');
@@ -2021,7 +2026,7 @@ async function traerRepartoInfluenza() {
     const sinUnidad = data.clues_sin_unidad || [];
     const base = `Se trajeron ${Number(data.frascos).toLocaleString('es-MX')} frascos de influenza: ${plural(data.destinos, 'destino', 'destinos')} y ${plural(data.unidades, 'unidad', 'unidades')}. Los lotes quedan por definir.`;
     const avisos = [];
-    if (sinReparto.length) avisos.push(`todavía no reparten entre sus unidades: ${sinReparto.join(', ')} (su reparto interno se hace en Influenza > Control de frascos)`);
+    if (sinReparto.length) avisos.push(`todavía no reparten entre sus unidades: ${sinReparto.join(', ')} (su reparto interno se hace en Control de Frascos, con la vacuna Influenza elegida)`);
     if (sinUnidad.length) avisos.push(`CLUES sin unidad en Requisiciones: ${sinUnidad.join(', ')}`);
     if (avisos.length) await confirmar({ titulo: 'Reparto de influenza traído', tono: 'aviso', aceptar: 'Entendido', cancelar: 'Cerrar', mensaje: base + ' Ojo: ' + avisos.join('; ') + '.' });
     else toast(base);
@@ -2099,13 +2104,13 @@ async function abrirTraerCovid() {
     if (!ops.length) { $(m.select).innerHTML = '<option value="">Sin entregas repartidas</option>'; return; }
     alguna = true;
     $(m.select).innerHTML = '<option value="">— No traer —</option>' + ops.map((o) =>
-      `<option value="${esc(o.valor)}">${esc(o.anio_campana)} · ${ordinalEntrega(o.numero_entrega)} · ${Number(o.total_frascos).toLocaleString('es-MX')} frascos${o.otra ? ' (ya vinculada)' : ''}</option>`).join('');
+      `<option value="${esc(o.valor)}">${esc(etiquetaTemporada(o.anio_campana))} · ${ordinalEntrega(o.numero_entrega)} · ${Number(o.total_frascos).toLocaleString('es-MX')} frascos${o.otra ? ' (ya vinculada)' : ''}</option>`).join('');
     const propia = ops.find((o) => !o.otra && estado.requisicion[m.col] === o.numero_entrega && estado.requisicion.covid_campana === o.anio_campana);
     const libre = ops.find((o) => !o.otra && !estado.covidVinculos.some((v) => v.covid_campana === o.anio_campana && v[m.col] === o.numero_entrega));
     const elegida = propia || libre || ops[0];   // sin libres se muestra la primera para explicar por qué no se puede
     $(m.select).value = elegida ? elegida.valor : '';
   });
-  if (!alguna) $('covDetalleModerna').textContent = 'Jurisdicción todavía no registra ninguna entrega de COVID-19 en Temporada invernal > COVID-19 > Control de frascos.';
+  if (!alguna) $('covDetalleModerna').textContent = 'Jurisdicción todavía no registra ninguna entrega de COVID-19. Se captura en Control de Frascos, con la vacuna COVID-19 elegida.';
   actualizarDetalleCovid();
   $('covModerna').focus();
 }
