@@ -426,7 +426,16 @@
             if (dockInfC) dockInfC.hidden = !window.MobileInfluenzaCap.puedeUsar();
         }
 
-        switchPanel('SR');
+        // Perfiles de supervisión: barra propia (Resumen · Influenza · Avisos · Capacitación · Más)
+        if (window.MobileSupervision) {
+            window.MobileSupervision.init({
+                getClient: () => supabaseClient,
+                getProfile: () => currentProfile,
+                irA: (id) => switchPanel(id)
+            });
+        }
+
+        switchPanel(window.MobileSupervision && window.MobileSupervision.activo() ? 'RES' : 'SR');
         initDockBehavior();
     };
 
@@ -2688,7 +2697,8 @@
         if (mpAnnounce) mpAnnounce.textContent = 'Panel: ' + (document.getElementById(`panel${panelId}`)?.getAttribute('aria-label') || panelId);
 
         document.querySelectorAll('.dock-item').forEach(item => {
-            const isActive = item.dataset.panel === panelId;
+            const dockKey = (window.MobileSupervision && window.MobileSupervision.activo()) ? window.MobileSupervision.dockKey(panelId) : panelId;
+            const isActive = item.dataset.panel === dockKey;
             item.classList.toggle('active', isActive);
             if (isActive) { item.setAttribute('aria-current', 'page'); } else { item.removeAttribute('aria-current'); }
         });
@@ -2696,6 +2706,12 @@
 
         // Cada panel abre desde arriba (antes quedaba a media página del panel anterior).
         if (changed) window.scrollTo({ top: 0, behavior: 'auto' });
+
+        // Supervisión: paneles propios (sin hub de guardado ni candados de captura)
+        if (window.MobileSupervision && window.MobileSupervision.activo()) {
+            window.MobileSupervision.mostrar(panelId);
+            return;
+        }
 
         // Validación de Influenza: panel propio, sin barra de guardado de captura ni candados de formularios
         if (panelId === 'INF' || panelId === 'INFC') {
@@ -3946,6 +3962,12 @@
         document.getElementById('mobileCaptureDock')?.addEventListener('click', (e) => {
             const btn = e.target.closest('.dock-item');
             if (btn) {
+                // Supervisión: «Avisos» abre la campana de notificaciones, no un panel
+                if (btn.dataset.panel === 'AVI' && document.body.classList.contains('sup-mode')) {
+                    e.stopPropagation();
+                    document.getElementById('btnNotifToggle')?.click();
+                    return;
+                }
                 switchPanel(btn.dataset.panel);
             }
         });

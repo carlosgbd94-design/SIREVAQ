@@ -41,6 +41,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="mobile_style.css?v=2026.45">
   <link rel="stylesheet" href="ayuda.css?v=1">
+  <link rel="stylesheet" href="mobile_supervision.css?v=2">
 </head>
 <body class="bg-[#f1f4f8] text-slate-800 min-h-[100dvh] flex flex-col relative overflow-x-hidden">
 
@@ -355,6 +356,23 @@
       <!-- ==================== INFLUENZA: VALIDACIÓN (supervisión) ==================== -->
       <section id="panelINF" class="panel-section hidden" role="region" aria-label="Validación de Influenza">
         <div id="infValRoot"><p class="iv-cargando" role="status">Cargando…</p></div>
+      </section>
+
+      <!-- ==================== SUPERVISIÓN (municipal, jurisdiccional, visualizador, caravanas, admin) ==================== -->
+      <section id="panelRES" class="panel-section hidden" role="region" aria-label="Resumen de captura">
+        <div id="supRoot"><p class="sv-vacio" role="status">Cargando…</p></div>
+      </section>
+      <section id="panelCAL" class="panel-section hidden" role="region" aria-label="Capacitaciones">
+        <div id="supCalRoot"></div>
+      </section>
+      <section id="panelMAS" class="panel-section hidden" role="region" aria-label="Más módulos">
+        <div id="supMasRoot"></div>
+      </section>
+      <section id="panelRDA" class="panel-section hidden" role="region" aria-label="Indicadores RDA">
+        <div id="supRdaRoot"></div>
+      </section>
+      <section id="panelMET" class="panel-section hidden" role="region" aria-label="Métricas de cumplimiento">
+        <div id="supMetRoot"></div>
       </section>
 
       <section id="panelPINOL" class="panel-section hidden" role="region" aria-label="Solicitud de Pinol">
@@ -802,6 +820,7 @@
   <script src="influenza_rubros.js?v=1" defer></script>
   <script src="mobile_influenza_validacion.js?v=2" defer></script>
   <script src="mobile_influenza_captura.js?v=4" defer></script>
-  <script src="mobile_main.js?v=2026.42" defer></script>
+  <script src="mobile_supervision.js?v=2" defer></script>
+  <script src="mobile_main.js?v=2026.43" defer></script>
 </body>
 </html>
