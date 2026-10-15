@@ -69,58 +69,60 @@
 
     if (actual) renderCensia(box, ctx, actual);
 
-    // Una tarjeta por marca, con la misma tabla que Influenza
-    C.MARCAS.forEach((m) => {
-      const rubros = C.RUBROS_MARCA[m].filter((r) => Number(metas[r] || 0) > 0);
-      if (!rubros.length) return;
-      const card = document.createElement("div");
-      card.className = "bg-white border border-slate-200 rounded-[24px] p-6 shadow-sm flex flex-col gap-4";
-      card.style.backgroundColor = "#ffffff";
-      const titulo = `COVID-19 - ${MARCA_TXT[m]}`;
-      card.innerHTML = `
-        <div class="pb-2 border-b border-slate-100">
-          <h4 class="text-xs font-black text-violet-900 uppercase tracking-wider m-0">${titulo}</h4>
-        </div>
-        <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200 bg-white">
-          <table class="inf-cap-tabla w-full border-collapse text-left text-xs font-semibold text-slate-700">
-            <caption class="sr-only">${titulo}: meta, acumulado de esta marca, dosis de esta semana y avance contra la meta (Moderna y Pfizer suman)</caption>
-            <thead>
-              <tr class="bg-slate-50 border-b border-slate-200">
-                <th scope="col" class="p-3">Subgrupo / Edad</th>
-                <th scope="col" class="p-3 text-center">Meta Anual</th>
-                <th scope="col" class="p-3 text-center">Acumulado</th>
-                <th scope="col" class="p-3 text-center">Esta Semana</th>
-                <th scope="col" class="p-3 text-center">Avance % (ambas marcas)</th>
-              </tr>
-            </thead>
-            <tbody class="tbody-inputs"></tbody>
-          </table>
-        </div>`;
-      const tbody = card.querySelector(".tbody-inputs");
-      rubros.forEach((r) => {
-        const meta = Number(metas[r]);
+    // Una sola tarjeta (como cada grupo de Influenza): una fila por grupo, con Moderna y Pfizer lado a lado.
+    // La meta es una sola por grupo (no distingue marca), por eso el avance suma ambas.
+    const rubros = C.RUBROS.filter((r) => Number(metas[r] || 0) > 0);
+    const card = document.createElement("div");
+    card.className = "bg-white border border-slate-200 rounded-[24px] p-6 shadow-sm flex flex-col gap-4";
+    card.style.backgroundColor = "#ffffff";
+    card.innerHTML = `
+      <div class="pb-2 border-b border-slate-100">
+        <h4 class="text-xs font-black text-violet-900 uppercase tracking-wider m-0">COVID-19 - Dosis aplicadas por marca</h4>
+      </div>
+      <div class="tableWrap w-full rounded-xl border border-slate-200 bg-white">
+        <table class="inf-cap-tabla w-full border-collapse text-left text-xs font-semibold text-slate-700">
+          <caption class="sr-only">COVID-19: meta, acumulado, dosis de esta semana por marca y avance contra la meta (Moderna y Pfizer suman)</caption>
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200">
+              <th scope="col" class="p-3">Subgrupo / Edad</th>
+              <th scope="col" class="p-3 text-center">Meta Anual</th>
+              <th scope="col" class="p-3 text-center">Acumulado</th>
+              <th scope="col" class="p-3 text-center">Moderna<span class="sr-only"> esta semana</span></th>
+              <th scope="col" class="p-3 text-center">Pfizer<span class="sr-only"> esta semana</span></th>
+              <th scope="col" class="p-3 text-center">Avance %</th>
+            </tr>
+          </thead>
+          <tbody class="tbody-inputs"></tbody>
+        </table>
+      </div>
+      <p class="text-xs text-slate-500 m-0">La meta no distingue marca: Moderna y Pfizer suman contra el mismo número, aunque los frascos se hayan repartido por marca.</p>`;
+    const tbody = card.querySelector(".tbody-inputs");
+    rubros.forEach((r) => {
+      const meta = Number(metas[r]);
+      const celda = (m) => {
+        if (!C.RUBROS_MARCA[m].includes(r)) return `<td class="p-3 text-center inf-num" aria-label="${MARCA_TXT[m]}: no aplica a este grupo"><span aria-hidden="true">—</span></td>`;
         const val = Number(previo?.[m]?.[r]) || 0;
-        const id = `${m}_${r}`;
-        const row = document.createElement("tr");
-        row.className = "inf-fila";
-        row.innerHTML = `
-          <th scope="row" class="p-3 inf-fila-edad"><span class="inf-edad">${esc(EDAD[r])}</span></th>
-          <td class="p-3 text-center inf-num">${fmt(meta)}</td>
-          <td class="p-3 text-center inf-num inf-num--acum">${fmt(acumMarca[m][r])}</td>
-          <td class="p-3 text-center">
-            <input type="number" min="0" step="1" inputmode="numeric" id="input_cov_${id}" class="inf-input" data-m="${m}" data-r="${r}"
-              aria-label="${MARCA_TXT[m]}, ${esc(EDAD[r])}: dosis aplicadas esta semana" aria-describedby="disp_cov_${id}"
-              value="${val > 0 ? val : ""}" ${ctx.cerrada ? 'disabled placeholder="—" title="La captura de esta semana está cerrada"' : 'placeholder="0"'}>
-          </td>
-          <td class="p-3 text-center inf-col-avance">
-            <span id="pct_cov_${id}" class="inf-pct" data-tono="none">0%</span>
-            <div class="inf-barra"><div id="bar_cov_${id}" class="inf-barra-fill" data-tono="none" role="progressbar" aria-label="Avance contra la meta" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width:0%;"></div></div>
-            <span id="disp_cov_${id}" class="inf-disp"></span>
-          </td>`;
-        tbody.appendChild(row);
-      });
-      box.appendChild(card);
+        return `<td class="p-3 text-center">
+          <input type="number" min="0" step="1" inputmode="numeric" id="input_cov_${m}_${r}" class="inf-input" data-m="${m}" data-r="${r}"
+            aria-label="${MARCA_TXT[m]}, ${esc(EDAD[r])}: dosis aplicadas esta semana" aria-describedby="disp_cov_${r}"
+            value="${val > 0 ? val : ""}" ${ctx.cerrada ? 'disabled placeholder="—" title="La captura de esta semana está cerrada"' : 'placeholder="0"'}>
+        </td>`;
+      };
+      const row = document.createElement("tr");
+      row.className = "inf-fila";
+      row.innerHTML = `
+        <th scope="row" class="p-3 inf-fila-edad"><span class="inf-edad">${esc(EDAD[r])}</span></th>
+        <td class="p-3 text-center inf-num">${fmt(meta)}</td>
+        <td class="p-3 text-center inf-num inf-num--acum">${fmt(acumRubro[r])}</td>
+        ${celda("MODERNA")}${celda("PFIZER")}
+        <td class="p-3 text-center inf-col-avance">
+          <span id="pct_cov_${r}" class="inf-pct" data-tono="none">0%</span>
+          <div class="inf-barra"><div id="bar_cov_${r}" class="inf-barra-fill" data-tono="none" role="progressbar" aria-label="Avance contra la meta" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width:0%;"></div></div>
+          <span id="disp_cov_${r}" class="inf-disp"></span>
+        </td>`;
+      tbody.appendChild(row);
     });
+    box.appendChild(card);
 
     const leer = () => {
       const v = { MODERNA: {}, PFIZER: {} };
@@ -129,35 +131,30 @@
     };
     const repintar = () => {
       const nuevo = C.porRubro(leer());
-      C.RUBROS.forEach((r) => {
+      rubros.forEach((r) => {
         const meta = Number(metas[r] || 0);
         const total = acumRubro[r] + nuevo[r];
         const pct = meta > 0 ? Math.round((total / meta) * 100) : 0;
         const t = tono(meta, pct);
         const exceso = total - meta;
-        C.MARCAS.forEach((m) => {
-          const id = `${m}_${r}`;
-          const disp = box.querySelector(`#disp_cov_${id}`);
-          if (!disp) return;
-          const input = box.querySelector(`#input_cov_${id}`);
-          const pctEl = box.querySelector(`#pct_cov_${id}`);
-          const bar = box.querySelector(`#bar_cov_${id}`);
-          if (exceso > 0) {
-            disp.className = "inf-disp is-over";
-            disp.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">warning</span>Te pasas por ${fmt(exceso)}`;
-            input.setAttribute("aria-invalid", "true");
-            input.classList.add("is-over");
-          } else {
-            disp.className = "inf-disp" + (exceso === 0 && meta > 0 ? " is-justo" : "");
-            disp.textContent = `${fmt(total)} de ${fmt(meta)}`;
-            input.removeAttribute("aria-invalid");
-            input.classList.remove("is-over");
-          }
-          pctEl.textContent = `${pct}%`; pctEl.dataset.tono = t;
-          bar.style.width = Math.min(pct, 100) + "%";
-          bar.setAttribute("aria-valuenow", String(Math.min(pct, 100)));
-          bar.dataset.tono = t;
+        const disp = box.querySelector(`#disp_cov_${r}`);
+        const pctEl = box.querySelector(`#pct_cov_${r}`);
+        const bar = box.querySelector(`#bar_cov_${r}`);
+        if (exceso > 0) {
+          disp.className = "inf-disp is-over";
+          disp.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">warning</span>Te pasas por ${fmt(exceso)}`;
+        } else {
+          disp.className = "inf-disp" + (exceso === 0 ? " is-justo" : "");
+          disp.textContent = `${fmt(total)} de ${fmt(meta)}`;
+        }
+        box.querySelectorAll(`.inf-input[data-r="${r}"]`).forEach((input) => {
+          if (exceso > 0) { input.setAttribute("aria-invalid", "true"); input.classList.add("is-over"); }
+          else { input.removeAttribute("aria-invalid"); input.classList.remove("is-over"); }
         });
+        pctEl.textContent = `${pct}%`; pctEl.dataset.tono = t;
+        bar.style.width = Math.min(pct, 100) + "%";
+        bar.setAttribute("aria-valuenow", String(Math.min(pct, 100)));
+        bar.dataset.tono = t;
       });
     };
     box.querySelectorAll(".inf-input[data-m]").forEach((el) => el.addEventListener("input", () => {

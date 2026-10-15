@@ -60,7 +60,7 @@ test('Validación contra la meta: Moderna y Pfizer suman; lo ya guardado no bloq
   expect(r.error).toMatch(/no tiene meta/);
 });
 
-test('Panel: mismo diseño que Influenza, una tarjeta por marca, avisa excesos y valida al recoger', async ({ page }) => {
+test('Panel: mismo diseño que Influenza, una tabla con Moderna y Pfizer lado a lado, avisa excesos y valida al recoger', async ({ page }) => {
   await page.setContent('<div id="covidCapturaContainer"></div>');
   await page.addScriptTag({ path: path.join(raiz, 'covid_captura.js') });
   await page.addScriptTag({ path: path.join(raiz, 'covid_captura_ui.js') });
@@ -70,12 +70,12 @@ test('Panel: mismo diseño que Influenza, una tarjeta por marca, avisa excesos y
     capturas: [], fecha: '2026-10-30', cerrada: false, USER: { clues: 'QTIMB000001' }
   }));
   expect(pintado).toBe(true);
-  await expect(page.locator('.inf-cap-tabla')).toHaveCount(2);        // Moderna y Pfizer
+  await expect(page.locator('.inf-cap-tabla')).toHaveCount(1);        // un solo cuadro, ambas marcas
   await expect(page.locator('.inf-input')).toHaveCount(10);           // Moderna 6 + Pfizer 4 (sin 6-59 meses)
   await expect(page.locator('#input_cov_PFIZER_c1')).toHaveCount(0);
   await page.locator('#input_cov_MODERNA_c3').fill('8');
   await page.locator('#input_cov_PFIZER_c3').fill('5');
-  await expect(page.locator('#disp_cov_PFIZER_c3')).toContainText('Te pasas por 3');
+  await expect(page.locator('#disp_cov_c3')).toContainText('Te pasas por 3');
   const mal = await page.evaluate(() => window.CovidCapturaUI.recoger());
   expect(mal.error).toMatch(/supera la meta/);
   await page.locator('#input_cov_PFIZER_c3').fill('2');

@@ -721,7 +721,7 @@ let _hubDosisTimer = null;
 function actualizarContadorDosisHub() {
   const box = document.getElementById("hubDosis");
   if (!box) return;
-  if (_capturaVacuna === "COVID" && window.CovidCapturaUI) {
+  if (typeof _capturaVacuna !== "undefined" && _capturaVacuna === "COVID" && window.CovidCapturaUI) {
     const t = window.CovidCapturaUI.totalActual();
     const el = document.getElementById("hubDosisSemana");
     if (el) el.textContent = t.toLocaleString("es-MX");
@@ -1037,7 +1037,7 @@ function renderCaptureGrid() {
 
   // Reporte ya guardado: ofrecer el paso a CeNSIA (plataforma federal)
   if (currentReport) renderPasoCensia(container, selectedFecha, currentReport);
-  renderCovidCaptura();
+  if (typeof renderCovidCaptura === "function") renderCovidCaptura();
 
 
   // Agrupar rubros por categoría y grupo para una presentación visual limpia y organizada
@@ -1648,7 +1648,7 @@ function influenzaValidarCaptura(selectedFecha) {
 window.influenzaValidarCaptura = influenzaValidarCaptura;
 
 async function saveInfluenzaReport() {
-  if (_capturaVacuna === "COVID") return guardarCovidDesdePanel();
+  if (typeof _capturaVacuna !== "undefined" && _capturaVacuna === "COVID") return guardarCovidDesdePanel();
   const selectedFecha = document.getElementById("influenza_semana").value;
   const nombre = document.getElementById("nombreINFLUENZA").value.trim();
   const campana = document.getElementById("influenza_campana").value;
