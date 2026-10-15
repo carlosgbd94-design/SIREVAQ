@@ -1691,3 +1691,20 @@ test('COVID Avance (Jurisdicción): al elegir un hospital su única unidad usa l
   await expect(fila).toContainText('31.3 %');
   await expect(fila).not.toContainText('sin meta');
 });
+
+test('Metas COVID (municipal): el total de la comparación va en dosis equivalentes de 0.5 mL, igual que el TOTAL', async ({ page }) => {
+  await montarMetas(page, 'MUNICIPAL', []);
+  await page.evaluate(() => {
+    _vacuna = 'COVID';
+    _covidMetasArray = [
+      { clues: null, municipio: 'QUERETARO', metas: { c1: 3000, c2: 3000, c3: 1000, c4: 2000, c5: 100, c6: 200 } },
+      { clues: 'Q1', municipio: 'QUERETARO', metas: { c1: 2000, c2: 2000, c3: 600, c4: 1200 } },
+      { clues: 'Q2', municipio: 'QUERETARO', metas: { c1: 1000, c2: 1000, c3: 400, c4: 800 } }
+    ];
+    window.__render();
+  });
+  // meta equivalente = (3000+3000)/2 + 1000+2000+100+200 = 6,300; repartido = (3000+3000)/2 + 1000+2000 = 6,000
+  await expect(page.locator('#cmp_TOTAL')).toContainText('6000 de 6300');
+  await expect(page.locator('#cmp_TOTAL')).toContainText('Faltan 300');
+  await expect(page.locator('#tot_meta')).toHaveText('6,300');
+});
