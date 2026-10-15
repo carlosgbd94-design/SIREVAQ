@@ -16,7 +16,7 @@
     RES: { icon: "dashboard", label: "Resumen", hoja: "#0284c7" },
     INF: { icon: "clinical_notes", label: "Influenza", hoja: "#6d28d9" },
     AVI: { icon: "campaign", label: "Avisos", hoja: "#d97706" },
-    CAL: { icon: "event", label: "Capacitación", hoja: "#059669" },
+    CAL: { icon: "event", label: "Calendario", hoja: "#059669" },
     MAS: { icon: "apps", label: "Más", hoja: "#475569" }
   };
   const NAV = {
@@ -182,13 +182,13 @@
     const [alcT, alcS] = textoAlcance(S.unidades);
 
     const chipsTipo = Object.keys(TIPOS).map((k) =>
-      `<button type="button" class="sv-chip${k === S.tipo ? " activo" : ""}" data-tipo="${k}" aria-pressed="${k === S.tipo}">${TIPOS[k].label}</button>`).join("");
+      `<button type="button" class="sv-seg-b${k === S.tipo ? " activo" : ""}" data-tipo="${k}" aria-pressed="${k === S.tipo}">${TIPOS[k].label}</button>`).join("");
     const chipsPeriodo = ["", "Actual", "Anterior"].slice(1).map((t, i) =>
-      `<button type="button" class="sv-chip sv-chip--sm${i === atras ? " activo" : ""}" data-atras="${i}" aria-pressed="${i === atras}">${t}</button>`).join("");
+      `<button type="button" class="sv-seg-b${i === atras ? " activo" : ""}" data-atras="${i}" aria-pressed="${i === atras}">${t}</button>`).join("");
     const sinPedidos = S.tipo === "BIO" && atras === 0 && !S.cargando && !S.error && caps && caps.size === 0;
     const avisoPeriodo = sinPedidos ? `<p class="sv-aviso" role="status"><span class="material-symbols-rounded" aria-hidden="true">info</span>Aún no hay pedidos registrados este mes; la ventana del pedido puede no haber abierto. Consulta «Anterior» para ver el mes pasado.</p>` : S.avisoAuto && S.avisoAuto[S.tipo] ? `<p class="sv-aviso" role="status"><span class="material-symbols-rounded" aria-hidden="true">info</span>La captura de esta semana abre el jueves. Mostrando la semana anterior.</p>` : "";
     const chipsFiltro = [["faltan", "Faltan"], ["capturadas", "Capturadas"], ["todas", "Todas"]].map(([k, t]) =>
-      `<button type="button" class="sv-chip sv-chip--sm${k === S.filtro ? " activo" : ""}" data-filtro="${k}" aria-pressed="${k === S.filtro}">${t}</button>`).join("");
+      `<button type="button" class="sv-seg-b${k === S.filtro ? " activo" : ""}" data-filtro="${k}" aria-pressed="${k === S.filtro}">${t}</button>`).join("");
 
     let cuerpo;
     if (S.cargando) {
@@ -209,16 +209,16 @@
     root.innerHTML = `
       <div class="sv-scope"><span class="material-symbols-rounded" aria-hidden="true">location_on</span><b>${esc(alcT)}</b><small>${esc(alcS)}</small></div>
       ${rol() === "VISUALIZADOR_JURISDICCIONAL" ? `<div class="sv-ro"><span class="material-symbols-rounded" aria-hidden="true">visibility</span>Solo lectura</div>` : ""}
-      <div class="sv-chips" role="group" aria-label="Tipo de captura">${chipsTipo}</div>
-      <div class="sv-chips" role="group" aria-label="Periodo">${chipsPeriodo}</div>
+      <div class="sv-seg" role="group" aria-label="Tipo de captura">${chipsTipo}</div>
       ${avisoPeriodo}
       <div class="sv-avance">
         <div class="sv-avance-cab"><div><b>${TIPOS[S.tipo].label}</b><small>${esc(etiquetaPeriodo(S.tipo, atras))}</small></div><span class="sv-pct">${pct}%</span></div>
+        <div class="sv-seg sv-seg--sm" role="group" aria-label="Periodo">${chipsPeriodo}</div>
         <div class="sv-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Unidades que capturaron"><i style="width:${pct}%"></i></div>
         <p class="sv-leyenda"><span><i class="sv-dot completo"></i>${hechas} capturaron</span><span><i class="sv-dot falta"></i>${total - hechas} faltan</span></p>
       </div>
       <div class="sv-filtros">
-        <div class="sv-chips" role="group" aria-label="Filtro">${chipsFiltro}</div>
+        <div class="sv-seg" role="group" aria-label="Filtro">${chipsFiltro}</div>
         <label class="sv-buscar"><span class="sr-only">Buscar unidad</span>
           <span class="material-symbols-rounded" aria-hidden="true">search</span>
           <input type="search" id="svBuscar" placeholder="Buscar unidad o CLUES" value="${esc(S.q)}" autocomplete="off"></label>
