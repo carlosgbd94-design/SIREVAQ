@@ -5250,7 +5250,11 @@ function covidAvanceCalcular(ambito) {
   const fila = (nombre, sub, metas, apl) => ({ nombre, sub, metas, apl, calc: CovidFrascos.avanceRubros(metas || {}, apl) });
 
   if (ambito === "JURIS") {
-    const filas = FRASCO_DESTINOS.map(d => fila(d.label, d.hospital ? "hospital" : "municipio", metaDestino(d.id), aplDestino(d.id)));
+    // Un destino sin meta de COVID-19 se dice «sin meta» (no «0 / 0 por aplicar»); si aun así aplicó, se señala.
+    const filas = FRASCO_DESTINOS.map(d => {
+      const f = fila(d.label, d.hospital ? "hospital" : "municipio", metaDestino(d.id), aplDestino(d.id));
+      return { ...f, sinMeta: f.calc.metaEq === 0 };
+    });
     const metas = covidAvanceSumar(FRASCO_DESTINOS.map(d => metaDestino(d.id)));
     const apl = covidAvanceSumar(FRASCO_DESTINOS.map(d => aplDestino(d.id)));
     return { titulo: "Avance por municipio y hospital", nombreCol: "Municipio / hospital", filas, total: fila("Jurisdicción", "", metas, apl) };

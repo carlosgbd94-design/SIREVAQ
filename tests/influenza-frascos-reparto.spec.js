@@ -1661,3 +1661,12 @@ test('COVID Avance (municipal): la unidad que aplicó dosis sin tener meta se se
   await expect(fila).toContainText('12');
   await expect(page.locator('#cavTbody tr', { hasText: 'UMQ TRES' })).not.toContainText('con dosis');   // sin dosis: solo «sin meta»
 });
+
+test('COVID Avance (Jurisdicción): el destino sin meta dice «sin meta», no «0» ni «por aplicar 0»', async ({ page }) => {
+  await montarAvance(page, 'JURISDICCIONAL', [{ clues: 'Q1', variable_sis: 'VCV16', dosis: 75, ult: '2026-11-01' }]);
+  await page.evaluate(() => renderCovidAvance());
+  const fila = page.locator('#cavTbody tr', { hasText: 'Corregidora' });
+  await expect(fila).toContainText('sin meta');
+  await expect(fila).not.toContainText('0.0 %');
+  await expect(page.locator('#cavTbody tr', { hasText: 'Querétaro' })).toContainText('23.1 %');
+});
