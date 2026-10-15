@@ -1681,3 +1681,13 @@ test('Reparto jurisdiccional COVID: sin frascos, la píldora en línea dice «Si
   await expect(page.locator('#pillT')).toContainText('Sin frascos por repartir');
   await expect(page.locator('#pillT')).toHaveAttribute('title', /Pfizer/);
 });
+
+test('COVID Avance (Jurisdicción): al elegir un hospital su única unidad usa la meta del hospital, no «sin meta»', async ({ page }) => {
+  await montarAvance(page, 'JURISDICCIONAL', [{ clues: 'QTSSA001740', variable_sis: 'VCV28', dosis: 50, ult: '2026-11-01' }]);
+  await page.evaluate(() => renderCovidAvance());
+  await page.selectOption('#cavAmbito', 'HENM');
+  const fila = page.locator('#cavTbody tr', { hasText: 'QTSSA001740' });
+  await expect(fila).toContainText('160');
+  await expect(fila).toContainText('31.3 %');
+  await expect(fila).not.toContainText('sin meta');
+});

@@ -5260,8 +5260,10 @@ function covidAvanceCalcular(ambito) {
     return { titulo: "Avance por municipio y hospital", nombreCol: "Municipio / hospital", filas, total: fila("Jurisdicción", "", metas, apl) };
   }
   const unidades = unidadesDe(ambito);
+  // Un hospital es su propio destino y una sola unidad: su meta vive en el destino, no por CLUES.
+  const esHospital = FRASCO_DESTINOS.some(d => d.id === ambito && d.hospital);
   const filas = unidades.map(u => {
-    const m = metaUnidad(u.clues);
+    const m = metaUnidad(u.clues) || (esHospital && Object.keys(metaDestino(ambito)).length ? metaDestino(ambito) : null);
     return { ...fila(u.unidad, u.clues, m || {}, aplPorClues[u.clues] || {}), sinMeta: !m };
   }).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es"));
   const nombre = (FRASCO_DESTINOS.find(d => d.id === ambito) || { label: ambito }).label;
