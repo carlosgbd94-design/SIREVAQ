@@ -134,3 +134,15 @@ html.dark .sv-met-chips span { background: rgba(255,255,255,.08); color: #cbd5e1
 html.dark .sv-met-chips span.ok, html.dark .sv-pill--ok, html.dark .sv-mini--ok { background: rgba(22,163,74,.22); color: #86efac; }
 html.dark .sv-pill--reg, html.dark .sv-mini--reg { background: rgba(245,158,11,.22); color: #fcd34d; }
 html.dark .sv-pill--mal, html.dark .sv-mini--mal { background: rgba(220,38,38,.25); color: #fca5a5; }
+
+.sv-aviso { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 12px; padding: 10px 12px; border-radius: 14px; background: #f0f9ff; color: #075985; font-size: 12px; font-weight: 600; line-height: 1.4; }
+.sv-aviso .material-symbols-rounded { font-size: 18px; flex: none; margin-top: 1px; }
+.sv-cargando { padding: 34px 18px; text-align: center; color: var(--text-secondary, #64748b); }
+.sv-cargando p { margin: 14px 0 2px; font-weight: 800; font-size: 13px; color: var(--text-primary, #0f172a); }
+.sv-cargando small { font-size: 11.5px; font-weight: 600; }
+.sv-indet { height: 6px; max-width: 220px; margin: 0 auto; border-radius: 6px; background: #e2e8f0; overflow: hidden; position: relative; }
+.sv-indet i { position: absolute; inset: 0 auto 0 0; width: 40%; border-radius: 6px; background: #0284c7; animation: sv-indet 1.2s ease-in-out infinite; }
+@keyframes sv-indet { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) { .sv-indet i { animation: none; width: 100%; opacity: .5; } }
+html.dark .sv-aviso { background: rgba(2,132,199,.2); color: #bae6fd; }
+html.dark .sv-indet { background: rgba(255,255,255,.12); }

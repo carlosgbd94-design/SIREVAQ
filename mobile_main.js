@@ -480,6 +480,16 @@
         document.getElementById('profileUnidad').textContent = dataProfile.unidad || (isAdmin ? 'Jurisdicción JS1' : 'No asignada');
         document.getElementById('profileMunicipio').textContent = dataProfile.municipio || (isAdmin ? 'Querétaro' : 'Ninguno');
         document.getElementById('profileAllowed').textContent = dataProfile.municipios_allowed || (isAdmin ? 'Todos' : 'Ninguno');
+        // Supervisión: no tienen CLUES ni unidad propias; se muestra solo su alcance
+        const esSupervision = ['MUNICIPAL', 'JURISDICCIONAL', 'VISUALIZADOR_JURISDICCIONAL', 'CARAVANAS', 'ADMIN'].includes(String(dataProfile.rol || '').toUpperCase());
+        ['profileClues', 'profileUnidad'].forEach((id) => {
+            const fila = document.getElementById(id)?.parentElement;
+            if (fila) fila.style.display = (esSupervision && !dataProfile.clues) ? 'none' : '';
+        });
+        if (esSupervision && !dataProfile.municipio) {
+            const fm = document.getElementById('profileMunicipio')?.parentElement;
+            if (fm) fm.style.display = 'none';
+        }
 
         // BCG button mobile dynamic visibility (Unidad non-UMME/FAM only)
         const btnSetBCGMobile = document.getElementById('btnSetBCGMobile');

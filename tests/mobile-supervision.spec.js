@@ -10,7 +10,7 @@ const UNIDADES = [
   { clues: 'QTSSA000333', unidad: 'FAM Sierra', municipio: 'AMEALCO', activo: 'SI' }
 ];
 
-function servidor(perfil) {
+function servidor(perfil, rpcExtra = {}) {
   const rpc = {
     get_captures_sr_range_bypass: [{ clues: 'QTSSA000830', fecha: '2026-10-22' }, { clues: 'QTSSA000333', fecha: '2026-10-22' }],
     get_captures_cons_range_bypass: [],
@@ -34,19 +34,24 @@ function servidor(perfil) {
     if (url.pathname.startsWith('/auth/v1')) return json({ user: null, session: null });
     if (!url.pathname.startsWith('/rest/v1/')) return json({});
     const nombre = url.pathname.replace('/rest/v1/', '');
-    if (nombre.startsWith('rpc/')) return json(rpc[nombre.slice(4)] || null);
+    if (nombre.startsWith('rpc/')) {
+      const fn = nombre.slice(4);
+      const h = rpcExtra[fn];
+      if (h) { let b = null; try { b = JSON.parse(req.postData() || 'null'); } catch (e) { /* sin cuerpo */ } return json(h(b || {})); }
+      return json(rpc[fn] || null);
+    }
     const filas = tablas[nombre] || [];
     if ((req.headers()['accept'] || '').includes('vnd.pgrst.object')) return filas.length === 1 ? json(filas[0]) : json({ code: 'PGRST116', message: 'x' }, 406);
     return json(filas);
   };
 }
 
-async function abrir(page, perfil) {
+async function abrir(page, perfil, ahora = '2026-10-22T12:00:00', rpcExtra = {}) {
   const errores = [];
   page.on('pageerror', (e) => errores.push('PAGEERROR: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !RUIDO.test(m.text())) errores.push('CONSOLE: ' + m.text().slice(0, 200)); });
-  await page.route(/\.supabase\.co\//, servidor({ id: 'u1', usuario: 'sup', nombre: 'Sup', clues: '', unidad: '', municipio: '', activo: 'SI', ...perfil }));
-  await page.clock.setFixedTime(new Date('2026-10-22T12:00:00'));
+  await page.route(/\.supabase\.co\//, servidor({ id: 'u1', usuario: 'sup', nombre: 'Sup', clues: '', unidad: '', municipio: '', activo: 'SI', ...perfil }, rpcExtra));
+  await page.clock.setFixedTime(new Date(ahora));
   await page.addInitScript(() => {
     localStorage.setItem('sb-utclfqjietlxzlorxhrs-auth-token', JSON.stringify({
       access_token: 'aaa.bbb.ccc', token_type: 'bearer', expires_in: 31536000, expires_at: Math.floor(Date.now() / 1000) + 31536000, refresh_token: 'r',
@@ -119,6 +124,7 @@ test.describe('Móvil · supervisión', () => {
     await expect(page.locator('.sv-kpi-val').first()).toContainText('82');
     await expect(page.locator('#supRdaRoot .sv-unidad')).toHaveCount(2);
     await expect(page.locator('#supRdaRoot .sv-unidad').first()).toContainText('La Cañada'); // menor avance primero
+    await expect(page.locator('#supRdaRoot .sv-nota').first()).toContainText('Sin registro en el RDA');
     await page.click('[data-muni="EL MARQUES"]');
     await expect(page.locator('#supRdaRoot .sv-unidad')).toHaveCount(1);
     await page.click('#supRdaRoot [data-back]');
@@ -138,5 +144,42 @@ test.describe('Móvil · supervisión', () => {
     await expect(page.locator('#supMetRoot .sv-unidad')).toHaveCount(2);
     await expect(page.locator('[data-mes="1"]')).toBeDisabled();
     expect(errores).toEqual([]);
+  });
+
+  test('Entre semana sin captura: muestra la semana anterior con aviso y permite volver a la actual', async ({ page }) => {
+    // Miércoles 14 oct: la semana 12–18 aún no tiene capturas; la del 5–11 sí.
+    const sr = (b) => (b.p_fecha_inicio >= '2026-10-12' ? [] : [{ clues: 'QTSSA000830', fecha: '2026-10-08' }]);
+    await abrir(page, { rol: 'JURISDICCIONAL' }, '2026-10-14T12:00:00', { get_captures_sr_range_bypass: sr });
+    await expect(page.locator('.sv-aviso')).toContainText('semana anterior');
+    await expect(page.locator('[data-atras="1"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#supRoot .sv-avance-cab small')).toContainText('5 oct');
+    await expect(page.locator('#supRoot .sv-pct')).toHaveText('25%');
+    await page.click('[data-atras="0"]');
+    await expect(page.locator('#supRoot .sv-pct')).toHaveText('0%');
+    await expect(page.locator('.sv-aviso')).toHaveCount(0);
+  });
+
+  test('Pedido del mes sin registros: explica por qué y ofrece el mes anterior', async ({ page }) => {
+    await abrir(page, { rol: 'MUNICIPAL', municipios_allowed: 'CORREGIDORA' }, '2026-10-14T12:00:00', { get_captures_bio_range_bypass: () => [] });
+    await page.click('[data-tipo="BIO"]');
+    await expect(page.locator('.sv-aviso')).toContainText('Aún no hay pedidos');
+    await expect(page.locator('[data-atras="1"]')).toBeVisible();
+  });
+
+  test('Indicadores RDA muestra la carga mientras calcula', async ({ page }) => {
+    let liberar;
+    const espera = new Promise((r) => { liberar = r; });
+    await abrir(page, { rol: 'JURISDICCIONAL' });
+    await page.route('**/rpc/get_rda_indicators*', async (route) => { await espera; await route.fallback(); });
+    await page.click('.dock-item[data-panel="MAS"]');
+    await page.click('[data-ir="RDA"]');
+    await expect(page.locator('#supRdaRoot .sv-cargando')).toContainText('Calculando');
+    liberar();
+  });
+
+  test('Perfil de supervisión no muestra CLUES ni unidad vacíos', async ({ page }) => {
+    await abrir(page, { rol: 'MUNICIPAL', municipios_allowed: 'CORREGIDORA' });
+    const vis = await page.evaluate(() => ['profileClues', 'profileUnidad'].map((id) => getComputedStyle(document.getElementById(id).parentElement).display));
+    expect(vis).toEqual(['none', 'none']);
   });
 });

@@ -69,19 +69,20 @@
   const rol = () => String((cfg && cfg.getProfile() && cfg.getProfile().rol) || "").toUpperCase();
   const puedeUsar = () => !!cfg && ROLES.includes(rol());
 
-  function rango(periodo, hoy) {
+  function rango(periodo, hoy, atras) {
     const d = hoy || new Date();
+    const n = atras || 0;
     if (periodo === "mes") {
-      return { ini: new Date(d.getFullYear(), d.getMonth(), 1), fin: new Date(d.getFullYear(), d.getMonth() + 1, 0) };
+      return { ini: new Date(d.getFullYear(), d.getMonth() - n, 1), fin: new Date(d.getFullYear(), d.getMonth() - n + 1, 0) };
     }
     const dow = d.getDay();
-    const lunes = new Date(d); lunes.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+    const lunes = new Date(d); lunes.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow) - 7 * n);
     const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6);
     return { ini: lunes, fin: domingo };
   }
 
-  function etiquetaPeriodo(tipo) {
-    const r = rango(TIPOS[tipo].periodo);
+  function etiquetaPeriodo(tipo, atras) {
+    const r = rango(TIPOS[tipo].periodo, null, atras);
     if (TIPOS[tipo].periodo === "mes") {
       const m = MESES[r.ini.getMonth()];
       return `${m.charAt(0).toUpperCase() + m.slice(1)}-${String(r.ini.getFullYear()).slice(2)}`;
@@ -141,19 +142,23 @@
       String(a.unidad || "").localeCompare(String(b.unidad || ""), "es"));
   }
 
-  async function cargarTipo(tipo) {
-    if (S.capturas[tipo]) return;
+  const claveCap = (tipo, atras) => tipo + ":" + (atras || 0);
+
+  async function cargarTipo(tipo, atras) {
+    const k = claveCap(tipo, atras);
+    if (S.capturas[k]) return;
     const db = cfg.getClient();
-    const r = rango(TIPOS[tipo].periodo);
+    const r = rango(TIPOS[tipo].periodo, null, atras);
     const filas = await rpcTodas(db, TIPOS[tipo].rpc, { p_fecha_inicio: ymd(r.ini), p_fecha_fin: ymd(r.fin) });
-    S.capturas[tipo] = new Set(filas.map((x) => String(x.clues || x.CLUES || "").trim().toUpperCase()).filter(Boolean));
+    S.capturas[k] = new Set(filas.map((x) => String(x.clues || x.CLUES || "").trim().toUpperCase()).filter(Boolean));
   }
 
   // ── Resumen ──
   function pintarResumen() {
     const root = document.getElementById("supRoot");
     if (!root || !S) return;
-    const caps = S.capturas[S.tipo];
+    const atras = S.atras[S.tipo] || 0;
+    const caps = S.capturas[claveCap(S.tipo, atras)];
     const q = norm(S.q);
     const conEstado = S.unidades.map((u) => ({ u, ok: !!caps && caps.has(String(u.clues || "").trim().toUpperCase()) }));
     const total = conEstado.length;
@@ -169,6 +174,10 @@
 
     const chipsTipo = Object.keys(TIPOS).map((k) =>
       `<button type="button" class="sv-chip${k === S.tipo ? " activo" : ""}" data-tipo="${k}" aria-pressed="${k === S.tipo}">${TIPOS[k].label}</button>`).join("");
+    const chipsPeriodo = ["", "Actual", "Anterior"].slice(1).map((t, i) =>
+      `<button type="button" class="sv-chip sv-chip--sm${i === atras ? " activo" : ""}" data-atras="${i}" aria-pressed="${i === atras}">${t}</button>`).join("");
+    const sinPedidos = S.tipo === "BIO" && atras === 0 && !S.cargando && !S.error && caps && caps.size === 0;
+    const avisoPeriodo = sinPedidos ? `<p class="sv-aviso" role="status"><span class="material-symbols-rounded" aria-hidden="true">info</span>Aún no hay pedidos registrados este mes; la ventana del pedido puede no haber abierto. Consulta «Anterior» para ver el mes pasado.</p>` : S.avisoAuto && S.avisoAuto[S.tipo] ? `<p class="sv-aviso" role="status"><span class="material-symbols-rounded" aria-hidden="true">info</span>La captura de esta semana abre el jueves. Mostrando la semana anterior.</p>` : "";
     const chipsFiltro = [["faltan", "Faltan"], ["capturadas", "Capturadas"], ["todas", "Todas"]].map(([k, t]) =>
       `<button type="button" class="sv-chip sv-chip--sm${k === S.filtro ? " activo" : ""}" data-filtro="${k}" aria-pressed="${k === S.filtro}">${t}</button>`).join("");
 
@@ -192,8 +201,10 @@
       <div class="sv-scope"><span class="material-symbols-rounded" aria-hidden="true">location_on</span><b>${esc(alcT)}</b><small>${esc(alcS)}</small></div>
       ${rol() === "VISUALIZADOR_JURISDICCIONAL" ? `<div class="sv-ro"><span class="material-symbols-rounded" aria-hidden="true">visibility</span>Solo lectura</div>` : ""}
       <div class="sv-chips" role="group" aria-label="Tipo de captura">${chipsTipo}</div>
+      <div class="sv-chips" role="group" aria-label="Periodo">${chipsPeriodo}</div>
+      ${avisoPeriodo}
       <div class="sv-avance">
-        <div class="sv-avance-cab"><div><b>${TIPOS[S.tipo].label}</b><small>${esc(etiquetaPeriodo(S.tipo))}</small></div><span class="sv-pct">${pct}%</span></div>
+        <div class="sv-avance-cab"><div><b>${TIPOS[S.tipo].label}</b><small>${esc(etiquetaPeriodo(S.tipo, atras))}</small></div><span class="sv-pct">${pct}%</span></div>
         <div class="sv-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Unidades que capturaron"><i style="width:${pct}%"></i></div>
         <p class="sv-leyenda"><span><i class="sv-dot completo"></i>${hechas} capturaron</span><span><i class="sv-dot falta"></i>${total - hechas} faltan</span></p>
       </div>
@@ -207,6 +218,7 @@
 
     root.querySelectorAll("[data-tipo]").forEach((b) => { b.onclick = () => cambiarTipo(b.dataset.tipo); });
     root.querySelectorAll("[data-filtro]").forEach((b) => { b.onclick = () => { S.filtro = b.dataset.filtro; pintarResumen(); }; });
+    root.querySelectorAll("[data-atras]").forEach((b) => { b.onclick = () => cambiarPeriodo(Number(b.dataset.atras)); });
     const bus = root.querySelector("#svBuscar");
     if (bus) bus.oninput = () => {
       S.q = bus.value;
@@ -222,18 +234,47 @@
   async function cambiarTipo(tipo) {
     S.tipo = tipo;
     S.error = null;
-    if (!S.capturas[tipo]) { S.cargando = true; pintarResumen(); }
-    try { await cargarTipo(tipo); S.cargando = false; } catch (e) { S.cargando = false; S.error = "No se pudo cargar: " + (e.message || e); }
+    const atras = S.atras[tipo] || 0;
+    if (!S.capturas[claveCap(tipo, atras)]) { S.cargando = true; pintarResumen(); }
+    try { await cargarTipo(tipo, atras); S.cargando = false; await autoAnterior(tipo); }
+    catch (e) { S.cargando = false; S.error = "No se pudo cargar: " + (e.message || e); }
     pintarResumen();
   }
 
-  async function abrirResumen() {
-    if (!S) S = { unidades: [], capturas: {}, tipo: "SR", filtro: "faltan", q: "", cargando: true, error: null };
+  async function cambiarPeriodo(atras) {
+    S.atras[S.tipo] = atras;
+    if (S.avisoAuto) S.avisoAuto[S.tipo] = false;
+    S.error = null;
+    if (!S.capturas[claveCap(S.tipo, atras)]) { S.cargando = true; pintarResumen(); }
+    try { await cargarTipo(S.tipo, atras); S.cargando = false; }
+    catch (e) { S.cargando = false; S.error = "No se pudo cargar: " + (e.message || e); }
     pintarResumen();
-    if (S.unidades.length && S.capturas[S.tipo]) { S.cargando = false; pintarResumen(); return; }
+  }
+
+  // Lunes a miércoles la semana en curso aún no tiene captura (se captura jueves y viernes):
+  // si está vacía se muestra la semana anterior para que el resumen sirva.
+  async function autoAnterior(tipo) {
+    if (TIPOS[tipo].periodo !== "semana") return;
+    if (S.atras[tipo] !== undefined && S.atras[tipo] !== 0) return;
+    if (S.autoVisto[tipo]) return;
+    S.autoVisto[tipo] = true;
+    const dow = new Date().getDay();
+    const enCurso = S.capturas[claveCap(tipo, 0)];
+    if (dow >= 1 && dow <= 3 && enCurso && enCurso.size === 0) {
+      S.atras[tipo] = 1;
+      S.avisoAuto[tipo] = true;
+      await cargarTipo(tipo, 1);
+    }
+  }
+
+  async function abrirResumen() {
+    if (!S) S = { unidades: [], capturas: {}, atras: {}, avisoAuto: {}, autoVisto: {}, tipo: "SR", filtro: "faltan", q: "", cargando: true, error: null };
+    pintarResumen();
+    if (S.unidades.length && S.capturas[claveCap(S.tipo, S.atras[S.tipo])]) { S.cargando = false; pintarResumen(); return; }
     try {
       if (!S.unidades.length) await cargarBase();
-      await cargarTipo(S.tipo);
+      await cargarTipo(S.tipo, S.atras[S.tipo] || 0);
+      await autoAnterior(S.tipo);
       S.cargando = false;
     } catch (e) {
       S.cargando = false;
@@ -304,13 +345,20 @@
     R.anio = anio;
     R.maxMes = maxMes;
     R.filas = (data || []).map((u) => ({ ...u, unidad: u.unidad || u.nombre })).filter(enAlcance);
+    // Unidades activas de tu alcance que el RDA no trae (p. ej. hospitales sin población asignada)
+    R.sinRda = [];
+    try {
+      const { data: us } = await db.from("unidades").select("clues, unidad, municipio").eq("activo", "SI");
+      const con = new Set(R.filas.map((u) => String(u.clues || "").trim().toUpperCase()));
+      R.sinRda = (us || []).filter(enAlcance).filter((u) => !con.has(String(u.clues || "").trim().toUpperCase()));
+    } catch (e) { /* solo informativo */ }
   }
 
   function pintarRDA() {
     const root = document.getElementById("supRdaRoot");
     if (!root || !R) return;
     let cuerpo;
-    if (R.cargando) cuerpo = `<p class="sv-vacio" role="status">Cargando…</p>`;
+    if (R.cargando) cuerpo = `<div class="sv-cargando" role="status" aria-live="polite"><div class="sv-indet" aria-hidden="true"><i></i></div><p>Calculando indicadores…</p><small>Puede tardar unos segundos.</small></div>`;
     else if (R.error) cuerpo = `<p class="sv-vacio" role="alert">${esc(R.error)}</p><button type="button" class="sv-btn" id="svRdaRe">Reintentar</button>`;
     else {
       const munis = [...new Set(R.filas.map((u) => String(u.municipio || "").toUpperCase().trim()).filter(Boolean))].sort();
@@ -341,6 +389,7 @@
             <span class="sv-mini-i sv-mini--${estadoCob(x.a.c2)}"><em>1</em>${Math.round(x.a.c2)}%</span>
             <span class="sv-mini-i sv-mini--${estadoCob(x.a.c4)}"><em>4</em>${Math.round(x.a.c4)}%</span></div></li>`).join("")}</ul>`
           : `<p class="sv-vacio">Sin unidades en tu alcance.</p>`}
+        ${R.sinRda && R.sinRda.length ? `<p class="sv-nota">Sin registro en el RDA: ${R.sinRda.map((u) => esc(u.unidad)).join(", ")}.</p>` : ""}
         <p class="sv-nota">Otros esquemas (adultos, mayores, embarazadas, invernal) y comparativas siguen en escritorio.</p>`;
     }
     root.innerHTML = encabezadoSub("Indicadores RDA") + cuerpo;
@@ -388,7 +437,7 @@
     const [y, m] = M.mes.split("-").map(Number);
     const esActual = M.mes === mesActual();
     let cuerpo;
-    if (M.cargando) cuerpo = `<p class="sv-vacio" role="status">Cargando…</p>`;
+    if (M.cargando) cuerpo = `<div class="sv-cargando" role="status" aria-live="polite"><div class="sv-indet" aria-hidden="true"><i></i></div><p>Cargando métricas…</p></div>`;
     else if (M.error) cuerpo = `<p class="sv-vacio" role="alert">${esc(M.error)}</p><button type="button" class="sv-btn" id="svMetRe">Reintentar</button>`;
     else {
       const todas = M.filas.map((r) => ({ r, p: pctSemanal(r) }));
