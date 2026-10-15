@@ -16,7 +16,7 @@ async function prepararPagina(page, rol = 'UNIDAD') {
   await page.goto('/index.html', { waitUntil: 'load' });
   await page.waitForFunction(() => typeof refreshComplianceMedals === 'function', null, { timeout: 20000 });
   // El arranque de la página reinicia USER/TOKEN al terminar su comprobación de sesión: se espera a que acabe.
-  await page.waitForLoadState('networkidle').catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});   // en CI la red nunca queda ociosa: sin tope se comía los 30 s de la prueba
   await page.waitForTimeout(1500);
   await page.evaluate(({ filas, rol }) => {
     /* eslint-disable no-undef */
