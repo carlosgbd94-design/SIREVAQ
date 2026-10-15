@@ -867,6 +867,9 @@ test('COVID Jurisdicción: reparte Moderna por la meta equivalente y Pfizer desc
   await page.fill('#remesaTotalInput', '150');
   expect(await valores(page, ['QUERETARO', 'CORREGIDORA'])).toEqual(['100', '50']);
   await expect(page.locator('#rem_dos_QUERETARO')).toHaveText('500');         // 100 frascos × 5 dosis
+  await expect(page.locator('#remesaPill')).toContainText('Reparto completo');   // estado en línea, junto a «Guardar»
+  await expect(page.locator('#rem_tope_QUERETARO')).toContainText('200');         // le caben ceil(1,000 / 5) frascos de Moderna
+  await expect(page.locator('#rem_tope_QUERETARO')).toContainText('Pfizer 134');   // meta adulta 800 / 6
 
   // Guarda como COVID/MODERNA (acción y marca propias) y sin tocar las tablas de influenza
   await page.fill('#rem_inp_QUERETARO', '40');
@@ -1491,7 +1494,7 @@ test('COVID frascos: la marca se elige con un control grande y accesible, y el e
   await expect(pildora).toHaveAttribute('aria-label', /Te pasaste por 4 frascos/);
   await expect(pildora).toHaveAttribute('data-estado', 'excede');
   await expect(pildora).toContainText('4');
-  await expect(pildora).toContainText('te pasaste');
+  await expect(pildora).toContainText('de más');
   await page.fill('#batch_frascos_Q1', '20');
   await expect(pildora).toHaveAttribute('aria-label', /Faltan 6 frascos por repartir/);
   await expect(pildora).toContainText('faltan');

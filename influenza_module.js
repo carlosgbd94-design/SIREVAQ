@@ -5982,7 +5982,7 @@ function frascoPintarPill(ids, { total, asignado, porAsignar }) {
     const plural = abs === 1 ? "frasco" : "frascos";
     icono = estado === "ok" ? "check_circle" : estado === "falta" ? "hourglass_top" : "error";
     valor = estado === "ok" ? "OK" : frascoFmt(abs);
-    etiqueta = estado === "ok" ? "completo" : estado === "falta" ? "faltan" : "te pasaste";
+    etiqueta = estado === "ok" ? "completo" : estado === "falta" ? "faltan" : "de más";
     completo = (estado === "ok" ? "Reparto completo"
       : estado === "falta" ? `Faltan ${frascoFmt(abs)} ${plural} por repartir`
         : `Te pasaste por ${frascoFmt(abs)} ${plural}`)
@@ -5994,7 +5994,16 @@ function frascoPintarPill(ids, { total, asignado, porAsignar }) {
     el.dataset.estado = estado;
     el.setAttribute("aria-label", completo);
     el.title = completo;
-    el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">${icono}</span><b>${valor}</b><small>${etiqueta}</small>`;
+    if (el.classList.contains("frs-pill--inline")) {
+      // En línea (Jurisdicción / pantallas chicas): una sola frase corta
+      el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">${icono}</span><b>${completo.split(" · ")[0]}</b>`;
+    } else if (estado === "ok") {
+      el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">${icono}</span><small>${etiqueta}</small>`;
+    } else {
+      // Círculo del hub: el número es lo importante; con 4+ dígitos se achica para que quepa
+      const chico = String(valor).length >= 4 ? ' style="font-size:13px"' : "";
+      el.innerHTML = `<b${chico}>${valor}</b><small>${etiqueta}</small>`;
+    }
   });
 }
 
