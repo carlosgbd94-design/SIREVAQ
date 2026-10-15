@@ -9446,7 +9446,12 @@ function bindMetricsUiEvents() {
     debouncedReloadHistory();
   });
 
+  $("histUnidadFilter")?.addEventListener("change", () => {
+    refreshComplianceMedals(new Date().getFullYear(), $("histMunicipioFilter")?.value || "", { clearIfNone: true });
+  });
+
   $("histMunicipioFilter")?.addEventListener("change", () => {
+    $("histUnidadFilter") && ($("histUnidadFilter").value = "");
     OPS_PREWARM_DONE.history = false;
     resetPanelFilterState("historyMetrics");
     debouncedReloadHistory();
@@ -14421,6 +14426,8 @@ function populateHistoryMunicipioFilter(user) {
       <option value="HUIMILPAN">Huimilpan</option>
     `;
     container.style.display = "flex";
+    const cu = $("filterUnidadMedallasContainer");
+    if (cu) cu.style.display = "flex";
   } else if (role === "MUNICIPAL" && allowed.length > 0) {
     if (allowed.length > 1) {
       // Municipal user with multiple municipalities
@@ -20033,14 +20040,19 @@ function refreshComplianceMedals(year, selectedMuni, { clearIfNone = false } = {
   if (!container) return;
   const holder = container.parentElement;
   const clear = () => {
+    // Sin alcance (vista global) no hay "Logros del año" que mostrar: se oculta el bloque, también desde el tablero.
+    if (holder && holder !== document.body) holder.style.display = "none";
     if (!clearIfNone) return;
     _medalsRenderSeq++;
     container.innerHTML = "";
-    if (holder) holder.style.display = "none"; // sin alcance (vista global) no hay "Logros del año" que mostrar
   };
 
   let scope = null;
-  if (USER && USER.rol === "UNIDAD" && USER.clues) {
+  const esVistaGlobal = USER && ["ADMIN", "JURISDICCIONAL", "VISUALIZADOR_JURISDICCIONAL"].includes(USER.rol);
+  const unidadSel = esVistaGlobal ? ($("histUnidadFilter")?.value || "") : "";
+  if (unidadSel) {
+    scope = { clues: unidadSel };
+  } else if (USER && USER.rol === "UNIDAD" && USER.clues) {
     scope = { clues: USER.clues };
   } else if (USER && (USER.rol === "MUNICIPAL" || (selectedMuni && selectedMuni !== "TODOS"))) {
     const targetMuni = USER.rol === "MUNICIPAL" ? (USER.municipio || "").split(",")[0].trim() : selectedMuni;
@@ -20048,7 +20060,13 @@ function refreshComplianceMedals(year, selectedMuni, { clearIfNone = false } = {
   }
   if (!scope) { clear(); return; }
 
-  if (holder) holder.style.display = "";
+  if (holder && holder !== document.body) holder.style.display = "";
+  const titulo = $("bCumplimientoMedalsTitle");
+  if (titulo) {
+    const opt = $("histUnidadFilter")?.selectedOptions?.[0];
+    titulo.textContent = unidadSel && opt ? `Logros del Año · ${opt.textContent.trim()}`
+      : (esVistaGlobal && scope.municipio ? `Logros del Año · ${scope.municipio}` : "Logros del Año");
+  }
   const seq = ++_medalsRenderSeq;
   getYearMedals(year, scope).then(medals => { if (seq === _medalsRenderSeq) renderUnitMedals(medals); });
 }
@@ -20199,6 +20217,23 @@ function renderHistoryMetrics(data) {
     // ADMIN / JURISDICCIONAL: Permite filtro manual por municipio en la vista
     if (selectedMuni && selectedMuni !== "TODOS") {
       activeRows = activeRows.filter(r => normalizeText(r.municipio) === normalizeText(selectedMuni));
+    }
+  }
+
+  // Selector de unidad para los "Logros del año" (solo vista global): unidades del municipio elegido.
+  const selUni = $("histUnidadFilter");
+  if (selUni && ["ADMIN", "JURISDICCIONAL", "VISUALIZADOR_JURISDICCIONAL"].includes(userRole)) {
+    const unidades = activeRows
+      .filter(r => r.clues)
+      .map(r => ({ clues: r.clues, nombre: String(r.unidad || r.clues) }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+    const firma = unidades.map(u => u.clues).join("|");
+    if (selUni.dataset.firma !== firma) {
+      const previa = selUni.value;
+      selUni.innerHTML = `<option value="">Toda la selección</option>` +
+        unidades.map(u => `<option value="${escapeHtml(u.clues)}">${escapeHtml(u.nombre)}</option>`).join("");
+      selUni.dataset.firma = firma;
+      selUni.value = unidades.some(u => u.clues === previa) ? previa : "";
     }
   }
 

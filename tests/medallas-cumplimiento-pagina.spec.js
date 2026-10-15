@@ -111,3 +111,18 @@ test('ADMIN: con TODOS el tablero no pinta medallas (vista global); con un munic
   const arg = await page.evaluate(() => window.__llamadas.find((l) => l.n === 'get_year_medal_inputs_rpc').a);
   expect(arg).toEqual({ p_anio: 2026, p_clues: null, p_municipio: 'CORREGIDORA' });
 });
+
+test('ADMIN: elegir una unidad en "Logros de" pide solo esa CLUES y titula la tarjeta con su nombre', async ({ page }) => {
+  await prepararPagina(page, 'ADMIN');
+  await page.evaluate(() => {
+    const sel = document.getElementById('histUnidadFilter');
+    sel.innerHTML = '<option value="">Toda la selección</option><option value="QTSSA000001">CS EJEMPLO</option>';
+    sel.value = 'QTSSA000001';
+    window.__llamadas.length = 0;
+    refreshComplianceMedals(2026, 'TODOS', { clearIfNone: true });
+  });
+  await expect(page.locator('#bCumplimientoMedals .chip-medal-icon')).toHaveCount(7);
+  const arg = await page.evaluate(() => window.__llamadas.find((l) => l.n === 'get_year_medal_inputs_rpc').a);
+  expect(arg).toEqual({ p_anio: 2026, p_clues: 'QTSSA000001', p_municipio: null });
+  await expect(page.locator('#bCumplimientoMedalsTitle')).toHaveText('Logros del Año · CS EJEMPLO');
+});
