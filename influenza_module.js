@@ -566,6 +566,8 @@ async function initInfluenzaCaptureFlow() {
       weekSelect.addEventListener("change", (e) => {
         SIN_MOVIMIENTO_INF = false;
         _infSinMovReabierto = null;
+        const nomInp = document.getElementById("nombreINFLUENZA");
+        if (nomInp) delete nomInp.dataset.tocado;
         updateInfluenzaWeekBtnLabel(e.target.value);
         updateInfluenzaSinMovimientoUI();
         renderCaptureGrid();
@@ -586,7 +588,7 @@ async function initInfluenzaCaptureFlow() {
   const nombreInf = document.getElementById("nombreINFLUENZA");
   if (nombreInf && !nombreInf.dataset.pasos) {
     nombreInf.dataset.pasos = "1";
-    nombreInf.addEventListener("input", actualizarPasosInfluenza);
+    nombreInf.addEventListener("input", () => { nombreInf.dataset.tocado = "1"; actualizarPasosInfluenza(); });
   }
   const gridInf = document.getElementById("influenzaCaptureGroupsContainer");
   if (gridInf && !gridInf.dataset.pasos) {
@@ -909,7 +911,7 @@ function renderPasoCensia(container, fechaSemana, reporte) {
     <div class="inf-censia__tit"><span class="material-symbols-rounded" aria-hidden="true">cloud_upload</span><b>Siguiente paso: captura en CeNSIA</b></div>
     <p>Este reporte (${total.toLocaleString("es-MX")} dosis) también se captura en la plataforma federal. SIREVAQ rellena las casillas con fecha <b>${fmtF(fecha)}</b>; tú revisas y pulsas <b>Guardar</b> allá.</p>
     ${avisoExt}
-    ${previo ? `<p class="inf-censia__aviso"><span class="material-symbols-rounded" aria-hidden="true">info</span>Ya abriste CeNSIA con este reporte el ${previo}. En CeNSIA las capturas se suman: no lo guardes dos veces.</p>` : ""}
+    ${previo ? `<p class="inf-censia__aviso"><span class="material-symbols-rounded" aria-hidden="true">info</span>Ya abriste CeNSIA con este reporte el ${previo}. En CeNSIA las capturas <b>se suman</b> (a diferencia de SIREVAQ, que reemplaza): si ya lo guardaste allá, no lo vuelvas a guardar; si cambió algo, captura en CeNSIA solo la diferencia.</p>` : ""}
     <div class="inf-censia__acciones">
       <a class="inf-censia__btn" id="infCensiaAbrir" href="${enlace}" target="_blank" rel="noopener">Abrir CeNSIA y rellenar</a>
       <button type="button" class="inf-censia__btn is-sec" id="infCensiaAyuda" aria-expanded="false" aria-controls="infCensiaPasos">Otra forma, sin instalar nada</button>
@@ -944,6 +946,20 @@ function renderPasoCensia(container, fechaSemana, reporte) {
   });
 }
 
+/** Nombre del responsable: el del reporte de la semana; si no hay, el del último reporte de la unidad o el último usado en este equipo.
+ *  Lo que la persona ya escribió en esta pantalla no se pisa. */
+function prellenarNombreResponsableInfluenza(reporte) {
+  const inp = document.getElementById("nombreINFLUENZA");
+  if (!inp || inp.dataset.tocado === "1") return;
+  let nombre = String(reporte?.capturado_por || "").trim();
+  if (!nombre) {
+    const ult = [..._influenzaCapturasCache].filter(r => r.capturado_por).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))[0];
+    nombre = String(ult?.capturado_por || "").trim();
+  }
+  if (!nombre) { try { nombre = localStorage.getItem(`sirevaq_inf_nombre_${USER?.clues}`) || ""; } catch (e) { /* sin almacenamiento */ } }
+  if (nombre && inp.value !== nombre) { inp.value = nombre; actualizarPasosInfluenza(); }
+}
+
 function renderCaptureGrid() {
   const container = document.getElementById("influenzaCaptureGroupsContainer");
   if (!container) return;
@@ -969,6 +985,7 @@ function renderCaptureGrid() {
   }
   const currentReport = _influenzaCapturasCache.find(r => r.fecha === selectedFecha);
   const currentValores = currentReport ? currentReport.valores : {};
+  prellenarNombreResponsableInfluenza(currentReport);
 
   // Acumulado previo por rubro (todo lo reportado en las demás semanas de la campaña)
   const acumuladosPrevios = {};
@@ -988,6 +1005,18 @@ function renderCaptureGrid() {
   control.className = "inf-ctl";
   control.setAttribute("aria-label", "Control de tu meta");
   container.appendChild(control);
+
+  // Regla de reemplazo: cada semana lleva un solo reporte y el último guardado sustituye al anterior
+  if (!capturaCerrada || currentReport) {
+    const reemplazo = document.createElement("section");
+    reemplazo.className = "inf-reemplazo";
+    reemplazo.setAttribute("aria-label", "Cómo funciona el guardado de la semana");
+    const folio = currentReport ? influenzaFolio(currentReport) : "";
+    reemplazo.innerHTML = currentReport
+      ? `<span class="material-symbols-rounded" aria-hidden="true">swap_horiz</span><div><b>Esta semana ya tiene un reporte guardado${folio ? ` (folio ${folio})` : ""}.</b> Si lo vuelves a guardar, <b>el nuevo reemplaza por completo al anterior</b>: no se suma. Captura siempre el <b>total de la semana</b>, no solo lo que falta.</div>`
+      : `<span class="material-symbols-rounded" aria-hidden="true">info</span><div><b>Un solo reporte por semana.</b> Si hoy guardas y mañana vuelves a guardar esta misma semana, <b>el reporte de mañana reemplaza al de hoy</b>. Por eso captura siempre el <b>total de la semana</b>, no solo lo nuevo.</div>`;
+    container.appendChild(reemplazo);
+  }
 
   // Reporte ya guardado: ofrecer el paso a CeNSIA (plataforma federal)
   if (currentReport) renderPasoCensia(container, selectedFecha, currentReport);
@@ -1665,6 +1694,7 @@ async function saveInfluenzaReport() {
     action: async () => {
       const res = await AppService.call("saveinfluenza_captura", payload);
       _infSinMovReabierto = null;
+      try { localStorage.setItem(`sirevaq_inf_nombre_${USER?.clues}`, nombre); } catch (e) { /* sin almacenamiento */ }
       await loadInfluenzaUnitData();
       const folioGuardado = res?.folio || influenzaFolio(_influenzaCapturasCache.find(r => r.fecha === selectedFecha));
       if (folioGuardado) showToast(`Folio del reporte: ${folioGuardado}`, true, "info");

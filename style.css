@@ -15559,3 +15559,8 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 .inf-censia__ok { display:flex; gap:6px; align-items:flex-start; color:#14532d; }
 .inf-censia__ok .material-symbols-rounded { font-size:18px; width:18px; height:18px; overflow:hidden; }
 .inf-censia__enlace { color:#1d4ed8; font-weight:700; text-decoration:underline; }
+
+/* Aviso de reemplazo semanal (captura de Influenza): neutro, contraste AA */
+.inf-reemplazo { display:flex; gap:10px; align-items:flex-start; background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:12px 14px; color:#334155; font-size:13px; line-height:1.5; }
+.inf-reemplazo .material-symbols-rounded { font-size:20px; width:20px; height:20px; overflow:hidden; color:#475569; flex:none; margin-top:1px; }
+.inf-reemplazo b { color:#0f172a; }

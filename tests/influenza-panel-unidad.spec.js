@@ -43,8 +43,8 @@ async function abrirPanel(page, { metas = true, fecha = '2026-10-20T12:00:00', e
     campanas: [{ id: 'c1', nombre: CAMP, fecha_inicio: '2026-10-02', fecha_fin: '2027-04-30', activo: true }],
     influenza_metas: metas ? [{ anio_campana: CAMP, clues: CLUES, municipio: 'QUERETARO', metas: meta }] : [],
     influenza_capturas: [
-      { id: 'k1', anio_campana: CAMP, clues: CLUES, municipio: 'QUERETARO', fecha: '2026-10-09', valores: { r1: 20, r2: 10 }, sin_movimiento: false },
-      { id: 'k2', anio_campana: CAMP, clues: CLUES, municipio: 'QUERETARO', fecha: '2026-10-16', valores: { r1: 30 }, sin_movimiento: false }
+      { id: 'k1', anio_campana: CAMP, clues: CLUES, municipio: 'QUERETARO', fecha: '2026-10-09', valores: { r1: 20, r2: 10 }, sin_movimiento: false, capturado_por: 'ANA PEREZ' },
+      { id: 'k2', anio_campana: CAMP, clues: CLUES, municipio: 'QUERETARO', fecha: '2026-10-16', valores: { r1: 30 }, sin_movimiento: false, capturado_por: 'LUIS GOMEZ' }
     ],
     influenza_distribucion_frascos: [{ anio_campana: CAMP, clues: CLUES, municipio: 'QUERETARO', cantidad_frascos: 15, fecha_entrega: '2026-10-05' }],
     unidades: [{ clues: CLUES, unidad: 'JOFRITO', municipio: 'QUERETARO', activo: 'SI' }]
@@ -465,6 +465,34 @@ test.describe('Paso a CeNSIA', () => {
       await page.locator('.inf-censia').screenshot({ path: path.join(process.env.GUARDAR_CAPTURAS, 'sirevaq_tarjeta_censia.png') });
     }
     expect(paq.clues).toBe('QTSSA001904');
+    expect(errores).toEqual([]);
+  });
+});
+
+test.describe('Responsable y reemplazo semanal', () => {
+  test.use({ viewport: { width: 1280, height: 1000 } });
+
+  test('el nombre del responsable viene del reporte de la semana y no se borra al editar', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-17T11:00:00' });
+    const nombre = page.locator('#nombreINFLUENZA');
+    await expect(nombre).toHaveValue('LUIS GOMEZ');
+    // editar cifras no toca el nombre; repintar la tabla tampoco
+    await page.locator('#input_inf_r1').fill('31');
+    await page.evaluate(() => renderCaptureGrid());
+    await expect(nombre).toHaveValue('LUIS GOMEZ');
+    // lo que la persona escribe no se pisa al repintar
+    await nombre.fill('MARIA LOPEZ');
+    await page.evaluate(() => renderCaptureGrid());
+    await expect(nombre).toHaveValue('MARIA LOPEZ');
+    expect(errores).toEqual([]);
+  });
+
+  test('el panel explica que el reporte nuevo reemplaza al anterior', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-17T11:00:00' });
+    const aviso = page.locator('.inf-reemplazo');
+    await expect(aviso).toBeVisible();
+    await expect(aviso).toContainText('reemplaza por completo al anterior');
+    await expect(aviso).toContainText('total de la semana');
     expect(errores).toEqual([]);
   });
 });
