@@ -15571,3 +15571,5 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 .cvc-seg-btn { min-height:38px; padding:0 18px; border:0; border-radius:9px; background:transparent; color:#334155; font-weight:700; font-size:13px; cursor:pointer; }
 .cvc-seg-btn[aria-pressed="true"] { background:#1e293b; color:#fff; }
 .cvc-seg-btn:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+.cvc-tabla-wrap { overflow:visible; max-height:none; }
+#covidCapturaContainer[hidden] { display:none; }

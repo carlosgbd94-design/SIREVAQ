@@ -79,8 +79,16 @@ async function buildGroup(name, files) {
     pure: ['console.log', 'console.debug', 'console.info'],
   });
 
-  fs.writeFileSync(path.join(DIST_DIR, `${name}.js`), `${result.code}\n//# sourceMappingURL=${name}.js.map`);
-  fs.writeFileSync(path.join(DIST_DIR, `${name}.js.map`), result.map);
+  // Escritura atomica (archivo temporal + rename): un servidor local (Live Server) que sirva el bundle mientras
+  // se reconstruye ya no entrega un archivo a medias («Unexpected end of input»).
+  const escribirAtomico = (destino, contenido) => {
+    const tmp = `${destino}.tmp`;
+    fs.writeFileSync(tmp, contenido);
+    fs.renameSync(tmp, destino);
+  };
+  escribirAtomico(path.join(DIST_DIR, `${name}.js.map`), result.map);
+  escribirAtomico(path.join(DIST_DIR, `${name}.js`), `${result.code}
+//# sourceMappingURL=${name}.js.map`);
 
   const originalSize = Buffer.byteLength(source, 'utf8');
   const finalSize = Buffer.byteLength(result.code, 'utf8');

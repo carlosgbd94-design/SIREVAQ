@@ -79,7 +79,7 @@
       <div class="pb-2 border-b border-slate-100">
         <h4 class="text-xs font-black text-violet-900 uppercase tracking-wider m-0">COVID-19 - Dosis aplicadas por marca</h4>
       </div>
-      <div class="tableWrap w-full rounded-xl border border-slate-200 bg-white">
+      <div class="cvc-tabla-wrap w-full rounded-xl border border-slate-200 bg-white">
         <table class="inf-cap-tabla w-full border-collapse text-left text-xs font-semibold text-slate-700">
           <caption class="sr-only">COVID-19: meta, acumulado, dosis de esta semana por marca y avance contra la meta (Moderna y Pfizer suman)</caption>
           <thead>
