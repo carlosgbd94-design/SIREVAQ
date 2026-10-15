@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.195" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.153" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.190" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.166" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -2016,6 +2016,14 @@
           <div class="command-hub-tracker pointer-events-auto">
             <!-- 🛸 GLOBAL COMMAND HUB (FLOATING ACTION ISLAND) -->
             <div id="globalCommandHub" class="command-hub">
+              <!-- Contador de dosis (solo captura de Influenza; lo pinta influenza_module.js) -->
+              <section id="hubDosis" class="hub-dosis" hidden role="group" aria-label="Dosis capturadas esta semana" title="Total de dosis que llevas capturadas en esta semana">
+                <span class="material-symbols-rounded" aria-hidden="true">vaccines</span>
+                <b id="hubDosisSemana" aria-hidden="true">0</b>
+                <span class="hub-dosis__txt" aria-hidden="true">dosis</span>
+                <span id="hubDosisSr" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
+              </section>
+
               <!-- Status Chip Premium -->
               <div id="hubStatusChip" class="status-chip-v5" style="display:none">
                 <div class="status-dot"></div>

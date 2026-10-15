@@ -705,10 +705,43 @@ function actualizarFilaInfluenza(rubroId, v) {
 }
 
 /**
+ * Contador de dosis del command hub: total de dosis tecleadas en la semana elegida.
+ * Se llama en cada cambio de la tabla; el texto leído por lectores de pantalla se actualiza con retardo
+ * para no anunciar cada tecla.
+ */
+let _hubDosisTimer = null;
+function actualizarContadorDosisHub() {
+  const box = document.getElementById("hubDosis");
+  if (!box) return;
+  const grid = document.getElementById("influenzaCaptureGroupsContainer");
+  const sinMov = !!document.getElementById("chkSinMovimientoINF")?.checked;
+  let semana = 0, previo = 0;
+  INFLUENZA_RUBROS.forEach(rb => {
+    previo += Number(_infGrid.acum[rb.id] || 0);
+    const input = document.getElementById(`input_inf_${rb.id}`);
+    const v = sinMov ? 0 : (parseInt(input?.value, 10) || 0);
+    if (v > 0) semana += v;
+  });
+  const fmt = (n) => n.toLocaleString("es-MX");
+  const campana = previo + semana;
+  const elS = document.getElementById("hubDosisSemana");
+  if (elS) elS.textContent = fmt(semana);
+  // Visible solo mientras la tabla de captura está pintada
+  box.hidden = !grid || !grid.querySelector(".inf-input, .inf-cap-tabla");
+  clearTimeout(_hubDosisTimer);
+  _hubDosisTimer = setTimeout(() => {
+    const sr = document.getElementById("hubDosisSr");
+    if (sr) sr.textContent = `${fmt(semana)} ${semana === 1 ? "dosis capturada" : "dosis capturadas"} esta semana.`;
+  }, 700);
+}
+window.actualizarContadorDosisHub = actualizarContadorDosisHub;
+
+/**
  * Panel «Control de tu meta» de la captura: suma lo tecleado de toda la tabla contra la meta y lo ya acumulado,
  * dice cuántas dosis le quedan a la unidad y señala los grupos que se pasarían (el guardado los rechaza).
  */
 function actualizarControlMetaInfluenza() {
+  actualizarContadorDosisHub();
   const box = document.getElementById("infControlMeta");
   if (!box) return;
   const sinMov = !!document.getElementById("chkSinMovimientoINF")?.checked;

@@ -25370,6 +25370,13 @@ function syncCommandHub() {
     return;
   }
 
+  // Contador de dosis: solo en la captura de Influenza
+  const hubDosis = document.getElementById("hubDosis");
+  if (hubDosis) {
+    if (captureTab === "INFLUENZA" && typeof window.actualizarContadorDosisHub === "function") window.actualizarContadorDosisHub();
+    else hubDosis.hidden = true;
+  }
+
   // 3. Sincronizar visibilidad y estados en el Hub
   const hubEdit = document.getElementById("hubEditBtn");
   const hubCancel = document.getElementById("hubCancelBtn");

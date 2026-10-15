@@ -228,6 +228,22 @@ test.describe('Panel de Influenza (unidad)', () => {
     expect(errores).toEqual([]);
   });
 
+  test('command hub: contador de dosis capturadas se actualiza en vivo y es accesible', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-17T11:00:00' });
+    await page.evaluate(() => { AppState.mainTab = 'CAP'; AppState.captureTab = 'INFLUENZA'; syncCommandHub(); });
+    const caja = page.locator('#hubDosis');
+    await expect(caja).toBeVisible();
+    await expect(caja).toHaveAttribute('aria-label', 'Dosis capturadas esta semana');
+    const semana = page.locator('#hubDosisSemana');
+    const base = Number((await semana.innerText()).replace(/\D/g, ''));
+    const r1 = page.locator('#input_inf_r1');
+    await r1.fill('7');
+    await expect(semana).not.toHaveText(String(base));
+    // el texto para lectores de pantalla se anuncia con retardo, sin saturar cada tecla
+    await expect(page.locator('#hubDosisSr')).toContainText('esta semana', { timeout: 3000 });
+    expect(errores).toEqual([]);
+  });
+
   test('selector de semanas: teclado (flechas, Esc) y estados visibles', async ({ page }) => {
     const { errores } = await abrirPanel(page, { fecha: '2026-10-20T12:00:00' });
     const btn = page.locator('#influenza_semana_btn');

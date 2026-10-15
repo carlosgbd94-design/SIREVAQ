@@ -8423,6 +8423,18 @@ html.sirevaq-scroll-locked .btn-save-animate {
 
 
 
+/* CONTADOR DE DOSIS (Hub de captura de Influenza): una línea, neutro, contraste AA */
+.hub-dosis {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 20px;
+  background: #ffffff; border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  color: #475569; font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.hub-dosis[hidden] { display: none; }
+.hub-dosis .material-symbols-rounded { font-size: 18px; width: 18px; height: 18px; overflow: hidden; color: #64748b; }
+.hub-dosis b { font-size: 16px; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
+
 /* STATUS CHIP V5 (Dentro del Hub) */
 .status-chip-v5 {
   display: flex;
