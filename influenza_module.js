@@ -5002,7 +5002,7 @@ async function exportCovidMetasExcel() {
     console.error("Error al exportar las metas de COVID-19:", err);
     const msg = String((err && err.message) || "");
     showToast(/No hay unidades|sin meta/.test(msg)
-      ? "Este municipio aún no tiene metas de COVID-19 por unidad." : "No se pudo generar el Excel de metas de COVID-19.", false, "bad");
+      ? "Este municipio aún no tiene metas de COVID-19 capturadas." : `No se pudo generar el Excel de metas de COVID-19${msg ? ": " + msg : "."}`, false, "bad");
   } finally {
     if (btn) btn.disabled = false;
   }

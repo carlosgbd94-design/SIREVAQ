@@ -100,3 +100,15 @@ test('El libro se puede volver a abrir y nombres de archivo', async () => {
   expect(X.nombreArchivo('MARQUES', '2026-2027')).toBe('Metas COVID-19 El Marqués 2026-2027.xlsx');
   expect(X.nombreArchivoUnidad('C.S. UNO / Centro', '2026-2027')).toBe('Metas COVID-19 C.S. UNO Centro 2026-2027.xlsx');
 });
+
+test('Municipio sin reparto a unidades: sale su meta completa en una sola columna con su nombre', async () => {
+  const unidades = [unidad('Q1', 'UMQ UNO', 'QUERETARO')];
+  const metas = [meta(null, 'QUERETARO', { c1: 3000, c2: 3000, c3: 1000, c4: 2000, c5: 100, c6: 200 })];
+  const wb = await construir('QUERETARO', metas, unidades);
+  const ws = wb.worksheets[0];
+  expect(ws.getCell('H10').value).toBe('QUERÉTARO');
+  expect(ws.getCell('H11').value).toBe(3000);
+  expect(ws.getCell('I10').value).toBeNull();
+  // sin ninguna meta (ni del municipio ni de unidades): no hay archivo
+  await expect(construir('HUIMILPAN', [], [])).rejects.toThrow(/No hay unidades/);
+});

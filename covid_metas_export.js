@@ -57,10 +57,14 @@
   /** Columnas (unidades) del municipio que tienen meta de COVID-19. */
   function columnasDelMunicipio(muni, unidades, metas) {
     if (muni === "HOSPITALES") return HOSPITALES.filter((c) => tieneMeta(metasDeColumna(metas, c)));
-    return (unidades || [])
+    const porUnidad = (unidades || [])
       .filter((u) => mayus(u.municipio) === muni && !HOSPITALES_CLUES.has(u.clues) && tieneMeta(metasDe(metas, { clues: u.clues })))
       .sort((a, b) => String(a.unidad).localeCompare(String(b.unidad), "es"))
       .map((u) => ({ label: mayus(u.unidad), nombre: mayus(u.unidad), clues: u.clues }));
+    if (porUnidad.length) return porUnidad;
+    // El municipio todavía no reparte su meta entre las unidades: sale su meta completa en una sola columna.
+    const delMunicipio = tieneMeta(metasDe(metas, { destino: muni }));
+    return delMunicipio ? [{ label: MUNICIPIOS[muni].etiqueta, nombre: MUNICIPIOS[muni].etiqueta, clues: null, destino: muni }] : [];
   }
 
   function trocear(lista, n) {
