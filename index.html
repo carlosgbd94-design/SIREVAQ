@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.220" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.225" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -1789,6 +1789,9 @@
                 </div>
                 <button type="button" id="btnExportMetaUnidad" class="ip-btn" onclick="exportInfluenzaMetaUnidadExcel()">
                   <span class="material-symbols-rounded" aria-hidden="true">table_view</span>Descargar mi meta (Excel)
+                </button>
+                <button type="button" id="btnExportMetaCovidUnidad" class="ip-btn" style="display:none" onclick="exportCovidMetaUnidadExcel()">
+                  <span class="material-symbols-rounded" aria-hidden="true">table_view</span>Meta de COVID-19 (Excel)
                 </button>
               </section>
 

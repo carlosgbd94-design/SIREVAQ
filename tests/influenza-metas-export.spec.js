@@ -111,11 +111,12 @@ test('Corregidora: una sola hoja, sin urbanas/rurales, encabezado compacto y lib
   expect(hoja.getCell('G10').value).toBe('SANTA BARBARA');   // orden por CLUES
   expect(hoja.getCell('H10').value).toBe('LOS ÁNGELES');
   expect(hoja.getCell('G11').value).toBe(20);
-  expect(hoja.getCell('I6').value).toBe('CORREGIDORA');
-  expect(hoja.getCell('I5').value).toBe(1);
+  // Encabezado apilado en A-F (siempre visibles) y sin columnas vacías: solo las 2 unidades y el TOTAL
+  expect(hoja.getCell('D8').value).toBe('CORREGIDORA');
+  expect(hoja.getCell('D7').value).toBe(1);
   expect(hoja.getColumn('G').hidden).toBe(false);
-  expect(hoja.getColumn('L').hidden).toBe(false);            // mínimo de columnas visibles
-  expect(hoja.getColumn('M').hidden).toBe(true);
+  expect(hoja.getColumn('H').hidden).toBe(false);
+  expect(hoja.getColumn('I').hidden).toBe(true);              // ya no quedan columnas vacías visibles
   expect(hoja.getColumn('AA').hidden).toBeFalsy();
   expect(wb.worksheets[1].getCell('G5').value.formula).toBe("SUM('METAS UNIDADES'!AA11)");
   expect(wb.worksheets[1].getCell('H5').value).toBe(300);

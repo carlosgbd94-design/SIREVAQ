@@ -161,8 +161,8 @@
   }
 
   // Con pocas unidades se ocultan las columnas sobrantes y los datos del encabezado (Jurisdicción, Municipio,
-  // Institución) quedarían escondidos: se reacomodan en las primeras columnas, que siempre se ven.
-  const COLUMNAS_MIN_COMPACTO = 6;
+  // Institución) quedarían escondidos: se apilan en las columnas A-F, que siempre se ven, y solo quedan visibles
+  // las columnas de las unidades (sin columnas vacías entre ellas y el TOTAL).
   const UMBRAL_COMPACTO = 18;
 
   function acomodarEncabezado(ws, muniEtiqueta) {
@@ -172,21 +172,21 @@
       try { ws.unMergeCells(r); } catch (e) { /* ya estaba separada */ }
     });
     ["U5", "X5", "L6", "N6", "T6", "V6", "D5", "D6"].forEach((a) => { ws.getCell(a).value = null; });
-    const poner = (rango, valor, estilo) => {
-      const [a, b] = rango.split(":");
-      if (b) ws.mergeCells(rango);
-      const c = ws.getCell(a);
+    const poner = (fila, etiqueta, valor) => {
+      const l = ws.getCell(`A${fila}`);
+      l.value = etiqueta;
+      l.style = estEtiqueta;
+      ws.mergeCells(`D${fila}:F${fila}`);
+      const c = ws.getCell(`D${fila}`);
       c.value = valor;
-      c.style = estilo;
+      c.style = estValor;
+      ws.getRow(fila).height = 22.5;
     };
-    poner("D5:F5", "QUERÉTARO", estValor);
-    poner("G5:H5", "Jurisdicción Sanitaria:", estEtiqueta);
-    poner("I5:J5", 1, estValor);
-    poner("D6:F6", "DEPARTAMENTO DE VACUNAS", estValor);
-    poner("G6:H6", "Municipio:", estEtiqueta);
-    poner("I6:L6", muniEtiqueta, estValor);
-    poner("A7", "Institución:", estEtiqueta);
-    poner("D7:F7", "SECRETARÍA DE SALUD", estValor);
+    poner(5, "Entidad Federativa:", "QUERÉTARO");
+    poner(6, "Unidad de Salud:", "DEPARTAMENTO DE VACUNAS");
+    poner(7, "Jurisdicción Sanitaria:", 1);
+    poner(8, "Municipio:", muniEtiqueta);
+    poner(9, "Institución:", "SECRETARÍA DE SALUD");
   }
 
   /** Escribe una hoja de unidades: encabezados, metas por rubro y fórmulas de total. */
@@ -196,7 +196,7 @@
       for (let c = COL_PRIMERA_UNIDAD; c <= COL_ULTIMA_UNIDAD; c++) ws.getCell(r, c).value = null;
     }
     const compacto = columnas.length < UMBRAL_COMPACTO;
-    const visibles = compacto ? Math.max(columnas.length, COLUMNAS_MIN_COMPACTO) : columnas.length;
+    const visibles = Math.max(columnas.length, 1);
     for (let c = COL_PRIMERA_UNIDAD; c <= COL_ULTIMA_UNIDAD; c++) {
       const col = ws.getColumn(c);
       const i = c - COL_PRIMERA_UNIDAD;

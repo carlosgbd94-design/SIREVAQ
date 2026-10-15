@@ -612,6 +612,7 @@ async function loadInfluenzaUnitData() {
     const resMetas = await AppService.call("getinfluenza_metas", { anio_campana: campana });
     const unitMetaRec = resMetas.data.find(r => r.clues === USER.clues);
     _influenzaMetasCache = unitMetaRec ? unitMetaRec.metas : {};
+    covidCargarMetaUnidad(campana);
 
     // 2. Historial de capturas
     const resCapturas = await AppService.call("getinfluenza_capturas", { clues: USER.clues, anio_campana: campana });
@@ -4819,7 +4820,55 @@ function metaDescargar(contenido, nombre, tipo) {
   setTimeout(() => URL.revokeObjectURL(link.href), 4000);
 }
 
+const METAS_COVID_PLANTILLA = "./Formatos/Metas COVID-19 plantilla.xlsx";
+
+// Excel de metas de COVID-19 (mismo reparto de archivos que influenza: un municipio, o «Todos» en un .zip).
+async function exportCovidMetasExcel() {
+  const btn = document.getElementById("btnExportInfluenzaMetas");
+  const X = window.CovidMetasExport;
+  if (!X) { showToast("No se cargó el exportador de metas de COVID-19. Recarga la página.", false, "bad"); return; }
+  const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";
+  const eleccion = esJuris ? (document.getElementById("metaExportMuni")?.value || "TODOS")
+    : String(document.getElementById("adminInfluenzaMuni")?.value || USER.municipio || "").toUpperCase();
+  const munis = eleccion === "TODOS" ? Object.keys(X.MUNICIPIOS) : [eleccion];
+  if (btn) btn.disabled = true;
+  try {
+    await window.ensureLibsLoaded("exceljs", "jszip");
+    const resp = await fetch(encodeURI(METAS_COVID_PLANTILLA));
+    if (!resp.ok) throw new Error(`No se pudo leer la plantilla (${resp.status})`);
+    const plantilla = await resp.arrayBuffer();
+    const campana = campaignSeasonLabel();
+    const archivos = [];
+    for (const muni of munis) {
+      try {
+        const wb = await X.construirLibroCovid({ ExcelJS, plantilla, muni, campana, metas: _covidMetasArray, unidades: _allUnidades });
+        archivos.push({ nombre: X.nombreArchivo(muni, campana), datos: await X.escribirLibro(wb) });
+      } catch (e) {
+        if (munis.length === 1) throw e;     // «Todos»: el municipio sin metas simplemente no genera archivo
+      }
+    }
+    if (!archivos.length) { showToast("Aún no hay metas de COVID-19 capturadas para exportar.", false, "warn"); return; }
+    const xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    if (archivos.length === 1) {
+      metaDescargar(archivos[0].datos, archivos[0].nombre, xlsx);
+    } else {
+      const zip = new window.JSZip();
+      archivos.forEach(a => zip.file(a.nombre, a.datos));
+      metaDescargar(await zip.generateAsync({ type: "uint8array" }), `Metas COVID-19 ${campana}.zip`, "application/zip");
+    }
+    showToast("Metas de COVID-19 exportadas con lo último guardado.", true, "good");
+  } catch (err) {
+    console.error("Error al exportar las metas de COVID-19:", err);
+    const msg = String((err && err.message) || "");
+    showToast(/No hay unidades|sin meta/.test(msg)
+      ? "Este municipio aún no tiene metas de COVID-19 por unidad." : "No se pudo generar el Excel de metas de COVID-19.", false, "bad");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function exportInfluenzaMetasExcel() {
+  if (esCovid()) return exportCovidMetasExcel();
   const btn = document.getElementById("btnExportInfluenzaMetas");
   const X = window.InfluenzaMetasExport;
   if (!X) { showToast("No se cargó el exportador de metas. Recarga la página.", false, "bad"); return; }
@@ -5119,9 +5168,9 @@ function renderMetasConfigurationGrid() {
   metaSincronizarExportar();
   const btnExp = document.getElementById("btnExportInfluenzaMetas");
   if (btnExp) btnExp.onclick = exportInfluenzaMetasExcel;
-  // El Excel oficial de metas es el de influenza; COVID aún no tiene exportador.
+  // El mismo botón exporta el Excel oficial de la vacuna elegida (influenza o COVID-19).
   const grupoExp = document.querySelector("#secInfluenzaMetas .meta-exp-grupo");
-  if (grupoExp) grupoExp.style.display = esCovid() ? "none" : "";
+  if (grupoExp) grupoExp.style.display = "";
   vacunaPintarSelectores();
   if (esCovid() && hints && !hints.textContent.startsWith("COVID-19")) hints.textContent = `COVID-19 · ${hints.textContent}`;
   covidPintarPerdida();
@@ -7018,6 +7067,61 @@ function renderInfluenzaResumenUnidad() {
     <tfoot><tr><th scope="row">Total</th><td class="c">${frascoFmt(c.metaTotal)}</td><td class="c"><b>${frascoFmt(c.logro)}</b></td><td class="ip-g-bar"><span>${pct(c.avancePct)}</span></td></tr></tfoot>
   </table>`;
 }
+
+// Meta de COVID-19 de la unidad (la lee de covid_metas; el hospital usa la de su destino). Si no tiene, el botón no sale.
+let _covidMetaUnidadCache = null;
+async function covidCargarMetaUnidad(campana) {
+  const btn = document.getElementById("btnExportMetaCovidUnidad");
+  _covidMetaUnidadCache = null;
+  if (btn) btn.style.display = "none";
+  try {
+    const res = await AppService.call("getcovid_metas", { anio_campana: campana }, { silent: true });
+    const filas = (res && res.data) || [];
+    const X = window.CovidMetasExport;
+    const destino = X ? Object.keys(X.CLUES_HOSPITALES).find(k => X.CLUES_HOSPITALES[k] === USER.clues) : null;
+    const propia = filas.find(r => r.clues === USER.clues);
+    const delDestino = destino ? filas.find(r => !r.clues && String(r.municipio).toUpperCase() === destino) : null;
+    const metas = (delDestino && delDestino.metas) || (propia && propia.metas) || null;
+    if (metas && CovidFrascos.RUBROS.some(r => Number(metas[r.id] || 0) > 0)) {
+      _covidMetaUnidadCache = { metas, registros: filas };
+      if (btn) btn.style.display = "";
+    }
+  } catch (e) { /* sin meta de COVID-19 visible: el botón queda oculto */ }
+}
+
+// Excel de la META de COVID-19 de la unidad (formato de la temporada invernal): solo su columna.
+async function exportCovidMetaUnidadExcel() {
+  const btn = document.getElementById("btnExportMetaCovidUnidad");
+  const X = window.CovidMetasExport;
+  if (!X) { showToast("No se cargó el exportador de metas de COVID-19. Recarga la página.", false, "bad"); return; }
+  if (!_covidMetaUnidadCache) { showToast("Tu unidad aún no tiene meta de COVID-19 asignada.", false, "warn"); return; }
+  if (btn) btn.disabled = true;
+  try {
+    await window.ensureLibsLoaded("exceljs", "jszip");
+    const resp = await fetch(encodeURI(METAS_COVID_PLANTILLA));
+    if (!resp.ok) throw new Error(`No se pudo leer la plantilla (${resp.status})`);
+    const plantilla = await resp.arrayBuffer();
+    const campana = campaignSeasonLabel();
+    const hospital = Object.keys(X.CLUES_HOSPITALES).find(k => X.CLUES_HOSPITALES[k] === USER.clues);
+    const muni = hospital ? "HOSPITALES" : String(USER.municipio || "").trim().toUpperCase();
+    if (!X.MUNICIPIOS[muni]) throw new Error(`Municipio sin formato de metas: ${USER.municipio}`);
+    const registros = (_covidMetaUnidadCache.registros || []).slice();
+    if (!registros.some(r => r.clues === USER.clues)) registros.push({ clues: USER.clues, municipio: USER.municipio, metas: _covidMetaUnidadCache.metas });
+    const wb = await X.construirLibroCovid({
+      ExcelJS, plantilla, muni, campana, metas: registros,
+      unidades: [{ clues: USER.clues, unidad: USER.unidad, municipio: USER.municipio }], soloClues: USER.clues,
+      unidadEtiqueta: String(USER.unidad || "").toUpperCase()
+    });
+    metaDescargar(await X.escribirLibro(wb), X.nombreArchivoUnidad(USER.unidad, campana), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    showToast("Meta de COVID-19 de tu unidad descargada.", true, "good");
+  } catch (err) {
+    console.error("Error al exportar la meta de COVID-19 de la unidad:", err);
+    showToast("No se pudo generar el Excel de tu meta de COVID-19.", false, "bad");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+window.exportCovidMetaUnidadExcel = exportCovidMetaUnidadExcel;
 
 // Excel de la META de la unidad con el formato oficial («Metas Influenza …»): solo su columna y su jeringa.
 async function exportInfluenzaMetaUnidadExcel() {
