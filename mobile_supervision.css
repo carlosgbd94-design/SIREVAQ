@@ -190,3 +190,21 @@ html.dark .sv-lista--sep > li { border-color: rgba(255,255,255,.1); }
 html.dark .sv-btn--sec { background: #1f2229; border-color: rgba(255,255,255,.2); color: #f8fafc; }
 html.dark .sv-error { background: rgba(220,38,38,.22); color: #fca5a5; }
 html.dark .sv-mx-item--mal { background: rgba(220,38,38,.15); }
+
+/* --- RDA completo y entrega de Pinol --- */
+.sv-btn--chico { min-height: 44px; margin: 8px 0 0; padding: 0 14px; font-size: 12px; }
+.sv-unidad:has(.sv-btn--chico) { flex-wrap: wrap; }
+.sv-unidad .sv-btn--chico { flex: 1 1 100%; }
+.sv-cadena { list-style: none; margin: 8px 0 0; padding: 0; }
+.sv-cadena li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #e2e8f0; font-size: 13px; }
+.sv-cadena li:first-child { border-top: 0; }
+.sv-cadena li > span:first-child { flex: 1; font-weight: 600; color: var(--text-secondary, #64748b); }
+.sv-cadena small { font-size: 11px; font-weight: 600; color: var(--text-secondary, #64748b); }
+.sv-comp { padding: 14px 16px; }
+.sv-comp > b { display: block; font-size: 13px; margin-bottom: 8px; }
+.sv-comp-v { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.sv-comp-v > span:not(.sv-pill) { display: flex; flex-direction: column; font: 800 20px Poppins, sans-serif; }
+.sv-comp-v small { font: 700 10.5px Inter, sans-serif; color: var(--text-secondary, #64748b); }
+.sv-comp-v em { font: 600 11px Inter, sans-serif; font-style: normal; color: var(--text-secondary, #64748b); }
+.sv-comp-v .sv-pill { margin-left: auto; }
+html.dark .sv-cadena li { border-color: rgba(255,255,255,.1); }

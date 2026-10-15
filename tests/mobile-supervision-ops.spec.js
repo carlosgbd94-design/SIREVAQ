@@ -33,12 +33,21 @@ function estadoBase(perfil) {
         { id: 'p2', clues: 'QTSSA000222', unidad: 'La Cañada', municipio: 'EL MARQUES', estatus: 'ENTREGADO', solicitud_botellas: 2, existencia_actual_botellas: 1, timestamp_solicitud: '2026-10-08T10:00:00Z' }
       ],
       aperturas_existencia: [],
-      notificaciones: [],
+      notificaciones: [
+        { id: 'NOTIF:PINOL_ENTREGA:p1', target_scope: 'CLUES', target_clues: 'QTSSA000830', target_municipio: 'CORREGIDORA', from_usuario: 'sup', title: 'Pinol entregado' }
+      ],
       notificaciones_perfil: []
     },
     rpc: {
       get_audit_findings: [{ severidad: 'alta', categoria: 'unidad_huerfana', clues: 'QTSSA000999', descripcion: 'Sin ficha' }],
-      get_rda_max_mes: 10, get_rda_indicators: [], get_history_metrics_rpc: [],
+      get_rda_max_mes: 10,
+      get_rda_indicators: [
+        { clues: 'QTSSA000830', unidad: 'Santa Bárbara', municipio: 'CORREGIDORA', pob_menor_1: 100, pob_1_ano: 100, pob_4_anos: 100, bcg_dosis: 400, hexa_ref_dosis: 100, neumo_ref_dosis: 100, srp_2_dosis: 100, dpt_4_dosis: 50, adol_hb: 30, adol_vph: 70, am_neumo13: 12, emb_tdpa: 9, inv_influenza: 40, inv_covid: 10, varicela: 5, hepatitis_a: 3 },
+        { clues: 'QTSSA000222', unidad: 'La Cañada', municipio: 'EL MARQUES', pob_menor_1: 50, pob_1_ano: 50, pob_4_anos: 50, bcg_dosis: 10, adol_hb: 10, adol_vph: 5 }
+      ],
+      get_rda_abandono_esquema: [
+        { clues: 'QTSSA000830', nombre: 'Santa Bárbara', municipio: 'CORREGIDORA', hexa_1: 100, hexa_2: 80, hexa_3: 40, hexa_ref: 40, rota_1: 50, rota_2: 50 }
+      ], get_history_metrics_rpc: [],
       get_captures_sr_range_bypass: [], get_captures_cons_range_bypass: [], get_captures_bio_range_bypass: []
     }
   };
@@ -85,7 +94,12 @@ function servidor(estado, reqs) {
       return route.fulfill({ status: 201, contentType: 'application/json', body: '[]' });
     }
     if (m === 'DELETE') { estado.db[nombre] = filas.filter((r) => !pasa(r)); return route.fulfill({ status: 204 }); }
-    if (m === 'PATCH') { filas.filter(pasa).forEach((r) => Object.assign(r, body)); return route.fulfill({ status: 204 }); }
+    if (m === 'PATCH') {
+      const tocadas = filas.filter(pasa);
+      tocadas.forEach((r) => Object.assign(r, body));
+      if ((req.headers()['prefer'] || '').includes('return=representation')) return json(tocadas);
+      return route.fulfill({ status: 204 });
+    }
     return json([]);
   };
 }
@@ -215,5 +229,42 @@ test.describe('Móvil · operaciones de supervisión', () => {
     await expect(page.locator('[data-ir="ENV"]')).toHaveCount(0);
     await expect(page.locator('[data-ir="SEG"]')).toHaveCount(0);
     await expect(page.locator('[data-ir="RDA"]')).toHaveCount(1);
+  });
+
+  test('Pinol: registra la entrega, valida estatus y reparte el aviso a la unidad', async ({ page }) => {
+    const { estado, reqs, errores } = await abrir(page, { rol: 'MUNICIPAL', usuario: 'sup', municipios_allowed: 'CORREGIDORA' });
+    await irAMas(page, 'PIN');
+    await page.click('[data-entrega="p1"]');
+    await expect(page.locator('#svPinEnt')).toContainText('Santa Bárbara');
+    await page.selectOption('#svPinCant', '3');
+    await page.fill('#svPinCom', 'Entregado en ventanilla');
+    await page.click('#svPinEntOk');
+    await expect.poll(() => estado.db.pinol_solicitudes.find((r) => r.id === 'p1').estatus).toBe('ENTREGADO');
+    const fila = estado.db.pinol_solicitudes.find((r) => r.id === 'p1');
+    expect(fila).toMatchObject({ solicitud_botellas: 3, comentario_entrega: 'Entregado en ventanilla', entregado_por: 'Sup' });
+    const patch = reqs.find((r) => r.m === 'PATCH' && r.nombre === 'pinol_solicitudes');
+    expect(patch.q).toContain('estatus=eq.PENDIENTE');
+    await expect.poll(() => estado.db.notificaciones_perfil.filter((r) => r.notificacion_id === 'NOTIF:PINOL_ENTREGA:p1').length).toBeGreaterThan(0);
+    expect(estado.db.notificaciones_perfil.map((r) => r.usuario)).toContain('unidad830');
+    expect(estado.db.notificaciones_perfil.map((r) => r.usuario)).not.toContain('sup');
+    await expect(page.locator('#supOps_PIN .sv-unidad')).toHaveCount(0); // ya no hay pendientes en su alcance
+    expect(errores).toEqual([]);
+  });
+
+  test('Indicadores RDA: esquemas de dosis, deserción y comparativa', async ({ page }) => {
+    await abrir(page, { rol: 'JURISDICCIONAL' });
+    await irAMas(page, 'RDA');
+    await page.click('[data-esq="adultos"]');
+    await expect(page.locator('#supRdaRoot .sv-avance .sv-pct')).toHaveText('115'); // 30+70+10+5
+    await expect(page.locator('#supRdaRoot .sv-kpi')).toHaveCount(5);
+    await page.click('[data-esq="invernal"]');
+    await expect(page.locator('#supRdaRoot .sv-avance .sv-pct')).toHaveText('50');
+    await page.click('[data-esq="desercion"]');
+    await expect(page.locator('#supRdaRoot .sv-cadena').first()).toContainText('Dosis 1');
+    await expect(page.locator('#supRdaRoot')).toContainText('Mayor caída');
+    await page.click('[data-esq="comparativa"]');
+    await expect(page.locator('#supRdaRoot .sv-comp')).toHaveCount(3);
+    await page.click('[data-esq="influenza"]');
+    await expect(page.locator('#supRdaRoot')).toContainText(/Influenza|meta/i);
   });
 });

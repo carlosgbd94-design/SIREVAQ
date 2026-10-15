@@ -243,7 +243,7 @@
   // ═══════════════════════════════════════════════════════════════════════════
   // Pinol: seguimiento (la entrega se registra en escritorio, donde se notifica a la unidad)
   // ═══════════════════════════════════════════════════════════════════════════
-  const PINOL = { filas: null, filtro: "PENDIENTE", q: "", cargando: false, error: null };
+  const PINOL = { filas: null, filtro: "PENDIENTE", q: "", cargando: false, error: null, entrega: null, guardando: false, errorEntrega: null };
   const ESTATUS = { PENDIENTE: ["Pendiente", "falta"], ENTREGADO: ["Por confirmar", "reg"], RECIBIDO: ["Recibido", "ok"] };
 
   async function abrirPinol(root) {
@@ -257,6 +257,71 @@
       } catch (e) { PINOL.error = "No se pudo cargar Pinol: " + (e.message || e); }
       PINOL.cargando = false;
     }
+    pintarPinol();
+  }
+
+  function tarjetaEntrega() {
+    if (!PINOL.entrega || !PINOL.filas) return "";
+    const r = PINOL.filas.find((x) => String(x.id) === String(PINOL.entrega));
+    if (!r) return "";
+    const pedidas = Math.min(4, Math.max(1, Number(r.solicitud_botellas) || 4));
+    return `<div class="sv-confirma" id="svPinEnt" role="alertdialog" aria-labelledby="svPinEntT">
+      <h3 id="svPinEntT">Registrar entrega · ${esc(r.unidad || r.clues)}</h3>
+      <label class="sv-fld"><span>Botellas entregadas</span><select id="svPinCant" class="sv-sel">${[1, 2, 3, 4].map((n) => `<option value="${n}"${n === pedidas ? " selected" : ""}>${n}</option>`).join("")}</select></label>
+      <label class="sv-fld"><span>Entregado por</span><input type="text" id="svPinPor" class="sv-txt" maxlength="80" value="${esc(perfil().nombre || perfil().usuario || "")}"></label>
+      <label class="sv-fld"><span>Fecha de entrega</span><input type="date" id="svPinFecha" class="sv-txt" value="${hoyYmd()}" max="${hoyYmd()}"></label>
+      <label class="sv-fld"><span>Comentario (opcional)</span><textarea id="svPinCom" class="sv-txt sv-area" rows="3" maxlength="400"></textarea></label>
+      <p class="sv-nota">Se avisará a la unidad que su solicitud fue entregada.</p>
+      ${PINOL.errorEntrega ? `<p class="sv-error" role="alert">${esc(PINOL.errorEntrega)}</p>` : ""}
+      <div class="sv-confirma-acc"><button type="button" class="sv-btn sv-btn--sec" id="svPinEntNo">Cancelar</button>
+        <button type="button" class="sv-btn sv-btn--pri" id="svPinEntOk"${PINOL.guardando ? " disabled" : ""}>${PINOL.guardando ? "Guardando…" : "Confirmar entrega"}</button></div>
+    </div>`;
+  }
+
+  // Misma secuencia que escritorio (markPinolDelivered): marca ENTREGADO y reparte el aviso que
+  // crea el trigger trg_notify_pinol_entregado a los usuarios de la unidad y su supervisión.
+  async function registrarEntrega() {
+    if (PINOL.guardando) return;
+    const root = PINOL.root;
+    const r = (PINOL.filas || []).find((x) => String(x.id) === String(PINOL.entrega));
+    if (!r) return;
+    const por = root.querySelector("#svPinPor").value.trim() || perfil().usuario;
+    const fecha = root.querySelector("#svPinFecha").value || hoyYmd();
+    const cant = Math.min(4, Math.max(1, parseInt(root.querySelector("#svPinCant").value, 10) || 4));
+    const com = root.querySelector("#svPinCom").value.trim();
+    PINOL.guardando = true; PINOL.errorEntrega = null; pintarPinol();
+    try {
+      const cambios = {
+        estatus: "ENTREGADO", entregado_por: por, timestamp_entrega: ahoraIso(), fecha_entrega: fecha,
+        comentario_entrega: com || null, solicitud_botellas: cant
+      };
+      const { data, error } = await db().from("pinol_solicitudes").update(cambios).eq("id", r.id).eq("estatus", "PENDIENTE").select("id");
+      if (error) throw error;
+      if (!data || !data.length) throw new Error("Esta solicitud ya no está pendiente. Actualiza la lista.");
+      Object.assign(r, cambios);
+      // Mejor esfuerzo: mi copia del aviso de solicitud queda leída y la unidad recibe el aviso de entrega.
+      try {
+        await db().from("notificaciones_perfil").update({ status: "READ", read_ts: ahoraIso() })
+          .eq("notificacion_id", "NOTIF:PINOL_REQ:" + r.id).eq("usuario", quien());
+      } catch (e) { /* informativo */ }
+      try {
+        const nid = "NOTIF:PINOL_ENTREGA:" + r.id;
+        const { data: notif } = await db().from("notificaciones").select("*").eq("id", nid).maybeSingle();
+        if (notif) {
+          const dest = await resolverDestinatarios(notif);
+          const filas = dest.map((u) => ({ notificacion_id: nid, usuario: u, status: "UNREAD", deleted: false }));
+          for (let i = 0; i < filas.length; i += 50) {
+            const { error: e2 } = await db().from("notificaciones_perfil").insert(filas.slice(i, i + 50));
+            if (e2 && e2.code !== "23505") console.warn("[Pinol] reparto parcial:", e2.message);
+          }
+        }
+      } catch (e) { console.warn("[Pinol] No se pudo repartir el aviso de entrega:", e); }
+      PINOL.entrega = null;
+      aviso("Solicitud marcada como entregada.");
+    } catch (e) {
+      PINOL.errorEntrega = "No se pudo registrar: " + (e.message || e);
+    }
+    PINOL.guardando = false;
     pintarPinol();
   }
 
@@ -280,18 +345,30 @@
           <div class="sv-kpi"><div class="sv-kpi-val">${pend.length}<small></small></div><small class="sv-kpi-sub">Pendientes</small></div>
           <div class="sv-kpi"><div class="sv-kpi-val">${botellas}<small></small></div><small class="sv-kpi-sub">Botellas en ruta (${(botellas * 0.828).toFixed(1)} L)</small></div>
         </div>
+        ${tarjetaEntrega()}
         <div class="sv-chips sv-chips--scroll" role="group" aria-label="Estatus">${chips}</div>
         <label class="sv-buscar"><span class="sr-only">Buscar unidad</span><span class="material-symbols-rounded" aria-hidden="true">search</span>
           <input type="search" id="svPinBuscar" placeholder="Buscar unidad o CLUES" value="${esc(PINOL.q)}" autocomplete="off"></label>
         ${lista.length ? `<ul class="sv-lista">${lista.map((r) => { const e = ESTATUS[est(r)] || [est(r), "falta"]; return `<li class="sv-unidad">
           <div class="sv-u-txt"><b>${esc(r.unidad || r.clues)}</b><small>${esc(r.municipio || "")} · ${esc(fechaCorta(r.timestamp_solicitud))} · ${Number(r.solicitud_botellas) || 0} bot. · existencia ${Number(r.existencia_actual_botellas) || 0}</small></div>
-          <span class="sv-pill sv-pill--${e[1]}">${esc(e[0])}</span></li>`; }).join("")}</ul>`
+          <span class="sv-pill sv-pill--${e[1]}">${esc(e[0])}</span>
+          ${est(r) === "PENDIENTE" ? `<button type="button" class="sv-btn sv-btn--sec sv-btn--chico" data-entrega="${esc(r.id)}">Registrar entrega</button>` : ""}</li>`; }).join("")}</ul>`
           : `<p class="sv-vacio">Sin solicitudes con ese criterio.</p>`}
-        <p class="sv-nota">La entrega y la guía de ruta se registran en escritorio, donde se avisa a la unidad.</p>`;
+        <p class="sv-nota">La guía de ruta y el acuse impreso siguen en escritorio.</p>`;
     }
     root.innerHTML = A.encabezadoSub("Pinol") + cuerpo;
     A.enlazarVolver(root);
     root.querySelectorAll("[data-pf]").forEach((b) => { b.onclick = () => { PINOL.filtro = b.dataset.pf; pintarPinol(); }; });
+    root.querySelectorAll("[data-entrega]").forEach((b) => {
+      b.onclick = () => {
+        PINOL.entrega = b.dataset.entrega; PINOL.errorEntrega = null; pintarPinol();
+        const c = root.querySelector("#svPinEnt"); if (c) c.scrollIntoView({ block: "center" });
+      };
+    });
+    const cancel = root.querySelector("#svPinEntNo");
+    if (cancel) cancel.onclick = () => { PINOL.entrega = null; pintarPinol(); };
+    const okEnt = root.querySelector("#svPinEntOk");
+    if (okEnt) okEnt.onclick = registrarEntrega;
     const bus = root.querySelector("#svPinBuscar");
     if (bus) bus.oninput = () => {
       PINOL.q = bus.value; const pos = bus.selectionStart; pintarPinol();

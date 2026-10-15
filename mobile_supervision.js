@@ -43,6 +43,7 @@
   const SUBPANELES = { RDA: "MAS", MET: "MAS", ENV: "MAS", PIN: "MAS", PAR: "MAS", JER: "MAS", SEG: "MAS" };
   // Paneles registrados por mobile_supervision_ops.js: { abrir(root) }
   const REG = {};
+  const HOST = {};
   // Solo escritorio: demasiado pesados para el celular.
   const SOLO_ESCRITORIO = [
     { icon: "medication_liquid", label: "SINBA-SIS", roles: ["MUNICIPAL", "ADMIN"] },
@@ -532,11 +533,11 @@
     panelActual = panelId;
     if (panelId === "RES") abrirResumen();
     else if (panelId === "MAS") pintarMas();
-    else if (panelId === "RDA") abrirRDA();
+    else if (panelId === "RDA" && !REG.RDA) abrirRDA();
     else if (panelId === "MET") abrirMet();
     else if (REG[panelId]) {
       Object.keys(REG).forEach((k) => { if (k !== panelId && REG[k].cerrar) REG[k].cerrar(); });
-      const host = document.getElementById("supOps_" + panelId);
+      const host = document.getElementById(HOST[panelId] || "supOps_" + panelId);
       if (host) REG[panelId].abrir(host);
     }
     else if (panelId === "CAL") {
@@ -561,8 +562,9 @@
     mostrar,
     panelInicial: () => "RES",
     // Para mobile_supervision_ops.js: registra un panel de «Más» y crea su sección
-    registrar(id, etiqueta, def) {
+    registrar(id, etiqueta, def, hostId) {
       REG[id] = def;
+      if (hostId) HOST[id] = hostId;
       if (document.getElementById("panel" + id)) return;
       const area = document.getElementById("captureContentArea");
       if (!area) return;
