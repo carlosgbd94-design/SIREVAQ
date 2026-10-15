@@ -164,6 +164,9 @@
     wb.calcProperties = Object.assign({}, wb.calcProperties, { fullCalcOnLoad: true });
     const hoja = wb.worksheets[0];
     if (!hoja) throw new Error("La plantilla de COVID-19 no tiene hojas.");
+    // La plantilla venía de un libro con 5 hojas y su vista apunta a la 2.ª (firstSheet=1): con una sola hoja Excel
+    // declara el archivo dañado. Se deja la vista en la primera hoja.
+    wb.views = [{ x: 0, y: 0, width: 24240, height: 13020, firstSheet: 0, activeTab: 0, visibility: "visible" }];
 
     let cols = columnasDelMunicipio(muni, ctx.unidades, base.metas);
     if (ctx.soloClues) {

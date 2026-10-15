@@ -126,3 +126,12 @@ test('El XML de cada hoja no trae DPI de impresora (Excel lo marcaba como archiv
     expect(xml).not.toMatch(/horizontalDpi|verticalDpi|4294967295/);
   }
 });
+
+test('El libro apunta a su primera hoja (firstSheet=0): con una hoja y firstSheet=1 Excel lo declara dañado', async () => {
+  const JSZip = require('jszip');
+  const wb = await construir('QUERETARO', [meta('Q1', 'QUERETARO', { c3: 5 })], [unidad('Q1', 'UMQ UNO', 'QUERETARO')], { soloClues: 'Q1' });
+  const zip = await JSZip.loadAsync(await X.escribirLibro(wb));
+  const libro = await zip.file('xl/workbook.xml').async('string');
+  expect(libro).not.toMatch(/firstSheet="[1-9]/);
+  expect(libro).not.toMatch(/activeTab="[1-9]/);
+});
