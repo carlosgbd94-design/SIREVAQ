@@ -1634,3 +1634,20 @@ test('Meta en frascos por marca: columnas visibles en COVID (resaltada la marca 
   expect(await vis('#secInfluenzaFrascos th.col-mod')).toBe(false);
   await expect(page.locator('#mr_mfr_Q1')).toContainText('3,000');                     // 30,000 dosis / 10
 });
+
+test('Reparto jurisdiccional compacto: la tabla cabe sin desplazarse y se ve la última columna', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await montar(page, 'JURISDICCIONAL');
+  await page.addStyleTag({ path: path.join(raiz, 'style.css') });
+  await page.evaluate(() => {
+    _vacuna = 'COVID'; _marcaCovid = 'MODERNA';
+    _covidMetasArray = [{ clues: null, municipio: 'QUERETARO', metas: { c1: 48714, c2: 48714, c3: 2702, c4: 4701, c5: 668, c6: 289 } }];
+    _covidRemesasAll = []; _covidFrascosAll = []; _covidLotesAll = [];
+    const w = document.createElement('div'); w.id = 'panelINFLUENZAADMIN'; w.style.cssText = 'background:#fff;padding:24px;width:1180px';
+    while (document.body.firstChild) w.appendChild(document.body.firstChild);
+    document.body.appendChild(w);
+    renderFrascosDistribution();
+  });
+  const d = await page.evaluate(() => { const sc = document.querySelector('#remesaTbody').closest('.frs-scroll'); const t = sc.querySelector('table'); return { visible: sc.clientWidth, contenido: t.scrollWidth }; });
+  expect(d.contenido).toBeLessThanOrEqual(d.visible + 1);
+});

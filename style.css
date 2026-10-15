@@ -15521,3 +15521,7 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 #influenzaFrascosDeliveryForm table[data-vac="COVID"] .col-pct { display: none; }
 #influenzaFrascosDeliveryForm .frs-meta-pct { display: none; }
 #influenzaFrascosDeliveryForm table[data-vac="COVID"] .frs-meta-pct { display: block; font-size: 10px; font-weight: 700; color: #64748b; }
+
+/* Reparto jurisdiccional compacto: la tabla (con meta por marca) cabe sin desplazarse hacia los lados. */
+#frascosJurisPanel .frs-table th, #frascosJurisPanel .frs-table td { padding: 8px 7px; }
+#frascosJurisPanel .frs-table th { font-size: 10.5px; letter-spacing: .02em; line-height: 1.2; white-space: normal; vertical-align: bottom; }
