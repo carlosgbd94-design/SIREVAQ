@@ -1530,3 +1530,42 @@ test('Botones redondos de guardado: mientras guardan solo gira el ícono (sin te
   expect(r.conTexto).toBe('Procesando…');
   expect(r.conTextoDespues).toBe('Guardar todo');
 });
+
+test('Metas: el verificador sobre «Guardar» dice si los grupos cuadran (Jurisdicción y municipal, influenza y COVID)', async ({ page }) => {
+  // Jurisdicción (influenza): meta de arriba 100 en r1; destinos suman 80 → faltan 20
+  await montarMetas(page, 'JURISDICCIONAL', []);
+  const pildora = page.locator('#metasHubEstado');
+  await expect(pildora).toHaveAttribute('data-estado', 'vacio');
+  await page.fill('input[data-rb="r1"][data-juris]', '100');
+  await page.fill('input[data-rb="r1"][data-muni="QUERETARO"]', '80');
+  await expect(pildora).toHaveAttribute('data-estado', 'falta');
+  await expect(pildora).toContainText('20');
+  await expect(pildora).toHaveAttribute('aria-label', /1 grupo no cuadra: faltan 20 y sobran 0 dosis/);
+  await page.fill('input[data-rb="r1"][data-muni="CORREGIDORA"]', '30');          // 110 contra 100 → sobran 10
+  await expect(pildora).toHaveAttribute('data-estado', 'excede');
+  await expect(pildora).toHaveAttribute('aria-label', /sobran 10 dosis/);
+  await page.fill('input[data-rb="r1"][data-muni="CORREGIDORA"]', '20');          // 100 contra 100
+  await expect(pildora).toHaveAttribute('data-estado', 'ok');
+  await expect(pildora).toContainText('cuadra');
+
+  // COVID: mismo verificador con sus rubros
+  await page.evaluate(() => { _vacuna = 'COVID'; _covidMetasArray = []; window.__render(); });
+  await page.fill('input[data-rb="c4"][data-juris]', '50');
+  await expect(page.locator('#metasHubEstado')).toHaveAttribute('data-estado', 'falta');
+  await page.fill('input[data-rb="c4"][data-muni="QUERETARO"]', '50');
+  await expect(page.locator('#metasHubEstado')).toHaveAttribute('data-estado', 'ok');
+});
+
+test('Control de frascos (influenza): el verificador junto a «Guardar» también está en Influenza', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 100, asignacion: { QUERETARO: 100 }, manual: [] }];
+    _adminFrascosArray = [];
+    renderFrascosDistribution();
+  });
+  const pildora = page.locator('#frascosHubEstado');
+  await expect(pildora).toHaveAttribute('data-estado', 'ok');
+  await page.fill('#batch_frascos_Q1', '90');
+  await expect(pildora).toHaveAttribute('data-estado', 'excede');
+  await expect(pildora).toHaveAttribute('aria-label', /Te pasaste por/);
+});

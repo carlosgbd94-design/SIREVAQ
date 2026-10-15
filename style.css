@@ -15467,25 +15467,25 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 #secInfluenzaFrascos .frs-tope--cero { color: #b91c1c; }
 #secInfluenzaFrascos .frs-tope-sub { display: block; margin-top: 2px; font-size: 10px; font-weight: 700; color: #475569; line-height: 1.25; }
 
-/* Estado del reparto: círculo de 56 px (igual que el botón de guardar, centrado sobre él); en línea, una píldora baja. */
-#secInfluenzaFrascos .frs-pill {
-  box-sizing: border-box; width: 56px; height: 56px; margin: 0; padding: 0; border-radius: 50%;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; line-height: 1;
-  border: 2px solid #94a3b8; background: #f8fafc; color: #0f172a; text-align: center;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, .12); overflow: hidden;
+/* Verificador (frascos y metas): cuadro de esquinas redondeadas, centrado sobre el botón de guardar; en línea, una píldora baja. */
+#panelINFLUENZAADMIN .frs-pill {
+  box-sizing: border-box; min-width: 64px; max-width: 76px; margin: 0; padding: 7px 8px 6px; border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; line-height: 1.1;
+  border: 1.5px solid #94a3b8; background: #f8fafc; color: #0f172a; text-align: center;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, .10);
 }
-#secInfluenzaFrascos .frs-pill:empty { display: none; }
-#secInfluenzaFrascos .frs-pill .material-symbols-rounded { font-size: 22px; font-variation-settings: 'FILL' 1; }
-#secInfluenzaFrascos .frs-pill b { font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; }
-#secInfluenzaFrascos .frs-pill small { margin-top: 2px; font-size: 8px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; }
-#secInfluenzaFrascos .frs-pill[data-estado="ok"] { background: #d1fae5; border-color: #10b981; color: #065f46; }
-#secInfluenzaFrascos .frs-pill[data-estado="falta"] { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
-#secInfluenzaFrascos .frs-pill[data-estado="excede"] { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
-#secInfluenzaFrascos .frs-pill--inline {
-  flex-direction: row; width: auto; height: 36px; padding: 0 14px 0 10px; gap: 8px; border-radius: 999px; box-shadow: none;
+#panelINFLUENZAADMIN .frs-pill:empty { display: none; }
+#panelINFLUENZAADMIN .frs-pill .material-symbols-rounded { font-size: 22px; width: 22px; height: 22px; overflow: hidden; font-variation-settings: 'FILL' 1; }
+#panelINFLUENZAADMIN .frs-pill b { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
+#panelINFLUENZAADMIN .frs-pill small { font-size: 9px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
+#panelINFLUENZAADMIN .frs-pill[data-estado="ok"] { background: #d1fae5; border-color: #10b981; color: #065f46; }
+#panelINFLUENZAADMIN .frs-pill[data-estado="falta"] { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+#panelINFLUENZAADMIN .frs-pill[data-estado="excede"] { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+#panelINFLUENZAADMIN .frs-pill--inline {
+  flex-direction: row; max-width: none; padding: 6px 14px 6px 10px; gap: 8px; border-radius: 12px; box-shadow: none;
 }
-#secInfluenzaFrascos .frs-pill--inline .material-symbols-rounded { font-size: 20px; }
-#secInfluenzaFrascos .frs-pill--inline b { font-size: 13px; font-weight: 800; }
+#panelINFLUENZAADMIN .frs-pill--inline .material-symbols-rounded { font-size: 20px; }
+#panelINFLUENZAADMIN .frs-pill--inline b { font-size: 13px; font-weight: 800; }
 #secInfluenzaFrascos .frs-solo-chico { display: none; }
 @media (max-width: 1023px) { #secInfluenzaFrascos .frs-solo-chico:not(:empty) { display: inline-flex; } }
 

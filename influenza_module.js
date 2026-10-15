@@ -4911,6 +4911,7 @@ function renderMetasConfigurationGrid() {
     };
     const recalcular = () => {
       let granJ = 0, granRef = 0, granEq = 0, granPed = 0, granAd = 0;
+      _metaDesc = { hay: false, n: 0, falta: 0, sobra: 0 };
       const porDestino = {};
       const eqDestino = {};   // en dosis de 0.5 mL equivalentes (COVID: las pediátricas valen la mitad)
       const pedDestino = {}, adDestino = {};   // COVID: niños (c1+c2) y adultos (c3..c6) por destino
@@ -4929,6 +4930,7 @@ function renderMetasConfigurationGrid() {
         const ref = leer(tr.querySelector("input[data-juris]"));
         document.getElementById(`total_j_${tr.dataset.rb}`).textContent = suma;
         pintar(document.getElementById(`cmp_${tr.dataset.rb}`), ref, suma);
+        metaDescAcum(ref, suma);
         granJ += suma;
         granRef += ref;
       });
@@ -4943,6 +4945,7 @@ function renderMetasConfigurationGrid() {
         esCovid() ? { ped: Math.ceil(granPed / 2), adulto: granAd, razon } : granJ, true, true);
       document.getElementById("tot_juris").textContent = granRef;
       pintar(document.getElementById("cmp_TOTAL"), granRef, granJ);
+      metaPintarPill();
     };
     metaEnlazarInputs(tbody, recalcular);
     _gridRecalcular = recalcular;
@@ -5011,6 +5014,7 @@ function renderMetasConfigurationGrid() {
     };
     const recalcular = () => {
       let granRef = 0, granSuma = 0, granRefEq = 0, refPed = 0, refAd = 0;
+      _metaDesc = { hay: false, n: 0, falta: 0, sobra: 0 };
       const porUnidad = {};
       const eqUnidad = {};   // dosis de 0.5 mL equivalentes (COVID)
       const pedUnidad = {}, adUnidad = {};   // COVID: niños (c1+c2) y adultos (c3..c6) por unidad
@@ -5028,6 +5032,7 @@ function renderMetasConfigurationGrid() {
         granRefEq += ref * metaPesoRubro(tr.dataset.rb);
         if (metaPesoRubro(tr.dataset.rb) === 0.5) refPed += ref; else refAd += ref;
         pintar(document.getElementById(`cmp_${tr.dataset.rb}`), ref, suma);
+        metaDescAcum(ref, suma);
         granRef += ref;
         granSuma += suma;
       });
@@ -5047,6 +5052,7 @@ function renderMetasConfigurationGrid() {
         esCovid() ? { ped: Math.ceil(refPed / 2), adulto: refAd, razon: razonCovid } : granRef, permiteAbierto, true);
       document.getElementById("tot_meta").textContent = granRef;
       pintar(document.getElementById("cmp_TOTAL"), granRef, granSuma);
+      metaPintarPill();
     };
     metaEnlazarInputs(tbody, recalcular);
     _gridRecalcular = recalcular;
@@ -5307,6 +5313,39 @@ async function renderCovidAvance() {
       <td class="c">${covidAvanceFmt(x.meta)}</td><td class="c">${covidAvanceFmt(x.aplicadas)}</td>
       <td class="c">${covidAvanceBarra(x.pct)}</td><td class="c">${covidAvanceFmt(x.pendiente)}</td></tr>`;
   }).join("");
+}
+
+// Verificador de Distribución de Metas: resume si todos los grupos cuadran contra la meta de arriba (Jurisdicción
+// para los destinos; el municipio para sus unidades). Se alimenta desde recalcular() de la cuadrícula.
+let _metaDesc = { hay: false, n: 0, falta: 0, sobra: 0 };
+function metaDescAcum(ref, suma) {
+  if (ref || suma) _metaDesc.hay = true;
+  if (ref === suma) return;
+  _metaDesc.n += 1;
+  if (suma > ref) _metaDesc.sobra += suma - ref; else _metaDesc.falta += ref - suma;
+}
+function metaPintarPill() {
+  const el = document.getElementById("metasHubEstado");
+  if (!el) return;
+  const d = _metaDesc;
+  const fmt = (n) => Number(n).toLocaleString("es-MX");
+  let estado, icono, valor, etiqueta, completo;
+  if (!d.hay) {
+    estado = "vacio"; icono = "rule"; valor = "—"; etiqueta = "sin metas";
+    completo = "Aún no hay metas capturadas";
+  } else if (d.n === 0) {
+    estado = "ok"; icono = "check_circle"; valor = ""; etiqueta = "cuadra";
+    completo = "Las metas cuadran en todos los grupos";
+  } else {
+    estado = d.sobra > 0 ? "excede" : "falta"; icono = "rule"; valor = fmt(d.falta + d.sobra); etiqueta = "diferencia";
+    completo = `${d.n} ${d.n === 1 ? "grupo no cuadra" : "grupos no cuadran"}: faltan ${fmt(d.falta)} y sobran ${fmt(d.sobra)} dosis`;
+  }
+  el.dataset.estado = estado;
+  el.setAttribute("aria-label", completo);
+  el.title = completo;
+  el.innerHTML = estado === "ok" || estado === "vacio"
+    ? `<span class="material-symbols-rounded" aria-hidden="true">${icono}</span><small>${etiqueta}</small>`
+    : `<b>${valor}</b><small>${etiqueta}</small>`;
 }
 
 // Caja «Factor de pérdida»: Jurisdicción la captura (dosis de 0.5 mL) y el municipal solo la ve. Muestra el %

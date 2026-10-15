@@ -136,7 +136,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=8">
   <link rel="stylesheet" href="ayuda.css?v=6">
-  <link rel="stylesheet" href="style.css?v=2026.150" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.151" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=20"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.161" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.162" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3507,6 +3507,8 @@
           <!-- Floating Command Hub (Derecha - Desktop - Sticky) -->
           <div class="hidden lg:block w-[80px] shrink-0" style="position: sticky; top: 180px; z-index: 999;">
             <div class="local-command-hub">
+              <!-- Si las metas cuadran contra la meta de arriba (Jurisdicción o municipio): sobre el botón de guardar -->
+              <div id="metasHubEstado" class="frs-pill" role="status" aria-live="polite"></div>
               <button class="save-chip-premium hub-action-btn-primary" id="btnSaveInfluenzaMetas"
                 title="Guardar Configuración de Metas">
                 <span class="material-symbols-rounded">save</span>
