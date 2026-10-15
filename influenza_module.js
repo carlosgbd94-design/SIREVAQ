@@ -5223,7 +5223,8 @@ function renderMetasConfigurationGrid() {
       metaPintarFrascos(document.getElementById("frs_J"),
         esCovid() ? { ped: Math.ceil(granPed / 2), adulto: granAd, razon } : granJ, true, true);
       document.getElementById("tot_juris").textContent = esCovid() ? covidAvanceFmt(granRefEqJ) : granRef;
-      pintar(document.getElementById("cmp_TOTAL"), granRef, granJ);
+      // COVID: el total se compara en dosis equivalentes de 0.5 mL (igual que el TOTAL de arriba y el formato)
+      pintar(document.getElementById("cmp_TOTAL"), esCovid() ? granRefEqJ : granRef, esCovid() ? granEq : granJ);
       metaPintarPill();
     };
     metaEnlazarInputs(tbody, recalcular);
@@ -5330,7 +5331,8 @@ function renderMetasConfigurationGrid() {
       metaPintarFrascos(document.getElementById("frs_meta"),
         esCovid() ? { ped: Math.ceil(refPed / 2), adulto: refAd, razon: razonCovid } : granRef, permiteAbierto, true);
       document.getElementById("tot_meta").textContent = esCovid() ? covidAvanceFmt(granRefEq) : granRef;
-      pintar(document.getElementById("cmp_TOTAL"), granRef, granSuma);
+      const sumaEq = Object.values(eqUnidad).reduce((a, v) => a + v, 0);
+      pintar(document.getElementById("cmp_TOTAL"), esCovid() ? granRefEq : granRef, esCovid() ? sumaEq : granSuma);
       metaPintarPill();
     };
     metaEnlazarInputs(tbody, recalcular);
