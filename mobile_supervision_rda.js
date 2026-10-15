@@ -50,8 +50,13 @@
     return { pob1, pob2, pob4, d1, d2, d4, c1: cob(d1, 4, pob1), c2: cob(d2, 3, pob2), c4: cob(d4, 1, pob4) };
   }
 
-  const S = { filas: null, esquema: "basico", muni: "", cargando: false, error: null, anio: 0, maxMes: 0,
+  const S = { filas: null, esquema: "basico", muni: "", destInf: null, cargando: false, error: null, anio: 0, maxMes: 0,
               sinRda: [], extra: {} };
+  // En Meta-logro de Influenza los hospitales (HENM y NHG) son destinos propios, igual que en escritorio:
+  // no cuentan dentro de Querétaro.
+  const HOSPITALES = { QTSSA001740: "HENM", QTSSA002901: "NHG" };
+  const destinoDe = (u) => HOSPITALES[u.clues] || String(u.municipio || "").toUpperCase().trim();
+  const claveDest = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim().replace(/^EL\s+/, "");
 
   const cargandoHtml = (t) => `<div class="sv-cargando" role="status" aria-live="polite"><div class="sv-indet" aria-hidden="true"><i></i></div><p>${esc(t)}</p><small>Puede tardar unos segundos.</small></div>`;
 
@@ -159,6 +164,7 @@
     A.enlazarVolver(root);
     root.querySelectorAll("[data-esq]").forEach((b) => { b.onclick = () => { S.esquema = b.dataset.esq; pintar(); cargarEsquema(S.esquema, false); }; });
     root.querySelectorAll("[data-muni]").forEach((b) => { b.onclick = () => { S.muni = b.dataset.muni; pintar(); }; });
+    root.querySelectorAll("[data-dest]").forEach((b) => { b.onclick = () => { S.destInf = b.dataset.dest; pintar(); }; });
     const re = root.querySelector("#svRdaRe");
     if (re) re.onclick = () => { S.filas = null; S.extra = {}; abrir(root); };
     const reX = root.querySelector("#svRdaReX");
@@ -308,7 +314,16 @@
     const ultima = vencidas[vencidas.length - 1] || null;
     const t0 = Date.parse(ini + "T12:00:00"), t1 = Date.parse(fin + "T12:00:00"), tn = Date.parse(hoy + "T12:00:00");
     const esperado = t1 > t0 ? Math.max(0, Math.min(100, ((tn - t0) * 100) / (t1 - t0))) : 0;
-    const sel = X.unidades.filter(enMuni);
+    const destinos = [...new Set(X.unidades.map(destinoDe).filter(Boolean))].sort();
+    // Por omisión (como en escritorio) el municipal ve su municipio sin los hospitales.
+    if (S.destInf === null) {
+      const rolActual = A.rol();
+      S.destInf = rolActual === "MUNICIPAL" ? (destinos.find((d) => d !== "HENM" && d !== "NHG") || "") : "";
+    }
+    const sel = X.unidades.filter((u) => !S.destInf || claveDest(destinoDe(u)) === claveDest(S.destInf));
+    const chipsDest = destinos.length > 1 ? `<div class="sv-chips sv-chips--scroll" role="group" aria-label="Destino">
+      <button type="button" class="sv-chip sv-chip--sm${!S.destInf ? " activo" : ""}" data-dest="" aria-pressed="${!S.destInf}">Todos</button>
+      ${destinos.map((d) => `<button type="button" class="sv-chip sv-chip--sm${claveDest(S.destInf) === claveDest(d) ? " activo" : ""}" data-dest="${esc(d)}" aria-pressed="${claveDest(S.destInf) === claveDest(d)}">${esc(d)}</button>`).join("")}</div>` : "";
     const filas = sel.map((u) => {
       const m = metas[u.clues] || {};
       const cs = caps[u.clues] || [];
@@ -321,14 +336,14 @@
     });
     const conMeta = filas.filter((f) => f.meta > 0);
     const meta = suma(filas, "meta"), apl = suma(filas, "apl");
-    if (!meta) return `${chipsMunicipio()}<p class="sv-vacio">Este ámbito aún no tiene meta de Influenza.</p>`;
+    if (!meta) return `${chipsDest}<p class="sv-vacio">Este ámbito aún no tiene meta de Influenza.</p>`;
     const pct = (apl * 100) / meta;
     const diff = pct - esperado;
     const tono = diff >= -5 ? "ok" : diff >= -15 ? "reg" : "mal";
     const etiqueta = pct >= 100 ? "Meta alcanzada" : tono === "ok" ? "En ritmo" : tono === "reg" ? "Algo atrasado" : "Atrasado";
     const sinReporte = ultima ? conMeta.filter((f) => !f.reporto) : [];
     const ranking = conMeta.map((f) => ({ ...f, p: (f.apl * 100) / f.meta })).sort((a, b) => a.p - b.p);
-    return `${chipsMunicipio()}
+    return `${chipsDest}
       <div class="sv-avance">
         <div class="sv-avance-cab"><div><b>${esc(X.camp.nombre)}</b><small>Avance de la meta · esperado a hoy ${f1(esperado)}%</small></div><span class="sv-pct">${f1(pct)}%</span></div>
         <div class="sv-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, Math.round(pct))}" aria-label="Avance de la meta de Influenza"><i class="sv-barra--${tono}" style="width:${Math.min(100, pct)}%"></i></div>
