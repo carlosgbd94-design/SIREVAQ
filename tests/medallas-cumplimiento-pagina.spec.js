@@ -61,7 +61,9 @@ test('UNIDAD: la tarjeta real pinta una chip por mes con su nivel, sin errores d
   expect(r[0].title).toBe('Medalla de cumplimiento Diamante - Enero (100%)');
   // Insignia SVG del sprite, una silueta por rango, sin glifos de fuente
   expect(r.map((x) => x.ref)).toEqual(['#mb-diamante', '#mb-plata', '#mb-oro', '#mb-plata', '#mb-bronce', '#mb-acero', '#mb-diamante']);
-  expect(r.every((x) => x.w === '26' && x.glyph === '')).toBe(true);
+  expect(r.every((x) => x.w === '24')).toBe(true);
+  // Cada medalla lleva su mes abreviado
+  expect(r.map((x) => x.glyph)).toEqual(['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL'].map((m) => m.charAt(0) + m.slice(1).toLowerCase()));
   // Solo la más reciente lleva la marca de "última"
   expect(r.map((x) => x.latest)).toEqual([false, false, false, false, false, false, true]);
   // El sprite define cada rango con su gradiente

@@ -202,7 +202,7 @@ test('el HTML: misma chip, icono y color por nivel, tooltip y solo la última ma
       { month: '2026-06', score: 55, tier: 'jade' },
       { month: '2026-07', score: 100, tier: 'diamante' }
     ]);
-    return [...document.querySelectorAll('#bCumplimientoMedals > span')].map((e) => ({ cls: e.className, icon: e.querySelector('use').getAttribute('href'), title: e.title }));
+    return [...document.querySelectorAll('#bCumplimientoMedals > .chip-medal-icon')].map((e) => ({ cls: e.className, icon: e.querySelector('use').getAttribute('href'), title: e.title }));
   });
   expect(r.map((x) => x.icon)).toEqual(['#mb-diamante', '#mb-oro', '#mb-plata', '#mb-bronce', '#mb-acero', '#mb-jade', '#mb-diamante']);
   expect(r.map((x) => x.cls.split(' ').find((c) => c.startsWith('tier-')))).toEqual(['tier-diamante', 'tier-oro', 'tier-plata', 'tier-bronze', 'tier-steel', 'tier-emerald', 'tier-diamante']);
@@ -221,7 +221,8 @@ test('renderUnitMedals con lista vacía o nula limpia el contenedor', async ({ p
     window.renderUnitMedals(null);
     return [a, document.getElementById('bCumplimientoMedals').innerHTML];
   });
-  expect(r).toEqual(['', '']);
+  expect(r[0].match(/chip-medal-empty/g).length).toBe(12); // sin logros: los 12 meses como huecos
+  expect(r[1]).toBe(''); // sin datos (error de red): nada
 });
 
 test('refreshComplianceMedals: una respuesta vieja no pisa a la más nueva', async ({ page }) => {
@@ -234,7 +235,7 @@ test('refreshComplianceMedals: una respuesta vieja no pisa a la más nueva', asy
     window.refreshComplianceMedals(2026, 'TODOS');
     window.refreshComplianceMedals(2026, 'TODOS');
     await new Promise((res) => setTimeout(res, 200));
-    return [...document.querySelectorAll('#bCumplimientoMedals > span')].map((e) => e.title);
+    return [...document.querySelectorAll('#bCumplimientoMedals > .chip-medal-icon')].map((e) => e.title);
   });
   expect(r).toEqual(['Medalla de cumplimiento Oro - Febrero (92%)']);
 });
@@ -277,7 +278,7 @@ test('admin con municipio elegido: historial y tablero piden lo mismo y las meda
     window.refreshComplianceMedals(2026, 'CORREGIDORA', { clearIfNone: true }); // historial (pendiente)
     window.refreshComplianceMedals(2026, 'CORREGIDORA');                        // tablero: lee el mismo filtro -> mismo alcance
     await new Promise((res) => setTimeout(res, 120));
-    return [...document.querySelectorAll('#bCumplimientoMedals > span')].map((e) => e.title);
+    return [...document.querySelectorAll('#bCumplimientoMedals > .chip-medal-icon')].map((e) => e.title);
   });
   expect(r).toEqual(['Medalla de cumplimiento Oro - Junio (92%)']);
 });

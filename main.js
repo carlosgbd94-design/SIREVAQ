@@ -328,9 +328,6 @@ const FACTS = [
 ];
 let factIdx = Math.floor(Math.random() * FACTS.length);
 let FACTS_TIMER = null;
-const FACT_HISTORY = [];
-let factHistPos = -1;
-let factNavBound = false;
 
 const tagThemes = {
   "Cadena fría": { bg: "#E6F1FB", icon: "#185FA5" },
@@ -378,43 +375,21 @@ function paintFact(idx) {
   }, 180);
 }
 
-/** delta > 0: siguiente (al azar si no hay uno ya visto adelante); delta < 0: el anterior de la sesión. */
-function stepFact(delta) {
+/** Siguiente consejo al azar (distinto del que se está mostrando). */
+function stepFact() {
   if (!FACTS || !FACTS.length) return;
-  if (delta < 0) {
-    if (factHistPos <= 0) return;
-    factHistPos--;
-  } else if (factHistPos < FACT_HISTORY.length - 1) {
-    factHistPos++;
-  } else {
-    let next = Math.floor(Math.random() * FACTS.length);
-    if (FACTS.length > 1 && next === FACT_HISTORY[factHistPos]) next = (next + 1) % FACTS.length;
-    FACT_HISTORY.push(next);
-    if (FACT_HISTORY.length > 60) FACT_HISTORY.shift();
-    factHistPos = FACT_HISTORY.length - 1;
-  }
-  paintFact(FACT_HISTORY[factHistPos]);
+  let next = Math.floor(Math.random() * FACTS.length);
+  if (FACTS.length > 1 && next === factIdx) next = (next + 1) % FACTS.length;
+  factIdx = next;
+  paintFact(factIdx);
 }
 
-function renderFact() { stepFact(1); }
+function renderFact() { stepFact(); }
 
 function startFactsRotation() {
   stopFactsRotation();
-  if (!factNavBound) {
-    factNavBound = true;
-    const bind = (id, d) => {
-      const b = document.getElementById(id);
-      if (b) b.addEventListener("click", () => {
-        stepFact(d);
-        stopFactsRotation();
-        FACTS_TIMER = setInterval(() => { if (!document.hidden) stepFact(1); }, 12000);
-      });
-    };
-    bind("factPrev", -1);
-    bind("factNext", 1);
-  }
-  if (factHistPos < 0) stepFact(1); else paintFact(FACT_HISTORY[factHistPos]);
-  FACTS_TIMER = setInterval(() => { if (!document.hidden) stepFact(1); }, 12000);
+  stepFact();
+  FACTS_TIMER = setInterval(() => { if (!document.hidden) stepFact(); }, 9000);
 }
 
 function stopFactsRotation() {
@@ -14709,7 +14684,7 @@ function updateDynamicGreeting(timeGreeting = null, customSubtitle = null) {
   if (parentEl) {
     parentEl.classList.add("weather-hero-block");
     parentEl.setAttribute("data-theme", theme);
-    parentEl.setAttribute("data-sky", CURRENT_WEATHER.sky || "clear-day");
+    parentEl.style.setProperty('--weather-bg', `url('${CURRENT_WEATHER.bg || ""}')`);
 
     const resumenSpan = parentEl.querySelector("span.uppercase");
     if (resumenSpan) {
@@ -20056,7 +20031,13 @@ async function getYearMedals(year, { clues = null, municipio = null } = {}) {
 function refreshComplianceMedals(year, selectedMuni, { clearIfNone = false } = {}) {
   const container = $("bCumplimientoMedals");
   if (!container) return;
-  const clear = () => { if (clearIfNone) { _medalsRenderSeq++; container.innerHTML = ""; } };
+  const holder = container.parentElement;
+  const clear = () => {
+    if (!clearIfNone) return;
+    _medalsRenderSeq++;
+    container.innerHTML = "";
+    if (holder) holder.style.display = "none"; // sin alcance (vista global) no hay "Logros del año" que mostrar
+  };
 
   let scope = null;
   if (USER && USER.rol === "UNIDAD" && USER.clues) {
@@ -20067,6 +20048,7 @@ function refreshComplianceMedals(year, selectedMuni, { clearIfNone = false } = {
   }
   if (!scope) { clear(); return; }
 
+  if (holder) holder.style.display = "";
   const seq = ++_medalsRenderSeq;
   getYearMedals(year, scope).then(medals => { if (seq === _medalsRenderSeq) renderUnitMedals(medals); });
 }
@@ -20088,19 +20070,23 @@ const MEDAL_MONTH_NAMES = {
 function renderUnitMedals(medals) {
   const container = $("bCumplimientoMedals");
   if (!container) return;
-  if (!medals || !medals.length) {
-    container.innerHTML = "";
-    return;
-  }
+  if (!Array.isArray(medals)) { container.innerHTML = ""; return; }
 
-  const lastIdx = medals.length - 1;
-  // Un solo innerHTML; solo la medalla diamante más reciente lleva el destello (ver .chip-medal-icon.is-latest).
-  container.innerHTML = medals.map((m, i) => {
+  // Siempre los 12 meses del año: medalla ganada o hueco punteado (así se ve el avance aunque aún no haya logros).
+  const byMonth = new Map(medals.map(m => [String(m.month).split("-")[1], m]));
+  const ganados = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"].filter(mm => byMonth.has(mm));
+  const lastMm = ganados[ganados.length - 1];
+  container.innerHTML = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"].map(mm => {
+    const nombre = MEDAL_MONTH_NAMES[mm];
+    const corto = nombre.slice(0, 3);
+    const m = byMonth.get(mm);
+    if (!m) {
+      return `<span class="chip-medal-empty" role="img" aria-label="${nombre}: sin medalla"><i class="chip-medal-ring"></i><i class="chip-medal-mes">${corto}</i></span>`;
+    }
     const key = String(m.tier || "").trim().toLowerCase();
     const ui = MEDAL_TIER_UI[key] || { cls: "tier-riesgo", label: "Cumplimiento" };
-    const mm = String(m.month).split("-")[1];
-    const title = `Medalla de cumplimiento ${ui.label} - ${MEDAL_MONTH_NAMES[mm] || mm} (${m.score}%)`;
-    return `<span class="chip-medal-icon ${ui.cls}${i === lastIdx ? " is-latest" : ""}" title="${title}" role="img" aria-label="${title}">${window.MedalBadges ? window.MedalBadges.svg(key, 26) : ""}</span>`;
+    const title = `Medalla de cumplimiento ${ui.label} - ${nombre} (${m.score}%)`;
+    return `<span class="chip-medal-icon ${ui.cls}${mm === lastMm ? " is-latest" : ""}" title="${title}" role="img" aria-label="${title}">${window.MedalBadges ? window.MedalBadges.svg(key, 24) : ""}<i class="chip-medal-mes">${corto}</i></span>`;
   }).join("");
 }
 
@@ -20870,33 +20856,44 @@ async function initWeather() {
     }
   } catch (e) {
     console.warn("initWeather failed:", e);
-    CURRENT_WEATHER = { temp: 24, emoji: "🌤️", text: "Despejado", iconUrl: WEATHER_ICON_BASE + "clear-day.svg", sky: "clear-day", bg: "", theme: "light-bg", code: 1 };
+    CURRENT_WEATHER = { temp: 24, emoji: "🌤️", text: "Despejado", iconUrl: WEATHER_ICON_BASE + "clear-day.svg", bg: WEATHER_BGS.clearDay, theme: "light-bg", code: 1 };
     if (USER) updateDynamicGreeting();
   }
 }
 
 const WEATHER_ICON_BASE = "assets/weather/";
 
+// Fondo fotográfico del hero según el estado del cielo (cambia con el clima, como siempre).
+const WEATHER_BGS = {
+  clearDay: "https://images.unsplash.com/photo-1601297183305-6df142704ea2?auto=format&fit=crop&q=80&w=600",
+  clearNight: "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?auto=format&fit=crop&q=80&w=600",
+  cloudy: "https://images.unsplash.com/photo-1534088568595-a066f410bcda?auto=format&fit=crop&q=80&w=600",
+  rain: "https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?auto=format&fit=crop&q=80&w=600",
+  snow: "https://images.unsplash.com/photo-1478265409131-1f65c88f965c?auto=format&fit=crop&q=80&w=600",
+  thunder: "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?auto=format&fit=crop&q=80&w=600",
+  fog: "https://images.unsplash.com/photo-1487621167305-5d248087c724?auto=format&fit=crop&q=80&w=600"
+};
+
 /**
- * Ícono (Meteocons, MIT, local en assets/weather) + tono plano de la tarjeta según el código WMO de Open-Meteo.
- * sky: clear-day | cloudy-day | overcast | fog | rain | snow | thunder | night (ver .weather-hero-block[data-sky]).
+ * Ícono (Meteocons, MIT, local en assets/weather) + foto de fondo y tema de texto según el código WMO de Open-Meteo.
+ * El tema es claro solo de día con cielo despejado/nublado ligero; con lluvia, noche, etc. el texto es blanco.
  */
 function getWeatherDetails(code, isDay) {
-  const mk = (icon, sky, text, emoji, iconSvg) => ({
-    emoji, iconSvg, text, sky, iconUrl: WEATHER_ICON_BASE + icon + ".svg", bg: "",
-    theme: (sky === "night" || sky === "thunder") ? "dark-bg" : "light-bg"
+  const theme = (isDay && [0, 1, 2, 3].includes(code)) ? "light-bg" : "dark-bg";
+  const mk = (icon, bg, text, emoji, iconSvg) => ({
+    emoji, iconSvg, text, iconUrl: WEATHER_ICON_BASE + icon + ".svg", bg, theme
   });
-  if (code === null || code === undefined) return mk("thermometer", "overcast", "Desconocido", "🌡️", "device_thermostat");
-  if (code === 0) return isDay ? mk("clear-day", "clear-day", "Despejado", "☀️", "sunny") : mk("clear-night", "night", "Noche clara", "🌙", "clear_night");
-  if (code === 1 || code === 2) return isDay ? mk("partly-cloudy-day", "cloudy-day", "Parcialmente nublado", "🌤️", "partly_cloudy_day") : mk("partly-cloudy-night", "night", "Nubes dispersas", "☁️", "partly_cloudy_night");
-  if (code === 3) return mk("overcast", isDay ? "overcast" : "night", "Nublado", "☁️", "cloud");
-  if (code === 45 || code === 48) return mk("fog", "fog", "Niebla", "🌫️", "foggy");
-  if (code >= 51 && code <= 57) return mk("drizzle", "rain", "Llovizna", "🌦️", "rainy");
-  if (code >= 61 && code <= 67) return mk("rain", "rain", "Lluvia", "🌧️", "rainy");
-  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return mk("snow", "snow", "Nieve", "❄️", "weather_snowy");
-  if (code >= 80 && code <= 82) return mk("rain", "rain", "Chubascos", "🌦️", "rainy");
-  if (code >= 95) return mk("thunderstorms", "thunder", "Tormenta", "⛈️", "thunderstorm");
-  return mk("partly-cloudy-day", "cloudy-day", "Clima", "🌤️", "partly_cloudy_day");
+  if (code === null || code === undefined) return { emoji: "🌡️", iconSvg: "device_thermostat", text: "Desconocido", iconUrl: WEATHER_ICON_BASE + "thermometer.svg", bg: "", theme: "dark-bg" };
+  if (code === 0) return isDay ? mk("clear-day", WEATHER_BGS.clearDay, "Despejado", "☀️", "sunny") : mk("clear-night", WEATHER_BGS.clearNight, "Noche clara", "🌙", "clear_night");
+  if (code === 1 || code === 2) return isDay ? mk("partly-cloudy-day", WEATHER_BGS.cloudy, "Parcialmente nublado", "🌤️", "partly_cloudy_day") : mk("partly-cloudy-night", WEATHER_BGS.cloudy, "Nubes dispersas", "☁️", "partly_cloudy_night");
+  if (code === 3) return mk("overcast", WEATHER_BGS.cloudy, "Nublado", "☁️", "cloud");
+  if (code === 45 || code === 48) return mk("fog", WEATHER_BGS.fog, "Niebla", "🌫️", "foggy");
+  if (code >= 51 && code <= 57) return mk("drizzle", WEATHER_BGS.rain, "Llovizna", "🌦️", "rainy");
+  if (code >= 61 && code <= 67) return mk("rain", WEATHER_BGS.rain, "Lluvia", "🌧️", "rainy");
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return mk("snow", WEATHER_BGS.snow, "Nieve", "❄️", "weather_snowy");
+  if (code >= 80 && code <= 82) return mk("rain", WEATHER_BGS.rain, "Chubascos", "🌦️", "rainy");
+  if (code >= 95) return mk("thunderstorms", WEATHER_BGS.thunder, "Tormenta", "⛈️", "thunderstorm");
+  return mk("partly-cloudy-day", WEATHER_BGS.clearDay, "Clima", "🌤️", "partly_cloudy_day");
 }
 
 // Esperar a que el DOM esté listo antes de arrancar

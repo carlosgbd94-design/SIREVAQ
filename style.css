@@ -8905,8 +8905,16 @@ body[data-role="UNIDAD"] .panelCaptureSummary {
 .chip-medal-icon {
   cursor: help;
   transition: transform 0.18s ease;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
+.chip-medal-mes { font-style: normal; font-size: 9px; font-weight: 800; line-height: 1; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.55; }
+.chip-medal-empty { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; line-height: 0; }
+.chip-medal-ring { display: block; width: 24px; height: 24px; border-radius: 50%; border: 1.5px dashed currentColor; opacity: 0.28; box-sizing: border-box; }
 .mb-svg { display: block; }
+#bCumplimientoMedals { gap: 2px !important; justify-content: space-between; flex-wrap: nowrap; }
+#bCumplimientoMedals > * { flex: 0 0 auto; }
 .chip-medal-icon.is-latest .mb-svg { filter: drop-shadow(0 2px 3px rgba(15, 23, 42, 0.25)); }
 @media (hover: hover) and (pointer: fine) {
   .chip-medal-icon:hover { transform: translateY(-2px) scale(1.12); }
@@ -8930,22 +8938,7 @@ body[data-role="UNIDAD"] .panelCaptureSummary {
 #bCumplimiento #bCumplimientoIconBg.has-medal #bCumplimientoIconSnake { display: none !important; }
 #bCumplimiento #bCumplimientoIconBg.has-medal .cmp-medal-big { display: flex; }
 
-/* Clima: tono plano por estado del cielo + ícono Meteocons (sin foto externa). */
-.weather-hero-block[data-sky]::before,
-.weather-hero-block[data-sky]::after { display: none !important; }
-.weather-hero-block[data-sky] {
-  box-shadow: none;
-  border: 1px solid var(--sky-bd, #C7D9EE);
-  background: var(--sky-bg, #EAF2FB);
-}
-.weather-hero-block[data-sky="clear-day"] { --sky-bg: #EEF6FF; --sky-bd: #CFE3FA; }
-.weather-hero-block[data-sky="cloudy-day"] { --sky-bg: #EAF2FB; --sky-bd: #C7D9EE; }
-.weather-hero-block[data-sky="overcast"] { --sky-bg: #E7EAEF; --sky-bd: #CDD3DB; }
-.weather-hero-block[data-sky="fog"] { --sky-bg: #F1F3F5; --sky-bd: #D8DDE2; }
-.weather-hero-block[data-sky="rain"] { --sky-bg: #DEE6F0; --sky-bd: #BAC6D6; }
-.weather-hero-block[data-sky="snow"] { --sky-bg: #EFF6FB; --sky-bd: #D3E3F0; }
-.weather-hero-block[data-sky="thunder"] { --sky-bg: #1F2937; --sky-bd: #374151; }
-.weather-hero-block[data-sky="night"] { --sky-bg: #1E1B4B; --sky-bd: #3730A3; }
+/* Clima: la foto de fondo la pone --weather-bg (cambia con el clima); el ícono es Meteocons. */
 .weather-hero-icon { flex-shrink: 0; width: 76px; height: 76px; margin: -12px -6px; }
 
 /* Consejo del día */
@@ -8983,19 +8976,8 @@ body[data-role="UNIDAD"] .panelCaptureSummary {
   font-size: 12px; font-weight: 600; line-height: 1.45;
   color: var(--md-sys-color-on-surface-variant, #475569);
 }
-.fc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fc-foot { display: flex; align-items: center; gap: 8px; }
 .fc-counter { font-size: 10px; font-weight: 700; color: #94a3b8; }
-.fc-nav { display: inline-flex; gap: 4px; }
-.fc-btn {
-  width: 28px; height: 28px; border-radius: 999px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; border: 0; color: #64748b; cursor: pointer;
-}
-.fc-btn .material-symbols-rounded { font-size: 18px; }
-@media (hover: hover) and (pointer: fine) {
-  .fc-btn:hover { background: rgba(100, 116, 139, 0.12); color: var(--md-sys-color-on-surface, #0f172a); }
-}
-.fc-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) { .fc-card { transition: none; } }
 
 
