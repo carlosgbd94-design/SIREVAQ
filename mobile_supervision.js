@@ -35,23 +35,27 @@
     { panel: "PIN", icon: "sanitizer", label: "Pinol", nota: "Seguimiento", roles: ["MUNICIPAL", "ADMIN"] },
     { panel: "PAR", icon: "tune", label: "Parámetros", nota: "Mín., máx. y promedio", roles: ["MUNICIPAL", "JURISDICCIONAL", "ADMIN"] },
     { panel: "JER", icon: "vaccines", label: "Jeringas", nota: "Cajas por unidad", roles: ["MUNICIPAL", "JURISDICCIONAL", "ADMIN"] },
-    { panel: "SEG", icon: "admin_panel_settings", label: "Seguridad", nota: "Auditoría y aperturas", roles: ["ADMIN"] }
+    { panel: "SEG", icon: "admin_panel_settings", label: "Seguridad", nota: "Auditoría y aperturas", roles: ["ADMIN"] },
+    { panel: "CON", icon: "table_chart", label: "Concentrado", nota: "Aplicaciones por biológico", roles: ["JURISDICCIONAL", "VISUALIZADOR_JURISDICCIONAL", "ADMIN"] },
+    { panel: "LOT", icon: "inventory_2", label: "Lotes", nota: "Consulta de caducidades", roles: ["JURISDICCIONAL", "ADMIN"] },
+    // Páginas completas (ya son responsivas): se abren en la misma pestaña y regresan a SIREVAQ.
+    { href: "biovac.html", icon: "medication_liquid", label: "SINBA-SIS por unidad", nota: "Página completa", roles: ["MUNICIPAL", "ADMIN"] },
+    { href: "biovac_jurisdiccion.html", icon: "lab_profile", label: "Concentrado biológico", nota: "Página completa", roles: ["JURISDICCIONAL", "ADMIN"] },
+    { href: "requisiciones.html", icon: "local_shipping", label: "Requisiciones", nota: "Página completa", roles: ["MUNICIPAL", "JURISDICCIONAL", "ADMIN"] }
   ];
   // Pendientes de diseñar para móvil (se muestran en «Más» como próximamente).
   const PROXIMAMENTE = [];
   // Paneles que cuelgan de «Más»: la barra resalta Más mientras están abiertos.
-  const SUBPANELES = { RDA: "MAS", MET: "MAS", ENV: "MAS", PIN: "MAS", PAR: "MAS", JER: "MAS", SEG: "MAS" };
+  const SUBPANELES = { RDA: "MAS", MET: "MAS", ENV: "MAS", PIN: "MAS", PAR: "MAS", JER: "MAS", SEG: "MAS", CON: "MAS", LOT: "MAS" };
   // Paneles registrados por mobile_supervision_ops.js: { abrir(root) }
   const REG = {};
   const HOST = {};
   // Solo escritorio: demasiado pesados para el celular.
   const SOLO_ESCRITORIO = [
-    { icon: "medication_liquid", label: "SINBA-SIS", roles: ["MUNICIPAL", "ADMIN"] },
-    { icon: "lab_profile", label: "Concentrado biológico", roles: ["JURISDICCIONAL", "ADMIN"] },
-    { icon: "table_chart", label: "Concentrado", roles: ["JURISDICCIONAL", "VISUALIZADOR_JURISDICCIONAL", "ADMIN"] },
-    { icon: "local_shipping", label: "Requisiciones", roles: ["MUNICIPAL", "JURISDICCIONAL", "ADMIN"] },
-    { icon: "inventory_2", label: "Lotes", roles: ["JURISDICCIONAL", "ADMIN"] },
-    { icon: "inventory", label: "Catálogo, mapeador y evidencias", roles: ["ADMIN"] }
+    { icon: "group", label: "Usuarios y accesos", roles: ["ADMIN"] },
+    { icon: "inventory", label: "Catálogo, mapeador y evidencias", roles: ["ADMIN"] },
+    { icon: "edit_note", label: "Alta y edición de lotes", roles: ["JURISDICCIONAL", "ADMIN"] },
+    { icon: "print", label: "Guía de ruta y acuse de Pinol", roles: ["MUNICIPAL", "ADMIN"] }
   ];
 
   const TIPOS = {
@@ -299,13 +303,17 @@
     const fila = (m, nota) => `<li class="sv-mas-item"><span class="material-symbols-rounded" aria-hidden="true">${m.icon}</span><b>${esc(m.label)}</b><small>${nota}</small></li>`;
     root.innerHTML = `
       <p class="sv-sec">Disponible</p>
-      <ul class="sv-mas">${listos.map((m) => `<li><button type="button" class="sv-mas-item sv-mas-btn" data-ir="${m.panel}">
+      <ul class="sv-mas">${listos.map((m) => m.href
+        ? `<li><a class="sv-mas-item sv-mas-btn" href="${esc(m.href)}">
+        <span class="material-symbols-rounded" aria-hidden="true">${m.icon}</span><b>${esc(m.label)}</b><small>${esc(m.nota)}</small>
+        <span class="material-symbols-rounded sv-chev" aria-hidden="true">open_in_new</span></a></li>`
+        : `<li><button type="button" class="sv-mas-item sv-mas-btn" data-ir="${m.panel}">
         <span class="material-symbols-rounded" aria-hidden="true">${m.icon}</span><b>${esc(m.label)}</b><small>${esc(m.nota)}</small>
         <span class="material-symbols-rounded sv-chev" aria-hidden="true">chevron_right</span></button></li>`).join("")}</ul>
       ${prox.length ? `<p class="sv-sec">En camino al móvil</p>
       <ul class="sv-mas">${prox.map((m) => fila(m, "Próximamente")).join("")}</ul>` : ""}
-      <p class="sv-sec">Solo en escritorio</p>
-      <ul class="sv-mas sv-mas--desk">${desk.map((m) => fila(m, "Usa la versión de escritorio")).join("")}</ul>`;
+      ${desk.length ? `<p class="sv-sec">Solo en escritorio</p>
+      <ul class="sv-mas sv-mas--desk">${desk.map((m) => fila(m, "Usa la versión de escritorio")).join("")}</ul>` : ""}`;
     root.querySelectorAll("[data-ir]").forEach((b) => { b.onclick = () => irA(b.dataset.ir); });
   }
 

@@ -274,7 +274,7 @@
       <p class="sv-nota">Se avisará a la unidad que su solicitud fue entregada.</p>
       ${PINOL.errorEntrega ? `<p class="sv-error" role="alert">${esc(PINOL.errorEntrega)}</p>` : ""}
       <div class="sv-confirma-acc"><button type="button" class="sv-btn sv-btn--sec" id="svPinEntNo">Cancelar</button>
-        <button type="button" class="sv-btn sv-btn--pri" id="svPinEntOk"${PINOL.guardando ? " disabled" : ""}>${PINOL.guardando ? "Guardando…" : "Confirmar entrega"}</button></div>
+        <button type="button" class="sv-btn sv-btn--pri" id="svPinEntOk" aria-label="Confirmar entrega"${PINOL.guardando ? " disabled" : ""}>${PINOL.guardando ? "Guardando…" : "Confirmar"}</button></div>
     </div>`;
   }
 
@@ -721,6 +721,166 @@
     pintarSeguridad();
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Concentrado de aplicaciones (solo lectura): mismo RPC que escritorio, por biológico y unidad
+  // ═══════════════════════════════════════════════════════════════════════════
+  const CON_BIOS = ["BCG", "HEPATITIS B", "HEXAVALENTE", "DPT", "ROTAVIRUS", "NEUMOCOCICA 13", "NEUMOCOCICA 20", "SRP", "SR", "VPH", "VARICELA", "HEPATITIS A", "TD", "TDPA", "COVID-19", "INFLUENZA", "VSR"];
+  const MESES_L = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  const CON = { anio: new Date().getFullYear(), ini: 1, fin: new Date().getMonth() + 1, bio: "", filas: null, cargando: false, error: null, q: "", clave: "" };
+
+  async function abrirConcentrado(root) {
+    CON.root = root;
+    if (!CON.filas || CON.clave !== CON.anio + "|" + CON.ini + "|" + CON.fin) await cargarConcentrado();
+    else pintarConcentrado();
+  }
+
+  async function cargarConcentrado() {
+    CON.cargando = true; CON.error = null; pintarConcentrado();
+    try {
+      let todo = [];
+      for (let off = 0; ; ) {
+        const { data, error } = await db().rpc("get_concentrado_por_biologico", { p_anio: CON.anio, p_mes_ini: CON.ini, p_mes_fin: CON.fin, p_offset: off, p_limit: 1000 });
+        if (error) throw error;
+        if (!data || !data.length) break;
+        todo = todo.concat(data);
+        off += data.length;
+      }
+      CON.filas = todo.filter((r) => A.enAlcance({ unidad: r.nombre || r.unidad, municipio: r.municipio }));
+      CON.clave = CON.anio + "|" + CON.ini + "|" + CON.fin;
+    } catch (e) { CON.error = "No se pudo cargar el concentrado: " + (e.message || e); CON.filas = null; }
+    CON.cargando = false;
+    pintarConcentrado();
+  }
+
+  function pintarConcentrado() {
+    const root = CON.root;
+    let cuerpo;
+    const meses = (sel) => MESES_L.map((m, i) => `<option value="${i + 1}"${i + 1 === sel ? " selected" : ""}>${m}</option>`).join("");
+    if (CON.cargando) cuerpo = cargandoHtml("Cargando concentrado…");
+    else if (CON.error) cuerpo = errorHtml(CON.error, "svConRe");
+    else {
+      const porBio = new Map();
+      CON.filas.forEach((r) => { const k = String(r.biologico || "").toUpperCase(); porBio.set(k, (porBio.get(k) || 0) + (Number(r.total_dosis) || 0)); });
+      const bios = CON_BIOS.filter((b) => porBio.has(b));
+      const extras = [...porBio.keys()].filter((b) => !CON_BIOS.includes(b)).sort();
+      const lista = bios.concat(extras);
+      if (!CON.bio || !lista.includes(CON.bio)) CON.bio = lista[0] || "";
+      const total = lista.reduce((t, b) => t + (porBio.get(b) || 0), 0);
+      const q = norm(CON.q);
+      const unidades = new Map();
+      CON.filas.filter((r) => String(r.biologico || "").toUpperCase() === CON.bio).forEach((r) => {
+        const k = r.clues; const v = unidades.get(k) || { nombre: r.nombre || r.unidad || r.clues, municipio: r.municipio, t: 0 };
+        v.t += Number(r.total_dosis) || 0; unidades.set(k, v);
+      });
+      const ranking = [...unidades.entries()].map(([clues, v]) => ({ clues, ...v }))
+        .filter((x) => !q || norm(x.nombre).includes(q) || norm(x.clues).includes(q))
+        .sort((a, b) => b.t - a.t);
+      const chips = lista.map((b) => `<button type="button" class="sv-chip sv-chip--sm${b === CON.bio ? " activo" : ""}" data-cb="${esc(b)}" aria-pressed="${b === CON.bio}">${esc(b)}</button>`).join("");
+      cuerpo = `
+        <div class="sv-avance"><div class="sv-avance-cab"><div><b>Aplicaciones del periodo</b><small>${MESES_L[CON.ini - 1]} – ${MESES_L[CON.fin - 1]} ${CON.anio}</small></div><span class="sv-pct">${nf(total)}</span></div></div>
+        <div class="sv-chips sv-chips--scroll" role="group" aria-label="Biológico">${chips}</div>
+        <p class="sv-sec">${esc(CON.bio || "Sin datos")} · ${nf(porBio.get(CON.bio) || 0)} dosis</p>
+        <label class="sv-buscar"><span class="sr-only">Buscar unidad</span><span class="material-symbols-rounded" aria-hidden="true">search</span>
+          <input type="search" id="svConBuscar" placeholder="Buscar unidad o CLUES" value="${esc(CON.q)}" autocomplete="off"></label>
+        ${ranking.length ? `<ul class="sv-lista sv-lista--sep">${ranking.map((x) => `<li class="sv-unidad"><div class="sv-u-txt"><b>${esc(x.nombre)}</b><small>${esc(x.municipio || "")} · ${esc(x.clues)}</small></div>
+          <span class="sv-pill sv-pill--ok">${nf(x.t)}</span></li>`).join("")}</ul>` : `<p class="sv-vacio">Sin unidades con ese criterio.</p>`}`;
+    }
+    root.innerHTML = A.encabezadoSub("Concentrado") + `
+      <div class="sv-periodo">
+        <label class="sv-fld"><span>Desde</span><select id="svConIni" class="sv-sel">${meses(CON.ini)}</select></label>
+        <label class="sv-fld"><span>Hasta</span><select id="svConFin" class="sv-sel">${meses(CON.fin)}</select></label>
+      </div>` + cuerpo;
+    A.enlazarVolver(root);
+    const cambiar = () => {
+      let i = Number(root.querySelector("#svConIni").value), f = Number(root.querySelector("#svConFin").value);
+      if (i > f) { if (document.activeElement && document.activeElement.id === "svConIni") f = i; else i = f; }
+      CON.ini = i; CON.fin = f; cargarConcentrado();
+    };
+    root.querySelector("#svConIni").onchange = cambiar;
+    root.querySelector("#svConFin").onchange = cambiar;
+    root.querySelectorAll("[data-cb]").forEach((b) => { b.onclick = () => { CON.bio = b.dataset.cb; pintarConcentrado(); }; });
+    const bus = root.querySelector("#svConBuscar");
+    if (bus) bus.oninput = () => {
+      CON.q = bus.value; const pos = bus.selectionStart; pintarConcentrado();
+      const n = root.querySelector("#svConBuscar"); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) { /* search */ } }
+    };
+    const re = root.querySelector("#svConRe");
+    if (re) re.onclick = cargarConcentrado;
+  }
+  const nf = (n) => Math.round(Number(n || 0)).toLocaleString("es-MX");
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Lotes (consulta): caducidades y municipio; alta y edición siguen en escritorio
+  // ═══════════════════════════════════════════════════════════════════════════
+  const LOT = { filas: null, q: "", filtro: "TODOS", cargando: false, error: null };
+  const MES3 = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  const mmmAa = (iso) => { if (!iso) return "—"; const d = new Date(String(iso).slice(0, 10) + "T00:00:00"); return isNaN(d) ? String(iso) : MES3[d.getMonth()] + "-" + String(d.getFullYear()).slice(2); };
+  function estadoCaducidad(iso) {
+    if (!iso) return ["Sin fecha", "reg"];
+    const d = new Date(String(iso).slice(0, 10) + "T00:00:00");
+    const dias = Math.floor((d - new Date(new Date().toDateString())) / 86400000);
+    if (dias < 0) return ["Vencido", "mal"];
+    if (dias <= 90) return ["Por vencer", "reg"];
+    return ["Vigente", "ok"];
+  }
+
+  async function abrirLotes(root) {
+    LOT.root = root;
+    if (!LOT.filas) {
+      LOT.cargando = true; LOT.error = null; pintarLotes();
+      try {
+        let todo = [];
+        for (let desde = 0; ; desde += 1000) {
+          const { data, error } = await db().from("lotes").select("*").order("id").range(desde, desde + 999);
+          if (error) throw error;
+          if (!data || !data.length) break;
+          todo = todo.concat(data);
+          if (data.length < 1000) break;
+        }
+        LOT.filas = todo;
+      } catch (e) { LOT.error = "No se pudieron cargar los lotes: " + (e.message || e); }
+      LOT.cargando = false;
+    }
+    pintarLotes();
+  }
+
+  function pintarLotes() {
+    const root = LOT.root;
+    let cuerpo;
+    if (LOT.cargando) cuerpo = cargandoHtml("Cargando lotes…");
+    else if (LOT.error) cuerpo = errorHtml(LOT.error, "svLotRe");
+    else {
+      const conEstado = LOT.filas.map((l) => ({ l, e: estadoCaducidad(l.caducidad) }));
+      const cuenta = (n) => conEstado.filter((x) => x.e[0] === n).length;
+      const q = norm(LOT.q);
+      const lista = conEstado.filter((x) => (LOT.filtro === "TODOS" || x.e[0] === LOT.filtro) &&
+        (!q || norm(x.l.lote).includes(q) || norm(x.l.biologico).includes(q) || norm(x.l.municipio).includes(q)))
+        .sort((a, b) => String(a.l.caducidad || "9999").localeCompare(String(b.l.caducidad || "9999")));
+      const chips = [["TODOS", "Todos"], ["Vencido", "Vencidos"], ["Por vencer", "Por vencer"], ["Vigente", "Vigentes"]].map(([k, t]) =>
+        `<button type="button" class="sv-chip sv-chip--sm${LOT.filtro === k ? " activo" : ""}" data-lf="${k}" aria-pressed="${LOT.filtro === k}">${t}${k !== "TODOS" ? " " + cuenta(k) : ""}</button>`).join("");
+      cuerpo = `
+        <div class="sv-chips sv-chips--scroll" role="group" aria-label="Caducidad">${chips}</div>
+        <label class="sv-buscar"><span class="sr-only">Buscar lote</span><span class="material-symbols-rounded" aria-hidden="true">search</span>
+          <input type="search" id="svLotBuscar" placeholder="Buscar lote, biológico o municipio" value="${esc(LOT.q)}" autocomplete="off"></label>
+        ${lista.length ? `<ul class="sv-lista sv-lista--sep">${lista.slice(0, 150).map((x) => `<li class="sv-unidad">
+          <div class="sv-u-txt"><b>${esc(x.l.biologico)} · ${esc(x.l.lote)}</b><small>${esc(x.l.municipio || "Todos")}${x.l.tipo ? " · " + esc(x.l.tipo) : ""} · caduca ${esc(mmmAa(x.l.caducidad))}</small></div>
+          <span class="sv-pill sv-pill--${x.e[1]}">${esc(x.e[0])}</span></li>`).join("")}</ul>
+          ${lista.length > 150 ? `<p class="sv-nota">Se muestran 150 de ${lista.length}. Afina la búsqueda.</p>` : ""}` : `<p class="sv-vacio">Sin lotes con ese criterio.</p>`}
+        <p class="sv-nota">El alta, edición y baja de lotes sigue en escritorio.</p>`;
+    }
+    root.innerHTML = A.encabezadoSub("Lotes") + cuerpo;
+    A.enlazarVolver(root);
+    root.querySelectorAll("[data-lf]").forEach((b) => { b.onclick = () => { LOT.filtro = b.dataset.lf; pintarLotes(); }; });
+    const bus = root.querySelector("#svLotBuscar");
+    if (bus) bus.oninput = () => {
+      LOT.q = bus.value; const pos = bus.selectionStart; pintarLotes();
+      const n = root.querySelector("#svLotBuscar"); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) { /* search */ } }
+    };
+    const re = root.querySelector("#svLotRe");
+    if (re) re.onclick = () => { LOT.filas = null; abrirLotes(root); };
+  }
+
   // ── Registro ──
   const par = montarMatriz("PAR");
   const jer = montarMatriz("JER");
@@ -728,6 +888,8 @@
   SV.registrar("JER", CONF_MATRIZ.JER.etiqueta, jer);
   SV.registrar("PIN", "Seguimiento de Pinol", { abrir: abrirPinol });
   SV.registrar("ENV", "Enviar aviso", { abrir: abrirEnvio });
+  SV.registrar("CON", "Concentrado de aplicaciones", { abrir: abrirConcentrado });
+  SV.registrar("LOT", "Lotes", { abrir: abrirLotes });
   SV.registrar("SEG", "Seguridad", {
     abrir: abrirSeguridad,
     cerrar() { if (SEG.canal) { try { db().removeChannel(SEG.canal); } catch (e) { /* ya cerrado */ } SEG.canal = null; } }

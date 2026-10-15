@@ -106,11 +106,12 @@ test.describe('Móvil · supervisión', () => {
     await expect(page.locator('.sv-ro')).toBeVisible();
   });
 
-  test('Más: Admin separa próximamente de solo-escritorio', async ({ page }) => {
+  test('Más: Admin ve paneles, páginas completas y lo que sigue solo en escritorio', async ({ page }) => {
     await abrir(page, { rol: 'ADMIN' });
     await page.click('.dock-item[data-panel="MAS"]');
     await expect(page.locator('#panelMAS')).toBeVisible();
-    await expect(page.locator('.sv-mas--desk')).toContainText('SINBA-SIS');
+    await expect(page.locator('.sv-mas--desk')).toContainText('Usuarios y accesos');
+    await expect(page.locator('a[href="biovac.html"]')).toBeVisible();
     await expect(page.locator('[data-ir="SEG"]')).toBeVisible();
   });
 
