@@ -22,6 +22,7 @@
   let _sisVariablesCache = [];
   let _sis06pCapturasCache = [];
   let _influenzaCapturasCache = [];
+  let _covidCapturasCache = [];   // capturas semanales de COVID-19 de la unidad (prellenado del SIS-06-P)
   let _ventanaCache = null;
   let _correccionesPendientesCache = [];
   // Filas de sis06p_comparativo (RPC) de la CLUES/mes/año en pantalla: una
@@ -343,6 +344,12 @@
       if (e3) throw e3;
       _influenzaCapturasCache = capturasInf || [];
 
+      // COVID-19 (captura semanal con marca): solo prellena; si la tabla no responde, el SIS se captura a mano como siempre.
+      try {
+        const { data: capturasCov, error: eCov } = await estado.db.from('covid_capturas').select('id, fecha, valores, anio_campana').eq('clues', activa.clues);
+        _covidCapturasCache = eCov ? [] : (capturasCov || []);
+      } catch (eCovx) { _covidCapturasCache = []; }
+
       const mes = Number(document.getElementById('selMes').value);
       const anio = Number(document.getElementById('selAnio').value);
       const { data: ventana, error: e4 } = await estado.db.rpc('sis06p_ventana_envio', { p_anio: anio, p_mes: mes });
@@ -474,6 +481,50 @@
   const AJUSTE_KEYS = AJUSTES_DEF.reduce((acc, d) => acc.concat([d.keyFwd, d.keyRev]), []);
 
   const _num2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
+  // COVID-19: dosis del mes capturadas por semana en el panel de la unidad (Moderna + Pfizer, el SIS-06-P no distingue
+  // marca). Solo rellena las casillas que la persona aún no ha guardado (o que están en 0); nunca guarda por sí solo.
+  function covidDelMesPorClave() {
+    const C = window.CovidCaptura;
+    if (!C) return null;
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const semanas = C.delMes(_covidCapturasCache, mes, anio);
+    return { semanas, porClave: C.sisPorClave(semanas) };
+  }
+
+  function prellenarCovidSis06p(body, vars, currentValores) {
+    const datos = covidDelMesPorClave();
+    if (!datos || !datos.semanas.length) return;
+    const filas = vars.filter((v) => v.clave_general && Object.prototype.hasOwnProperty.call(datos.porClave, v.clave_general));
+    const aplicar = (forzar) => {
+      let n = 0;
+      filas.forEach((v) => {
+        const total = datos.porClave[v.clave_general];
+        const el = document.getElementById('sisb_' + v.fila_excel + '_total');
+        if (!el || !(total > 0)) return;
+        const guardado = Number((currentValores[String(v.fila_excel)] || {}).total) || 0;
+        if (!forzar && guardado > 0) return;
+        if ((parseInt(el.value, 10) || 0) === total) return;
+        if (!forzar && (parseInt(el.value, 10) || 0) > 0) return;   // ya tecleado a mano
+        el.value = total;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        n++;
+      });
+      return n;
+    };
+    const aviso = document.createElement('div');
+    aviso.setAttribute('role', 'note');
+    aviso.style.cssText = 'margin:8px 10px; padding:8px 12px; border:1px solid #cbd5e1; border-radius:10px; background:#f8fafc; color:#334155; font-size:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;';
+    aviso.innerHTML = '<span>Prellenado con tu captura semanal de COVID-19 (' + datos.semanas.length + ' reporte' + (datos.semanas.length === 1 ? '' : 's') + ' de este mes; Moderna y Pfizer sumadas). Revisa y guarda.</span>'
+      + '<button type="button" class="btn-mini btn-secundario" data-covid-retraer>Volver a traer de COVID-19</button>';
+    body.insertBefore(aviso, body.firstChild);
+    aviso.querySelector('[data-covid-retraer]').addEventListener('click', () => {
+      const n = aplicar(true);
+      toast(n ? 'COVID-19: casillas actualizadas desde tu captura semanal. Revisa y guarda.' : 'COVID-19: ya coincide con tu captura semanal.', 'ok');
+    });
+    setTimeout(() => { aplicar(false); }, 0);
+  }
 
   // Paloteo de un biológico SIS tal como está EN PANTALLA (lo que se está
   // tecleando, sin guardar): suma de los totales de sus variables, con la
@@ -1046,6 +1097,7 @@
       card.appendChild(header);
       card.appendChild(body);
       container.appendChild(card);
+      if (biologico === 'COVID-19' && !soloLectura) prellenarCovidSis06p(body, vars, currentValores);
     });
 
     draftAplicar(currentReport, soloLectura);

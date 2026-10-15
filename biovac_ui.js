@@ -1237,6 +1237,7 @@ async function cargarMovimiento() {
 // aplicadas en Movimiento sin paloteo ES una diferencia y debe avisarse.
 async function cargarSIS06PTotalesParaComparar(anio, mes) {
   estado.sis06pTotales = {};
+  estado.covidMov = null;
   // Se guarda junto a los totales (misma llamada, mismo captura) el estado
   // ENVIADO/VALIDADO del concentrado SIS-06-P de este mes -- lo usa render()
   // para no dejar exportar/imprimir el Excel oficial (SIS-06-P + Movimiento)
@@ -1251,6 +1252,12 @@ async function cargarSIS06PTotalesParaComparar(anio, mes) {
       estado.db.rpc('sis06p_comparativo', { p_mes: mes, p_anio: anio, p_clues: clues })
     ]);
     estado.sis06pEstadoActual = captura ? captura.estado : 'BORRADOR';
+    // COVID-19 capturado en el panel de la unidad (con marca): sugerencia para Movimiento, nunca se aplica solo.
+    try {
+      const { data: cov, error: eCov } = await estado.db.from('covid_capturas').select('fecha, valores').eq('clues', clues);
+      const C = window.CovidCaptura;
+      estado.covidMov = (!eCov && C) ? C.movimientoPorMarca(C.delMes(cov || [], mes, anio)) : null;
+    } catch (eCovx) { estado.covidMov = null; }
     if (errMapa) throw errMapa;
     if (errComp) throw errComp;
 
@@ -1917,6 +1924,16 @@ function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, 
   }
   const puedeUsarTotal = editable && estado.perfil && estado.perfil.rol === 'UNIDAD' && bio.clave === 'ANTIINFLUENZA'
     && !coincide && totalSIS06P > 0 && normalesLotes.length === 1 && Number(normalesLotes[0].aplicadas_a || 0) === 0;
+  // COVID-19: lo capturado por marca en el panel de la unidad, para este biológico (Moderna: 0.25 mL y 0.5 mL; Pfizer: todo en la primera columna).
+  const sugCovid = editable && estado.perfil && estado.perfil.rol === 'UNIDAD' && estado.covidMov
+    && (bio.clave === 'COVID_MODERNA' || bio.clave === 'COVID_PFIZER') && estado.covidMov[bio.clave]
+    && normalesLotes.length === 1
+    && (Number(normalesLotes[0].aplicadas_a || 0) + Number(normalesLotes[0].aplicadas_b || 0)) === 0
+    ? estado.covidMov[bio.clave] : null;
+  const covidA = sugCovid ? Number(sugCovid.a) || 0 : 0;
+  const covidB = sugCovid ? Number(sugCovid.b) || 0 : 0;
+  const botonCovid = sugCovid && (covidA + covidB) > 0
+    ? `<button type="button" class="btn-mini btn-secundario" data-action="usar-covid-capturado" data-renglon="${normalesLotes[0].id}" data-a="${covidA}" data-b="${covidB}"><span class="material-symbols-rounded">sync</span> Usar lo capturado de COVID-19 (${bio.clave === 'COVID_MODERNA' ? `${covidA} de 0.25 mL y ${covidB} de 0.5 mL` : `${covidA} dosis`})</button>` : '';
   return `<div data-sis06p-compara="${bio.id}" style="margin-top:8px; padding:8px 12px; border-radius:10px; font-size:11.5px; font-weight:700;
       background:${coincide ? 'var(--success-bg)' : 'var(--warning-bg)'};
       color:${coincide ? 'var(--success)' : 'var(--warning)'};
@@ -1925,6 +1942,7 @@ function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, 
       <span><span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">${coincide ? 'check_circle' : 'compare_arrows'}</span>
       ${fuente} ${totalSIS06P}${info.ajustePaloteo ? ` (incluye ${info.ajustePaloteo} de comodín de sustitución)` : ''} dosis aplicadas de ${info.claves.length > 1 ? `${info.etiqueta.replace(' (se concilian juntas)', '')} (juntas)` : 'este biológico'} este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas}${info.ajusteAplicado ? ` (incluye ${info.ajusteAplicado} de comodín de sustitución)` : ''} aplicadas${info.claves.length > 1 ? ' entre los biológicos del grupo' : ''} -- deben ser iguales: no se puede enviar el SIS mientras no coincidan)`}.</span>
       ${avisoPar}
+      ${botonCovid}
       ${puedeUsarTotal ? `<button type="button" class="btn-mini btn-secundario" data-action="usar-total-influenza" data-renglon="${normalesLotes[0].id}" data-total="${totalSIS06P}"><span class="material-symbols-rounded">sync</span> Usar este total aquí</button>` : ''}
     </div>`;
 }
@@ -2451,6 +2469,42 @@ async function usarTotalInfluenzaEnRenglon(renglonId, total) {
   r.existencia_final_frascos = data.existencia_final_frascos;
   render();
   toast('✅ Total de Influenza aplicado en el movimiento.', 'ok');
+  if (window.SIS06PBiovac && window.SIS06PBiovac.refrescarConciliacion) window.SIS06PBiovac.refrescarConciliacion();
+}
+
+// COVID-19: pasa a Movimiento lo que la unidad capturó por marca en su panel (a = dosis de 0.25 mL, b = de 0.5 mL).
+// Solo con exactamente un lote normal sin aplicadas; mismo camino de guardado y validación que el de Influenza.
+async function usarCovidCapturadoEnRenglon(renglonId, a, b) {
+  const r = estado.renglones.find((x) => x.id === renglonId);
+  if (!r) return;
+  const confirmado = await mostrarModal({
+    titulo: 'Usar lo capturado de COVID-19',
+    mensaje: `Se registrarán ${a}${b ? ` de 0.25 mL y ${b} de 0.5 mL` : ''} dosis aplicadas en este lote, con lo que capturaste por marca en tu reporte semanal de COVID-19 de este mes. Después puedes corregirlo a mano si hace falta. ¿Confirmas?`,
+    textoAceptar: 'Usar lo capturado'
+  });
+  if (!confirmado) return;
+
+  const bio = estado.biologicos.find((b2) => b2.id === r.biovac_lotes.biologico_id);
+  const split = bio.regla_especial === 'SPLIT_DOSE';
+  const nuevoA = split ? a : a + b;
+  const nuevoB = split ? b : 0;
+  const dosisProspectiva = BiovacEngine.calcExistenciaFinal({
+    presentacion: bio.presentacion, dosisPorFrasco: bio.dosis_por_frasco, dosisPorFrascoOverride: r.biovac_lotes.dosis_por_frasco_override,
+    reglaEspecial: bio.regla_especial, existenciaAnterior: r.existencia_anterior_frascos, recibido: r.recibido_frascos,
+    aplicadasA: nuevoA, aplicadasB: nuevoB, desechadasA: r.desechadas_a, desechadasB: r.desechadas_b
+  });
+  const errorValidacion = validarGuardadoRenglon(r, bio, dosisProspectiva);
+  if (errorValidacion) { toast(errorValidacion, 'error'); return; }
+
+  const cambios = split ? { aplicadas_a: nuevoA, aplicadas_b: nuevoB } : { aplicadas_a: nuevoA };
+  const { data, error } = await estado.db.from('biovac_renglones').update(cambios).eq('id', renglonId)
+    .select('existencia_final_frascos').single();
+  if (error) { toast('Error al guardar: ' + error.message, 'error'); return; }
+  r.aplicadas_a = nuevoA;
+  if (split) r.aplicadas_b = nuevoB;
+  r.existencia_final_frascos = data.existencia_final_frascos;
+  render();
+  toast('✅ Lo capturado de COVID-19 quedó en el movimiento.', 'ok');
   if (window.SIS06PBiovac && window.SIS06PBiovac.refrescarConciliacion) window.SIS06PBiovac.refrescarConciliacion();
 }
 
@@ -3580,6 +3634,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (accion === 'eliminar-renglon') { eliminarRenglon(btn.dataset.renglon); return; }
     if (accion === 'editar-ant') { alternarEdicionAnterior(btn.dataset.renglon); return; }
     if (accion === 'ir-a-recibido') { irACasillaRecibido(btn.dataset.renglon); return; }
+    if (accion === 'usar-covid-capturado') { usarCovidCapturadoEnRenglon(btn.dataset.renglon, Number(btn.dataset.a) || 0, Number(btn.dataset.b) || 0); return; }
     if (accion === 'usar-total-influenza') { usarTotalInfluenzaEnRenglon(btn.dataset.renglon, Number(btn.dataset.total)); return; }
 
     if (accion === 'toggle-agregar' || accion === 'cancelar-agregar' || accion === 'confirmar-agregar') {

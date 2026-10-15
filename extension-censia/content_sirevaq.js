@@ -15,7 +15,7 @@
     var limpio = {};
     Object.keys(p.valores).forEach(function (k) {
       var n = Number(p.valores[k]);
-      if (/^BI[EO][0-9A-Z_]{1,12}$/.test(k) && Number.isInteger(n) && n >= 0 && n < 100000) limpio[k] = n;
+      if (/^BI[EO][0-9A-Za-z_]{1,20}$/.test(k) && Number.isInteger(n) && n >= 0 && n < 100000) limpio[k] = n;
     });
     chrome.storage.local.set({ pending: { v: 1, t: Date.now(), clues: p.clues, fecha: p.fecha, valores: limpio } }, function () {
       window.postMessage({ source: "sirevaq-ext", type: "censia-payload-ok" }, location.origin);

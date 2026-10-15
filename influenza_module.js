@@ -619,6 +619,11 @@ async function loadInfluenzaUnitData() {
     // 2. Historial de capturas
     const resCapturas = await AppService.call("getinfluenza_capturas", { clues: USER.clues, anio_campana: campana });
     _influenzaCapturasCache = resCapturas.data || [];
+    try {
+      const resCovid = await AppService.call("getcovid_capturas", { clues: USER.clues, anio_campana: campana }, { silent: true });
+      _covidCapturasCache = (resCovid && resCovid.data) || [];
+    } catch (e) { _covidCapturasCache = []; }
+    renderCovidCaptura();
 
     // 3. Distribución de frascos
     const resFrascos = await AppService.call("getinfluenza_distribucion", { clues: USER.clues, anio_campana: campana });
@@ -1020,6 +1025,7 @@ function renderCaptureGrid() {
 
   // Reporte ya guardado: ofrecer el paso a CeNSIA (plataforma federal)
   if (currentReport) renderPasoCensia(container, selectedFecha, currentReport);
+  renderCovidCaptura();
 
 
   // Agrupar rubros por categoría y grupo para una presentación visual limpia y organizada
@@ -7258,6 +7264,67 @@ async function covidCargarMetaUnidad(campana) {
       if (btn) btn.style.display = "";
     }
   } catch (e) { /* sin meta de COVID-19 visible: el botón queda oculto */ }
+  renderCovidCaptura();
+}
+
+// ─── COVID-19: reporte semanal por marca (covid_captura.js / covid_captura_ui.js) ────────────────────────
+let _covidCapturasCache = [];
+
+function renderCovidCaptura() {
+  const cont = document.getElementById("covidCapturaContainer");
+  if (!cont || !window.CovidCapturaUI) return;
+  const fecha = document.getElementById("influenza_semana")?.value;
+  if (!fecha) { cont.hidden = true; return; }
+  const estado = influenzaEstadoCaptura(fecha);
+  window.CovidCapturaUI.render({
+    container: cont,
+    metas: _covidMetaUnidadCache ? _covidMetaUnidadCache.metas : null,
+    capturas: _covidCapturasCache,
+    fecha,
+    cerrada: !estado.abierta,
+    motivo: estado.motivo,
+    USER,
+    nombre: () => document.getElementById("nombreINFLUENZA")?.value || "",
+    aviso: (msg, tipo) => showToast(msg, false, tipo || "bad"),
+    guardar: (p) => guardarCapturaCovid(fecha, p),
+    censia: {
+      url: CENSIA_URL,
+      hoy: influenzaHoy,
+      fechaAplicacion: (f) => censiaFechaAplicacion(f, influenzaHoy()),
+      enviarPaquete: (paquete) => {
+        const token = btoa(unescape(encodeURIComponent(JSON.stringify({ v: 1, t: Date.now(), clues: paquete.clues, fecha: paquete.fecha, valores: paquete.valores }))));
+        if (censiaExtInstalada()) window.postMessage({ source: "sirevaq", type: "censia-payload", payload: paquete }, location.origin);
+        try { navigator.clipboard?.writeText("SIREVAQ1:" + token).catch(() => { }); } catch (e) { /* sin portapapeles */ }
+        return `${CENSIA_URL}#sirevaq=${encodeURIComponent(token)}`;
+      }
+    }
+  });
+}
+
+async function guardarCapturaCovid(fecha, p) {
+  const cierre = influenzaEstadoCaptura(fecha);
+  if (!cierre.abierta) { showToast(cierre.motivo, false, "bad"); return; }
+  const campana = document.getElementById("influenza_campana").value;
+  const total = window.CovidCaptura.totalDosis(p.valores);
+  await AppService.runCapture({
+    btnId: "cvcGuardar",
+    title: "Guardando reporte",
+    msg: "Registrando reporte semanal de COVID-19...",
+    successMsg: `✅ Reporte de COVID-19 guardado · ${total} dosis esta semana`,
+    eventTitle: "COVID-19",
+    eventMsg: `Captura COVID-19 semana ${fecha}: ${total} dosis.`,
+    action: async () => {
+      const res = await AppService.call("savecovid_captura", {
+        clues: USER.clues, unidad: USER.unidad, municipio: USER.municipio, fecha, anio_campana: campana,
+        valores: p.valores, capturado_por: p.nombre, editado_por: "UNIDAD", sin_movimiento: p.sin_movimiento
+      });
+      const r = await AppService.call("getcovid_capturas", { clues: USER.clues, anio_campana: campana }, { silent: true });
+      _covidCapturasCache = (r && r.data) || [];
+      renderCovidCaptura();
+      if (res && res.folio) showToast(`Folio del reporte de COVID-19: ${res.folio}`, true, "info");
+      return res;
+    }
+  });
 }
 
 // Excel de la META de COVID-19 de la unidad (formato de la temporada invernal): solo su columna.

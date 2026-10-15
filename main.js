@@ -8351,6 +8351,58 @@ async function supabaseRequest(action = "", payload, options = {}) {
         return { ok: true, folio: guardado?.folio || null };
       }
 
+      // COVID-19: un reporte por unidad y semana, con marca (valores = { MODERNA:{c1..c6}, PFIZER:{c3..c6} }).
+      case "getcovid_capturas": {
+        const { clues, municipio, anio_campana } = payload;
+        const camp = anio_campana || (await getActiveCampaign()).data?.nombre || "";
+        const data = await fetchAllRows(() => {
+          let query = supabase.from('covid_capturas').select('*').eq('anio_campana', camp);
+          if (clues) query = query.eq('clues', clues);
+          else if (municipio) query = query.eq('municipio', municipio);
+          return query.order('fecha', { ascending: false }).order('clues', { ascending: true });
+        });
+        return { ok: true, data };
+      }
+
+      case "savecovid_captura": {
+        const { clues, unidad, municipio, fecha, anio_campana, valores, capturado_por, editado_por } = payload;
+        const camp = anio_campana || (await getActiveCampaign()).data?.nombre || "";
+        const edPor = editado_por || "UNIDAD";
+        const { data: prev } = await supabase
+          .from('covid_capturas')
+          .select('valores, historial_ediciones')
+          .eq('clues', clues)
+          .eq('fecha', fecha)
+          .maybeSingle();
+        let hist = [];
+        if (prev && prev.historial_ediciones) {
+          hist = typeof prev.historial_ediciones === 'string' ? JSON.parse(prev.historial_ediciones) : prev.historial_ediciones;
+        }
+        hist.push({
+          fecha_edicion: new Date().toISOString(),
+          editado_por: edPor,
+          usuario: String(USER?.usuario || "DESCONOCIDO").toUpperCase(),
+          valores_anteriores: prev ? prev.valores : null
+        });
+        const record = {
+          clues, unidad, municipio, fecha,
+          anio_campana: camp,
+          valores,
+          capturado_por: String(capturado_por || USER?.usuario || "").toUpperCase(),
+          editado_por: edPor,
+          historial_ediciones: hist,
+          ...(payload.sin_movimiento === undefined ? {} : { sin_movimiento: payload.sin_movimiento === true }),
+          updated_at: new Date().toISOString()
+        };
+        const { data: guardado, error } = await supabase
+          .from('covid_capturas')
+          .upsert(record, { onConflict: 'clues,fecha' })
+          .select('folio')
+          .maybeSingle();
+        if (error) throw error;
+        return { ok: true, folio: guardado?.folio || null };
+      }
+
       case "getsis_variables": {
         const { data, error } = await supabase
           .from('sis_variables')

@@ -15564,3 +15564,33 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 .inf-reemplazo { display:flex; gap:10px; align-items:flex-start; background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:12px 14px; color:#334155; font-size:13px; line-height:1.5; }
 .inf-reemplazo .material-symbols-rounded { font-size:20px; width:20px; height:20px; overflow:hidden; color:#475569; flex:none; margin-top:1px; }
 .inf-reemplazo b { color:#0f172a; }
+
+/* COVID-19: reporte semanal por marca en el panel de captura (covid_captura_ui.js). Plano y neutro. */
+.cvc { background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:14px 16px; color:#334155; font-size:13px; line-height:1.5; }
+.cvc[hidden], #covidCapturaContainer[hidden] { display:none; }
+.cvc p { margin:6px 0 0; }
+.cvc-tit { display:flex; align-items:center; gap:8px; color:#0f172a; font-size:14px; }
+.cvc-tit .material-symbols-rounded { font-size:20px; width:20px; height:20px; overflow:hidden; color:#475569; }
+.cvc-ok { display:flex; gap:6px; align-items:center; color:#166534; }
+.cvc-ok .material-symbols-rounded, .cvc-aviso .material-symbols-rounded { font-size:18px; width:18px; height:18px; overflow:hidden; }
+.cvc-aviso { display:flex; gap:6px; align-items:flex-start; color:#92400e; background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:6px 10px; }
+.cvc-wrap { overflow-x:auto; margin-top:10px; }
+.cvc-tabla { width:100%; border-collapse:collapse; min-width:560px; }
+.cvc-tabla th, .cvc-tabla td { padding:8px 10px; border-bottom:1px solid #e2e8f0; text-align:center; }
+.cvc-tabla thead th { font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#475569; background:#f8fafc; }
+.cvc-tabla tbody th { text-align:left; font-weight:600; color:#1e293b; }
+.cvc-num { font-variant-numeric:tabular-nums; }
+.cvc-na { color:#64748b; }
+.cvc-in { width:92px; max-width:100%; min-height:40px; text-align:center; border:1px solid #94a3b8; border-radius:10px; background:#fff; color:#0f172a; font-weight:700; -moz-appearance:textfield; appearance:textfield; }
+.cvc-in::-webkit-outer-spin-button, .cvc-in::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+.cvc-in:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+.cvc-in[aria-invalid="true"] { border-color:#b91c1c; background:#fef2f2; }
+.cvc-est { font-size:12px; color:#475569; white-space:nowrap; }
+.cvc-est.is-over { color:#b91c1c; font-weight:700; }
+.cvc-acc { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:12px; }
+.cvc-btn { display:inline-flex; align-items:center; min-height:40px; padding:0 16px; border-radius:12px; border:1px solid #1e293b; background:#1e293b; color:#fff; font-weight:700; font-size:13px; text-decoration:none; cursor:pointer; }
+.cvc-btn:disabled { opacity:.55; cursor:not-allowed; }
+.cvc-btn:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+.cvc-total { color:#334155; font-weight:600; }
+.cvc-censia { margin-top:14px; padding-top:12px; border-top:1px solid #e2e8f0; }
+.cvc-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
