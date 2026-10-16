@@ -157,6 +157,15 @@ test.describe('Influenza: captura de la unidad en móvil', () => {
     expect(Object.values(fila.valores).every(v => v === 0)).toBe(true);
   });
 
+  test('reporte en ceros sin «Sin movimiento» no se guarda', async ({ page }) => {
+    const { srv } = await abrir(page, estado());
+    await page.click('#dockItemINFC');
+    await page.fill('#icNombre', 'Ana Perez');
+    await page.click('#hubSaveBtn');
+    await expect(page.locator('#icError')).toContainText('Sin movimiento');
+    expect(srv.reqs.filter(r => r.nombre === 'influenza_capturas' && r.m === 'POST')).toHaveLength(0);
+  });
+
   test('sin meta de COVID-19 no aparece el selector de vacuna', async ({ page }) => {
     await abrir(page, estado());
     await page.click('#dockItemINFC');

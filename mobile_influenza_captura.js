@@ -573,6 +573,10 @@
         if (val.error) errores.push({ msg: val.error, el: rootEl.querySelector("input[data-marca]:not(:disabled)") });
       }
     } else if (!S.sinMov) {
+      // Un reporte en ceros solo se guarda con «Sin movimiento» (misma regla que en escritorio).
+      if (Object.values(v).every(x => x === 0)) {
+        errores.push({ msg: "No hay dosis capturadas. Si esta semana no hubo aplicaciones, activa «Sin movimiento» para guardar el reporte en ceros.", el: rootEl.querySelector("#icSinMov") || rootEl.querySelector("input[data-rubro]:not(:disabled)") });
+      }
       rubros().forEach(rb => {
         const inp = rootEl.querySelector(`#ic_${rb.id}`);
         const nombreRubro = `${rb.grupo} ${rb.edad}`;
