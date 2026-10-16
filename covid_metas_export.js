@@ -7,6 +7,8 @@
  *   propio archivo con la meta que Jurisdicción les asigna como destino.
  * - Seis renglones (c1..c6) y dos totales: «META: TOTAL DOSIS POR APLICAR (0.5 mL y 0.25 mL)» y
  *   «TOTAL DOSIS POR APLICAR (0.5 mL)» (los niños de 0.25 mL valen la mitad). Ambos son fórmulas de Excel.
+ * - Jeringas: la 23x25 suma los niños de 6 a 59 meses (primera y segunda dosis, c1 + c2); los demás rubros
+ *   (c3..c6) llevan la 22x32. Una jeringa por dosis, en cajas de 50 redondeadas hacia arriba (el TOTAL suma las cajas de cada unidad); fórmulas de Excel.
  * - Más de 20 unidades: se parten en hojas de 20 columnas, cada una con su TOTAL.
  */
 (function (root) {
@@ -18,8 +20,12 @@
   const FILA_ULTIMO_RUBRO = 16;
   const FILA_TOTAL_MIXTO = 17;       // 0.5 mL y 0.25 mL sumados tal cual
   const FILA_TOTAL_EQUIV = 18;       // dosis equivalentes de 0.5 mL
+  const FILA_JERINGA_23X25 = 19;     // jeringa 23x25: niñas y niños de 6 a 59 meses (c1 + c2)
+  const FILA_JERINGA_22X32 = 20;     // jeringa 22x32: todos los demás rubros (c3..c6)
+  const FILA_ULTIMA = FILA_JERINGA_22X32;
   const COL_PRIMERA = 8;             // H
   const MAX_UNIDADES_HOJA = 20;
+  const DOSIS_POR_CAJA = 50;
 
   const CLUES_HOSPITALES = { NHG: "QTSSA002901", HENM: "QTSSA001740" };
   const HOSPITALES_CLUES = new Set(Object.values(CLUES_HOSPITALES));
@@ -82,7 +88,7 @@
 
   /** Copia el estilo de la columna H (renglones 10..18) a la columna c. */
   function clonarColumna(ws, c) {
-    for (let r = FILA_ENCABEZADO; r <= FILA_TOTAL_EQUIV; r++) ws.getCell(r, c).style = Object.assign({}, ws.getCell(r, COL_PRIMERA).style);
+    for (let r = FILA_ENCABEZADO; r <= FILA_ULTIMA; r++) ws.getCell(r, c).style = Object.assign({}, ws.getCell(r, COL_PRIMERA).style);
   }
 
   function llenarHoja(ws, columnas, ctx) {
@@ -91,16 +97,28 @@
     const ultima = COL_PRIMERA + Math.max(n, 1) - 1;
     const colTotal = ultima + 1;
     // El estilo de H se copia antes de pisar su contenido
+    // Los renglones de jeringa heredan el formato del renglón 18 (etiqueta combinada C:G y total en H)
+    for (const r of [FILA_JERINGA_23X25, FILA_JERINGA_22X32]) {
+      if (ws.getCell(r, 3).value == null) {
+        for (let c = 1; c <= COL_PRIMERA; c++) ws.getCell(r, c).style = Object.assign({}, ws.getCell(FILA_TOTAL_EQUIV, c).style);
+        ws.getRow(r).height = ws.getRow(FILA_TOTAL_EQUIV).height;
+      }
+      try { ws.mergeCells(`C${r}:G${r}`); } catch (e) { /* ya combinada */ }
+    }
+    ws.getCell(FILA_JERINGA_23X25, 3).value = "CAJAS DE JERINGAS 23x25 (6 a 59 meses, 1ª y 2ª dosis; caja de 50)";
+    ws.getCell(FILA_JERINGA_22X32, 3).value = "CAJAS DE JERINGAS 22x32 (demás grupos; caja de 50)";
     const estilos = {};
-    for (let r = FILA_ENCABEZADO; r <= FILA_TOTAL_EQUIV; r++) estilos[r] = Object.assign({}, ws.getCell(r, COL_PRIMERA).style);
+    for (let r = FILA_ENCABEZADO; r <= FILA_ULTIMA; r++) estilos[r] = Object.assign({}, r > FILA_TOTAL_EQUIV ? ws.getCell(FILA_TOTAL_EQUIV, COL_PRIMERA).style : ws.getCell(r, COL_PRIMERA).style);
     const poner = (c) => {
-      for (let r = FILA_ENCABEZADO; r <= FILA_TOTAL_EQUIV; r++) ws.getCell(r, c).style = Object.assign({}, estilos[r]);
+      for (let r = FILA_ENCABEZADO; r <= FILA_ULTIMA; r++) ws.getCell(r, c).style = Object.assign({}, estilos[r]);
     };
 
     const filaTotal = (c) => {
       const L = letra(c);
       ws.getCell(FILA_TOTAL_MIXTO, c).value = { formula: `SUM(${L}${FILA_PRIMER_RUBRO}:${L}${FILA_ULTIMO_RUBRO})` };
       ws.getCell(FILA_TOTAL_EQUIV, c).value = { formula: `((${L}${FILA_PRIMER_RUBRO}+${L}${FILA_PRIMER_RUBRO + 1})/2)+${L}${FILA_PRIMER_RUBRO + 2}+${L}${FILA_PRIMER_RUBRO + 3}+${L}${FILA_PRIMER_RUBRO + 4}+${L}${FILA_PRIMER_RUBRO + 5}` };
+      ws.getCell(FILA_JERINGA_23X25, c).value = { formula: `ROUNDUP((${L}${FILA_PRIMER_RUBRO}+${L}${FILA_PRIMER_RUBRO + 1})/${DOSIS_POR_CAJA},0)` };
+      ws.getCell(FILA_JERINGA_22X32, c).value = { formula: `ROUNDUP(SUM(${L}${FILA_PRIMER_RUBRO + 2}:${L}${FILA_ULTIMO_RUBRO})/${DOSIS_POR_CAJA},0)` };
     };
 
     columnas.forEach((u, i) => {
@@ -123,6 +141,8 @@
       const a = letra(COL_PRIMERA), b = letra(ultima);
       for (let r = FILA_PRIMER_RUBRO; r <= FILA_ULTIMO_RUBRO; r++) ws.getCell(r, colTotal).value = { formula: `SUM(${a}${r}:${b}${r})` };
       filaTotal(colTotal);
+      // Las cajas del TOTAL suman las de cada unidad (cada una se redondea hacia arriba por separado)
+      for (const r of [FILA_JERINGA_23X25, FILA_JERINGA_22X32]) ws.getCell(r, colTotal).value = { formula: `SUM(${a}${r}:${b}${r})` };
     }
     // El encabezado de unidad puede llevar nombres largos
     ws.getRow(FILA_ENCABEZADO).height = n && columnas.some((u) => String(u.label).length > 20) ? 64 : 44;

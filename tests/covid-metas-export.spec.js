@@ -34,6 +34,12 @@ test('Municipio: una columna por unidad con meta, TOTAL al final y los renglones
   expect(ws.getCell('I17').value.formula).toBe('SUM(I11:I16)');
   expect(ws.getCell('I18').value.formula).toBe('((I11+I12)/2)+I13+I14+I15+I16');
   expect(ws.getCell('J18').value.formula).toBe('((J11+J12)/2)+J13+J14+J15+J16');
+  // Jeringas: 23x25 = niños 6-59 meses (c1+c2); 22x32 = c3..c6
+  expect(ws.getCell('I19').value.formula).toBe('ROUNDUP((I11+I12)/50,0)');
+  expect(ws.getCell('I20').value.formula).toBe('ROUNDUP(SUM(I13:I16)/50,0)');
+  expect(ws.getCell('J19').value.formula).toBe('SUM(H19:I19)');
+  expect(String(ws.getCell('C19').value)).toContain('23x25');
+  expect(String(ws.getCell('C20').value)).toContain('22x32');
   // La unidad sin meta y la de otro municipio no salen; no quedan columnas vacías antes del TOTAL
   expect(ws.getCell('K10').value).toBeNull();
   // Encabezado de la plantilla
