@@ -1656,3 +1656,12 @@ html.dark #chipCumplimiento[data-tier] .logro-rango, html.dark #chipCumplimiento
 .logro-vacio { width: 30px; height: 30px; border-radius: 50%; border: 1.5px dashed #cbd5e1; box-sizing: border-box; }
 html.dark .logro-vacio { border-color: rgba(255,255,255,.25); }
 html.dark .logro, html.dark .logros-count { color: #94a3b8; }
+
+/* COVID-19 en la captura de la unidad: selector de vacuna y renglón por marca */
+#panelINFC .ic-vac { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 5px; border-radius: 18px; background: #e2e8f0; }
+#panelINFC .ic-vac-btn { min-height: 48px; border-radius: 14px; border: 0; background: transparent; font-size: 15px; font-weight: 900; color: #334155; }
+#panelINFC .ic-vac-btn[aria-pressed="true"] { background: #fff; color: #4c1d95; box-shadow: 0 1px 3px rgba(15, 23, 42, .18); }
+#panelINFC .ic-datos--fila { flex-direction: row; flex-wrap: wrap; gap: 4px 14px; }
+#panelINFC .ic-marca { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#panelINFC .ic-marca-nom { font-size: 14px; font-weight: 900; color: #0f172a; }
+html.dark #panelINFC .ic-vac { background: #334155; }

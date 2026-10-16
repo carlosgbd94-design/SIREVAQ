@@ -9,6 +9,8 @@
  *   · Guardado con folio y lista de reportes anteriores.
  *
  * Datos: campanas, influenza_metas e influenza_capturas (mismas tablas y políticas que el escritorio).
+ * COVID-19: si la unidad tiene meta en covid_metas aparece el selector Influenza | COVID-19; el reporte lleva
+ *   Moderna y Pfizer por grupo (covid_capturas, reglas de covid_captura.js) y comparte semana, nombre y botón Guardar.
  * Calendario: influenza_reglas.js (window.InfluenzaReglas). Rubros: influenza_rubros.js.
  */
 (function (root) {
@@ -22,6 +24,16 @@
   const R = () => root.InfluenzaReglas;
   const rubros = () => root.INFLUENZA_RUBROS_MOVIL || [];
   const num = (v) => Number(v || 0);
+  const CC = () => root.CovidCaptura;
+  const esCovid = () => !!S && S.vac === "COVID";
+  const MARCA_TXT = { MODERNA: "Moderna", PFIZER: "Pfizer" };
+  const EDAD_COVID = {
+    c1: "6 a 59 meses · 1ª dosis (0.25 mL)", c2: "6 a 59 meses · 2ª dosis (0.25 mL)",
+    c3: "5 a 59 años con factores de riesgo", c4: "60 años y más", c5: "Personas embarazadas", c6: "Personal de salud"
+  };
+  const CLUES_HOSPITALES = { NHG: "QTSSA002901", HENM: "QTSSA001740" };   // el hospital toma la meta de su destino
+  const nombreVac = () => (esCovid() ? "COVID-19" : "Influenza");
+  const caps = () => (esCovid() ? S.covid.capturas : S.capturas);
 
   // ── Fechas ──
   function hoy() {
@@ -86,13 +98,22 @@
   }
 
   // ── Datos derivados ──
-  const reporteDe = (f) => S.capturas.find(r => r.fecha === f) || null;
+  const reporteDe = (f) => caps().find(r => r.fecha === f) || null;
   const esSinMov = (r) => !!(r && (r.sin_movimiento === true || r.sin_movimiento === "SI"));
-  const totalReporte = (r) => Object.values((r && r.valores) || {}).reduce((a, v) => a + num(v), 0);
+  const totalReporte = (r) => (esCovid()
+    ? CC().totalDosis((r && r.valores) || {})
+    : Object.values((r && r.valores) || {}).reduce((a, v) => a + num(v), 0));
   function acumuladoOtras(id) {
     return S.capturas.reduce((a, r) => (r.fecha !== S.fecha ? a + num((r.valores || {})[id]) : a), 0);
   }
-  const metaTotal = () => Object.values(S.metas).reduce((a, v) => a + num(v), 0);
+  // COVID-19: acumulado de las demás semanas por grupo (Moderna + Pfizer suman contra la misma meta)
+  function acumuladoCovid(r) {
+    return S.covid.capturas.reduce((a, c) => (c.fecha !== S.fecha ? a + CC().porRubro(c.valores)[r] : a), 0);
+  }
+  const rubrosCovid = () => CC().RUBROS.filter(r => num(S.covid.metas[r]) > 0);
+  const metaTotal = () => (esCovid()
+    ? CC().RUBROS.reduce((a, r) => a + num(S.covid.metas[r]), 0)
+    : Object.values(S.metas).reduce((a, v) => a + num(v), 0));
   function reglaDosis(rb, f) {
     return R().reglaDosis(rb.grupo, f, S.camp.fecha_inicio, S.camp.fecha_fin);
   }
@@ -111,7 +132,7 @@
   function folioDe(r) {
     if (!r) return "";
     if (r.folio) return r.folio;
-    return `INF-${String(r.fecha || "").replace(/-/g, "")}-${r.id ? String(r.id).slice(0, 8).toUpperCase() : "TEMP"}`;
+    return `${esCovid() ? "COV" : "INF"}-${String(r.fecha || "").replace(/-/g, "")}-${r.id ? String(r.id).slice(0, 8).toUpperCase() : "TEMP"}`;
   }
 
   // ── Datos remotos ──
@@ -134,7 +155,27 @@
     if (c.error) throw c.error;
     S.metas = (m.data && m.data[0] && m.data[0].metas) || {};
     S.capturas = c.data || [];
+    await cargarCovid(db, p);
   }
+  // COVID-19 es opcional: si no hay meta (o la tabla no responde) la unidad solo ve Influenza
+  async function cargarCovid(db, p) {
+    S.covid = { metas: null, capturas: [] };
+    try {
+      const destino = Object.keys(CLUES_HOSPITALES).find(k => CLUES_HOSPITALES[k] === p.clues);
+      const [m, c] = await Promise.all([
+        db.from("covid_metas").select("clues,municipio,metas").eq("anio_campana", S.camp.nombre).or(`clues.eq.${p.clues},clues.is.null`),
+        db.from("covid_capturas").select("*").eq("anio_campana", S.camp.nombre).eq("clues", p.clues).order("fecha", { ascending: false })
+      ]);
+      if (m.error || c.error || !CC()) return;
+      const filas = m.data || [];
+      const propia = filas.find(r => r.clues === p.clues);
+      const delDestino = destino ? filas.find(r => !r.clues && String(r.municipio).toUpperCase() === destino) : null;
+      const metas = (delDestino && delDestino.metas) || (propia && propia.metas) || null;
+      if (metas && CC().RUBROS.some(r => num(metas[r]) > 0)) S.covid = { metas, capturas: c.data || [] };
+    } catch (_) { /* sin COVID-19 visible */ }
+    if (!S.covid.metas && S.vac === "COVID") S.vac = "INFLUENZA";
+  }
+  const hayCovid = () => !!(S && S.covid && S.covid.metas);
 
   // ── Render ──
   function anunciar(msg) {
@@ -162,13 +203,14 @@
     // Avisos de calendario (una vez por tipo)
     const avisos = [];
     const vistos = {};
-    if (metaTotal() > 0) rubros().forEach(rb => { const r = reglaDosis(rb, f); if (r && !vistos[r.tipo]) { vistos[r.tipo] = 1; avisos.push(r); } });
+    if (!esCovid() && metaTotal() > 0) rubros().forEach(rb => { const r = reglaDosis(rb, f); if (r && !vistos[r.tipo]) { vistos[r.tipo] = 1; avisos.push(r); } });
 
     const grupos = {};
     rubros().forEach(rb => { (grupos[`${rb.categoria} - ${rb.grupo}`] = grupos[`${rb.categoria} - ${rb.grupo}`] || []).push(rb); });
     const sinMeta = [];
     let tarjetas = "";
-    Object.entries(grupos).forEach(([titulo, lista]) => {
+    if (esCovid()) tarjetas = tarjetasCovid(editable);
+    else Object.entries(grupos).forEach(([titulo, lista]) => {
       if (lista.every(rb => !num(S.metas[rb.id]))) { sinMeta.push(titulo); return; }
       let omitidas = 0;
       const filas = lista.map(rb => {
@@ -206,14 +248,18 @@
     });
 
     const semanasOpts = S.semanas.map(w => `<option value="${w.fecha}"${w.fecha === f ? " selected" : ""}>${esc(etiquetaSemana(w))}</option>`).join("");
-    const guardados = S.capturas.slice(0, 12);
+    const guardados = caps().slice(0, 12);
 
     rootEl.innerHTML = `
       <div class="ic-wrap">
         <div class="ic-titulo">
-          <h2 id="icTitulo" tabindex="-1">Influenza</h2>
+          <h2 id="icTitulo" tabindex="-1">${nombreVac()}</h2>
           <p>Reporte semanal de dosis aplicadas en tu unidad.</p>
         </div>
+        ${hayCovid() ? `<div class="ic-vac" role="group" aria-label="Vacuna a reportar">
+          <button type="button" class="ic-vac-btn" data-vac="INFLUENZA" aria-pressed="${!esCovid()}">Influenza</button>
+          <button type="button" class="ic-vac-btn" data-vac="COVID" aria-pressed="${esCovid()}">COVID-19</button>
+        </div>` : ""}
         ${op.exito ? `<div class="ic-exito" id="icExito" role="status" tabindex="-1">
             <span class="material-symbols-rounded" aria-hidden="true">task_alt</span>
             <div><b>Reporte guardado</b><span>Folio ${esc(op.exito.folio)} · ${op.exito.dosis} dosis esta semana${op.exito.avance != null ? ` · avance de la meta ${op.exito.avance}%` : ""}</span></div>
@@ -249,11 +295,12 @@
           <p class="ic-res-pie" id="icEstaSemana"></p>
         </section>
 
+        ${esCovid() ? `<div class="ic-aviso ic-aviso--info"><b>Moderna y Pfizer suman contra la misma meta.</b> Captura el total de la semana de cada marca; si guardas de nuevo esta semana, el reporte nuevo reemplaza al anterior.</div>` : ""}
         ${metaTotal() === 0 ? `<div class="ic-aviso"><b>Tu unidad no tiene meta asignada.</b> Puedes registrar la semana como «sin movimiento»; para capturar dosis pide a tu jurisdicción que asigne la meta.</div>` : ""}
         ${avisos.map(r => `<div class="ic-aviso"><b>${r.tipo === "segunda" ? "2ª dosis" : "1ª dosis"} no disponible esta semana.</b> ${esc(r.texto)}</div>`).join("")}
 
         <label class="ic-switch${S.sinMov ? " ic-switch--on" : ""}">
-          <span class="ic-switch-txt"><b>Sin movimiento</b><span>No se aplicó ninguna dosis de influenza esta semana.</span></span>
+          <span class="ic-switch-txt"><b>Sin movimiento</b><span>No se aplicó ninguna dosis de ${esCovid() ? "COVID-19" : "influenza"} esta semana.</span></span>
           <input type="checkbox" id="icSinMov" role="switch"${S.sinMov ? " checked" : ""}${!editable || (rep && !sinMovGuardado) ? " disabled" : ""}>
         </label>
         ${rep && !sinMovGuardado ? `<p class="ic-nota">Este reporte ya tiene dosis: para ponerlo en ceros corrige las cantidades.</p>` : ""}
@@ -288,8 +335,87 @@
     if (op.exito) { const e = rootEl.querySelector("#icExito"); if (e) e.focus(); }
   }
 
+  // COVID-19: un grupo por rango de edad, con Moderna y Pfizer (Pfizer no aplica a menores de 5 años)
+  function tarjetasCovid(editable) {
+    const f = S.fecha;
+    const rep = reporteDe(f);
+    const borr = S.borrador && S.borrador.fecha === f ? S.borrador.v : {};
+    const C = CC();
+    const filas = rubrosCovid().map(r => {
+      const meta = num(S.covid.metas[r]);
+      const marcas = C.MARCAS.map(m => {
+        if (!C.RUBROS_MARCA[m].includes(r)) return "";
+        const id = `cv_${m}_${r}`;
+        const previo = rep && rep.valores && rep.valores[m] ? rep.valores[m][r] : "";
+        const val = borr[id] !== undefined ? borr[id] : (previo > 0 ? previo : "");
+        const deshab = !editable || S.sinMov;
+        const nombre = `${MARCA_TXT[m]}, ${EDAD_COVID[r]}`;
+        return `<div class="ic-marca">
+          <span class="ic-marca-nom">${MARCA_TXT[m]}</span>
+          <div class="ic-stepper" role="group" aria-label="${esc(nombre)}">
+            <button type="button" class="ic-mas-menos" data-paso="-1" data-rubro="${id}" aria-label="Disminuir ${esc(nombre)}"${deshab ? " disabled" : ""}><span aria-hidden="true">−</span></button>
+            <input id="ic_${id}" data-rubro="${id}" data-marca="${m}" data-grupo="${r}" type="number" inputmode="numeric" min="0" step="1" value="${S.sinMov ? 0 : esc(val)}"
+              aria-label="Dosis aplicadas, ${esc(nombre)}" placeholder="0"${deshab ? " disabled" : ""} aria-describedby="icf_cv_${r}">
+            <button type="button" class="ic-mas-menos" data-paso="1" data-rubro="${id}" aria-label="Aumentar ${esc(nombre)}"${deshab ? " disabled" : ""}><span aria-hidden="true">+</span></button>
+          </div>
+        </div>`;
+      }).join("");
+      return `<div class="ic-rubro" data-rubro="cv_${r}">
+        <div class="ic-rubro-cab"><span class="ic-edad">${esc(EDAD_COVID[r])}</span></div>
+        <div class="ic-datos ic-datos--fila">
+          <span>Meta <b>${meta}</b></span>
+          <span>Antes <b>${acumuladoCovid(r)}</b></span>
+          <span class="ic-faltan" id="icf_cv_${r}"></span>
+        </div>
+        ${marcas}
+        <div class="ic-barra-av" aria-hidden="true"><span id="icb_cv_${r}"></span></div>
+      </div>`;
+    }).join("");
+    return `<section class="ic-grupo" aria-label="COVID-19, dosis por marca"><h3>COVID-19 - Dosis por marca</h3>${filas}</section>`;
+  }
+
+  function leerCovid() {
+    const v = { MODERNA: {}, PFIZER: {} };
+    rootEl.querySelectorAll("input[data-marca]").forEach(i => {
+      v[i.dataset.marca][i.dataset.grupo] = S.sinMov ? 0 : Math.max(0, parseInt(i.value, 10) || 0);
+    });
+    return CC().limpiar(v);
+  }
+
+  function recalcularCovid() {
+    const C = CC();
+    const v = leerCovid();
+    const nuevo = C.porRubro(v);
+    const rep = reporteDe(S.fecha);
+    const antes = C.porRubro((rep && rep.valores) || {});
+    let previas = 0;
+    const esta = C.totalDosis(v);
+    rubrosCovid().forEach(r => {
+      const meta = num(S.covid.metas[r]);
+      const acum = acumuladoCovid(r);
+      previas += acum;
+      const total = acum + nuevo[r];
+      const quedan = meta - total;
+      const falt = rootEl.querySelector(`#icf_cv_${r}`);
+      const barra = rootEl.querySelector(`#icb_cv_${r}`);
+      if (falt) {
+        falt.textContent = quedan >= 0 ? `Faltan ${quedan}` : `Rebasa por ${-quedan}`;
+        falt.classList.toggle("ic-faltan--mal", quedan < 0);
+      }
+      if (barra) {
+        const pct = meta > 0 ? Math.min(100, Math.round((total / meta) * 100)) : 0;
+        barra.style.width = pct + "%";
+        barra.className = total > meta ? "ic-barra--mal" : pct >= 85 ? "ic-barra--ok" : pct >= 50 ? "ic-barra--medio" : "";
+      }
+      const rebasa = total > meta && nuevo[r] > antes[r];
+      rootEl.querySelectorAll(`input[data-grupo="${r}"]`).forEach(i => { if (rebasa) i.setAttribute("aria-invalid", "true"); else i.removeAttribute("aria-invalid"); });
+    });
+    return { v, esta, previas };
+  }
+
   // Lee lo capturado en pantalla y actualiza avances, faltantes y totales
   function leer() {
+    if (esCovid()) return leerCovid();
     const v = {};
     rubros().forEach(rb => {
       const i = rootEl.querySelector(`#ic_${rb.id}`);
@@ -299,9 +425,12 @@
   }
 
   function recalcular() {
-    const v = leer();
+    let v, esta = 0, previas = 0;
     const rep = reporteDe(S.fecha);
-    let esta = 0, previas = 0;
+    if (esCovid()) {
+      ({ v, esta, previas } = recalcularCovid());
+    } else {
+    v = leer();
     rubros().forEach(rb => {
       const meta = num(S.metas[rb.id]);
       const acum = acumuladoOtras(rb.id);
@@ -328,6 +457,7 @@
       }
       if (rebasa) inp.setAttribute("aria-invalid", "true"); else inp.removeAttribute("aria-invalid");
     });
+    }
     const mt = metaTotal();
     const aplicadas = previas + esta;
     const av = mt > 0 ? Math.round((aplicadas / mt) * 100) : null;
@@ -364,13 +494,24 @@
     rootEl.querySelectorAll("input[data-rubro]").forEach(i => { i.oninput = () => { recalcular(); limpiarError(); }; });
     $("#icNombre").oninput = (e) => { S.nombre = e.target.value; e.target.removeAttribute("aria-invalid"); pintarPasos(); };
 
+    rootEl.querySelectorAll(".ic-vac-btn").forEach(b => {
+      b.onclick = () => {
+        if ((b.dataset.vac === "COVID") === esCovid()) return;
+        S.vac = b.dataset.vac === "COVID" ? "COVID" : "INFLUENZA";
+        S.sinMov = null; S.reabierto = null; S.borrador = null; S.ultAnuncio = undefined;
+        pintar();
+        const nuevo = rootEl.querySelector(`.ic-vac-btn[data-vac="${S.vac}"]`); if (nuevo) nuevo.focus();
+        anunciar(`${nombreVac()}.`);
+      };
+    });
+
     const sm = $("#icSinMov");
     if (sm) {
       sm.onchange = () => {
         // Al activar «sin movimiento» se recuerda lo escrito para no perderlo si se desactiva
         if (sm.checked) {
           const borr = {};
-          rubros().forEach(rb => { const i = rootEl.querySelector(`#ic_${rb.id}`); if (i && i.value !== "") borr[rb.id] = i.value; });
+          rootEl.querySelectorAll("input[data-rubro]").forEach(i => { if (i.value !== "") borr[i.dataset.rubro] = i.value; });
           S.borrador = { fecha: S.fecha, v: borr };
         }
         S.reabierto = { fecha: S.fecha, valor: sm.checked };
@@ -422,7 +563,14 @@
 
     const rep = reporteDe(f);
     const { v } = recalcular();
-    if (!S.sinMov) {
+    if (esCovid()) {
+      if (!S.sinMov) {
+        const acum = {};
+        CC().RUBROS.forEach(r => { acum[r] = acumuladoCovid(r); });
+        const val = CC().validar(v, S.covid.metas, acum, rep ? rep.valores : {});
+        if (val.error) errores.push({ msg: val.error, el: rootEl.querySelector("input[data-marca]:not(:disabled)") });
+      }
+    } else if (!S.sinMov) {
       rubros().forEach(rb => {
         const inp = rootEl.querySelector(`#ic_${rb.id}`);
         const nombreRubro = `${rb.grupo} ${rb.edad}`;
@@ -448,7 +596,8 @@
     try {
       const db = cfg.getClient();
       const p = cfg.getProfile();
-      const { data: prev, error: e0 } = await db.from("influenza_capturas").select("valores, historial_ediciones").eq("clues", p.clues).eq("fecha", f).maybeSingle();
+      const tabla = esCovid() ? "covid_capturas" : "influenza_capturas";
+      const { data: prev, error: e0 } = await db.from(tabla).select("valores, historial_ediciones").eq("clues", p.clues).eq("fecha", f).maybeSingle();
       if (e0) throw e0;
       let hist = [];
       if (prev && prev.historial_ediciones) hist = typeof prev.historial_ediciones === "string" ? JSON.parse(prev.historial_ediciones) : prev.historial_ediciones;
@@ -471,7 +620,7 @@
         sin_movimiento: !!S.sinMov,
         updated_at: new Date().toISOString()
       };
-      const { data: guardado, error } = await db.from("influenza_capturas").upsert(registro, { onConflict: "clues,fecha" }).select("folio").maybeSingle();
+      const { data: guardado, error } = await db.from(tabla).upsert(registro, { onConflict: "clues,fecha" }).select("folio").maybeSingle();
       if (error) throw error;
       try { localStorage.setItem(`inf_nombre_${p.clues}`, nombre); } catch (_) { /* sin almacenamiento */ }
       await cargarUnidad();
@@ -479,11 +628,11 @@
       S.sinMov = null;
       S.borrador = null;
       const guardadoRep = reporteDe(f);
-      const dosis = Object.values(v).reduce((a, x) => a + x, 0);
+      const dosis = esCovid() ? CC().totalDosis(v) : Object.values(v).reduce((a, x) => a + x, 0);
       const mt = metaTotal();
-      const aplicadas = S.capturas.reduce((a, r) => a + totalReporte(r), 0);
+      const aplicadas = caps().reduce((a, r) => a + totalReporte(r), 0);
       const folio = (guardado && guardado.folio) || folioDe(guardadoRep);
-      cfg.toast(`Reporte guardado · folio ${folio}`, "success");
+      cfg.toast(`Reporte de ${nombreVac()} guardado · folio ${folio}`, "success");
       pintar({ exito: { folio, dosis, avance: mt > 0 ? Math.round((aplicadas / mt) * 100) : null } });
     } catch (e) {
       mostrarError([{ msg: "No se pudo guardar: " + (e.message || e) + ". Revisa tu conexión e inténtalo de nuevo." }]);
@@ -573,7 +722,7 @@
       save.style.color = bloqueado ? "#475569" : "";
       save.style.pointerEvents = bloqueado ? "none" : "";
       const cuenta = t.sinMov ? "sin movimiento" : `${t.esta} dosis esta semana`;
-      const label = !est.editable ? "Guardar reporte de Influenza: la semana aún no se puede capturar" : `${rep ? "Actualizar" : "Guardar"} reporte de Influenza, ${cuenta}`;
+      const label = !est.editable ? `Guardar reporte de ${nombreVac()}: la semana aún no se puede capturar` : `${rep ? "Actualizar" : "Guardar"} reporte de ${nombreVac()}, ${cuenta}`;
       save.setAttribute("aria-label", label);
       save.title = label;
     }
@@ -606,9 +755,11 @@
       return;
     }
     if (S && S.listo) { pintar(); return; }
+    const vacPrevia = S && S.vac;
     rootEl.innerHTML = `<div class="ic-wrap"><p class="ic-vacio" role="status">Cargando…</p></div>`;
     try {
       S = S || {};
+      S.vac = vacPrevia || "INFLUENZA";
       await cargarBase();
       await cargarUnidad();
       let nombre = "";

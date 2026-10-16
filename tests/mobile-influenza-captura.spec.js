@@ -11,7 +11,7 @@ const creaServidor = new Function(srcDock.slice(srcDock.indexOf('function creaSe
 
 const CAMP = 'Campaña Influenza 2026-2027';
 
-function estado({ rol = 'UNIDAD', metas = { r1: 100, r2: 12, r6: 40, r11: 20 }, capturas } = {}) {
+function estado({ rol = 'UNIDAD', metas = { r1: 100, r2: 12, r6: 40, r11: 20 }, capturas, covid = false } = {}) {
   return {
     db: {
       perfiles: [{ id: 'u1', usuario: 'ana', nombre: 'Ana Perez', rol, clues: 'QTSSA000001', unidad: 'CENTRO A', municipio: 'QUERETARO', activo: 'SI' }],
@@ -23,6 +23,14 @@ function estado({ rol = 'UNIDAD', metas = { r1: 100, r2: 12, r6: 40, r11: 20 }, 
     },
     rpc: {}
   };
+}
+
+function estadoCovid() {
+  const st = estado();
+  st.db.covid_metas = [{ clues: 'QTSSA000001', municipio: 'QUERETARO', anio_campana: CAMP, metas: { c1: 20, c3: 50, c4: 100 } }];
+  st.db.covid_capturas = [{ clues: 'QTSSA000001', unidad: 'CENTRO A', municipio: 'QUERETARO', fecha: '2026-10-09', anio_campana: CAMP,
+    valores: { MODERNA: { c3: 10, c4: 30 }, PFIZER: { c4: 20 } }, capturado_por: 'ANA', editado_por: 'UNIDAD', historial_ediciones: [], folio: 'COV-20261009-AAAA1111' }];
+  return st;
 }
 
 async function abrir(page, st, ahora = '2026-10-14T12:00:00') {
@@ -147,6 +155,47 @@ test.describe('Influenza: captura de la unidad en móvil', () => {
     const fila = Array.isArray(post.body) ? post.body[0] : post.body;
     expect(fila.sin_movimiento).toBe(true);
     expect(Object.values(fila.valores).every(v => v === 0)).toBe(true);
+  });
+
+  test('sin meta de COVID-19 no aparece el selector de vacuna', async ({ page }) => {
+    await abrir(page, estado());
+    await page.click('#dockItemINFC');
+    await expect(page.locator('.ic-vac')).toHaveCount(0);
+  });
+
+  test('COVID-19: selector, Moderna y Pfizer por grupo, meta compartida y guardado en covid_capturas', async ({ page }) => {
+    const { srv, errores } = await abrir(page, estadoCovid());
+    await page.click('#dockItemINFC');
+    await expect(page.locator('.ic-vac')).toBeVisible();
+    await page.click('.ic-vac-btn[data-vac="COVID"]');
+    await expect(page.locator('#icTitulo')).toHaveText('COVID-19');
+    // Solo los grupos con meta; Pfizer no aplica a 6 a 59 meses
+    await expect(page.locator('.ic-grupo .ic-rubro')).toHaveCount(3);
+    await expect(page.locator('#ic_cv_MODERNA_c1')).toBeVisible();
+    await expect(page.locator('#ic_cv_PFIZER_c1')).toHaveCount(0);
+    await expect(page.locator('#icMeta')).toHaveText('170');
+    await expect(page.locator('#icAplicadas')).toHaveText('60');                  // 10 + 30 + 20 de la semana anterior
+    await expect(page.locator('#icf_cv_c4')).toHaveText('Faltan 50');
+    await page.fill('#ic_cv_MODERNA_c4', '20');
+    await page.fill('#ic_cv_PFIZER_c4', '10');
+    await expect(page.locator('#icf_cv_c4')).toHaveText('Faltan 20');            // las dos marcas suman: 50 + 30
+    await expect(page.locator('#hubCounter .hub-counter-num')).toHaveText('30');
+    // Se pasa de la meta sumando ambas marcas
+    await page.fill('#ic_cv_MODERNA_c4', '45');
+    await page.fill('#ic_cv_PFIZER_c4', '10');
+    await page.click('#hubSaveBtn');
+    await expect(page.locator('#icError')).toContainText('supera la meta');
+    expect(srv.reqs.filter(r => r.nombre === 'covid_capturas' && r.m === 'POST')).toHaveLength(0);
+    await page.fill('#ic_cv_MODERNA_c4', '20');
+    await page.click('#hubSaveBtn');
+    await expect(page.locator('#icExito')).toBeVisible();
+    const post = srv.reqs.find(r => r.nombre === 'covid_capturas' && r.m === 'POST');
+    const fila = Array.isArray(post.body) ? post.body[0] : post.body;
+    expect(fila).toMatchObject({ clues: 'QTSSA000001', fecha: '2026-10-16', anio_campana: CAMP, editado_por: 'UNIDAD', sin_movimiento: false });
+    expect(fila.valores.MODERNA.c4).toBe(20);
+    expect(fila.valores.PFIZER.c4).toBe(10);
+    expect(srv.reqs.filter(r => r.nombre === 'influenza_capturas' && r.m === 'POST')).toHaveLength(0);
+    expect(errores).toEqual([]);
   });
 
   test('unidad sin meta: avisa y solo permite sin movimiento', async ({ page }) => {
