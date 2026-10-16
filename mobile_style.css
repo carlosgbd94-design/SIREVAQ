@@ -1673,7 +1673,6 @@ html.dark #panelINFC .ic-vac { background: #334155; }
 /* Encabezados de panel (titulo + interruptor «Sin movimiento»): se parten en dos lineas en vez de
    ensanchar la pagina. Una pagina mas ancha que la pantalla desplaza la barra de paneles y el boton
    de guardar (estan fijos al viewport) y recorta los controles de la derecha. */
-html, body { overflow-x: clip; }
 .panel-section > .flex.items-center.justify-between.mb-6 { flex-wrap: wrap; gap: 10px 12px; }
 .panel-section > .flex.items-center.justify-between.mb-6 > h2 { min-width: 0; }
 .dock-item .dock-label { text-overflow: clip; }
