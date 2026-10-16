@@ -220,7 +220,7 @@ html.dark .command-hub button {
   bottom: calc(14px + env(safe-area-inset-bottom, 0px) + var(--vv-bottom, 0px));
   display: flex;
   justify-content: center;
-  padding: 0 10px;
+  padding: 0 6px;
   z-index: 100;
   pointer-events: none;
   transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.25, 1), opacity 0.2s ease;
@@ -297,13 +297,13 @@ html.dark .dock-indicator {
 }
 
 .dock-item .dock-label {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700; /* mismo peso activo/inactivo: el texto no cambia de ancho al seleccionar */
   line-height: 1.15;
   letter-spacing: -0.01em;
   max-width: 100%;
   text-align: center;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .dock-item.active {
@@ -1668,7 +1668,6 @@ html.dark #panelINFC .ic-vac { background: #334155; }
 /* Accesibilidad: el contenido deja espacio al botón de guardar y a la barra de paneles, y el
    contenido largo nunca queda detrás de ellos. */
 #captureContentArea { padding-bottom: calc(210px + env(safe-area-inset-bottom, 0px)); }
-.command-hub .status-chip-v5 { width: auto !important; max-width: 96px !important; }
 #panelINFC .ic-sel select { font-size: 14px; padding: 0 28px 0 10px; text-overflow: ellipsis; }
 
 /* Encabezados de panel (titulo + interruptor «Sin movimiento»): se parten en dos lineas en vez de
@@ -1678,3 +1677,32 @@ html, body { overflow-x: clip; }
 .panel-section > .flex.items-center.justify-between.mb-6 { flex-wrap: wrap; gap: 10px 12px; }
 .panel-section > .flex.items-center.justify-between.mb-6 > h2 { min-width: 0; }
 .dock-item .dock-label { text-overflow: clip; }
+/* space-y-8 sumaba 2rem de margen al panel visible por los paneles ocultos que lo preceden */
+#captureContentArea > .panel-section { margin-top: 0 !important; }
+
+/* Barra de acciones: estado + contador + guardar en UNA fila sobre la barra de paneles. Antes eran
+   tres piezas apiladas a la derecha que tapaban el texto de las tarjetas. */
+.command-hub {
+  left: calc(14px + var(--vv-left, 0px)) !important;
+  right: calc(14px + var(--vv-right, 0px)) !important;
+  bottom: calc(94px + env(safe-area-inset-bottom, 0px) + var(--vv-bottom, 0px)) !important;
+  width: auto !important;
+  flex-direction: row !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 6px 6px 6px 12px !important;
+  border-radius: 999px !important;
+  background: var(--oui-glass-strong, rgba(255,255,255,.92)) !important;
+  border: 1px solid var(--oui-glass-border, rgba(15,23,42,.12)) !important;
+  box-shadow: 0 6px 20px rgba(20, 30, 50, 0.12) !important;
+  -webkit-backdrop-filter: var(--oui-glass-blur) !important;
+  backdrop-filter: var(--oui-glass-blur) !important;
+}
+.command-hub .status-chip-v5 { flex-direction: row !important; width: auto !important; max-width: none !important; margin-right: auto !important; padding: 6px 12px !important; border-radius: 999px !important; font-size: 11px !important; }
+.command-hub .hub-counter { flex-direction: row; gap: 6px; padding: 4px 12px; min-width: 0; border-radius: 999px; align-items: baseline; }
+.command-hub button { width: 48px !important; height: 48px !important; }
+#captureContentArea { padding-bottom: calc(230px + env(safe-area-inset-bottom, 0px)); }
+#panelINFC .ic-semana { grid-template-columns: 44px 1fr 44px; gap: 6px; }
+#panelINFC .ic-nav { height: 48px; }
+#panelINFC .ic-sel select { height: 48px; font-size: 13px; padding: 0 22px 0 8px; }

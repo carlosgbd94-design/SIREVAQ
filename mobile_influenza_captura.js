@@ -127,7 +127,7 @@
   function etiquetaSemana(w) {
     const est = estadoSemana(w.fecha);
     const marca = est.id === "guardado" ? "✓ " : est.id === "pendiente" ? "• " : "";
-    return `${marca}Semana ${isoWeek(w.fecha)} (${w.corte ? "corte de mes: " : ""}${rangoTexto(w.fecha)})`;
+    return `${marca}Sem. ${isoWeek(w.fecha)} · ${w.corte ? "corte: " : ""}${rangoTexto(w.fecha)}`;
   }
   function folioDe(r) {
     if (!r) return "";
