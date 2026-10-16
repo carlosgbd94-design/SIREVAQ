@@ -189,7 +189,7 @@
     rootEl.innerHTML = `
       <div class="iv-wrap" id="ivLista">
         <div class="iv-titulo">
-          <h2 id="ivTitulo" tabindex="-1">Influenza: validar reportes</h2>
+          <h2 id="ivTitulo" tabindex="-1">Temporada invernal: validar reportes</h2>
           <p>Revisa lo que capturó cada unidad, valida o corrige las cifras.</p>
         </div>
         <div class="iv-filtros">

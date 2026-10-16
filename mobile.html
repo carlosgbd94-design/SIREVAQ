@@ -39,7 +39,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1" rel="stylesheet">
 
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="mobile_style.css?v=2026.46">
+  <link rel="stylesheet" href="mobile_style.css?v=2026.47">
   <link rel="stylesheet" href="ayuda.css?v=1">
   <link rel="stylesheet" href="mobile_supervision.css?v=8">
 </head>
@@ -338,12 +338,12 @@
 
       <!-- ==================== PINOL (PINOL) ==================== -->
       <!-- ==================== INFLUENZA: CAPTURA SEMANAL (unidad) ==================== -->
-      <section id="panelINFC" class="panel-section hidden" role="region" aria-label="Captura de Influenza">
+      <section id="panelINFC" class="panel-section hidden" role="region" aria-label="Captura de Temporada invernal">
         <div id="infCapRoot"><p class="ic-vacio" role="status">Cargando…</p></div>
       </section>
 
       <!-- ==================== INFLUENZA: VALIDACIÓN (supervisión) ==================== -->
-      <section id="panelINF" class="panel-section hidden" role="region" aria-label="Validación de Influenza">
+      <section id="panelINF" class="panel-section hidden" role="region" aria-label="Validación de Temporada invernal">
         <div id="infValRoot"><p class="iv-cargando" role="status">Cargando…</p></div>
       </section>
 
@@ -447,13 +447,13 @@
           <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
           <span class="dock-label">Pinol</span>
         </button>
-        <button class="dock-item" hidden id="dockItemINFC" data-panel="INFC" type="button" style="--hoja:#7c3aed;">
+        <button class="dock-item" hidden id="dockItemINFC" data-panel="INFC" type="button" aria-label="Temporada invernal" style="--hoja:#7c3aed;">
           <span class="material-symbols-rounded" aria-hidden="true">ac_unit</span>
-          <span class="dock-label">Influenza</span>
+          <span class="dock-label">Temporada</span>
         </button>
-        <button class="dock-item" hidden id="dockItemINF" data-panel="INF" type="button" style="--hoja:#6d28d9;">
+        <button class="dock-item" hidden id="dockItemINF" data-panel="INF" type="button" aria-label="Temporada invernal" style="--hoja:#6d28d9;">
           <span class="material-symbols-rounded" aria-hidden="true">fact_check</span>
-          <span class="dock-label">Influenza</span>
+          <span class="dock-label">Temporada</span>
         </button>
       </div>
     </div>
@@ -807,10 +807,10 @@
 <script defer src="a11y_global.js?v=6"></script>
   <script src="influenza_reglas.js?v=1" defer></script>
   <script src="influenza_rubros.js?v=1" defer></script>
-  <script src="mobile_influenza_validacion.js?v=2" defer></script>
+  <script src="mobile_influenza_validacion.js?v=3" defer></script>
   <script src="covid_captura.js?v=1" defer></script>
-  <script src="mobile_influenza_captura.js?v=5" defer></script>
-  <script src="mobile_supervision.js?v=6" defer></script>
+  <script src="mobile_influenza_captura.js?v=6" defer></script>
+  <script src="mobile_supervision.js?v=7" defer></script>
   <script src="mobile_supervision_ops.js?v=3" defer></script>
   <script src="mobile_supervision_rda.js?v=2" defer></script>
   <script src="mobile_main.js?v=2026.45" defer></script>

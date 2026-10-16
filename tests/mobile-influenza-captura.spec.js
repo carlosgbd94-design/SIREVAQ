@@ -168,7 +168,8 @@ test.describe('Influenza: captura de la unidad en móvil', () => {
     await page.click('#dockItemINFC');
     await expect(page.locator('.ic-vac')).toBeVisible();
     await page.click('.ic-vac-btn[data-vac="COVID"]');
-    await expect(page.locator('#icTitulo')).toHaveText('COVID-19');
+    await expect(page.locator('#icTitulo')).toHaveText('Temporada invernal');
+    await expect(page.locator('.ic-titulo p')).toContainText('COVID-19');
     // Solo los grupos con meta; Pfizer no aplica a 6 a 59 meses
     await expect(page.locator('.ic-grupo .ic-rubro')).toHaveCount(3);
     await expect(page.locator('#ic_cv_MODERNA_c1')).toBeVisible();

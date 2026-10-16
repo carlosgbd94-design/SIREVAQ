@@ -14,7 +14,7 @@
   // Cada módulo: icono, etiqueta, color de la barra y a qué roles aplica.
   const MOD = {
     RES: { icon: "dashboard", label: "Resumen", hoja: "#0284c7" },
-    INF: { icon: "clinical_notes", label: "Influenza", hoja: "#6d28d9" },
+    INF: { icon: "clinical_notes", label: "Temporada", hoja: "#6d28d9" },
     AVI: { icon: "campaign", label: "Avisos", hoja: "#d97706" },
     CAL: { icon: "event", label: "Calendario", hoja: "#059669" },
     MAS: { icon: "apps", label: "Más", hoja: "#475569" }

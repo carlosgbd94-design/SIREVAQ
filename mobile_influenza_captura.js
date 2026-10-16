@@ -253,8 +253,8 @@
     rootEl.innerHTML = `
       <div class="ic-wrap">
         <div class="ic-titulo">
-          <h2 id="icTitulo" tabindex="-1">${nombreVac()}</h2>
-          <p>Reporte semanal de dosis aplicadas en tu unidad.</p>
+          <h2 id="icTitulo" tabindex="-1">Temporada invernal</h2>
+          <p>Reporte semanal de dosis de ${nombreVac()} aplicadas en tu unidad.</p>
         </div>
         ${hayCovid() ? `<div class="ic-vac" role="group" aria-label="Vacuna a reportar">
           <button type="button" class="ic-vac-btn" data-vac="INFLUENZA" aria-pressed="${!esCovid()}">Influenza</button>
