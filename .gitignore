@@ -20,3 +20,10 @@ test-results/
 ARREGLO_RED_SUPABASE/
 PRUEBAS_EXPORTACION/
 SEPTIEMBRE/
+
+# Archivos locales que no forman parte de la pagina
+Formatos/FORMATOS_TEMPORADA_INVERNAL_2026-2027.xlsx
+Formatos/PLANTILLA META COVID 2026.xlsx
+Formatos/REPORTE_DIARIO_APLICACIONES_2026-2027.xlsx
+demo_movil_perfiles.html
+dist-extension/
