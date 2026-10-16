@@ -97,7 +97,7 @@ html.dark .sv-pill.falta { background: rgba(245,158,11,.22); color: #fcd34d; }
 .sv-chips--scroll .sv-chip { flex: none; }
 
 .sv-kpis { display: flex; flex-direction: column; gap: 10px; }
-.sv-kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 20px; padding: 14px 16px; }
+.sv-kpi { background: #fff; color: #0f172a; border: 1px solid #e2e8f0; border-radius: 20px; padding: 14px 16px; }
 .sv-kpi-cab { display: flex; align-items: center; gap: 8px; }
 .sv-kpi-cab .material-symbols-rounded { font-size: 22px; color: #0284c7; }
 .sv-kpi-cab b { flex: 1; font-size: 13px; }
@@ -130,7 +130,7 @@ html.dark .sv-pill.falta { background: rgba(245,158,11,.22); color: #fcd34d; }
 .sv-mes-btn { width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; display: grid; place-items: center; color: var(--text-primary, #0f172a); cursor: pointer; }
 .sv-mes-btn:disabled { opacity: .3; cursor: default; }
 
-html.dark .sv-kpi, html.dark .sv-mes { background: #1f2229; border-color: rgba(255,255,255,.1); }
+html.dark .sv-kpi, html.dark .sv-mes { background: #1f2229; color: #f1f5f9; border-color: rgba(255,255,255,.1); }
 html.dark .sv-mas > li { border-color: rgba(255,255,255,.1); }
 html.dark .sv-met-chips span { background: rgba(255,255,255,.08); color: #cbd5e1; }
 html.dark .sv-met-chips span.ok, html.dark .sv-pill--ok, html.dark .sv-mini--ok { background: rgba(22,163,74,.22); color: #86efac; }

@@ -112,6 +112,11 @@
   }
   function enAlcance(u) {
     const r = rol();
+    // UNIDAD: solo su propia unidad (los indicadores de la unidad filtran por CLUES)
+    if (r === "UNIDAD") {
+      const mia = String((cfg.getProfile() || {}).clues || "").trim().toUpperCase();
+      return !!mia && String(u.clues || "").trim().toUpperCase() === mia;
+    }
     if (r === "CARAVANAS") return esCaravana(u);
     if (r === "MUNICIPAL") {
       const ok = municipiosPermitidos();
@@ -320,8 +325,8 @@
   function irA(panelId) {
     if (cfg && typeof cfg.irA === "function") cfg.irA(panelId);
   }
-  const encabezadoSub = (titulo) => `<div class="sv-sub"><button type="button" class="sv-back" data-back aria-label="Volver a Más"><span class="material-symbols-rounded" aria-hidden="true">arrow_back</span></button><h2>${esc(titulo)}</h2></div>`;
-  function enlazarVolver(root) { root.querySelectorAll("[data-back]").forEach((b) => { b.onclick = () => irA("MAS"); }); }
+  const encabezadoSub = (titulo) => `<div class="sv-sub"><button type="button" class="sv-back" data-back aria-label="${rol() === "UNIDAD" ? "Volver a la captura" : "Volver a Más"}"><span class="material-symbols-rounded" aria-hidden="true">arrow_back</span></button><h2>${esc(titulo)}</h2></div>`;
+  function enlazarVolver(root) { root.querySelectorAll("[data-back]").forEach((b) => { b.onclick = () => irA(rol() === "UNIDAD" && cfg && cfg.volver ? cfg.volver() : "MAS"); }); }
 
   const MESES_LARGO = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
   const nf = (n) => Number(n || 0).toLocaleString("es-MX");
@@ -566,6 +571,8 @@
   global.MobileSupervision = {
     init,
     puedeUsar,
+    // Indicadores de la propia unidad (perfil UNIDAD): reutiliza el panel RDA acotado a su CLUES
+    puedeIndicadoresUnidad: () => !!cfg && rol() === "UNIDAD" && !!String((cfg.getProfile() || {}).clues || "").trim(),
     activo: () => document.body.classList.contains("sup-mode"),
     mostrar,
     panelInicial: () => "RES",

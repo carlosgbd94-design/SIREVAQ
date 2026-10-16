@@ -39,9 +39,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1" rel="stylesheet">
 
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="mobile_style.css?v=2026.59">
+  <link rel="stylesheet" href="mobile_style.css?v=2026.60">
   <link rel="stylesheet" href="ayuda.css?v=1">
-  <link rel="stylesheet" href="mobile_supervision.css?v=10">
+  <link rel="stylesheet" href="mobile_supervision.css?v=11">
 </head>
 <body class="bg-[#f1f4f8] text-slate-800 min-h-[100dvh] flex flex-col relative overflow-x-hidden">
 
@@ -192,6 +192,12 @@
           <span id="lblCumplimientoRango" class="logro-rango" hidden></span>
         </div>
       </div>
+      <!-- Solo perfil UNIDAD: indicadores de la propia unidad -->
+      <button type="button" id="btnMisIndicadores" class="mis-indicadores liquid-glass" hidden>
+        <span class="material-symbols-rounded" aria-hidden="true">monitoring</span>
+        <span class="mis-indicadores-txt"><b>Mis indicadores</b><small>Cobertura y dosis aplicadas de tu unidad</small></span>
+        <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+      </button>
     </section>
 
     <!-- 📲 Área de Contenido de Formularios -->
@@ -810,9 +816,9 @@
   <script src="mobile_influenza_validacion.js?v=3" defer></script>
   <script src="covid_captura.js?v=1" defer></script>
   <script src="mobile_influenza_captura.js?v=8" defer></script>
-  <script src="mobile_supervision.js?v=7" defer></script>
+  <script src="mobile_supervision.js?v=8" defer></script>
   <script src="mobile_supervision_ops.js?v=3" defer></script>
-  <script src="mobile_supervision_rda.js?v=2" defer></script>
-  <script src="mobile_main.js?v=2026.48" defer></script>
+  <script src="mobile_supervision_rda.js?v=3" defer></script>
+  <script src="mobile_main.js?v=2026.49" defer></script>
 </body>
 </html>

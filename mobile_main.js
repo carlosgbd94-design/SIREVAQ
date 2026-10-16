@@ -432,8 +432,16 @@
                 getClient: () => supabaseClient,
                 getProfile: () => currentProfile,
                 toast: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'success'),
-                irA: (id) => switchPanel(id)
+                irA: (id) => switchPanel(id),
+                volver: () => ultimoPanelCaptura
             });
+        }
+        // Perfil UNIDAD: acceso a los indicadores de su propia unidad
+        const btnInd = document.getElementById('btnMisIndicadores');
+        if (btnInd) {
+            const puede = !!(window.MobileSupervision && window.MobileSupervision.puedeIndicadoresUnidad && window.MobileSupervision.puedeIndicadoresUnidad());
+            btnInd.hidden = !puede;
+            btnInd.onclick = () => switchPanel('RDA');
         }
 
         switchPanel(window.MobileSupervision && window.MobileSupervision.activo() ? 'RES' : 'SR');
@@ -2600,9 +2608,12 @@
         }
     };
 
+    // Último panel de captura abierto: a él regresa «Indicadores» (perfil UNIDAD)
+    let ultimoPanelCaptura = 'SR';
     const switchPanel = (panelId) => {
         const changed = activePanel !== panelId;
         activePanel = panelId;
+        if (panelId !== 'RDA') ultimoPanelCaptura = panelId;
         
         document.querySelectorAll('.panel-section').forEach(sec => sec.classList.add('hidden'));
         document.getElementById(`panel${panelId}`)?.classList.remove('hidden');
@@ -2619,6 +2630,13 @@
 
         // Cada panel abre desde arriba (antes quedaba a media página del panel anterior).
         if (changed) window.scrollTo({ top: 0, behavior: 'auto' });
+
+        // Indicadores de la unidad (perfil UNIDAD): panel propio, sin hub de guardado
+        if (panelId === 'RDA' && window.MobileSupervision && !window.MobileSupervision.activo()) {
+            document.getElementById('globalCommandHub')?.classList.remove('visible');
+            window.MobileSupervision.mostrar('RDA');
+            return;
+        }
 
         // Supervisión: paneles propios (sin hub de guardado ni candados de captura)
         if (window.MobileSupervision && window.MobileSupervision.activo()) {

@@ -35,6 +35,7 @@
     { label: "SRP", steps: [["srp_1", "Dosis 1"], ["srp_2", "Dosis 2"]] }
   ];
 
+  const esUnidad = () => A.rol() === "UNIDAD";
   const estadoCob = (v) => (v >= 95 ? "ok" : v >= 75 ? "reg" : "mal");
   const textoEstado = { ok: "Óptimo", reg: "Regular", mal: "Crítico" };
 
@@ -116,7 +117,7 @@
       if (id === "desercion") {
         const { data, error } = await db().rpc("get_rda_abandono_esquema", { p_anio: S.anio, p_max_mes: S.maxMes });
         if (error) throw error;
-        S.extra[id] = { ok: true, filas: (data || []).filter((r) => A.enAlcance({ unidad: r.nombre || r.unidad, municipio: r.municipio })) };
+        S.extra[id] = { ok: true, filas: (data || []).filter((r) => A.enAlcance({ clues: r.clues, unidad: r.nombre || r.unidad, municipio: r.municipio })) };
       } else if (id === "comparativa") {
         const d = db();
         const [a, b] = await Promise.all([
@@ -159,7 +160,7 @@
     if (S.cargando) cuerpo = cargandoHtml("Calculando indicadores…");
     else if (S.error) cuerpo = `<p class="sv-vacio" role="alert">${esc(S.error)}</p><button type="button" class="sv-btn" id="svRdaRe">Reintentar</button>`;
     else cuerpo = cuerpoEsquema();
-    const chips = ESQUEMAS.map((e) => `<button type="button" class="sv-chip sv-chip--sm${e.id === S.esquema ? " activo" : ""}" data-esq="${e.id}" aria-pressed="${e.id === S.esquema}">${esc(e.label)}</button>`).join("");
+    const chips = ESQUEMAS.filter((e) => !(esUnidad() && e.id === "influenza")).map((e) => `<button type="button" class="sv-chip sv-chip--sm${e.id === S.esquema ? " activo" : ""}" data-esq="${e.id}" aria-pressed="${e.id === S.esquema}">${esc(e.label)}</button>`).join("");
     root.innerHTML = A.encabezadoSub("Indicadores RDA") + `<div class="sv-chips sv-chips--scroll" role="group" aria-label="Esquema">${chips}</div>` + cuerpo;
     A.enlazarVolver(root);
     root.querySelectorAll("[data-esq]").forEach((b) => { b.onclick = () => { S.esquema = b.dataset.esq; pintar(); cargarEsquema(S.esquema, false); }; });
@@ -184,6 +185,9 @@
 
   function cuerpoEsquema() {
     const id = S.esquema;
+    if (esUnidad() && !S.filas.length && !["desercion", "comparativa"].includes(id)) {
+      return `<p class="sv-vacio" role="status">Tu unidad aún no tiene registro en el RDA de este año. Cuando se cargue el RDA del mes verás aquí tus indicadores.</p>`;
+    }
     if (id === "basico") return htmlBasico();
     if (id === "desercion") return htmlDesercion();
     if (id === "comparativa") return htmlComparativa();
@@ -206,8 +210,8 @@
     const ranking = usadas.map((u) => ({ u, a: cobertura([u], S.maxMes) })).sort((x, y) => x.a.c1 - y.a.c1 || String(x.u.unidad).localeCompare(String(y.u.unidad), "es"));
     return `${corteHtml()}${chipsMunicipio()}
       <div class="sv-kpis">${tarjeta("Menores de 1 año", "child_care", a.c1, a.d1, a.pob1)}${tarjeta("1 año", "face", a.c2, a.d2, a.pob2)}${tarjeta("4 años", "school", a.c4, a.d4, a.pob4)}</div>
-      <p class="sv-sec">Por unidad · de menor a mayor avance</p>
-      ${ranking.length ? `<ul class="sv-lista">${ranking.map((x) => `<li class="sv-unidad sv-unidad--rda">
+      ${esUnidad() ? "" : `<p class="sv-sec">Por unidad · de menor a mayor avance</p>`}
+      ${esUnidad() ? "" : ranking.length ? `<ul class="sv-lista">${ranking.map((x) => `<li class="sv-unidad sv-unidad--rda">
         <div class="sv-u-txt"><b>${esc(x.u.unidad)}</b><small>${esc(x.u.municipio || "")}</small></div>
         <div class="sv-mini" role="img" aria-label="Cobertura: menores de 1 año ${x.a.c1}%, 1 año ${x.a.c2}%, 4 años ${x.a.c4}%">
           <span class="sv-mini-i sv-mini--${estadoCob(x.a.c1)}"><em>&lt;1</em>${Math.round(x.a.c1)}%</span>
@@ -230,8 +234,8 @@
           <div class="sv-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(p)}" aria-label="${esc(x.n)}"><i style="width:${p}%"></i></div>
           <small class="sv-kpi-sub">${p}% de las dosis de este esquema</small></div>`;
       }).join("")}</div>
-      <p class="sv-sec">Por unidad · de mayor a menor</p>
-      ${ranking.length ? `<ul class="sv-lista">${ranking.map((x) => `<li class="sv-unidad">
+      ${esUnidad() ? "" : `<p class="sv-sec">Por unidad · de mayor a menor</p>`}
+      ${esUnidad() ? "" : ranking.length ? `<ul class="sv-lista">${ranking.map((x) => `<li class="sv-unidad">
         <div class="sv-u-txt"><b>${esc(x.u.unidad)}</b><small>${esc(x.u.municipio || "")}</small></div><span class="sv-pill sv-pill--ok">${nf(x.t)}</span></li>`).join("")}</ul>`
         : `<p class="sv-vacio">Sin unidades en tu alcance.</p>`}
       ${notaSinRda()}`;

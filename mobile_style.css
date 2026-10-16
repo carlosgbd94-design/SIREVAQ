@@ -1703,3 +1703,16 @@ html.dark .dock-container { background: rgba(28, 30, 36, 0.94); }
 .sr-apertura-badge[role="button"] { min-height: 44px; display: flex; align-items: center; }
 
 html.dark .swipe-content .text-slate-500, html.dark .swipe-content .text-slate-400 { color: #cbd5e1 !important; }
+
+/* Perfil UNIDAD: acceso a los indicadores de la unidad (ocupa las dos columnas del resumen) */
+.mis-indicadores { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 10px 14px; border-radius: 18px; text-align: left; color: #0f172a; cursor: pointer; border: 0; }
+.mis-indicadores[hidden] { display: none !important; }
+.mis-indicadores > .material-symbols-rounded { font-size: 24px !important; color: #0369a1; flex: none; }
+.mis-indicadores > .material-symbols-rounded:last-child { color: #475569; }
+.mis-indicadores-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mis-indicadores-txt b { font-size: 14px; font-weight: 800; }
+.mis-indicadores-txt small { font-size: 12px; font-weight: 600; color: #475569; }
+.mis-indicadores:focus-visible { outline: 3px solid #0284c7; outline-offset: 2px; }
+html.dark .mis-indicadores { color: #f1f5f9; }
+html.dark .mis-indicadores > .material-symbols-rounded { color: #7dd3fc; }
+html.dark .mis-indicadores-txt small, html.dark .mis-indicadores > .material-symbols-rounded:last-child { color: #cbd5e1; }
