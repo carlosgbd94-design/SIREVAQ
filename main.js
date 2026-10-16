@@ -14461,6 +14461,7 @@ window.generateWhatsAppTemplate = function () {
   if (window.currentTipoWhatsApp === "BIO") tipoTexto = "PEDIDO DE BIOLÓGICO";
   else if (window.currentTipoWhatsApp === "CONS") tipoTexto = "CONSUMIBLES";
   else if (window.currentTipoWhatsApp === "SR") tipoTexto = "EXISTENCIA DE BIOLÓGICO";
+  else if (window.currentTipoWhatsApp === "INF") tipoTexto = "REPORTE DE INFLUENZA";
 
   let listado = "";
   const sortedFaltantes = [...window.currentFaltantesWhatsApp].sort((a, b) => {
@@ -25557,7 +25558,8 @@ function syncCommandHub() {
 
   // Para INFLUENZA no hay modo edición/cancelación (manejo propio)
   if (captureTab === "INFLUENZA") {
-    if (hubEdit) hubEdit.style.display = "none";
+    // Influenza no bloquea los campos; «Editar» solo avisa que el reporte guardado se puede corregir (lleva a las dosis).
+    if (hubEdit) hubEdit.style.display = (isSaved && isValidDate) ? "flex" : "none";
     if (hubCancel) hubCancel.style.display = "none";
   } else {
     if (canEdit && captureTab !== "PINOL") hubEdit.style.display = "flex";
@@ -25665,6 +25667,16 @@ function syncCommandHub() {
       if (captureTab === "SR") performEditSR();
       if (captureTab === "CONS") performEditCONS();
       if (captureTab === "BIO") performEditBIO();
+      if (captureTab === "INFLUENZA") {
+        const primero = Array.from(document.querySelectorAll("#formINFLUENZA .inf-input")).find(i => !i.disabled);
+        if (primero) {
+          primero.scrollIntoView({ behavior: "smooth", block: "center" });
+          primero.focus({ preventScroll: true });
+          showToast("Corrige las dosis y presiona Guardar para actualizar tu reporte.", true, "info");
+        } else {
+          showToast("Esta semana no tiene dosis editables.", false, "warn");
+        }
+      }
     };
   }
   if (hubCancel) {
