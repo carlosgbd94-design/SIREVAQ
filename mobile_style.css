@@ -1685,3 +1685,19 @@ html.dark #panelINFC .ic-vac { background: #334155; }
 #panelINFC .ic-semana { grid-template-columns: 44px 1fr 44px; gap: 6px; }
 #panelINFC .ic-nav { height: 48px; }
 #panelINFC .ic-sel select { height: 48px; font-size: 13px; padding: 0 22px 0 8px; }
+
+/* ===== Modo oscuro: contraste de insignias y del perfil (axe: 1.2:1 a 3.3:1 antes) ===== */
+html.dark .shelf-life-danger { color: #fca5a5 !important; }
+html.dark .shelf-life-warn { color: #fcd34d !important; }
+html.dark .shelf-life-ok { color: #6ee7b7 !important; }
+html.dark .stock-val-badge.bg-slate-100 { background: rgba(148, 163, 184, 0.2) !important; color: #e2e8f0 !important; }
+html.dark .stock-val-badge.bg-red-100 { background: rgba(239, 68, 68, 0.2) !important; color: #fecaca !important; border-color: rgba(252, 165, 165, 0.4) !important; }
+html.dark .stock-val-badge.bg-amber-100 { background: rgba(245, 158, 11, 0.2) !important; color: #fde68a !important; border-color: rgba(252, 211, 77, 0.4) !important; }
+html.dark .stock-val-badge.bg-emerald-100 { background: rgba(16, 185, 129, 0.2) !important; color: #a7f3d0 !important; border-color: rgba(110, 231, 183, 0.4) !important; }
+html.dark #profileDropdown .text-slate-400 { color: #a1a1aa !important; }
+html.dark #profileDropdown .text-slate-800 { color: #f1f5f9 !important; }
+
+html.dark .dock-container { background: rgba(28, 30, 36, 0.94); }
+
+/* Insignia de apertura de frasco: es un boton, objetivo tactil de 44 px */
+.sr-apertura-badge[role="button"] { min-height: 44px; display: flex; align-items: center; }

@@ -438,6 +438,7 @@
 
         switchPanel(window.MobileSupervision && window.MobileSupervision.activo() ? 'RES' : 'SR');
         initDockBehavior();
+        initDialogosA11y();
     };
 
     const fetchProfile = async () => {
@@ -2650,6 +2651,55 @@
             applyFormLocks();
             syncCommandHub();
         }).catch(err => console.error("Error refreshing captures on panel switch:", err));
+    };
+
+
+    // =========================================================================
+    // DIÁLOGOS (accesibilidad): al abrirse un .dropdown-overlay el foco entra al diálogo, Tab no se
+    // escapa de él, Escape lo cierra y al cerrarse el foco regresa al botón que lo abrió.
+    // Se observa el cambio de clase «hidden», así sirve para todos sin tocar cada abridor.
+    // =========================================================================
+    const initDialogosA11y = () => {
+        const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+        const visibles = (el) => Array.from(el.querySelectorAll(FOCUSABLE)).filter(n => n.offsetParent !== null);
+        const abierto = () => Array.from(document.querySelectorAll('.dropdown-overlay')).find(o => !o.classList.contains('hidden'));
+        const retorno = new WeakMap();
+        document.querySelectorAll('.dropdown-overlay').forEach(ov => {
+            let estabaAbierto = !ov.classList.contains('hidden');
+            new MutationObserver(() => {
+                const ahora = !ov.classList.contains('hidden');
+                if (ahora === estabaAbierto) return;
+                estabaAbierto = ahora;
+                const card = ov.querySelector('[role="dialog"]') || ov.firstElementChild;
+                if (ahora) {
+                    retorno.set(ov, document.activeElement);
+                    setTimeout(() => {
+                        const f = visibles(card);
+                        const destino = f.find(n => n.matches('input, select, textarea')) || f[0];
+                        if (destino) destino.focus();
+                        else if (card) { card.setAttribute('tabindex', '-1'); card.focus(); }
+                    }, 60);
+                } else {
+                    const prev = retorno.get(ov);
+                    if (prev && prev.isConnected && typeof prev.focus === 'function') prev.focus();
+                }
+            }).observe(ov, { attributes: true, attributeFilter: ['class'] });
+        });
+        document.addEventListener('keydown', (e) => {
+            const ov = abierto();
+            if (!ov) return;
+            if (e.key === 'Escape') {
+                const cerrar = ov.querySelector('[data-close], [aria-label*="Cerrar" i], [aria-label*="Cancelar" i], button[id*="Cancel" i], button[id*="Close" i], button[id*="Cerrar" i]');
+                if (cerrar) cerrar.click(); else ov.classList.add('hidden');
+                e.preventDefault();
+            } else if (e.key === 'Tab') {
+                const f = visibles(ov);
+                if (!f.length) return;
+                const primero = f[0], ultimo = f[f.length - 1];
+                if (e.shiftKey && (document.activeElement === primero || !ov.contains(document.activeElement))) { ultimo.focus(); e.preventDefault(); }
+                else if (!e.shiftKey && document.activeElement === ultimo) { primero.focus(); e.preventDefault(); }
+            }
+        });
     };
 
     // Reposiciona la cápsula si cambia el ancho (rotación, teclado, fuentes) y retira la barra

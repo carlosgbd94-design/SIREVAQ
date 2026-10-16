@@ -39,7 +39,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1" rel="stylesheet">
 
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="mobile_style.css?v=2026.55">
+  <link rel="stylesheet" href="mobile_style.css?v=2026.58">
   <link rel="stylesheet" href="ayuda.css?v=1">
   <link rel="stylesheet" href="mobile_supervision.css?v=8">
 </head>
@@ -460,7 +460,7 @@
 
     <!-- 👤 DROPDOWN: PERFIL -->
     <div id="profileDropdown" class="dropdown-overlay hidden">
-      <div class="dropdown-card">
+      <div role="dialog" aria-modal="true" aria-label="Perfil y cuenta" class="dropdown-card">
         <!-- Identidad del Usuario -->
         <div class="flex items-center gap-3 border-b border-slate-100 pb-3 mb-3">
           <div class="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-lg text-slate-700">👤</div>
@@ -553,7 +553,7 @@
 
     <!-- 🔔 DROPDOWN: NOTIFICACIONES -->
     <div id="topNotifDropdown" class="dropdown-overlay hidden">
-      <div class="dropdown-card w-full max-w-sm">
+      <div role="dialog" aria-modal="true" aria-label="Avisos" class="dropdown-card w-full max-w-sm">
         <div class="flex items-center justify-between border-b border-slate-200/60 pb-3 mb-3">
           <h3 class="text-sm font-black text-slate-900">Notificaciones</h3>
           <button id="btnClearNotifs" class="text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-slate-800">Limpiar</button>
@@ -566,7 +566,7 @@
 
     <!-- 📂 DROPDOWN: ARCHIVOS -->
     <div id="archivosDropdown" class="dropdown-overlay hidden">
-      <div class="dropdown-card w-full max-w-sm">
+      <div role="dialog" aria-modal="true" aria-label="Archivos y documentos" class="dropdown-card w-full max-w-sm">
         <div class="flex items-center justify-between border-b border-slate-200/60 pb-3 mb-3">
           <h3 class="text-sm font-black text-slate-900">Archivos y Evidencias</h3>
         </div>
@@ -584,7 +584,7 @@
 
   <!-- 🛡️ MODAL ESTABLECER APERTURA BCG -->
   <div class="dropdown-overlay hidden" id="bcgAperturaOverlay">
-    <div class="dropdown-card max-w-sm relative">
+    <div role="dialog" aria-modal="true" aria-label="Apertura de frasco" class="dropdown-card max-w-sm relative">
       <button type="button" class="absolute top-4 right-4 text-slate-400 hover:text-slate-900" onclick="document.getElementById('bcgAperturaOverlay').classList.add('hidden')">
         <span class="material-symbols-rounded">close</span>
       </button>
@@ -607,7 +607,7 @@
 
   <!-- 🛡️ MODAL DIRECTORIO BCG -->
   <div class="dropdown-overlay hidden" id="bcgDirectorioOverlay">
-    <div class="dropdown-card max-w-md flex flex-col max-h-[85vh] relative w-[calc(100%-32px)]">
+    <div role="dialog" aria-modal="true" aria-label="Directorio" class="dropdown-card max-w-md flex flex-col max-h-[85vh] relative w-[calc(100%-32px)]">
       <button type="button" class="absolute top-4 right-4 text-slate-400 hover:text-slate-900" onclick="document.getElementById('bcgDirectorioOverlay').classList.add('hidden')">
         <span class="material-symbols-rounded">close</span>
       </button>
@@ -642,7 +642,7 @@
   </div>
 
   <div class="dropdown-overlay hidden" id="feedbackMobileOverlay">
-    <div class="dropdown-card max-w-md flex flex-col max-h-[85vh] relative w-[calc(100%-32px)] p-6 bg-white rounded-3xl shadow-2xl border border-slate-100">
+    <div role="dialog" aria-modal="true" aria-label="Enviar comentarios" class="dropdown-card max-w-md flex flex-col max-h-[85vh] relative w-[calc(100%-32px)] p-6 bg-white rounded-3xl shadow-2xl border border-slate-100">
       <button type="button" style="position: absolute; top: 20px; right: 20px; z-index: 10;" class="text-slate-400 hover:text-slate-900" onclick="document.getElementById('feedbackMobileOverlay').classList.add('hidden')">
         <span class="material-symbols-rounded">close</span>
       </button>
@@ -716,7 +716,7 @@
   </div>
 
   <div class="dropdown-overlay hidden" id="forgotOverlayMobile">
-    <div class="dropdown-card max-w-md flex flex-col relative w-[calc(100%-32px)] p-6 bg-white rounded-3xl shadow-2xl border border-slate-100">
+    <div role="dialog" aria-modal="true" aria-label="Recuperar contraseña" class="dropdown-card max-w-md flex flex-col relative w-[calc(100%-32px)] p-6 bg-white rounded-3xl shadow-2xl border border-slate-100">
       <button type="button" style="position: absolute; top: 20px; right: 20px; z-index: 10;" class="text-slate-400 hover:text-slate-900" id="btnForgotCloseMobile">
         <span class="material-symbols-rounded">close</span>
       </button>
@@ -740,7 +740,7 @@
   </div>
 
   <div class="dropdown-overlay hidden" id="prefillGapConfirmOverlay">
-    <div class="dropdown-card max-w-md flex flex-col relative w-[calc(100%-32px)] p-6 bg-white rounded-3xl shadow-2xl border border-slate-100">
+    <div role="dialog" aria-modal="true" aria-label="Confirmar guardado sin cambios" class="dropdown-card max-w-md flex flex-col relative w-[calc(100%-32px)] p-6 bg-white rounded-3xl shadow-2xl border border-slate-100">
       <div class="flex items-center gap-2 mb-3">
         <span class="material-symbols-rounded text-amber-500 text-2xl">warning</span>
         <h3 class="text-base font-black text-slate-900">Guardado sin cambios</h3>
@@ -755,7 +755,7 @@
 
   <!-- 💉 MODAL FECHA DE APERTURA DE FRASCO (multidosis) -->
   <div class="dropdown-overlay hidden" id="aperturaFrascoOverlay">
-    <div class="dropdown-card max-w-md flex flex-col relative w-[calc(100%-32px)] p-6 bg-white rounded-3xl shadow-2xl border border-slate-100">
+    <div role="dialog" aria-modal="true" aria-label="Fecha de apertura del frasco" class="dropdown-card max-w-md flex flex-col relative w-[calc(100%-32px)] p-6 bg-white rounded-3xl shadow-2xl border border-slate-100">
       <div class="flex items-center gap-2 mb-3">
         <span class="material-symbols-rounded text-amber-500 text-2xl">vaccines</span>
         <h3 class="text-base font-black text-slate-900">Registrar fecha de apertura</h3>
@@ -775,7 +775,7 @@
 
   <!-- 💉 MODAL FRASCOS ABIERTOS PENDIENTES (revisión en lote, un solo modal al guardar) -->
   <div class="dropdown-overlay hidden" id="aperturaBatchOverlay">
-    <div class="dropdown-card max-w-md flex flex-col relative w-[calc(100%-32px)] p-6 bg-white rounded-3xl shadow-2xl border border-slate-100" style="max-height: 85vh;">
+    <div role="dialog" aria-modal="true" aria-label="Revisión de frascos abiertos" class="dropdown-card max-w-md flex flex-col relative w-[calc(100%-32px)] p-6 bg-white rounded-3xl shadow-2xl border border-slate-100" style="max-height: 85vh;">
       <div class="flex items-center gap-2 mb-3">
         <span class="material-symbols-rounded text-amber-500 text-2xl">vaccines</span>
         <h3 class="text-base font-black text-slate-900">Frascos abiertos por registrar</h3>
@@ -813,6 +813,6 @@
   <script src="mobile_supervision.js?v=7" defer></script>
   <script src="mobile_supervision_ops.js?v=3" defer></script>
   <script src="mobile_supervision_rda.js?v=2" defer></script>
-  <script src="mobile_main.js?v=2026.47" defer></script>
+  <script src="mobile_main.js?v=2026.48" defer></script>
 </body>
 </html>
