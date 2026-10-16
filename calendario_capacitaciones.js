@@ -132,8 +132,8 @@
 
   // ── Estilos (Shadow DOM) ──────────────────────────────────────────────────
   const CSS = `
-    :host{all:initial;display:block;--bg:#fff;--fg:#0f172a;--muted:#64748b;--line:#e2e8f0;--field:#f1f5f9;--accent:#0b5cad;--accent-fg:#fff;--accent-soft:rgba(11,92,173,.09);--ok:#059669;--warn:#b45309;--warn-bg:rgba(245,158,11,.16);--bad:#dc2626}
-    :host(.dark){--bg:#1e293b;--fg:#f1f5f9;--muted:#94a3b8;--line:#334155;--field:#0f172a;--accent:#38bdf8;--accent-fg:#082f49;--accent-soft:rgba(56,189,248,.14);--ok:#34d399;--warn:#fbbf24;--warn-bg:rgba(251,191,36,.16);--bad:#f87171}
+    :host{all:initial;display:block;--bg:#fff;--fg:#0f172a;--muted:#475569;--line:#e2e8f0;--field:#f1f5f9;--accent:#0b5cad;--accent-fg:#fff;--accent-soft:rgba(11,92,173,.09);--ok:#059669;--warn:#92400e;--warn-bg:rgba(245,158,11,.16);--bad:#dc2626}
+    :host(.dark){--bg:#1e293b;--fg:#f1f5f9;--muted:#cbd5e1;--line:#334155;--field:#0f172a;--accent:#38bdf8;--accent-fg:#082f49;--accent-soft:rgba(56,189,248,.14);--ok:#34d399;--warn:#fbbf24;--warn-bg:rgba(251,191,36,.16);--bad:#f87171}
     *{box-sizing:border-box;font-family:'Inter','Poppins',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
     .ov{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.5);animation:fade .18s ease-out}
     .card{width:100%;max-width:900px;max-height:calc(100dvh - 32px);overflow:auto;background:var(--bg);color:var(--fg);border-radius:28px;padding:20px 22px;box-shadow:0 16px 48px rgba(0,0,0,.22);animation:rise .22s ease-out}
@@ -180,6 +180,7 @@
     .day.ev{background:var(--accent);color:var(--accent-fg);font-weight:800;cursor:pointer}
     .day.ev.past{background:var(--muted);opacity:.6}
     .day.ev.soon{background:var(--warn);color:#fff}
+    :host(.dark) .day.ev.soon{color:#0f172a}
     .agenda h3:first-child{margin-top:0}
     .agenda h3{margin:12px 0 6px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
     .ev-row{display:flex;gap:12px;padding:11px 12px;border:1px solid var(--line);border-radius:16px;margin-bottom:6px;transition:background .3s,border-color .3s}

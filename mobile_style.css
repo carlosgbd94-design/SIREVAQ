@@ -1701,3 +1701,5 @@ html.dark .dock-container { background: rgba(28, 30, 36, 0.94); }
 
 /* Insignia de apertura de frasco: es un boton, objetivo tactil de 44 px */
 .sr-apertura-badge[role="button"] { min-height: 44px; display: flex; align-items: center; }
+
+html.dark .swipe-content .text-slate-500, html.dark .swipe-content .text-slate-400 { color: #cbd5e1 !important; }
