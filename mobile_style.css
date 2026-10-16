@@ -303,7 +303,8 @@ html.dark .dock-indicator {
   letter-spacing: -0.01em;
   max-width: 100%;
   text-align: center;
-  white-space: nowrap;
+  white-space: normal; /* cabe en una linea a tamano normal; con texto muy grande baja de linea en vez de encimarse */
+  overflow-wrap: anywhere;
 }
 
 .dock-item.active {
