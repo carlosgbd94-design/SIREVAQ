@@ -204,11 +204,12 @@
       cuerpo = `<p class="sv-vacio">${S.filtro === "faltan" && !q ? "Todas las unidades capturaron. ¡Buen trabajo!" : "Sin unidades con ese criterio."}</p>`;
     } else {
       cuerpo = `<ul class="sv-lista">${lista.map((x) => `
-        <li class="sv-unidad ${x.ok ? "completo" : "falta"}">
-          <span class="sv-dot" aria-hidden="true"></span>
+        <li><button type="button" class="sv-unidad sv-unidad--btn ${x.ok ? "completo" : "falta"}" data-lv="${esc(x.u.clues)}">
+          <span class="sr-only">Ver en vivo: </span><span class="sv-dot" aria-hidden="true"></span>
           <div class="sv-u-txt"><b>${esc(x.u.unidad)}</b><small>${esc(x.u.municipio || "")} · ${esc(x.u.clues)}</small></div>
           <span class="sv-pill ${x.ok ? "ok" : "falta"}">${x.ok ? "Capturó" : "Falta"}</span>
-        </li>`).join("")}</ul>`;
+          <span class="material-symbols-rounded sv-chev" aria-hidden="true">visibility</span>
+        </button></li>`).join("")}</ul>`;
     }
 
     root.innerHTML = `
@@ -230,6 +231,14 @@
       </div>
       ${cuerpo}`;
 
+    root.querySelectorAll("[data-lv]").forEach((b) => {
+      b.onclick = () => {
+        const u = S.unidades.find((x) => String(x.clues) === b.dataset.lv);
+        if (!u || !global.MobileLiveView) return;
+        const r = rango(TIPOS[S.tipo].periodo, null, atras);
+        global.MobileLiveView.abrir({ clues: u.clues, unidad: u.unidad, municipio: u.municipio, tipo: S.tipo, ini: ymd(r.ini), fin: ymd(r.fin), etiqueta: `${TIPOS[S.tipo].label} · ${etiquetaPeriodo(S.tipo, atras)}` });
+      };
+    });
     root.querySelectorAll("[data-tipo]").forEach((b) => { b.onclick = () => cambiarTipo(b.dataset.tipo); });
     root.querySelectorAll("[data-filtro]").forEach((b) => { b.onclick = () => { S.filtro = b.dataset.filtro; pintarResumen(); }; });
     root.querySelectorAll("[data-atras]").forEach((b) => { b.onclick = () => cambiarPeriodo(Number(b.dataset.atras)); });

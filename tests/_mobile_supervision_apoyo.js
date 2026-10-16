@@ -68,9 +68,10 @@ function servidor(estado, reqs) {
     const fs = [];
     for (const [k, v] of url.searchParams.entries()) {
       if (['select', 'order', 'limit', 'offset', 'on_conflict', 'columns'].includes(k)) continue;
-      const m = v.match(/^(eq|in)\.(.*)$/s);
+      const m = v.match(/^(eq|in|gte|lte|gt|lt)\.(.*)$/s);
       if (!m) continue;
-      if (m[1] === 'eq') fs.push((r) => String(r[k]) === m[2]);
+      if (['gte', 'lte', 'gt', 'lt'].includes(m[1])) { const c = { gte: (x, y) => x >= y, lte: (x, y) => x <= y, gt: (x, y) => x > y, lt: (x, y) => x < y }[m[1]]; fs.push((r) => r[k] != null && c(String(r[k]), m[2])); }
+      else if (m[1] === 'eq') fs.push((r) => String(r[k]) === m[2]);
       else { const l = m[2].replace(/^\(|\)$/g, '').split(',').map((x) => x.replace(/^"|"$/g, '')); fs.push((r) => l.includes(String(r[k]))); }
     }
     return (r) => fs.every((f) => f(r));
@@ -93,7 +94,9 @@ function servidor(estado, reqs) {
     const pasa = filtros(url);
     const m = req.method();
     if (m === 'GET' || m === 'HEAD') {
-      const out = filas.filter(pasa);
+      let out = filas.filter(pasa);
+      const orden = url.searchParams.get('order');
+      if (orden) { const [col, dir] = orden.split('.'); out = [...out].sort((x, y) => (String(x[col]) < String(y[col]) ? -1 : String(x[col]) > String(y[col]) ? 1 : 0) * (dir === 'desc' ? -1 : 1)); }
       if ((req.headers()['accept'] || '').includes('vnd.pgrst.object')) return out.length === 1 ? json(out[0]) : json({ code: 'PGRST116', message: 'x' }, 406);
       return json(out);
     }
