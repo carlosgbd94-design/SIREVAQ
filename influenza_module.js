@@ -844,6 +844,40 @@ const CENSIA_URL = "https://siscensia.salud.gob.mx/influenza26/ssa/captura.php";
 const CENSIA_EXT_URL = "https://chromewebstore.google.com/detail/noofpbkapekpjcfegnmcndjejmkpmbin";
 const censiaExtInstalada = () => document.documentElement.hasAttribute("data-sirevaq-censia-ext");
 
+/** Guía para quien no conoce el complemento: cómo instalarlo (solo una vez) o, ya instalado, cómo se usa.
+ *  Se comparte entre la tarjeta de Influenza y la de COVID-19. */
+function censiaGuiaExtension() {
+  const d = document.createElement("div");
+  d.className = "inf-censia__guia";
+  if (censiaExtInstalada()) {
+    d.innerHTML = `
+      <p class="inf-censia__ok"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span><span><b>Complemento instalado.</b> Así se usa:</span></p>
+      <ol class="inf-censia__pasos inf-censia__pasos--grandes">
+        <li>Pulsa <b>Abrir CeNSIA y rellenar</b>. CeNSIA se abre en otra pestaña.</li>
+        <li>Si CeNSIA te pide usuario y contraseña, entra como siempre y ve a <b>Dosis Aplicadas → Captura</b>.</li>
+        <li>Las casillas aparecen llenas solas. Revisa las cifras y pulsa <b>Guardar</b> en CeNSIA.</li>
+      </ol>`;
+    return d;
+  }
+  if (!CENSIA_EXT_URL) return d;
+  d.innerHTML = `
+    <div class="inf-censia__instala">
+      <p class="inf-censia__instala-tit"><span class="material-symbols-rounded" aria-hidden="true">extension</span><b>Primero instala el complemento (solo una vez, tarda 1 minuto)</b></p>
+      <ol class="inf-censia__pasos inf-censia__pasos--grandes">
+        <li>Pulsa el botón <b>Instalar complemento</b>. Se abre la tienda de Chrome en otra pestaña.</li>
+        <li>En esa pestaña pulsa el botón azul <b>Agregar a Chrome</b> y, si Chrome pregunta, <b>Agregar extensión</b>.</li>
+        <li>Regresa a esta pestaña y pulsa <b>Ya lo instalé</b>. Listo: no tendrás que hacerlo otra vez.</li>
+      </ol>
+      <div class="inf-censia__acciones">
+        <a class="inf-censia__btn" href="${CENSIA_EXT_URL}" target="_blank" rel="noopener">Instalar complemento</a>
+        <button type="button" class="inf-censia__btn is-sec" data-recargar>Ya lo instalé</button>
+      </div>
+      <p class="inf-censia__nota">Solo funciona en Google Chrome de computadora, no en el celular.</p>
+    </div>`;
+  d.querySelector("[data-recargar]").addEventListener("click", () => location.reload());
+  return d;
+}
+
 /** Fecha de aplicación para CeNSIA: hoy, pero nunca fuera del mes que se reporta (si ya es otro mes, el último día de ese mes). */
 function censiaFechaAplicacion(fechaSemana, hoy) {
   const [a, m] = String(fechaSemana).split("-").map(Number);
@@ -919,26 +953,21 @@ function renderPasoCensia(container, fechaSemana, reporte) {
   const box = document.createElement("section");
   box.className = "inf-censia";
   box.setAttribute("aria-label", "Pasar este reporte a CeNSIA");
-  const instalada = censiaExtInstalada();
-  const avisoExt = instalada
-    ? `<p class="inf-censia__ok"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span>Complemento instalado: al entrar a <b>Dosis Aplicadas → Captura</b> las casillas se rellenan solas.</p>`
-    : (CENSIA_EXT_URL
-      ? `<p><a class="inf-censia__enlace" href="${CENSIA_EXT_URL}" target="_blank" rel="noopener">Instala el complemento de Chrome (1 clic)</a> para que CeNSIA se rellene solo.</p>`
-      : "");
   box.innerHTML = `
     <div class="inf-censia__tit"><span class="material-symbols-rounded" aria-hidden="true">cloud_upload</span><b>Siguiente paso: captura en CeNSIA</b></div>
     <p>Este reporte (${total.toLocaleString("es-MX")} dosis) también se captura en la plataforma federal. SIREVAQ rellena las casillas con fecha <b>${fmtF(fecha)}</b>; tú revisas y pulsas <b>Guardar</b> allá.</p>
-    ${avisoExt}
+    <div id="infCensiaGuia"></div>
     ${previo ? `<p class="inf-censia__aviso"><span class="material-symbols-rounded" aria-hidden="true">info</span>Ya abriste CeNSIA con este reporte el ${previo}. En CeNSIA las capturas <b>se suman</b> (a diferencia de SIREVAQ, que reemplaza): si ya lo guardaste allá, no lo vuelvas a guardar; si cambió algo, captura en CeNSIA solo la diferencia.</p>` : ""}
     <div class="inf-censia__acciones">
       <a class="inf-censia__btn" id="infCensiaAbrir" href="${enlace}" target="_blank" rel="noopener">Abrir CeNSIA y rellenar</a>
-      <button type="button" class="inf-censia__btn is-sec" id="infCensiaAyuda" aria-expanded="false" aria-controls="infCensiaPasos">Otra forma, sin instalar nada</button>
+      <button type="button" class="inf-censia__btn is-sec" id="infCensiaAyuda" aria-expanded="false" aria-controls="infCensiaPasos"${censiaExtInstalada() ? " hidden" : ""}>Prefiero no instalar nada (para personas con experiencia)</button>
     </div>
     <ol id="infCensiaPasos" class="inf-censia__pasos" hidden>
       <li>Una sola vez: arrastra <a href="#" id="infCensiaMarcador" class="inf-censia__marcador">Rellenar CeNSIA</a> a tu barra de marcadores.</li>
       <li>Pulsa «Abrir CeNSIA y rellenar», inicia sesión si te lo pide y entra a <b>Dosis Aplicadas → Captura</b>.</li>
       <li>Pulsa el marcador «Rellenar CeNSIA» (si Chrome pregunta por el portapapeles, permítelo). Revisa las cifras y pulsa GUARDAR.</li>
     </ol>`;
+  box.querySelector("#infCensiaGuia").replaceWith(censiaGuiaExtension());
   container.appendChild(box);
 
   const marc = box.querySelector("#infCensiaMarcador");
@@ -1642,6 +1671,10 @@ function influenzaValidarCaptura(selectedFecha) {
   }
 
   let error = reglaError;
+  // Un reporte en ceros solo se guarda con «Sin movimiento»: así queda claro que no es un olvido.
+  if (!error && !isSinMov && Object.values(valores).every(v => v === 0)) {
+    error = "No hay dosis capturadas. Si esta semana no hubo aplicaciones, marca «Sin movimiento» para guardar el reporte en ceros.";
+  }
   if (!error && excedeRubro) error = `No se puede guardar el reporte: ${excedeRubro} supera la meta asignada de tu unidad. Revisa los grupos marcados en rojo.`;
   if (!error) error = influenzaVentanaError(selectedFecha);
   return { error, valores, isSinMov };
@@ -7504,6 +7537,7 @@ function renderCovidCaptura() {
     alCambiar: actualizarContadorDosisHub,
     censia: {
       url: CENSIA_URL,
+      guia: censiaGuiaExtension,
       hoy: influenzaHoy,
       fechaAplicacion: (f) => censiaFechaAplicacion(f, influenzaHoy()),
       enviarPaquete: (paquete) => {

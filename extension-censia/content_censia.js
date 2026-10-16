@@ -2,7 +2,6 @@
 // Rellena las casillas con lo que dejó SIREVAQ. NUNCA pulsa Guardar.
 (function () {
   "use strict";
-  if (!document.getElementById("BIE01")) return;
   var MAX_MS = 12 * 3600 * 1000;
 
   var host = document.createElement("div");
@@ -90,15 +89,47 @@
     });
   }
 
-  chrome.storage.local.get("pending", function (r) {
-    var d = r && r.pending;
-    if (!d || d.v !== 1) return;                           // nada pendiente: no hacemos ruido
-    if (Date.now() - d.t > MAX_MS) { chrome.storage.local.remove("pending"); return; }
-    rellenar(d);
-    // Al guardar en CeNSIA, el paquete se descarta para que no se rellene dos veces
+  var ultimoT = 0, enganchado = false;
+  var hayFormulario = function () { return !!document.getElementById("BIE01"); };
+
+  // Al guardar en CeNSIA, el paquete se descarta para que no se rellene dos veces
+  function enganchar() {
+    if (enganchado) return;
+    enganchado = true;
     var descartar = function () { setTimeout(function () { chrome.storage.local.remove("pending"); }, 1500); };
     var btn = document.getElementById("enviar_dosis");
     if (btn) btn.addEventListener("click", descartar, true);
     if (document.forms[0]) document.forms[0].addEventListener("submit", descartar, true);
+  }
+
+  // Rellena si ya hay formulario y hay un paquete sin usar. Se llama cuando la pantalla termina de cargar,
+  // cuando el formulario aparece tarde (CeNSIA lo arma con scripts / tras el inicio de sesión) y cuando
+  // SIREVAQ entrega un paquete con CeNSIA ya abierta: así no hace falta recargar con F5.
+  function intentar() {
+    if (!hayFormulario()) return;
+    chrome.storage.local.get("pending", function (r) {
+      var d = r && r.pending;
+      if (!d || d.v !== 1) return;                         // nada pendiente: no hacemos ruido
+      if (Date.now() - d.t > MAX_MS) { chrome.storage.local.remove("pending"); return; }
+      if (d.t === ultimoT) return;                         // ese paquete ya se rellenó en esta pantalla
+      ultimoT = d.t;
+      rellenar(d);
+      enganchar();
+    });
+  }
+
+  if (hayFormulario()) intentar();
+  else {
+    var obs = new MutationObserver(function () {
+      if (!hayFormulario()) return;
+      obs.disconnect();
+      // un instante para que CeNSIA termine de pintar los selectores antes de tocarlos
+      setTimeout(intentar, 400);
+    });
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(function () { obs.disconnect(); }, 10 * 60 * 1000);
+  }
+  chrome.storage.onChanged.addListener(function (cambios, area) {
+    if (area === "local" && cambios.pending && cambios.pending.newValue) intentar();
   });
 })();

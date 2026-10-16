@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "SIREVAQ → CeNSIA",
   "short_name": "SIREVAQ-CeNSIA",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Rellena en CeNSIA las dosis de Influenza y COVID-19 que ya validaste en SIREVAQ. Tú revisas y pulsas Guardar.",
   "permissions": ["storage"],
   "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },

@@ -197,8 +197,11 @@
       <div class="inf-censia__tit"><span class="material-symbols-rounded" aria-hidden="true">cloud_upload</span><b>Siguiente paso: COVID-19 en CeNSIA</b></div>
       <p>Este reporte (${fmt(total)} dosis${marcas ? ` · ${marcas}` : ""}) también se captura en la sección <b>COVID-19</b> de <b>Dosis Aplicadas → Captura</b> de CeNSIA, con fecha <b>${fmtF(fecha)}</b>. Tú revisas y pulsas <b>Guardar</b> allá.</p>
       ${previo ? `<p class="inf-censia__aviso"><span class="material-symbols-rounded" aria-hidden="true">info</span>Ya abriste CeNSIA con este reporte el ${esc(previo)}. En CeNSIA las capturas <b>se suman</b> (a diferencia de SIREVAQ, que reemplaza): si ya lo guardaste allá, no lo vuelvas a guardar; si cambió algo, captura solo la diferencia.</p>` : ""}
+      <div data-guia></div>
       <p class="inf-censia__aviso"><span class="material-symbols-rounded" aria-hidden="true">info</span>El complemento lleva un solo reporte a la vez: al abrir CeNSIA con COVID-19, guarda primero lo de Influenza si aún no lo hiciste.</p>
       <div class="inf-censia__acciones"><a class="inf-censia__btn" id="cvcCensiaAbrir" href="${esc(cz.url)}" target="_blank" rel="noopener">Abrir CeNSIA y rellenar COVID-19</a></div>`;
+    const gh = sec.querySelector("[data-guia]");
+    if (gh) { if (typeof cz.guia === "function") gh.replaceWith(cz.guia()); else gh.remove(); }
     box.appendChild(sec);
     const abrir = sec.querySelector("#cvcCensiaAbrir");
     abrir.addEventListener("click", () => {
