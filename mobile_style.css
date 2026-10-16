@@ -359,7 +359,7 @@ html.dark .biologic-card .card-header {
 }
 
 .biologic-card .card-header span.text-xs {
-  line-height: 1 !important;
+  line-height: 1.35 !important;
   margin: 0 !important;
 }
 
@@ -1716,3 +1716,11 @@ html.dark .swipe-content .text-slate-500, html.dark .swipe-content .text-slate-4
 html.dark .mis-indicadores { color: #f1f5f9; }
 html.dark .mis-indicadores > .material-symbols-rounded { color: #7dd3fc; }
 html.dark .mis-indicadores-txt small, html.dark .mis-indicadores > .material-symbols-rounded:last-child { color: #cbd5e1; }
+
+/* Tarjetas de captura: el tipo de biologico (texto largo) va en su propia linea; titulos con interlineado legible */
+.cascade-field:has(.sr-tipo-select) { grid-template-columns: 1fr; gap: 6px; }
+#captureContentArea .text-xs.tracking-widest { line-height: 1.4; }
+
+/* Textos de ejemplo (placeholder) con contraste suficiente (4.5:1) */
+#captureContentArea input::placeholder, #captureContentArea textarea::placeholder { color: #64748b !important; opacity: 1 !important; }
+html.dark #captureContentArea input::placeholder, html.dark #captureContentArea textarea::placeholder { color: #a8b3c4 !important; }

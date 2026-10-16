@@ -202,7 +202,8 @@ html.dark .sv-mx-item--mal { background: rgba(220,38,38,.15); }
 .sv-cadena li:first-child { border-top: 0; }
 .sv-cadena li > span:first-child { flex: 1; font-weight: 600; color: var(--sv-mute); }
 .sv-cadena small { font-size: 11px; font-weight: 600; color: var(--sv-mute); }
-.sv-comp { padding: 14px 16px; }
+.sv-comp { padding: 14px 16px; color: #0f172a; }
+html.dark .sv-comp { color: #f1f5f9; }
 .sv-comp > b { display: block; font-size: 13px; margin-bottom: 8px; }
 .sv-comp-v { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
 .sv-comp-v > span:not(.sv-pill) { display: flex; flex-direction: column; font: 800 20px Poppins, sans-serif; }
