@@ -841,7 +841,7 @@ const CENSIA_CODIGOS = [
 ];
 const CENSIA_URL = "https://siscensia.salud.gob.mx/influenza26/ssa/captura.php";
 // Ficha del complemento en la Chrome Web Store (se llena al publicarlo); vacío = aún no disponible.
-const CENSIA_EXT_URL = "";
+const CENSIA_EXT_URL = "https://chromewebstore.google.com/detail/noofpbkapekpjcfegnmcndjejmkpmbin";
 const censiaExtInstalada = () => document.documentElement.hasAttribute("data-sirevaq-censia-ext");
 
 /** Fecha de aplicación para CeNSIA: hoy, pero nunca fuera del mes que se reporta (si ya es otro mes, el último día de ese mes). */
