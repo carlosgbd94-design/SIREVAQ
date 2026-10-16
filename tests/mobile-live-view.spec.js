@@ -72,9 +72,45 @@ test.describe('Móvil · Live View de la unidad', () => {
     await page.click('[data-filtro="todas"]');
     await page.locator('[data-lv="QTSSA000830"]').click();
     await expect(page.locator('#lvOverlay')).toContainText('BCG');
+    await page.waitForTimeout(500); // termina la animacion de entrada de la hoja
     expect(await axe(page, '#lvOverlay')).toEqual([]);
     await page.evaluate(() => document.documentElement.classList.add('dark'));
     await page.waitForTimeout(600);
     expect(await axe(page, '#lvOverlay')).toEqual([]);
+  });
+});
+
+test.describe('Móvil · plantilla de WhatsApp con las unidades pendientes', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('arma el mismo texto que el escritorio con las unidades que faltan, por municipio', async ({ page }) => {
+    const { estado } = await abrir(page, { rol: 'ADMIN' });
+    // Santa Bárbara y FAM Sierra ya capturaron biológicos esta semana
+    estado.rpc.get_captures_sr_range_bypass = [{ clues: 'QTSSA000830', fecha: '2026-10-22' }, { clues: 'QTSSA000333', fecha: '2026-10-22' }];
+    await page.reload();
+    await page.waitForSelector('body.sup-mode');
+    const wa = page.locator('#svWa');
+    await expect(wa).toBeVisible();
+    const href = await wa.getAttribute('href');
+    expect(href.startsWith('https://wa.me/?text=')).toBe(true);
+    const texto = decodeURIComponent(href.split('text=')[1]);
+    expect(texto).toContain('Las siguientes unidades no han realizado su captura de *EXISTENCIA DE BIOLÓGICO*');
+    expect(texto).toContain('por favor hay que ingresar a la plataforma *SIREVAQ*');
+    // Santa Bárbara y FAM Sierra capturaron biológicos en el periodo; faltan El Pueblito (Corregidora) y La Cañada (El Marqués)
+    expect(texto).toContain('• *EL PUEBLITO*');
+    expect(texto).toContain('• *LA CAÑADA*');
+    expect(texto).not.toContain('SANTA BÁRBARA');
+    expect(texto.indexOf('EL PUEBLITO')).toBeLessThan(texto.indexOf('LA CAÑADA')); // Corregidora antes que El Marqués
+    await expect(wa).toContainText('(2)');
+    // Cambia el texto con el tipo de captura
+    await page.click('[data-tipo="CONS"]');
+    const href2 = await page.locator('#svWa').getAttribute('href');
+    expect(decodeURIComponent(href2.split('text=')[1])).toContain('*CONSUMIBLES*');
+  });
+
+  test('accesible', async ({ page }) => {
+    await abrir(page, { rol: 'ADMIN' });
+    await expect(page.locator('#svWa')).toBeVisible();
+    expect(await axe(page, '#svWa')).toEqual([]);
   });
 });

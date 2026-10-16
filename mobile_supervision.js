@@ -167,6 +167,23 @@
     S.capturas[k] = new Set(filas.map((x) => String(x.clues || x.CLUES || "").trim().toUpperCase()).filter(Boolean));
   }
 
+  // ── Plantilla de WhatsApp con las unidades pendientes (mismo texto que el escritorio) ──
+  const ORDEN_MUNI = ["CORREGIDORA", "HUIMILPAN", "MARQUES", "QUERETARO"];
+  const idxMuni = (m) => { const n = norm(m); const i = ORDEN_MUNI.findIndex((x) => n.includes(x)); return i < 0 ? 999 : i; };
+  function plantillaWhatsApp(pendientes, tipo) {
+    const h = new Date().getHours();
+    const [saludo, emoji] = h >= 6 && h < 12 ? ["Buenos días", "☀️"] : h >= 12 && h < 19 ? ["Buenas tardes", "⛅"] : ["Buenas noches", "🌙"];
+    const tipoTxt = { BIO: "PEDIDO DE BIOLÓGICO", CONS: "CONSUMIBLES", SR: "EXISTENCIA DE BIOLÓGICO" }[tipo] || "PENDIENTES";
+    const orden = [...pendientes].sort((a, b) => idxMuni(a.municipio) - idxMuni(b.municipio) || String(a.clues || "").trim().toUpperCase().localeCompare(String(b.clues || "").trim().toUpperCase()));
+    const listado = orden.map((u) => `• *${String(u.unidad || "").toUpperCase().trim()}*
+`).join("");
+    return `¡${saludo}! ${emoji}
+
+Las siguientes unidades no han realizado su captura de *${tipoTxt}*, por favor hay que ingresar a la plataforma *SIREVAQ* a realizar la captura correspondiente:
+
+${listado}`;
+  }
+
   // ── Resumen ──
   function pintarResumen() {
     const root = document.getElementById("supRoot");
@@ -192,6 +209,9 @@
       `<button type="button" class="sv-seg-b${i === atras ? " activo" : ""}" data-atras="${i}" aria-pressed="${i === atras}">${t}</button>`).join("");
     const sinPedidos = S.tipo === "BIO" && atras === 0 && !S.cargando && !S.error && caps && caps.size === 0;
     const avisoPeriodo = sinPedidos ? `<p class="sv-aviso" role="status"><span class="material-symbols-rounded" aria-hidden="true">info</span>Aún no hay pedidos registrados este mes; la ventana del pedido puede no haber abierto. Consulta «Anterior» para ver el mes pasado.</p>` : S.avisoAuto && S.avisoAuto[S.tipo] ? `<p class="sv-aviso" role="status"><span class="material-symbols-rounded" aria-hidden="true">info</span>La captura de esta semana abre el jueves. Mostrando la semana anterior.</p>` : "";
+    const pendientes = conEstado.filter((x) => !x.ok).map((x) => x.u);
+    const botonWa = !S.cargando && !S.error && pendientes.length
+      ? `<a class="sv-wa" id="svWa" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(plantillaWhatsApp(pendientes, S.tipo))}"><span class="material-symbols-rounded" aria-hidden="true">chat</span><span>Mandar pendientes por WhatsApp <b>(${pendientes.length})</b></span></a>` : "";
     const chipsFiltro = [["faltan", "Faltan"], ["capturadas", "Capturadas"], ["todas", "Todas"]].map(([k, t]) =>
       `<button type="button" class="sv-seg-b${k === S.filtro ? " activo" : ""}" data-filtro="${k}" aria-pressed="${k === S.filtro}">${t}</button>`).join("");
 
@@ -223,6 +243,7 @@
         <div class="sv-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Unidades que capturaron"><i style="width:${pct}%"></i></div>
         <p class="sv-leyenda"><span><i class="sv-dot completo"></i>${hechas} capturaron</span><span><i class="sv-dot falta"></i>${total - hechas} faltan</span></p>
       </div>
+      ${botonWa}
       <div class="sv-filtros">
         <div class="sv-seg" role="group" aria-label="Filtro">${chipsFiltro}</div>
         <label class="sv-buscar"><span class="sr-only">Buscar unidad</span>
