@@ -178,9 +178,17 @@ declare
     v_buffer_multiplier constant numeric := 1.10;
     v_semanas_evaluadas constant integer := 12;
     v_min_capturas_validas constant integer := 2;
-    v_z_bump_maximo constant numeric := 1.5;
-    v_winsor_factor constant numeric := 4;
-    v_winsor_piso_suma constant numeric := 50;
+    -- Ajuste 2026-10-16: los pedidos se inflaban (Hep B 1 -> 6 frascos, SR 1 -> 50).
+    -- Causas: (a) picos de campaña/brote (SR feb-2026) entraban completos a la media
+    -- y la varianza, (b) el mes en curso sin cerrar contaba como 0, (c) z llegaba a
+    -- 3.15 y (d) nada limitaba el salto contra lo vigente.
+    v_z_bump_maximo constant numeric := 0.5;
+    v_winsor_factor constant numeric := 3;
+    v_winsor_piso_suma constant numeric := 20;
+    v_meses_ventana constant integer := 6;
+    v_techo_seguridad constant numeric := 0.5;
+    v_paso_maximo constant numeric := 2;
+    v_mes_inicio integer;
     v_evento_generalizado_umbral constant numeric := 0.15;
     v_bio_excluidos constant text[] := array['INFLUENZA', 'VPH', 'COVID-19', 'COVID19', 'COVID 19'];
     v_count integer;
@@ -198,18 +206,27 @@ begin
         end if;
     end if;
 
+    -- Último mes CERRADO: el que ya reportó al menos la mitad de las unidades que
+    -- reportan en el mes con más reportes (un mes a medias contaría como consumo ~0).
     select max(mes) into v_last_month
-    from registros_sis
-    where anio = p_anio;
+    from (
+        select mes, count(distinct clues) as n, max(count(distinct clues)) over () as n_max
+        from registros_sis
+        where anio = p_anio
+        group by mes
+    ) q
+    where n >= n_max * 0.5;
 
     if v_last_month is null then
         return 0;
     end if;
 
+    v_mes_inicio := greatest(1, v_last_month - v_meses_ventana + 1);
+
     delete from biologicos_params_sugeridos where anio_evaluado = p_anio;
 
     with meses as (
-        select generate_series(1, v_last_month) as mes
+        select generate_series(v_mes_inicio, v_last_month) as mes
     ),
     unidades_activas as (
         select clues, unidad, municipio from unidades
@@ -261,8 +278,8 @@ begin
         from consumo_mensual_crudo
         group by clues, biologico
     ),
-    -- Guardarraíl contra datos atípicos: ningún mes puede pesar más de 4x la mediana
-    -- de esa misma unidad+biológico (o mediana+50 si la mediana es muy baja).
+    -- Guardarraíl contra datos atípicos: ningún mes puede pesar más de 3x la mediana
+    -- de esa misma unidad+biológico (o mediana+20 si la mediana es muy baja).
     candidato_atipico as (
         select
             c.clues, c.unidad, c.municipio, c.biologico, c.mes, c.semanas_del_mes,
@@ -274,7 +291,8 @@ begin
     ),
     -- Evento generalizado: si el mismo mes está "disparado" en muchas unidades a la
     -- vez para el mismo biológico (>=15%), es un evento real (brote/campaña, ej.
-    -- sarampión disparando SR/SRP) -- no se recorta ni se marca atípico en ese caso.
+    -- sarampión disparando SR/SRP). Se recorta IGUAL (no es consumo de rutina y no
+    -- debe inflar el pedido), pero NO se marca como dato atípico a revisar.
     eventos_generalizados as (
         select
             biologico, mes,
@@ -285,10 +303,7 @@ begin
     consumo_mensual as (
         select
             ca.clues, ca.unidad, ca.municipio, ca.biologico, ca.mes, ca.semanas_del_mes,
-            case
-                when eg.fraccion_con_pico >= v_evento_generalizado_umbral then ca.total_dosis_crudo
-                else least(ca.total_dosis_crudo, ca.tope_individual)
-            end as total_dosis,
+            least(ca.total_dosis_crudo, ca.tope_individual) as total_dosis,
             (ca.pico_aislado and eg.fraccion_con_pico < v_evento_generalizado_umbral) as fue_recortado
         from candidato_atipico ca
         join eventos_generalizados eg on eg.biologico = ca.biologico and eg.mes = ca.mes
@@ -374,7 +389,12 @@ begin
     resultado as (
         select
             o.clues, o.unidad, o.municipio, o.biologico, o.ciclos_insuficientes_recientes, o.dato_atipico_detectado,
-            greatest(0::numeric, (o.media_semanal * o.semanas_cobertura) + (o.z_efectivo * o.desviacion_combinada)) as promedio_dosis_objetivo,
+            -- Existencia de seguridad acotada a 50% de la demanda base del periodo de
+            -- cobertura: con consumo bajo/irregular la desviación domina y pedía de más.
+            greatest(0::numeric, least(
+                (o.media_semanal * o.semanas_cobertura) + (o.z_efectivo * o.desviacion_combinada),
+                o.media_semanal * o.semanas_cobertura * (1 + v_techo_seguridad)
+            )) as promedio_dosis_objetivo,
             o.consumo_min_mes, o.consumo_max_mes
         from objetivo o
     ),
@@ -392,7 +412,16 @@ begin
     final_calc as (
         select
             clues, unidad, municipio, biologico, ciclos_insuficientes_recientes, dato_atipico_detectado,
-            ceil(promedio_dosis_objetivo / multiplo_pedido)::numeric as promedio_frascos_sugerido,
+            -- Multidosis: el objetivo está en DOSIS y se divide entre dosis/frasco.
+            -- Paso máximo por ciclo: no más de 2x lo vigente (o +1 frasco), para que
+            -- el ajuste sea gradual; si no hay valor vigente, no aplica el tope.
+            case
+                when promedio_frascos_actual > 0 then least(
+                    ceil(promedio_dosis_objetivo / multiplo_pedido),
+                    greatest(promedio_frascos_actual * v_paso_maximo, promedio_frascos_actual + 1)
+                )
+                else ceil(promedio_dosis_objetivo / multiplo_pedido)
+            end::numeric as promedio_frascos_sugerido,
             greatest(v_min_dosis_floor, round(consumo_min_mes * v_buffer_multiplier))::integer as min_dosis_sugerido,
             round(consumo_max_mes * v_buffer_multiplier)::integer as max_dosis_base,
             promedio_dosis_objetivo,
@@ -426,7 +455,7 @@ begin
             else 'SIN_CAMBIO_RELEVANTE'
         end,
         dato_atipico_detectado,
-        'Enero a mes ' || v_last_month || ' de ' || p_anio,
+        'Mes ' || v_mes_inicio || ' a mes ' || v_last_month || ' de ' || p_anio,
         p_anio
     from con_max_final
     -- Alcance dirigido: SOLO unidades con evidencia real de desabasto recurrente,

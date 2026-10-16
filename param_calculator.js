@@ -928,6 +928,7 @@ window.spmConfirmCalcSave = async function() {
 // y deja aplicar/descartar el lote completo -- nunca escribe directo, siempre pasa por
 // esta aprobación humana explícita.
 window._spmSugerenciasCache = null;
+window._spmSugSel = new Set(); // ids marcados para aplicar/descartar
 
 const SPM_TIPO_CAMBIO_LABEL = {
     RIESGO_DESABASTO: 'Riesgo de desabasto',
@@ -976,7 +977,8 @@ window.spmLoadSugerenciasPendientes = async function() {
             .order('biologico');
         if (error) throw error;
 
-        window._spmSugerenciasCache = data || [];
+        window._spmSugerenciasCache = (data || []).filter(r => !['INFLUENZA', 'VPH', 'COVID-19', 'COVID19', 'COVID 19'].includes(String(r.biologico || '').toUpperCase()));
+        window._spmSugSel = new Set();
         window.spmRenderSugerenciasModal(window._spmSugerenciasCache);
 
         const modal = document.getElementById('spmSugerenciasModal');
@@ -1006,43 +1008,153 @@ window.spmRenderSugerenciasModal = function(rows) {
 
     if (btnAplicar) btnAplicar.style.display = 'inline-flex';
     if (btnDescartar) btnDescartar.style.display = 'inline-flex';
+    // Solo conservar marcas de filas que siguen existiendo
+    const idsVigentes = new Set(rows.map(r => r.id));
+    window._spmSugSel = new Set([...window._spmSugSel].filter(id => idsVigentes.has(id)));
+
+    // Vacunas de campaña/temporada: nunca se sugieren desde este motor (el SQL ya las
+    // excluye; esto cubre filas viejas que hayan quedado en staging).
+    const EXCLUIDOS = ['INFLUENZA', 'VPH', 'COVID-19', 'COVID19', 'COVID 19'];
+    rows = rows.filter(r => !EXCLUIDOS.includes(String(r.biologico || '').toUpperCase()));
+
+    const CAT = {
+        RIESGO_DESABASTO:     { txt: 'Subir promedio',      bg: '#fee2e2', fg: '#b91c1c', hint: 'Se quedó sin existencia mientras sí había consumo.' },
+        POSIBLE_SOBREABASTO:  { txt: 'Bajar promedio',    bg: '#dcfce7', fg: '#15803d', hint: 'Lo que pide hoy es más de lo que consume.' },
+        DATO_ATIPICO_REVISAR: { txt: 'Revisar captura', bg: '#fef3c7', fg: '#b45309', hint: 'Hubo un mes con consumo fuera de lo normal; confirma que no sea error de captura.' },
+        SIN_CAMBIO_RELEVANTE: { txt: 'Mantener promedio', bg: '#f1f5f9', fg: '#475569', hint: 'El promedio queda igual; solo cambian Mín/Máx.' }
+    };
 
     const counts = {};
     rows.forEach(r => { counts[r.tipo_cambio] = (counts[r.tipo_cambio] || 0) + 1; });
-    const countsText = Object.keys(SPM_TIPO_CAMBIO_LABEL)
-        .filter(k => counts[k])
-        .map(k => `${counts[k]} ${SPM_TIPO_CAMBIO_LABEL[k].toLowerCase()}`)
-        .join(' · ');
-    summary.textContent = `${rows.length} sugerencia(s) pendientes — ${countsText}`;
+    const chips = Object.keys(CAT).filter(k => counts[k]).map(k =>
+        `<span style="display:inline-block; padding:3px 10px; border-radius:999px; background:${CAT[k].bg}; color:${CAT[k].fg}; font-weight:700; font-size:12px; margin:2px 6px 2px 0;">${counts[k]} · ${CAT[k].txt}</span>`
+    ).join('');
+    summary.innerHTML = `
+        <div style="font-weight:700; color:#0f172a; margin-bottom:4px;">${rows.length} cambio(s) por revisar</div>
+        <div>${chips}</div>
+        <div style="margin-top:6px; font-size:12px; color:#64748b; line-height:1.5;">
+            <b>Cómo leerlo:</b> cada tarjeta es una unidad. <b>Pedido</b> = frascos que pide por ciclo (antes &rarr; propuesto).
+            <b>Mín</b> y <b>Máx</b> = existencia mínima y máxima en dosis. Los frascos multidosis ya se calculan dividiendo las dosis entre las dosis por frasco.
+            Influenza, VPH y COVID-19 no se incluyen.
+            <br><b>Marca</b> las que quieras y usa <b>Aplicar seleccionadas</b>; las que no marques se quedan pendientes.
+        </div>`;
 
-    const rowsHtml = rows.map(r => {
-        const color = SPM_TIPO_CAMBIO_COLOR[r.tipo_cambio] || '#ffffff';
-        const atipicoTag = r.dato_atipico_detectado ? ' ⚠️' : '';
+    // Agrupar por municipio > unidad
+    const byMuni = {};
+    rows.forEach(r => {
+        const m = r.municipio || 'Sin municipio';
+        const u = r.unidad || r.clues;
+        ((byMuni[m] = byMuni[m] || {})[u] = byMuni[m][u] || []).push(r);
+    });
+
+    const dosisPorFrasco = (bio) => DEFAULT_DOSES_PER_BOTTLE[String(bio).toUpperCase()] || 1;
+    const frascoTxt = (n) => `${n} frasco${Number(n) === 1 ? '' : 's'}`;
+
+    const bioLine = (r) => {
+        const c = CAT[r.tipo_cambio] || CAT.SIN_CAMBIO_RELEVANTE;
+        const ant = Number(r.promedio_frascos_actual) || 0;
+        const nue = Number(r.promedio_frascos_sugerido) || 0;
+        const dif = nue - ant;
+        const difTxt = dif === 0 ? '' : ` <span style="color:${dif > 0 ? '#b91c1c' : '#15803d'}; font-weight:700;">(${dif > 0 ? '+' : ''}${dif})</span>`;
+        const dpf = dosisPorFrasco(r.biologico);
+        const dpfTxt = dpf > 1 ? `<span style="color:#94a3b8;"> · ${dpf} dosis c/u</span>` : '';
+        const sem = Number(r.ciclos_insuficientes_recientes) || 0;
+        const motivo = sem > 0
+            ? `Sin existencia ${sem} semana${sem === 1 ? '' : 's'} con consumo.`
+            : c.hint;
+        const sel = window._spmSugSel.has(r.id);
+        const chk = `<span role="checkbox" tabindex="0" aria-checked="${sel}" aria-label="Seleccionar ${escapeHtml(r.biologico || '')}"
+            onclick="window.spmToggleSugerencia('${r.id}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();window.spmToggleSugerencia('${r.id}');}"
+            style="width:20px; height:20px; border-radius:6px; border:2px solid ${sel ? '#2563eb' : '#94a3b8'}; background:${sel ? '#2563eb' : '#fff'}; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; cursor:pointer; user-select:none;">${sel ? '&#10003;' : ''}</span>`;
         return `
-            <tr style="background:${color};">
-                <td>${escapeHtml(r.municipio || '')}</td>
-                <td>${escapeHtml(r.unidad || '')}</td>
-                <td>${escapeHtml(r.biologico || '')}</td>
-                <td>${SPM_TIPO_CAMBIO_LABEL[r.tipo_cambio] || r.tipo_cambio}${atipicoTag}</td>
-                <td class="spm-preview-diff">${r.promedio_frascos_actual} &rarr; <strong>${r.promedio_frascos_sugerido}</strong></td>
-                <td class="spm-preview-diff">${r.min_dosis_actual} &rarr; <strong>${r.min_dosis_sugerido}</strong></td>
-                <td class="spm-preview-diff">${r.max_dosis_actual} &rarr; <strong>${r.max_dosis_sugerido}</strong></td>
-                <td style="text-align:center;">${r.ciclos_insuficientes_recientes ?? 0}</td>
-            </tr>
-        `;
+            <div style="display:grid; grid-template-columns:26px minmax(120px,1.1fr) minmax(170px,1.6fr) minmax(130px,1fr); gap:8px 14px; align-items:center; padding:9px 0; border-top:1px solid #eef2f7;">
+                <div>${chk}</div>
+                <div>
+                    <div style="font-weight:700; color:#0f172a; font-size:13px;">${escapeHtml(r.biologico || '')}</div>
+                    <span style="display:inline-block; margin-top:3px; padding:2px 8px; border-radius:999px; background:${c.bg}; color:${c.fg}; font-weight:700; font-size:11px;">${c.txt}${r.dato_atipico_detectado && r.tipo_cambio !== 'DATO_ATIPICO_REVISAR' ? ' ⚠️' : ''}</span>
+                </div>
+                <div style="font-size:13px; color:#334155;">
+                    <b>Pedido:</b> ${frascoTxt(ant)} &rarr; <b style="color:#0f172a;">${frascoTxt(nue)}</b>${difTxt}${dpfTxt}
+                    <div style="font-size:11.5px; color:#64748b; margin-top:2px;">${motivo}</div>
+                </div>
+                <div style="font-size:12px; color:#475569; line-height:1.6;">
+                    <div><b>Mín:</b> ${r.min_dosis_actual} &rarr; <b>${r.min_dosis_sugerido}</b></div>
+                    <div><b>Máx:</b> ${r.max_dosis_actual} &rarr; <b>${r.max_dosis_sugerido}</b></div>
+                </div>
+            </div>`;
+    };
+
+    const html = Object.keys(byMuni).sort().map(muni => {
+        const unidades = Object.keys(byMuni[muni]).sort().map(u => `
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:10px 16px 4px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding-bottom:6px;">
+                    <span style="font-weight:800; color:#0f172a; font-size:13.5px;">${escapeHtml(u)}</span>
+                    <button type="button" onclick="window.spmToggleSugerenciasGrupo('${byMuni[muni][u][0].clues}')" style="height:26px; padding:0 10px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; color:#475569; font-size:11.5px; font-weight:700; cursor:pointer;">Elegir unidad</button>
+                </div>
+                ${byMuni[muni][u].map(bioLine).join('')}
+            </div>`).join('');
+        return `
+            <div style="margin-bottom:14px;">
+                <div style="font-size:11.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#64748b; margin:4px 2px 8px;">${escapeHtml(muni)}</div>
+                ${unidades}
+            </div>`;
     }).join('');
 
-    body.innerHTML = `
-        <table class="spm-preview-table">
-            <thead>
-                <tr>
-                    <th>Municipio</th><th>Unidad</th><th>Biológico</th><th>Categoría</th>
-                    <th>Promedio (frascos)</th><th>Mínimo (dosis)</th><th>Máximo (dosis)</th><th>Sem. en cero c/consumo</th>
-                </tr>
-            </thead>
-            <tbody>${rowsHtml}</tbody>
-        </table>
-    `;
+    const barra = `
+        <div style="display:flex; gap:8px; align-items:center; margin:2px 2px 12px;">
+            <button type="button" onclick="window.spmSeleccionarSugerencias(true)" style="height:30px; padding:0 12px; border-radius:9px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-size:12px; font-weight:700; cursor:pointer;">Seleccionar todas</button>
+            <button type="button" onclick="window.spmSeleccionarSugerencias(false)" style="height:30px; padding:0 12px; border-radius:9px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-size:12px; font-weight:700; cursor:pointer;">Quitar selección</button>
+        </div>`;
+    body.innerHTML = `<div style="padding:4px 2px;">${barra}${html}</div>`;
+    window.spmUpdateSugerenciasFooter();
+};
+
+/** Actualiza texto/estado de los botones del pie según lo marcado. */
+window.spmUpdateSugerenciasFooter = function() {
+    const n = window._spmSugSel.size;
+    const set = (id, base) => {
+        const b = document.getElementById(id);
+        if (!b) return;
+        b.textContent = n ? `${base} (${n})` : base;
+        b.disabled = !n;
+        b.style.opacity = n ? '1' : '.5';
+        b.style.cursor = n ? 'pointer' : 'not-allowed';
+    };
+    set('spmBtnAplicarSugerencias', 'Aplicar seleccionadas');
+    set('spmBtnDescartarSugerencias', 'Descartar seleccionadas');
+};
+
+window.spmToggleSugerencia = function(id) {
+    if (window._spmSugSel.has(id)) window._spmSugSel.delete(id); else window._spmSugSel.add(id);
+    window.spmRenderSugerenciasModal(window._spmSugerenciasCache);
+};
+
+window.spmSeleccionarSugerencias = function(todas) {
+    window._spmSugSel = new Set(todas ? (window._spmSugerenciasCache || []).map(r => r.id) : []);
+    window.spmRenderSugerenciasModal(window._spmSugerenciasCache);
+};
+
+/** Marca/desmarca todas las filas de una unidad (si ya están todas marcadas, las quita). */
+window.spmToggleSugerenciasGrupo = function(clues) {
+    const ids = (window._spmSugerenciasCache || []).filter(r => r.clues === clues).map(r => r.id);
+    const todas = ids.length > 0 && ids.every(id => window._spmSugSel.has(id));
+    ids.forEach(id => todas ? window._spmSugSel.delete(id) : window._spmSugSel.add(id));
+    window.spmRenderSugerenciasModal(window._spmSugerenciasCache);
+};
+
+/** Filas marcadas, tomadas de la caché. */
+window._spmSugerenciasSeleccionadas = function() {
+    return (window._spmSugerenciasCache || []).filter(r => window._spmSugSel.has(r.id));
+};
+
+/** Quita de la caché las filas ya resueltas y refresca (o cierra si no queda nada). */
+window._spmSugerenciasQuitar = function(ids) {
+    const set = new Set(ids);
+    window._spmSugerenciasCache = (window._spmSugerenciasCache || []).filter(r => !set.has(r.id));
+    ids.forEach(id => window._spmSugSel.delete(id));
+    window.spmRefreshSugerenciasBadge();
+    if (window._spmSugerenciasCache.length === 0) window.spmCerrarSugerenciasModal();
+    else window.spmRenderSugerenciasModal(window._spmSugerenciasCache);
 };
 
 window.spmCerrarSugerenciasModal = function() {
@@ -1050,14 +1162,14 @@ window.spmCerrarSugerenciasModal = function() {
     if (modal) modal.style.display = 'none';
 };
 
-/** Copia TODAS las sugerencias cargadas a biologicos_params (aprobación humana explícita). */
-window.spmAplicarTodasSugerencias = async function() {
-    const rows = window._spmSugerenciasCache || [];
+/** Copia SOLO las sugerencias marcadas a biologicos_params (aprobación humana explícita). */
+window.spmAplicarSugerenciasSeleccionadas = async function() {
+    const rows = window._spmSugerenciasSeleccionadas();
     if (rows.length === 0) return;
 
     const confirmApply = await window.showConfirmDialog(
         'Aplicar Sugerencias de Reabasto Inteligente',
-        `¿Aplicar las ${rows.length} sugerencias pendientes a biologicos_params? Esto reemplaza el Promedio/Mínimo/Máximo vigente de cada unidad+biológico listado.`
+        `¿Aplicar ${rows.length} sugerencia(s) seleccionada(s)? Esto reemplaza el Promedio/Mínimo/Máximo vigente de cada unidad+biológico marcado. Las demás siguen pendientes.`
     );
     if (!confirmApply) return;
 
@@ -1098,9 +1210,7 @@ window.spmAplicarTodasSugerencias = async function() {
             .in('id', ids);
         if (delError) console.warn('[param_calculator] Sugerencias aplicadas pero no se pudieron limpiar de la tabla de staging:', delError);
 
-        window._spmSugerenciasCache = null;
-        window.spmCerrarSugerenciasModal();
-        window.spmRefreshSugerenciasBadge();
+        window._spmSugerenciasQuitar(ids);
 
         records.forEach(rec => {
             window._spmParamsMap[`${rec.clues}|${rec.biologico}`] = rec;
@@ -1120,14 +1230,14 @@ window.spmAplicarTodasSugerencias = async function() {
     }
 };
 
-/** Descarta TODAS las sugerencias cargadas sin aplicarlas (el motor las regenerará si sigue aplicando el criterio). */
-window.spmDescartarTodasSugerencias = async function() {
-    const rows = window._spmSugerenciasCache || [];
+/** Descarta SOLO las sugerencias marcadas sin aplicarlas (el motor las regenerará si sigue aplicando el criterio). */
+window.spmDescartarSugerenciasSeleccionadas = async function() {
+    const rows = window._spmSugerenciasSeleccionadas();
     if (rows.length === 0) return;
 
     const confirmDiscard = await window.showConfirmDialog(
         'Descartar Sugerencias Pendientes',
-        `¿Descartar las ${rows.length} sugerencias pendientes sin aplicarlas? El motor las volverá a generar en su próxima corrida si las condiciones siguen igual.`
+        `¿Descartar ${rows.length} sugerencia(s) seleccionada(s) sin aplicarlas? El motor las volverá a generar en su próxima corrida si las condiciones siguen igual.`
     );
     if (!confirmDiscard) return;
 
@@ -1140,9 +1250,7 @@ window.spmDescartarTodasSugerencias = async function() {
             .in('id', ids);
         if (error) throw error;
 
-        window._spmSugerenciasCache = null;
-        window.spmCerrarSugerenciasModal();
-        window.spmRefreshSugerenciasBadge();
+        window._spmSugerenciasQuitar(ids);
         if (typeof showToast === 'function') showToast('Sugerencias descartadas.', true, 'warn');
     } catch (e) {
         console.error('[param_calculator] Error al descartar sugerencias:', e);
