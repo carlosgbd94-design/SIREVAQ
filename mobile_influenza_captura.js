@@ -543,6 +543,8 @@
     box.innerHTML = `<strong>${items.length === 1 ? "Hay 1 problema" : `Hay ${items.length} problemas`} que corregir antes de guardar:</strong><ul>${items.map(i => `<li>${esc(i.msg)}</li>`).join("")}</ul>`;
     box.hidden = false;
     items.forEach(i => i.el && i.el.setAttribute("aria-invalid", "true"));
+    // Aviso emergente: el usuario lo ve aunque el cuadro de errores quede fuera de pantalla
+    if (cfg && cfg.toast) cfg.toast(esc(items[0].msg) + (items.length > 1 ? ` (y ${items.length - 1} más)` : ""), "error");
     const primero = items.find(i => i.el && !i.el.disabled);
     const dest = primero ? primero.el : box;
     dest.focus();

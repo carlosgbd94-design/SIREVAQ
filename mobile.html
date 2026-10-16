@@ -39,7 +39,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1" rel="stylesheet">
 
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="mobile_style.css?v=2026.50">
+  <link rel="stylesheet" href="mobile_style.css?v=2026.55">
   <link rel="stylesheet" href="ayuda.css?v=1">
   <link rel="stylesheet" href="mobile_supervision.css?v=8">
 </head>
@@ -145,41 +145,41 @@
   <div id="mainApp" class="hidden flex-1 flex flex-col pb-32">
     
     <!-- 🏢 Header Premium (Independent floating liquid-glass nodes) -->
-    <div class="w-full px-6 pt-6 flex items-center justify-between z-[100] gap-3">
+    <header class="w-full px-6 pt-6 flex items-center justify-between z-[100] gap-3">
       <!-- Title Badge (independent) -->
       <div class="flex items-center gap-3 px-4 py-2.5 rounded-2xl liquid-glass flex-1 max-w-[220px]">
         <img src="assets/logo_nuevo.png" class="h-8 w-auto" alt="Logo JS1">
         <div class="min-w-0">
-          <span class="text-xs font-black tracking-tight text-slate-900 block leading-tight truncate">JS1 SIREVAQ</span>
+          <h1 class="text-xs font-black tracking-tight text-slate-900 block leading-tight truncate">JS1 SIREVAQ</h1>
           <span class="text-[8px] font-bold text-slate-500 uppercase tracking-widest leading-none block">Móvil</span>
         </div>
       </div>
 
       <!-- Action Buttons (independent circles) -->
       <div class="flex items-center gap-2">
-        <button id="btnNotifToggle" class="w-11 h-11 rounded-full liquid-glass flex items-center justify-center relative active:scale-95 transition-transform">
-          <span class="material-symbols-rounded text-xl">notifications</span>
+        <button id="btnNotifToggle" type="button" aria-label="Avisos" class="w-11 h-11 rounded-full liquid-glass flex items-center justify-center relative active:scale-95 transition-transform">
+          <span class="material-symbols-rounded text-xl" aria-hidden="true">notifications</span>
           <span id="notifBadge" class="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white hidden"></span>
         </button>
         
-        <button id="btnFilesToggle" class="w-11 h-11 rounded-full liquid-glass flex items-center justify-center active:scale-95 transition-transform">
-          <span class="material-symbols-rounded text-xl">folder_open</span>
+        <button id="btnFilesToggle" type="button" aria-label="Archivos y documentos" class="w-11 h-11 rounded-full liquid-glass flex items-center justify-center active:scale-95 transition-transform">
+          <span class="material-symbols-rounded text-xl" aria-hidden="true">folder_open</span>
         </button>
         
-        <button id="btnProfileToggle" style="position:relative;" class="w-11 h-11 rounded-full liquid-glass flex items-center justify-center active:scale-95 transition-transform overflow-hidden">
-          <span class="material-symbols-rounded text-xl">person</span>
+        <button id="btnProfileToggle" type="button" aria-label="Perfil y cuenta" style="position:relative;" class="w-11 h-11 rounded-full liquid-glass flex items-center justify-center active:scale-95 transition-transform overflow-hidden">
+          <span class="material-symbols-rounded text-xl" aria-hidden="true">person</span>
           <span data-cal-cap-dot style="display:none; position:absolute; top:6px; right:6px; width:10px; height:10px; border-radius:50%; background:#d97706; border:2px solid #fff;"></span>
         </button>
       </div>
-    </div>
+    </header>
 
     <!-- 🌤️ KPI Cards & Info Area (Weather & Compliance) -->
-    <div class="px-6 pt-4 grid grid-cols-2 gap-4 max-w-md mx-auto w-full">
+    <section aria-label="Resumen: clima y cumplimiento" class="px-6 pt-4 grid grid-cols-2 gap-4 max-w-md mx-auto w-full">
       <!-- Weather widget -->
       <div class="kpi-chip liquid-glass">
         <img id="lblClimaIcon" src="assets/weather/partly-cloudy-day.svg" width="48" height="48" alt="" style="flex-shrink:0;margin:-8px -4px -8px -8px">
         <div class="flex flex-col">
-          <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Clima</span>
+          <span class="text-[9px] font-black uppercase tracking-widest text-slate-600">Clima</span>
           <span class="text-xs font-black" id="hdrClima">Cargando...</span>
         </div>
       </div>
@@ -187,12 +187,12 @@
       <div class="kpi-chip liquid-glass" id="chipCumplimiento">
         <span id="lblCumplimientoIcon" class="inline-flex items-center justify-center" style="min-width:28px;line-height:0"><span class="material-symbols-rounded text-emerald-500 text-xl">leaderboard</span></span>
         <div class="flex flex-col">
-          <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Cumplimiento</span>
+          <span class="text-[9px] font-black uppercase tracking-widest text-slate-600">Cumplimiento</span>
           <span class="text-xs font-black text-emerald-600" id="lblCumplimientoVal">—</span>
           <span id="lblCumplimientoRango" class="logro-rango" hidden></span>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- 📲 Área de Contenido de Formularios -->
     <main id="captureContentArea" class="flex-1 p-6 pb-32 space-y-8 max-w-md mx-auto w-full">
@@ -203,7 +203,7 @@
         <div class="biologic-card liquid-glass flex gap-3.5 items-start mb-6">
           <span class="material-symbols-rounded text-xl text-sky-600 mt-0.5">ac_unit</span>
           <div class="min-w-0">
-            <h4 class="text-xs font-black uppercase tracking-wider mb-1">Cadena de Frío</h4>
+            <h2 class="text-xs font-black uppercase tracking-wider mb-1">Cadena de Frío</h2>
             <p class="text-xs text-slate-600 leading-relaxed font-semibold">Mantén siempre la temperatura estrictamente entre +2°C y +8°C para evitar la inactivación de los biológicos.</p>
           </div>
         </div>
@@ -246,7 +246,7 @@
         <div class="biologic-card liquid-glass flex gap-3.5 items-start mb-6">
           <span class="material-symbols-rounded text-xl text-amber-600 mt-0.5">warning</span>
           <div class="min-w-0">
-            <h4 class="text-xs font-black uppercase tracking-wider mb-1">Desecho Seguro</h4>
+            <h2 class="text-xs font-black uppercase tracking-wider mb-1">Desecho Seguro</h2>
             <p class="text-xs text-slate-600 leading-relaxed font-semibold">Toda jeringa utilizada debe ser descartada inmediatamente en contenedores rígidos de RPBI para evitar accidentes punzocortantes.</p>
           </div>
         </div>
@@ -300,7 +300,7 @@
         <div class="biologic-card liquid-glass flex gap-3.5 items-start mb-6">
           <span class="material-symbols-rounded text-xl text-purple-600 mt-0.5">calculate</span>
           <div class="min-w-0">
-            <h4 class="text-xs font-black uppercase tracking-wider mb-1">Pedido Inteligente</h4>
+            <h2 class="text-xs font-black uppercase tracking-wider mb-1">Pedido Inteligente</h2>
             <p class="text-xs text-slate-600 leading-relaxed font-semibold">El pedido se evalúa automáticamente contra el promedio histórico de consumo para evitar pérdidas por caducidad.</p>
           </div>
         </div>
@@ -369,7 +369,7 @@
         <div class="biologic-card liquid-glass flex gap-3.5 items-start mb-6">
           <span class="material-symbols-rounded text-xl text-emerald-600 mt-0.5">clean_hands</span>
           <div class="min-w-0">
-            <h4 class="text-xs font-black uppercase tracking-wider mb-1">Higiene de Unidades</h4>
+            <h2 class="text-xs font-black uppercase tracking-wider mb-1">Higiene de Unidades</h2>
             <p class="text-xs text-slate-600 leading-relaxed font-semibold">Asegura la limpieza diaria con Pinol diluido para mantener altos estándares de bioseguridad en el área de inmunizaciones.</p>
           </div>
         </div>
@@ -809,10 +809,10 @@
   <script src="influenza_rubros.js?v=1" defer></script>
   <script src="mobile_influenza_validacion.js?v=3" defer></script>
   <script src="covid_captura.js?v=1" defer></script>
-  <script src="mobile_influenza_captura.js?v=7" defer></script>
+  <script src="mobile_influenza_captura.js?v=8" defer></script>
   <script src="mobile_supervision.js?v=7" defer></script>
   <script src="mobile_supervision_ops.js?v=3" defer></script>
   <script src="mobile_supervision_rda.js?v=2" defer></script>
-  <script src="mobile_main.js?v=2026.45" defer></script>
+  <script src="mobile_main.js?v=2026.47" defer></script>
 </body>
 </html>

@@ -188,6 +188,7 @@
                 if (!canvas) {
                     canvas = document.createElement("canvas");
                     canvas.id = "mobile-confetti-canvas";
+                    canvas.setAttribute("aria-hidden", "true");
                     canvas.style.position = "fixed";
                     canvas.style.inset = "0";
                     canvas.style.width = "100vw";
@@ -2671,6 +2672,7 @@
             const top = Math.max(0, Math.round(vv.offsetTop));
             const bottom = Math.max(0, Math.round(window.innerHeight - (vv.height + top)));
             const right = Math.max(0, Math.round(window.innerWidth - (vv.width + left)));
+            root.style.setProperty('--vv-top', top + 'px');
             root.style.setProperty('--vv-left', left + 'px');
             root.style.setProperty('--vv-right', right + 'px');
             root.style.setProperty('--vv-bottom', bottom + 'px');
@@ -4141,6 +4143,7 @@
     const initBgCanvas = () => {
         const canvas = document.createElement('canvas');
         canvas.id = 'bgCanvas';
+        canvas.setAttribute('aria-hidden', 'true');
         canvas.style.position = 'fixed';
         canvas.style.top = '0';
         canvas.style.left = '0';

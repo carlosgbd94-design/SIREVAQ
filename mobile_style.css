@@ -330,6 +330,8 @@ body.teclado-abierto .command-hub { bottom: calc(16px + env(safe-area-inset-bott
 
 /* Los avisos deben quedar por encima de los diálogos (z-index 50000), no detrás. */
 #toastContainer { z-index: 60000 !important; }
+/* Con el teclado abierto el viewport visible se desplaza: el aviso se ancla al borde visible, no al de la pagina */
+#toastContainer { top: calc(24px + var(--vv-top, 0px)) !important; }
 
 /* 🗂️ Cascade Card Layout */
 .biologic-card {
@@ -612,21 +614,21 @@ html.dark .premium-switch-track {
 
 /* Shelf life colors */
 .shelf-life-danger {
-  color: #ef4444 !important;
+  color: #b91c1c !important;
   font-weight: 800;
   background: rgba(239, 68, 68, 0.1);
   padding: 2px 6px;
   border-radius: 6px;
 }
 .shelf-life-warn {
-  color: #f59e0b !important;
+  color: #92400e !important;
   font-weight: 800;
   background: rgba(245, 158, 11, 0.1);
   padding: 2px 6px;
   border-radius: 6px;
 }
 .shelf-life-ok {
-  color: #10b981 !important;
+  color: #047857 !important;
   font-weight: 800;
   background: rgba(16, 185, 129, 0.1);
   padding: 2px 6px;
@@ -1432,7 +1434,7 @@ html.dark .cp-step.done .cp-step-dot, html.dark .cp-step.current .cp-step-dot { 
 html.dark .cp-flow.pending .cp-step.done .cp-step-dot, html.dark .cp-flow.pending .cp-step.current .cp-step-dot { background: #fbbf24; }
 html.dark .cp-flow.delivered .cp-step.done .cp-step-dot, html.dark .cp-flow.delivered .cp-step.current .cp-step-dot { background: #93c5fd; }
 html.dark .panel-section .biologic-card.liquid-glass { background: #0a0a0a; border-color: #27272a; }
-html.dark .panel-section .biologic-card h4 { color: #f8fafc; }
+html.dark .panel-section .biologic-card :is(h2, h4) { color: #f8fafc; }
 
 /* One UI 9 -- modo oscuro del vidrio: el texto y los iconos del encabezado/chips deben ser claros
    (antes el vidrio era siempre claro y ahora sigue el tema). */
@@ -1445,7 +1447,7 @@ html.dark .liquid-glass .text-sky-600 { color: #38bdf8 !important; }
 html.dark .liquid-glass .text-amber-600 { color: #fbbf24 !important; }
 html.dark .liquid-glass .text-purple-600 { color: #c4b5fd !important; }
 html.dark .liquid-glass .text-emerald-600 { color: #34d399 !important; }
-html.dark .panel-section .biologic-card.liquid-glass :is(h4, p) { color: #f1f5f9; }
+html.dark .panel-section .biologic-card.liquid-glass :is(h2, h4, p) { color: #f1f5f9; }
 
 /* ===== Influenza: validación de reportes (mobile_influenza_validacion.js) ===== */
 #panelINF .iv-wrap { display: flex; flex-direction: column; gap: 14px; color: #0f172a; }
@@ -1677,31 +1679,9 @@ html.dark #panelINFC .ic-vac { background: #334155; }
 .panel-section > .flex.items-center.justify-between.mb-6 > h2 { min-width: 0; }
 .dock-item .dock-label { text-overflow: clip; }
 /* space-y-8 sumaba 2rem de margen al panel visible por los paneles ocultos que lo preceden */
-#captureContentArea > .panel-section { margin-top: 0 !important; }
+#captureContentArea > :is(#panelSR, #panelCONS, #panelBIO, #panelPINOL, #panelINFC) { margin-top: 0 !important; }
 
-/* Barra de acciones: estado + contador + guardar en UNA fila sobre la barra de paneles. Antes eran
-   tres piezas apiladas a la derecha que tapaban el texto de las tarjetas. */
-.command-hub {
-  left: calc(14px + var(--vv-left, 0px)) !important;
-  right: calc(14px + var(--vv-right, 0px)) !important;
-  bottom: calc(94px + env(safe-area-inset-bottom, 0px) + var(--vv-bottom, 0px)) !important;
-  width: auto !important;
-  flex-direction: row !important;
-  justify-content: flex-end !important;
-  align-items: center !important;
-  gap: 8px !important;
-  padding: 6px 6px 6px 12px !important;
-  border-radius: 999px !important;
-  background: var(--oui-glass-strong, rgba(255,255,255,.92)) !important;
-  border: 1px solid var(--oui-glass-border, rgba(15,23,42,.12)) !important;
-  box-shadow: 0 6px 20px rgba(20, 30, 50, 0.12) !important;
-  -webkit-backdrop-filter: var(--oui-glass-blur) !important;
-  backdrop-filter: var(--oui-glass-blur) !important;
-}
-.command-hub .status-chip-v5 { flex-direction: row !important; width: auto !important; max-width: none !important; margin-right: auto !important; padding: 6px 12px !important; border-radius: 999px !important; font-size: 11px !important; }
-.command-hub .hub-counter { flex-direction: row; gap: 6px; padding: 4px 12px; min-width: 0; border-radius: 999px; align-items: baseline; }
-.command-hub button { width: 48px !important; height: 48px !important; }
-#captureContentArea { padding-bottom: calc(230px + env(safe-area-inset-bottom, 0px)); }
+#captureContentArea { padding-bottom: calc(210px + env(safe-area-inset-bottom, 0px)); }
 #panelINFC .ic-semana { grid-template-columns: 44px 1fr 44px; gap: 6px; }
 #panelINFC .ic-nav { height: 48px; }
 #panelINFC .ic-sel select { height: 48px; font-size: 13px; padding: 0 22px 0 8px; }
