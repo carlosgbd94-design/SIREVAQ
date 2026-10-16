@@ -2595,7 +2595,9 @@
         const indicator = document.getElementById('dockIndicator');
         const dock = document.getElementById('mobileCaptureDock');
         const activeBtn = dock && dock.querySelector('.dock-item.active');
+        if (indicator && !activeBtn) { indicator.style.opacity = '0'; return; } // panel sin botón en la barra (p. ej. Mis indicadores)
         if (!indicator || !activeBtn || activeBtn.offsetWidth === 0) return;
+        indicator.style.opacity = '';
         const primeraVez = indicator.dataset.colocada !== '1';
         if (primeraVez) indicator.style.transition = 'none'; // la primera colocación no se anima desde 0
         indicator.style.width = activeBtn.offsetWidth + 'px';
@@ -2614,6 +2616,9 @@
         const changed = activePanel !== panelId;
         activePanel = panelId;
         if (panelId !== 'RDA') ultimoPanelCaptura = panelId;
+        // El acceso a «Mis indicadores» sobra dentro del propio panel de indicadores
+        const btnIndAcc = document.getElementById('btnMisIndicadores');
+        if (btnIndAcc && window.MobileSupervision && window.MobileSupervision.puedeIndicadoresUnidad && window.MobileSupervision.puedeIndicadoresUnidad()) btnIndAcc.hidden = panelId === 'RDA';
         
         document.querySelectorAll('.panel-section').forEach(sec => sec.classList.add('hidden'));
         document.getElementById(`panel${panelId}`)?.classList.remove('hidden');
