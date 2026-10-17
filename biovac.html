@@ -37,7 +37,7 @@ window.onunhandledrejection = function (event) {
 <link rel="stylesheet" href="ayuda.css?v=6">
 <link rel="stylesheet" href="municipal_guiado.css?v=6">
 <script defer src="guias_contenido.js?v=3"></script>
-<script defer src="ayuda.js?v=20"></script>
+<script defer src="ayuda.js?v=21"></script>
 <script defer src="a11y_global.js?v=6"></script>
 <script defer src="dock_glass.js?v=4"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
@@ -47,10 +47,10 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.68"></script>
+<script defer src="biovac_ui.js?v=2026.69"></script>
 <script defer src="sis06p_biovac_module.js?v=2026.56"></script>
 <script defer src="sis_csv.js?v=2"></script>
-<script defer src="sis06p_dashboard_module.js?v=2026.19"></script>
+<script defer src="sis06p_dashboard_module.js?v=2026.20"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
 <script defer src="municipal_guiado.js?v=13"></script>
 <style>
@@ -457,6 +457,13 @@ window.onunhandledrejection = function (event) {
   .bloque-titulo .bio-meta { display: flex; flex-direction: column; gap: 1px; }
   .bloque-titulo .bio-resumen { font-size: 11px; font-weight: 700; color: var(--muted); }
   .bloque-titulo .bio-resumen .alerta { color: var(--error); }
+  .avisos-caducidad { display:flex; flex-direction:column; gap:8px; margin:0 0 14px; }
+  .aviso-caducidad { display:flex; gap:10px; align-items:flex-start; padding:10px 14px; border-radius:12px; border:1px solid; font-size:12.5px; }
+  .aviso-caducidad b { display:block; font-weight:800; }
+  .aviso-caducidad small { display:block; margin:2px 0 4px; font-weight:600; opacity:.9; }
+  .aviso-caducidad ul { margin:0; padding-left:18px; font-weight:600; }
+  .aviso-caducidad.vencido { background:var(--error-bg, #fef2f2); border-color:rgba(220,38,38,.35); color:var(--error, #b91c1c); }
+  .aviso-caducidad.proximo { background:var(--warning-bg); border-color:var(--warning-border); color:var(--warning); }
 
   .tabla-wrap { overflow-x: auto; border-radius: 14px; border: 1px solid var(--outline-variant); }
   table.renglones { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; min-width: 720px; }

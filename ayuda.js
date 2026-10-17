@@ -298,7 +298,7 @@
         I('lock', '#16a34a', 'Municipios cerrados', 'El informe suma solo lo que ya cerró. Si falta alguno, te pregunta antes de generarlo.'),
         I('rule', '#d97706', 'Errores y avisos', 'Lo ideal es generarlo sin errores pendientes.'),
         T('Los entregables'),
-        I('summarize', '#7c3aed', 'Informe del mes', 'Una foto del concentrado, con quién la generó y cuándo. Puedes generar otro si algo cambia después.'),
+        I('summarize', '#7c3aed', 'Informe del mes', 'Es la constancia del mes: guarda una foto del concentrado con quién la generó y cuándo, y no descarga archivos. Si se corrige algo después, se marca como desactualizada y puedes generar otra.'),
         I('download', '#0284c7', 'Excel y PDF', 'El Excel usa el formato oficial de Movimiento de Biológico; el PDF sirve para archivar o imprimir.')
       ]
     },

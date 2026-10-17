@@ -456,7 +456,7 @@
       btnPub.className = completo ? 'btn-primario btn-mini' : 'btn-fantasma btn-mini';
       btnPub.disabled = !completo;
       if (!completo) btnPub.style.opacity = '0.5';
-      btnPub.innerHTML = '<span class="material-symbols-rounded">cloud_upload</span> Publicar a indicadores';
+      btnPub.innerHTML = '<span class="material-symbols-rounded">cloud_upload</span> Forzar publicación a indicadores';
       const estadoPub = document.createElement('div');
       estadoPub.style.cssText = 'flex-basis:100%; font-size:11.5px; font-weight:600; color:var(--muted);';
       btnPub.addEventListener('click', async () => {
@@ -643,10 +643,10 @@
     try {
       const { data } = await estado.db.rpc('sis_estado_publicacion', { p_mes: mes, p_anio: anio, p_municipio: municipio });
       const p = Array.isArray(data) ? data[0] : null;
-      if (!p) { cont.textContent = 'Aún no publicado a indicadores.'; cont.style.color = 'var(--muted)'; return; }
+      if (!p) { cont.textContent = 'Aún no publicado a indicadores: se publica sola cuando todas las unidades estén validadas (y se vuelve a publicar si algo cambia).'; cont.style.color = 'var(--muted)'; return; }
       const cuando = new Date(p.publicado_en).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
       if (p.desactualizada) {
-        cont.textContent = `⚠ Publicado el ${cuando}${p.publicado_por ? ' por ' + p.publicado_por : ''}, pero hubo cambios después: vuelve a publicar.`;
+        cont.textContent = `⚠ Publicado el ${cuando}${p.publicado_por ? ' por ' + p.publicado_por : ''}, pero hubo cambios después. Se vuelve a publicar sola al validar; si no, usa «Forzar publicación».`;
         cont.style.color = 'var(--warning)';
       } else {
         cont.textContent = `Publicado el ${cuando}${p.publicado_por ? ' por ' + p.publicado_por : ''} (${p.filas} filas).`;

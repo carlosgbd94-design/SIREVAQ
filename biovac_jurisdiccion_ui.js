@@ -297,7 +297,9 @@ const INFO_VALIDACION = {
   EXISTENCIA_NEGATIVA: { titulo: 'Existencia negativa', icono: 'remove_circle', nivel: 'ERROR' },
   CADUCIDAD_INCONSISTENTE: { titulo: 'Caducidades distintas', icono: 'event_busy', nivel: 'ADVERTENCIA' },
   ARF_SIN_RESOLVER: { titulo: 'Lote en dictamen sin resolver', icono: 'hourglass_bottom', nivel: 'ADVERTENCIA' },
-  MUNICIPIO_VS_UNIDADES: { titulo: 'Municipio vs. sus unidades', icono: 'compare_arrows', nivel: 'ADVERTENCIA' }
+  MUNICIPIO_VS_UNIDADES: { titulo: 'Municipio vs. sus unidades', icono: 'compare_arrows', nivel: 'ADVERTENCIA' },
+  LOTE_CADUCADO: { titulo: 'Biológico caducado con existencia', icono: 'event_busy', nivel: 'ADVERTENCIA' },
+  LOTE_PROXIMO_A_CADUCAR: { titulo: 'Biológico próximo a caducar', icono: 'schedule', nivel: 'ADVERTENCIA' }
 };
 
 function filasDeLote(v) {
@@ -349,12 +351,49 @@ function explicarValidacion(v) {
       hacer: 'El municipal revisa ese lote contra sus unidades (el aviso dice la causa probable) y lo ajusta o lo confirma. Aquí no hace falta corregir nada.'
     };
   }
+  if (v.codigo === 'LOTE_CADUCADO' || v.codigo === 'LOTE_PROXIMO_A_CADUCAR') {
+    const f = filas.filter((x) => Number(x.existencia_final_frascos) > 0);
+    const total = redondearFrascos(suma(f.length ? f : filas, 'existencia_final_frascos'));
+    const cad = f.length ? formatMmmAa(f[0].caducidad) : '';
+    const enDictamen = f.some((x) => x.categoria !== 'NORMAL');
+    if (v.codigo === 'LOTE_CADUCADO') {
+      return {
+        que: `Este lote caducó (${cad}) y todavía tiene ${total} frascos en existencia${enDictamen ? ' (parte en A.R.F. o canje)' : ''}.`,
+        quien: 'Lo resuelve el municipio o la unidad que lo tiene',
+        hacer: 'Que lo registren como desechado (o lo envíen a canje/A.R.F. si aplica) para que no siga contando como existencia utilizable.'
+      };
+    }
+    return {
+      que: `Este lote caduca en ${cad} (menos de ${DIAS_PROXIMO_A_VENCER} días) y hay ${total} frascos en existencia.`,
+      quien: 'Lo resuelve el municipio con sus unidades',
+      hacer: 'Priorizar su uso o redistribuirlo a una unidad con más demanda antes de que caduque.'
+    };
+  }
   return { que: v.mensaje || '', quien: '', hacer: '' };
 }
 
 function alertasDeLote(fila) {
   return estado.validaciones.filter((v) => v.codigo !== 'MOVIMIENTO_NO_CERRADO'
     && sinSaltos(v.biologico) === sinSaltos(fila.nombre_excel) && String(v.lote) === String(fila.numero_lote));
+}
+
+// Alertas de caducidad calculadas sobre el concentrado: lote con existencia final > 0 que ya caducó
+// o caduca dentro de DIAS_PROXIMO_A_VENCER días. La fecha de referencia es hoy, o el último día del mes
+// consultado si ese mes ya pasó (así un mes viejo no se marca por lo que pasó después).
+function avisosDeCaducidad(filas, anio, mes) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const finMes = new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10);
+  const ref = finMes < hoy ? finMes : hoy;
+  const limite = new Date(new Date(ref + 'T00:00:00Z').getTime() + DIAS_PROXIMO_A_VENCER * 86400000).toISOString().slice(0, 10);
+  const vistos = new Map();
+  (filas || []).forEach((f) => {
+    if (!f.caducidad || !(Number(f.existencia_final_frascos) > 0)) return;
+    const cod = f.caducidad < ref ? 'LOTE_CADUCADO' : (f.caducidad <= limite ? 'LOTE_PROXIMO_A_CADUCAR' : null);
+    if (!cod) return;
+    const k = cod + '|' + f.biologico_id + '|' + f.numero_lote;
+    if (!vistos.has(k)) vistos.set(k, { severidad: 'ADVERTENCIA', codigo: cod, mensaje: '', unidad: null, biologico: f.nombre_excel, lote: f.numero_lote });
+  });
+  return [...vistos.values()];
 }
 
 async function cargarConcentrado(opciones) {
@@ -384,9 +423,9 @@ async function cargarConcentrado(opciones) {
   estado.unidadesCuentan = cuentan;
   estado.unidadPorId = new Map(cuentan.map((u) => [u.id, u]));
   estado.movPorUnidad = new Map((movimientos || []).map((m) => [m.unidad_id, m]));
-  estado.validaciones = validaciones || [];
-  estado.informes = informes || [];
   estado.concentrado = concentrado || [];
+  estado.validaciones = (validaciones || []).concat(avisosDeCaducidad(estado.concentrado, anio, mes));
+  estado.informes = informes || [];
   estado.correccionesPend = [];
   try {
     const { data: pend } = await estado.db.rpc('biovac_correcciones_municipio_estado', {
@@ -716,7 +755,7 @@ function renderInforme() {
   const informes = estado.informes || [];
   cont.innerHTML = informes.length ? informes.map((i) => `
     <div class="informe-fila">
-      <span class="estado-badge estado-${i.estado}">${String(i.estado).replace(/_/g, ' ')}</span>
+      <span class="estado-badge estado-${i.estado}">${i.estado === 'GENERADO' ? 'Vigente' : 'Desactualizado: hubo correcciones'}</span>
       generado por <b>${escJ(i.generado_por || '—')}</b> el ${new Date(i.generado_en).toLocaleString('es-MX')}
     </div>`).join('') : '<p style="color:var(--muted); font-size:12.5px; margin:0">Aún no se ha generado un informe de este mes.</p>';
 }
@@ -1215,12 +1254,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ocultarCampo = (id) => { const c = document.getElementById(id).closest('.campo'); if (c) c.style.display = 'none'; };
   if (estado.jurisdicciones.length <= 1) ocultarCampo('selJurisdiccion');
   if (estado.perfil) ocultarCampo('selUsuario');
-  if (!puedeEditar()) document.getElementById('btnGenerarInforme').style.display = 'none';
+  if (!puedeEditar()) {
+    document.getElementById('btnGenerarInforme').style.display = 'none';
+    const bc = document.getElementById('btnGenerarInformeCuerpo');
+    if (bc) bc.style.display = 'none';
+  }
 
   const recargar = () => cargarConcentrado({ mantenerPaso: true });
   document.getElementById('btnCargar').addEventListener('click', recargar);
   ['selJurisdiccion', 'selAnio', 'selMes'].forEach((id) => document.getElementById(id).addEventListener('change', recargar));
   document.getElementById('btnGenerarInforme').addEventListener('click', generarInforme);
+  const btnInfCuerpo = document.getElementById('btnGenerarInformeCuerpo');
+  if (btnInfCuerpo) btnInfCuerpo.addEventListener('click', generarInforme);
   document.getElementById('btnExportarExcelJurisdiccional').addEventListener('click', exportarExcelJurisdiccional);
   document.getElementById('btnVerPdfJurisdiccional').addEventListener('click', verPdfJurisdiccional);
   document.getElementById('btnSiguiente').addEventListener('click', () => activarPasoJur(Math.min(4, estado.paso + 1)));

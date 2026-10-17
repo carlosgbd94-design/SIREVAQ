@@ -1754,7 +1754,26 @@ function renderBloques(editable) {
       html += renderBiologico(bio, editable);
     }
   }
-  cont.innerHTML = html || '<p>Sin biológicos vigentes para este periodo.</p>';
+  cont.innerHTML = avisoCaducidadMovimiento() + (html || '<p>Sin biológicos vigentes para este periodo.</p>');
+}
+
+// Aviso de biológico caducado / próximo a caducar (<= DIAS_PROXIMO_A_VENCER) entre los lotes con existencia final.
+function avisoCaducidadMovimiento() {
+  const conExistencia = (estado.renglones || []).filter((r) => Number(r.existencia_final_frascos) > 0 && r.biovac_lotes && r.biovac_lotes.caducidad);
+  const nombre = (r) => {
+    const bio = (estado.biologicos || []).find((b) => b.id === r.biovac_lotes.biologico_id);
+    return `${bio ? bio.nombre_excel.replace(/\n/g, ' ') : 'Biológico'} · lote ${r.biovac_lotes.numero_lote} (${formatMmmAa(r.biovac_lotes.caducidad)})`;
+  };
+  const vencidos = conExistencia.filter((r) => loteVencido(r.biovac_lotes.caducidad) || semaforoCaducidad(r.biovac_lotes.caducidad) === 'sem-vencido');
+  const proximos = conExistencia.filter((r) => !vencidos.includes(r) && semaforoCaducidad(r.biovac_lotes.caducidad) === 'sem-proximo');
+  if (!vencidos.length && !proximos.length) return '';
+  const lista = (rs) => `<ul>${[...new Set(rs.map(nombre))].map((t) => `<li>${t}</li>`).join('')}</ul>`;
+  const bloque = (cls, icono, titulo, rs, ayuda) => rs.length
+    ? `<div class="aviso-caducidad ${cls}" role="alert"><span class="material-symbols-rounded" aria-hidden="true">${icono}</span><div><b>${titulo}</b><small>${ayuda}</small>${lista(rs)}</div></div>` : '';
+  return `<div class="avisos-caducidad">
+    ${bloque('vencido', 'event_busy', 'Biológico caducado con existencia', vencidos, 'Regístralo como desechado (o en A.R.F./canje si aplica) antes de cerrar el mes.')}
+    ${bloque('proximo', 'schedule', `Próximo a caducar (menos de ${DIAS_PROXIMO_A_VENCER} días)`, proximos, 'Prioriza su uso o avisa a tu municipio para redistribuirlo.')}
+  </div>`;
 }
 
 function numColumnas(split) { return split ? 11 : 9; }

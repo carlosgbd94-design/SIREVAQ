@@ -12,13 +12,13 @@
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=8">
 <link rel="stylesheet" href="ayuda.css?v=1">
-<script defer src="ayuda.js?v=13"></script>
+<script defer src="ayuda.js?v=14"></script>
 <script defer src="a11y_global.js?v=6"></script>
 <script defer src="dock_glass.js?v=4"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.8"></script>
-<script defer src="biovac_jurisdiccion_ui.js?v=2026.15"></script>
+<script defer src="biovac_jurisdiccion_ui.js?v=2026.16"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -584,7 +584,7 @@
       </div>
       <ul class="jur-check" id="checkInforme"></ul>
       <div class="jur-entregables">
-        <div class="jur-entregable"><b>Informe del mes</b><small>Una foto del concentrado con los movimientos cerrados hoy. Queda registrada con quién y cuándo la generó.</small><span>Se genera con el botón <b>Generar informe</b> de la barra de abajo.</span></div>
+        <div class="jur-entregable"><b>Constancia del mes</b><small>Deja registrado quién revisó el concentrado y cuándo. No descarga nada: el Excel y el PDF se bajan aparte y siempre salen con los datos de hoy. Si después se corrige algún municipio, la constancia se marca como desactualizada y puedes generar otra.</small><button type="button" class="btn-secundario btn-mini" id="btnGenerarInformeCuerpo"><span class="material-symbols-rounded">summarize</span> Generar informe</button></div>
         <div class="jur-entregable"><b>Excel oficial</b><small>El formato de Movimiento de Biológico con la suma de la jurisdicción.</small><button class="btn-secundario btn-mini" id="btnExportarExcelJurisdiccional"><span class="material-symbols-rounded">download</span> Descargar Excel</button></div>
         <div class="jur-entregable"><b>PDF</b><small>Para imprimir o archivar el concentrado del mes.</small><button class="btn-secundario btn-mini" id="btnVerPdfJurisdiccional"><span class="material-symbols-rounded">picture_as_pdf</span> Ver PDF</button></div>
       </div>
