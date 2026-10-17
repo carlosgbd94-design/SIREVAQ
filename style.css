@@ -14092,6 +14092,7 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 /* La barra de subpaneles va arriba, en flujo normal: no flota (abajo se perdía). */
 #secInfluenzaFrascos #dockFrascos { position: static; transform: none; left: auto; bottom: auto; align-self: flex-start; max-width: 100%; }
 #secInfluenzaFrascos .frs-panel { display: flex; flex-direction: column; gap: 24px; }
+#secInfluenzaFrascos[data-frs-sub="covidctl"] > .frs-panel:not([data-frs-panel="covidctl"]),
 #secInfluenzaFrascos[data-frs-sub="repartir"] > .frs-panel:not([data-frs-panel="repartir"]),
 #secInfluenzaFrascos[data-frs-sub="entregas"] > .frs-panel:not([data-frs-panel="entregas"]),
 #secInfluenzaFrascos[data-frs-sub="resumen"] > .frs-panel:not([data-frs-panel="resumen"]),
@@ -15463,7 +15464,7 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
   #liveViewOverlay *, #liveViewOverlay *::before, #liveViewOverlay *::after { animation: none !important; transition: none !important; }
 }
 
-/* ── Control de Frascos: marca, «te caben» y estado fijo ───────────────────────────────────────────────── */
+/* ── Control de Frascos: marca, «faltan por recibir» y estado fijo ───────────────────────────────────────────────── */
 #secInfluenzaFrascos .marca-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0; }
 #secInfluenzaFrascos .marca-lbl { font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #334155; }
 #secInfluenzaFrascos .marca-seg { display: inline-flex; gap: 8px; padding: 4px; border-radius: 16px; background: #f1f5f9; border: 1px solid #cbd5e1; }
@@ -15660,3 +15661,60 @@ button.cob-c:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(15,
 @media (max-width: 640px) { .cob-unidad { min-width: 150px; } }
 /* Las celdas son botones: se neutralizan los resets globales de button (padding y alto mínimo) */
 #secInfluenzaCobertura .cob-tabla button.cob-c { width: 34px !important; height: 30px !important; min-width: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; }
+
+/* Corregir reportes: contenedor amplio, tabla compacta y páginas */
+.rs-panel { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 22px; padding: 22px 24px 20px; min-height: 620px; }
+.rs-tabla-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 16px; }
+.rs-tabla { width: 100%; border-collapse: collapse; font-size: 13px; color: #1e293b; }
+.rs-tabla thead th { position: sticky; top: 0; background: #f1f5f9; text-align: left; padding: 10px 14px; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #334155; border-bottom: 1px solid #cbd5e1; white-space: nowrap; }
+.rs-tabla td, .rs-tabla tbody th { padding: 8px 14px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+.rs-tabla tbody tr:last-child td, .rs-tabla tbody tr:last-child th { border-bottom: 0; }
+.rs-fila { cursor: pointer; transition: background-color .12s ease; }
+.rs-fila:hover { background: #f8fafc; }
+.rs-celda-unidad { text-align: left; font-weight: 400; min-width: 240px; }
+.rs-unidad-n { display: block; font-weight: 800; color: #0f172a; line-height: 1.25; }
+.rs-unidad-c { display: inline; font-family: ui-monospace, monospace; font-size: 11px; color: #475569; }
+.rs-unidad-nota { display: block; font-size: 12px; font-weight: 600; color: #475569; }
+.rs-tabla .rs-num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 800; white-space: nowrap; }
+.rs-quien { max-width: 200px; overflow-wrap: anywhere; font-weight: 600; }
+.rs-folio { font-family: ui-monospace, monospace; font-size: 11px; color: #475569; white-space: nowrap; }
+.rs-acc { text-align: right; white-space: nowrap; }
+.rs-btn-fila { display: inline-flex; align-items: center; gap: 6px; height: 34px; min-height: 0 !important; padding: 0 12px !important; border-radius: 10px; border: 0; font-size: 12px; font-weight: 800; }
+.rs-btn-fila .material-symbols-rounded { font-size: 18px; }
+.rs-pag { display: flex; justify-content: center; align-items: center; gap: 6px; padding-top: 6px; flex-wrap: wrap; }
+.rs-pag__n, .rs-pag__btn { min-width: 40px; height: 40px; padding: 0 10px !important; border-radius: 12px; border: 1px solid #94a3b8; background: #ffffff; color: #0f172a; font-weight: 800; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.rs-pag__n:hover:not([aria-current]), .rs-pag__btn:hover:not(:disabled) { background: #f1f5f9; }
+.rs-pag__n[aria-current="page"] { background: #0f172a; color: #ffffff; border-color: #0f172a; }
+.rs-pag__btn:disabled { opacity: .45; cursor: not-allowed; }
+.rs-pag__gap { color: #475569; font-weight: 800; }
+#validationDashboard :is(button, [tabindex="0"]):focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+@media (max-width: 760px) { .rs-panel { padding: 14px; min-height: 0; } .rs-quien, .rs-folio, .rs-tabla thead th:nth-child(4), .rs-tabla thead th:nth-child(5) { display: none; } }
+@media (prefers-reduced-motion: reduce) { .rs-fila { transition: none; } }
+
+/* Control de Frascos: semáforo de entrega contra la meta (con ícono y texto, no solo color) */
+.frs-sem { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px 3px 6px; border-radius: 999px; border: 1px solid transparent; font-weight: 800; font-size: 12px; white-space: nowrap; }
+.frs-sem .material-symbols-rounded { font-size: 16px; }
+.frs-sem--ok { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+.frs-sem--med { background: #fffbeb; color: #92400e; border-color: #fcd34d; }
+.frs-sem--bajo { background: #fff1f2; color: #9f1239; border-color: #fda4af; }
+.frs-sem-ley { display: flex; flex-wrap: wrap; gap: 8px 18px; list-style: none; margin: 10px 0 0; padding: 0; font-size: 12px; font-weight: 700; color: #1e293b; }
+.frs-sem-ley li { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Control de frascos COVID-19 por marca */
+.cc-tabla .cc-mod { background: #ecfeff; }
+.cc-tabla .cc-pfz { background: #fffbeb; }
+.cc-tabla thead .cc-mod { color: #155e75; }
+.cc-tabla thead .cc-pfz { color: #92400e; }
+.cc-dest { text-align: left; min-width: 150px; }
+.cc-falta { text-align: left; font-size: 12px; }
+.cc-fr { display: block; font-weight: 600; }
+.cc-fr b { font-variant-numeric: tabular-nums; }
+.cc-fr--mod { color: #155e75; }
+.cc-fr--pfz { color: #92400e; }
+.cc-o { display: block; color: #475569; font-weight: 600; font-size: 11px; }
+.cc-tabla th, .cc-tabla td { padding-left: 10px; padding-right: 10px; }
+.cc-tabla thead th { white-space: normal; line-height: 1.25; vertical-align: bottom; max-width: 150px; }
+.cc-tabla thead th:first-child { max-width: none; }
+.cc-tabla .cc-fr, .cc-tabla .cc-o { display: inline; }
+.cc-tabla .cc-o { margin: 0 4px; }
+.cc-tabla th, .cc-tabla td { vertical-align: middle; }

@@ -1872,6 +1872,7 @@ let _marcaCovid = "MODERNA";        // "MODERNA" | "PFIZER"
 let _covidMetasArray = [];
 let _covidRemesasAll = [];
 let _covidFrascosAll = [];
+let _covidCapturasAll = [];   // reportes semanales de COVID-19 de todas las unidades (para la cobertura)
 let _covidLotesAll = [];   // lotes reales por marca/unidad/entrega (los asigna Requisiciones)
 
 function esCovid() { return _vacuna === "COVID"; }
@@ -1944,6 +1945,12 @@ async function loadCovidAdminData(campana) {
     if (typeof _covidAvance !== "undefined") _covidAvance.cargado = false;   // el Avance se vuelve a pedir al SIS
     _covidFrascosAll = d.data || [];
     _covidRemesasAll = r.data || [];
+    try {
+      const c = await AppService.call("getcovid_capturas", { anio_campana: camp }, { silent: true });
+      _covidCapturasAll = c.data || [];
+    } catch (eCap) {
+      _covidCapturasAll = [];
+    }
     try {
       const l = await AppService.call("getcovid_lotes_entregas", { anio_campana: camp }, { silent: true });
       _covidLotesAll = l.data || [];
@@ -2028,9 +2035,9 @@ function vacunaPintarSelectores() {
   temporadaAplicarVacuna();
 }
 
-// Subpestañas que solo existen para Influenza (captura semanal, reportes por semana, cobertura y fechas de
+// Subpestañas que solo existen para Influenza (captura semanal, reportes por semana y fechas de
 // campaña). Con COVID-19 el panel muestra únicamente lo suyo: Distribución de Metas y Control de Frascos.
-const TEMPORADA_SOLO_INFLUENZA = ["subtabInfluenzaAvances", "subtabInfluenzaValidacion", "subtabInfluenzaCobertura", "subtabInfluenzaConfig"];
+const TEMPORADA_SOLO_INFLUENZA = ["subtabInfluenzaAvances", "subtabInfluenzaValidacion", "subtabInfluenzaConfig"];
 function temporadaAplicarVacuna() {
   TEMPORADA_SOLO_INFLUENZA.forEach(id => {
     const el = document.getElementById(id);
@@ -3191,8 +3198,13 @@ function infEsSinMov(report) {
 }
 
 function infTotalDosisReporte(report) {
-  return report && report.valores ? Object.values(report.valores).reduce((a, v) => a + Number(v || 0), 0) : 0;
+  if (!report || !report.valores) return 0;
+  if (esCovid() && window.CovidCaptura) return window.CovidCaptura.totalDosis(report.valores);
+  return Object.values(report.valores).reduce((a, v) => a + Number(v || 0), 0);
 }
+
+/** Reportes semanales de la vacuna elegida (Influenza o COVID-19). */
+function infCapturasVista() { return esCovid() ? _covidCapturasAll : _adminCapturasArray; }
 
 /** true si la unidad no tiene meta en ningún rubro: solo puede reportar «Sin movimiento». */
 function infUnidadSinMeta(clues) {
@@ -3267,6 +3279,7 @@ function valoresOriginalesUnidad(report) {
 }
 
 let _valUltimaClues = null;
+let _valPagina = 1, _valPagFirma = "", _valIrAClues = null;
 
 // Texto legible de la semana seleccionada («Semana 42 (12 al 18 oct)») en vez de la fecha ISO.
 function etiquetaSemanaValidacion(fecha) {
@@ -3295,6 +3308,7 @@ function anunciarValidacion(msg) {
 function volverAlListadoValidacion(mensaje) {
   document.getElementById("validationReportContent").classList.add("hidden");
   document.getElementById("validationDashboard").classList.remove("hidden");
+  _valIrAClues = _valUltimaClues;
   renderValidationDashboard();
   const clues = _valUltimaClues;
   const btn = clues ? document.querySelector(`#validationUnitsGrid button[data-clues="${clues}"]`) : null;
@@ -3369,93 +3383,105 @@ function renderValidationDashboard() {
     return true;
   });
 
-  grid.innerHTML = "";
-  grid.setAttribute("role", "list");
-
-  if (filtradas.length === 0) {
-    grid.innerHTML = `<div class="col-span-full text-center text-sm text-slate-700 font-medium p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-300">No hay unidades que coincidan con la búsqueda o el estado elegido.</div>`;
+  // Paginación: 30 unidades por página. Al cambiar de semana, municipio, estado o búsqueda se vuelve a la primera;
+  // al regresar del detalle se abre la página donde está la unidad que se revisaba.
+  const POR_PAGINA = 30;
+  const firma = `${selectedFecha}|${estadoFiltro}|${filterText}|${document.getElementById("adminInfluenzaMuni")?.value}`;
+  if (_valPagFirma !== firma) { _valPagFirma = firma; _valPagina = 1; }
+  if (_valIrAClues) {
+    const pos = filtradas.findIndex(f => f.u.clues === _valIrAClues);
+    if (pos >= 0) _valPagina = Math.floor(pos / POR_PAGINA) + 1;
+    _valIrAClues = null;
   }
+  const paginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
+  _valPagina = Math.min(Math.max(1, _valPagina), paginas);
+  const desde = (_valPagina - 1) * POR_PAGINA;
+  const pagina = filtradas.slice(desde, desde + POR_PAGINA);
 
-  const badgeBase = "px-2.5 py-1 rounded-full text-[12px] font-black flex items-center gap-1 border";
-  filtradas.forEach(({ u, report, estado, total }) => {
-    let statusBadge, actionText, cardBorder, detalle = "";
-    const sinMeta = infUnidadSinMeta(u.clues);
+  const badgeBase = "px-2.5 py-1 rounded-full text-[12px] font-black inline-flex items-center gap-1 border whitespace-nowrap";
+  const filasHtml = pagina.map(({ u, report, estado, total }) => {
+    let badge, accion, nota = "";
     if (estado === "corregido") {
-      const firma = firmaDeReporte(report);
-      statusBadge = `<span class="bg-violet-50 text-violet-900 border-violet-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">edit_note</span>${validadoSinCambios(report) ? "Revisado" : "Corregido"}</span>`;
-      actionText = "Ver reporte";
-      cardBorder = "border-violet-200 hover:border-violet-300";
-      detalle = firma ? `Firmó: ${esc(firma)}` : "";
+      badge = `<span class="bg-violet-50 text-violet-900 border-violet-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">edit_note</span>${validadoSinCambios(report) ? "Revisado" : "Corregido"}</span>`;
+      accion = "Ver reporte";
+      const firmaTxt = firmaDeReporte(report);
+      if (firmaTxt) nota = `Firmó: ${esc(firmaTxt)}`;
     } else if (estado === "sinmov") {
-      statusBadge = `<span class="bg-cyan-50 text-cyan-900 border-cyan-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">pause_circle</span>Sin movimiento</span>`;
-      actionText = "Ver reporte";
-      cardBorder = "border-cyan-200 hover:border-cyan-300";
+      badge = `<span class="bg-cyan-50 text-cyan-900 border-cyan-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">pause_circle</span>Sin movimiento</span>`;
+      accion = "Ver reporte";
     } else if (estado === "reportado") {
-      statusBadge = `<span class="bg-emerald-50 text-emerald-900 border-emerald-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">check_circle</span>Reportado</span>`;
-      actionText = "Ver reporte";
-      cardBorder = "border-emerald-200 hover:border-emerald-300";
+      badge = `<span class="bg-emerald-50 text-emerald-900 border-emerald-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">check_circle</span>Reportado</span>`;
+      accion = "Ver reporte";
     } else {
       const vencida = fase === "vencida";
-      statusBadge = `<span class="${vencida ? "bg-rose-50 text-rose-900 border-rose-300" : "bg-amber-50 text-amber-900 border-amber-300"} ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">${vencida ? "error" : "schedule"}</span>${fase === "futura" ? "Aún no abre" : (vencida ? "Sin reporte" : "Pendiente")}</span>`;
-      actionText = "Capturar por la unidad";
-      cardBorder = vencida ? "border-rose-200 hover:border-rose-300" : "border-amber-200 hover:border-amber-300";
-      if (sinMeta) detalle = "Sin meta asignada: solo puede reportar «Sin movimiento»";
+      badge = `<span class="${vencida ? "bg-rose-50 text-rose-900 border-rose-300" : "bg-amber-50 text-amber-900 border-amber-300"} ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">${vencida ? "error" : "schedule"}</span>${fase === "futura" ? "Aún no abre" : (vencida ? "Sin reporte" : "Pendiente")}</span>`;
+      accion = "Capturar";
+      if (infUnidadSinMeta(u.clues)) nota = "Sin meta asignada: solo «Sin movimiento»";
     }
-    if (report) {
-      const quien = report.capturado_por ? `Capturó: ${esc(report.capturado_por)}` : "";
-      const folio = influenzaFolio(report);
-      detalle = [quien, folio ? `Folio ${esc(folio)}` : "", detalle].filter(Boolean).join(" · ");
-    }
+    return `<tr class="rs-fila" data-clues="${esc(u.clues)}">
+      <th scope="row" class="rs-celda-unidad"><span class="rs-unidad-n">${esc(u.unidad)}</span><span class="rs-unidad-c">${esc(u.clues)}</span>${nota ? `<span class="rs-unidad-nota">${nota}</span>` : ""}</th>
+      <td>${badge}</td>
+      <td class="rs-num">${report ? total : "—"}</td>
+      <td class="rs-quien">${report ? esc(report.capturado_por || "—") : "—"}</td>
+      <td class="rs-folio">${report ? esc(influenzaFolio(report)) : "—"}</td>
+      <td class="rs-acc"><button type="button" class="rs-btn-oscuro rs-btn-fila" data-clues="${esc(u.clues)}" aria-label="${esc(accion)}: ${esc(u.unidad)}, ${esc(u.clues)}"><span class="material-symbols-rounded" aria-hidden="true">${accion === "Capturar" ? "edit_square" : "find_in_page"}</span><span>${esc(accion)}</span></button></td>
+    </tr>`;
+  }).join("");
 
-    const card = document.createElement("div");
-    card.setAttribute("role", "listitem");
-    card.className = `p-4 rounded-2xl border bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all shadow-sm hover:shadow-md cursor-pointer ${cardBorder}`;
-    card.style.backgroundColor = "#ffffff";
-    card.innerHTML = `
-      <div class="flex items-start gap-3 min-w-0">
-        <div class="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5" aria-hidden="true">
-          <span class="material-symbols-rounded text-[22px] text-slate-600" aria-hidden="true">domain</span>
-        </div>
-        <div class="min-w-0">
-          <div class="text-[12px] font-black text-slate-600 tracking-wider uppercase mb-0.5">${esc(u.clues)}</div>
-          <h5 class="text-sm font-extrabold text-slate-900 leading-tight" style="overflow-wrap:anywhere;">${esc(u.unidad)}</h5>
-          <div class="text-xs font-bold text-slate-700 mt-1.5">
-            Dosis reportadas: <strong class="text-slate-900">${report ? total : "—"}</strong>
-          </div>
-          ${detalle ? `<div class="text-[12px] font-semibold text-slate-600 mt-1" style="overflow-wrap:anywhere;">${detalle}</div>` : ""}
-        </div>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 shrink-0 self-end sm:self-center">
-        ${statusBadge}
-        <button type="button" data-clues="${esc(u.clues)}" aria-label="${esc(actionText)}: ${esc(u.unidad)}, ${esc(u.clues)}"
-          class="rs-btn-oscuro transition-all h-[40px] px-4 rounded-xl text-xs font-black flex items-center justify-center gap-1 shadow-sm border-0">
-          <span class="material-symbols-rounded text-[18px]" aria-hidden="true">find_in_page</span>
-          <span>${esc(actionText)}</span>
-        </button>
-      </div>
-    `;
+  // Números de página: todos si son pocos; con muchos, primera, última y las vecinas de la actual.
+  const numeros = [];
+  for (let n = 1; n <= paginas; n++) {
+    if (paginas <= 7 || n === 1 || n === paginas || Math.abs(n - _valPagina) <= 1) numeros.push(n);
+    else if (numeros[numeros.length - 1] !== "…") numeros.push("…");
+  }
+  const pagBtn = (n, etq, icono, off) => `<button type="button" class="rs-pag__btn" data-pag="${n}"${off ? " disabled" : ""} aria-label="${etq}"><span class="material-symbols-rounded" aria-hidden="true">${icono}</span></button>`;
+  const pagHtml = paginas > 1 ? `<nav class="rs-pag" aria-label="Páginas de unidades">
+      ${pagBtn(_valPagina - 1, "Página anterior", "chevron_left", _valPagina === 1)}
+      ${numeros.map(n => n === "…" ? `<span class="rs-pag__gap" aria-hidden="true">…</span>` : `<button type="button" class="rs-pag__n" data-pag="${n}" aria-label="Página ${n}"${n === _valPagina ? ' aria-current="page"' : ""}>${n}</button>`).join("")}
+      ${pagBtn(_valPagina + 1, "Página siguiente", "chevron_right", _valPagina === paginas)}
+    </nav>` : "";
 
-    card.onclick = () => {
-      _valUltimaClues = u.clues;
-      document.getElementById("validationDashboard").classList.add("hidden");
-      document.getElementById("validationReportContent").classList.remove("hidden");
-      const valCluesSelect = document.getElementById("validationInfluenzaClues");
-      if (valCluesSelect) valCluesSelect.value = u.clues;
-      renderValidacionEdicionGrid(u.clues, selectedFecha);
-      const titulo = document.getElementById("validationReportTitle");
-      if (titulo) {
-        titulo.focus();
-        titulo.scrollIntoView({ block: "start" });
-      }
+  grid.innerHTML = filtradas.length === 0
+    ? `<p class="rs-vacio">No hay unidades que coincidan con la búsqueda o el estado elegido.</p>`
+    : `<div class="rs-tabla-wrap" tabindex="0" role="region" aria-label="Tabla de reportes de la semana; se desplaza horizontalmente en pantallas chicas">
+        <table class="rs-tabla">
+          <caption class="vl-sr">Reportes de influenza de la semana elegida, una fila por unidad</caption>
+          <thead><tr>
+            <th scope="col">Unidad</th><th scope="col">Estado</th><th scope="col" class="rs-num">Dosis</th>
+            <th scope="col">Capturó</th><th scope="col">Folio</th><th scope="col"><span class="vl-sr">Acción</span></th>
+          </tr></thead>
+          <tbody>${filasHtml}</tbody>
+        </table>
+      </div>${pagHtml}`;
+
+  const abrir = (clues) => {
+    _valUltimaClues = clues;
+    document.getElementById("validationDashboard").classList.add("hidden");
+    document.getElementById("validationReportContent").classList.remove("hidden");
+    const valCluesSelect = document.getElementById("validationInfluenzaClues");
+    if (valCluesSelect) valCluesSelect.value = clues;
+    renderValidacionEdicionGrid(clues, selectedFecha);
+    const titulo = document.getElementById("validationReportTitle");
+    if (titulo) { titulo.focus(); titulo.scrollIntoView({ block: "start" }); }
+  };
+  grid.querySelectorAll("tr.rs-fila").forEach(tr => {
+    tr.onclick = (ev) => { if (!ev.target.closest("button")) abrir(tr.dataset.clues); };
+    tr.querySelector("button").onclick = () => abrir(tr.dataset.clues);
+  });
+  grid.querySelectorAll("[data-pag]").forEach(b => {
+    b.onclick = () => {
+      _valPagina = Number(b.dataset.pag);
+      renderValidationDashboard();
+      grid.querySelector(`.rs-pag__n[data-pag="${_valPagina}"]`)?.focus();
+      grid.scrollIntoView({ block: "start" });
     };
-
-    grid.appendChild(card);
   });
 
   if (summary) {
-    summary.textContent = `Mostrando ${filtradas.length} de ${totalCount} unidades`;
+    const rango = filtradas.length ? `${desde + 1}–${desde + pagina.length}` : "0";
+    summary.textContent = `Mostrando ${rango} de ${filtradas.length}${filtradas.length !== totalCount ? ` (${totalCount} unidades en total)` : ""}`;
   }
-  anunciarValidacion(`Mostrando ${filtradas.length} de ${totalCount} unidades. ${reportedCount} reportaron, ${pendientes.length} sin reporte.`);
+  anunciarValidacion(`Mostrando ${filtradas.length ? `${desde + 1} a ${desde + pagina.length}` : "0"} de ${filtradas.length} unidades. ${reportedCount} reportaron, ${pendientes.length} sin reporte.`);
 }
 
 function infSaludoWhatsApp() {
@@ -3864,6 +3890,8 @@ const COB_ESTADOS = {
   fut:   { icono: "remove",       txt: "Aún no abre" }
 };
 
+function infVacunaTxt() { return esCovid() ? "COVID-19" : "INFLUENZA"; }
+
 function infEstadoCelda(report, fecha) {
   if (report) {
     if (report.editado_por !== "UNIDAD") return "corr";
@@ -3880,7 +3908,7 @@ function infCalcularCobertura() {
   const muni = String(document.getElementById("adminInfluenzaMuni")?.value || "").toUpperCase();
   const unidades = _allUnidades.filter(u => String(u.municipio || "").toUpperCase() === muni);
   const porClave = new Map();
-  _adminCapturasArray.forEach(r => porClave.set(`${r.clues}|${r.fecha}`, r));
+  infCapturasVista().forEach(r => porClave.set(`${r.clues}|${r.fecha}`, r));
 
   const filas = unidades.map(u => {
     const celdas = weeks.map(w => {
@@ -3905,6 +3933,8 @@ function renderCobertura() {
   if (!cont) return;
   infSincronizarMuniLocal("cobMuniSelect", renderCobertura);
   const esc = INF_ESC;
+  const nota = document.getElementById("cobVacunaNota");
+  if (nota) nota.hidden = !esCovid();
 
   const datos = infCalcularCobertura();
   _cobDatos = datos;
@@ -3954,8 +3984,8 @@ function renderCobertura() {
       const dosis = c.report && c.k !== "sinmov" ? `, ${c.total} dosis` : "";
       const aria = `${f.u.unidad}, ${c.w.label}: ${e.txt}${dosis}`;
       const interior = `<span class="material-symbols-rounded" aria-hidden="true">${e.icono}</span>`;
-      return c.k === "fut"
-        ? `<td class="cob-td"><span class="cob-c cob-c--fut" role="img" aria-label="${esc(aria)}">${interior}</span></td>`
+      return (c.k === "fut" || esCovid())
+        ? `<td class="cob-td"><span class="cob-c cob-c--${c.k}" role="img" aria-label="${esc(aria)}" title="${esc(e.txt + dosis)}">${interior}</span></td>`
         : `<td class="cob-td"><button type="button" class="cob-c cob-c--${c.k}" data-clues="${esc(f.u.clues)}" data-fecha="${c.w.fecha}" aria-label="${esc(aria)}" title="${esc(e.txt + dosis)}">${interior}</button></td>`;
     }).join("");
     const nAtr = f.atrasos.length;
@@ -4003,7 +4033,7 @@ function infCopiarRecordatorioAtrasos() {
   if (!atrasadas.length) { showToast("No hay unidades con atraso.", true, "info"); return; }
   const saludo = infSaludoWhatsApp();
   const lista = atrasadas.map(f => `• *${String(f.u.unidad).toUpperCase().trim()}*: ${f.atrasos.map(c => "S" + c.w.semana + (c.w.corte ? " (corte)" : "")).join(", ")}`).join("\n");
-  const texto = `${saludo}\n\nLas siguientes unidades tienen semanas pendientes de su *REPORTE DE INFLUENZA*, por favor hay que ingresar a la plataforma *SIREVAQ* a realizar la captura correspondiente:\n\n${lista}`;
+  const texto = `${saludo}\n\nLas siguientes unidades tienen semanas pendientes de su *REPORTE DE ${infVacunaTxt()}*, por favor hay que ingresar a la plataforma *SIREVAQ* a realizar la captura correspondiente:\n\n${lista}`;
   navigator.clipboard.writeText(texto)
     .then(() => showToast("¡Copiado! El aviso está listo para pegarse en WhatsApp.", true, "good"))
     .catch(() => showToast("No se pudo copiar el texto automáticamente.", false, "bad"));
@@ -4017,7 +4047,7 @@ function infExportarCobertura() {
   datos.filas.forEach(f => filas.push([f.u.municipio, f.u.clues, f.u.unidad, ...f.celdas.map(c => COB_ESTADOS[c.k].txt + (c.report && c.k !== "sinmov" ? ` (${c.total})` : "")), f.recibidos, f.atrasos.length, f.dosis]));
   const csv = "﻿" + filas.map(r => r.map(infCsvCelda).join(",")).join("\r\n");
   const muni = String(document.getElementById("adminInfluenzaMuni")?.value || "municipio");
-  metaDescargar(csv, `Influenza_cobertura_${muni}_${influenzaHoy()}.csv`, "text/csv;charset=utf-8");
+  metaDescargar(csv, `${esCovid() ? "COVID19" : "Influenza"}_cobertura_${muni}_${influenzaHoy()}.csv`, "text/csv;charset=utf-8");
   showToast("Cobertura descargada.", true, "good");
 }
 
@@ -5979,14 +6009,14 @@ function covidMetaFrascosDe(metas) {
   };
 }
 
-// Celda «Te caben»: lo que todavía le cabe en esta marca/entrega, con su meta en frascos. Se ve ANTES de capturar.
+// Celda «Faltan por recibir»: lo que todavía puede recibir en esta marca/entrega antes de llegar a su meta. Se ve ANTES de capturar.
 function frascoTopeCeldaHtml(it, metasRec) {
   if (it.tope === undefined || it.tope === null) return '<span class="frs-muted">sin meta</span>';
   const cero = it.tope <= 0;
   const sub = esCovid()
     ? ``
     : `ya recibió ${frascoFmt(it.otras || 0)}`;
-  return `<span class="frs-tope${cero ? " frs-tope--cero" : ""}" title="Le caben ${frascoFmt(it.tope)} frascos sin rebasar su meta (descontadas las dos marcas)">${frascoFmt(it.tope)}</span>${sub ? `<span class="frs-tope-sub">${sub}</span>` : ""}`;
+  return `<span class="frs-tope${cero ? " frs-tope--cero" : ""}" title="Faltan por recibir ${frascoFmt(it.tope)} frascos para llegar a su meta (descontadas las dos marcas)">${frascoFmt(it.tope)}</span>${sub ? `<span class="frs-tope-sub">${sub}</span>` : ""}`;
 }
 
 // Celdas «Meta (frascos)» / «Meta Moderna» / «Meta Pfizer»: la meta de cada renglón en frascos, bien visible.
@@ -6525,6 +6555,16 @@ function frascoMatrizDatos(ambito) {
   return { columnas, valor, meta, numeros: Array.from({ length: max }, (_, i) => i + 1) };
 }
 
+// Semáforo de entrega: dosis equivalentes de los frascos entregados contra la meta del destino/unidad.
+const FRASCO_SEMAFORO = [
+  { tono: "ok", icono: "check_circle", rango: "80% o más", texto: "Entrega casi completa", min: 80 },
+  { tono: "med", icono: "warning", rango: "50% a 79%", texto: "Entrega a medias", min: 50 },
+  { tono: "bajo", icono: "error", rango: "Menos de 50%", texto: "Entrega rezagada", min: 0 }
+];
+function frascoSemaforo(pct) {
+  return FRASCO_SEMAFORO.find(t => pct >= t.min) || FRASCO_SEMAFORO[FRASCO_SEMAFORO.length - 1];
+}
+
 function renderFrascosMatrix(ambito) {
   const table = document.getElementById("frascosMatrixTable");
   if (!table) return;
@@ -6542,14 +6582,27 @@ function renderFrascosMatrix(ambito) {
     return v ? frascoFmt(v) : "";
   })).join("");
   const entregado = k => numeros.reduce((s, n) => s + (k === null ? suma(kk => valor(n, kk)) : valor(n, k)), 0);
+  const metaFr = k => frascoTopeMeta(meta(k));
   table.innerHTML = `<thead><tr><th></th>${cab}<th class="c">TOTAL</th></tr></thead>
     <tbody>${cuerpo}
     ${fila(esCovid() ? "META + PÉRDIDA (dosis)" : "META (dosis)", k => frascoFmt(k === null ? suma(meta) : meta(k)), true)}
+    ${fila("META (frascos)", k => frascoFmt(k === null ? suma(metaFr) : metaFr(k)), true)}
     ${fila("TOTAL ENTREGADO", k => { const v = entregado(k); return v ? frascoFmt(v) : "-"; }, true)}
+    ${fila("FALTAN POR RECIBIR", k => {
+      const f = Math.max(0, (k === null ? suma(metaFr) : metaFr(k)) - entregado(k));
+      return f ? frascoFmt(f) : "0";
+    }, false)}
     ${fila("DOSIS EQUIV. / META", k => {
       const m = k === null ? suma(meta) : meta(k);
-      return m ? `${Math.round(entregado(k) * dosisFrasco() * 100 / m)}%` : "—";
+      if (!m) return "—";
+      const pct = Math.round(entregado(k) * dosisFrasco() * 100 / m);
+      const t = frascoSemaforo(pct);
+      return `<span class="frs-sem frs-sem--${t.tono}" title="${t.texto}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${pct}%<span class="vl-sr"> · ${t.texto}</span></span>`;
     }, false)}</tbody>`;
+  const leyenda = document.getElementById("frascosMatrixLegend");
+  if (leyenda) {
+    leyenda.innerHTML = FRASCO_SEMAFORO.map(t => `<li><span class="frs-sem frs-sem--${t.tono}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${t.rango}</span> ${t.texto}</li>`).join("");
+  }
 }
 
 async function exportFrascosExcel() {
@@ -7397,8 +7450,99 @@ function renderFrascosDistribution() {
     renderFrascosBalance();
     updateFlaskCalculationMuni();
   }
+  if (esCovid()) renderCovidControlFrascos();
   vacunaPintarSelectores();
   iniciarDockFrascos(esJuris);
+}
+
+// ─── Control de frascos de COVID-19 por marca ──────────────────────────────────────────────────────────────────
+// Moderna (5 dosis por frasco, niños y adultos) y Pfizer (6 dosis, solo adultos) comparten UNA meta: lo que recibe
+// una marca descuenta de la otra. Aquí se ven juntas: meta a recibir, frascos entregados de cada marca, dosis
+// equivalentes (0.5 mL) ya entregadas contra la meta, semáforo y lo que falta por recibir.
+
+const covidEsc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function covidKpiHtml(icono, tono, etiqueta, valor, nota) {
+  return `<div class="rs-kpi rs-kpi--${tono}"><span class="material-symbols-rounded rs-kpi__ico" aria-hidden="true">${icono}</span>
+    <div><div class="rs-kpi__lbl">${etiqueta}</div><div class="rs-kpi__val">${valor}</div>${nota ? `<div class="rs-kpi__nota">${nota}</div>` : ""}</div></div>`;
+}
+
+function covidControlFilas(esJuris, muni) {
+  const factor = covidFactor();
+  const dM = CovidFrascos.dosisPorFrasco("MODERNA"), dP = CovidFrascos.dosisPorFrasco("PFIZER");
+  const origen = esJuris
+    ? FRASCO_DESTINOS.map(d => ({ key: d.id, label: d.label, rec: _covidMetasArray.find(m => !m.clues && String(m.municipio).toUpperCase() === d.id) }))
+    : frascoUnidadesMunicipio(muni).map(u => ({ key: u.clues, label: u.unidad, sub: u.clues, rec: _covidMetasArray.find(m => m.clues === u.clues) }));
+  const entregados = (marca, key) => esJuris
+    ? _covidRemesasAll.filter(r => r.marca === marca).reduce((s, r) => s + Number((r.asignacion || {})[key] || 0), 0)
+    : _covidFrascosAll.filter(d => d.marca === marca && d.clues === key).reduce((s, d) => s + Number(d.cantidad_frascos || 0), 0);
+  return origen.map(o => {
+    const metas = (o.rec && o.rec.metas) || {};
+    const meta = CovidFrascos.metaMarcaConPerdida(metas, "MODERNA", factor);       // todo lo que debe recibir (dosis 0.5 mL)
+    const metaAdulta = CovidFrascos.metaMarcaConPerdida(metas, "PFIZER", factor);  // tope de Pfizer (solo adultos)
+    const fM = entregados("MODERNA", o.key), fP = entregados("PFIZER", o.key);
+    const eq = fM * dM + fP * dP;
+    const falta = Math.max(0, meta - eq);
+    const faltaAdulta = Math.max(0, metaAdulta - fP * dP);
+    return {
+      ...o, meta, metaAdulta, fM, fP, eq, falta,
+      pct: meta > 0 ? Math.round(eq * 100 / meta) : null,
+      faltaM: Math.ceil(falta / dM), faltaP: Math.ceil(Math.min(falta, faltaAdulta) / dP)
+    };
+  });
+}
+
+function renderCovidControlFrascos() {
+  const cont = document.getElementById("covidControlBody");
+  if (!cont) return;
+  const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";
+  const muni = document.getElementById("adminInfluenzaMuni")?.value;
+  const filas = covidControlFilas(esJuris, muni);
+  const titulo = document.getElementById("covidControlTitulo");
+  if (titulo) titulo.textContent = esJuris ? "Control de frascos por municipio y hospital" : `Control de frascos por unidad · ${(String(muni).toUpperCase() === "MARQUES" ? "EL MARQUÉS" : muni)}`;
+
+  const T = filas.reduce((a, f) => ({ meta: a.meta + f.meta, fM: a.fM + f.fM, fP: a.fP + f.fP, eq: a.eq + f.eq, falta: a.falta + f.falta }), { meta: 0, fM: 0, fP: 0, eq: 0, falta: 0 });
+  const pctT = T.meta > 0 ? Math.round(T.eq * 100 / T.meta) : null;
+  const semT = pctT === null ? null : frascoSemaforo(pctT);
+  const pill = (pct) => {
+    if (pct === null) return "—";
+    const t = frascoSemaforo(pct);
+    return `<span class="frs-sem frs-sem--${t.tono}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${pct}%<span class="vl-sr"> · ${t.texto}</span></span>`;
+  };
+  const kpis = document.getElementById("covidControlKpis");
+  if (kpis) {
+    kpis.innerHTML =
+      covidKpiHtml("flag", "info", "Meta a recibir", frascoFmt(T.meta), "dosis de 0.5 mL, con pérdida") +
+      covidKpiHtml("vaccines", "cian", "Moderna entregada", `${frascoFmt(T.fM)}<small> frascos</small>`, `${frascoFmt(T.fM * 5)} dosis equivalentes`) +
+      covidKpiHtml("vaccines", "aviso", "Pfizer entregada", `${frascoFmt(T.fP)}<small> frascos</small>`, `${frascoFmt(T.fP * 6)} dosis equivalentes`) +
+      covidKpiHtml(semT ? semT.icono : "percent", semT ? (semT.tono === "ok" ? "ok" : (semT.tono === "med" ? "aviso" : "mal")) : "info", "Entregado de la meta", pctT === null ? "—" : `${pctT}%`, `faltan ${frascoFmt(T.falta)} dosis por recibir`);
+  }
+
+  const cuerpo = filas.map(f => `<tr>
+      <th scope="row" class="cc-dest"><span class="rs-unidad-n">${covidEsc(f.label)}</span>${f.sub ? `<span class="rs-unidad-c">${covidEsc(f.sub)}</span>` : ""}</th>
+      <td class="c">${f.meta ? frascoFmt(f.meta) : "—"}</td>
+      <td class="c cc-mod">${f.fM ? frascoFmt(f.fM) : "0"}</td>
+      <td class="c cc-pfz">${f.fP ? frascoFmt(f.fP) : "0"}</td>
+      <td class="c"><b>${frascoFmt(f.eq)}</b></td>
+      <td class="c">${pill(f.pct)}</td>
+      <td class="c">${f.meta ? frascoFmt(f.falta) : "—"}</td>
+      <td class="c cc-falta">${f.meta && f.falta ? `<span class="cc-fr cc-fr--mod">Moderna <b>${frascoFmt(f.faltaM)}</b></span><span class="cc-o">o</span><span class="cc-fr cc-fr--pfz">Pfizer <b>${frascoFmt(f.faltaP)}</b></span>` : (f.meta ? "Completo" : "—")}</td>
+    </tr>`).join("");
+  const pie = `<tr class="frs-bold"><th scope="row">TOTAL</th><td class="c">${frascoFmt(T.meta)}</td><td class="c cc-mod">${frascoFmt(T.fM)}</td><td class="c cc-pfz">${frascoFmt(T.fP)}</td><td class="c">${frascoFmt(T.eq)}</td><td class="c">${pill(pctT)}</td><td class="c">${frascoFmt(T.falta)}</td><td class="c"></td></tr>`;
+  cont.innerHTML = `<div class="frs-scroll"><table class="frs-table cc-tabla">
+      <caption class="vl-sr">Frascos de COVID-19 entregados por marca contra la meta de cada destino</caption>
+      <thead><tr>
+        <th scope="col">Destino</th>
+        <th scope="col" class="c" title="Dosis de 0.5 mL que debe recibir el destino (meta más pérdida). Es la misma meta para las dos marcas.">Meta a recibir (dosis)</th>
+        <th scope="col" class="c cc-mod">Moderna entregada (frascos)</th>
+        <th scope="col" class="c cc-pfz">Pfizer entregada (frascos)</th>
+        <th scope="col" class="c" title="Moderna × 5 + Pfizer × 6 dosis">Dosis equivalentes entregadas</th>
+        <th scope="col" class="c" title="Dosis equivalentes entregadas entre la meta a recibir">% de la meta</th>
+        <th scope="col" class="c">Faltan por recibir (dosis)</th>
+        <th scope="col" class="c" title="Con cualquiera de las dos marcas se cubre lo que falta; Pfizer solo hasta la meta adulta">Faltan por recibir (frascos)</th>
+      </tr></thead>
+      <tbody>${cuerpo}</tbody><tfoot>${pie}</tfoot></table></div>`;
+  const ley = document.getElementById("covidControlLegend");
+  if (ley) ley.innerHTML = FRASCO_SEMAFORO.map(t => `<li><span class="frs-sem frs-sem--${t.tono}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${t.rango}</span> ${t.texto}</li>`).join("");
 }
 
 // Barra flotante: un solo subpanel a la vez (Repartir / Entregas / Resumen / Historial).
@@ -7406,6 +7550,9 @@ function frascoIrA(sub) {
   const sec = document.getElementById("secInfluenzaFrascos");
   if (!sec) return;
   sec.dataset.frsSub = sub;
+  // El control por marca junta las dos marcas: ahí no se elige marca.
+  const barraMarca = document.getElementById("frascosMarcaBar");
+  if (barraMarca) barraMarca.style.display = (esCovid() && sub !== "covidctl") ? "" : "none";
   document.querySelectorAll("#dockFrascosTabs .hoja-tab").forEach(b => {
     const activo = b.dataset.frs === sub;
     b.classList.toggle("activo", activo);
@@ -7422,6 +7569,9 @@ function iniciarDockFrascos(esJuris) {
   // «Resumen» compara lo repartido contra las capturas semanales de influenza: no aplica a COVID.
   const resumenTab = tabs.querySelector('[data-frs="resumen"]');
   if (resumenTab) resumenTab.style.display = esCovid() ? "none" : "";
+  // «Control por marca» es el resumen de COVID-19: las dos marcas juntas contra la meta.
+  const controlTab = tabs.querySelector('[data-frs="covidctl"]');
+  if (controlTab) controlTab.style.display = esCovid() ? "" : "none";
   if (!tabs.dataset.bound) {
     tabs.dataset.bound = "1";
     tabs.addEventListener("click", (e) => {
@@ -7432,6 +7582,7 @@ function iniciarDockFrascos(esJuris) {
   }
   const sec = document.getElementById("secInfluenzaFrascos");
   if (esCovid() && ["resumen", "historial"].includes(sec?.dataset.frsSub)) frascoIrA("repartir");
+  else if (!esCovid() && sec?.dataset.frsSub === "covidctl") frascoIrA("repartir");
   else if (esJuris && sec?.dataset.frsSub === "historial") frascoIrA("repartir");
   else frascoIrA(sec?.dataset.frsSub || "repartir");
 }
