@@ -89,7 +89,8 @@ for (const oscuro of [false, true]) {
       await page.click('.iv-unidad[data-clues="QTSSA000001"]');
       await page.waitForSelector('#ivGuardar');
       expect(await axe(page, '#panelINF')).toEqual([]);
-      await page.click('#ivGuardar');                      // sin nombre → error en línea
+      await page.fill('#iv_r1', '12');                  // un cambio, pero sin nombre → error en línea
+      await page.click('#ivGuardar');
       await page.waitForSelector('#ivError:not([hidden])');
       expect(await axe(page, '#panelINF')).toEqual([]);
     });

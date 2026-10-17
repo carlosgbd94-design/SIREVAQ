@@ -6400,6 +6400,9 @@ async function supabaseRequest(action = "", payload, options = {}) {
                 estatus: "OK"
               };
 
+              if (tipo === "SR" || tipo === "CONS" || tipo === "INF") {
+                metadata.sin_movimiento = record?.sin_movimiento === true || record?.sin_movimiento === "SI";
+              }
               if (tipo === "BIO") {
                 metadata.tipo_pedido = record?.tipo_pedido || "MENSUAL";
                 metadata.sin_pedido = record?.sin_pedido || false;
@@ -14145,6 +14148,9 @@ function hasCONSNumericChanges() {
   );
 }
 
+// Reporte «sin movimiento»: círculo con símbolo de pausa (mismo del chip del panel de la unidad).
+const SVG_SIN_MOVIMIENTO = '<svg style="width:18px; height:18px; display:block;" viewBox="0 0 24 24" fill="none" stroke="#0891b2" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/></svg>';
+
 function renderCaptureSummary(data) {
   console.log("[renderCaptureSummary DEBUG] Iniciando render con datos:", data);
   if (!document.getElementById("panelCaptureSummary")) return;
@@ -14343,6 +14349,9 @@ function renderCaptureSummary(data) {
       } else if (r.sin_pedido) {
         svgIcon = '<svg style="width:18px; height:18px; display:block;" viewBox="0 0 24 24" fill="none"><path stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 8L12 3L3 8v8l9 5l9-5V8z"/><path stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3v18M3 8l9 5l9-5"/><path d="M4.5 4.5L19.5 19.5" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round"/><path d="M4.5 4.5L19.5 19.5" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round"/></svg>';
         iconHint = 'Sin pedido de biológico (Solo Existencias)';
+      } else if (r.sin_movimiento) {
+        svgIcon = SVG_SIN_MOVIMIENTO;
+        iconHint = 'Reporte sin movimiento (todo en ceros)';
       } else if (r.tiene_ceros) {
         svgIcon = '<svg style="width:18px; height:18px; display:block;" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008zM12 3a9 9 0 100 18 9 9 0 000-18z"/></svg>';
         iconHint = 'Capturó con algún biológico sin existencia';
@@ -14425,6 +14434,12 @@ function renderCaptureSummary(data) {
   const legendEditado = $("legendBioEditado");
   if (legendEditado) {
     legendEditado.style.display = (tipo === "BIO") ? "flex" : "none";
+  }
+
+  const legendSinMov = $("legendSinMovimiento");
+  if (legendSinMov) {
+    const hay = (capturadas || []).some(r => r.sin_movimiento);
+    legendSinMov.style.display = (tipo !== "BIO" && hay) ? "flex" : "none";
   }
 
   // Leyenda de ceros: siempre visible en SR
@@ -22618,7 +22633,6 @@ function renderLiveCharts(tipo, leftData, rightData) {
         const barras = (obj, color) => {
           const keys = Object.keys(obj || {}).filter(k => Number(obj[k]) > 0);
           if (!keys.length) return `<p style="margin:0; font-size:13px; color:#475569;">Sin dosis registradas.</p>`;
-          const max = Math.max(...keys.map(k => Number(obj[k])));
           return `<ul style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px;">` + keys.map(k => {
             const v = Number(obj[k]);
             const pct = total ? Math.round((v / total) * 100) : 0;
@@ -22628,17 +22642,17 @@ function renderLiveCharts(tipo, leftData, rightData) {
                 <span style="font-weight:800; font-variant-numeric:tabular-nums;">${num(v)} <span style="font-weight:600; color:#475569;">· ${pct}%</span></span>
               </div>
               <div style="height:8px; border-radius:4px; background:#fdf2ee; border:1px solid #f1bdad; margin-top:6px; overflow:hidden;">
-                <div style="height:100%; width:${Math.max(3, Math.round((v / max) * 100))}%; background:${color}; border-radius:4px;"></div>
+                <div style="height:100%; width:${Math.max(3, pct)}%; background:${color}; border-radius:4px;"></div>
               </div>
             </li>`;
           }).join("") + `</ul>`;
         };
-        const card = (kicker, inner) => `<section style="background:var(--md-sys-color-surface); border:1px solid #f1bdad; border-top:4px solid #f1bdad; border-radius:20px; padding:20px;">
-            <h3 style="margin:0 0 14px; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7a2a16;">${kicker}</h3>${inner}</section>`;
+        const card = (kicker, inner, nota) => `<section style="background:var(--md-sys-color-surface); border:1px solid #f1bdad; border-top:4px solid #f1bdad; border-radius:20px; padding:20px;">
+            <h3 style="margin:0 0 ${nota ? 4 : 14}px; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7a2a16;">${kicker}</h3>${nota ? `<p style="margin:0 0 14px; font-size:12px; color:#475569;">${nota}</p>` : ""}${inner}</section>`;
         infEl.innerHTML = `<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px;">
           ${card("Total de la semana", `<div style="font-size:44px; line-height:1; font-weight:900; color:#9a3a22; font-variant-numeric:tabular-nums;">${num(total)}</div><p style="margin:8px 0 0; font-size:13px; color:#475569;">dosis de influenza aplicadas</p>`)}
-          ${card("Por población", barras(leftData, "#c9563a"))}
-          ${card("Por esquema", barras(rightData, "#2f7f86"))}
+          ${card("Por población", barras(leftData, "#c9563a"), "% de las dosis de esta semana (no es avance de meta)")}
+          ${card("Por esquema", barras(rightData, "#2f7f86"), "% de las dosis de esta semana (no es avance de meta)")}
         </div>`;
         infEl.style.display = "block";
       } else {
@@ -24097,7 +24111,7 @@ window.renderLiveViewTableContent = function() {
     if (headRow) {
       headRow.innerHTML = `
            <th style="padding: 16px 24px; text-align: left;">Grupo de Edad / Rubro</th>
-           <th style="padding: 16px 24px; text-align: right; width: 170px;">Dosis Aplicadas</th>
+           <th style="padding: 16px 24px; text-align: center; width: 170px;">Dosis Aplicadas</th>
          `;
     }
 
@@ -24142,22 +24156,22 @@ window.renderLiveViewTableContent = function() {
         : `<span style="display:inline-block; min-width:44px; padding:4px 12px; color:#57534e; font-weight:${strong ? 800 : 600}; font-size:14px;">0</span>`;
       let html = "";
       pops.forEach(P => {
-        html += `<tr><th colspan="2" scope="colgroup" style="padding:14px 24px; text-align:left; background:#7a2a16; color:#ffffff; font-size:13px; font-weight:800; letter-spacing:.05em; text-transform:uppercase;">
-            <span style="display:flex; justify-content:space-between; gap:16px;"><span>${escapeHtml(P.name)}</span><span style="font-variant-numeric:tabular-nums;">${fmt(P.total)} dosis</span></span></th></tr>`;
+        html += `<tr><th scope="row" style="padding:14px 24px; text-align:left; background:#7a2a16; color:#ffffff; font-size:13px; font-weight:800; letter-spacing:.05em; text-transform:uppercase;">${escapeHtml(P.name)}</th>
+            <td style="padding:14px 24px; text-align:center; background:#7a2a16; color:#ffffff; font-size:13px; font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap;">${fmt(P.total)} DOSIS</td></tr>`;
         P.groups.forEach(G => {
-          html += `<tr><th colspan="2" scope="colgroup" style="padding:10px 24px 10px 32px; text-align:left; background:#fdf2ee; color:#7a2a16; font-size:13px; font-weight:800; border-top:1px solid #f1bdad;">
-              <span style="display:flex; justify-content:space-between; gap:16px;"><span>${escapeHtml(G.name)}</span><span style="font-variant-numeric:tabular-nums;">Subtotal: ${fmt(G.total)}</span></span></th></tr>`;
+          html += `<tr><th scope="row" style="padding:10px 24px 10px 32px; text-align:left; background:#fdf2ee; color:#7a2a16; font-size:13px; font-weight:800; border-top:1px solid #f1bdad;">${escapeHtml(G.name)}</th>
+              <td style="padding:10px 24px; text-align:center; background:#fdf2ee; color:#7a2a16; font-size:13px; font-weight:800; border-top:1px solid #f1bdad; font-variant-numeric:tabular-nums; white-space:nowrap;">Subtotal: ${fmt(G.total)}</td></tr>`;
           G.rows.forEach(R => {
             html += `<tr class="live-view-row" style="border-bottom:1px solid #f4dcd3;">
               <td style="padding:10px 24px 10px 52px; font-weight:${R.n > 0 ? 700 : 500}; color:${R.n > 0 ? "#1c1917" : "#57534e"}; font-size:14px;">${escapeHtml(R.det || "—")}</td>
-              <td style="padding:10px 24px; text-align:right;">${numCell(R.n, false)}</td>
+              <td style="padding:10px 24px; text-align:center;">${numCell(R.n, false)}</td>
             </tr>`;
           });
         });
       });
       html += `<tr style="background:#fdf2ee; border-top:2px solid #7a2a16;">
              <td style="padding:16px 24px; font-weight:900; color:#0f172a; font-size:14px;">Total de dosis aplicadas</td>
-             <td style="padding:16px 24px; text-align:right; font-weight:900; color:#0f172a; font-size:16px; font-variant-numeric:tabular-nums;">${fmt(total)}</td>
+             <td style="padding:16px 24px; text-align:center; font-weight:900; color:#0f172a; font-size:16px; font-variant-numeric:tabular-nums;">${fmt(total)}</td>
            </tr>`;
       tbody.innerHTML = html;
       renderLiveCharts("INF", porCat, porGrupo);

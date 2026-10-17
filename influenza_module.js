@@ -85,10 +85,6 @@ let _campaignConfig = { fecha_inicio: "2025-10-03", fecha_fin: "2026-04-25" };
 let _allCampaigns = [];
 let _activeCampaign = null;
 let _selectedCampaign = null;
-let _uploadedCsvData = null;
-let _conciliacionLastResult = [];
-let _conciliacionFilter = "all"; // all, diff, match
-let _conciliacionSearchQuery = "";
 
 /**
  * Deriva el nombre de campaña (ej. "2025-2026") a partir de las fechas.
@@ -144,8 +140,6 @@ function populateCampaignSelectors() {
     badge.textContent = _selectedCampaign ? _selectedCampaign.nombre : `Campaña Influenza ${deriveCampaignName(_campaignConfig.fecha_inicio, _campaignConfig.fecha_fin)}`;
   }
 
-  // Generar dinámicamente los meses de conciliación basados en la campaña activa y sus fechas variables
-  populateConciliacionMonths();
 }
 
 async function selectCampaignByName(name) {
@@ -167,7 +161,6 @@ async function selectCampaignByName(name) {
   const badge = document.getElementById("influenzaCampaignBadge");
   if (badge) badge.textContent = found.nombre;
 
-  populateConciliacionMonths();
 }
 
 async function handleInfluenzaCampanaChange(e) {
@@ -193,38 +186,6 @@ async function handleMetaCampaignSelectChange(e) {
   renderActiveAdminSection();
 }
 
-
-function populateConciliacionMonths() {
-  const conciliacionMesSelect = document.getElementById("conciliacionMes");
-  if (!conciliacionMesSelect) return;
-
-  const startStr = _campaignConfig.fecha_inicio || "2025-10-03";
-  const endStr   = _campaignConfig.fecha_fin    || "2026-04-25";
-
-  const startDate = new Date(startStr + "T12:00:00");
-  const endDate = new Date(endStr + "T12:00:00");
-
-  const monthNames = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
-  ];
-
-  const options = [];
-  // Inicializar en el día 1 de ese mes/año
-  let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1, 12, 0, 0);
-
-  while (current <= endDate || (current.getMonth() === endDate.getMonth() && current.getFullYear() === endDate.getFullYear())) {
-    const m = current.getMonth() + 1;
-    const y = current.getFullYear();
-    const label = `${monthNames[current.getMonth()]} ${y}`;
-    options.push({ value: `${m}|${y}`, label: label });
-    
-    // Avanzar mes
-    current.setMonth(current.getMonth() + 1);
-  }
-
-  conciliacionMesSelect.innerHTML = options.map(o => `<option value="${o.value}">${o.label}</option>`).join("");
-}
 
 async function loadCampaignConfig() {
   try {
@@ -1796,7 +1757,7 @@ async function refreshInfluenzaAdminPanel() {
 }
 
 function initInfluenzaSubtabs() {
-  const tabs = ["subtabInfluenzaAvances", "subtabInfluenzaValidacion", "subtabInfluenzaConciliacion", "subtabCovidAvance", "subtabInfluenzaMetas", "subtabInfluenzaFrascos", "subtabInfluenzaConfig"];
+  const tabs = ["subtabInfluenzaAvances", "subtabInfluenzaValidacion", "subtabInfluenzaCobertura", "subtabCovidAvance", "subtabInfluenzaMetas", "subtabInfluenzaFrascos", "subtabInfluenzaConfig"];
   
   // Inicializar estado de visibilidad
   tabs.forEach(t => {
@@ -1868,7 +1829,7 @@ function initInfluenzaSubtabs() {
         syncAriaTabs();
 
         // Ocultar todas las secciones
-        const sections = ["secInfluenzaAvances", "secInfluenzaValidacion", "secInfluenzaConciliacion", "secCovidAvance", "secInfluenzaMetas", "secInfluenzaFrascos", "secInfluenzaConfig"];
+        const sections = ["secInfluenzaAvances", "secInfluenzaValidacion", "secInfluenzaCobertura", "secCovidAvance", "secInfluenzaMetas", "secInfluenzaFrascos", "secInfluenzaConfig"];
         sections.forEach(s => {
           const sec = document.getElementById(s);
           if (sec) sec.style.setProperty("display", "none", "important");
@@ -2067,9 +2028,9 @@ function vacunaPintarSelectores() {
   temporadaAplicarVacuna();
 }
 
-// Subpestañas que solo existen para Influenza (captura semanal, validación, conciliación con el CSV y fechas de
+// Subpestañas que solo existen para Influenza (captura semanal, reportes por semana, cobertura y fechas de
 // campaña). Con COVID-19 el panel muestra únicamente lo suyo: Distribución de Metas y Control de Frascos.
-const TEMPORADA_SOLO_INFLUENZA = ["subtabInfluenzaAvances", "subtabInfluenzaValidacion", "subtabInfluenzaConciliacion", "subtabInfluenzaConfig"];
+const TEMPORADA_SOLO_INFLUENZA = ["subtabInfluenzaAvances", "subtabInfluenzaValidacion", "subtabInfluenzaCobertura", "subtabInfluenzaConfig"];
 function temporadaAplicarVacuna() {
   TEMPORADA_SOLO_INFLUENZA.forEach(id => {
     const el = document.getElementById(id);
@@ -2145,15 +2106,10 @@ async function updateCluesFilterAndRender() {
   const muniVal = document.getElementById("adminInfluenzaMuni").value;
   const units = _allUnidades.filter(u => u.municipio.toUpperCase() === muniVal.toUpperCase());
   
-  // Rellenar selectores de validación y conciliación
+  // Rellenar el selector oculto de la pestaña de reportes
   const valCluesSelect = document.getElementById("validationInfluenzaClues");
   if (valCluesSelect) {
     valCluesSelect.innerHTML = units.map(u => `<option value="${u.clues}">${u.unidad} (${u.clues})</option>`).join("");
-  }
-
-  const concCluesSelect = document.getElementById("conciliacionClues");
-  if (concCluesSelect) {
-    concCluesSelect.innerHTML = units.map(u => `<option value="${u.clues}">${u.unidad} (${u.clues})</option>`).join("");
   }
 
   renderAvancesAndConcentrados();
@@ -2162,7 +2118,7 @@ async function updateCluesFilterAndRender() {
 function renderActiveAdminSection() {
   const advancesTab = document.getElementById("subtabInfluenzaAvances");
   const validationTab = document.getElementById("subtabInfluenzaValidacion");
-  const conciliacionTab = document.getElementById("subtabInfluenzaConciliacion");
+  const coberturaTab = document.getElementById("subtabInfluenzaCobertura");
   const metasTab = document.getElementById("subtabInfluenzaMetas");
   const frascosTab = document.getElementById("subtabInfluenzaFrascos");
   const configTab = document.getElementById("subtabInfluenzaConfig");
@@ -2174,8 +2130,8 @@ function renderActiveAdminSection() {
     renderAvancesAndConcentrados();
   } else if (validationTab && validationTab.classList.contains("active")) {
     initValidationTab();
-  } else if (conciliacionTab && conciliacionTab.classList.contains("active")) {
-    initConciliacionTab();
+  } else if (coberturaTab && coberturaTab.classList.contains("active")) {
+    initCoberturaTab();
   } else if (metasTab && metasTab.classList.contains("active")) {
     renderMetasConfigurationGrid();
   } else if (frascosTab && frascosTab.classList.contains("active")) {
@@ -2220,54 +2176,72 @@ function mapDateToMonthAndWeek(fechaStr) {
 async function exportInfluenzaExcelOficialUnidad() {
   try {
     showToast("Generando reporte de Excel...", true, "info");
+    await window.ensureLibsLoaded("exceljs");
 
-    const response = await fetch(encodeURI("./Formatos/Análisis_Meta_Logro_Influenza_2025-2026_UNIDAD_DE_SALUD.xlsx"));
+    // Plantilla Individual 2026-2027: hoja resumen (logro / meta / %) + una hoja por mes con columna por semana.
+    const response = await fetch(encodeURI("./Formatos/Análisis_Meta_Logro_Influenza_2026-2027_UNIDAD_DE_SALUD_Individual.xlsx"));
     if (!response.ok) throw new Error("No se pudo cargar la plantilla de Excel.");
-    const arrayBuffer = await response.arrayBuffer();
-
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(arrayBuffer);
+    const plantilla = await response.arrayBuffer();
 
     const fechaCorte = document.getElementById("influenza_semana")?.value || new Date().toISOString().split("T")[0];
-    const sheetMeta = wb.getWorksheet('ANÁLIS DE META-LOGRO') || wb.worksheets[1];
-
-    if (sheetMeta) {
-      sheetMeta.getCell('A5').value = `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal ${campaignSeasonLabel()} - ${USER.unidad} (${USER.clues})`;
-
-      INFLUENZA_RUBROS.forEach((rb, idx) => {
-        const metaVal = Number(_influenzaMetasCache[rb.id] || 0);
-        sheetMeta.getCell(9 + idx, 8).value = metaVal;
-
-        let totalLogro = 0;
-        _influenzaCapturasCache.forEach(c => {
-          if (c.fecha <= fechaCorte) totalLogro += Number(c.valores[rb.id] || 0);
-        });
-        sheetMeta.getCell(9 + idx, 7).value = totalLogro;
-      });
-
-      sheetMeta.getCell('G55').value = { formula: 'SUM(G9:G54)' };
-    }
-
-    const sheetsToRemove = ['INSTRUCTIVO', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO'];
-    sheetsToRemove.forEach(name => {
-      const sh = wb.getWorksheet(name);
-      if (sh) wb.removeWorksheet(sh.id);
+    const capturas = (_influenzaCapturasCache || []).filter(c => c.fecha <= fechaCorte);
+    const { wb, omitidas } = await window.InfluenzaMetaLogroExport.construirLibroUnidad({
+      ExcelJS, plantilla, rubroIds: INFLUENZA_RUBROS.map(r => r.id),
+      metas: _influenzaMetasCache || {}, capturas,
+      titulo: `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal ${campaignSeasonLabel()} - ${USER.unidad} (${USER.clues})`
     });
 
     const buffer = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `Análisis_Meta_Logro_Influenza_${campaignSeasonLabel()}_${String(USER.unidad || '').replace(/ /g, "_")}_${fechaCorte}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast("Reporte Excel descargado exitosamente.", true, "good");
+    descargarLibroXlsx(buffer, `Análisis_Meta_Logro_Influenza_${campaignSeasonLabel()}_${String(USER.unidad || '').replace(/ /g, "_")}_${fechaCorte}.xlsx`);
+    showToast(omitidas.length
+      ? `Excel descargado. ${omitidas.length} semana(s) quedan fuera por caer en un mes sin hoja en la plantilla.`
+      : "Reporte Excel descargado exitosamente.", true, omitidas.length ? "warn" : "good");
   } catch (err) {
     console.error("Error al exportar reporte Excel (unidad):", err);
     showToast("Error al generar el archivo Excel.", false, "bad");
   }
 }
+
+function descargarLibroXlsx(buffer, nombre) {
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = nombre;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+}
+
+/**
+ * Excel Meta-Logro (plantilla Municipal_Jurisdiccional) del ámbito que se ve en el tablero de Indicadores:
+ * una columna LOGRO | META | % por unidad (municipio elegido), por municipio y hospital (jurisdicción), con
+ * semáforo en el avance. Usa las mismas cifras que el tablero (window._infIndicadoresDatos).
+ */
+async function exportInfluenzaMetaLogroPlantilla() {
+  const d = window._infIndicadoresDatos;
+  if (!d || !d.entidades || !d.entidades.length) { showToast("Primero abre el tablero de influenza (con meta asignada) para generar el Excel.", false, "warn"); return; }
+  try {
+    showToast("Generando Excel de Meta-Logro...", true, "info");
+    await window.ensureLibsLoaded("exceljs");
+    const response = await fetch(encodeURI("./Formatos/Análisis_Meta_Logro_Influenza_2026-2027_UNIDAD_DE_SALUD_Municipal_Jurisdiccional.xlsx"));
+    if (!response.ok) throw new Error("No se pudo cargar la plantilla de Excel.");
+    const plantilla = await response.arrayBuffer();
+    const temporada = String(d.campana || "").replace(/^Campa.a Influenza\s*/i, "") || campaignSeasonLabel();
+    const wb = await window.InfluenzaMetaLogroExport.construirLibroEntidades({
+      ExcelJS, plantilla, rubroIds: INFLUENZA_RUBROS.map(r => r.id), entidades: d.entidades,
+      titulo: `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal ${temporada} - ${d.ambito} · Corte al ${d.fechaCorte}`,
+      nombreTotal: d.nivel === "JURIS" ? "TOTAL JURISDICCIÓN" : "TOTAL"
+    });
+    const limpio = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    descargarLibroXlsx(await wb.xlsx.writeBuffer(), `Meta_Logro_Influenza_${limpio(temporada)}_${limpio(d.ambito)}_${d.fechaCorte}.xlsx`);
+    showToast("Excel de Meta-Logro descargado.", true, "good");
+  } catch (err) {
+    console.error("Error al exportar Meta-Logro (plantilla):", err);
+    showToast("No se pudo generar el Excel de Meta-Logro.", false, "bad");
+  }
+}
+window.exportInfluenzaMetaLogroPlantilla = exportInfluenzaMetaLogroPlantilla;
 
 async function exportUnitReportExcel(report, fecha) {
   try {
@@ -3167,14 +3141,9 @@ function initValidationTab() {
     valSemanaSelect.innerHTML = weeks.map(w => `<option value="${w.fecha}">${w.label}</option>`).join("");
     // Select last week by default or current week
     // Fecha LOCAL (toISOString usa UTC y de noche en México adelantaría un día).
-    const hoy = new Date();
-    const today = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
-    const matchingWeek = weeks.find(w => w.fecha >= today);
-    if (matchingWeek) {
-      valSemanaSelect.value = matchingWeek.fecha;
-    } else if (weeks.length) {
-      valSemanaSelect.value = weeks[weeks.length - 1].fecha;
-    }
+    // La semana que corre (la más reciente ya abierta), igual que en el panel de la unidad.
+    const predeterminada = influenzaSemanaPredeterminada(weeks);
+    if (predeterminada) valSemanaSelect.value = predeterminada;
   }
 
   // Bind events
@@ -3202,13 +3171,72 @@ function initValidationTab() {
     backBtn.onclick = () => volverAlListadoValidacion();
   }
 
+  infSincronizarMuniLocal("validationMuniSelect", () => {
+    document.getElementById("validationReportContent")?.classList.add("hidden");
+    document.getElementById("validationDashboard")?.classList.remove("hidden");
+    renderValidationDashboard();
+  });
+  const bCopiar = document.getElementById("btnValCopiarRecordatorio");
+  if (bCopiar && !bCopiar.dataset.listened) { bCopiar.dataset.listened = "1"; bCopiar.onclick = infCopiarRecordatorioSemana; }
+  const bExp = document.getElementById("btnValExportar");
+  if (bExp && !bExp.dataset.listened) { bExp.dataset.listened = "1"; bExp.onclick = infExportarEstadoSemana; }
+
   renderValidationDashboard();
 }
 
-// Estado del reporte de una unidad en la semana: "pendiente" | "reportado" | "corregido"
+// ─── Seguimiento de reportes semanales ──────────────────────────────────────────────────────────────────────
+// El reporte de cada unidad ya se valida solo al capturar (meta, calendario y reglas por grupo), así que la
+// supervisión NO tiene que validarlo: aquí se consulta quién reportó, quién falta y, si la unidad lo pide, se corrige.
+
+const INF_ESC = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function infEsSinMov(report) {
+  return !!report && (report.sin_movimiento === true || report.sin_movimiento === "SI");
+}
+
+function infTotalDosisReporte(report) {
+  return report && report.valores ? Object.values(report.valores).reduce((a, v) => a + Number(v || 0), 0) : 0;
+}
+
+/** true si la unidad no tiene meta en ningún rubro: solo puede reportar «Sin movimiento». */
+function infUnidadSinMeta(clues) {
+  const m = _adminMetasArray.find(r => r.clues === clues);
+  return !m || !Object.values(m.metas || {}).some(v => Number(v) > 0);
+}
+
+/** Último día que cubre el reporte de `fecha`: el domingo de esa semana, o el mismo día si es corte de mes. */
+function infFinPeriodo(fecha) {
+  return influenzaEsCorte(fecha) ? fecha : influenzaSumaDias(fecha, 2);
+}
+
+/** Estado de la semana en el calendario: "futura" (aún no abre), "encurso" (abierta, aún en plazo) o "vencida". */
+function infFaseSemana(fecha) {
+  const hoy = influenzaHoy();
+  if (hoy < influenzaSemanaAbre(fecha)) return "futura";
+  return hoy <= infFinPeriodo(fecha) ? "encurso" : "vencida";
+}
+
+/** Municipios que puede ver este rol (copia de las opciones del selector general). */
+function infSincronizarMuniLocal(selId, alCambiar) {
+  const general = document.getElementById("adminInfluenzaMuni");
+  const sel = document.getElementById(selId);
+  if (!general || !sel) return;
+  sel.innerHTML = general.innerHTML;
+  sel.value = general.value;
+  const caja = sel.closest("[data-muni-box]");
+  if (caja) caja.style.display = general.options.length > 1 ? "" : "none";
+  sel.onchange = () => {
+    general.value = sel.value;
+    ["validationMuniSelect", "cobMuniSelect"].forEach(id => { const o = document.getElementById(id); if (o && o !== sel) o.value = sel.value; });
+    alCambiar();
+  };
+}
+
+// Estado del reporte de una unidad en la semana: "pendiente" | "reportado" | "sinmov" | "corregido"
 function estadoValidacion(report) {
   if (!report) return "pendiente";
-  return report.editado_por !== "UNIDAD" ? "corregido" : "reportado";
+  if (report.editado_por !== "UNIDAD") return "corregido";
+  return infEsSinMov(report) ? "sinmov" : "reportado";
 }
 
 function historialDeReporte(report) {
@@ -3218,7 +3246,7 @@ function historialDeReporte(report) {
   } catch (_) { return []; }
 }
 
-// Última edición del supervisor fue «validar sin cambios»
+// Reportes antiguos: la supervisión los marcó «validar sin cambios» cuando la validación era obligatoria.
 function validadoSinCambios(report) {
   if (!report || report.editado_por === "UNIDAD") return false;
   const hist = historialDeReporte(report);
@@ -3226,7 +3254,7 @@ function validadoSinCambios(report) {
   return !!(last && last.sin_cambios);
 }
 
-// Nombre que firmó la última corrección/validación (si el historial lo trae)
+// Nombre que firmó la última corrección (si el historial lo trae)
 function firmaDeReporte(report) {
   const hist = historialDeReporte(report);
   const last = hist[hist.length - 1];
@@ -3282,82 +3310,126 @@ function volverAlListadoValidacion(mensaje) {
   if (mensaje) anunciarValidacion(mensaje);
 }
 
+/** Abre el reporte de una unidad y semana (lo usa la matriz de cobertura). */
+function infAbrirReporteSemanal(clues, fecha) {
+  document.getElementById("subtabInfluenzaValidacion")?.click();
+  const sel = document.getElementById("validationInfluenzaSemana");
+  if (sel) sel.value = fecha;
+  renderValidationDashboard();
+  _valUltimaClues = clues;
+  document.getElementById("validationDashboard").classList.add("hidden");
+  document.getElementById("validationReportContent").classList.remove("hidden");
+  const cs = document.getElementById("validationInfluenzaClues");
+  if (cs) cs.value = clues;
+  renderValidacionEdicionGrid(clues, fecha);
+  const titulo = document.getElementById("validationReportTitle");
+  if (titulo) { titulo.focus(); titulo.scrollIntoView({ block: "start" }); }
+}
+window.infAbrirReporteSemanal = infAbrirReporteSemanal;
+
+function infMuniEtiqueta(m) { return String(m).toUpperCase() === "MARQUES" ? "EL MARQUÉS" : m; }
+
+/** Unidades del municipio elegido, con su reporte de la semana. */
+function infFilasSemana(fecha) {
+  const muni = String(document.getElementById("adminInfluenzaMuni")?.value || "").toUpperCase();
+  return _allUnidades
+    .filter(u => String(u.municipio || "").toUpperCase() === muni)
+    .sort((a, b) => String(a.unidad).localeCompare(String(b.unidad), "es"))
+    .map(u => {
+      const report = _adminCapturasArray.find(r => r.clues === u.clues && r.fecha === fecha) || null;
+      return { u, report, estado: estadoValidacion(report), total: infTotalDosisReporte(report) };
+    });
+}
+
+function infTarjetaKpi(icono, tono, etiqueta, valor, nota) {
+  return `<div class="rs-kpi rs-kpi--${tono}">
+    <span class="material-symbols-rounded rs-kpi__ico" aria-hidden="true">${icono}</span>
+    <div><div class="rs-kpi__lbl">${etiqueta}</div><div class="rs-kpi__val">${valor}</div>${nota ? `<div class="rs-kpi__nota">${nota}</div>` : ""}</div>
+  </div>`;
+}
+
 function renderValidationDashboard() {
   const grid = document.getElementById("validationUnitsGrid");
   const summary = document.getElementById("validationStatsSummary");
   const valSemanaSelect = document.getElementById("validationInfluenzaSemana");
   const searchInput = document.getElementById("validationUnitSearch");
-  const muniVal = document.getElementById("adminInfluenzaMuni").value;
-
   if (!grid || !valSemanaSelect) return;
 
   const selectedFecha = valSemanaSelect.value;
   const filterText = searchInput ? searchInput.value.toLowerCase().trim() : "";
-
-  // Get units in selected municipality
-  const muniUnits = _allUnidades.filter(u => u.municipio.toUpperCase() === muniVal.toUpperCase());
-
-  const esc = (s) => (typeof escapeHtml === "function" ? escapeHtml(String(s ?? "")) : String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])));
   const estadoFiltro = document.getElementById("validationEstadoFiltro")?.value || "todas";
+  const esc = INF_ESC;
 
-  // Estadísticas de TODO el municipio (no dependen de la búsqueda ni del filtro de estado)
-  let totalCount = muniUnits.length;
-  let reportedCount = 0;
-  let validatedCount = 0;
-  muniUnits.forEach(u => {
-    const rep = _adminCapturasArray.find(r => r.clues === u.clues && r.fecha === selectedFecha);
-    if (rep) {
-      reportedCount++;
-      if (rep.editado_por !== "UNIDAD") validatedCount++;
-    }
-  });
+  // Las cifras son de TODO el municipio (no dependen de la búsqueda ni del filtro de estado)
+  const filas = infFilasSemana(selectedFecha);
+  const totalCount = filas.length;
+  const reportedCount = filas.filter(f => f.report).length;
+  const sinMovCount = filas.filter(f => infEsSinMov(f.report)).length;
+  const corregidasCount = filas.filter(f => f.estado === "corregido").length;
+  const pendientes = filas.filter(f => !f.report);
+  const dosisSemana = filas.reduce((a, f) => a + f.total, 0);
+  const fase = infFaseSemana(selectedFecha);
+  const pct = totalCount ? Math.round((reportedCount / totalCount) * 100) : 0;
 
-  const filteredUnits = muniUnits.filter(u => {
-    if (filterText && !(u.unidad.toLowerCase().includes(filterText) || u.clues.toLowerCase().includes(filterText))) return false;
-    if (estadoFiltro !== "todas") {
-      const rep = _adminCapturasArray.find(r => r.clues === u.clues && r.fecha === selectedFecha);
-      if (estadoValidacion(rep) !== estadoFiltro) return false;
-    }
+  const kpis = document.getElementById("validationKpis");
+  if (kpis) {
+    const faseTxt = fase === "futura" ? "La semana aún no abre" : (fase === "encurso" ? "Semana en curso" : "Plazo vencido");
+    kpis.innerHTML =
+      infTarjetaKpi("fact_check", pct === 100 ? "ok" : "info", "Reportaron", `${reportedCount}<small> de ${totalCount}</small>`, `${pct}% · ${faseTxt}`) +
+      infTarjetaKpi("hourglass_empty", pendientes.length && fase === "vencida" ? "mal" : (pendientes.length ? "aviso" : "ok"), "Sin reporte", String(pendientes.length), pendientes.length ? (fase === "vencida" ? "fuera de plazo" : "aún en plazo") : "todas al corriente") +
+      infTarjetaKpi("pause_circle", "cian", "Sin movimiento", String(sinMovCount), sinMovCount ? "reportaron en ceros" : "ninguna") +
+      infTarjetaKpi("vaccines", "info", "Dosis de la semana", dosisSemana.toLocaleString("es-MX"), corregidasCount ? `${corregidasCount} corregida${corregidasCount === 1 ? "" : "s"} por supervisión` : "");
+  }
+
+  const copiar = document.getElementById("btnValCopiarRecordatorio");
+  if (copiar) {
+    copiar.disabled = !pendientes.length || fase === "futura";
+    copiar.title = fase === "futura" ? "La semana aún no abre" : (pendientes.length ? "Copia el aviso para WhatsApp con las unidades sin reporte" : "No hay unidades pendientes");
+  }
+
+  const filtradas = filas.filter(f => {
+    if (filterText && !(String(f.u.unidad).toLowerCase().includes(filterText) || String(f.u.clues).toLowerCase().includes(filterText))) return false;
+    if (estadoFiltro !== "todas" && f.estado !== estadoFiltro) return false;
     return true;
   });
 
   grid.innerHTML = "";
   grid.setAttribute("role", "list");
 
-  if (filteredUnits.length === 0) {
+  if (filtradas.length === 0) {
     grid.innerHTML = `<div class="col-span-full text-center text-sm text-slate-700 font-medium p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-300">No hay unidades que coincidan con la búsqueda o el estado elegido.</div>`;
   }
 
-  filteredUnits.forEach(u => {
-    const report = _adminCapturasArray.find(r => r.clues === u.clues && r.fecha === selectedFecha);
-    const estado = estadoValidacion(report);
-
-    let statusBadge = "";
-    let actionText = "";
-    let cardBorder = "";
-    let totalDosis = 0;
-    const badgeBase = "px-2.5 py-1 rounded-full text-[12px] font-black flex items-center gap-1 border";
-
-    if (report && report.valores) {
-      Object.values(report.valores).forEach(v => totalDosis += Number(v || 0));
-    }
-
+  const badgeBase = "px-2.5 py-1 rounded-full text-[12px] font-black flex items-center gap-1 border";
+  filtradas.forEach(({ u, report, estado, total }) => {
+    let statusBadge, actionText, cardBorder, detalle = "";
+    const sinMeta = infUnidadSinMeta(u.clues);
     if (estado === "corregido") {
-      const sinCambios = validadoSinCambios(report);
-      statusBadge = `<span class="bg-violet-50 text-violet-900 border-violet-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">verified</span>${sinCambios ? "Validado" : "Corregido"}</span>`;
-      actionText = "Revisar de nuevo";
+      const firma = firmaDeReporte(report);
+      statusBadge = `<span class="bg-violet-50 text-violet-900 border-violet-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">edit_note</span>${validadoSinCambios(report) ? "Revisado" : "Corregido"}</span>`;
+      actionText = "Ver reporte";
       cardBorder = "border-violet-200 hover:border-violet-300";
+      detalle = firma ? `Firmó: ${esc(firma)}` : "";
+    } else if (estado === "sinmov") {
+      statusBadge = `<span class="bg-cyan-50 text-cyan-900 border-cyan-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">pause_circle</span>Sin movimiento</span>`;
+      actionText = "Ver reporte";
+      cardBorder = "border-cyan-200 hover:border-cyan-300";
     } else if (estado === "reportado") {
-      statusBadge = `<span class="bg-emerald-50 text-emerald-900 border-emerald-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">check_circle</span>Por validar</span>`;
-      actionText = "Validar reporte";
+      statusBadge = `<span class="bg-emerald-50 text-emerald-900 border-emerald-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">check_circle</span>Reportado</span>`;
+      actionText = "Ver reporte";
       cardBorder = "border-emerald-200 hover:border-emerald-300";
     } else {
-      statusBadge = `<span class="bg-amber-50 text-amber-900 border-amber-300 ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">error</span>Sin reporte</span>`;
+      const vencida = fase === "vencida";
+      statusBadge = `<span class="${vencida ? "bg-rose-50 text-rose-900 border-rose-300" : "bg-amber-50 text-amber-900 border-amber-300"} ${badgeBase}"><span class="material-symbols-rounded text-xs" aria-hidden="true">${vencida ? "error" : "schedule"}</span>${fase === "futura" ? "Aún no abre" : (vencida ? "Sin reporte" : "Pendiente")}</span>`;
       actionText = "Capturar por la unidad";
-      cardBorder = "border-amber-200 hover:border-amber-300";
+      cardBorder = vencida ? "border-rose-200 hover:border-rose-300" : "border-amber-200 hover:border-amber-300";
+      if (sinMeta) detalle = "Sin meta asignada: solo puede reportar «Sin movimiento»";
     }
-    const btnBg = "#0f172a";
-    const btnHoverBg = "#1e293b";
+    if (report) {
+      const quien = report.capturado_por ? `Capturó: ${esc(report.capturado_por)}` : "";
+      const folio = influenzaFolio(report);
+      detalle = [quien, folio ? `Folio ${esc(folio)}` : "", detalle].filter(Boolean).join(" · ");
+    }
 
     const card = document.createElement("div");
     card.setAttribute("role", "listitem");
@@ -3372,19 +3444,17 @@ function renderValidationDashboard() {
           <div class="text-[12px] font-black text-slate-600 tracking-wider uppercase mb-0.5">${esc(u.clues)}</div>
           <h5 class="text-sm font-extrabold text-slate-900 leading-tight" style="overflow-wrap:anywhere;">${esc(u.unidad)}</h5>
           <div class="text-xs font-bold text-slate-700 mt-1.5">
-            Dosis reportadas: <strong class="text-slate-900">${report ? totalDosis : "—"}</strong>
+            Dosis reportadas: <strong class="text-slate-900">${report ? total : "—"}</strong>
           </div>
+          ${detalle ? `<div class="text-[12px] font-semibold text-slate-600 mt-1" style="overflow-wrap:anywhere;">${detalle}</div>` : ""}
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-3 shrink-0 self-end sm:self-center">
         ${statusBadge}
         <button type="button" data-clues="${esc(u.clues)}" aria-label="${esc(actionText)}: ${esc(u.unidad)}, ${esc(u.clues)}"
-          class="transition-all h-[40px] px-4 rounded-xl text-xs font-black flex items-center justify-center gap-1 shadow-sm border-0"
-          style="background-color: ${btnBg} !important; color: #ffffff !important; cursor: pointer;"
-          onmouseenter="this.style.setProperty('background-color', '${btnHoverBg}', 'important');"
-          onmouseleave="this.style.setProperty('background-color', '${btnBg}', 'important');">
-          <span class="material-symbols-rounded text-[18px]" aria-hidden="true" style="color: #ffffff !important;">find_in_page</span>
-          <span style="color: #ffffff !important;">${esc(actionText)}</span>
+          class="rs-btn-oscuro transition-all h-[40px] px-4 rounded-xl text-xs font-black flex items-center justify-center gap-1 shadow-sm border-0">
+          <span class="material-symbols-rounded text-[18px]" aria-hidden="true">find_in_page</span>
+          <span>${esc(actionText)}</span>
         </button>
       </div>
     `;
@@ -3393,12 +3463,9 @@ function renderValidationDashboard() {
       _valUltimaClues = u.clues;
       document.getElementById("validationDashboard").classList.add("hidden");
       document.getElementById("validationReportContent").classList.remove("hidden");
-
       const valCluesSelect = document.getElementById("validationInfluenzaClues");
       if (valCluesSelect) valCluesSelect.value = u.clues;
-
       renderValidacionEdicionGrid(u.clues, selectedFecha);
-
       const titulo = document.getElementById("validationReportTitle");
       if (titulo) {
         titulo.focus();
@@ -3410,20 +3477,52 @@ function renderValidationDashboard() {
   });
 
   if (summary) {
-    summary.innerHTML = `
-      <span>${reportedCount} de ${totalCount} reportadas</span>
-      <span class="text-slate-400 font-normal" aria-hidden="true">|</span>
-      <span class="text-violet-900">${validatedCount} revisadas por supervisión</span>
-    `;
+    summary.textContent = `Mostrando ${filtradas.length} de ${totalCount} unidades`;
   }
-  anunciarValidacion(`Mostrando ${filteredUnits.length} de ${totalCount} unidades.`);
+  anunciarValidacion(`Mostrando ${filtradas.length} de ${totalCount} unidades. ${reportedCount} reportaron, ${pendientes.length} sin reporte.`);
+}
+
+/** Aviso de WhatsApp con las unidades que no han reportado la semana elegida. */
+function infCopiarRecordatorioSemana() {
+  const fecha = document.getElementById("validationInfluenzaSemana")?.value;
+  const pend = infFilasSemana(fecha).filter(f => !f.report);
+  if (!pend.length) { showToast("No hay unidades pendientes en esta semana.", true, "info"); return; }
+  const saludo = infSaludoWhatsApp();
+  const lista = pend.map(f => `• *${String(f.u.unidad).toUpperCase().trim()}*`).join("\n");
+  const texto = `${saludo}\n\nLas siguientes unidades no han realizado su captura de *REPORTE DE INFLUENZA* de la ${etiquetaSemanaValidacion(fecha).toLowerCase()}, por favor hay que ingresar a la plataforma *SIREVAQ* a realizar la captura correspondiente:\n\n${lista}`;
+  navigator.clipboard.writeText(texto)
+    .then(() => showToast("¡Copiado! El aviso está listo para pegarse en WhatsApp.", true, "good"))
+    .catch(() => showToast("No se pudo copiar el texto automáticamente.", false, "bad"));
+}
+
+function infSaludoWhatsApp() {
+  const h = new Date().getHours();
+  return h >= 6 && h < 12 ? "¡Buenos días! ☀️" : (h >= 12 && h < 19 ? "¡Buenas tardes! ⛅" : "¡Buenas noches! 🌙");
+}
+
+function infCsvCelda(v) {
+  const s = String(v ?? "");
+  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Descarga el estado de la semana (una fila por unidad) en CSV con acentos correctos para Excel. */
+function infExportarEstadoSemana() {
+  const fecha = document.getElementById("validationInfluenzaSemana")?.value;
+  const nombres = { pendiente: "Sin reporte", reportado: "Reportado", sinmov: "Sin movimiento", corregido: "Corregido por supervisión" };
+  const filas = [["Municipio", "CLUES", "Unidad", "Estado", "Dosis", "Capturó", "Folio", "Última actualización"]];
+  infFilasSemana(fecha).forEach(f => {
+    filas.push([f.u.municipio, f.u.clues, f.u.unidad, nombres[f.estado], f.report ? f.total : "", f.report?.capturado_por || "", f.report ? influenzaFolio(f.report) : "", f.report?.updated_at ? String(f.report.updated_at).slice(0, 16).replace("T", " ") : ""]);
+  });
+  const csv = "﻿" + filas.map(r => r.map(infCsvCelda).join(",")).join("\r\n");
+  metaDescargar(csv, `Influenza_estado_semana_${fecha}.csv`, "text/csv;charset=utf-8");
+  showToast("Estado de la semana descargado.", true, "good");
 }
 
 // Mensaje de error en línea (role="alert") + campos marcados; mueve el foco al primero con problema.
 function mostrarErroresValidacion(items) {
   const box = document.getElementById("validationFormError");
   if (!box || !items.length) return;
-  const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const esc = INF_ESC;
   box.innerHTML = `<strong>${items.length === 1 ? "Hay 1 problema" : `Hay ${items.length} problemas`} que corregir antes de guardar:</strong><ul>${items.map(i => `<li>${esc(i.msg)}</li>`).join("")}</ul>`;
   box.classList.remove("hidden");
   items.forEach(i => {
@@ -3462,20 +3561,26 @@ function actualizarResumenValidacion() {
   const hayReporte = !!_currentValidationReport;
   let texto, etiqueta;
   if (hayReporte && n === 0) {
-    texto = "Sin cambios: el reporte se validará tal como lo capturó la unidad.";
-    etiqueta = "Validar sin cambios";
+    texto = "Sin cambios. El reporte ya cuenta tal como lo capturó la unidad; no necesita validación.";
+    etiqueta = "Sin cambios que guardar";
   } else if (hayReporte) {
     texto = n === 1 ? "1 rubro modificado respecto a lo capturado por la unidad." : `${n} rubros modificados respecto a lo capturado por la unidad.`;
-    etiqueta = "Guardar corrección del supervisor";
+    etiqueta = "Guardar corrección";
   } else {
     texto = n === 0 ? "La unidad no tiene reporte esta semana. Captura las dosis para registrarlo." : `Se registrará un reporte nuevo con ${n} rubro${n === 1 ? "" : "s"} capturado${n === 1 ? "" : "s"} por supervisión.`;
-    etiqueta = "Guardar captura del supervisor";
+    etiqueta = "Guardar captura";
   }
   if (resumen) {
     resumen.textContent = texto;
     resumen.classList.toggle("vl-hay-cambios", n > 0);
   }
-  if (btn && !btn.disabled) btn.textContent = etiqueta;
+  // Sin cambios no hay nada que guardar: el botón se ve apagado pero sigue enfocable y explica por qué.
+  const apagado = n === 0;
+  if (btn) {
+    btn.setAttribute("aria-disabled", apagado ? "true" : "false");
+    btn.classList.toggle("is-apagado", apagado);
+    if (!btn.disabled) btn.textContent = etiqueta;
+  }
   return n;
 }
 
@@ -3518,7 +3623,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
       badge.classList.remove("hidden");
       const firma = firmaDeReporte(report) || report.editado_por;
       badge.textContent = validadoSinCambios(report)
-        ? `Validado sin cambios por ${firma}`
+        ? `Revisado por ${firma}`
         : `Corregido por ${firma}`;
     } else {
       badge.classList.add("hidden");
@@ -3526,7 +3631,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
   } else {
     const unidad = _allUnidades.find(u => u.clues === clues);
     title.textContent = `Sin reporte: ${unidad ? unidad.unidad : clues}`;
-    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} | La unidad no ha enviado su reporte. Al guardar se creará uno nuevo.`;
+    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} | La unidad aún no envía su reporte. Si se lo pide, puedes capturarlo por ella.`;
     badge.classList.add("hidden");
   }
 
@@ -3600,7 +3705,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
           <td class="p-3 text-center">
             <input type="number" min="0" step="1" inputmode="numeric"
               id="val_input_inf_${rb.id}" data-rubro="${rb.id}"
-              aria-label="${etiqueta}: valor validado de esta semana${isLocked ? (reglaCal ? ' (no disponible esta semana)' : ' (la unidad no tiene meta)') : ''}"
+              aria-label="${etiqueta}: valor de esta semana${isLocked ? (reglaCal ? ' (no disponible esta semana)' : ' (la unidad no tiene meta)') : ''}"
               aria-describedby="val_over_inf_${rb.id}"
               class="text-center font-bold bg-slate-50 border border-slate-400 rounded-lg outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-200 transition-all"
               value="${val}"
@@ -3629,14 +3734,14 @@ function renderValidacionEdicionGrid(clues, fecha) {
       </div>
       <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200" tabindex="0" role="region" aria-label="Tabla: ${esc(groupTitle)}">
         <table class="w-full border-collapse text-left text-xs text-slate-700">
-          <caption class="vl-sr">${esc(groupTitle)}: dosis por rango de edad, con meta, captura de la unidad, acumulado, valor validado y avance.</caption>
+          <caption class="vl-sr">${esc(groupTitle)}: dosis por rango de edad, con meta, captura de la unidad, acumulado, valor de esta semana y avance.</caption>
           <thead>
             <tr class="bg-slate-50 border-b border-slate-200 font-bold text-slate-700">
               <th scope="col" class="p-3">Edad</th>
               <th scope="col" class="p-3 text-center">Meta anual</th>
               <th scope="col" class="p-3 text-center">Capturado por la unidad</th>
               <th scope="col" class="p-3 text-center">Acumulado otras semanas</th>
-              <th scope="col" class="p-3 text-center">Valor validado</th>
+              <th scope="col" class="p-3 text-center">Valor de esta semana</th>
               <th scope="col" class="p-3">Avance con este valor</th>
             </tr>
           </thead>
@@ -3692,6 +3797,14 @@ function renderValidacionEdicionGrid(clues, fecha) {
   };
 
   document.getElementById("btnSaveValidation").onclick = () => {
+    if (_currentValidationReport && contarCambiosValidacion() === 0) {
+      showToast("No hay cambios que guardar: el reporte ya cuenta como lo capturó la unidad.", true, "info");
+      return;
+    }
+    if (!_currentValidationReport && contarCambiosValidacion() === 0) {
+      showToast("Captura al menos una dosis para registrar el reporte.", false, "warn");
+      return;
+    }
     saveValidationReport(clues, fecha);
   };
 }
@@ -3704,7 +3817,7 @@ async function saveValidationReport(clues, fecha) {
   const errores = [];
 
   if (!nombre) {
-    errores.push({ msg: "Escribe el nombre de quien realiza o autoriza la corrección; queda firmado en el historial.", el: nombreInput });
+    errores.push({ msg: "Escribe el nombre de quien realiza la corrección; queda firmado en el historial.", el: nombreInput });
   }
 
   const unitMeta = _adminMetasArray.find(r => r.clues === clues);
@@ -3750,7 +3863,8 @@ async function saveValidationReport(clues, fecha) {
     return;
   }
 
-  const sinCambios = !!_currentValidationReport && contarCambiosValidacion() === 0;
+  // Lo que no cambió ya cuenta tal como lo capturó la unidad: no hay nada que validar ni guardar.
+  const todoCero = Object.values(valores).every(v => v === 0);
 
   const unitData = _allUnidades.find(u => u.clues === clues);
   const unidadNombre = unitData ? unitData.unidad : "Unidad Médica";
@@ -3767,629 +3881,194 @@ async function saveValidationReport(clues, fecha) {
     capturado_por: _currentValidationReport ? _currentValidationReport.capturado_por : nombre,
     editado_por: USER.rol.toUpperCase(),
     firmado_por: nombre,
-    sin_cambios: sinCambios
+    // Todo en ceros = reporte «sin movimiento»; con dosis se quita esa marca si la unidad la había puesto.
+    sin_movimiento: todoCero
   };
 
   await AppService.runCapture({
     btnId: "btnSaveValidation",
-    title: sinCambios ? "Validando reporte" : "Guardando corrección",
-    msg: sinCambios ? "Registrando la validación firmada por el supervisor..." : "Registrando la corrección firmada por el supervisor...",
-    successMsg: sinCambios ? "Reporte validado sin cambios." : "Reporte de validación guardado correctamente.",
+    title: "Guardando corrección",
+    msg: "Registrando la corrección firmada por supervisión...",
+    successMsg: "Corrección guardada.",
     eventTitle: "Influenza",
-    eventMsg: `${sinCambios ? "Validación" : "Edición"} de reporte de ${unidadNombre} por supervisor ${nombre}`,
+    eventMsg: `Corrección del reporte de ${unidadNombre} por ${nombre}`,
     action: async () => {
       const res = await AppService.call("saveinfluenza_captura", payload);
       await loadInfluenzaAdminData();
-      volverAlListadoValidacion(sinCambios ? `Reporte de ${unidadNombre} validado sin cambios.` : `Corrección de ${unidadNombre} guardada.`);
-      const sinMovimientoVisual = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (typeof confetti === 'function' && !sinMovimientoVisual) {
-        confetti({
-          particleCount: 150,
-          spread: 80,
-          origin: { y: 0.6 }
-        });
-      }
+      volverAlListadoValidacion(`Corrección de ${unidadNombre} guardada.`);
       return res;
     }
   });
 }
 
-// 1.2 CONCILIACIÓN VS CSV
-function initConciliacionTab() {
-  const runBtn = document.getElementById("btnRunConciliacion");
-  const resultContainer = document.getElementById("conciliacionResultContainer");
-  const exportBtn = document.getElementById("btnExportConciliacion");
-  const searchInput = document.getElementById("conciliacionSearch");
-  const closeDrawerBtn = document.getElementById("btnCloseConciliacionDrawer");
-  const backdrop = document.getElementById("conciliacionDrawerBackdrop");
+// ─── Cobertura por semanas ──────────────────────────────────────────────────────────────────────────────────
+// Matriz unidades × semanas de la campaña: de un vistazo quién reportó, quién está en ceros y quién lleva atraso.
+// Reemplaza la antigua «Conciliación vs CSV»: el CSV ya sale directo de lo que capturan las unidades.
 
-  const filterAllBtn = document.getElementById("btnFilterConcAll");
-  const filterDiffBtn = document.getElementById("btnFilterConcDiff");
-  const filterMatchBtn = document.getElementById("btnFilterConcMatch");
+const COB_ESTADOS = {
+  rep:   { icono: "check_circle", txt: "Reportado" },
+  sinmov:{ icono: "pause_circle", txt: "Sin movimiento" },
+  corr:  { icono: "edit_note",    txt: "Corregido por supervisión" },
+  curso: { icono: "schedule",     txt: "Pendiente, aún en plazo" },
+  falta: { icono: "error",        txt: "Sin reporte, fuera de plazo" },
+  fut:   { icono: "remove",       txt: "Aún no abre" }
+};
 
-  if (!runBtn || !resultContainer) return;
+function infEstadoCelda(report, fecha) {
+  if (report) {
+    if (report.editado_por !== "UNIDAD") return "corr";
+    return infEsSinMov(report) ? "sinmov" : "rep";
+  }
+  const fase = infFaseSemana(fecha);
+  return fase === "futura" ? "fut" : (fase === "encurso" ? "curso" : "falta");
+}
 
-  // Limpiar estados
-  _uploadedCsvData = null;
-  _conciliacionLastResult = [];
-  _conciliacionFilter = "all";
-  _conciliacionSearchQuery = "";
+let _cobDatos = null;
 
-  // Botón Consultar Base de Datos
-  runBtn.onclick = () => {
-    const docInfo = document.getElementById("conciliacionSourceInfo");
-    if (docInfo) docInfo.textContent = "Fuente: Consulta de Base de Datos";
-    
-    const mesAnio = document.getElementById("conciliacionMes").value;
-    const clues = document.getElementById("conciliacionClues").value;
-    runConciliacionProcess(clues, mesAnio);
+function infCalcularCobertura() {
+  const weeks = generateCampaignWeeks();
+  const muni = String(document.getElementById("adminInfluenzaMuni")?.value || "").toUpperCase();
+  const unidades = _allUnidades.filter(u => String(u.municipio || "").toUpperCase() === muni);
+  const porClave = new Map();
+  _adminCapturasArray.forEach(r => porClave.set(`${r.clues}|${r.fecha}`, r));
+
+  const filas = unidades.map(u => {
+    const celdas = weeks.map(w => {
+      const report = porClave.get(`${u.clues}|${w.fecha}`) || null;
+      return { w, report, k: infEstadoCelda(report, w.fecha), total: infTotalDosisReporte(report) };
+    });
+    const atrasos = celdas.filter(c => c.k === "falta");
+    return {
+      u, celdas,
+      recibidos: celdas.filter(c => c.report).length,
+      sinMov: celdas.filter(c => c.k === "sinmov").length,
+      atrasos,
+      dosis: celdas.reduce((a, c) => a + c.total, 0)
+    };
+  });
+  const vencidas = weeks.filter(w => infFaseSemana(w.fecha) === "vencida").length;
+  return { weeks, filas, vencidas };
+}
+
+function renderCobertura() {
+  const cont = document.getElementById("cobMatriz");
+  if (!cont) return;
+  infSincronizarMuniLocal("cobMuniSelect", renderCobertura);
+  const esc = INF_ESC;
+
+  const datos = infCalcularCobertura();
+  _cobDatos = datos;
+  const buscar = (document.getElementById("cobBuscar")?.value || "").toLowerCase().trim();
+  const soloAtraso = !!document.getElementById("cobSoloAtraso")?.checked;
+  const orden = document.getElementById("cobOrden")?.value || "atraso";
+
+  let filas = datos.filas.slice();
+  if (buscar) filas = filas.filter(f => String(f.u.unidad).toLowerCase().includes(buscar) || String(f.u.clues).toLowerCase().includes(buscar));
+  if (soloAtraso) filas = filas.filter(f => f.atrasos.length);
+  filas.sort((a, b) => orden === "atraso" && b.atrasos.length !== a.atrasos.length
+    ? b.atrasos.length - a.atrasos.length
+    : String(a.u.unidad).localeCompare(String(b.u.unidad), "es"));
+
+  // Resumen del municipio completo (no depende de la búsqueda)
+  const todas = datos.filas;
+  const semanasAbiertas = datos.weeks.filter(w => infFaseSemana(w.fecha) !== "futura").length;
+  const esperados = todas.length * semanasAbiertas;
+  const recibidosVencidas = todas.reduce((a, f) => a + f.celdas.filter(c => c.report && infFaseSemana(c.w.fecha) !== "futura").length, 0);
+  const pct = esperados ? Math.round((recibidosVencidas / esperados) * 100) : 100;
+  const conAtraso = todas.filter(f => f.atrasos.length).length;
+  const totalAtrasos = todas.reduce((a, f) => a + f.atrasos.length, 0);
+  const sinMovTotal = todas.reduce((a, f) => a + f.sinMov, 0);
+  const kpis = document.getElementById("cobKpis");
+  if (kpis) {
+    kpis.innerHTML =
+      infTarjetaKpi("percent", pct >= 95 ? "ok" : (pct >= 80 ? "aviso" : "mal"), "Cobertura a la fecha", `${pct}%`, `${recibidosVencidas} de ${esperados} reportes esperados`) +
+      infTarjetaKpi("task_alt", conAtraso ? "aviso" : "ok", "Unidades al corriente", `${todas.length - conAtraso}<small> de ${todas.length}</small>`, conAtraso ? `${conAtraso} con atraso` : "ninguna con atraso") +
+      infTarjetaKpi("error", totalAtrasos ? "mal" : "ok", "Semanas atrasadas", String(totalAtrasos), totalAtrasos ? "reportes fuera de plazo" : "sin atrasos") +
+      infTarjetaKpi("pause_circle", "cian", "Reportes sin movimiento", String(sinMovTotal), "en ceros durante la campaña");
+  }
+
+  const copiar = document.getElementById("btnCobCopiarAtrasos");
+  if (copiar) { copiar.disabled = !conAtraso; copiar.title = conAtraso ? "Copia el aviso para WhatsApp con las unidades atrasadas" : "No hay unidades con atraso"; }
+
+  if (!datos.weeks.length || !todas.length) {
+    cont.innerHTML = `<p class="rs-vacio">No hay unidades o semanas para mostrar en esta campaña.</p>`;
+    return;
+  }
+
+  const encabezados = datos.weeks.map(w => `<th scope="col" class="cob-th${w.corte ? " cob-th--corte" : ""}" title="${esc(w.label)}">
+      <span class="cob-th__s">S${w.semana}${w.corte ? "<sup>corte</sup>" : ""}</span><span class="cob-th__f">${esc(influenzaFechaCorta(w.fecha))}</span></th>`).join("");
+
+  const cuerpo = filas.map(f => {
+    const celdas = f.celdas.map(c => {
+      const e = COB_ESTADOS[c.k];
+      const dosis = c.report && c.k !== "sinmov" ? `, ${c.total} dosis` : "";
+      const aria = `${f.u.unidad}, ${c.w.label}: ${e.txt}${dosis}`;
+      const interior = `<span class="material-symbols-rounded" aria-hidden="true">${e.icono}</span>`;
+      return c.k === "fut"
+        ? `<td class="cob-td"><span class="cob-c cob-c--fut" role="img" aria-label="${esc(aria)}">${interior}</span></td>`
+        : `<td class="cob-td"><button type="button" class="cob-c cob-c--${c.k}" data-clues="${esc(f.u.clues)}" data-fecha="${c.w.fecha}" aria-label="${esc(aria)}" title="${esc(e.txt + dosis)}">${interior}</button></td>`;
+    }).join("");
+    const nAtr = f.atrasos.length;
+    return `<tr>
+      <th scope="row" class="cob-unidad"><span class="cob-unidad__n">${esc(f.u.unidad)}</span><span class="cob-unidad__c">${esc(f.u.clues)}</span></th>
+      ${celdas}
+      <td class="cob-tot"><b>${f.recibidos}</b><small> reportes</small></td>
+      <td class="cob-tot ${nAtr ? "cob-tot--mal" : "cob-tot--ok"}"><b>${nAtr}</b><small> atraso${nAtr === 1 ? "" : "s"}</small></td>
+    </tr>`;
+  }).join("");
+
+  cont.innerHTML = filas.length ? `
+    <div class="cob-scroll" tabindex="0" role="region" aria-label="Matriz de unidades por semana; se desplaza horizontalmente">
+      <table class="cob-tabla">
+        <caption class="vl-sr">Estado del reporte de influenza de cada unidad en cada semana de la campaña. Cada celda es un botón que abre el reporte.</caption>
+        <thead><tr><th scope="col" class="cob-unidad cob-unidad--th">Unidad</th>${encabezados}<th scope="col" class="cob-tot-th">Recibidos</th><th scope="col" class="cob-tot-th">Atrasos</th></tr></thead>
+        <tbody>${cuerpo}</tbody>
+      </table>
+    </div>` : `<p class="rs-vacio">Ninguna unidad coincide con la búsqueda o el filtro.</p>`;
+
+  cont.querySelectorAll("button.cob-c").forEach(b => {
+    b.onclick = () => infAbrirReporteSemanal(b.dataset.clues, b.dataset.fecha);
+  });
+  const live = document.getElementById("cobLive");
+  if (live) live.textContent = `Mostrando ${filas.length} de ${todas.length} unidades. Cobertura ${pct}%.`;
+}
+
+function initCoberturaTab() {
+  const ligar = (id, ev) => {
+    const el = document.getElementById(id);
+    if (el && !el.dataset.listened) { el.dataset.listened = "1"; el.addEventListener(ev, renderCobertura); }
   };
-
-  // Filtros de Estado
-  const updateFilterButtons = (activeBtn) => {
-    [filterAllBtn, filterDiffBtn, filterMatchBtn].forEach(btn => {
-      if (!btn) return;
-      btn.className = "px-3 py-1.5 text-[11px] font-bold text-slate-500 rounded-lg transition-all focus:outline-none hover:text-slate-700";
-    });
-    if (activeBtn) {
-      activeBtn.className = "px-3 py-1.5 text-[11px] font-black rounded-lg transition-all focus:outline-none bg-surface text-slate-700 shadow-xs";
-    }
-  };
-
-  if (filterAllBtn) {
-    filterAllBtn.onclick = () => {
-      _conciliacionFilter = "all";
-      updateFilterButtons(filterAllBtn);
-      applyConciliacionFiltersAndSearch();
-    };
-  }
-  if (filterDiffBtn) {
-    filterDiffBtn.onclick = () => {
-      _conciliacionFilter = "diff";
-      updateFilterButtons(filterDiffBtn);
-      applyConciliacionFiltersAndSearch();
-    };
-  }
-  if (filterMatchBtn) {
-    filterMatchBtn.onclick = () => {
-      _conciliacionFilter = "match";
-      updateFilterButtons(filterMatchBtn);
-      applyConciliacionFiltersAndSearch();
-    };
-  }
-
-  // Buscador
-  if (searchInput) {
-    searchInput.oninput = (e) => {
-      _conciliacionSearchQuery = e.target.value;
-      applyConciliacionFiltersAndSearch();
-    };
-  }
-
-  // Exportar Excel
-  if (exportBtn) {
-    exportBtn.onclick = async () => {
-      await exportConciliacionReport();
-    };
-  }
-
-  // Cerrar Drawer
-  if (closeDrawerBtn) closeDrawerBtn.onclick = closeConciliacionDrawer;
-  if (backdrop) backdrop.onclick = closeConciliacionDrawer;
+  ligar("cobBuscar", "input"); ligar("cobSoloAtraso", "change"); ligar("cobOrden", "change");
+  const cp = document.getElementById("btnCobCopiarAtrasos");
+  if (cp && !cp.dataset.listened) { cp.dataset.listened = "1"; cp.onclick = infCopiarRecordatorioAtrasos; }
+  const ex = document.getElementById("btnCobExportar");
+  if (ex && !ex.dataset.listened) { ex.dataset.listened = "1"; ex.onclick = infExportarCobertura; }
+  renderCobertura();
 }
 
-// Ejecutar proceso de conciliación
-async function runConciliacionProcess(clues, mesAnio) {
-  const resultContainer = document.getElementById("conciliacionResultContainer");
-  const tbody = document.getElementById("conciliacionTbody");
-  const title = document.getElementById("conciliacionTitle");
-  const statusEl = document.getElementById("conciliacionGeneralStatus");
-
-  if (!resultContainer || !tbody) return;
-
-  const [mes, anio] = mesAnio.split("|").map(Number);
-  const unitData = _allUnidades.find(u => u.clues === clues);
-  const unitName = unitData ? unitData.unidad : clues;
-
-  resultContainer.classList.remove("hidden");
-  title.textContent = `Conciliación de Carga: ${unitName} (${clues}) — Mes ${mes}/${anio}`;
-
-  let sisRecords = [];
-
-  // Consultar Base de Datos Supabase (Dato Inmutable)
-  const { data, error } = await window.supabase
-    .from("registros_sis")
-    .select("variable_sis, valor")
-    .eq("clues", clues)
-    .eq("mes", mes)
-    .eq("anio", anio);
-
-  if (error) {
-    console.error("Error al cargar registros del SIS:", error);
-    tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-rose-500 font-bold">Error al cargar datos del SIS oficial.</td></tr>`;
-    return;
-  }
-  sisRecords = data || [];
-
-  // Sumar capturas locales de _adminCapturasArray
-  const localValues = {};
-  INFLUENZA_RUBROS.forEach(rb => {
-    localValues[rb.id] = 0;
-  });
-
-  _adminCapturasArray.forEach(c => {
-    if (c.clues === clues) {
-      const d = new Date(c.fecha + "T12:00:00");
-      if (d.getMonth() + 1 === mes && d.getFullYear() === anio) {
-        INFLUENZA_RUBROS.forEach(rb => {
-          localValues[rb.id] += Number(c.valores[rb.id] || 0);
-        });
-      }
-    }
-  });
-
-  _conciliacionLastResult = [];
-  let totalLocal = 0;
-  let totalSis = 0;
-  let totalDiff = 0;
-  let discrepanciasCount = 0;
-
-  INFLUENZA_RUBROS.forEach(rb => {
-    const sisVar = window.INFLUENZA_SIS_MAPPING[rb.id];
-    const sisRec = sisRecords.find(r => r.variable_sis === sisVar);
-    const sisVal = sisRec ? Number(sisRec.valor || 0) : 0;
-    const localVal = localValues[rb.id];
-    const diff = localVal - sisVal;
-
-    totalLocal += localVal;
-    totalSis += sisVal;
-    totalDiff += diff;
-
-    if (diff !== 0) {
-      discrepanciasCount++;
-    }
-
-    _conciliacionLastResult.push({
-      rb,
-      sisVar,
-      localVal,
-      sisVal,
-      diff
-    });
-  });
-
-  // Renderizar tabla aplicando filtros y buscador
-  applyConciliacionFiltersAndSearch();
-
-  // Actualizar Tarjetas KPI
-  const kpiTasa = document.getElementById("kpiTasa");
-  const kpiTasaIcon = document.getElementById("kpiTasaIcon");
-  const kpiLocal = document.getElementById("kpiLocal");
-  const kpiSis = document.getElementById("kpiSis");
-  const kpiDiscrepancias = document.getElementById("kpiDiscrepancias");
-
-  const totalRubros = INFLUENZA_RUBROS.length;
-  const tasaPareo = totalRubros > 0 ? ((1 - (discrepanciasCount / totalRubros)) * 100) : 100;
-  
-  if (kpiTasa) kpiTasa.textContent = `${tasaPareo.toFixed(1)}%`;
-  if (kpiLocal) kpiLocal.textContent = totalLocal.toLocaleString('es-MX');
-  if (kpiSis) kpiSis.textContent = totalSis.toLocaleString('es-MX');
-  if (kpiDiscrepancias) {
-    kpiDiscrepancias.textContent = `${discrepanciasCount} (${totalDiff > 0 ? `+${totalDiff}` : totalDiff})`;
-  }
-
-  // Actualizar ícono de la tasa
-  if (kpiTasaIcon) {
-    if (tasaPareo === 100) {
-      kpiTasaIcon.textContent = "check_circle";
-      kpiTasaIcon.parentElement.className = "w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0";
-    } else if (tasaPareo > 85) {
-      kpiTasaIcon.textContent = "info";
-      kpiTasaIcon.parentElement.className = "w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0";
-    } else {
-      kpiTasaIcon.textContent = "error";
-      kpiTasaIcon.parentElement.className = "w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0";
-    }
-  }
-
-  // Fila de totales en el status general
-  if (discrepanciasCount > 0) {
-    statusEl.className = "px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-200";
-    statusEl.textContent = `Desconciliado (${discrepanciasCount} discrepancias encontradas)`;
-  } else {
-    statusEl.className = "px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-200";
-    statusEl.textContent = "Datos 100% Conciliados";
-  }
+/** Aviso de WhatsApp con las unidades que llevan semanas sin reportar, con el detalle de cuáles. */
+function infCopiarRecordatorioAtrasos() {
+  const datos = _cobDatos || infCalcularCobertura();
+  const atrasadas = datos.filas.filter(f => f.atrasos.length).sort((a, b) => b.atrasos.length - a.atrasos.length);
+  if (!atrasadas.length) { showToast("No hay unidades con atraso.", true, "info"); return; }
+  const saludo = infSaludoWhatsApp();
+  const lista = atrasadas.map(f => `• *${String(f.u.unidad).toUpperCase().trim()}*: ${f.atrasos.map(c => "S" + c.w.semana + (c.w.corte ? " (corte)" : "")).join(", ")}`).join("\n");
+  const texto = `${saludo}\n\nLas siguientes unidades tienen semanas pendientes de su *REPORTE DE INFLUENZA*, por favor hay que ingresar a la plataforma *SIREVAQ* a realizar la captura correspondiente:\n\n${lista}`;
+  navigator.clipboard.writeText(texto)
+    .then(() => showToast("¡Copiado! El aviso está listo para pegarse en WhatsApp.", true, "good"))
+    .catch(() => showToast("No se pudo copiar el texto automáticamente.", false, "bad"));
 }
 
-// Aplicar filtros y búsquedas en caliente a la tabla
-function applyConciliacionFiltersAndSearch() {
-  const tbody = document.getElementById("conciliacionTbody");
-  if (!tbody || !_conciliacionLastResult.length) return;
-
-  tbody.innerHTML = "";
-  let filtered = _conciliacionLastResult;
-
-  // 1. Filtrar por estado
-  if (_conciliacionFilter === "diff") {
-    filtered = filtered.filter(item => item.diff !== 0);
-  } else if (_conciliacionFilter === "match") {
-    filtered = filtered.filter(item => item.diff === 0);
-  }
-
-  // 2. Filtrar por búsqueda
-  if (_conciliacionSearchQuery.trim()) {
-    const q = _conciliacionSearchQuery.toLowerCase();
-    filtered = filtered.filter(item => 
-      item.rb.categoria.toLowerCase().includes(q) ||
-      item.rb.grupo.toLowerCase().includes(q) ||
-      item.rb.edad.toLowerCase().includes(q) ||
-      item.sisVar.toLowerCase().includes(q)
-    );
-  }
-
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-400 font-semibold">No se encontraron rubros con los filtros aplicados.</td></tr>`;
-    return;
-  }
-
-  let subLocal = 0;
-  let subSis = 0;
-  let subDiff = 0;
-
-  filtered.forEach(item => {
-    const isDiscrepant = item.diff !== 0;
-    subLocal += item.localVal;
-    subSis += item.sisVal;
-    subDiff += item.diff;
-
-    const row = document.createElement("tr");
-    if (isDiscrepant) {
-      row.className = "border-b border-slate-100 font-bold bg-rose-50/10 hover:bg-rose-50/20";
-    } else {
-      row.className = "border-b border-slate-100 hover:bg-slate-50";
-    }
-
-    row.innerHTML = `
-      <td class="p-3">
-        <div style="max-width: 420px; white-space: normal; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.35;" title="${item.rb.categoria} - ${item.rb.grupo} (${item.rb.edad})">
-          ${item.rb.categoria} - ${item.rb.grupo} (${item.rb.edad})
-        </div>
-      </td>
-      <td class="p-3 text-center text-xs font-mono font-bold text-slate-500">${item.sisVar}</td>
-      <td class="p-3 text-center text-xs font-bold">${item.localVal.toLocaleString('es-MX')}</td>
-      <td class="p-3 text-center text-xs font-bold">${item.sisVal.toLocaleString('es-MX')}</td>
-      <td class="p-3 text-center text-xs font-black ${item.diff > 0 ? 'text-indigo-600' : item.diff < 0 ? 'text-rose-600' : 'text-emerald-600'}">
-        ${item.diff > 0 ? `+${item.diff}` : item.diff}
-      </td>
-      <td class="p-3 text-center text-xs">
-        <span class="px-2.5 py-1 rounded-full text-[10px] font-black ${isDiscrepant ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}">
-          ${isDiscrepant ? 'Desfase' : 'Conciliado'}
-        </span>
-      </td>
-      <td class="p-3 text-center">
-        <button class="w-7 h-7 rounded-full flex items-center justify-center hover:bg-slate-200 text-slate-400 hover:text-primary transition-colors btn-conciliacion-detalle" data-rubro-id="${item.rb.id}" title="Auditar capturas locales">
-          <span class="material-symbols-rounded text-[18px]">history</span>
-        </button>
-      </td>
-    `;
-    tbody.appendChild(row);
-  });
-
-  // Fila de totales del filtro
-  const totalRow = document.createElement("tr");
-  totalRow.className = "bg-slate-50 border-t border-slate-300 font-extrabold text-slate-900";
-  totalRow.innerHTML = `
-    <td class="p-3 text-xs uppercase text-right" colspan="2">TOTAL FILTRADO:</td>
-    <td class="p-3 text-center text-xs">${subLocal.toLocaleString('es-MX')}</td>
-    <td class="p-3 text-center text-xs">${subSis.toLocaleString('es-MX')}</td>
-    <td class="p-3 text-center text-xs ${subDiff > 0 ? 'text-indigo-700' : subDiff < 0 ? 'text-rose-700' : 'text-emerald-700'}">
-      ${subDiff > 0 ? `+${subDiff}` : subDiff}
-    </td>
-    <td class="p-3 text-center text-xs" colspan="2">
-      <span class="px-2 py-0.5 rounded-full font-black ${subDiff !== 0 ? 'bg-rose-200 text-rose-900' : 'bg-emerald-200 text-emerald-900'}">
-        ${subDiff !== 0 ? 'Diferencia Activa' : 'Sincronizado'}
-      </span>
-    </td>
-  `;
-  tbody.appendChild(totalRow);
-
-  // Agregar click listener a los botones de auditoría
-  tbody.querySelectorAll(".btn-conciliacion-detalle").forEach(btn => {
-    btn.onclick = () => {
-      const rubroId = btn.getAttribute("data-rubro-id");
-      openAuditDrawer(rubroId);
-    };
-  });
-}
-
-// Abrir Drawer de Auditoría Lateral
-function openAuditDrawer(rubroId) {
-  const drawer = document.getElementById("conciliacionDrawer");
-  const backdrop = document.getElementById("conciliacionDrawerBackdrop");
-  const nameEl = document.getElementById("drawerRubroName");
-  const contentEl = document.getElementById("drawerContent");
-
-  if (!drawer || !backdrop) return;
-
-  const rb = INFLUENZA_RUBROS.find(r => r.id === rubroId);
-  if (!rb) return;
-
-  nameEl.textContent = `${rb.categoria} - ${rb.grupo} (${rb.edad})`;
-
-  const mesAnio = document.getElementById("conciliacionMes").value;
-  const clues = document.getElementById("conciliacionClues").value;
-  const [mes, anio] = mesAnio.split("|").map(Number);
-
-  // Buscar capturas locales
-  const matchingCapturas = [];
-  _adminCapturasArray.forEach(c => {
-    if (c.clues === clues) {
-      const d = new Date(c.fecha + "T12:00:00");
-      if (d.getMonth() + 1 === mes && d.getFullYear() === anio) {
-        const val = Number(c.valores[rubroId] || 0);
-        if (val > 0) {
-          matchingCapturas.push({
-            fecha: c.fecha,
-            valor: val,
-            usuario: c.capturado_por || c.usuario || "Usuario del Sistema",
-            comentarios: c.comentarios || ""
-          });
-        }
-      }
-    }
-  });
-
-  // Ordenar por fecha descendente
-  matchingCapturas.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-
-  contentEl.innerHTML = "";
-
-  if (matchingCapturas.length === 0) {
-    contentEl.innerHTML = `
-      <div class="flex flex-col items-center justify-center p-8 text-center text-slate-400">
-        <span class="material-symbols-rounded text-[48px] mb-2">assignment_late</span>
-        <p class="text-sm font-semibold">No hay capturas locales registradas para este rubro en este mes.</p>
-      </div>
-    `;
-  } else {
-    const timeline = document.createElement("div");
-    timeline.className = "flex flex-col gap-4 relative border-l-2 border-slate-100 pl-4 ml-2";
-
-    matchingCapturas.forEach(cap => {
-      const item = document.createElement("div");
-      item.className = "relative mb-1";
-
-      const dateParts = cap.fecha.split("-");
-      const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
-
-      item.innerHTML = `
-        <div class="absolute -left-[23px] top-1.5 w-2.5 h-2.5 rounded-full bg-primary border-2 border-surface"></div>
-        <div class="bg-slate-50 border border-slate-150 rounded-xl p-3 shadow-2xs hover:bg-slate-100/50 transition-colors">
-          <div class="flex justify-between items-center mb-1">
-            <span class="text-xs font-bold text-slate-800">${formattedDate}</span>
-            <span class="px-2 py-0.5 rounded-full text-xs font-black bg-primary/10 text-primary">${cap.valor} dosis</span>
-          </div>
-          <div class="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
-            <span class="material-symbols-rounded text-[12px]">person</span>
-            ${cap.usuario}
-          </div>
-          ${cap.comentarios ? `
-            <div class="mt-2 text-[10px] italic text-slate-600 bg-surface border border-slate-100 p-2 rounded-lg">
-              "${cap.comentarios}"
-            </div>
-          ` : ""}
-        </div>
-      `;
-      timeline.appendChild(item);
-    });
-
-    contentEl.appendChild(timeline);
-  }
-
-  drawer.classList.remove("hidden");
-  backdrop.classList.remove("hidden");
-
-  // Pequeño timeout para asegurar que el DOM dibuje la clase hidden y luego anime
-  setTimeout(() => {
-    drawer.classList.remove("translate-x-full");
-    backdrop.classList.remove("opacity-0");
-  }, 30);
-}
-
-// Cerrar Drawer de Auditoría Lateral
-function closeConciliacionDrawer() {
-  const drawer = document.getElementById("conciliacionDrawer");
-  const backdrop = document.getElementById("conciliacionDrawerBackdrop");
-
-  if (!drawer || !backdrop) return;
-
-  drawer.classList.add("translate-x-full");
-  backdrop.classList.add("opacity-0");
-
-  setTimeout(() => {
-    drawer.classList.add("hidden");
-    backdrop.classList.add("hidden");
-  }, 300);
-}
-
-// Exportar Reporte de Conciliación a Excel con ExcelJS
-async function exportConciliacionReport() {
-  if (!_conciliacionLastResult || _conciliacionLastResult.length === 0) {
-    showToast("No hay datos de conciliación para exportar.", false, "bad");
-    return;
-  }
-
-  const mesAnio = document.getElementById("conciliacionMes").value;
-  const clues = document.getElementById("conciliacionClues").value;
-  const [mes, anio] = mesAnio.split("|").map(Number);
-  const unitData = _allUnidades.find(u => u.clues === clues);
-  const unitName = unitData ? unitData.unidad : clues;
-
-  try {
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Conciliación SIS');
-
-    sheet.columns = [
-      { header: 'Rubro (Edad)', key: 'rubro', width: 45 },
-      { header: 'Clave SIS', key: 'clave', width: 15 },
-      { header: 'Captura Local', key: 'local', width: 20 },
-      { header: 'SIS Oficial (CSV)', key: 'sis', width: 20 },
-      { header: 'Diferencia', key: 'diff', width: 15 },
-      { header: 'Estatus', key: 'status', width: 15 }
-    ];
-
-    sheet.insertRow(1, []);
-    sheet.insertRow(2, [`REPORTE DE CONCILIACIÓN DE INFLUENZA`]);
-    sheet.insertRow(3, [`Unidad: ${unitName} (${clues})  |  Mes: ${mes}/${anio}`]);
-    sheet.insertRow(4, [`Fecha de exportación: ${new Date().toLocaleDateString('es-MX')}`]);
-    sheet.insertRow(5, []);
-
-    sheet.mergeCells('A2:F2');
-    sheet.mergeCells('A3:F3');
-    sheet.mergeCells('A4:F4');
-
-    const titleCell = sheet.getCell('A2');
-    titleCell.font = { name: 'Montserrat', family: 4, size: 16, bold: true, color: { argb: 'FF1E293B' } };
-    titleCell.alignment = { horizontal: 'center' };
-
-    const subtitleCell = sheet.getCell('A3');
-    subtitleCell.font = { name: 'Montserrat', family: 4, size: 11, italic: true, color: { argb: 'FF475569' } };
-    subtitleCell.alignment = { horizontal: 'center' };
-
-    const dateCell = sheet.getCell('A4');
-    dateCell.font = { name: 'Montserrat', family: 4, size: 9, color: { argb: 'FF64748B' } };
-    dateCell.alignment = { horizontal: 'center' };
-
-    const headerRow = sheet.getRow(6);
-    headerRow.values = ['Rubro (Edad)', 'Clave SIS', 'Captura Local', 'SIS Oficial (CSV)', 'Diferencia', 'Estatus'];
-    headerRow.font = { name: 'Montserrat', family: 4, size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-    headerRow.height = 25;
-
-    headerRow.eachCell((cell) => {
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF1E3A8A' }
-      };
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.border = {
-        top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        bottom: { style: 'medium', color: { argb: 'FF1E3A8A' } },
-        left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
-      };
-    });
-
-    let rowIdx = 7;
-    let totalLocal = 0;
-    let totalSis = 0;
-
-    _conciliacionLastResult.forEach(item => {
-      const isDiscrepant = item.diff !== 0;
-      totalLocal += item.localVal;
-      totalSis += item.sisVal;
-
-      const row = sheet.addRow({
-        rubro: `${item.rb.categoria} - ${item.rb.grupo} (${item.rb.edad})`,
-        clave: item.sisVar,
-        local: item.localVal,
-        sis: item.sisVal,
-        diff: item.diff,
-        status: isDiscrepant ? 'Desfase' : 'Conciliado'
-      });
-
-      row.height = 20;
-      row.getCell('rubro').alignment = { horizontal: 'left', vertical: 'middle' };
-      row.getCell('clave').alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell('local').alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell('sis').alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell('diff').alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell('status').alignment = { horizontal: 'center', vertical: 'middle' };
-
-      row.eachCell((cell, colNumber) => {
-        cell.font = { name: 'Montserrat', family: 4, size: 9 };
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
-        };
-
-        if (isDiscrepant) {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFFFF1F2' }
-          };
-          if (colNumber === 5) {
-            cell.font = { name: 'Montserrat', family: 4, size: 9, bold: true, color: { argb: 'FFE11D48' } };
-          }
-          if (colNumber === 6) {
-            cell.font = { name: 'Montserrat', family: 4, size: 9, bold: true, color: { argb: 'FF9F1239' } };
-          }
-        } else {
-          if (colNumber === 5) {
-            cell.font = { name: 'Montserrat', family: 4, size: 9, color: { argb: 'FF059669' } };
-          }
-          if (colNumber === 6) {
-            cell.font = { name: 'Montserrat', family: 4, size: 9, bold: true, color: { argb: 'FF065F46' } };
-            cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFE6F4EA' }
-            };
-          }
-        }
-      });
-
-      rowIdx++;
-    });
-
-    const totalRow = sheet.addRow({
-      rubro: 'TOTAL GENERAL:',
-      clave: '',
-      local: totalLocal,
-      sis: totalSis,
-      diff: totalLocal - totalSis,
-      status: totalLocal === totalSis ? 'Sincronizado' : 'Desfases'
-    });
-    totalRow.height = 24;
-    sheet.mergeCells(`A${rowIdx}:B${rowIdx}`);
-
-    totalRow.eachCell((cell) => {
-      cell.font = { name: 'Montserrat', family: 4, size: 10, bold: true };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFF1F5F9' }
-      };
-      cell.border = {
-        top: { style: 'medium', color: { argb: 'FF94A3B8' } },
-        bottom: { style: 'double', color: { argb: 'FF475569' } },
-        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-        right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
-      };
-    });
-
-    totalRow.getCell('rubro').alignment = { horizontal: 'right', vertical: 'middle' };
-    totalRow.getCell('local').alignment = { horizontal: 'right', vertical: 'middle' };
-    totalRow.getCell('sis').alignment = { horizontal: 'right', vertical: 'middle' };
-    totalRow.getCell('diff').alignment = { horizontal: 'right', vertical: 'middle' };
-    totalRow.getCell('status').alignment = { horizontal: 'center', vertical: 'middle' };
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `Conciliacion_Influenza_${clues}_Mes_${mes}_${anio}.xlsx`;
-    link.click();
-
-    showToast("Reporte de conciliación exportado correctamente.", true, "good");
-  } catch (err) {
-    console.error("Error al exportar a Excel:", err);
-    showToast("Error al exportar el reporte a Excel.", false, "bad");
-  }
+/** CSV de la matriz: una fila por unidad y una columna por semana, con el estado en texto. */
+function infExportarCobertura() {
+  const datos = _cobDatos || infCalcularCobertura();
+  const cab = ["Municipio", "CLUES", "Unidad", ...datos.weeks.map(w => `S${w.semana}${w.corte ? " (corte)" : ""} ${w.fecha}`), "Reportes recibidos", "Semanas atrasadas", "Dosis"];
+  const filas = [cab];
+  datos.filas.forEach(f => filas.push([f.u.municipio, f.u.clues, f.u.unidad, ...f.celdas.map(c => COB_ESTADOS[c.k].txt + (c.report && c.k !== "sinmov" ? ` (${c.total})` : "")), f.recibidos, f.atrasos.length, f.dosis]));
+  const csv = "﻿" + filas.map(r => r.map(infCsvCelda).join(",")).join("\r\n");
+  const muni = String(document.getElementById("adminInfluenzaMuni")?.value || "municipio");
+  metaDescargar(csv, `Influenza_cobertura_${muni}_${influenzaHoy()}.csv`, "text/csv;charset=utf-8");
+  showToast("Cobertura descargada.", true, "good");
 }
 
 // --- FUNCIONES PREMIUM DE EXPORTACIÓN A EXCEL (CON EXCELJS) ---
@@ -7932,7 +7611,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
     });
     const ultima = caps.reduce((x, c) => (c.fecha > x ? c.fecha : x), "");
     return {
-      ...u, meta, apl, blancoM, blancoA, riesgoM, riesgoA, rebasa, ultima,
+      ...u, meta, apl, blancoM, blancoA, riesgoM, riesgoA, rebasa, ultima, metasR: metas, aplR: aplRubro,
       conMeta: meta > 0, nunca: caps.length === 0,
       reportoUltima: !!ultimaSemana && caps.some(c => c.fecha === ultimaSemana),
       frascos: frascosPorClues[u.clues] || 0
@@ -8058,8 +7737,12 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   const mapa = {};
   evaluables.forEach(f => {
     const k = porUnidad ? f.clues : f.destino;
-    const o = mapa[k] || (mapa[k] = { nombre: porUnidad ? f.unidad : f.destino, n: 0, meta: 0, apl: 0, ultima: "", sinRep: 0 });
+    const o = mapa[k] || (mapa[k] = { nombre: porUnidad ? f.unidad : f.destino, n: 0, meta: 0, apl: 0, ultima: "", sinRep: 0, metasR: {}, aplR: {} });
     o.n++; o.meta += f.meta; o.apl += f.apl;
+    INFLUENZA_RUBROS.forEach(rb => {
+      o.metasR[rb.id] = (o.metasR[rb.id] || 0) + Number(f.metasR[rb.id] || 0);
+      o.aplR[rb.id] = (o.aplR[rb.id] || 0) + Number(f.aplR[rb.id] || 0);
+    });
     if (f.ultima > o.ultima) o.ultima = f.ultima;
     if (!f.reportoUltima) o.sinRep++;
   });
@@ -8189,6 +7872,15 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
     nuncaReportaron: nuncaReportaron.length,
     blanco: { meta: blancoM, apl: blancoA }, riesgo: { meta: riesgoM, apl: riesgoA },
     porUnidad, ranking: uniFilter ? [] : lista,
+    // Una entidad por unidad (municipio elegido), por municipio/hospital (jurisdicción) o la unidad sola: alimenta el Excel Meta-Logro.
+    nivel: uniFilter ? "UNIDAD" : (muniFilter ? "MUNICIPIO" : "JURIS"),
+    entidades: Object.values(mapa)
+      .sort((a, b) => {
+        const orden = ["QUERETARO", "CORREGIDORA", "EL MARQUES", "HUIMILPAN", "HENM", "NHG"];
+        const sa = (t) => String(t).normalize("NFD").replace(/[^A-Za-z ]/g, "").toUpperCase(); const ia = orden.indexOf(sa(a.nombre)), ib = orden.indexOf(sa(b.nombre));
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || String(a.nombre).localeCompare(String(b.nombre), "es");
+      })
+      .map(o => ({ nombre: o.nombre, metas: o.metasR, logros: o.aplR })),
     semanas: barras.map(b => ({ fecha: b.f, rango: rangoDe(b.f), desde: window.InfluenzaReglas.rangoSemana(b.f, ini, fin).desde, dosis: b.v })),
     rangoUltimaSemana: ultimaSemana ? rangoDe(ultimaSemana) : null,
     grupos: filasGrupo.map(g => ({ titulo: g.titulo, meta: g.m, apl: g.a, edades: g.rubros.map(rb => ({ edad: rb.edad, meta: rubro[rb.id].meta, apl: rubro[rb.id].apl })).filter(x => x.meta || x.apl) })),

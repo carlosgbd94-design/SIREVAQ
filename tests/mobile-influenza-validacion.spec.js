@@ -65,15 +65,16 @@ test.describe('Influenza: validación en móvil', () => {
     await expect(page.locator('#dockItemINF')).toBeHidden();
   });
 
-  test('lista con estados, filtros y vista en vivo; validar sin cambios guarda firma y marca', async ({ page }) => {
+  test('lista con estados, filtros y vista en vivo; sin cambios no hay nada que guardar y la corrección lleva firma', async ({ page }) => {
     const { srv, errores } = await abrir(page, estado('ADMIN'));
     await expect(page.locator('#dockItemINF')).toBeVisible();
     await page.click('#dockItemINF');
     await expect(page.locator('#ivUnidades .iv-unidad')).toHaveCount(3);          // solo QUERETARO
     await expect(page.locator('#ivSemana')).toHaveValue('2026-10-16');             // semana en curso
     const txt = await page.locator('#ivUnidades').innerText();
-    expect(txt).toMatch(/Por validar/);
-    expect(txt).toMatch(/Validado/);
+    expect(txt).toMatch(/Reportado/);
+    expect(txt).not.toMatch(/Por validar/);
+    expect(txt).toMatch(/Revisado/);
     expect(txt).toMatch(/Sin reporte/);
 
     // Filtro por estado
@@ -87,11 +88,17 @@ test.describe('Influenza: validación en móvil', () => {
     await expect(page.locator('#ivDetTitulo')).toBeFocused();
     await expect(page.locator('.iv-vivo')).toContainText('21');                    // 11 + 10 dosis
     await expect(page.locator('.iv-vivo')).toContainText('ANA');
-    await expect(page.locator('#ivGuardar')).toHaveText('Validar sin cambios');
+    await expect(page.locator('#ivGuardar')).toHaveText('Sin cambios que guardar');
+    await expect(page.locator('#ivGuardar')).toHaveAttribute('aria-disabled', 'true');
     await expect(page.locator('#iv_r6')).toBeDisabled();                            // 2ª dosis aún no disponible
     await expect(page.locator('.iv-aviso:not(.iv-aviso--info)')).toContainText('2ª dosis no disponible');
 
-    // Sin firma: error en línea y foco al campo
+    // Sin cambios no se guarda nada (el reporte no necesita validación)
+    await page.locator('#ivGuardar').dispatchEvent('click');
+    expect(srv.reqs.filter(r => r.nombre === 'influenza_capturas' && r.m === 'POST')).toHaveLength(0);
+
+    // Con un cambio pero sin firma: error en línea y foco al campo
+    await page.fill('#iv_r1', '12');
     await page.click('#ivGuardar');
     await expect(page.locator('#ivError')).toBeVisible();
     await expect(page.locator('#ivNombre')).toBeFocused();
@@ -106,10 +113,11 @@ test.describe('Influenza: validación en móvil', () => {
     expect(fila.clues).toBe('QTSSA000001');
     expect(fila.fecha).toBe('2026-10-16');
     expect(fila.editado_por).toBe('ADMIN');
-    expect(fila.valores.r1).toBe(11);
+    expect(fila.valores.r1).toBe(12);
     const ultima = fila.historial_ediciones[fila.historial_ediciones.length - 1];
     expect(ultima.firmado_por).toBe('DRA. LOPEZ');
-    expect(ultima.sin_cambios).toBe(true);
+    expect(ultima.sin_cambios).toBeUndefined();
+    expect(fila.sin_movimiento).toBe(false);
     expect(errores).toEqual([]);
   });
 
@@ -136,7 +144,6 @@ test.describe('Influenza: validación en móvil', () => {
     const fila = Array.isArray(post.body) ? post.body[0] : post.body;
     expect(fila.valores.r1).toBe(15);
     const ultima = fila.historial_ediciones[fila.historial_ediciones.length - 1];
-    expect(ultima.sin_cambios).toBe(false);
     expect(ultima.valores_anteriores.r1).toBe(11);
     expect(errores).toEqual([]);
   });

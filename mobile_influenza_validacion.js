@@ -2,10 +2,10 @@
  * Validación de reportes de Influenza (versión móvil).
  *
  * Mismo flujo que «Validación y Edición» del escritorio, en una sola columna:
- *   1. Lista de unidades del municipio con el estado de su reporte de la semana (Sin reporte / Por validar /
- *      Validado / Corregido).
+ *   1. Lista de unidades del municipio con el estado de su reporte de la semana (Sin reporte / Reportado /
+ *      Sin movimiento / Corregido). Los reportes NO requieren validación: ya se validan solos al capturar.
  *   2. Detalle de la unidad: vista en vivo de lo capturado (total, quién capturó, quién firmó) y el formulario
- *      de corrección con meta, acumulado y avance. «Validar sin cambios» o «Guardar corrección».
+ *      de corrección con meta, acumulado y avance. «Guardar corrección» (solo si hay cambios).
  *
  * Datos: tablas campanas, unidades, influenza_metas e influenza_capturas (las mismas del escritorio, con las
  * mismas políticas de acceso). Reglas de calendario de 1ª/2ª dosis: influenza_reglas.js (window.InfluenzaReglas).
@@ -19,8 +19,9 @@
   const ESTADOS = [
     { id: "todas", label: "Todas" },
     { id: "pendiente", label: "Sin reporte" },
-    { id: "reportado", label: "Por validar" },
-    { id: "corregido", label: "Revisadas" }
+    { id: "reportado", label: "Reportadas" },
+    { id: "sinmov", label: "Sin movimiento" },
+    { id: "corregido", label: "Corregidas" }
   ];
 
   let cfg = null;               // { getClient, getProfile, toast }
@@ -93,7 +94,8 @@
   }
   function estadoDe(report) {
     if (!report) return "pendiente";
-    return report.editado_por && report.editado_por !== "UNIDAD" ? "corregido" : "reportado";
+    if (report.editado_por && report.editado_por !== "UNIDAD") return "corregido";
+    return report.sin_movimiento === true || report.sin_movimiento === "SI" ? "sinmov" : "reportado";
   }
   function ultimaEdicion(report) {
     const h = historial(report);
@@ -173,27 +175,29 @@
     const est = estadoDe(report);
     if (est === "corregido") {
       const sin = !!(ultimaEdicion(report) && ultimaEdicion(report).sin_cambios);
-      return `<span class="iv-badge iv-badge--ok"><span class="material-symbols-rounded" aria-hidden="true">verified</span>${sin ? "Validado" : "Corregido"}</span>`;
+      return `<span class="iv-badge iv-badge--ok"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span>${sin ? "Revisado" : "Corregido"}</span>`;
     }
-    if (est === "reportado") return `<span class="iv-badge iv-badge--info"><span class="material-symbols-rounded" aria-hidden="true">pending_actions</span>Por validar</span>`;
+    if (est === "sinmov") return `<span class="iv-badge iv-badge--info"><span class="material-symbols-rounded" aria-hidden="true">pause_circle</span>Sin movimiento</span>`;
+    if (est === "reportado") return `<span class="iv-badge iv-badge--ok"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span>Reportado</span>`;
     return `<span class="iv-badge iv-badge--warn"><span class="material-symbols-rounded" aria-hidden="true">error</span>Sin reporte</span>`;
   }
 
   function pintarLista() {
     const mun = S.todasUnidades.filter(u => norm(u.municipio) === norm(S.municipio));
     const reportadas = mun.filter(u => S.capturas[u.clues]).length;
-    const revisadas = mun.filter(u => estadoDe(S.capturas[u.clues]) === "corregido").length;
+    const corregidas = mun.filter(u => estadoDe(S.capturas[u.clues]) === "corregido").length;
+    const enCeros = mun.filter(u => estadoDe(S.capturas[u.clues]) === "sinmov").length;
     const semanasOpts = S.semanas.map(s => `<option value="${esc(s.fecha)}"${s.fecha === S.fecha ? " selected" : ""}>${esc(s.label)}</option>`).join("");
     const munOpts = S.municipios.map(m => `<option value="${esc(m)}"${m === S.municipio ? " selected" : ""}>${esc(m)}</option>`).join("");
 
     rootEl.innerHTML = `
       <div class="iv-wrap" id="ivLista">
         <div class="iv-titulo">
-          <h2 id="ivTitulo" tabindex="-1">Temporada invernal: validar reportes</h2>
-          <p>Revisa lo que capturó cada unidad, valida o corrige las cifras.</p>
+          <h2 id="ivTitulo" tabindex="-1">Temporada invernal: reportes por semana</h2>
+          <p>Consulta quién reportó. Los reportes no necesitan validación; corrige una cifra solo si la unidad lo pide.</p>
         </div>
         <div class="iv-filtros">
-          <label class="iv-campo"><span>Semana a validar</span>
+          <label class="iv-campo"><span>Semana</span>
             <select id="ivSemana">${semanasOpts}</select>
           </label>
           ${S.municipios.length > 1 ? `<label class="iv-campo"><span>Municipio</span><select id="ivMunicipio">${munOpts}</select></label>` : `<p class="iv-municipio-fijo">Municipio: <b>${esc(S.municipio)}</b></p>`}
@@ -204,7 +208,7 @@
         <div class="iv-chips" role="group" aria-label="Filtrar por estado del reporte">
           ${ESTADOS.map(e => `<button type="button" class="iv-chip" data-estado="${e.id}" aria-pressed="${S.estado === e.id}">${e.label}</button>`).join("")}
         </div>
-        <p class="iv-resumen" id="ivResumen">${reportadas} de ${mun.length} unidades reportaron · ${revisadas} revisadas por supervisión</p>
+        <p class="iv-resumen" id="ivResumen">${reportadas} de ${mun.length} unidades reportaron · ${enCeros} sin movimiento · ${corregidas} corregidas</p>
         <div id="ivLive" class="iv-sr" role="status" aria-live="polite"></div>
         <ul class="iv-lista" id="ivUnidades"></ul>
       </div>`;
@@ -238,7 +242,7 @@
     ul.innerHTML = lista.map(u => {
       const rep = S.capturas[u.clues];
       const est = estadoDe(rep);
-      const accion = est === "corregido" ? "Revisar de nuevo" : est === "reportado" ? "Validar reporte" : "Capturar por la unidad";
+      const accion = est === "pendiente" ? "Capturar por la unidad" : "Ver reporte";
       return `<li>
         <button type="button" class="iv-unidad" data-clues="${esc(u.clues)}">
           <span class="iv-unidad-txt">
@@ -318,7 +322,7 @@
       vivo = `<dl class="iv-vivo">
           <div><dt>Dosis reportadas</dt><dd>${totalDosis(rep)}</dd></div>
           <div><dt>Capturó</dt><dd>${esc(rep.capturado_por || "—")}</dd></div>
-          <div><dt>Estado</dt><dd>${est === "corregido" ? (ult && ult.sin_cambios ? "Validado sin cambios" : "Corregido") + (firmante ? " por " + esc(firmante) : "") : "Por validar"}</dd></div>
+          <div><dt>Estado</dt><dd>${est === "corregido" ? (ult && ult.sin_cambios ? "Revisado" : "Corregido") + (firmante ? " por " + esc(firmante) : "") : (est === "sinmov" ? "Sin movimiento" : "Reportado")}</dd></div>
           ${rep.updated_at ? `<div><dt>Última actualización</dt><dd>${esc(larga(String(rep.updated_at).slice(0, 10)))}</dd></div>` : ""}
         </dl>`;
     }
@@ -351,7 +355,7 @@
             <span>Acumulado otras semanas <b>${acum[rb.id]}</b></span>
           </div>
           <div class="iv-rubro-input">
-            <label for="iv_${rb.id}">Valor validado<span class="iv-sr"> de ${esc(nombre)}</span></label>
+            <label for="iv_${rb.id}">Valor de esta semana<span class="iv-sr"> de ${esc(nombre)}</span></label>
             <input id="iv_${rb.id}" data-rubro="${rb.id}" type="number" inputmode="numeric" min="0" step="1" value="${esc(val)}"
               ${bloqueada ? `disabled placeholder="—"` : `placeholder="0"`} aria-describedby="ivp_${rb.id}">
           </div>
@@ -384,10 +388,10 @@
           <p><b>Meta anual:</b> dosis que debe aplicar la unidad en toda la campaña.</p>
           <p><b>Capturó la unidad:</b> cifra original enviada; no cambia.</p>
           <p><b>Acumulado otras semanas:</b> dosis de las demás semanas, sin contar esta.</p>
-          <p><b>Valor validado:</b> la cifra de esta semana que queda registrada; es lo único que puedes editar.</p>
+          <p><b>Valor de esta semana:</b> la cifra que queda registrada; es lo único que puedes editar.</p>
         </details>
         ${avisos.map(r => `<div class="iv-aviso"><b>${r.tipo === "segunda" ? "2ª dosis" : "1ª dosis"} no disponible esta semana.</b> ${esc(r.texto)}</div>`).join("")}
-        <label class="iv-campo iv-firma"><span>Nombre de quien realiza/autoriza la corrección <i>(obligatorio)</i></span>
+        <label class="iv-campo iv-firma"><span>Nombre de quien corrige <i>(obligatorio al guardar)</i></span>
           <input id="ivNombre" type="text" autocomplete="name" required aria-required="true" placeholder="Nombre completo">
         </label>
         ${tarjetas}
@@ -396,7 +400,7 @@
         <div class="iv-error" id="ivError" role="alert" tabindex="-1" hidden></div>
         <div class="iv-acciones">
           <button type="button" class="iv-btn iv-btn--sec" id="ivCancelar">Cancelar</button>
-          <button type="button" class="iv-btn iv-btn--pri" id="ivGuardar">Validar sin cambios</button>
+          <button type="button" class="iv-btn iv-btn--pri" id="ivGuardar" aria-disabled="true">Sin cambios que guardar</button>
         </div>
       </div>`;
 
@@ -406,9 +410,10 @@
       const n = cambios();
       const t = rootEl.querySelector("#ivCambios");
       const b = rootEl.querySelector("#ivGuardar");
-      if (rep && n === 0) { t.textContent = "Sin cambios: se validará tal como lo capturó la unidad."; b.textContent = "Validar sin cambios"; }
+      if (rep && n === 0) { t.textContent = "Sin cambios. El reporte ya cuenta tal como lo capturó la unidad; no necesita validación."; b.textContent = "Sin cambios que guardar"; }
       else if (rep) { t.textContent = `${n} rubro${n === 1 ? "" : "s"} modificado${n === 1 ? "" : "s"} respecto a lo capturado.`; b.textContent = "Guardar corrección"; }
       else { t.textContent = n ? `Se registrará un reporte nuevo con ${n} rubro${n === 1 ? "" : "s"}.` : "La unidad no tiene reporte esta semana: captura las dosis."; b.textContent = "Guardar captura"; }
+      b.setAttribute("aria-disabled", n === 0 ? "true" : "false");
       return n;
     };
     refrescar();
@@ -455,6 +460,10 @@
     const d = S.detalle;
     const rep = d.report;
     const box = rootEl.querySelector("#ivError");
+    if (cambios() === 0) {
+      cfg.toast(rep ? "No hay cambios que guardar: el reporte ya cuenta como lo capturó la unidad." : "Captura al menos una dosis para registrar el reporte.", rep ? "info" : "error");
+      return;
+    }
     box.hidden = true;
     rootEl.querySelectorAll("[aria-invalid='true']").forEach(el => el.removeAttribute("aria-invalid"));
 
@@ -484,7 +493,7 @@
     });
     if (errores.length) { mostrarErrores(errores); return; }
 
-    const sinCambios = !!rep && cambios() === 0;
+    const todoCero = Object.values(valores).every(v => v === 0);
     const btn = rootEl.querySelector("#ivGuardar");
     const textoBtn = btn.textContent;
     btn.disabled = true;
@@ -502,7 +511,6 @@
         editado_por: rol,
         usuario: String(perfil.usuario || "DESCONOCIDO").toUpperCase(),
         firmado_por: nombre.slice(0, 120),
-        sin_cambios: sinCambios,
         valores_anteriores: prev ? prev.valores : null
       });
       const registro = {
@@ -515,14 +523,16 @@
         capturado_por: String((rep && rep.capturado_por) || nombre).toUpperCase(),
         editado_por: rol,
         historial_ediciones: hist,
+        // Todo en ceros = «sin movimiento»; con dosis se quita esa marca si la unidad la había puesto.
+        sin_movimiento: todoCero,
         updated_at: new Date().toISOString()
       };
       const { error } = await db.from("influenza_capturas").upsert(registro, { onConflict: "clues,fecha" });
       if (error) throw error;
-      cfg.toast(sinCambios ? "Reporte validado sin cambios." : "Corrección guardada.", "success");
+      cfg.toast("Corrección guardada.", "success");
       await cargarSemana();
       volver();
-      anunciar(sinCambios ? `Reporte de ${d.unidad} validado sin cambios.` : `Corrección de ${d.unidad} guardada.`);
+      anunciar(`Corrección de ${d.unidad} guardada.`);
     } catch (e) {
       btn.disabled = false;
       btn.textContent = textoBtn;

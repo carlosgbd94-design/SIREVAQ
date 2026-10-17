@@ -1148,7 +1148,7 @@ async function montarPanel(page) {
     window.__llamadas = []; window.__clicks = [];
     document.body.innerHTML = h;
     document.getElementById('panelINFLUENZAADMIN').style.display = '';
-    ['Avances', 'Validacion', 'Conciliacion', 'Metas', 'Frascos', 'Config'].forEach((n) => {
+    ['Avances', 'Validacion', 'Cobertura', 'Metas', 'Frascos', 'Config'].forEach((n) => {
       document.getElementById(`subtabInfluenza${n}`).addEventListener('click', () => window.__clicks.push(n));
     });
     document.getElementById('subtabCovidAvance').addEventListener('click', () => window.__clicks.push('CovidAvance'));
@@ -1178,7 +1178,7 @@ test('Temporada invernal: COVID-19 muestra solo Metas y Frascos; Influenza conse
   await montarPanel(page);
   const visibles = () => page.evaluate(() => [...document.querySelectorAll('#influenzaAdminTabsContainer .nav-tab')]
     .filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id.replace('subtabInfluenza', '').replace('subtabCovid', 'Covid')));
-  expect(await visibles()).toEqual(['Avances', 'Validacion', 'Conciliacion', 'Metas', 'Frascos', 'Config']);
+  expect(await visibles()).toEqual(['Avances', 'Validacion', 'Cobertura', 'Metas', 'Frascos', 'Config']);
 
   await page.click('#temporadaVacunaBar [data-vac="COVID"]');
   await expect.poll(visibles).toEqual(['CovidAvance', 'Metas', 'Frascos']);
@@ -1188,7 +1188,7 @@ test('Temporada invernal: COVID-19 muestra solo Metas y Frascos; Influenza conse
   expect(await page.evaluate(() => window.__clicks)).toEqual(['CovidAvance']);
 
   await page.click('#temporadaVacunaBar [data-vac="INFLUENZA"]');
-  await expect.poll(visibles).toEqual(['Avances', 'Validacion', 'Conciliacion', 'Metas', 'Frascos', 'Config']);
+  await expect.poll(visibles).toEqual(['Avances', 'Validacion', 'Cobertura', 'Metas', 'Frascos', 'Config']);
   await expect(page.locator('#temporadaVacunaBar [data-vac="INFLUENZA"]')).toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -1201,7 +1201,7 @@ test('Temporada invernal: el selector de temporada se muestra neutro, pero su va
     window._selectedCampaign = { nombre: 'Campaña Influenza 2026-2027' };
     window._campaignConfig = {};
     window.deriveCampaignName = () => '2026-2027';
-    window.populateConciliacionMonths = () => {};
+    
     // eslint-disable-next-line no-new-func
     new Function(`${codigo}; populateCampaignSelectors();`)();
     const o = (id) => { const s = document.getElementById(id); return [s.value, s.options[0].textContent]; };
