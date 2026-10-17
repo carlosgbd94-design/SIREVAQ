@@ -2709,7 +2709,11 @@ function updateInfluenzaDashboardVisuals(muni, minFecha, maxFecha) {
   const actualTrend = [];
   const expectedTrend = [];
   
-  const currentWeekIndex = Math.max(1, weeksSorted.indexOf(maxFecha) + 1);
+  // Semanas transcurridas: las que ya abrieron hasta hoy (sin pasar de la «Semana fin» elegida). Antes se tomaba la
+  // semana fin del filtro (la última de la campaña), lo que diluía la velocidad entre semanas futuras.
+  const hoyStr = influenzaHoy();
+  const semanasAbiertas = weeksSorted.filter(f => influenzaSemanaAbre(f) <= hoyStr).length;
+  const currentWeekIndex = Math.max(1, Math.min(weeksSorted.indexOf(maxFecha) + 1 || totalWeeks, semanasAbiertas || 1));
 
   weeksSorted.forEach((wFecha, idx) => {
     const weekNum = campaignWeeks.find(cw => cw.fecha === wFecha)?.semana || "N/A";
@@ -2730,11 +2734,16 @@ function updateInfluenzaDashboardVisuals(muni, minFecha, maxFecha) {
 
   const accumulatedUpToMax = actualTrend[currentWeekIndex - 1] || 0;
   const velocity = currentWeekIndex > 0 ? (accumulatedUpToMax / currentWeekIndex) : 0;
-  const projectedEndValue = Math.round(velocity * totalWeeks);
+  const semanasRestantes = Math.max(0, totalWeeks - currentWeekIndex);
+  const projectedEndValue = Math.round(accumulatedUpToMax + velocity * semanasRestantes);
   const projectedPct = municipalMetaTotal > 0 ? Math.round((projectedEndValue / municipalMetaTotal) * 100) : 0;
   
   let statusText, statusBadgeClass, statusDesc;
-  if (projectedPct >= 95) {
+  if (currentWeekIndex < 4) {
+    statusText = "⚪ Preliminar";
+    statusBadgeClass = "bg-slate-100 text-slate-700 border-slate-300";
+    statusDesc = `Solo hay ${currentWeekIndex === 1 ? "1 semana" : currentWeekIndex + " semanas"} de campaña: la proyección (${projectedPct}% de la meta) se estabiliza a partir de la 4.ª semana.`;
+  } else if (projectedPct >= 95) {
     statusText = "🟢 Óptimo";
     statusBadgeClass = "bg-emerald-100 text-emerald-800 border-emerald-300";
     statusDesc = "El ritmo actual de aplicación es excelente. Se proyecta cumplir o superar la meta anual de vacunación al finalizar la campaña invernal.";
@@ -2761,7 +2770,7 @@ function updateInfluenzaDashboardVisuals(muni, minFecha, maxFecha) {
         <div class="bg-white/60 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
           <div class="text-[9px] font-bold text-slate-450 uppercase leading-none">Velocidad Promedio</div>
           <div class="text-base font-extrabold text-violet-950 mt-1.5 leading-none">${Math.round(velocity).toLocaleString('es-MX')} <span class="text-xs font-bold text-slate-500">d/sem</span></div>
-          <div class="text-[10px] text-slate-500 mt-1.5 leading-none">Semanas: ${currentWeekIndex} de ${totalWeeks}</div>
+          <div class="text-[10px] text-slate-500 mt-1.5 leading-none">Semanas transcurridas: ${currentWeekIndex} de ${totalWeeks}</div>
         </div>
         <div class="bg-white/60 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
           <div class="text-[9px] font-bold text-slate-450 uppercase leading-none">Meta Asignada</div>
@@ -3178,6 +3187,16 @@ function initValidationTab() {
     backBtn.onclick = () => volverAlListadoValidacion();
   }
 
+  const selPag = document.getElementById("validationPorPagina");
+  if (selPag && !selPag.dataset.listened) {
+    selPag.dataset.listened = "1";
+    selPag.value = String(_valPorPagina);
+    selPag.addEventListener("change", () => {
+      _valPorPagina = Number(selPag.value);
+      try { localStorage.setItem("sirevaq_val_por_pagina", String(_valPorPagina)); } catch (_) { /* sin almacenamiento */ }
+      renderValidationDashboard();
+    });
+  }
   infSincronizarMuniLocal("validationMuniSelect", () => {
     document.getElementById("validationReportContent")?.classList.add("hidden");
     document.getElementById("validationDashboard")?.classList.remove("hidden");
@@ -3280,6 +3299,8 @@ function valoresOriginalesUnidad(report) {
 
 let _valUltimaClues = null;
 let _valPagina = 1, _valPagFirma = "", _valIrAClues = null;
+// Filas por página que elige el usuario (0 = todas); se recuerda en este navegador.
+let _valPorPagina = (() => { try { const v = Number(localStorage.getItem("sirevaq_val_por_pagina")); return [0, 10, 20, 30, 50, 100].includes(v) && localStorage.getItem("sirevaq_val_por_pagina") !== null ? v : 30; } catch (_) { return 30; } })();
 
 // Texto legible de la semana seleccionada («Semana 42 (12 al 18 oct)») en vez de la fecha ISO.
 function etiquetaSemanaValidacion(fecha) {
@@ -3385,8 +3406,8 @@ function renderValidationDashboard() {
 
   // Paginación: 30 unidades por página. Al cambiar de semana, municipio, estado o búsqueda se vuelve a la primera;
   // al regresar del detalle se abre la página donde está la unidad que se revisaba.
-  const POR_PAGINA = 30;
-  const firma = `${selectedFecha}|${estadoFiltro}|${filterText}|${document.getElementById("adminInfluenzaMuni")?.value}`;
+  const POR_PAGINA = _valPorPagina > 0 ? _valPorPagina : Math.max(1, filtradas.length);
+  const firma = `${_valPorPagina}|${selectedFecha}|${estadoFiltro}|${filterText}|${document.getElementById("adminInfluenzaMuni")?.value}`;
   if (_valPagFirma !== firma) { _valPagFirma = firma; _valPagina = 1; }
   if (_valIrAClues) {
     const pos = filtradas.findIndex(f => f.u.clues === _valIrAClues);
@@ -3487,11 +3508,6 @@ function renderValidationDashboard() {
 function infSaludoWhatsApp() {
   const h = new Date().getHours();
   return h >= 6 && h < 12 ? "¡Buenos días! ☀️" : (h >= 12 && h < 19 ? "¡Buenas tardes! ⛅" : "¡Buenas noches! 🌙");
-}
-
-function infCsvCelda(v) {
-  const s = String(v ?? "");
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 // Mensaje de error en línea (role="alert") + campos marcados; mueve el foco al primero con problema.
@@ -3903,9 +3919,9 @@ function infEstadoCelda(report, fecha) {
 
 let _cobDatos = null;
 
-function infCalcularCobertura() {
+function infCalcularCobertura(muniParam) {
   const weeks = generateCampaignWeeks();
-  const muni = String(document.getElementById("adminInfluenzaMuni")?.value || "").toUpperCase();
+  const muni = String(muniParam || document.getElementById("adminInfluenzaMuni")?.value || "").toUpperCase();
   const unidades = _allUnidades.filter(u => String(u.municipio || "").toUpperCase() === muni);
   const porClave = new Map();
   infCapturasVista().forEach(r => porClave.set(`${r.clues}|${r.fecha}`, r));
@@ -4039,16 +4055,229 @@ function infCopiarRecordatorioAtrasos() {
     .catch(() => showToast("No se pudo copiar el texto automáticamente.", false, "bad"));
 }
 
-/** CSV de la matriz: una fila por unidad y una columna por semana, con el estado en texto. */
-function infExportarCobertura() {
-  const datos = _cobDatos || infCalcularCobertura();
-  const cab = ["Municipio", "CLUES", "Unidad", ...datos.weeks.map(w => `S${w.semana}${w.corte ? " (corte)" : ""} ${w.fecha}`), "Reportes recibidos", "Semanas atrasadas", "Dosis"];
-  const filas = [cab];
-  datos.filas.forEach(f => filas.push([f.u.municipio, f.u.clues, f.u.unidad, ...f.celdas.map(c => COB_ESTADOS[c.k].txt + (c.report && c.k !== "sinmov" ? ` (${c.total})` : "")), f.recibidos, f.atrasos.length, f.dosis]));
-  const csv = "﻿" + filas.map(r => r.map(infCsvCelda).join(",")).join("\r\n");
-  const muni = String(document.getElementById("adminInfluenzaMuni")?.value || "municipio");
-  metaDescargar(csv, `${esCovid() ? "COVID19" : "Influenza"}_cobertura_${muni}_${influenzaHoy()}.csv`, "text/csv;charset=utf-8");
-  showToast("Cobertura descargada.", true, "good");
+/**
+ * Excel de cobertura con analítica (todos los municipios que puede ver el rol): Resumen con KPIs y semáforo por
+ * municipio, cobertura por semana, matriz unidades × semanas a color y lista de atrasos priorizada.
+ */
+async function infExportarCobertura() {
+  if (typeof ExcelJS === "undefined") { showToast("No se pudo cargar el generador de Excel.", false, "bad"); return; }
+  const btn = document.getElementById("btnCobExportar");
+  if (btn) btn.disabled = true;
+  try {
+    const munis = [...(document.getElementById("adminInfluenzaMuni")?.options || [])].map(o => ({ id: o.value, label: o.textContent.trim() }));
+    const porMuni = munis.map(m => ({ ...m, datos: infCalcularCobertura(m.id) })).filter(m => m.datos.filas.length);
+    if (!porMuni.length) { showToast("No hay unidades para exportar.", false, "warn"); return; }
+    const weeks = porMuni[0].datos.weeks;
+    const vacuna = esCovid() ? "COVID-19" : "Influenza";
+    const temporada = campaignSeasonLabel();
+    const hoy = influenzaHoy();
+    const abiertas = weeks.filter(w => infFaseSemana(w.fecha) !== "futura");
+
+    const C = { morado: "FF1E1B4B", gris: "FFF1F5F9", borde: "FFCBD5E1", blanco: "FFFFFFFF" };
+    const estilos = {
+      rep:    { fill: "FFD1FAE5", font: "FF065F46" },
+      sinmov: { fill: "FFCFFAFE", font: "FF155E75" },
+      corr:   { fill: "FFEDE9FE", font: "FF5B21B6" },
+      curso:  { fill: "FFFEF3C7", font: "FF92400E" },
+      falta:  { fill: "FFFFE4E6", font: "FF9F1239" },
+      fut:    { fill: "FFF1F5F9", font: "FF64748B" }
+    };
+    // Sin semanas vencidas (p. ej. la campaña acaba de abrir) no hay atraso posible: «En curso», no un semáforo rojo.
+    const semaforo = (pct) => pct === null ? { t: "En curso", f: "FFE0F2FE", c: "FF075985" } : pct >= 95 ? { t: "Al corriente", f: "FFD1FAE5", c: "FF065F46" }
+      : (pct >= 80 ? { t: "En riesgo", f: "FFFEF3C7", c: "FF92400E" } : { t: "Crítico", f: "FFFFE4E6", c: "FF9F1239" });
+    const barra = (pct) => { const n = Math.max(0, Math.min(10, Math.round(pct / 10))); return "█".repeat(n) + "░".repeat(10 - n); };
+    const lado = { style: "thin", color: { argb: C.borde } };
+    const bordes = { top: lado, left: lado, bottom: lado, right: lado };
+    const cabecera = (row) => {
+      row.eachCell(c => {
+        c.font = { bold: true, color: { argb: C.blanco }, size: 10 };
+        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.morado } };
+        c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+        c.border = bordes;
+      });
+      row.height = 32;
+    };
+    const celda = (c, o = {}) => {
+      c.border = bordes;
+      c.alignment = { horizontal: o.izq ? "left" : "center", vertical: "middle", wrapText: !!o.wrap };
+      if (o.fill) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: o.fill } };
+      c.font = { size: 10, bold: !!o.bold, color: o.color ? { argb: o.color } : undefined };
+    };
+    const titulo = (ws, texto, sub, cols) => {
+      ws.mergeCells(1, 1, 1, cols);
+      ws.getCell(1, 1).value = texto;
+      ws.getCell(1, 1).font = { bold: true, size: 15, color: { argb: C.morado } };
+      ws.mergeCells(2, 1, 2, cols);
+      ws.getCell(2, 1).value = sub;
+      ws.getCell(2, 1).font = { size: 10, italic: true, color: { argb: "FF475569" } };
+      ws.getRow(1).height = 26;
+    };
+    const subtitulo = `Corte al ${hoy.split("-").reverse().join("/")} · ${abiertas.length} de ${weeks.length} semanas ya abiertas · Temporada ${temporada}`;
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "SIREVAQ";
+
+    // ── Estadísticas por municipio y totales ──
+    const stats = porMuni.map(m => {
+      const filas = m.datos.filas;
+      const esperados = filas.length * abiertas.length;
+      const recibidos = filas.reduce((a, f) => a + f.celdas.filter(c => c.report && infFaseSemana(c.w.fecha) !== "futura").length, 0);
+      const venc = weeks.filter(w => infFaseSemana(w.fecha) === "vencida");
+      const esperadosV = filas.length * venc.length;
+      const recibidosV = filas.reduce((a, f) => a + f.celdas.filter(c => c.report && infFaseSemana(c.w.fecha) === "vencida").length, 0);
+      return {
+        etq: m.label, unidades: filas.length, esperados, recibidos,
+        pct: esperados ? Math.round(recibidos * 100 / esperados) : 100,
+        pctV: esperadosV ? Math.round(recibidosV * 100 / esperadosV) : null, esperadosV, recibidosV,
+        conAtraso: filas.filter(f => f.atrasos.length).length,
+        atrasos: filas.reduce((a, f) => a + f.atrasos.length, 0),
+        sinMov: filas.reduce((a, f) => a + f.sinMov, 0),
+        dosis: filas.reduce((a, f) => a + f.dosis, 0)
+      };
+    });
+    const T = stats.reduce((a, s) => ({ unidades: a.unidades + s.unidades, esperados: a.esperados + s.esperados, recibidos: a.recibidos + s.recibidos, esperadosV: a.esperadosV + s.esperadosV, recibidosV: a.recibidosV + s.recibidosV, conAtraso: a.conAtraso + s.conAtraso, atrasos: a.atrasos + s.atrasos, sinMov: a.sinMov + s.sinMov, dosis: a.dosis + s.dosis }),
+      { unidades: 0, esperados: 0, recibidos: 0, esperadosV: 0, recibidosV: 0, conAtraso: 0, atrasos: 0, sinMov: 0, dosis: 0 });
+    T.pct = T.esperados ? Math.round(T.recibidos * 100 / T.esperados) : 100;
+    T.pctV = T.esperadosV ? Math.round(T.recibidosV * 100 / T.esperadosV) : null;
+
+    // ── Hoja 1: Resumen ──
+    const ws1 = wb.addWorksheet("Resumen", { views: [{ showGridLines: false }] });
+    titulo(ws1, `Cobertura de reportes semanales · ${vacuna}`, subtitulo, 11);
+    const kpis = [
+      ["Cobertura a la fecha (incluye la semana en curso)", `${T.pct}%`, semaforo(T.pctV)],
+      ["Reportes recibidos / esperados", `${T.recibidos.toLocaleString("es-MX")} de ${T.esperados.toLocaleString("es-MX")}`, null],
+      ["Unidades al corriente", `${T.unidades - T.conAtraso} de ${T.unidades}`, T.conAtraso ? semaforo(80) : semaforo(100)],
+      ["Semanas atrasadas (fuera de plazo)", String(T.atrasos), T.atrasos ? semaforo(0) : semaforo(100)],
+      ["Reportes sin movimiento", String(T.sinMov), null],
+      ["Dosis reportadas", T.dosis.toLocaleString("es-MX"), null]
+    ];
+    kpis.forEach((k, i) => {
+      const r = 4 + i;
+      ws1.mergeCells(r, 1, r, 3);
+      ws1.getCell(r, 1).value = k[0];
+      celda(ws1.getCell(r, 1), { izq: true, bold: true, fill: C.gris });
+      ws1.mergeCells(r, 4, r, 5);
+      ws1.getCell(r, 4).value = k[1];
+      celda(ws1.getCell(r, 4), { bold: true, fill: k[2] ? k[2].f : undefined, color: k[2] ? k[2].c : undefined });
+      ws1.getCell(r, 4).font = { size: 12, bold: true, color: k[2] ? { argb: k[2].c } : undefined };
+    });
+    const h1 = 12;
+    ws1.getRow(h1 - 1).getCell(1).value = "Cobertura por municipio";
+    ws1.getRow(h1 - 1).getCell(1).font = { bold: true, size: 12, color: { argb: C.morado } };
+    ws1.getRow(h1).values = ["Municipio", "Unidades", "Reportes esperados", "Reportes recibidos", "Cobertura", "Avance", "Semáforo", "Unidades con atraso", "Semanas atrasadas", "Sin movimiento", "Dosis reportadas"];
+    cabecera(ws1.getRow(h1));
+    [...stats, { etq: "TOTAL JURISDICCIÓN", ...T, total: true }].forEach((s, i) => {
+      const row = ws1.getRow(h1 + 1 + i);
+      const sem = semaforo(s.pctV);
+      row.values = [s.etq, s.unidades, s.esperados, s.recibidos, s.pct / 100, barra(s.pct), sem.t, s.conAtraso, s.atrasos, s.sinMov, s.dosis];
+      row.eachCell(c => celda(c, { bold: !!s.total, fill: s.total ? C.gris : undefined }));
+      row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+      row.getCell(5).numFmt = "0%";
+      row.getCell(6).font = { name: "Consolas", size: 10, color: { argb: sem.c } };
+      row.getCell(7).fill = { type: "pattern", pattern: "solid", fgColor: { argb: sem.f } };
+      row.getCell(7).font = { size: 10, bold: true, color: { argb: sem.c } };
+      [3, 4, 11].forEach(n => { row.getCell(n).numFmt = "#,##0"; });
+    });
+    [26, 12, 14, 14, 12, 14, 14, 14, 14, 14, 16].forEach((w, i) => { ws1.getColumn(i + 1).width = w; });
+    const nota = h1 + stats.length + 3;
+    ws1.mergeCells(nota, 1, nota, 11);
+    ws1.getCell(nota, 1).value = "Semáforo (sobre las semanas ya vencidas): 95% o más = Al corriente · 80% a 94% = En riesgo · menos de 80% = Crítico; «En curso» mientras no venza ninguna semana. «Atraso» = semana cuyo plazo (domingo, o el último día del mes en un corte) ya venció sin reporte.";
+    ws1.getCell(nota, 1).font = { size: 9, italic: true, color: { argb: "FF475569" } };
+    ws1.getCell(nota, 1).alignment = { wrapText: true, vertical: "top" };
+    ws1.getRow(nota).height = 28;
+
+    // ── Hoja 2: Por semana ──
+    const ws2 = wb.addWorksheet("Por semana", { views: [{ state: "frozen", ySplit: 3, showGridLines: false }] });
+    titulo(ws2, `Cobertura por semana · ${vacuna}`, subtitulo, 12);
+    ws2.getRow(3).values = ["Semana", "Fecha", "Periodo", "Plazo", "Unidades", "Reportaron", "Sin movimiento", "Corregidos", "Pendientes", "Cobertura", "Avance", "Dosis"];
+    cabecera(ws2.getRow(3));
+    weeks.forEach((w, i) => {
+      const fase = infFaseSemana(w.fecha);
+      const celdasSem = porMuni.flatMap(m => m.datos.filas.map(f => f.celdas[i]));
+      const unidades = celdasSem.length;
+      const rep = celdasSem.filter(c => c.report).length;
+      const sm = celdasSem.filter(c => c.k === "sinmov").length;
+      const co = celdasSem.filter(c => c.k === "corr").length;
+      const pen = unidades - rep;
+      const pct = unidades ? Math.round(rep * 100 / unidades) : 0;
+      const dosis = celdasSem.reduce((a, c) => a + c.total, 0);
+      const row = ws2.getRow(4 + i);
+      const futura = fase === "futura";
+      row.values = [`S${w.semana}${w.corte ? " (corte)" : ""}`, w.fecha, influenzaRangoTexto(w.fecha), futura ? "Aún no abre" : (fase === "encurso" ? "En curso" : "Vencida"),
+        unidades, futura ? "" : rep, futura ? "" : sm, futura ? "" : co, futura ? "" : pen, futura ? "" : pct / 100, futura ? "" : barra(pct), futura ? "" : dosis];
+      row.eachCell(c => celda(c, { fill: futura ? estilos.fut.fill : undefined, color: futura ? estilos.fut.font : undefined }));
+      if (!futura) {
+        const sem = semaforo(pct);
+        row.getCell(10).numFmt = "0%";
+        row.getCell(10).fill = { type: "pattern", pattern: "solid", fgColor: { argb: sem.f } };
+        row.getCell(10).font = { size: 10, bold: true, color: { argb: sem.c } };
+        row.getCell(11).font = { name: "Consolas", size: 10, color: { argb: sem.c } };
+        row.getCell(12).numFmt = "#,##0";
+        if (pen && fase === "vencida") row.getCell(9).font = { size: 10, bold: true, color: { argb: "FF9F1239" } };
+      }
+    });
+    [12, 12, 18, 13, 11, 12, 15, 12, 12, 12, 14, 12].forEach((w, i) => { ws2.getColumn(i + 1).width = w; });
+
+    // ── Hoja 3: Matriz ──
+    const ws3 = wb.addWorksheet("Matriz", { views: [{ state: "frozen", xSplit: 3, ySplit: 3, showGridLines: false }] });
+    const nCols = 3 + weeks.length + 3;
+    titulo(ws3, `Matriz de reportes por unidad y semana · ${vacuna}`, "Número = dosis reportadas · S/M = sin movimiento · ✎ = corregido por supervisión · ATRASO = fuera de plazo · pend. = en plazo · · = aún no abre", nCols);
+    ws3.getRow(3).values = ["Municipio", "CLUES", "Unidad", ...weeks.map(w => `S${w.semana}${w.corte ? "c" : ""}\n${influenzaFechaCorta(w.fecha)}`), "Recibidos", "Atrasos", "Dosis"];
+    cabecera(ws3.getRow(3));
+    let r3 = 4;
+    porMuni.forEach(m => {
+      m.datos.filas.slice().sort((a, b) => b.atrasos.length - a.atrasos.length || String(a.u.unidad).localeCompare(String(b.u.unidad), "es")).forEach(f => {
+        const row = ws3.getRow(r3++);
+        row.values = [m.label, f.u.clues, f.u.unidad, ...f.celdas.map(c => c.k === "sinmov" ? "S/M" : (c.k === "falta" ? "ATRASO" : (c.k === "curso" ? "pend." : (c.k === "fut" ? "·" : (c.k === "corr" ? `${c.total} ✎` : c.total))))), f.recibidos, f.atrasos.length, f.dosis];
+        row.eachCell((c, n) => {
+          celda(c, { izq: n <= 3, bold: n > 3 + weeks.length });
+          const k = n > 3 && n <= 3 + weeks.length ? f.celdas[n - 4].k : null;
+          if (k) { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: estilos[k].fill } }; c.font = { size: 9, bold: k === "falta", color: { argb: estilos[k].font } }; }
+        });
+        if (f.atrasos.length) row.getCell(3 + weeks.length + 2).font = { size: 10, bold: true, color: { argb: "FF9F1239" } };
+      });
+    });
+    ws3.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, r3 - 1), column: nCols } };
+    ws3.getColumn(1).width = 14; ws3.getColumn(2).width = 14; ws3.getColumn(3).width = 38;
+    weeks.forEach((w, i) => { ws3.getColumn(4 + i).width = 9; });
+    [11, 9, 10].forEach((w, i) => { ws3.getColumn(4 + weeks.length + i).width = w; });
+    ws3.getRow(3).height = 34;
+
+    // ── Hoja 4: Atrasos ──
+    const ws4 = wb.addWorksheet("Atrasos", { views: [{ state: "frozen", ySplit: 3, showGridLines: false }] });
+    titulo(ws4, `Unidades con semanas atrasadas · ${vacuna}`, subtitulo, 7);
+    ws4.getRow(3).values = ["Municipio", "CLUES", "Unidad", "Semanas atrasadas", "Cuáles", "Último reporte", "Dosis reportadas"];
+    cabecera(ws4.getRow(3));
+    const atrasadas = porMuni.flatMap(m => m.datos.filas.filter(f => f.atrasos.length).map(f => ({ m, f })))
+      .sort((a, b) => b.f.atrasos.length - a.f.atrasos.length || String(a.f.u.unidad).localeCompare(String(b.f.u.unidad), "es"));
+    if (!atrasadas.length) {
+      ws4.mergeCells(4, 1, 4, 7);
+      ws4.getCell(4, 1).value = "Ninguna unidad tiene semanas atrasadas.";
+      celda(ws4.getCell(4, 1), { fill: estilos.rep.fill, color: estilos.rep.font, bold: true });
+    }
+    atrasadas.forEach(({ m, f }, i) => {
+      const ult = f.celdas.filter(c => c.report).map(c => c.w.fecha).pop();
+      const row = ws4.getRow(4 + i);
+      row.values = [m.label, f.u.clues, f.u.unidad, f.atrasos.length, f.atrasos.map(c => "S" + c.w.semana + (c.w.corte ? " (corte)" : "")).join(", "), ult ? ult.split("-").reverse().join("/") : "Nunca", f.dosis];
+      row.eachCell((c, n) => celda(c, { izq: n <= 3 || n === 5, wrap: n === 5 }));
+      const grave = f.atrasos.length >= 3 ? semaforo(0) : semaforo(85);
+      row.getCell(4).fill = { type: "pattern", pattern: "solid", fgColor: { argb: grave.f } };
+      row.getCell(4).font = { size: 11, bold: true, color: { argb: grave.c } };
+      row.getCell(7).numFmt = "#,##0";
+    });
+    [14, 14, 40, 12, 44, 14, 14].forEach((w, i) => { ws4.getColumn(i + 1).width = w; });
+
+    [ws1, ws2, ws3, ws4].forEach(ws => { ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 }; });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    metaDescargar(buffer, `Cobertura_${esCovid() ? "COVID19" : "Influenza"}_${temporada}_${hoy}.xlsx`, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    showToast("Cobertura descargada en Excel.", true, "good");
+  } catch (err) {
+    console.error("Error al exportar la cobertura:", err);
+    showToast("No se pudo generar el Excel de cobertura.", false, "bad");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 // --- FUNCIONES PREMIUM DE EXPORTACIÓN A EXCEL (CON EXCELJS) ---
@@ -6583,22 +6812,36 @@ function renderFrascosMatrix(ambito) {
   })).join("");
   const entregado = k => numeros.reduce((s, n) => s + (k === null ? suma(kk => valor(n, kk)) : valor(n, k)), 0);
   const metaFr = k => frascoTopeMeta(meta(k));
+  const claves = [...columnas.map(c => c.key), null];
+  const etiqueta = k => (k === null ? "TOTAL" : columnas.find(c => c.key === k).label);
+  const pctDe = k => { const m = k === null ? suma(meta) : meta(k); return m ? Math.round(entregado(k) * dosisFrasco() * 100 / m) : null; };
+  const pill = (pct) => {
+    if (pct === null) return "—";
+    const t = frascoSemaforo(pct);
+    return `<span class="frs-sem frs-sem--${t.tono}" title="${t.texto}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${pct}%<span class="vl-sr"> · ${t.texto}</span></span>`;
+  };
+  const fmtFr = k => frascoFmt(k === null ? suma(metaFr) : metaFr(k));
   table.innerHTML = `<thead><tr><th></th>${cab}<th class="c">TOTAL</th></tr></thead>
     <tbody>${cuerpo}
-    ${fila(esCovid() ? "META + PÉRDIDA (dosis)" : "META (dosis)", k => frascoFmt(k === null ? suma(meta) : meta(k)), true)}
-    ${fila("META (frascos)", k => frascoFmt(k === null ? suma(metaFr) : metaFr(k)), true)}
-    ${fila("TOTAL ENTREGADO", k => { const v = entregado(k); return v ? frascoFmt(v) : "-"; }, true)}
-    ${fila("FALTAN POR RECIBIR", k => {
-      const f = Math.max(0, (k === null ? suma(metaFr) : metaFr(k)) - entregado(k));
-      return f ? frascoFmt(f) : "0";
-    }, false)}
-    ${fila("DOSIS EQUIV. / META", k => {
-      const m = k === null ? suma(meta) : meta(k);
-      if (!m) return "—";
-      const pct = Math.round(entregado(k) * dosisFrasco() * 100 / m);
-      const t = frascoSemaforo(pct);
-      return `<span class="frs-sem frs-sem--${t.tono}" title="${t.texto}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${pct}%<span class="vl-sr"> · ${t.texto}</span></span>`;
-    }, false)}</tbody>`;
+    <tr class="frs-cmp frs-cmp--ini"><th class="frs-rowlbl">META (frascos)</th>${claves.map(k => `<td class="c">${fmtFr(k)}</td>`).join("")}</tr>
+    <tr class="frs-cmp"><th class="frs-rowlbl">FRASCOS ENTREGADOS</th>${claves.map(k => { const v = entregado(k); return `<td class="c">${v ? frascoFmt(v) : "0"}</td>`; }).join("")}</tr>
+    <tr class="frs-cmp"><th class="frs-rowlbl">FALTAN POR RECIBIR</th>${claves.map(k => { const f = Math.max(0, (k === null ? suma(metaFr) : metaFr(k)) - entregado(k)); return `<td class="c">${f ? frascoFmt(f) : "0"}</td>`; }).join("")}</tr>
+    <tr class="frs-cmp frs-cmp--fin"><th class="frs-rowlbl">AVANCE DE LA ENTREGA</th>${claves.map(k => `<td class="c">${pill(pctDe(k))}</td>`).join("")}</tr>
+    ${fila(esCovid() ? "Meta + pérdida (dosis)" : "Meta (dosis)", k => frascoFmt(k === null ? suma(meta) : meta(k)), false).replace('<tr class="">', '<tr class="frs-ref">')}
+    ${fila("Dosis equivalentes entregadas", k => frascoFmt(entregado(k) * dosisFrasco()), false).replace('<tr class="">', '<tr class="frs-ref">')}</tbody>`;
+  // Comparación visual: frascos entregados contra la meta en frascos, por destino y total
+  const cmp = document.getElementById("frascosCompara");
+  if (cmp) {
+    cmp.innerHTML = [null, ...claves.slice(0, -1)].map(k => {
+      const mf = k === null ? suma(metaFr) : metaFr(k), ent = entregado(k);
+      const pct = pctDe(k), t = pct === null ? null : frascoSemaforo(pct);
+      return `<li class="frs-cmp-item${k === null ? " frs-cmp-item--tot" : ""}">
+        <div class="frs-cmp-cab"><b>${etiqueta(k)}</b>${t ? `<span class="frs-sem frs-sem--${t.tono}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${pct}%<span class="vl-sr"> · ${t.texto}</span></span>` : ""}</div>
+        <div class="frs-cmp-barra" role="img" aria-label="${etiqueta(k)}: ${frascoFmt(ent)} de ${frascoFmt(mf)} frascos"><span class="frs-cmp-fill frs-cmp-fill--${t ? t.tono : "bajo"}" style="width:${Math.min(100, pct || 0)}%"></span></div>
+        <div class="frs-cmp-num"><span><b>${frascoFmt(ent)}</b> entregados</span><span>de <b>${frascoFmt(mf)}</b> frascos de meta</span><span>faltan <b>${frascoFmt(Math.max(0, mf - ent))}</b></span></div>
+      </li>`;
+    }).join("");
+  }
   const leyenda = document.getElementById("frascosMatrixLegend");
   if (leyenda) {
     leyenda.innerHTML = FRASCO_SEMAFORO.map(t => `<li><span class="frs-sem frs-sem--${t.tono}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${t.rango}</span> ${t.texto}</li>`).join("");

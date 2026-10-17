@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=21"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.270" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.272" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3183,10 +3183,23 @@
               <h4 class="text-sm font-black text-violet-950 uppercase tracking-wider m-0" id="validationDashboardTitle"
                 tabindex="-1">Elige el reporte a corregir
               </h4>
-              <div role="status"
-                class="flex gap-2 text-xs font-black text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full"
-                id="validationStatsSummary">
-                <!-- JS insertará contadores del estado de captura de la semana -->
+              <div class="rs-cab-der">
+                <label class="rs-porpag" for="validationPorPagina">
+                  <span>Filas por página</span>
+                  <select id="validationPorPagina">
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="30">30</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="0">Todas</option>
+                  </select>
+                </label>
+                <div role="status"
+                  class="flex gap-2 text-xs font-black text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full"
+                  id="validationStatsSummary">
+                  <!-- JS insertará contadores del estado de captura de la semana -->
+                </div>
               </div>
             </div>
 
@@ -3300,7 +3313,7 @@
               <span class="material-symbols-rounded" aria-hidden="true">content_copy</span><span>Copiar aviso de atrasos para WhatsApp</span>
             </button>
             <button type="button" class="rs-herr__btn" id="btnCobExportar">
-              <span class="material-symbols-rounded" aria-hidden="true">download</span><span>Descargar cobertura (CSV)</span>
+              <span class="material-symbols-rounded" aria-hidden="true">download</span><span>Descargar cobertura con análisis (Excel)</span>
             </button>
           </div>
 
@@ -3651,6 +3664,8 @@
                 <span class="material-symbols-rounded" style="font-size:16px">download</span> Exportar Excel
               </button>
             </div>
+            <h5 class="frs-cmp-titulo">Meta en frascos vs. frascos entregados</h5>
+            <ul class="frs-cmp-lista" id="frascosCompara" aria-label="Frascos entregados contra la meta en frascos, por destino"></ul>
             <div class="frs-scroll">
               <table class="frs-table frs-matrix" id="frascosMatrixTable"></table>
             </div>

@@ -504,8 +504,9 @@ test('Concentrado por entregas: columnas por destino y total entregado', async (
   await page.click('#dockFrascosTabs [data-frs="entregas"]');
   const filas = await page.locator('#frascosMatrixTable tbody tr').allInnerTexts();
   expect(filas[0]).toContain('1ª entrega');
-  expect(filas.find((f) => f.includes('TOTAL ENTREGADO'))).toContain('458');
-  expect(filas.find((f) => f.includes('META'))).toContain('8,800');
+  expect(filas.find((f) => /FRASCOS ENTREGADOS/i.test(f))).toContain('458');
+  expect(filas.find((f) => /meta \(dosis\)/i.test(f))).toContain('8,800');
+  expect(filas.find((f) => /meta \(frascos\)/i.test(f))).toContain('880');
 });
 
 test('Excel de distribución: hoja jurisdiccional con entregas, META y TOTAL ENTREGADO', async ({ page }, info) => {
