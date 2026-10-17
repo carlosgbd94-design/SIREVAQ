@@ -37,11 +37,15 @@ test.describe('Cálculo de indicadores (sin navegador)', () => {
   ];
 
   test('Existencia: ceros, caducados, caducan pronto, abiertos, permanencia, préstamos y última captura', () => {
-    const ex = [{ clues: 'C1', fecha: '2026-10-13', timestamp: '2026-10-13T16:42:00Z', editado: 'SI' }];
-    const an = CI.analizarSR(det, ex, HOY);
+    // existencia_detalle nunca guarda renglones en 0: el cero sale de biologicos_existencia contra la captura anterior
+    const ex = [{ clues: 'C1', fecha: '2026-10-13', timestamp: '2026-10-13T16:42:00Z', editado: 'SI', tiene_ceros: true, bcg: 0, td: 8, hexavalente: 10 }];
+    const exPrev = [{ clues: 'C1', fecha: '2026-10-06', bcg: 3, td: 8, hexavalente: 10 }, { clues: 'C1', fecha: '2026-09-29', bcg: 0, vph: 4 }];
+    const an = CI.analizarSR(det, ex, HOY, exPrev);
     const c1 = an.unidades.get('C1'), c2 = an.unidades.get('C2');
     expect(c1.frascos).toBe(18);                       // 5+3+10 (el 99 de la captura vieja y el fantasma no cuentan)
-    expect(c1.ceros).toEqual(['BCG']);
+    expect(c1.ceros).toEqual(['BCG']);          // solo se compara con la captura inmediata anterior (VPH de hace 2 semanas no cuenta)
+    expect(c1.enCero).toBe(true);
+    expect(c2.enCero).toBe(false);
     expect(c1.cad).toMatchObject({ lotes: 1, frascos: 5 });
     expect(c1.caducados).toMatchObject({ lotes: 1, frascos: 3 });
     expect(c1.permanencia.excedida).toBe(1);           // lote A2: 136 días
@@ -50,21 +54,23 @@ test.describe('Cálculo de indicadores (sin navegador)', () => {
     expect(c2.abiertos.vencidos).toBe(1);
     expect(c2.prestamos).toBe(1);
     expect(an.enCeroPorBio.get('BCG').clues.has('C1')).toBe(true);
+    expect(an.enCeroPorBio.has('VPH')).toBe(false);
     expect(an.porBio.get('TD').frascos).toBe(8 + 20);
   });
 
   test('Resumen de Existencia: tarjetas con las unidades correctas para filtrar', () => {
-    const an = CI.analizarSR(det, [], HOY);
+    const ex = [{ clues: 'C1', fecha: '2026-10-13', tiene_ceros: true, bcg: 0 }, { clues: 'C2', fecha: '2026-10-14', tiene_ceros: false, bcg: 4 }];
+    const an = CI.analizarSR(det, ex, HOY, [{ clues: 'C1', fecha: '2026-10-06', bcg: 3 }]);
     const r = CI.construirResumen('SR', an, { muniDe: () => 'X' });
     const t = (id) => r.tiles.find((x) => x.id === id);
+    expect(r.tiles.map((x) => x.id)).toEqual(['ceros', 'caducan', 'abiertos', 'sinmov']); // una sola fila breve
     expect(t('ceros').valor).toBe('1');
+    expect(t('ceros').nota).toContain('BCG (1)');
     expect([...t('ceros').set]).toEqual(['C1']);
-    expect(t('caducados').valor).toBe('1');
-    expect(t('caducan').valor).toBe('1');
+    expect(t('caducan').valor).toBe('2');                  // 1 lote por caducar + 1 ya caducado
+    expect(t('caducan').nota).toContain('1 ya caducado');
     expect([...t('abiertos').set]).toEqual(['C2']);
-    expect([...t('prest').set]).toEqual(['C2']);
-    expect(r.paneles.find((p) => p.id === 'ceros').filas[0]).toMatchObject({ etiqueta: 'BCG', valor: 1 });
-    expect(r.texto.join('\n')).toContain('1 unidad con biológicos en cero');
+    expect(r.texto.join('\n')).toContain('1 unidad capturó biológicos en cero (BCG: 1)');
   });
 
   test('Consumibles: insumos insuficientes para las dosis y cobertura', () => {
@@ -79,7 +85,7 @@ test.describe('Cálculo de indicadores (sin navegador)', () => {
     expect(an.unidades.get('C2')).toMatchObject({ dosis: 10, insuficiente: false });
     const r = CI.construirResumen('CONS', an, { muniDe: (c) => (c === 'C1' ? 'CORREGIDORA' : 'MARQUES') });
     expect(r.tiles.find((t) => t.id === 'insuf').valor).toBe('1');
-    expect(r.tabla.filas.map((f) => f.celdas[0])).toEqual(['Corregidora', 'El Marqués']);
+    expect(r.tiles.map((x) => x.id)).toEqual(['insuf', 'ceros', 'sinmov']);
   });
 
   test('Pedido: sobrepedido, riesgo, exceso, sin pedido y fuera de ventana', () => {
@@ -123,7 +129,7 @@ test.describe('Cálculo de indicadores (sin navegador)', () => {
     expect(an.porCat['Población blanca']).toBe(35);
     const r = CI.construirResumen('INF', an, { muniDe: () => 'X' });
     expect(r.tiles.find((t) => t.id === 'bajo').valor).toBe('1');
-    expect(r.paneles.find((p) => p.id === 'rezago').filas[0].texto).toContain('5 %');
+    expect(r.tiles.find((t) => t.id === 'acum').valor).toBe('18 %'); // 55 de 300
   });
 
   test('Reincidentes: semanas y meses seguidos sin capturar', () => {
@@ -179,7 +185,7 @@ test.describe('Cálculo de indicadores (sin navegador)', () => {
     expect(txt).toContain('Avance: 2 de 3 unidades (67 %)');
     expect(txt).toContain('• Huimilpan: 0/1 (0 %) — faltan 1');
     expect(txt).toContain('Pendientes (1): TRES');
-    const an = CI.analizarSR(det, [], HOY);
+    const an = CI.analizarSR(det, [{ clues: 'C1', fecha: '2026-10-13', bcg: 0, tiene_ceros: true }], HOY, [{ clues: 'C1', fecha: '2026-10-06', bcg: 3 }]);
     const csv = CI.construirCsv('SR', data, an, () => 2);
     const lineas = csv.replace('\ufeff', '').split('\r\n');
     expect(lineas[0]).toContain('Biológicos en cero');
@@ -256,7 +262,8 @@ function estadoBase() {
         { id: 'd5', clues: 'C3', fecha: '2026-10-15', biologico: 'TD', lote: 'E', caducidad: '2028-01-31', cantidad: 12 }
       ],
       biologicos_existencia: [
-        { id: 'e1', clues: 'C1', fecha: '2026-10-13', timestamp: T('2026-10-13', '10:42'), capturado_por: 'Ana', tiene_ceros: true },
+        { id: 'e1', clues: 'C1', fecha: '2026-10-13', timestamp: T('2026-10-13', '10:42'), capturado_por: 'Ana', tiene_ceros: true, bcg: 0, td: 8 },
+        { id: 'e0', clues: 'C1', fecha: '2026-10-06', timestamp: T('2026-10-06', '10:00'), capturado_por: 'Ana', bcg: 3, td: 8 },
         { id: 'e2', clues: 'C2', fecha: '2026-10-14', timestamp: T('2026-10-14', '09:05'), capturado_por: 'Luis', tiene_ceros: false },
         { id: 'e3', clues: 'C3', fecha: '2026-10-15', timestamp: T('2026-10-15', '08:30'), capturado_por: 'Eva', tiene_ceros: false },
         // C2 también capturó la semana pasada; C4 no ha capturado en 4 semanas
@@ -335,23 +342,27 @@ test.describe('Resumen de captura con indicadores', () => {
     const { errores } = await preparar(page, estadoBase());
     await pintarResumen(page, 'SR', HOY);
     const tarjeta = (txt) => page.locator('#captureInsights .ci-tile', { hasText: txt });
-    await expect(tarjeta('Unidades con biológicos en cero').locator('.ci-val')).toHaveText('1');
-    await expect(tarjeta('Lotes ya caducados').locator('.ci-val')).toHaveText('1');
-    await expect(tarjeta('Frascos abiertos por vencer').locator('.ci-val')).toHaveText('1');
-    await expect(page.locator('#captureInsights .ci-card', { hasText: 'Biológicos sin existencia' })).toContainText('BCG');
+    await expect(tarjeta('Capturaron en cero').locator('.ci-val')).toHaveText('1');
+    await expect(tarjeta('Capturaron en cero')).toContainText('BCG (1)');
+    await expect(tarjeta('Caducan en ≤ 3 meses').locator('.ci-val')).toHaveText('2');
+    await expect(tarjeta('Frascos abiertos').locator('.ci-val')).toHaveText('1');
+    // Una sola fila de tarjetas, compacta, y sin paneles extra
+    const alto = await page.locator('#captureInsights .ci-tiles').evaluate((e) => e.getBoundingClientRect().height);
+    expect(alto).toBeLessThan(80);
+    await expect(page.locator('#captureInsights .ci-card')).toHaveCount(0);
 
     // Fichas bajo cada unidad capturada y reincidencia en la que falta
     const cap = await filas(page, 'capturadasTbody');
-    expect(cap.find((t) => t.includes('Centro Uno'))).toMatch(/1 en cero.*1 caducado.*caduca ≤3 m|1 en cero/);
-    expect(cap.find((t) => t.includes('Centro Uno'))).toContain('mar 13 · 10:42');
-    expect((await filas(page, 'faltantesTbody')).find((t) => t.includes('Centro Cuatro'))).toContain('4+ semanas seguidas sin capturar');
+    expect(cap.find((t) => t.includes('Centro Uno'))).toContain('en cero: BCG');
+    expect(cap.find((t) => t.includes('Centro Uno'))).toContain('1 caducado');
+    expect((await filas(page, 'faltantesTbody')).find((t) => t.includes('Centro Cuatro'))).toContain('4+ semanas sin capturar');
 
     // Tocar una tarjeta deja solo esas unidades
-    await tarjeta('Unidades con biológicos en cero').click();
+    await tarjeta('Capturaron en cero').click();
     expect(await filas(page, 'capturadasTbody')).toHaveLength(1);
     await expect(page.locator('#capturadasCountLabel')).toHaveText('(1 de 3)');
     await expect(page.locator('#faltantesTbody')).toContainText('Ninguna unidad pendiente coincide');
-    await expect(page.locator('#captureInsights .ci-active')).toContainText('Con biológicos en cero');
+    await expect(page.locator('#captureInsights .ci-active')).toContainText('Capturaron en cero');
     await page.locator('#captureInsights [data-ci="quitar"]').click();
     expect(await filas(page, 'capturadasTbody')).toHaveLength(3);
     await expect(page.locator('#capturadasCountLabel')).toHaveText('(3)');
@@ -375,7 +386,7 @@ test.describe('Resumen de captura con indicadores', () => {
     expect(txt).toContain('RESUMEN DE CAPTURA · EXISTENCIA DE BIOLÓGICOS');
     expect(txt).toContain('Avance: 3 de 4 unidades (75 %)');
     expect(txt).toContain('• Corregidora: 2/2 (100 %)');
-    expect(txt).toContain('1 unidad con biológicos en cero');
+    expect(txt).toContain('1 unidad capturó biológicos en cero');
     expect(await axe(page, '#panelCaptureSummary')).toEqual([]);
     expect(errores).toEqual([]);
   });
@@ -383,11 +394,8 @@ test.describe('Resumen de captura con indicadores', () => {
   test('Consumibles: insumos insuficientes y tabla por municipio', async ({ page }) => {
     const { errores } = await preparar(page, estadoBase());
     await pintarResumen(page, 'CONS', HOY);
-    await expect(page.locator('#captureInsights .ci-tile', { hasText: 'Insumos insuficientes' }).locator('.ci-val')).toHaveText('1');
-    await expect(page.locator('#captureInsights .ci-card', { hasText: 'Menor cobertura' })).toContainText('Centro Uno');
+    await expect(page.locator('#captureInsights .ci-tile', { hasText: 'No alcanzan para sus dosis' }).locator('.ci-val')).toHaveText('1');
     expect((await filas(page, 'capturadasTbody')).find((t) => t.includes('Centro Uno'))).toContain('insumos para 50 % de sus dosis');
-    await page.locator('#captureInsights .ci-det summary').click();
-    await expect(page.locator('#captureInsights .ci-tab')).toContainText('Corregidora');
     expect(await axe(page, '#panelCaptureSummary')).toEqual([]);
     expect(errores).toEqual([]);
   });
@@ -395,13 +403,11 @@ test.describe('Resumen de captura con indicadores', () => {
   test('Pedido: pedido consolidado, pedidos por revisar y reincidencia mensual', async ({ page }) => {
     const { errores } = await preparar(page, estadoBase());
     await pintarResumen(page, 'BIO', '2026-10-22');
-    await expect(page.locator('#captureInsights .ci-tile', { hasText: 'Pedido de la jurisdicción' }).locator('.ci-val')).toHaveText('30');
-    await expect(page.locator('#captureInsights .ci-tile', { hasText: 'Unidades sin pedido' }).locator('.ci-val')).toHaveText('1');
-    await expect(page.locator('#captureInsights .ci-card', { hasText: 'Pedidos por revisar' })).toContainText('Centro Uno');
-    await page.locator('#captureInsights .ci-det summary').click();
-    await expect(page.locator('#captureInsights .ci-tab')).toContainText('TD');
+    await expect(page.locator('#captureInsights .ci-tile', { hasText: 'Pedido total' }).locator('.ci-val')).toHaveText('30');
+    await expect(page.locator('#captureInsights .ci-tile', { hasText: 'Sin pedido' }).locator('.ci-val')).toHaveText('1');
+    await expect(page.locator('#captureInsights .ci-tile', { hasText: 'Por revisar' }).locator('.ci-val')).toHaveText('1');
     const fal = await filas(page, 'faltantesTbody');
-    expect(fal.find((t) => t.includes('Centro Cuatro'))).toContain('3+ meses seguidos sin capturar');
+    expect(fal.find((t) => t.includes('Centro Cuatro'))).toContain('3+ meses sin capturar');
     expect(await axe(page, '#panelCaptureSummary')).toEqual([]);
     expect(errores).toEqual([]);
   });
@@ -410,9 +416,8 @@ test.describe('Resumen de captura con indicadores', () => {
     const { errores } = await preparar(page, estadoBase());
     await pintarResumen(page, 'INF', '2026-10-16');
     const v = (t) => page.locator('#captureInsights .ci-tile', { hasText: t }).locator('.ci-val');
-    await expect(v('Dosis aplicadas en la semana')).toHaveText('40');
-    await expect(v('Acumulado de la campaña')).toHaveText('75');
-    await expect(page.locator('#captureInsights .ci-card', { hasText: 'Mayor rezago' })).toContainText('38 %');
+    await expect(v('Dosis de la semana')).toHaveText('40');
+    await expect(v('Avance de campaña')).toHaveText('38 %');
     expect(await axe(page, '#panelCaptureSummary')).toEqual([]);
     expect(errores).toEqual([]);
   });

@@ -14419,7 +14419,7 @@ function renderCaptureSummary(data) {
       }
 
       const tipoPedidoTag = r.tipo_pedido
-        ? `<span class="opacity-60 font-black uppercase text-[10px] tracking-tighter ml-1" style="background:#f1f5f9; padding:2px 6px; border-radius:6px">${r.tipo_pedido}</span>`
+        ? `<span class="font-black uppercase text-[10px] tracking-tighter ml-1" style="background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:6px">${r.tipo_pedido}</span>`
         : '';
 
       const rowBg = r.tiene_ceros ? '#fff1f2' : (r.editado === 'SI' ? '#faf5ff' : '#ffffff');
@@ -14427,7 +14427,7 @@ function renderCaptureSummary(data) {
         <tr style="background:${rowBg}; box-shadow:0 1px 4px rgba(15,23,42,0.06); border:1px solid #e2e8f0;">
           <td data-label="Municipio / CLUES" style="padding:12px 14px; vertical-align:middle; background:${rowBg}; border-top-left-radius:14px; border-bottom-left-radius:14px;">
             <div style="font-weight:800; color:#0f172a; font-size:12px; line-height:1.3;">${escapeHtml(r.municipio || '')}</div>
-            <div style="font-family:monospace; font-size:10px; color:#94a3b8; margin-top:2px;">${escapeHtml(r.clues || '')}</div>
+            <div style="font-family:monospace; font-size:10px; color:#475569; margin-top:2px;">${escapeHtml(r.clues || '')}</div>
           </td>
           <td data-label="Unidad" style="padding:12px 14px; font-weight:700; color:#1e293b; font-size:12px; vertical-align:middle; background:${rowBg};">${escapeHtml(r.unidad || '')}${fichasIndicadores(r, "cap")}</td>
           <td data-label="Estatus" style="padding:12px 14px; text-align:center; vertical-align:middle; width:70px; background:${rowBg};">
@@ -14474,7 +14474,7 @@ function renderCaptureSummary(data) {
         <tr style="background:#ffffff; box-shadow:0 1px 4px rgba(15,23,42,0.06); border:1px solid #e2e8f0;">
           <td data-label="Municipio / CLUES" style="padding:12px 14px; vertical-align:middle; background:#ffffff; border-top-left-radius:14px; border-bottom-left-radius:14px;">
             <div style="font-weight:800; color:#0f172a; font-size:12px; line-height:1.3;">${escapeHtml(r.municipio || "")}</div>
-            <div style="font-family:monospace; font-size:10px; color:#94a3b8; margin-top:2px;">${escapeHtml(r.clues || "")}</div>
+            <div style="font-family:monospace; font-size:10px; color:#475569; margin-top:2px;">${escapeHtml(r.clues || "")}</div>
           </td>
           <td data-label="Unidad" style="padding:12px 14px; font-weight:700; color:#1e293b; font-size:12px; vertical-align:middle; background:#ffffff;">${escapeHtml(r.unidad || "")}${fichasIndicadores(r, "fal")}</td>
           <td data-label="Estatus" style="padding:12px 14px; text-align:center; vertical-align:middle; width:70px; background:#ffffff; border-top-right-radius:14px; border-bottom-right-radius:14px;">
