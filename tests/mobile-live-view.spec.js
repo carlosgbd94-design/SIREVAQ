@@ -114,3 +114,50 @@ test.describe('Móvil · plantilla de WhatsApp con las unidades pendientes', () 
     expect(await axe(page, '#svWa')).toEqual([]);
   });
 });
+
+test.describe('Móvil · Resumen de Influenza', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const CAMP = 'Campaña Influenza 2026-2027';
+
+  test('sin campaña vigente el Resumen no ofrece Influenza', async ({ page }) => {
+    await abrir(page, { rol: 'ADMIN' });
+    await expect(page.locator('[data-tipo]')).toHaveCount(3);
+  });
+
+  test('con campaña: unidades pendientes, WhatsApp y detalle en vivo', async ({ page }) => {
+    const { estado } = await abrir(page, { rol: 'ADMIN' });
+    estado.db.campanas = [{ id: 1, nombre: CAMP, activo: true, fecha_inicio: '2026-10-01', fecha_fin: '2027-04-30' }];
+    estado.db.influenza_capturas = [{ clues: 'QTSSA000830', fecha: '2026-10-23', anio_campana: CAMP, valores: { r1: 5, r2: 3, r16: 2 }, capturado_por: 'ANA', sin_movimiento: false }];
+    await page.reload();
+    await page.waitForSelector('body.sup-mode');
+    await expect(page.locator('[data-tipo]')).toHaveCount(4);
+    await page.click('[data-tipo="INF"]');
+    await page.click('[data-filtro="todas"]');
+    // Solo Santa Bárbara reportó la semana (viernes 23 oct); faltan las otras 3
+    await expect(page.locator('.sv-pill.ok')).toHaveCount(1);
+    await expect(page.locator('#svWa')).toContainText('(3)');
+    const texto = decodeURIComponent((await page.locator('#svWa').getAttribute('href')).split('text=')[1]);
+    expect(texto).toContain('*REPORTE DE INFLUENZA*');
+    expect(texto).not.toContain('SANTA BÁRBARA');
+    // Live View: dosis por rubro de la semana
+    await page.locator('[data-lv="QTSSA000830"]').click();
+    const hoja = page.locator('#lvOverlay');
+    await expect(hoja).toContainText('Influenza · Santa Bárbara');
+    await expect(hoja).toContainText('Dosis aplicadas en la semana');
+    await expect(hoja).toContainText('10'); // 5 + 3 + 2
+    await expect(hoja).toContainText('EMBARAZADAS');
+    await page.keyboard.press('Escape');
+    // Una unidad sin reporte lo dice
+    await page.locator('[data-lv="QTSSA000111"]').click();
+    await expect(page.locator('#lvOverlay')).toContainText('no tiene reporte de Influenza');
+  });
+
+  test('accesible con 4 tipos', async ({ page }) => {
+    const { estado } = await abrir(page, { rol: 'ADMIN' });
+    estado.db.campanas = [{ id: 1, nombre: CAMP, activo: true, fecha_inicio: '2026-10-01', fecha_fin: '2027-04-30' }];
+    await page.reload();
+    await page.waitForSelector('body.sup-mode');
+    await page.click('[data-tipo="INF"]');
+    expect(await axe(page, '#supRoot')).toEqual([]);
+  });
+});

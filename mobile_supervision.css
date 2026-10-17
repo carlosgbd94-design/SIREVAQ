@@ -295,3 +295,11 @@ html.dark .lv-item .sv-pill--reg { color: #fcd34d; }
 .sv-wa:focus-visible { outline: 3px solid #0284c7; outline-offset: 2px; }
 .sv-wa:active { transform: scale(.98); }
 html.dark .sv-wa { background: #0b7a6c; }
+
+/* Resumen con 4 tipos de captura (Influenza vigente): letra un poco menor para que quepan */
+.sv-seg--4 .sv-seg-b { font-size: 12px; padding-left: 2px; padding-right: 2px; }
+.lv-sub { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.lv-sub li { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; font-weight: 600; color: #475569; }
+.lv-sub b { color: #0f172a; font-variant-numeric: tabular-nums; }
+html.dark .lv-sub li { color: #cbd5e1; }
+html.dark .lv-sub b { color: #f1f5f9; }

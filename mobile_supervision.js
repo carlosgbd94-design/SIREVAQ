@@ -61,8 +61,12 @@
   const TIPOS = {
     SR: { label: "Biológicos", rpc: "get_captures_sr_range_bypass", periodo: "semana" },
     CONS: { label: "Consumibles", rpc: "get_captures_cons_range_bypass", periodo: "semana" },
-    BIO: { label: "Pedido", rpc: "get_captures_bio_range_bypass", periodo: "mes" }
+    BIO: { label: "Pedido", rpc: "get_captures_bio_range_bypass", periodo: "mes" },
+    // Reporte semanal de Influenza (fechado el viernes de la semana); solo con campaña vigente, como en escritorio
+    INF: { label: "Influenza", periodo: "semana", tabla: "influenza_capturas", sinAuto: true }
   };
+  const tiposVisibles = () => Object.keys(TIPOS).filter((k) => k !== "INF" || (S && S.campInf));
+  const viernesDe = (ini) => { const d = new Date(ini); d.setDate(d.getDate() + 4); return ymd(d); };
 
   let cfg = null;
   let S = null; // estado del Resumen
@@ -154,6 +158,13 @@
     S.unidades = (data || []).filter(enAlcance).sort((a, b) =>
       String(a.municipio || "").localeCompare(String(b.municipio || ""), "es") ||
       String(a.unidad || "").localeCompare(String(b.unidad || ""), "es"));
+    // Campaña de Influenza vigente (si no hay, el resumen no ofrece ese tipo)
+    S.campInf = null;
+    try {
+      const { data: camps } = await db.from("campanas").select("*").ilike("nombre", "Campaña Influenza%").order("fecha_inicio", { ascending: false });
+      const hoy = ymd(new Date());
+      S.campInf = (camps || []).find((c) => c.fecha_inicio <= hoy && hoy <= c.fecha_fin) || null;
+    } catch (e) { /* sin campaña: el tipo Influenza no se ofrece */ }
   }
 
   const claveCap = (tipo, atras) => tipo + ":" + (atras || 0);
@@ -163,7 +174,14 @@
     if (S.capturas[k]) return;
     const db = cfg.getClient();
     const r = rango(TIPOS[tipo].periodo, null, atras);
-    const filas = await rpcTodas(db, TIPOS[tipo].rpc, { p_fecha_inicio: ymd(r.ini), p_fecha_fin: ymd(r.fin) });
+    let filas;
+    if (tipo === "INF") {
+      const { data, error } = await db.from("influenza_capturas").select("clues, fecha").eq("fecha", viernesDe(r.ini)).eq("anio_campana", S.campInf ? S.campInf.nombre : "");
+      if (error) throw error;
+      filas = data || [];
+    } else {
+      filas = await rpcTodas(db, TIPOS[tipo].rpc, { p_fecha_inicio: ymd(r.ini), p_fecha_fin: ymd(r.fin) });
+    }
     S.capturas[k] = new Set(filas.map((x) => String(x.clues || x.CLUES || "").trim().toUpperCase()).filter(Boolean));
   }
 
@@ -173,7 +191,7 @@
   function plantillaWhatsApp(pendientes, tipo) {
     const h = new Date().getHours();
     const [saludo, emoji] = h >= 6 && h < 12 ? ["Buenos días", "☀️"] : h >= 12 && h < 19 ? ["Buenas tardes", "⛅"] : ["Buenas noches", "🌙"];
-    const tipoTxt = { BIO: "PEDIDO DE BIOLÓGICO", CONS: "CONSUMIBLES", SR: "EXISTENCIA DE BIOLÓGICO" }[tipo] || "PENDIENTES";
+    const tipoTxt = { BIO: "PEDIDO DE BIOLÓGICO", CONS: "CONSUMIBLES", SR: "EXISTENCIA DE BIOLÓGICO", INF: "REPORTE DE INFLUENZA" }[tipo] || "PENDIENTES";
     const orden = [...pendientes].sort((a, b) => idxMuni(a.municipio) - idxMuni(b.municipio) || String(a.clues || "").trim().toUpperCase().localeCompare(String(b.clues || "").trim().toUpperCase()));
     const listado = orden.map((u) => `• *${String(u.unidad || "").toUpperCase().trim()}*
 `).join("");
@@ -203,7 +221,7 @@ ${listado}`;
     });
     const [alcT, alcS] = textoAlcance(S.unidades);
 
-    const chipsTipo = Object.keys(TIPOS).map((k) =>
+    const chipsTipo = tiposVisibles().map((k) =>
       `<button type="button" class="sv-seg-b${k === S.tipo ? " activo" : ""}" data-tipo="${k}" aria-pressed="${k === S.tipo}">${TIPOS[k].label}</button>`).join("");
     const chipsPeriodo = ["", "Actual", "Anterior"].slice(1).map((t, i) =>
       `<button type="button" class="sv-seg-b${i === atras ? " activo" : ""}" data-atras="${i}" aria-pressed="${i === atras}">${t}</button>`).join("");
@@ -235,7 +253,7 @@ ${listado}`;
     root.innerHTML = `
       <div class="sv-scope"><span class="material-symbols-rounded" aria-hidden="true">location_on</span><b>${esc(alcT)}</b><small>${esc(alcS)}</small></div>
       ${rol() === "VISUALIZADOR_JURISDICCIONAL" ? `<div class="sv-ro"><span class="material-symbols-rounded" aria-hidden="true">visibility</span>Solo lectura</div>` : ""}
-      <div class="sv-seg" role="group" aria-label="Tipo de captura">${chipsTipo}</div>
+      <div class="sv-seg${tiposVisibles().length > 3 ? " sv-seg--4" : ""}" role="group" aria-label="Tipo de captura">${chipsTipo}</div>
       ${avisoPeriodo}
       <div class="sv-avance">
         <div class="sv-avance-cab"><div><b>${TIPOS[S.tipo].label}</b><small>${esc(etiquetaPeriodo(S.tipo, atras))}</small></div><span class="sv-pct">${pct}%</span></div>
@@ -257,7 +275,7 @@ ${listado}`;
         const u = S.unidades.find((x) => String(x.clues) === b.dataset.lv);
         if (!u || !global.MobileLiveView) return;
         const r = rango(TIPOS[S.tipo].periodo, null, atras);
-        global.MobileLiveView.abrir({ clues: u.clues, unidad: u.unidad, municipio: u.municipio, tipo: S.tipo, ini: ymd(r.ini), fin: ymd(r.fin), etiqueta: `${TIPOS[S.tipo].label} · ${etiquetaPeriodo(S.tipo, atras)}` });
+        global.MobileLiveView.abrir({ clues: u.clues, unidad: u.unidad, municipio: u.municipio, tipo: S.tipo, ini: ymd(r.ini), fin: ymd(r.fin), fecha: viernesDe(r.ini), campana: S.campInf ? S.campInf.nombre : "", etiqueta: `${TIPOS[S.tipo].label} · ${etiquetaPeriodo(S.tipo, atras)}` });
       };
     });
     root.querySelectorAll("[data-tipo]").forEach((b) => { b.onclick = () => cambiarTipo(b.dataset.tipo); });
@@ -298,7 +316,7 @@ ${listado}`;
   // Lunes a miércoles la semana en curso aún no tiene captura (se captura jueves y viernes):
   // si está vacía se muestra la semana anterior para que el resumen sirva.
   async function autoAnterior(tipo) {
-    if (TIPOS[tipo].periodo !== "semana") return;
+    if (TIPOS[tipo].periodo !== "semana" || TIPOS[tipo].sinAuto) return;
     if (S.atras[tipo] !== undefined && S.atras[tipo] !== 0) return;
     if (S.autoVisto[tipo]) return;
     S.autoVisto[tipo] = true;

@@ -11,7 +11,7 @@
   "use strict";
 
   const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
-  const TITULO = { SR: "Biológicos", CONS: "Consumibles", BIO: "Pedido" };
+  const TITULO = { SR: "Biológicos", CONS: "Consumibles", BIO: "Pedido", INF: "Influenza" };
 
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const num = (v) => Number(v || 0);
@@ -91,6 +91,11 @@
       }
       return { fecha, filas };
     }
+    if (P.tipo === "INF") {
+      const { data, error } = await db.from("influenza_capturas").select("*").eq("clues", P.clues).eq("fecha", P.fecha).eq("anio_campana", P.campana || "").limit(1);
+      if (error) throw error;
+      return { fecha: data && data.length ? data[0].fecha : null, filas: data || [] };
+    }
     const { data, error } = await db.from("consumibles").select("*").eq("clues", P.clues)
       .gte("fecha", P.ini).lte("fecha", P.fin).order("fecha", { ascending: false }).limit(1);
     if (error) throw error;
@@ -121,6 +126,23 @@
           ${sin ? `<span class="sv-pill sv-pill--mal">Sin existencia</span>` : `<span class="sv-pill sv-pill--${v.k}">${v.t}</span>`}${tipoTag(r)}</div></li>`;
     }).join("")}</ul>` : `<p class="lv-vacio">Ningún lote con ese criterio.</p>`;
     return `<div class="sv-chips sv-chips--scroll" role="group" aria-label="Filtrar lotes">${chips}</div>${lista}`;
+  }
+
+  function cuerpoINF() {
+    if (!D.filas.length) return `<p class="lv-vacio">La unidad no tiene reporte de Influenza en esta semana.</p>`;
+    const r = D.filas[0];
+    const vals = r.valores || {};
+    const rubros = global.INFLUENZA_RUBROS_MOVIL || [];
+    const total = rubros.reduce((t, x) => t + num(vals[x.id]), 0);
+    const grupos = {};
+    rubros.forEach((x) => { if (num(vals[x.id]) > 0) { const k = `${x.categoria} · ${x.grupo}`; (grupos[k] = grupos[k] || []).push(x); } });
+    const ceros = rubros.filter((x) => num(vals[x.id]) === 0).length;
+    const lista = Object.keys(grupos).map((k) => `<li class="lv-item"><div class="lv-item-cab"><b>${esc(k)}</b><span class="lv-num">${nf(grupos[k].reduce((t, x) => t + num(vals[x.id]), 0))}</span></div>
+      <ul class="lv-sub">${grupos[k].map((x) => `<li><span>${esc(x.edad)}</span><b>${nf(vals[x.id])}</b></li>`).join("")}</ul></li>`).join("");
+    return `<div class="lv-item lv-item--fila"><b>Dosis aplicadas en la semana</b><span class="lv-num">${nf(total)}</span></div>
+      ${r.sin_movimiento ? `<p class="lv-vacio">La unidad reportó «Sin movimiento» esta semana.</p>` : ""}
+      ${lista ? `<ul class="lv-lista">${lista}</ul>` : ""}
+      ${ceros ? `<p class="lv-vacio">${ceros} rubros en 0.</p>` : ""}`;
   }
 
   function cuerpoCONS() {
@@ -154,7 +176,7 @@
     if (estado === "cargando") cuerpo.innerHTML = `<p class="lv-vacio" role="status">Cargando…</p>`;
     else if (estado && estado.error) cuerpo.innerHTML = `<p class="lv-vacio" role="alert">${esc(estado.error)}</p><button type="button" class="sv-btn" id="lvReintentar">Reintentar</button>`;
     else {
-      cuerpo.innerHTML = P.tipo === "SR" ? cuerpoSR() : P.tipo === "BIO" ? cuerpoBIO() : cuerpoCONS();
+      cuerpo.innerHTML = P.tipo === "SR" ? cuerpoSR() : P.tipo === "BIO" ? cuerpoBIO() : P.tipo === "INF" ? cuerpoINF() : cuerpoCONS();
       cuerpo.querySelectorAll("[data-lvf]").forEach((b) => { b.onclick = () => { filtro = b.dataset.lvf; pintar(); }; });
     }
     const re = ov.querySelector("#lvReintentar");
