@@ -392,7 +392,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=21"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.268" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.269" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -2911,7 +2911,7 @@
             </button>
             <button id="subtabInfluenzaValidacion" class="nav-tab">
               <span class="material-symbols-rounded" aria-hidden="true">fact_check</span>
-              <span>Reportes por semana</span>
+              <span>Corregir reportes</span>
             </button>
             <button id="subtabInfluenzaCobertura" class="nav-tab">
               <span class="material-symbols-rounded" aria-hidden="true">grid_view</span>
@@ -3174,25 +3174,14 @@
           <p class="rs-nota" id="validationNotaSinValidar">
             <span class="material-symbols-rounded" aria-hidden="true">verified_user</span>
             <span>Los reportes <b>no necesitan validación</b>: la plataforma ya impide rebasar la meta y capturar donde no hay meta.
-            Aquí das seguimiento a quién reportó y, solo si la unidad lo pide, corriges una cifra.</span>
+            Aquí solo corriges una cifra cuando la unidad lo pide. Quién reportó y quién falta está en <b>Resumen</b> (Influenza) y el historial de semanas en <b>Cobertura por semanas</b>.</span>
           </p>
-
-          <div class="rs-kpis" id="validationKpis" aria-label="Resumen de la semana"></div>
-
-          <div class="rs-herr" role="group" aria-label="Herramientas de la semana">
-            <button type="button" class="rs-herr__btn" id="btnValCopiarRecordatorio">
-              <span class="material-symbols-rounded" aria-hidden="true">content_copy</span><span>Copiar aviso de pendientes para WhatsApp</span>
-            </button>
-            <button type="button" class="rs-herr__btn" id="btnValExportar">
-              <span class="material-symbols-rounded" aria-hidden="true">download</span><span>Descargar estado de la semana (CSV)</span>
-            </button>
-          </div>
 
           <!-- SUB-PANEL 1: CONTROL DE ENTREGAS (DASHBOARD) -->
           <div id="validationDashboard" class="flex flex-col gap-4">
             <div class="flex items-center justify-between">
               <h4 class="text-sm font-black text-violet-950 uppercase tracking-wider m-0" id="validationDashboardTitle"
-                tabindex="-1">Reportes de la semana
+                tabindex="-1">Elige el reporte a corregir
               </h4>
               <div role="status"
                 class="flex gap-2 text-xs font-black text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full"

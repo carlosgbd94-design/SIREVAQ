@@ -3176,10 +3176,6 @@ function initValidationTab() {
     document.getElementById("validationDashboard")?.classList.remove("hidden");
     renderValidationDashboard();
   });
-  const bCopiar = document.getElementById("btnValCopiarRecordatorio");
-  if (bCopiar && !bCopiar.dataset.listened) { bCopiar.dataset.listened = "1"; bCopiar.onclick = infCopiarRecordatorioSemana; }
-  const bExp = document.getElementById("btnValExportar");
-  if (bExp && !bExp.dataset.listened) { bExp.dataset.listened = "1"; bExp.onclick = infExportarEstadoSemana; }
 
   renderValidationDashboard();
 }
@@ -3364,28 +3360,8 @@ function renderValidationDashboard() {
   const filas = infFilasSemana(selectedFecha);
   const totalCount = filas.length;
   const reportedCount = filas.filter(f => f.report).length;
-  const sinMovCount = filas.filter(f => infEsSinMov(f.report)).length;
-  const corregidasCount = filas.filter(f => f.estado === "corregido").length;
   const pendientes = filas.filter(f => !f.report);
-  const dosisSemana = filas.reduce((a, f) => a + f.total, 0);
   const fase = infFaseSemana(selectedFecha);
-  const pct = totalCount ? Math.round((reportedCount / totalCount) * 100) : 0;
-
-  const kpis = document.getElementById("validationKpis");
-  if (kpis) {
-    const faseTxt = fase === "futura" ? "La semana aún no abre" : (fase === "encurso" ? "Semana en curso" : "Plazo vencido");
-    kpis.innerHTML =
-      infTarjetaKpi("fact_check", pct === 100 ? "ok" : "info", "Reportaron", `${reportedCount}<small> de ${totalCount}</small>`, `${pct}% · ${faseTxt}`) +
-      infTarjetaKpi("hourglass_empty", pendientes.length && fase === "vencida" ? "mal" : (pendientes.length ? "aviso" : "ok"), "Sin reporte", String(pendientes.length), pendientes.length ? (fase === "vencida" ? "fuera de plazo" : "aún en plazo") : "todas al corriente") +
-      infTarjetaKpi("pause_circle", "cian", "Sin movimiento", String(sinMovCount), sinMovCount ? "reportaron en ceros" : "ninguna") +
-      infTarjetaKpi("vaccines", "info", "Dosis de la semana", dosisSemana.toLocaleString("es-MX"), corregidasCount ? `${corregidasCount} corregida${corregidasCount === 1 ? "" : "s"} por supervisión` : "");
-  }
-
-  const copiar = document.getElementById("btnValCopiarRecordatorio");
-  if (copiar) {
-    copiar.disabled = !pendientes.length || fase === "futura";
-    copiar.title = fase === "futura" ? "La semana aún no abre" : (pendientes.length ? "Copia el aviso para WhatsApp con las unidades sin reporte" : "No hay unidades pendientes");
-  }
 
   const filtradas = filas.filter(f => {
     if (filterText && !(String(f.u.unidad).toLowerCase().includes(filterText) || String(f.u.clues).toLowerCase().includes(filterText))) return false;
@@ -3482,19 +3458,6 @@ function renderValidationDashboard() {
   anunciarValidacion(`Mostrando ${filtradas.length} de ${totalCount} unidades. ${reportedCount} reportaron, ${pendientes.length} sin reporte.`);
 }
 
-/** Aviso de WhatsApp con las unidades que no han reportado la semana elegida. */
-function infCopiarRecordatorioSemana() {
-  const fecha = document.getElementById("validationInfluenzaSemana")?.value;
-  const pend = infFilasSemana(fecha).filter(f => !f.report);
-  if (!pend.length) { showToast("No hay unidades pendientes en esta semana.", true, "info"); return; }
-  const saludo = infSaludoWhatsApp();
-  const lista = pend.map(f => `• *${String(f.u.unidad).toUpperCase().trim()}*`).join("\n");
-  const texto = `${saludo}\n\nLas siguientes unidades no han realizado su captura de *REPORTE DE INFLUENZA* de la ${etiquetaSemanaValidacion(fecha).toLowerCase()}, por favor hay que ingresar a la plataforma *SIREVAQ* a realizar la captura correspondiente:\n\n${lista}`;
-  navigator.clipboard.writeText(texto)
-    .then(() => showToast("¡Copiado! El aviso está listo para pegarse en WhatsApp.", true, "good"))
-    .catch(() => showToast("No se pudo copiar el texto automáticamente.", false, "bad"));
-}
-
 function infSaludoWhatsApp() {
   const h = new Date().getHours();
   return h >= 6 && h < 12 ? "¡Buenos días! ☀️" : (h >= 12 && h < 19 ? "¡Buenas tardes! ⛅" : "¡Buenas noches! 🌙");
@@ -3503,19 +3466,6 @@ function infSaludoWhatsApp() {
 function infCsvCelda(v) {
   const s = String(v ?? "");
   return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-/** Descarga el estado de la semana (una fila por unidad) en CSV con acentos correctos para Excel. */
-function infExportarEstadoSemana() {
-  const fecha = document.getElementById("validationInfluenzaSemana")?.value;
-  const nombres = { pendiente: "Sin reporte", reportado: "Reportado", sinmov: "Sin movimiento", corregido: "Corregido por supervisión" };
-  const filas = [["Municipio", "CLUES", "Unidad", "Estado", "Dosis", "Capturó", "Folio", "Última actualización"]];
-  infFilasSemana(fecha).forEach(f => {
-    filas.push([f.u.municipio, f.u.clues, f.u.unidad, nombres[f.estado], f.report ? f.total : "", f.report?.capturado_por || "", f.report ? influenzaFolio(f.report) : "", f.report?.updated_at ? String(f.report.updated_at).slice(0, 16).replace("T", " ") : ""]);
-  });
-  const csv = "﻿" + filas.map(r => r.map(infCsvCelda).join(",")).join("\r\n");
-  metaDescargar(csv, `Influenza_estado_semana_${fecha}.csv`, "text/csv;charset=utf-8");
-  showToast("Estado de la semana descargado.", true, "good");
 }
 
 // Mensaje de error en línea (role="alert") + campos marcados; mueve el foco al primero con problema.
