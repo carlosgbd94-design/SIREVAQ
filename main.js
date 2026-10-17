@@ -7590,7 +7590,24 @@ async function supabaseRequest(action = "", payload, options = {}) {
             filteredData = data.filter(r => r.fecha_pedido_programada === latestDate);
             filteredData.sort((a, b) => (a.biologico || "").localeCompare(b.biologico || ""));
           }
-          return { ok: true, data: filteredData, meta: { fecha: filteredData.length ? filteredData[0].fecha_pedido_programada : targetFecha, tipo } };
+          // Pedido del mes anterior de la unidad (mismo tipo mensual) para comparar en la Vista en vivo
+          let pedidoAnterior = null;
+          try {
+            const pm = new Date(fIniStr + "T12:00:00");
+            pm.setMonth(pm.getMonth() - 1);
+            const pIni = dateToLocalYmd(new Date(pm.getFullYear(), pm.getMonth(), 1));
+            const pFin = dateToLocalYmd(new Date(pm.getFullYear(), pm.getMonth() + 1, 0));
+            const { data: pd } = await window.supabase
+              .from('biologicos_pedido')
+              .select('biologico, pedido_frascos, fecha_pedido_programada, tipo_pedido')
+              .eq('clues', payload.clues)
+              .gte('fecha_pedido_programada', pIni)
+              .lte('fecha_pedido_programada', pFin)
+              .or('tipo_pedido.eq.MENSUAL,tipo_pedido.is.null')
+              .order('fecha_pedido_programada', { ascending: false });
+            if (pd && pd.length) pedidoAnterior = pd.filter(r => r.fecha_pedido_programada === pd[0].fecha_pedido_programada);
+          } catch (e) { console.warn("[adminGetUnitDetail] pedido anterior:", e); }
+          return { ok: true, data: filteredData, extra: { pedidoAnterior }, meta: { fecha: filteredData.length ? filteredData[0].fecha_pedido_programada : targetFecha, tipo } };
         } else if (tipo === "INF") {
           // Los reportes de Influenza son SEMANALES (lunes a domingo, fechados el viernes): se busca la captura
           // de la semana que contiene la fecha elegida, no una fecha exacta.
@@ -7627,6 +7644,33 @@ async function supabaseRequest(action = "", payload, options = {}) {
           }
           if (!data) data = await buscar("");
 
+          // Avance de la campaña de la unidad: acumulado hasta esta semana contra su meta y contra lo esperado
+          let extra = null;
+          try {
+            const campNombre = (data && data.anio_campana) || (activeCamp ? activeCamp.nombre : "");
+            if (campNombre) {
+              const [{ data: capsU }, { data: metaU }] = await Promise.all([
+                window.supabase.from('influenza_capturas').select('fecha, valores').eq('clues', payload.clues).eq('anio_campana', campNombre).order('fecha', { ascending: true }),
+                window.supabase.from('influenza_metas').select('metas').eq('clues', payload.clues).eq('anio_campana', campNombre).limit(1)
+              ]);
+              const sumar = (o) => Object.values(o || {}).reduce((s, v) => s + Number(v || 0), 0);
+              const refFecha = data ? data.fecha : semIni;
+              const acumulado = (capsU || []).filter(c => c.fecha <= refFecha).reduce((s, c) => s + sumar(c.valores), 0);
+              const prev = (capsU || []).filter(c => c.fecha < refFecha).pop();
+              const metaTotal = metaU && metaU[0] ? sumar(metaU[0].metas) : 0;
+              let esperado = null, restantes = null;
+              const camp = (activeCamp && activeCamp.nombre === campNombre) ? activeCamp : null;
+              if (camp && camp.fecha_inicio && camp.fecha_fin) {
+                const dias = (a, b) => Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000);
+                const total = dias(camp.fecha_inicio, camp.fecha_fin);
+                const ref = todayYmdLocal() < refFecha ? todayYmdLocal() : refFecha;
+                if (total > 0) esperado = Math.max(0, Math.min(100, Math.round((dias(camp.fecha_inicio, ref) / total) * 100)));
+                restantes = Math.max(0, Math.ceil(dias(refFecha, camp.fecha_fin) / 7));
+              }
+              extra = { acumulado, metaTotal, anterior: prev ? sumar(prev.valores) : null, esperado, restantes };
+            }
+          } catch (e) { console.warn("[adminGetUnitDetail] avance de campaña:", e); }
+
           let rows = [];
           if (data && data.valores) {
             INFLUENZA_RUBROS.forEach(rb => {
@@ -7640,7 +7684,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
               });
             });
           }
-          return { ok: true, data: rows, meta: { fecha: data ? data.fecha : semIni, tipo, semana: `${semIni} / ${semFin}` } };
+          return { ok: true, data: rows, extra, meta: { fecha: data ? data.fecha : semIni, tipo, semana: `${semIni} / ${semFin}` } };
         } else {
           let query = window.supabase
             .from('consumibles')
@@ -7654,7 +7698,17 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
           const { data, error } = await query;
           if (error) throw error;
-          return { ok: true, data: data || [], meta: { fecha: data && data.length ? data[0].fecha : targetFecha, tipo } };
+          // Captura anterior de la unidad: para ver cuánto cambió cada insumo
+          let prevData = [];
+          if (data && data.length) {
+            try {
+              const { data: pv } = await window.supabase
+                .from('consumibles').select('*').eq('clues', payload.clues).lt('fecha', data[0].fecha)
+                .order('fecha', { ascending: false }).limit(1);
+              prevData = pv || [];
+            } catch (e) { console.warn("[adminGetUnitDetail] consumibles anterior:", e); }
+          }
+          return { ok: true, data: data || [], prevData, meta: { fecha: data && data.length ? data[0].fecha : targetFecha, tipo } };
         }
       }
 
@@ -14234,6 +14288,7 @@ function renderCaptureSummary(data) {
 
   // Lógica de Ventana Inteligente para Pedido
   let extraInfo = "";
+  let ventanaBioIndicadores = null; // la usa captura_insights.js para marcar pedidos capturados fuera de ventana
   if (tipo === "BIO" && fecha) {
     let windowStart, windowEnd, source;
 
@@ -14252,6 +14307,7 @@ function renderCaptureSummary(data) {
     }
 
     const isInside = (fecha >= windowStart && fecha <= windowEnd);
+    ventanaBioIndicadores = data.es_extraordinario ? null : { start: windowStart, end: windowEnd };
     if (data.es_extraordinario) {
       extraInfo = `<span class="statusWarn" style="background:#fff3e0; color:#92400e; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; border:1px solid #ffe0b2;">Pedido extraordinario: no todas las unidades lo piden, no cuenta para el cumplimiento</span>`;
     } else if (isInside) {
@@ -14269,6 +14325,7 @@ function renderCaptureSummary(data) {
   // 🛡️ FILTRO DE TIPO DE PEDIDO (Solo para BIO)
   let capturadas = data?.capturadas || [];
   let faltantes = data?.faltantes || [];
+  let bioTipoSeleccionado = "ALL";
 
   if (tipo === "BIO") {
     const existingTypes = [...new Set(capturadas.map(c => c.tipo_pedido || "MENSUAL"))];
@@ -14288,9 +14345,8 @@ function renderCaptureSummary(data) {
         const sel = $("filterBioType");
         if (sel) {
           sel.onchange = () => {
-            const val = sel.value;
-            const filtered = val === "ALL" ? data.capturadas : data.capturadas.filter(c => (c.tipo_pedido || "MENSUAL") === val);
-            renderCapturadasOnly(filtered);
+            bioTipoSeleccionado = sel.value;
+            repintarTablasResumen();
           };
         }
       }, 100);
@@ -14313,10 +14369,15 @@ function renderCaptureSummary(data) {
   const falLabel = $("faltantesCountLabel");
   if (falLabel) falLabel.textContent = `(${falCount})`;
 
+  // Hallazgos bajo el nombre de la unidad (captura_insights.js); vacío mientras se calculan o si el módulo no cargó
+  const fichasIndicadores = (r, estado) => {
+    try { return window.CapturaInsights ? window.CapturaInsights.rowHtml(r, estado) : ""; } catch (e) { return ""; }
+  };
+
   function renderCapturadasOnly(list) {
     const tbodyCap = $("capturadasTbody");
     if (!list.length) {
-      const msg = "No hay capturas registradas";
+      const msg = (window.CapturaInsights && window.CapturaInsights.filterLists(capturadas, faltantes).activo && capturadas.length) ? "Ninguna unidad capturada coincide con el filtro" : "No hay capturas registradas";
       tbodyCap.innerHTML = `<tr><td colspan="4" class="muted text-center py-4">${msg}</td></tr>`;
       return;
     }
@@ -14368,7 +14429,7 @@ function renderCaptureSummary(data) {
             <div style="font-weight:800; color:#0f172a; font-size:12px; line-height:1.3;">${escapeHtml(r.municipio || '')}</div>
             <div style="font-family:monospace; font-size:10px; color:#94a3b8; margin-top:2px;">${escapeHtml(r.clues || '')}</div>
           </td>
-          <td data-label="Unidad" style="padding:12px 14px; font-weight:700; color:#1e293b; font-size:12px; vertical-align:middle; background:${rowBg};">${escapeHtml(r.unidad || '')}</td>
+          <td data-label="Unidad" style="padding:12px 14px; font-weight:700; color:#1e293b; font-size:12px; vertical-align:middle; background:${rowBg};">${escapeHtml(r.unidad || '')}${fichasIndicadores(r, "cap")}</td>
           <td data-label="Estatus" style="padding:12px 14px; text-align:center; vertical-align:middle; width:70px; background:${rowBg};">
             <div style="display:flex; align-items:center; justify-content:center;" data-hint="${iconHint}">
               ${svgIcon}
@@ -14376,7 +14437,7 @@ function renderCaptureSummary(data) {
             </div>
           </td>
           <td data-label="Live View" style="padding:12px 14px; text-align:center; vertical-align:middle; width:80px; background:${rowBg}; border-top-right-radius:14px; border-bottom-right-radius:14px;">
-            <button style="display:inline-flex; align-items:center; justify-content:center; background:transparent; border:none; cursor:pointer; color:#6366f1; padding:4px; border-radius:8px; transition:opacity 0.2s, transform 0.2s;" onclick="openLiveView('${r.clues}','${escapeHtml(r.unidad)}','${escapeHtml(r.municipio)}')" data-hint="Inspeccionar inventario en vivo" onmouseover="this.style.opacity='0.7'; this.style.transform='scale(1.15)'" onmouseout="this.style.opacity='1'; this.style.transform='scale(1)'">
+            <button style="display:inline-flex; align-items:center; justify-content:center; background:transparent; border:none; cursor:pointer; color:#6366f1; padding:4px; border-radius:8px; transition:opacity 0.2s, transform 0.2s;" onclick="openLiveView('${r.clues}','${escapeHtml(r.unidad)}','${escapeHtml(r.municipio)}')" data-hint="Inspeccionar inventario en vivo" aria-label="Inspeccionar en vivo la captura de ${escapeHtml(r.unidad)}" onmouseover="this.style.opacity='0.7'; this.style.transform='scale(1.15)'" onmouseout="this.style.opacity='1'; this.style.transform='scale(1)'">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12c.074-.154 1.02-2.316 3.195-4.475C7.407 5.352 10.372 4 12 4c1.628 0 4.593 1.352 6.769 3.525 2.175 2.159 3.12 4.32 3.195 4.475a.75.75 0 010 .707c-.074.154-1.02 2.316-3.195 4.475C16.593 19.348 13.628 20.7 12 20.7c-1.628 0-4.593-1.352-6.769-3.525C3.056 15.016 2.11 12.855 2.036 12.707a.75.75 0 010-.707z"/><circle cx="12" cy="12" r="3.2"/></svg>
             </button>
           </td>
@@ -14388,7 +14449,7 @@ function renderCaptureSummary(data) {
   function renderFaltantesOnly(list) {
     const tbodyFal = $("faltantesTbody");
     if (!list.length) {
-      const msg = data.es_extraordinario ? "No aplica: un pedido extraordinario no lo hacen todas las unidades" : "No hay pendientes";
+      const msg = data.es_extraordinario ? "No aplica: un pedido extraordinario no lo hacen todas las unidades" : ((window.CapturaInsights && window.CapturaInsights.filterLists(capturadas, faltantes).activo && faltantes.length) ? "Ninguna unidad pendiente coincide con el filtro" : "No hay pendientes");
       tbodyFal.innerHTML = `<tr><td colspan="3" class="muted text-center py-4">${msg}</td></tr>`;
       return;
     }
@@ -14415,7 +14476,7 @@ function renderCaptureSummary(data) {
             <div style="font-weight:800; color:#0f172a; font-size:12px; line-height:1.3;">${escapeHtml(r.municipio || "")}</div>
             <div style="font-family:monospace; font-size:10px; color:#94a3b8; margin-top:2px;">${escapeHtml(r.clues || "")}</div>
           </td>
-          <td data-label="Unidad" style="padding:12px 14px; font-weight:700; color:#1e293b; font-size:12px; vertical-align:middle; background:#ffffff;">${escapeHtml(r.unidad || "")}</td>
+          <td data-label="Unidad" style="padding:12px 14px; font-weight:700; color:#1e293b; font-size:12px; vertical-align:middle; background:#ffffff;">${escapeHtml(r.unidad || "")}${fichasIndicadores(r, "fal")}</td>
           <td data-label="Estatus" style="padding:12px 14px; text-align:center; vertical-align:middle; width:70px; background:#ffffff; border-top-right-radius:14px; border-bottom-right-radius:14px;">
             <span style="display:inline-flex; align-items:center; justify-content:center; color:#f59e0b;" data-hint="Pendiente por capturar hoy">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -14448,11 +14509,25 @@ function renderCaptureSummary(data) {
     legendCeros.style.display = (tipo === "SR") ? "flex" : "none";
   }
 
-  renderCapturadasOnly(capturadas);
-  renderFaltantesOnly(faltantes);
-
-  window.currentFaltantesWhatsApp = faltantes;
+  // Pinta las dos tablas aplicando los filtros del panel de indicadores (municipio, búsqueda, tarjeta elegida)
+  function repintarTablasResumen() {
+    const CI = window.CapturaInsights;
+    const base = bioTipoSeleccionado === "ALL" ? capturadas : capturadas.filter(c => (c.tipo_pedido || "MENSUAL") === bioTipoSeleccionado);
+    const f = CI ? CI.filterLists(base, faltantes) : { cap: base, fal: faltantes };
+    renderCapturadasOnly(f.cap);
+    renderFaltantesOnly(f.fal);
+    const hayFiltro = !!(f.activo);
+    if ($("capturadasCountLabel")) $("capturadasCountLabel").textContent = hayFiltro ? `(${f.cap.length} de ${capCount})` : `(${capCount})`;
+    if ($("faltantesCountLabel")) $("faltantesCountLabel").textContent = hayFiltro ? `(${f.fal.length} de ${falCount})` : `(${falCount})`;
+    // Lo que se ve es lo que se copia: el aviso de WhatsApp usa la lista filtrada
+    window.currentFaltantesWhatsApp = f.fal;
+  }
+  repintarTablasResumen();
   window.currentTipoWhatsApp = tipo;
+
+  if (window.CapturaInsights) {
+    window.CapturaInsights.attach(data, { repaint: repintarTablasResumen, ventana: ventanaBioIndicadores });
+  }
 }
 
 window.generateWhatsAppTemplate = function () {
@@ -22128,6 +22203,8 @@ window.showLiveViewSkeletons = function() {
   const chartLeft = $("liveChartLeft");
   const chartRight = $("liveChartRight");
 
+  const kpisEl = $("liveViewKpis");
+  if (kpisEl) { kpisEl.style.display = "none"; kpisEl.innerHTML = ""; }
   // Destruir gráficos previos si existen
   if (window.CHART_SEM) { try { window.CHART_SEM.dispose(); } catch(e){} window.CHART_SEM = null; }
   if (window.CHART_CAD) { try { window.CHART_CAD.dispose(); } catch(e){} window.CHART_CAD = null; }
@@ -22311,6 +22388,9 @@ async function openLiveView(clues, unidad, municipio) {
 
     // 4. Renderizar el contenido inicial y el timeline
     renderLiveViewTableContent();
+    if (window.CapturaInsights && window.CapturaInsights.renderVivo) {
+      try { window.CapturaInsights.renderVivo(tipo, res); } catch (e) { console.warn("[LiveView] indicadores:", e); }
+    }
     if (window.renderLiveViewTimeline) {
       window.renderLiveViewTimeline();
     }
@@ -23002,6 +23082,7 @@ if ($("btnLiveViewClose")) {
 }
 
 window.openLiveView = openLiveView;
+window.getDosesPerVial = getDosesPerVial; // captura_insights.js usa la misma regla de dosis por frasco
 
 // 🛡️ CONTROLADOR DE PESTAÑAS PARA VISTA EN VIVO (Existencia vs Movimiento)
 window.switchLiveViewTab = function(tab) {
@@ -24039,6 +24120,7 @@ window.renderLiveViewTableContent = function() {
            <th style="padding: 16px 24px; text-align: center;">Pedido (Frascos)</th>
            <th style="padding: 16px 24px; text-align: center;" title="Consumo mensual promedio, en frascos">Promedio mensual (frascos)</th>
            <th style="padding: 16px 24px; text-align: center;" title="Mínimo y máximo de dosis">Mín / Máx (dosis)</th>
+           <th style="padding: 16px 24px; text-align: center;" title="Meses que alcanzan existencia + pedido con el consumo mensual promedio">Cobertura y revisión</th>
          `;
     }
 
@@ -24082,11 +24164,24 @@ window.renderLiveViewTableContent = function() {
         }
       }
 
+      const pedidoPrevPorBio = {};
+      ((res.extra && res.extra.pedidoAnterior) || []).forEach(p => { pedidoPrevPorBio[String(p.biologico || "").trim().toUpperCase()] = Number(p.pedido_frascos || 0); });
+      const hayPrev = !!(res.extra && res.extra.pedidoAnterior);
+      const RevColor = { sobrepedido: ["#fef3c7", "#78350f", "#fcd34d"], riesgo: ["#fee2e2", "#7f1d1d", "#fca5a5"], exceso: ["#fef3c7", "#78350f", "#fcd34d"] };
+
       tbody.innerHTML = displayItems.map(r => {
         const bioName = r.biologico || "—";
         const color = window.getBiologicoTextColor(bioName);
         const existQty = r.existencia_actual_frascos ?? r.existencia ?? 0;
         const pedQty = r.pedido_frascos ?? r.solicitud ?? 0;
+        const rev = window.CapturaInsights ? window.CapturaInsights.revisionRenglonBio(r) : { cobertura: null, tipo: null, texto: "" };
+        const pPrev = pedidoPrevPorBio[String(bioName).trim().toUpperCase()];
+        const dPrev = hayPrev ? Number(pedQty) - (pPrev || 0) : null;
+        const prevTxt = dPrev == null ? "" : `<div style="font-size:11px; font-weight:700; color:#475569; margin-top:3px;">${dPrev === 0 ? "igual que el mes anterior" : (dPrev > 0 ? "+" : "−") + Math.abs(dPrev) + " vs mes anterior"}</div>`;
+        const revCol = rev.tipo ? RevColor[rev.tipo] : null;
+        const revHtml = rev.cobertura == null ? `<span style="color:#475569; font-weight:600;">—</span>` :
+          `<div style="font-weight:800; color:#0f172a;">${rev.cobertura.toLocaleString("es-MX", { maximumFractionDigits: 1 })} ${rev.cobertura === 1 ? "mes" : "meses"}</div>` +
+          (revCol ? `<span style="display:inline-block; margin-top:3px; padding:2px 9px; border-radius:99px; font-size:10.5px; font-weight:800; background:${revCol[0]}; color:${revCol[1]}; border:1px solid ${revCol[2]};">${rev.texto}</span>` : "");
 
         return `
            <tr class="live-view-row" style="border-bottom: 1px solid #f1f5f9; transition: all 0.2s ease;" data-type="bio" data-biologico="${escapeHtml(bioName)}">
@@ -24098,9 +24193,11 @@ window.renderLiveViewTableContent = function() {
              </td>
              <td style="padding:14px 24px; text-align:center;">
                <span style="display:inline-flex; align-items:center; justify-content:center; min-width:54px; height:28px; padding:0 10px; border-radius:20px; background:${color}18; color:${color}; font-weight:900; font-size:13px; border:1px solid ${color}40;">${pedQty}</span>
+               ${prevTxt}
              </td>
              <td style="padding:14px 24px; text-align:center; font-weight:700; color:#475569;">${r.promedio_frascos ?? 0}</td>
              <td style="padding:14px 24px; text-align:center; font-weight:600; color:#64748b;">${r.min_dosis ?? 0} / ${r.max_dosis ?? 0}</td>
+             <td style="padding:14px 24px; text-align:center;">${revHtml}</td>
            </tr>
          `;
       }).join("");
@@ -24182,6 +24279,7 @@ window.renderLiveViewTableContent = function() {
       headRow.innerHTML = `
            <th style="padding: 16px 24px; text-align: left;">Insumo / Concepto</th>
            <th style="padding: 16px 24px; text-align: center;">Cantidad / Dosis</th>
+           <th style="padding: 16px 24px; text-align: center;">Contra la captura anterior</th>
          `;
     }
 
@@ -24190,13 +24288,21 @@ window.renderLiveViewTableContent = function() {
       renderLiveCharts("CONS", null, null);
     } else {
       const c = res.data[0];
+      const p = (res.prevData && res.prevData[0]) || null;
       const rows = [
-        { label: "Existencia SRP (Dosis)", val: c.srp_dosis || 0 },
-        { label: "Existencia SR (Dosis)", val: c.sr_dosis || 0 },
-        { label: "Jeringa de 5 ml", val: c.jeringa_reconst_5ml_0605500438 || 0 },
-        { label: "Jeringa de 0.5 ml", val: c.jeringa_aplic_05ml_0605502657 || 0 },
-        { label: "Aguja", val: c.aguja_0600403711 || 0 }
+        { label: "Existencia SRP (Dosis)", val: c.srp_dosis || 0, prev: p ? (p.srp_dosis || 0) : null },
+        { label: "Existencia SR (Dosis)", val: c.sr_dosis || 0, prev: p ? (p.sr_dosis || 0) : null },
+        { label: "Jeringa de 5 ml", val: c.jeringa_reconst_5ml_0605500438 || 0, prev: p ? (p.jeringa_reconst_5ml_0605500438 || 0) : null },
+        { label: "Jeringa de 0.5 ml", val: c.jeringa_aplic_05ml_0605502657 || 0, prev: p ? (p.jeringa_aplic_05ml_0605502657 || 0) : null },
+        { label: "Aguja", val: c.aguja_0600403711 || 0, prev: p ? (p.aguja_0600403711 || 0) : null }
       ];
+      const deltaCons = (r) => {
+        if (r.prev == null) return `<span style="color:#475569; font-weight:600;">Sin captura previa</span>`;
+        const d = Number(r.val) - Number(r.prev);
+        if (d === 0) return `<span style="color:#475569; font-weight:700;">Sin cambio</span>`;
+        const baja = d < 0;
+        return `<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 10px; border-radius:99px; font-size:12px; font-weight:800; background:${baja ? "#e0f2fe" : "#d1fae5"}; color:${baja ? "#075985" : "#065f46"}; border:1px solid ${baja ? "#7dd3fc" : "#6ee7b7"};">${baja ? "−" : "+"}${Math.abs(d).toLocaleString("es-MX")}${baja ? " (consumo o salida)" : " (ingreso)"}</span>`;
+      };
 
       // Aplicar filtros dinámicos si existen
       let displayItems = rows;
@@ -24213,6 +24319,7 @@ window.renderLiveViewTableContent = function() {
              <td style="padding:16px 24px; text-align:center;">
                <span class="live-view-count-badge">${r.val || 0}</span>
              </td>
+             <td style="padding:16px 24px; text-align:center;">${deltaCons(r)}</td>
            </tr>
          `).join("");
 
