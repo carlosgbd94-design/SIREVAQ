@@ -441,6 +441,7 @@ function initRDADashboard() {
             const type = btn.dataset.export;
             if (type === 'individual') exportIndividualPDF();
             else if (type === 'excel') { if (typeof exportInfluenzaIndicadoresExcel === 'function') exportInfluenzaIndicadoresExcel(); }
+            else if (type === 'meta_logro_plantilla') { if (typeof exportInfluenzaMetaLogroPlantilla === 'function') exportInfluenzaMetaLogroPlantilla(); }
             else if (type === 'png' || type === 'jpeg') exportDashboardImagen(type);
             else if (type === 'masivo_pdf') exportMasivoZIP('pdf');
             else if (type === 'masivo_img') exportMasivoZIP('png');
@@ -743,6 +744,8 @@ async function renderDashboard() {
 
     const optExcelInf = document.getElementById('rdaExportExcelInfluenza');
     if (optExcelInf) optExcelInf.style.display = (esquema === 'meta_logro_influenza') ? 'flex' : 'none';
+    const optMetaLogro = document.getElementById('rdaExportMetaLogro');
+    if (optMetaLogro) optMetaLogro.style.display = (esquema === 'meta_logro_influenza') ? 'flex' : 'none';
 
     if (esquema === 'meta_logro_influenza') {
         if (typeof renderInfluenzaIndicatorsDashboard === 'function') {

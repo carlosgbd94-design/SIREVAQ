@@ -216,6 +216,21 @@ test.describe('Panel de Influenza (unidad)', () => {
     expect(errores).toEqual([]);
   });
 
+  test('Excel Meta-Logro de la unidad: plantilla Individual con meta en el resumen y el logro por mes y semana', async ({ page }) => {
+    const { errores } = await abrirPanel(page);
+    const [descarga] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportInfluenzaExcelOficialUnidad())]);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(await descarga.path());
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['ANÁLIS DE META-LOGRO', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL']);
+    const res = wb.getWorksheet('ANÁLIS DE META-LOGRO');
+    let meta = 0; for (let r = 9; r <= 54; r++) meta += Number(res.getCell(r, 8).value || 0);
+    expect(meta).toBe(200);                                   // misma meta que el resumen del panel
+    let logro = 0;
+    wb.worksheets.slice(1).forEach((hoja) => { for (let r = 8; r <= 53; r++) for (let c = 7; c <= 11; c++) logro += Number(hoja.getCell(r, c).value || 0); });
+    expect(logro).toBe(60);                                   // dosis aplicadas del resumen del panel
+    expect(errores).toEqual([]);
+  });
+
   test('«Descargar mi meta»: Excel oficial solo de la unidad, con su columna, su meta y su jeringa', async ({ page }) => {
     const { errores } = await abrirPanel(page);
     await page.locator('#subtabUnitResumen').click();

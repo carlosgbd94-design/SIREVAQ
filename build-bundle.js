@@ -37,6 +37,7 @@ const GROUP_HEAD = [
   'covid_captura.js',
   'covid_captura_ui.js',
   'influenza_metas_export.js',
+  'influenza_meta_logro_export.js',
   'covid_metas_export.js',
   'influenza_module.js',
   'sis_csv.js',

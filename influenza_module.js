@@ -2188,7 +2188,7 @@ async function exportInfluenzaExcelOficialUnidad() {
     const { wb, omitidas } = await window.InfluenzaMetaLogroExport.construirLibroUnidad({
       ExcelJS, plantilla, rubroIds: INFLUENZA_RUBROS.map(r => r.id),
       metas: _influenzaMetasCache || {}, capturas,
-      titulo: `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal ${campaignSeasonLabel()} - ${USER.unidad} (${USER.clues})`
+      titulo: `${USER.unidad} (${USER.clues}) · Corte al ${fechaCorte.split("-").reverse().join("/")}`, temporada: campaignSeasonLabel()
     });
 
     const buffer = await wb.xlsx.writeBuffer();
@@ -2230,7 +2230,7 @@ async function exportInfluenzaMetaLogroPlantilla() {
     const temporada = String(d.campana || "").replace(/^Campa.a Influenza\s*/i, "") || campaignSeasonLabel();
     const wb = await window.InfluenzaMetaLogroExport.construirLibroEntidades({
       ExcelJS, plantilla, rubroIds: INFLUENZA_RUBROS.map(r => r.id), entidades: d.entidades,
-      titulo: `Meta-Logro de Vacuna Anti Influenza Estacional Temporada Invernal ${temporada} - ${d.ambito} · Corte al ${d.fechaCorte}`,
+      titulo: `${d.ambito} · Corte al ${String(d.fechaCorte).split("-").reverse().join("/")}`, temporada,
       nombreTotal: d.nivel === "JURIS" ? "TOTAL JURISDICCIÓN" : "TOTAL"
     });
     const limpio = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");

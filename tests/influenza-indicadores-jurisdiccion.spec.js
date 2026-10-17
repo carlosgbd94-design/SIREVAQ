@@ -247,6 +247,29 @@ test.describe('Indicadores de influenza con una jurisdicción completa', () => {
     expect(errores).toEqual([]);
   });
 
+  test('Excel Meta-Logro (plantilla oficial): una columna LOGRO|META|% por municipio y hospital, con total y semáforo', async ({ page }) => {
+    test.setTimeout(120000);
+    const errores = await abrir(page, D);
+    await render(page);
+    const E = esperado(D, null);
+    await expect(page.locator('#rdaExportMetaLogro')).toHaveCount(1);
+
+    const [descarga] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportInfluenzaMetaLogroPlantilla())]);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(await descarga.path());
+    const ws = wb.worksheets[0];
+    const nombres = [];
+    for (let c = 7; c <= 40; c += 3) { const v = ws.getCell(8, c).value; if (v) nombres.push(String(v)); }
+    expect(nombres.length).toBe(7);                       // 6 destinos + total
+    expect(nombres[nombres.length - 1]).toBe('TOTAL JURISDICCIÓN');
+    const colTotal = 7 + 6 * 3;
+    const res = (c) => { const v = ws.getCell(56, c).value; return v && v.result !== undefined ? v.result : v; };
+    expect(res(colTotal)).toBe(E.apl);                    // logro total = dosis aplicadas del tablero
+    expect(res(colTotal + 1)).toBe(E.meta);               // meta total = meta del tablero
+    expect(ws.conditionalFormattings.length).toBeGreaterThanOrEqual(7);
+    expect(errores).toEqual([]);
+  });
+
   test('cambios rápidos de filtro: gana el último y el Excel usa ese mismo ámbito', async ({ page }) => {
     test.setTimeout(60000);
     const errores = await abrir(page, D);
