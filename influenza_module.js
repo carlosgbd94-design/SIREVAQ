@@ -3505,11 +3505,6 @@ function renderValidationDashboard() {
   anunciarValidacion(`Mostrando ${filtradas.length ? `${desde + 1} a ${desde + pagina.length}` : "0"} de ${filtradas.length} unidades. ${reportedCount} reportaron, ${pendientes.length} sin reporte.`);
 }
 
-function infSaludoWhatsApp() {
-  const h = new Date().getHours();
-  return h >= 6 && h < 12 ? "¡Buenos días! ☀️" : (h >= 12 && h < 19 ? "¡Buenas tardes! ⛅" : "¡Buenas noches! 🌙");
-}
-
 // Mensaje de error en línea (role="alert") + campos marcados; mueve el foco al primero con problema.
 function mostrarErroresValidacion(items) {
   const box = document.getElementById("validationFormError");
@@ -3983,8 +3978,6 @@ function renderCobertura() {
       infTarjetaKpi("pause_circle", "cian", "Reportes sin movimiento", String(sinMovTotal), "en ceros durante la campaña");
   }
 
-  const copiar = document.getElementById("btnCobCopiarAtrasos");
-  if (copiar) { copiar.disabled = !conAtraso; copiar.title = conAtraso ? "Copia el aviso para WhatsApp con las unidades atrasadas" : "No hay unidades con atraso"; }
 
   if (!datos.weeks.length || !todas.length) {
     cont.innerHTML = `<p class="rs-vacio">No hay unidades o semanas para mostrar en esta campaña.</p>`;
@@ -4035,24 +4028,9 @@ function initCoberturaTab() {
     if (el && !el.dataset.listened) { el.dataset.listened = "1"; el.addEventListener(ev, renderCobertura); }
   };
   ligar("cobBuscar", "input"); ligar("cobSoloAtraso", "change"); ligar("cobOrden", "change");
-  const cp = document.getElementById("btnCobCopiarAtrasos");
-  if (cp && !cp.dataset.listened) { cp.dataset.listened = "1"; cp.onclick = infCopiarRecordatorioAtrasos; }
   const ex = document.getElementById("btnCobExportar");
   if (ex && !ex.dataset.listened) { ex.dataset.listened = "1"; ex.onclick = infExportarCobertura; }
   renderCobertura();
-}
-
-/** Aviso de WhatsApp con las unidades que llevan semanas sin reportar, con el detalle de cuáles. */
-function infCopiarRecordatorioAtrasos() {
-  const datos = _cobDatos || infCalcularCobertura();
-  const atrasadas = datos.filas.filter(f => f.atrasos.length).sort((a, b) => b.atrasos.length - a.atrasos.length);
-  if (!atrasadas.length) { showToast("No hay unidades con atraso.", true, "info"); return; }
-  const saludo = infSaludoWhatsApp();
-  const lista = atrasadas.map(f => `• *${String(f.u.unidad).toUpperCase().trim()}*: ${f.atrasos.map(c => "S" + c.w.semana + (c.w.corte ? " (corte)" : "")).join(", ")}`).join("\n");
-  const texto = `${saludo}\n\nLas siguientes unidades tienen semanas pendientes de su *REPORTE DE ${infVacunaTxt()}*, por favor hay que ingresar a la plataforma *SIREVAQ* a realizar la captura correspondiente:\n\n${lista}`;
-  navigator.clipboard.writeText(texto)
-    .then(() => showToast("¡Copiado! El aviso está listo para pegarse en WhatsApp.", true, "good"))
-    .catch(() => showToast("No se pudo copiar el texto automáticamente.", false, "bad"));
 }
 
 /**
