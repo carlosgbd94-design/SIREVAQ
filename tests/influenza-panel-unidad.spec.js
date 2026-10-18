@@ -513,6 +513,37 @@ test.describe('Paso a CeNSIA', () => {
   });
 });
 
+test.describe('Paso a CeNSIA: confirmación del complemento', () => {
+  test.use({ viewport: { width: 1280, height: 1000 } });
+
+  const abrirYPulsar = async (page, responder) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-17T11:00:00' });
+    await page.evaluate((resp) => {
+      document.documentElement.setAttribute('data-sirevaq-censia-ext', '1.1.1');
+      if (resp) window.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'censia-payload') window.postMessage({ source: 'sirevaq-ext', type: 'censia-payload-ok' }, location.origin);
+      });
+      renderCaptureGrid();
+    }, responder);
+    await page.locator('#infCensiaAbrir').evaluate((a) => { a.target = '_self'; a.addEventListener('click', (e) => e.preventDefault()); });
+    await page.locator('#infCensiaAbrir').click();
+    return errores;
+  };
+
+  test('si el complemento no responde (quedó huérfano tras actualizarse) se pide recargar', async ({ page }) => {
+    const errores = await abrirYPulsar(page, false);
+    await expect(page.locator('.toast-new').filter({ hasText: 'Recarga esta página' }).first()).toBeVisible({ timeout: 5000 });
+    expect(errores).toEqual([]);
+  });
+
+  test('si el complemento confirma no sale ningún aviso', async ({ page }) => {
+    const errores = await abrirYPulsar(page, true);
+    await page.waitForTimeout(2500);
+    await expect(page.getByText('Recarga esta página (F5)')).toHaveCount(0);
+    expect(errores).toEqual([]);
+  });
+});
+
 test.describe('Responsable y reemplazo semanal', () => {
   test.use({ viewport: { width: 1280, height: 1000 } });
 

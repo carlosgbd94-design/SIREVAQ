@@ -805,6 +805,21 @@ const CENSIA_URL = "https://siscensia.salud.gob.mx/influenza26/ssa/captura.php";
 const CENSIA_EXT_URL = "https://chromewebstore.google.com/detail/noofpbkapekpjcfegnmcndjejmkpmbin";
 const censiaExtInstalada = () => document.documentElement.hasAttribute("data-sirevaq-censia-ext");
 
+/** Entrega el paquete al complemento y espera su confirmación. Si el complemento se actualizó con esta página ya abierta,
+ *  su parte vieja queda huérfana y no responde: se avisa que hay que recargar en vez de abrir CeNSIA vacío sin explicación. */
+function censiaEntregarPaquete(paquete) {
+  let confirmado = false;
+  const alResponder = (e) => {
+    if (e.source === window && e.data && e.data.source === "sirevaq-ext" && e.data.type === "censia-payload-ok") confirmado = true;
+  };
+  window.addEventListener("message", alResponder);
+  window.postMessage({ source: "sirevaq", type: "censia-payload", payload: paquete }, location.origin);
+  setTimeout(() => {
+    window.removeEventListener("message", alResponder);
+    if (!confirmado) showToast("El complemento no respondió. Recarga esta página (F5) y vuelve a pulsar «Abrir CeNSIA y rellenar».", false, "warn");
+  }, 1800);
+}
+
 /** Guía para quien no conoce el complemento: cómo instalarlo (solo una vez) o, ya instalado, cómo se usa.
  *  Se comparte entre la tarjeta de Influenza y la de COVID-19. */
 function censiaGuiaExtension() {
@@ -946,7 +961,7 @@ function renderPasoCensia(container, fechaSemana, reporte) {
     abrir.href = `${CENSIA_URL}#sirevaq=${encodeURIComponent(token)}`;
     // Con el complemento: el paquete se entrega directo (no depende de la dirección ni del portapapeles)
     if (censiaExtInstalada()) {
-      window.postMessage({ source: "sirevaq", type: "censia-payload", payload: { v: 1, clues: USER?.clues, fecha, valores } }, location.origin);
+      censiaEntregarPaquete({ v: 1, clues: USER?.clues, fecha, valores });
     }
     // Respaldo para el marcador: CeNSIA borra el «#» al iniciar sesión, así que también va al portapapeles
     try { navigator.clipboard?.writeText("SIREVAQ1:" + token).catch(() => { }); } catch (e) { /* sin portapapeles */ }
@@ -7445,7 +7460,7 @@ function renderCovidCaptura() {
       fechaAplicacion: (f) => censiaFechaAplicacion(f, influenzaHoy()),
       enviarPaquete: (paquete) => {
         const token = btoa(unescape(encodeURIComponent(JSON.stringify({ v: 1, t: Date.now(), clues: paquete.clues, fecha: paquete.fecha, valores: paquete.valores }))));
-        if (censiaExtInstalada()) window.postMessage({ source: "sirevaq", type: "censia-payload", payload: paquete }, location.origin);
+        if (censiaExtInstalada()) censiaEntregarPaquete(paquete);
         try { navigator.clipboard?.writeText("SIREVAQ1:" + token).catch(() => { }); } catch (e) { /* sin portapapeles */ }
         return `${CENSIA_URL}#sirevaq=${encodeURIComponent(token)}`;
       }
