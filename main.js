@@ -9135,7 +9135,57 @@ function applyPinolFormLock() {
   }
 
   updatePinolFormBanner(status);
+  actualizarAyudasPinolUnidad();
 }
+
+// Ayudas para la unidad: cuánto suele tardar el municipio y cuántas botellas conviene pedir según su existencia.
+function actualizarAyudasPinolUnidad() {
+  const PR = window.PinolRuta;
+  const info = document.getElementById("pinolInfoUnidad");
+  if (!PR || !USER || USER.rol !== "UNIDAD") return;
+  const status = getPinolFlowStatus();
+
+  if (info) {
+    const h = PR.resumenHistorialUnidad(window._pinolCache || [], USER.clues, todayYmdLocal());
+    const partes = [];
+    if (status === "NONE" && h.ultimo) {
+      const f = pinolFechaCorta_(h.ultimo.entrega || h.ultimo.solicitud);
+      partes.push(`Tu último Pinol lo recibiste ${f ? "el " + escapeHtml(f) : ""}${h.ultimo.haceDias ? ` (hace ${h.ultimo.haceDias} días)` : ""}.`);
+    }
+    if (h.promEspera != null && status !== "LOADING") {
+      partes.push(`El municipio suele surtirlo en ${h.promEspera === 0 ? "el mismo día" : "unos " + h.promEspera + (h.promEspera === 1 ? " día" : " días")} (según tus últimas ${h.n} solicitud${h.n === 1 ? "" : "es"}).`);
+    }
+    info.style.display = partes.length ? "" : "none";
+    info.innerHTML = partes.length ? `<span class="material-symbols-rounded" aria-hidden="true">history</span><div>${partes.join(" ")}</div>` : "";
+  }
+
+  const btn = document.getElementById("pinolSugerirBtn");
+  const aviso = document.getElementById("pinolSugerirAviso");
+  const ex = document.getElementById("pinol_existencia");
+  const pe = document.getElementById("pinol_solicitud");
+  if (!btn || !aviso || !ex || !pe) return;
+  const s = PR.botellasSugeridas(ex.value === "" ? NaN : ex.value);
+  const libre = status === "NONE";
+  if (libre && s.n != null) {
+    btn.hidden = false;
+    btn.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">auto_awesome</span>Sugerido: ${s.n} ${s.n === 1 ? "botella" : "botellas"} (para llegar a ${PR.MAX_BOTELLAS})`;
+    btn.dataset.n = String(s.n);
+  } else {
+    btn.hidden = true;
+    btn.dataset.n = "";
+  }
+  aviso.style.display = libre && s.aviso ? "" : "none";
+  aviso.textContent = libre ? s.aviso : "";
+}
+document.addEventListener("input", (e) => {
+  if (e.target && e.target.id === "pinol_existencia") actualizarAyudasPinolUnidad();
+});
+document.addEventListener("click", (e) => {
+  const b = e.target && e.target.closest ? e.target.closest("#pinolSugerirBtn") : null;
+  if (!b || !b.dataset.n) return;
+  const pe = document.getElementById("pinol_solicitud");
+  if (pe && !pe.disabled) { pe.value = b.dataset.n; pe.dispatchEvent(new Event("input", { bubbles: true })); pe.focus(); }
+});
 
 
 const INFLIGHT_FETCHES = new Map();
@@ -16428,6 +16478,9 @@ $("btnSavePINOL").onclick = async () => {
   if (isNaN(solicitud) || solicitud < 1) {
     return showToast("La solicitud debe ser de al menos 1 botella", false, "warn");
   }
+  if (solicitud > 4) {
+    return showToast("Cada unidad puede pedir hasta 4 botellas por solicitud", false, "warn", { title: "Pide 4 botellas o menos" });
+  }
 
   await AppService.runCapture({
     btnId: "btnSavePINOL",
@@ -19474,6 +19527,14 @@ function renderPinolCommandCenter() {
   if ($("pinolEntregadas")) animateCounter("pinolEntregadas", parseInt($("pinolEntregadas").textContent) || 0, entregadas.length);
   if ($("pinolRecibidas")) animateCounter("pinolRecibidas", parseInt($("pinolRecibidas").textContent) || 0, recibidas.length);
 
+  // Rezago: pendientes con muchos días de espera y envíos que la unidad aún no confirma
+  const PR = window.PinolRuta;
+  const hoyPinol = todayYmdLocal();
+  const alertasPinol = PR ? PR.resumenAlertas(safeItems, hoyPinol) : { rezago: 0, sinConfirmar: 0, criticas: 0 };
+  const avisoRezago = (alertasPinol.rezago || alertasPinol.sinConfirmar)
+    ? ` ${alertasPinol.rezago ? `<b>${alertasPinol.rezago}</b> llevan ${PR.DIAS_ESPERA_ALERTA}+ días esperando. ` : ""}${alertasPinol.sinConfirmar ? `<b>${alertasPinol.sinConfirmar}</b> enviadas sin confirmar hace ${PR.DIAS_SIN_CONFIRMAR}+ días (conviene avisarles).` : ""}`
+    : "";
+
   // Semáforo Banner Alert
   const alertMsgEl = $("pinolAlertMsg");
   if (alertMsgEl) {
@@ -19486,7 +19547,7 @@ function renderPinolCommandCenter() {
            </div>
            <div>
              <div style="font-size: 14px; font-weight: 900; letter-spacing: -0.01em; color: #991b1b;">⚠️ ${criticos.length} ${criticos.length === 1 ? "UNIDAD EN STOCK CRÍTICO" : "UNIDADES EN STOCK CRÍTICO"} (0 EXISTENCIAS)</div>
-             <div style="font-size: 13px; font-weight: 700; opacity: 0.9; margin-top: 2px;">Atención prioritaria requerida para desinfección de red de frío. Hay <b>${pendientes.length}</b> solicitudes pendientes en total (${litrosRuta} Litros).</div>
+             <div style="font-size: 13px; font-weight: 700; opacity: 0.9; margin-top: 2px;">Atención prioritaria requerida para desinfección de red de frío. Hay <b>${pendientes.length}</b> solicitudes pendientes en total (${litrosRuta} Litros).${avisoRezago}</div>
            </div>
          </div>`
       : pendientes.length > 0
@@ -19496,7 +19557,7 @@ function renderPinolCommandCenter() {
              </div>
              <div>
                <div style="font-size: 14px; font-weight: 900; color: #92400e;">🚚 SOLICITUDES EN ESPERA DE DESPACHO</div>
-               <div style="font-size: 13px; font-weight: 700; opacity: 0.9; margin-top: 2px;">Hay <b>${pendientes.length}</b> unidades listas para surtir en ruta municipal (${litrosRuta} Litros en total).</div>
+               <div style="font-size: 13px; font-weight: 700; opacity: 0.9; margin-top: 2px;">Hay <b>${pendientes.length}</b> unidades listas para surtir en ruta municipal (${litrosRuta} Litros en total).${avisoRezago}</div>
              </div>
            </div>`
         : `<div style="display:flex; align-items:center; gap:14px;">
@@ -19505,7 +19566,7 @@ function renderPinolCommandCenter() {
              </div>
              <div>
                <div style="font-size: 14px; font-weight: 900; color: #065f46;">✅ RUTA DE PINOL® AL DÍA</div>
-               <div style="font-size: 12.5px; font-weight: 700; opacity: 0.9; margin-top: 2px;">Se han surtido <b>${atendidasPorMunicipio}</b> de <b>${total}</b> solicitudes acumuladas.</div>
+               <div style="font-size: 12.5px; font-weight: 700; opacity: 0.9; margin-top: 2px;">Se han surtido <b>${atendidasPorMunicipio}</b> de <b>${total}</b> solicitudes acumuladas.${avisoRezago}</div>
              </div>
            </div>`;
   }
@@ -19534,6 +19595,9 @@ function renderPinolCommandCenter() {
     if (estA === "PENDIENTE" && estB === "PENDIENTE") {
       if (existA === 0 && existB > 0) return -1;
       if (existA > 0 && existB === 0) return 1;
+      // Entre pendientes, la que más lleva esperando va primero
+      const cmpEspera = String(a?.fecha_solicitud || "").localeCompare(String(b?.fecha_solicitud || ""));
+      if (cmpEspera) return cmpEspera;
     }
 
     const order = { "PENDIENTE": 1, "ENTREGADO": 2, "RECIBIDO": 3 };
@@ -19565,6 +19629,21 @@ function renderPinolCommandCenter() {
       stockBadge = `<div style="display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 5px !important; font-size: 13px !important; font-weight: 800 !important; color: #dc2626 !important;"><span class="material-symbols-rounded" style="font-size: 16px !important; color: #dc2626 !important;">warning</span><span>0 Bot <span style="font-size: 11px !important; font-weight: 700 !important; color: #ef4444 !important;">(Crítico)</span></span></div>`;
     } else if (existencia <= 2) {
       stockBadge = `<div style="display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 5px !important; font-size: 13px !important; font-weight: 800 !important; color: #d97706 !important;"><span class="material-symbols-rounded" style="font-size: 16px !important; color: #d97706 !important;">error</span><span>${existencia} Bot.</span></div>`;
+    }
+
+    // Cuánto lleva esperando (pendiente) o sin confirmar (enviada): lo que decide a quién atender primero
+    let esperaHtml = "";
+    let sinConfirmarHtml = "";
+    if (PR) {
+      const e = PR.esperaDias(x, hoyPinol);
+      if (e != null) {
+        const fuerte = e >= PR.DIAS_ESPERA_ALERTA;
+        esperaHtml = `<div style="font-size:10.5px; font-weight:800; margin-top:2px; color:${fuerte ? "#92400e" : "#475569"};">${e === 0 ? "hoy" : "hace " + e + " d"}</div>`;
+      }
+      const sc = PR.sinConfirmarDias(x, hoyPinol);
+      if (sc != null && sc >= PR.DIAS_SIN_CONFIRMAR) {
+        sinConfirmarHtml = `<div style="font-size:10.5px; font-weight:800; margin-top:3px; color:#92400e;">sin confirmar hace ${sc} d</div>`;
+      }
     }
 
     let estatusHtml = `<span class="crystalStatus warn"><span class="material-symbols-rounded">schedule</span><span>Pendiente</span></span>`;
@@ -19600,7 +19679,7 @@ function renderPinolCommandCenter() {
         <td class="text-center" style="vertical-align: middle !important;">
           ${estatus === 'PENDIENTE' ? `<input type="checkbox" class="pinol-row-checkbox w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" data-id="${escapeAttr(id)}" ${isChecked ? 'checked' : ''} />` : '—'}
         </td>
-        <td class="font-bold text-slate-700" style="vertical-align: middle !important;">${escapeHtml(fechaSoliFormateada)}</td>
+        <td class="font-bold text-slate-700" style="vertical-align: middle !important;">${escapeHtml(fechaSoliFormateada)}${esperaHtml}</td>
         <td class="font-bold text-slate-900" style="vertical-align: middle !important;">${escapeHtml(x?.municipio || "")}</td>
         <td style="vertical-align: middle !important;">
           <div class="font-black text-slate-900 cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5" onclick="openPinolUnitDrawer('${escapeAttr(id)}')">
@@ -19613,7 +19692,7 @@ function renderPinolCommandCenter() {
         <td class="text-center font-black text-slate-900" style="vertical-align: middle !important;">${solicitado} pzas <span class="text-[10px] text-slate-400 font-normal">(${(solicitado * 0.828).toFixed(1)}L)</span></td>
         <td class="text-center" style="vertical-align: middle !important;">${obsHtml}</td>
         <td class="text-xs font-semibold text-slate-600" style="vertical-align: middle !important;">${escapeHtml(fechaEntregaFormateada || "—")}</td>
-        <td style="vertical-align: middle !important;">${estatusHtml}</td>
+        <td style="vertical-align: middle !important;">${estatusHtml}${sinConfirmarHtml}</td>
         <td class="pn-actions-cell" style="padding: 4px 8px !important; text-align: center !important; width: auto !important; min-width: 132px !important; vertical-align: middle !important;">
           <div class="pn-btn-group" style="display: inline-flex !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; gap: 6px !important; margin: 0 auto !important; padding: 0 !important; background: transparent !important; border: none !important; vertical-align: middle !important;">
             ${actionContent}
@@ -19708,13 +19787,11 @@ $("pinolFiltroEstatus")?.addEventListener("change", () => renderPinolCommandCent
 
 // Batch Modal Handlers
 $("btnPinolBatchDispatch")?.addEventListener("click", () => openPinolBatchModal());
+// La Guía de Ruta ya no imprime «todas las pendientes»: abre el armador para elegir qué unidades van (pinol_ruta.js)
 $("btnPinolPrintGuia")?.addEventListener("click", () => {
-  const selectedItems = (window._pinolRawItems || []).filter(x => window._pinolSelectedIds.has(String(x.id)));
-  const itemsToPrint = selectedItems.length > 0 ? selectedItems : (window._pinolRawItems || []).filter(x => String(x.estatus || "PENDIENTE").toUpperCase() === "PENDIENTE");
-  if (!itemsToPrint.length) {
-    showToast("No hay solicitudes para generar la Guía de Ruta", false);
-    return;
-  }
+  if (window.PinolRuta) { window.PinolRuta.abrir(); return; }
+  const itemsToPrint = (window._pinolRawItems || []).filter(x => window._pinolSelectedIds.has(String(x.id)));
+  if (!itemsToPrint.length) { showToast("Marca en la tabla las unidades que van en la ruta", false, "warn"); return; }
   imprimirGuiaEmbarquePinol(itemsToPrint);
 });
 
@@ -19781,7 +19858,7 @@ $("btnConfirmarBatchPinol")?.addEventListener("click", async () => {
     await refreshPinol();
 
     // Ofrecer impresión de la Guía de Ruta
-    imprimirGuiaEmbarquePinol(selectedItems);
+    imprimirGuiaEmbarquePinol(selectedItems, { fecha: fechaEntrega, responsable: entregadoPor, vehiculo: comentario, cantidad: Math.min(cantidadPiezas, 4) });
   } catch (err) {
     console.error("Error en surtido masivo:", err);
     showToast("Error al procesar surtido masivo", false, "bad");
@@ -19852,9 +19929,25 @@ function closePinolDrawer() {
 }
 
 // Impresión de Guía de Embarque Colectiva
-function imprimirGuiaEmbarquePinol(items) {
+function imprimirGuiaEmbarquePinol(items, extra) {
   const container = $("pinolPrintContainer");
   if (!container) return;
+
+  // Guía nueva (pinol_ruta.js): agrupa por municipio, con subtotales y datos del viaje
+  if (window.PinolRuta) {
+    const hoy = todayYmdLocal();
+    const ordenadas = window.PinolRuta.ordenarParadas(items, hoy);
+    const cantidades = {};
+    ordenadas.forEach(x => { cantidades[String(x.id)] = (extra && extra.cantidad) || window.PinolRuta.cantidadInicial(x); });
+    window.PinolRuta.imprimirHtml(ordenadas, {
+      fecha: (extra && extra.fecha) || hoy,
+      responsable: (extra && extra.responsable) || "",
+      vehiculo: (extra && extra.vehiculo) || "",
+      cantidades,
+      logos: window.PINOL_LOGOS || {}
+    });
+    return;
+  }
 
   const defaultDate = typeof todayYmdLocal === "function" ? todayYmdLocal() : new Date().toISOString().split('T')[0];
   const fechaTexto = formatFechaMemorandumText(defaultDate);

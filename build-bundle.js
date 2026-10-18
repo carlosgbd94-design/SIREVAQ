@@ -29,6 +29,7 @@ const GROUP_HEAD = [
   'perfil_cuenta.js',
   'calendario_capacitaciones.js',
   'desabasto_center.js', // antes que main.js: main.js usa window.DesabastoCenter al cargar
+  'pinol_ruta.js', // armador de la ruta de Pinol; main.js lo usa solo al operar, no al cargar
   'main.js',
   'dock_glass.js',
   'influenza_reglas.js',

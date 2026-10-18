@@ -15742,3 +15742,15 @@ button.cob-c:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(15,
 .frs-cmp-item--tot .frs-cmp-cab { margin: 0; }
 .frs-cmp-item--tot .frs-cmp-num { margin: 0; }
 @media (max-width: 760px) { .frs-cmp-item--tot { display: block; } }
+
+/* Pinol (UNIDAD): botón de botellas sugeridas. Clase propia: .cp-help-btn fuerza display con !important y no se podría ocultar. */
+#formPINOL .cp-sug-btn {
+  display: inline-flex !important; align-items: center !important; gap: 6px !important;
+  min-height: 32px !important; padding: 0 12px !important; margin: 6px 0 0 !important; border-radius: 999px !important;
+  font-family: inherit !important; font-size: 12px !important; font-weight: 700 !important; line-height: 1.2 !important;
+  background: transparent !important; color: var(--cp-accent) !important; border: 1.5px solid var(--cp-accent) !important;
+  box-shadow: none !important; cursor: pointer;
+}
+#formPINOL .cp-sug-btn[hidden] { display: none !important; }
+#formPINOL .cp-sug-btn .material-symbols-rounded { font-size: 18px; }
+@media (hover: hover) and (pointer: fine) { #formPINOL .cp-sug-btn:hover { background: var(--cp-tint) !important; } }
