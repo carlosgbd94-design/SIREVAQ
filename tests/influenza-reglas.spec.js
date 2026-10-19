@@ -63,6 +63,8 @@ async function montarCaptura(page, fecha, valoresGuardados) {
       'var AppService = { call: async (a, p) => { window.__guardados.push([a, p]); return { ok: true }; }, runCapture: async (o) => o.action() };',
       'var loadInfluenzaUnitData = async () => {}; var updateInfluenzaWeekBtnLabel = () => {}; var updateInfluenzaSinMovimientoUI = () => {};',
       'var loadInfluenzaHistoryList = () => {};',
+      'var capBloqueadaPorGuardado = () => false;   // el reporte guardado se abre bloqueado hasta «Editar»: aquí la captura siempre está editable',
+      "var capSincronizarNombre = () => {}; var capVacunaActual = () => 'INFLUENZA'; var _capEdicion = null; var _capturaVacuna = 'INFLUENZA';",
       'var influenzaResumenCalcular = () => ({ esperadoPct: 40 }); var frascoFmt = (n) => String(n); var escapeHtml = (t) => String(t);',
       'var RealDate = Date;   // la captura ya no depende del día de la semana'
     ].join('\n')
