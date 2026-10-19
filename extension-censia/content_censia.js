@@ -73,26 +73,19 @@
   function rellenar(d) {
     var f = document.querySelector("input[type=date]");
     if (f) { f.value = d.fecha; ev(f, "input"); ev(f, "change"); }
-    var n = 0, total = 0, omitidas = [];
+    var n = 0, total = 0;
     Object.keys(d.valores).forEach(function (k) {
       var el = document.getElementById(k);
-      // Una casilla que CeNSIA tiene bloqueada (solo lectura / deshabilitada) o que ya no existe NO se escribe a la fuerza:
-      // se avisa para que la persona decida con su jurisdicción en vez de meter cifras donde CeNSIA no las espera.
-      if (!el || el.disabled || el.readOnly) {
-        omitidas.push(esc((el && el.placeholder ? el.placeholder + " " : "") + "(" + k + "): " + d.valores[k]));
-        return;
-      }
+      if (!el || el.disabled) return;
       el.value = d.valores[k]; ev(el, "input"); ev(el, "change");
       n++; total += d.valores[k];
     });
     var fecha = d.fecha.split("-").reverse().join("/");
     var base = "SIREVAQ rellenó " + n + " casillas · " + total.toLocaleString("es-MX") + " dosis · fecha " + fecha;
-    var faltan = omitidas.length
-      ? "<small><b>No se llenó:</b> " + omitidas.join("; ") + ". CeNSIA tiene esa casilla bloqueada; captúrala tú o consulta a tu jurisdicción.</small>" : "";
-    aviso(base + faltan + "<small>Eligiendo tu unidad…</small>", !omitidas.length);
+    aviso(base + "<small>Eligiendo tu unidad…</small>", true);
     elegirUnidad(d.clues).then(function (ok) {
-      aviso(base + faltan + "<small>" + (ok ? "Unidad " + esc(d.clues) + " elegida. " : "Falta elegir tu unidad (" + esc(d.clues) + ") en el selector de CeNSIA. ") +
-        "Revisa las cifras y pulsa GUARDAR tú mismo.</small>", ok && !omitidas.length);
+      aviso(base + "<small>" + (ok ? "Unidad " + esc(d.clues) + " elegida. " : "Falta elegir tu unidad (" + esc(d.clues) + ") en el selector de CeNSIA. ") +
+        "Revisa las cifras y pulsa GUARDAR tú mismo.</small>", ok);
     });
   }
 
