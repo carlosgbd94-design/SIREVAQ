@@ -142,6 +142,37 @@ test.describe('Influenza: captura de la unidad en móvil', () => {
     expect(errores).toEqual([]);
   });
 
+  test('reporte guardado: casillas bloqueadas hasta «Editar»; Cancelar vuelve a lo guardado y Guardar sale del modo edición', async ({ page }) => {
+    const { srv } = await abrir(page, estado());
+    await page.click('#dockItemINFC');
+    await page.selectOption('#icSemana', '2026-10-09');
+    await expect(page.locator('#ic_r1')).toBeDisabled();
+    await expect(page.locator('#icNombre')).toBeDisabled();
+    await expect(page.locator('#icSinMov')).toBeDisabled();
+    await expect(page.locator('#hubSaveBtn')).toBeDisabled();
+    await expect(page.locator('#hubSaveBtn')).toHaveAttribute('aria-label', /toca Editar/);
+    await expect(page.locator('#hubEditBtn')).toBeVisible();
+    await expect(page.locator('#hubCancelBtn')).toBeHidden();
+
+    await page.click('#hubEditBtn');
+    await expect(page.locator('#ic_r1')).toBeEnabled();
+    await expect(page.locator('#hubEditBtn')).toBeHidden();
+    await expect(page.locator('#hubCancelBtn')).toBeVisible();
+    await expect(page.locator('#hubSaveBtn')).toBeEnabled();
+    await page.fill('#ic_r1', '85');
+    await page.click('#hubCancelBtn');
+    await expect(page.locator('#ic_r1')).toBeDisabled();
+    await expect(page.locator('#ic_r1')).toHaveValue('80');
+
+    await page.click('#hubEditBtn');
+    await page.fill('#ic_r1', '85');
+    await page.click('#hubSaveBtn');
+    await expect(page.locator('#icExito')).toBeVisible();
+    await expect(page.locator('#ic_r1')).toBeDisabled();
+    const post = srv.reqs.find(r => r.nombre === 'influenza_capturas' && r.m === 'POST');
+    expect((Array.isArray(post.body) ? post.body[0] : post.body).valores.r1).toBe(85);
+  });
+
   test('sin movimiento guarda todo en cero y no exige cantidades', async ({ page }) => {
     const { srv } = await abrir(page, estado());
     await page.click('#dockItemINFC');
@@ -205,6 +236,36 @@ test.describe('Influenza: captura de la unidad en móvil', () => {
     expect(fila.valores.MODERNA.c4).toBe(20);
     expect(fila.valores.PFIZER.c4).toBe(10);
     expect(srv.reqs.filter(r => r.nombre === 'influenza_capturas' && r.m === 'POST')).toHaveLength(0);
+    expect(errores).toEqual([]);
+  });
+
+  test('COVID-19: la 2ª dosis de 6 a 59 meses se bloquea el 1er mes (igual que en escritorio) y se abre un mes después', async ({ page }) => {
+    const conC2 = () => { const st = estadoCovid(); st.db.covid_metas[0].metas.c2 = 20; return st; };
+    const { srv, errores } = await abrir(page, conC2(), '2026-10-14T12:00:00');
+    await page.click('#dockItemINFC');
+    await page.click('.ic-vac-btn[data-vac="COVID"]');
+    // 1er mes de la campaña (inicio 1-oct): la 2ª dosis queda deshabilitada con su etiqueta y su aviso; la 1ª sigue libre
+    await expect(page.locator('#ic_cv_MODERNA_c2')).toBeDisabled();
+    await expect(page.locator('.ic-rubro[data-rubro="cv_c2"] .ic-pill')).toHaveText('Desde 1 nov');
+    await expect(page.locator('.ic-aviso').filter({ hasText: '2ª dosis no disponible esta semana' })).toBeVisible();
+    await expect(page.locator('#ic_cv_MODERNA_c1')).toBeEnabled();
+    // Aunque algo la saltara, guardar con dosis en c2 se rechaza con la regla de calendario y no manda nada
+    await page.evaluate(() => { const i = document.getElementById('ic_cv_MODERNA_c2'); i.disabled = false; i.value = '3'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+    await page.fill('#ic_cv_MODERNA_c1', '2');
+    await page.click('#hubSaveBtn');
+    await expect(page.locator('#icError')).toContainText('No hay 2ª dosis en el 1er mes');
+    expect(srv.reqs.filter(r => r.nombre === 'covid_capturas' && r.m === 'POST')).toHaveLength(0);
+    expect(errores).toEqual([]);
+  });
+
+  test('COVID-19: pasado el primer mes la 2ª dosis se captura normal', async ({ page }) => {
+    const st = estadoCovid(); st.db.covid_metas[0].metas.c2 = 20;
+    const { errores } = await abrir(page, st, '2026-11-06T12:00:00');
+    await page.click('#dockItemINFC');
+    await page.click('.ic-vac-btn[data-vac="COVID"]');
+    await expect(page.locator('#ic_cv_MODERNA_c2')).toBeEnabled();
+    await expect(page.locator('.ic-rubro[data-rubro="cv_c2"] .ic-pill')).toHaveCount(0);
+    await expect(page.locator('.ic-aviso').filter({ hasText: '2ª dosis no disponible' })).toHaveCount(0);
     expect(errores).toEqual([]);
   });
 
