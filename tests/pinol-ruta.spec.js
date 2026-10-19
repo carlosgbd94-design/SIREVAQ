@@ -247,6 +247,26 @@ test.describe('Panel de Pinol (ADMIN): armar la ruta', () => {
     expect(errores).toEqual([]);
   });
 
+  test("sin CSS.escape (error de Sentry): marcar, desmarcar, reordenar e imprimir siguen funcionando", async ({ page }) => {
+    const { errores } = await preparar(page, "ADMIN", lote());
+    await page.evaluate(() => { try { delete CSS.escape; } catch (e) {} if (CSS.escape) CSS.escape = undefined; });
+    await page.evaluate(() => refreshPinol());
+    await mostrar(page, "btnPinolPrintGuia");
+    await page.locator("#btnPinolPrintGuia").click();
+    await page.locator("#prLista input[data-id=p1]").check();
+    await page.locator("#prLista input[data-id=p3]").check();
+    await page.locator("#prLista input[data-id=p1]").uncheck();
+    await page.locator("#prLista input[data-id=p1]").check();
+    await page.locator("#prParadas [data-pr=bajar][data-id=p3]").click();
+    await page.locator("#prParadas [data-pr=subir][data-id=p3]").click();
+    await page.locator("#prResp").fill("Ana Pérez");
+    await page.locator("#prImprimir").click();
+    const html = await page.evaluate(() => window.__abiertas.pop());
+    expect(html).toContain("UNIDAD P1");
+    expect(html).toContain("UNIDAD P3");
+    expect(errores).toEqual([]);
+  });
+
   test('accesibilidad del armador (axe)', async ({ page }) => {
     const fs = require('fs'); const path = require('path');
     const AXE = fs.readFileSync(path.join(__dirname, '..', 'node_modules', 'axe-core', 'axe.min.js'), 'utf8');

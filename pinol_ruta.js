@@ -19,6 +19,8 @@
 
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const norm = (s) => String(s == null ? "" : s).normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim();
+  // CSS.escape puede faltar (o estar pisado por otro script): ids numericos/uuid solo necesitan escapar comillas y barras.
+  const cssEsc = (v) => (typeof CSS !== "undefined" && CSS && typeof CSS.escape === "function") ? CSS.escape(String(v)) : String(v).replace(/[^w-]/g, (c) => "\\" + c);
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
   /* ───────────────────────────── funciones puras ───────────────────────────── */
@@ -411,8 +413,8 @@
       if (i < 0 || j < 0 || j >= S.orden.length) return;
       [S.orden[i], S.orden[j]] = [S.orden[j], S.orden[i]];
       pintarRuta();
-      const nuevo = document.querySelector(`#pinolRutaOverlay [data-pr=${a}][data-id="${CSS.escape(String(id))}"]`);
-      if (nuevo && !nuevo.disabled) nuevo.focus(); else document.querySelector(`#pinolRutaOverlay [data-pr=${a === "subir" ? "bajar" : "subir"}][data-id="${CSS.escape(String(id))}"]`)?.focus();
+      const nuevo = document.querySelector(`#pinolRutaOverlay [data-pr=${a}][data-id="${cssEsc(id)}"]`);
+      if (nuevo && !nuevo.disabled) nuevo.focus(); else document.querySelector(`#pinolRutaOverlay [data-pr=${a === "subir" ? "bajar" : "subir"}][data-id="${cssEsc(id)}"]`)?.focus();
       return pintarLista();
     }
     if (a === "ordenar") { ordenarSeleccion(); return pintarRuta(); }
@@ -421,7 +423,7 @@
   }
   function alCambiar(e) {
     const t = e.target;
-    if (t.dataset && t.dataset.pr === "sel") { if (t.checked) { agregar(t.dataset.id); } else quitar(t.dataset.id); pintarRuta(); pintarLista(); const c = document.querySelector(`#pinolRutaOverlay [data-pr=sel][data-id="${CSS.escape(t.dataset.id)}"]`); if (c) c.focus(); }
+    if (t.dataset && t.dataset.pr === "sel") { if (t.checked) { agregar(t.dataset.id); } else quitar(t.dataset.id); pintarRuta(); pintarLista(); const c = document.querySelector(`#pinolRutaOverlay [data-pr=sel][data-id="${cssEsc(t.dataset.id)}"]`); if (c) c.focus(); }
   }
   function alEscribir(e) {
     const t = e.target;
