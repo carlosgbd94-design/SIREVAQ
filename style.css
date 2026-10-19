@@ -1952,17 +1952,50 @@ label,
   box-shadow: none !important;
 }
 
-/* Anchos Pro para Log -- 7 columnas: Bio y Registro, Lote, Vigencia, Tipo,
-   Estatus Log, Municipio, Acción (la columna Tipo se agregó después; si se
-   agrega/quita otra columna aquí, hay que correr estos nth-child también). */
-#lotesTableWrap .summaryTable { table-layout: fixed; }
-#lotesTableWrap .summaryTable :is(th, td):nth-child(1) { width: 16%; } /* Bio y Registro */
-#lotesTableWrap .summaryTable :is(th, td):nth-child(2) { width: 11%; } /* Lote */
-#lotesTableWrap .summaryTable :is(th, td):nth-child(3) { width: 13%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* Vigencia */
+/* Panel Lotes -- 8 columnas: Bio y Registro, Lote, Vigencia, Tipo, Estatus Log,
+   Municipio, Captura, Acción. Los anchos suman 100% para que la tabla quepa sin
+   scroll horizontal (antes eran 7 columnas y la 8a empujaba todo hacia afuera).
+   Si se agrega/quita una columna, hay que correr estos nth-child también. */
+#lotesTableWrap { overflow-x: hidden; }
+#lotesTableWrap .summaryTable { table-layout: fixed; width: 100%; min-width: 0; }
+#lotesTableWrap .summaryTable thead th,
+#lotesTableWrap .summaryTable tbody td {
+  padding: 10px 8px !important;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+#lotesTableWrap .summaryTable thead th { font-size: 10.5px !important; letter-spacing: 0.06em !important; }
+#lotesTableWrap .summaryTable :is(th, td):first-child { padding-left: 16px !important; }
+#lotesTableWrap .summaryTable :is(th, td):last-child { padding-right: 10px !important; }
+#lotesTableWrap .summaryTable :is(th, td):nth-child(1) { width: 14%; } /* Bio y Registro */
+#lotesTableWrap .summaryTable :is(th, td):nth-child(2) { width: 12%; } /* Lote */
+#lotesTableWrap .summaryTable :is(th, td):nth-child(3) { width: 11%; } /* Vigencia */
 #lotesTableWrap .summaryTable :is(th, td):nth-child(4) { width: 11%; } /* Tipo */
-#lotesTableWrap .summaryTable :is(th, td):nth-child(5) { width: 26%; } /* Estatus Log*/
-#lotesTableWrap .summaryTable :is(th, td):nth-child(6) { width: 13%; } /* Municipio */
-#lotesTableWrap .summaryTable :is(th, td):nth-child(7) { width: 10%; text-align: center; }  /* Acci*/
+#lotesTableWrap .summaryTable :is(th, td):nth-child(5) { width: 19%; } /* Estatus Log */
+#lotesTableWrap .summaryTable :is(th, td):nth-child(6) { width: 12%; } /* Municipio */
+#lotesTableWrap .summaryTable :is(th, td):nth-child(7) { width: 13%; } /* Captura */
+#lotesTableWrap .summaryTable :is(th, td):nth-child(8) { width: 8%; text-align: center; } /* Acción */
+/* Píldoras compactas: el texto largo del estatus baja a 2 líneas en vez de cortarse */
+#lotesTableWrap .status-pill {
+  padding: 4px 9px;
+  min-height: 28px;
+  font-size: 10.5px;
+  gap: 5px;
+  white-space: normal;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+}
+#lotesTableWrap .status-pill .material-symbols-rounded { flex: none; }
+#lotesTableWrap .inline-edit-input { width: 100%; min-width: 0; box-sizing: border-box; }
+#lotesTableWrap .md-edit-btn, #lotesTableWrap .md-delete-btn { padding: 4px !important; }
+/* En pantallas angostas sí se permite deslizar, con un ancho mínimo legible */
+@media (max-width: 980px) {
+  #lotesTableWrap { overflow-x: auto; }
+  #lotesTableWrap .summaryTable { min-width: 860px; }
+}
 
 .summaryTable :is(th, td):last-child {
   padding-right: 16px !important;

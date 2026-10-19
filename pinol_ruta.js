@@ -155,26 +155,26 @@
       g.items.forEach((x) => {
         n++;
         const obs = String(x.observaciones || "").trim();
-        filas += `<tr style="page-break-inside:avoid;">
+        filas += `<tr style="page-break-inside:avoid;height:74px;">
           <td style="${td}text-align:center;font-weight:800;">${n}</td>
           <td style="${td}font-family:monospace;font-weight:700;">${esc(x.clues || "")}</td>
           <td style="${td}font-weight:800;">${esc(x.unidad || "")}${esCritica(x) ? ' <span style="font-size:9px;font-weight:900;color:#991b1b;">· SIN EXISTENCIA</span>' : ""}${obs ? `<div style="font-weight:600;font-size:9.5px;color:#475569;">${esc(obs.length > 90 ? obs.slice(0, 87) + "…" : obs)}</div>` : ""}</td>
           <td style="${td}text-align:center;font-weight:700;">${num(x.existencia_actual_botellas)}</td>
           <td style="${td}text-align:center;font-weight:900;">${cant(x)} pz</td>
           <td style="${td}text-align:center;font-weight:700;">${(cant(x) * LITROS_BOTELLA).toFixed(1)} L</td>
-          <td style="${td}width:150px;"></td>
+          <td style="${td}width:170px;"></td>
         </tr>`;
       });
     });
     return `<div style="padding:18px 22px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#0f172a;background:#fff;">
       <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px;">
-        <div style="width:110px;">${logos.logo1 ? `<img src="${logos.logo1}" style="height:48px;" alt="">` : ""}</div>
-        <div style="text-align:center;">
+        <div style="flex:0 0 auto;max-width:30%;">${logos.logo1 ? `<img src="${logos.logo1}" style="height:48px;max-width:100%;width:auto;object-fit:contain;display:block;" alt="">` : ""}</div>
+        <div style="flex:1 1 0;min-width:0;text-align:center;padding:0 10px;">
           <div style="font-size:15px;font-weight:900;text-transform:uppercase;">Servicios de Salud del Estado de Querétaro</div>
           <div style="font-size:12.5px;font-weight:800;color:#166534;text-transform:uppercase;">Guía de despacho y ruta de entrega</div>
           <div style="font-size:10.5px;font-weight:700;color:#475569;">Insumos de desinfección de red de frío (Pinol® 828 mL)</div>
         </div>
-        <div style="width:110px;text-align:right;">${logos.logo2 ? `<img src="${logos.logo2}" style="height:52px;" alt="">` : ""}</div>
+        <div style="flex:0 0 auto;max-width:30%;">${logos.logo2 ? `<img src="${logos.logo2}" style="height:44px;max-width:100%;width:auto;object-fit:contain;display:block;margin-left:auto;" alt="">` : ""}</div>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px;"><tbody>
         <tr>
@@ -191,7 +191,7 @@
       <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:26px;">
         <thead><tr style="background:#1e293b;color:#fff;text-transform:uppercase;font-weight:800;">
           <th style="${th}width:28px;">#</th><th style="${th}text-align:left;width:105px;">CLUES</th><th style="${th}text-align:left;">Unidad de salud</th>
-          <th style="${th}width:56px;">Exist.</th><th style="${th}width:62px;">Botellas</th><th style="${th}width:56px;">Litros</th><th style="${th}width:150px;">Firma de recibido</th>
+          <th style="${th}width:56px;">Exist.</th><th style="${th}width:62px;">Botellas</th><th style="${th}width:56px;">Litros</th><th style="${th}width:170px;">Sello y firma de recibido</th>
         </tr></thead>
         <tbody>${filas}
           <tr style="background:#f1f5f9;font-weight:900;"><td colspan="4" style="${td}text-align:right;">TOTAL DE LA RUTA</td><td style="${td}text-align:center;">${tot.botellas} pz</td><td style="${td}text-align:center;">${tot.litros.toFixed(1)} L</td><td style="${td}"></td></tr>
