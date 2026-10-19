@@ -864,35 +864,37 @@ test('COVID Jurisdicción: reparte Moderna por la meta equivalente y Pfizer desc
     renderFrascosDistribution();
   }, metasCovid);
 
-  // Moderna: 150 frascos en proporción 1000 : 500 → 100 y 50 (cada uno justo en su tope)
+  // Moderna: CORREGIDORA es solo de adultos (sin meta de niños) y no recibe Moderna: los 150 van a QUERETARO
   await page.fill('#remesaTotalInput', '150');
-  expect(await valores(page, ['QUERETARO', 'CORREGIDORA'])).toEqual(['100', '50']);
-  await expect(page.locator('#rem_dos_QUERETARO')).toHaveText('500');         // 100 frascos × 5 dosis
+  expect(await valores(page, ['QUERETARO', 'CORREGIDORA'])).toEqual(['150', '0']);
+  await expect(page.locator('#rem_tope_CORREGIDORA')).toContainText('Sin meta de niños');
+  await expect(page.locator('#rem_tope_CORREGIDORA')).toContainText('100 %');   // se cubre al 100 % con Pfizer
+  await expect(page.locator('#rem_dos_QUERETARO')).toHaveText('750');         // 150 frascos × 5 dosis
   await expect(page.locator('#remesaPill')).toContainText('Reparto completo');   // estado en línea, junto a «Guardar»
   await expect(page.locator('#rem_tope_QUERETARO')).toContainText('200');         // le caben ceil(1,000 / 5) frascos de Moderna
   await expect(page.locator('#rem_mmod_QUERETARO')).toContainText('200');          // Meta Moderna en frascos
   await expect(page.locator('#rem_mpfz_QUERETARO')).toContainText('134');          // Meta Pfizer: adulta 800 / 6
 
   // Guarda como COVID/MODERNA (acción y marca propias) y sin tocar las tablas de influenza
-  await page.fill('#rem_inp_QUERETARO', '40');
-  await page.fill('#rem_inp_CORREGIDORA', '20');
+  await page.fill('#rem_inp_QUERETARO', '60');
+  await page.fill('#rem_inp_CORREGIDORA', '0');
   await page.fill('#remesaTotalInput', '60');
   await page.click('#btnSaveRemesa');
   const guardada = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'savecovid_remesa'));
   expect(guardada[1].marca).toBe('MODERNA');
   expect(guardada[1].total_frascos).toBe(60);
-  expect(guardada[1].asignacion.QUERETARO).toBe(40);
+  expect(guardada[1].asignacion.QUERETARO).toBe(60);
   expect(await page.evaluate(() => window.__llamadas.some((l) => l[0] === 'saveinfluenza_remesa'))).toBe(false);
 
-  // Pfizer con esa Moderna ya entregada (40 y 20 frascos × 5 dosis): QUERETARO (1000-200)/6 = 134; CORREGIDORA (500-100)/6 = 67
+  // Pfizer con esa Moderna ya entregada (60 frascos × 5 dosis a QUERETARO): QUERETARO (1000-300)/6 = 117; CORREGIDORA 500/6 = 84
   const topes = await page.evaluate(() => {
-    _covidRemesasAll = [{ marca: 'MODERNA', numero_entrega: 1, fecha: '2026-10-05', total_frascos: 60, asignacion: { QUERETARO: 40, CORREGIDORA: 20 }, manual: [] }];
+    _covidRemesasAll = [{ marca: 'MODERNA', numero_entrega: 1, fecha: '2026-10-05', total_frascos: 60, asignacion: { QUERETARO: 60, CORREGIDORA: 0 }, manual: [] }];
     _marcaCovid = 'PFIZER';
     _remesaState.numero = null;
     renderFrascosDistribution();
     return calcularRemesa().items.filter((i) => ['QUERETARO', 'CORREGIDORA'].includes(i.id)).map((i) => [i.id, i.meta, i.tope]);
   });
-  expect(topes).toEqual([['QUERETARO', 800, 134], ['CORREGIDORA', 500, 67]]);   // meta Pfizer = solo adulta
+  expect(topes).toEqual([['QUERETARO', 800, 117], ['CORREGIDORA', 500, 84]]);   // meta Pfizer = solo adulta
   await page.fill('#remesaTotalInput', '300');
   await expect(page.locator('#remesaResumen')).toContainText('ya no caben');       // 201 máx. entre los dos
 });
@@ -1423,8 +1425,9 @@ async function montarMunicipalCovid(page) {
 test('COVID municipal: reparte los frascos de la marca por la meta de cada unidad (con su lote) y guarda con la marca', async ({ page }) => {
   await montarMunicipalCovid(page);
   const v = (c) => page.locator(`#batch_frascos_${c}`).inputValue();
-  // Moderna 40 frascos por meta equivalente 2,600 : 1,300 : 100 → 26 / 13 / 1
-  expect([await v('Q1'), await v('Q2'), await v('Q3')]).toEqual(['26', '13', '1']);
+  // Moderna 40 frascos por meta equivalente 2,600 : 1,300 (Q3 es solo de adultos: no recibe Moderna) → 27 / 13 / 0
+  expect([await v('Q1'), await v('Q2'), await v('Q3')]).toEqual(['27', '13', '0']);
+  await expect(page.locator('#mr_tope_Q3')).toContainText('Sin meta de niños');
   await expect(page.locator('#kpiDosis')).toContainText('200 dosis');                 // 40 frascos x 5 dosis
   // Antes de teclear ya se ve cuántos frascos le caben a cada unidad y su meta en frascos de las dos marcas
   await expect(page.locator('#mr_tope_Q1')).toContainText('520');                     // le caben 520 de Moderna
@@ -1447,14 +1450,14 @@ test('COVID municipal: reparte los frascos de la marca por la meta de cada unida
 
 test('COVID municipal: Pfizer solo llega a unidades con meta adulta y el tope descuenta lo que ya tiene de la otra marca', async ({ page }) => {
   await montarMunicipalCovid(page);
-  // Q3 ya recibió 10 frascos de Pfizer (60 dosis de su meta de 100): a Moderna solo le caben ceil((100-60)/5) = 8
+  // Q3 es solo de adultos (sin meta de niños): no recibe Moderna aunque le sobre meta (tope 0), solo Pfizer
   const topes = await page.evaluate(() => {
     _covidFrascosAll = [{ marca: 'PFIZER', clues: 'Q3', municipio: 'QUERETARO', numero_entrega: 1, cantidad_frascos: 10 }];
     _muniRepartoState.numero = null;
     renderFrascosDistribution();
     return frascoItemsMunicipal('QUERETARO').map((i) => [i.id, i.tope]);
   });
-  expect(topes).toEqual([['Q1', 520], ['Q2', 260], ['Q3', 8]]);
+  expect(topes).toEqual([['Q1', 520], ['Q2', 260], ['Q3', 0]]);
   await expect(page.locator('#frascosBatchTbody tr', { hasText: 'UMQ TRES' })).toContainText('Pfizer: 10');   // lo de la otra marca se ve
 
   // Pfizer: meta adulta 600 / 300 / 100 → topes 100 / 50 / 17 frascos (ceil de dosis/6), sin sobrepasar la adulta
@@ -1471,7 +1474,7 @@ test('COVID municipal: Pfizer solo llega a unidades con meta adulta y el tope de
 test('COVID municipal: no deja repartir más de lo que le cabe a una unidad (aunque el total cuadre)', async ({ page }) => {
   await montarMunicipalCovid(page);
   await page.evaluate(() => { window.__toasts = []; window.__llamadas = []; });
-  // Q3 solo admite 20 frascos de Moderna (meta 100 dosis / 5): se le ponen 25 y se compensa en Q1 y Q2
+  // Q1 solo admite 520 de Moderna, pero Q3 (solo adultos) no admite ninguno: se le ponen 25 y se compensa en Q1 y Q2
   await page.fill('#batch_frascos_Q3', '25');
   await page.fill('#batch_frascos_Q1', '8');
   await page.fill('#batch_frascos_Q2', '7');
@@ -1501,12 +1504,12 @@ test('COVID frascos: la marca se elige con un control grande y accesible, y el e
   const pildora = page.locator('#frascosHubEstado');
   await expect(pildora).toContainText('completo');
   await page.fill('#batch_frascos_Q1', '30');
-  await expect(pildora).toHaveAttribute('aria-label', /Te pasaste por 4 frascos/);
+  await expect(pildora).toHaveAttribute('aria-label', /Te pasaste por 3 frascos/);
   await expect(pildora).toHaveAttribute('data-estado', 'excede');
-  await expect(pildora).toContainText('4');
+  await expect(pildora).toContainText('3');
   await expect(pildora).toContainText('de más');
   await page.fill('#batch_frascos_Q1', '20');
-  await expect(pildora).toHaveAttribute('aria-label', /Faltan 6 frascos por repartir/);
+  await expect(pildora).toHaveAttribute('aria-label', /Faltan 7 frascos por repartir/);
   await expect(pildora).toContainText('faltan');
 });
 

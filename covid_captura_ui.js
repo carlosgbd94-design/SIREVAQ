@@ -137,6 +137,25 @@
     });
     box.appendChild(card);
 
+    // Frascos que corresponden a la meta de la unidad: niños solo con Moderna (5 dosis), adultos con Pfizer (6 dosis)
+    const F = root.CovidFrascos;
+    if (F && F.frascosPorMeta) {
+      const fm = F.frascosPorMeta(metas);
+      const resumen = document.createElement("section");
+      resumen.className = "cvc-frascos";
+      resumen.setAttribute("aria-label", "Frascos que corresponden a la meta de tu unidad");
+      resumen.style.cssText = "display:flex;flex-wrap:wrap;gap:12px;align-items:stretch;margin-bottom:12px";
+      const caja = (tit, num, det) => `<div style="flex:1 1 180px;border:1px solid #e2e8f0;border-radius:16px;padding:12px 16px;background:#fff">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#64748b">${tit}</div>
+        <div style="font-size:26px;font-weight:900;color:#4c1d95;line-height:1.2">${fmt(num)} <span style="font-size:13px;font-weight:700;color:#64748b">frascos</span></div>
+        <div style="font-size:12px;color:#64748b">${det}</div></div>`;
+      resumen.innerHTML =
+        caja("Moderna · niños de 6 a 59 meses", fm.moderna, `Meta de niños: ${fmt(fm.pedEq)} dosis de 0.5 mL ÷ 5 por frasco. Es la única marca para menores de 12 años (lineamientos 2026-2027).`) +
+        caja("Pfizer · 12 años y más", fm.pfizer, `Meta de adultos: ${fmt(fm.adulto)} dosis ÷ 6 por frasco. Pfizer solo se aplica desde los 12 años.`) +
+        caja("Total que te corresponde", fm.total, "Sin contar la pérdida que sume la Jurisdicción.");
+      card.insertBefore(resumen, card.children[1]);
+    }
+
     const leer = () => {
       const v = { MODERNA: {}, PFIZER: {} };
       box.querySelectorAll(".inf-input[data-m]").forEach((el) => { v[el.dataset.m][el.dataset.r] = Math.max(0, parseInt(el.value, 10) || 0); });

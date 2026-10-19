@@ -57,12 +57,50 @@
   }
 
   /**
+   * Frascos que corresponden a una meta: los niños (6-59 meses) solo se vacunan con Moderna, así que la meta
+   * pediátrica equivalente (c1+c2)/2 se cubre con Moderna (5 dosis de 0.5 mL por frasco); la meta adulta (c3..c6)
+   * va con Pfizer (6 dosis por frasco). Ejemplo: 25 dosis de niños = 5 frascos de Moderna de cajón.
+   * Sin pérdida (la pérdida de la Jurisdicción solo sube lo que se debe recibir).
+   */
+  function frascosPorMeta(metas) {
+    const pedEq = metaPediatrica(metas) / 2;
+    const adulto = metaAdulta(metas);
+    const moderna = Math.ceil(pedEq / DPF_MODERNA);
+    const pfizer = Math.ceil(adulto / DPF_PFIZER);
+    return { pedEq, adulto, moderna, pfizer, total: moderna + pfizer };
+  }
+
+  /**
+   * Cobertura de niños: los menores de 6 a 59 meses solo reciben Moderna, así que cada destino/unidad necesita
+   * al menos `minimo` frascos de Moderna (meta pediátrica con su pérdida / 5, hacia arriba). Pfizer no cuenta.
+   * `factor` = factorPerdida de la Jurisdicción; `moderna` = frascos de Moderna recibidos (todas las entregas).
+   */
+  function coberturaNinos(metas, factor, moderna) {
+    const dosisNinos = Math.max(0, metaMarcaConPerdida(metas, "MODERNA", factor) - metaMarcaConPerdida(metas, "PFIZER", factor));
+    const minimo = Math.ceil(dosisNinos / DPF_MODERNA);
+    const recibidos = n(moderna);
+    return { dosisNinos, minimo, moderna: recibidos, faltan: Math.max(0, minimo - recibidos), cubierto: recibidos >= minimo };
+  }
+
+  /**
+   * ¿La meta no trae niños de 6 a 59 meses? (solo adultos). Entonces no recibe Moderna y su meta se cubre al 100 %
+   * con Pfizer: `pfizerFrascos` = frascos de Pfizer que la cubren (6 dosis por frasco, con pérdida).
+   */
+  function sinNinos(metas, factor) {
+    const total = metaMarcaConPerdida(metas, "MODERNA", factor);
+    const adulto = metaMarcaConPerdida(metas, "PFIZER", factor);
+    return { sinNinos: total > 0 && total <= adulto, dosisMeta: total, pfizerFrascos: Math.ceil(adulto / DPF_PFIZER) };
+  }
+
+  /**
    * Frascos que aún le caben a un destino/unidad en la entrega que se está capturando.
    *  - total / adulto: meta en dosis de 0.5 mL (equivalente) y meta adulta.
    *  - propiasOtras: frascos de ESTA marca en las demás entregas.
    *  - otraMarca: frascos de la OTRA marca (todas sus entregas).
    */
-  function topeFrascos({ total, adulto, marca, propiasOtras, otraMarca }) {
+  function topeFrascos({ total, adulto, marca, propiasOtras, otraMarca, sinNinos }) {
+    // Sin meta de niños no recibe Moderna: se cubre al 100 % con Pfizer (igual que el servidor).
+    if (marca === "MODERNA" && sinNinos) return 0;
     const dpf = dosisPorFrasco(marca);
     const dpfOtra = dosisPorFrasco(marca === "PFIZER" ? "MODERNA" : "PFIZER");
     const otrasDosis = n(propiasOtras) * dpf + n(otraMarca) * dpfOtra;
@@ -382,7 +420,7 @@
     };
   }
 
-  const api = { RUBROS, MARCAS, dosisPorFrasco, metaPediatrica, metaAdulta, metaEquivalente, metaMarca, topeFrascos,
+  const api = { RUBROS, MARCAS, dosisPorFrasco, metaPediatrica, metaAdulta, metaEquivalente, metaMarca, topeFrascos, frascosPorMeta, coberturaNinos, sinNinos,
     pesosInfluenza, repartirEntero, predistribuir, factorPerdida, metaMarcaConPerdida,
     razonPerdida, recibirDosis, esCerrado, candidatosCerrados, cerrarLado, predistribuirCerrado, DPF_MODERNA, DPF_PFIZER,
     VARIABLE_SIS, avanceRubros };

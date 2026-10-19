@@ -16800,7 +16800,7 @@ window.ensureLibsLoaded = ensureLibsLoaded;
 async function generarPDFResguardoSR(municipios, fIni, fFin, isUnitExport = false) {
   showOverlay("Preparando PDF...", "PDF");
   try {
-    await Promise.all([ensurePdfAssetsLoaded(), ensureJsPdfLoaded()]);
+    await Promise.all([ensurePdfAssetsLoaded(), ensureJsPdfLoaded(), typeof ensureCovidLoteMarca === "function" ? ensureCovidLoteMarca() : null]);
     const groups = {};
 
     if (isUnitExport) {
@@ -17012,7 +17012,7 @@ async function generarPDFResguardoSR(municipios, fIni, fFin, isUnitExport = fals
           if (i < pageItems.length) {
             const it = pageItems[i];
             const frascos = Number(it.cantidad || 0);
-            const dosis = Math.round(frascos * getDosesPerVial(it.biologico));
+            const dosis = Math.round(frascos * getDosesPerVial(it.biologico, it.lote));
             tableRows.push([
               it.biologico.toUpperCase(),
               frascos.toString(),
@@ -23855,11 +23855,29 @@ function highlightZeroRows(items) {
   }
 }
 
-function getDosesPerVial(biologico) {
+// Marca de cada lote de COVID-19 (la existencia guarda un solo «COVID-19» sin marca). Sale de Requisiciones
+// (supabase/covid_marca_por_lote.sql). Moderna = 5 dosis de 0.5 mL por frasco, Pfizer = 6.
+window.COVID_LOTE_MARCA = window.COVID_LOTE_MARCA || null;
+async function ensureCovidLoteMarca() {
+  if (window.COVID_LOTE_MARCA) return window.COVID_LOTE_MARCA;
+  try {
+    const { data, error } = await window.supabase.rpc('covid_marca_por_lote');
+    if (error) throw error;
+    const mapa = {};
+    (data || []).forEach(r => { mapa[String(r.lote || '').toUpperCase().trim()] = r.marca; });
+    window.COVID_LOTE_MARCA = mapa;
+  } catch (e) {
+    console.warn("[COVID] No se pudo leer la marca de los lotes:", e);
+  }
+  return window.COVID_LOTE_MARCA || {};
+}
+
+function getDosesPerVial(biologico, lote) {
   const name = String(biologico || '').toUpperCase().trim();
-  
+
   if (name.includes("COVID-19") || name.includes("COVID")) {
-    return 6;
+    const marca = (window.COVID_LOTE_MARCA || {})[String(lote || '').toUpperCase().trim()];
+    return marca === "MODERNA" ? 5 : 6;
   }
   
   // Monodosis (1 dosis)
@@ -24128,6 +24146,7 @@ window.renderLiveViewTableContent = function() {
       if (!currentItems.length && !prevItems.length) {
         tbody.innerHTML = '<tr><td colspan="6" class="muted" style="padding:40px; text-align:center;">No hay registros para calcular movimiento.</td></tr>';
       } else {
+        if (!window.COVID_LOTE_MARCA) ensureCovidLoteMarca(); // se usa en la siguiente apertura (Moderna 5 dosis / Pfizer 6)
         const prevMap = {};
         prevItems.forEach(r => {
           const key = `${(r.biologico || '').trim().toUpperCase()}:${(r.lote || '').trim().toUpperCase()}`;
@@ -24150,7 +24169,7 @@ window.renderLiveViewTableContent = function() {
           let statusColor = "";
           let statusBg = "";
 
-          const dosesPerVial = getDosesPerVial(bioName);
+          const dosesPerVial = getDosesPerVial(bioName, loteName);
 
           if (prevQty > currQty) {
             apps = Math.round((prevQty - currQty) * dosesPerVial);

@@ -13,7 +13,7 @@ const extraer = (inicio) => {
 };
 const codigo = extraer('async function generarPDFResguardoSR(') + extraer('function getDosesPerVial(');
 
-function generar(existencias) {
+function generar(existencias, marcas) {
   const hojas = [];      // una entrada por página: filas de la tabla de biológicos
   let paginaActual = -1;
   const doc = {
@@ -29,6 +29,7 @@ function generar(existencias) {
   const ctx = {
     console, Math, Number, String, Object, Array, Promise, Map,
     window: {
+      COVID_LOTE_MARCA: marcas || null,
       jspdf: { jsPDF: function () { return doc; } },
       supabase: {
         from(t) {
@@ -100,4 +101,53 @@ test('exactamente 18 filas caben en una sola hoja y los lotes en cero no se impr
   const hojas = await generar(filas);
   expect(hojas).toHaveLength(2);
   expect(llenas(hojas[0])).toHaveLength(18);
+});
+
+test('COVID-19: Moderna imprime 5 dosis por frasco y Pfizer 6 (según la marca del lote)', async () => {
+  const hojas = await generar([
+    fila('COVID-19', '3062813', 4, '2026-10-01'),
+    fila('COVID-19', 'RP2699', 4, '2026-10-01'),
+  ], { '3062813': 'MODERNA', 'RP2699': 'PFIZER' });
+  const f = llenas(hojas[0]);
+  expect(f.find((r) => r[3] === '3062813')[2]).toBe('20');
+  expect(f.find((r) => r[3] === 'RP2699')[2]).toBe('24');
+});
+
+test('frascos por meta: niños solo con Moderna (5 dosis), adultos con Pfizer (6)', () => {
+  const F = require('../covid_frascos.js');
+  // 25 niños (1ª y 2ª dosis) = 25 dosis de 0.5 mL equivalentes = 5 frascos Moderna de cajón
+  expect(F.frascosPorMeta({ c1: 25, c2: 25 })).toMatchObject({ moderna: 5, pfizer: 0, total: 5 });
+  expect(F.frascosPorMeta({ c1: 25, c2: 25, c3: 10, c4: 20 })).toMatchObject({ moderna: 5, pfizer: 5, total: 10 });
+  expect(F.frascosPorMeta({ c4: 13 })).toMatchObject({ moderna: 0, pfizer: 3 });
+});
+
+test('cobertura de niños con las cifras reales de la Jurisdicción: Moderna mínimo 13,779 y Pfizer no los cubre', () => {
+  const F = require('../covid_frascos.js');
+  const juris = { c1: 65604, c2: 65604, c3: 4135, c4: 6288, c5: 948, c6: 859, perdida: 3900 };
+  const f = F.factorPerdida(juris);
+  expect(F.metaMarcaConPerdida(juris, 'MODERNA', f)).toBe(81734);
+  const c = F.coberturaNinos(juris, f, 13791);   // lo que entrega la federación
+  expect(c.minimo).toBe(13779);
+  expect(c.cubierto).toBe(true);
+  expect(F.coberturaNinos(juris, f, 13000)).toMatchObject({ cubierto: false, faltan: 779 });
+  // Pfizer (2,141 frascos = 12,846 dosis) alcanza para toda la meta adulta con pérdida
+  expect(Math.ceil(F.metaMarcaConPerdida(juris, 'PFIZER', f) / 6)).toBe(2141);
+});
+
+test('sin meta de niños: no recibe Moderna (tope 0) y se cubre al 100% con Pfizer', () => {
+  const F = require('../covid_frascos.js');
+  const juris = { c1: 65604, c2: 65604, c3: 4135, c4: 6288, c5: 948, c6: 859, perdida: 3900 };
+  const f = F.factorPerdida(juris);
+  const hospital = { c4: 300, c6: 66 };                    // 366 dosis, solo adultos (como HENM)
+  const sn = F.sinNinos(hospital, f);
+  expect(sn.sinNinos).toBe(true);
+  expect(sn.pfizerFrascos * 6).toBeGreaterThanOrEqual(366);
+  const base = { total: 400, adulto: 400, propiasOtras: 0, otraMarca: 0 };
+  expect(F.topeFrascos({ ...base, marca: 'MODERNA', sinNinos: true })).toBe(0);
+  expect(F.topeFrascos({ ...base, marca: 'MODERNA', sinNinos: false })).toBeGreaterThan(0);
+  expect(F.topeFrascos({ ...base, marca: 'PFIZER', sinNinos: true })).toBeGreaterThan(0);
+  // una unidad con niños sí recibe Moderna
+  expect(F.sinNinos({ c1: 40, c2: 40, c4: 20 }, f).sinNinos).toBe(false);
+  // sin ninguna meta no se marca como "sin niños"
+  expect(F.sinNinos({}, f).sinNinos).toBe(false);
 });
