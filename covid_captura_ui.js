@@ -118,7 +118,7 @@
         return `<td class="p-3 text-center">
           <input type="number" min="0" step="1" inputmode="numeric" id="input_cov_${m}_${r}" class="inf-input" data-m="${m}" data-r="${r}"
             aria-label="${MARCA_TXT[m]}, ${esc(EDAD[r])}: dosis aplicadas esta semana" aria-describedby="disp_cov_${r}"
-            value="${val > 0 ? val : ""}" ${ctx.cerrada ? 'disabled placeholder="—" title="La captura de esta semana está cerrada"' : 'placeholder="0"'}>
+            value="${val > 0 ? val : ""}" ${ctx.cerrada ? 'disabled placeholder="—" title="La captura de esta semana está cerrada"' : ctx.bloqueada ? 'disabled title="Reporte guardado: presiona Editar para modificarlo"' : 'placeholder="0"'}>
         </td>`;
       };
       const row = document.createElement("tr");

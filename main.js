@@ -25627,6 +25627,10 @@ function syncCommandHub() {
     (captureTab === "CONS" && typeof HAS_TODAY_CONS !== "undefined" && HAS_TODAY_CONS) ||
     (captureTab === "BIO" && typeof HAS_SAVED_BIO !== "undefined" && HAS_SAVED_BIO);
   const canEdit = isAlreadySaved && !isEditing;
+  // Influenza / COVID-19: un reporte guardado se abre bloqueado y solo se corrige en «modo edición»
+  const cme = captureTab === "INFLUENZA" ? window.capturaModoEdicion : null;
+  const infGuardado = !!(cme && cme.guardado());
+  const infEditando = !!(cme && cme.editando());
 
   // 1. Visibilidad Global (Solo en paneles de captura)
   const isCapture = (mainPanel === "CAP");
@@ -25688,7 +25692,7 @@ function syncCommandHub() {
       isValidDate = false;
       reasonInvalid = estInf.motivo;
     }
-    isSaveDisabled = !isValidDate;
+    isSaveDisabled = !isValidDate || (infGuardado && !infEditando);
   }
 
   // Lógica del Status Chip (¿Está guardado hoy?)
@@ -25696,7 +25700,7 @@ function syncCommandHub() {
   if (captureTab === "SR") isSaved = !!HAS_TODAY_SR;
   if (captureTab === "CONS") isSaved = !!HAS_TODAY_CONS;
   if (captureTab === "BIO") isSaved = !!HAS_SAVED_BIO;
-  if (captureTab === "INFLUENZA" && typeof window.influenzaEstadoCaptura === "function") isSaved = window.influenzaEstadoCaptura().guardado;
+  if (captureTab === "INFLUENZA") isSaved = infGuardado;
   if (captureTab === "PINOL") {
     // Pinol state machine: check for pending solicitud from this unit
     try {
@@ -25755,7 +25759,7 @@ function syncCommandHub() {
       }
     } else if (isSaved) {
       hubStatus.className = "status-chip-v5 saved";
-      hubStatusText.textContent = "Reporte Guardado";
+      hubStatusText.textContent = infEditando ? "Editando" : "Reporte Guardado";
     } else {
       hubStatus.className = "status-chip-v5 pending";
       hubStatusText.textContent = "Pendiente de Captura";
@@ -25765,16 +25769,16 @@ function syncCommandHub() {
   if (hubSave) {
     const saveText = hubSave.querySelector('span:last-child');
     if (saveText) {
-      if (isEditing) saveText.textContent = "Actualizar";
+      if (isEditing || infEditando) saveText.textContent = "Actualizar";
       else saveText.textContent = "Guardar";
     }
   }
 
-  // Para INFLUENZA no hay modo edición/cancelación (manejo propio)
+  // INFLUENZA / COVID-19: modo edición propio (influenza_module.js › capturaModoEdicion)
   if (captureTab === "INFLUENZA") {
-    // Influenza no bloquea los campos; «Editar» solo avisa que el reporte guardado se puede corregir (lleva a las dosis).
-    if (hubEdit) hubEdit.style.display = (isSaved && isValidDate) ? "flex" : "none";
-    if (hubCancel) hubCancel.style.display = "none";
+    // Reporte guardado: casillas bloqueadas hasta «Editar»; en edición aparece «Cancelar» para volver a lo guardado.
+    if (hubEdit) hubEdit.style.display = (infGuardado && !infEditando && isValidDate) ? "flex" : "none";
+    if (hubCancel) hubCancel.style.display = infEditando ? "flex" : "none";
   } else {
     if (canEdit && captureTab !== "PINOL") hubEdit.style.display = "flex";
     else hubEdit.style.display = "none";
@@ -25790,7 +25794,7 @@ function syncCommandHub() {
     hubSave.setAttribute("aria-disabled", isSaveDisabled ? "true" : "false");
     hubSave.title = isSaveDisabled
       ? (captureTab === "PINOL" ? "Bloqueado: confirma primero la recepción de tu Pinol anterior" : "Guardado no disponible por ahora")
-      : (isEditing ? "Actualizar" : "Guardar cambios");
+      : ((isEditing || infEditando) ? "Actualizar" : "Guardar cambios");
     hubSave.setAttribute("aria-label", hubSave.title);
 
     // Remove legacy Tailwind classes and ensure base class
@@ -25807,7 +25811,7 @@ function syncCommandHub() {
         }
         const alertMsg = (hubSave.getAttribute("data-alert"))
           ? "Corrige las alertas antes de guardar"
-          : (reasonInvalid || (isSaved && !isEditing
+          : (reasonInvalid || (isSaved && !isEditing && !infEditando
             ? "Este reporte ya está guardado. Usa Editar si necesitas modificarlo."
             : "No es posible guardar en este momento"));
         showToast(alertMsg, false, "warn");
@@ -25881,16 +25885,7 @@ function syncCommandHub() {
       if (captureTab === "SR") performEditSR();
       if (captureTab === "CONS") performEditCONS();
       if (captureTab === "BIO") performEditBIO();
-      if (captureTab === "INFLUENZA") {
-        const primero = Array.from(document.querySelectorAll("#formINFLUENZA .inf-input")).find(i => !i.disabled);
-        if (primero) {
-          primero.scrollIntoView({ behavior: "smooth", block: "center" });
-          primero.focus({ preventScroll: true });
-          showToast("Corrige las dosis y presiona Guardar para actualizar tu reporte.", true, "info");
-        } else {
-          showToast("Esta semana no tiene dosis editables.", false, "warn");
-        }
-      }
+      if (captureTab === "INFLUENZA" && window.capturaModoEdicion) window.capturaModoEdicion.entrar();
     };
   }
   if (hubCancel) {
@@ -25898,6 +25893,7 @@ function syncCommandHub() {
       if (captureTab === "SR") performCancelEditSR();
       if (captureTab === "CONS") performCancelEditCONS();
       if (captureTab === "BIO") performCancelEditBIO();
+      if (captureTab === "INFLUENZA" && window.capturaModoEdicion) window.capturaModoEdicion.cancelar();
     };
   }
 }

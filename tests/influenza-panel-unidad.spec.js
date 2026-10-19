@@ -103,6 +103,39 @@ test.describe('Panel de Influenza (unidad)', () => {
     expect(errores).toEqual([]);
   });
 
+  test('reporte guardado: casillas y nombre bloqueados hasta «Editar»; Cancelar restaura y el hub sigue el modo edición', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-22T12:00:00' });
+    await page.evaluate(() => {
+      const sel = document.getElementById('influenza_semana'); sel.value = '2026-10-16'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+      AppState.mainTab = 'CAP'; AppState.captureTab = 'INFLUENZA'; syncCommandHub();
+    });
+    const r1 = page.locator('#input_inf_r1');
+    await expect(r1).toHaveValue('30');
+    await expect(r1).toBeDisabled();
+    await expect(page.locator('#nombreINFLUENZA')).toBeDisabled();
+    await expect(page.locator('#chkSinMovimientoINF')).toBeDisabled();
+    await expect(page.locator('#hubEditBtn')).toBeVisible();
+    await expect(page.locator('#hubCancelBtn')).toBeHidden();
+    await expect(page.locator('#hubSaveBtn')).toHaveAttribute('aria-disabled', 'true');
+    await page.locator('#hubEditBtn').click();
+    await expect(r1).toBeEnabled();
+    await expect(page.locator('#nombreINFLUENZA')).toBeEnabled();
+    await expect(page.locator('#hubEditBtn')).toBeHidden();
+    await expect(page.locator('#hubCancelBtn')).toBeVisible();
+    await expect(page.locator('#hubSaveBtn')).toHaveAttribute('aria-disabled', 'false');
+    await expect(page.locator('#hubStatusText')).toHaveText('Editando');
+    await r1.fill('35');
+    await page.locator('#hubCancelBtn').click();
+    await expect(r1).toBeDisabled();
+    await expect(r1).toHaveValue('30');
+    await expect(page.locator('#hubEditBtn')).toBeVisible();
+    // cambiar de semana también sale del modo edición
+    await page.locator('#hubEditBtn').click();
+    await page.evaluate(() => { const sel = document.getElementById('influenza_semana'); sel.value = '2026-10-09'; sel.dispatchEvent(new Event('change', { bubbles: true })); });
+    await expect(page.locator('#input_inf_r1')).toBeDisabled();
+    expect(errores).toEqual([]);
+  });
+
   test('captura abierta: casillas con nombre, sin controles mudos y la pestaña activa se anuncia', async ({ page }) => {
     const { errores } = await abrirPanel(page, { fecha: '2026-10-22T12:00:00' });   // jueves: la captura de la semana está abierta
     await page.waitForTimeout(400);   // el saneador de accesibilidad corre un instante después de pintar
@@ -253,6 +286,9 @@ test.describe('Panel de Influenza (unidad)', () => {
     const { errores } = await abrirPanel(page, { fecha: '2026-10-17T11:00:00' });
     await expect(page.locator('#influenza_semana')).toHaveValue('2026-10-16');
     await expect(page.locator('.inf-aviso--cerrada')).toHaveCount(0);
+    // el 16 ya tiene reporte: sus casillas están protegidas hasta entrar a «Editar»
+    await expect(page.locator('#input_inf_r1')).toBeDisabled();
+    await page.evaluate(() => window.capturaModoEdicion.entrar());
     const habil = page.locator('#formINFLUENZA input[id^="input_inf_"]:not([disabled])').first();
     await expect(habil).toBeEnabled();
     const ctl = page.locator('#infControlMeta');
@@ -281,6 +317,7 @@ test.describe('Panel de Influenza (unidad)', () => {
     const semana = page.locator('#hubDosisSemana');
     const base = Number((await semana.innerText()).replace(/\D/g, ''));
     const r1 = page.locator('#input_inf_r1');
+    await page.evaluate(() => window.capturaModoEdicion.entrar());
     await r1.fill('7');
     await expect(semana).not.toHaveText(String(base));
     // el texto para lectores de pantalla se anuncia con retardo, sin saturar cada tecla
@@ -552,10 +589,12 @@ test.describe('Responsable y reemplazo semanal', () => {
     const nombre = page.locator('#nombreINFLUENZA');
     await expect(nombre).toHaveValue('LUIS GOMEZ');
     // editar cifras no toca el nombre; repintar la tabla tampoco
+    await page.evaluate(() => window.capturaModoEdicion.entrar());
     await page.locator('#input_inf_r1').fill('31');
     await page.evaluate(() => renderCaptureGrid());
     await expect(nombre).toHaveValue('LUIS GOMEZ');
     // lo que la persona escribe no se pisa al repintar
+    await expect(nombre).toBeEnabled();
     await nombre.fill('MARIA LOPEZ');
     await page.evaluate(() => renderCaptureGrid());
     await expect(nombre).toHaveValue('MARIA LOPEZ');

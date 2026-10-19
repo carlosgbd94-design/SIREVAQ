@@ -127,6 +127,13 @@
     if (err) return { id: "cerrada", texto: "Aún no abre", editable: false, motivo: err };
     return { id: "pendiente", texto: "Pendiente", editable: true };
   }
+  // Un reporte ya guardado abre BLOQUEADO: las casillas solo se habilitan con «Editar» (modo edición) para no
+  // cambiar un dato por accidente. Se sale al guardar, cancelar, cambiar de semana o de vacuna.
+  function enEdicion(f) { return !!(S && S.edicion && S.edicion.fecha === f && S.edicion.vac === (S.vac || "INFLUENZA")); }
+  function protegido(f) {
+    f = f || (S && S.fecha);
+    return !!f && !!reporteDe(f) && estadoSemana(f).editable && !enEdicion(f);
+  }
   function etiquetaSemana(w) {
     const est = estadoSemana(w.fecha);
     const marca = est.id === "guardado" ? "✓ " : est.id === "pendiente" ? "• " : "";
@@ -201,7 +208,8 @@
       S.sinMovFecha = f;
     }
     if (reabierto != null) S.sinMov = reabierto;
-    const editable = est.editable;
+    const protegida = protegido(f);
+    const editable = est.editable && !protegida;
 
     // Avisos de calendario (una vez por tipo)
     const avisos = [];
@@ -299,6 +307,7 @@
           <p class="ic-res-pie" id="icEstaSemana"></p>
         </section>
 
+        ${protegida ? `<div class="ic-aviso ic-aviso--info" role="note"><b>Reporte guardado y protegido.</b> Para cambiar una cantidad toca <b>Editar</b> (lápiz flotante, abajo a la derecha).</div>` : ""}
         ${esCovid() ? `<div class="ic-aviso ic-aviso--info"><b>Moderna y Pfizer suman contra la misma meta.</b> Captura el total de la semana de cada marca; si guardas de nuevo esta semana, el reporte nuevo reemplaza al anterior.</div>` : ""}
         ${metaTotal() === 0 ? `<div class="ic-aviso"><b>Tu unidad no tiene meta asignada.</b> Puedes registrar la semana como «sin movimiento»; para capturar dosis pide a tu jurisdicción que asigne la meta.</div>` : ""}
         ${avisos.map(r => `<div class="ic-aviso"><b>${r.tipo === "segunda" ? "2ª dosis" : "1ª dosis"} no disponible esta semana.</b> ${esc(r.texto)}</div>`).join("")}
@@ -319,7 +328,7 @@
         <div class="ic-error" id="icError" role="alert" tabindex="-1" hidden></div>
         <p class="ic-guardar-nota" id="icGuardarNota">
           <span class="material-symbols-rounded" aria-hidden="true">save</span>
-          <span>${editable ? `Cuando termines, toca el botón <b>Guardar</b> flotante (abajo a la derecha).` : "Esta semana no se puede guardar todavía."}</span>
+          <span>${protegida ? `Para modificar este reporte toca <b>Editar</b> (lápiz flotante).` : editable ? `Cuando termines, toca el botón <b>Guardar</b> flotante (abajo a la derecha).` : "Esta semana no se puede guardar todavía."}</span>
         </p>
 
         <details class="ic-historial"${guardados.length ? "" : " hidden"}>
@@ -503,7 +512,7 @@
       b.onclick = () => {
         if ((b.dataset.vac === "COVID") === esCovid()) return;
         S.vac = b.dataset.vac === "COVID" ? "COVID" : "INFLUENZA";
-        S.sinMov = null; S.reabierto = null; S.borrador = null; S.ultAnuncio = undefined;
+        S.sinMov = null; S.reabierto = null; S.borrador = null; S.ultAnuncio = undefined; S.edicion = null;
         pintar();
         const nuevo = rootEl.querySelector(`.ic-vac-btn[data-vac="${S.vac}"]`); if (nuevo) nuevo.focus();
         anunciar(`${nombreVac()}.`);
@@ -533,6 +542,7 @@
     S.sinMov = null;
     S.reabierto = null;
     S.borrador = null;
+    S.edicion = null;
     pintar();
     const est = estadoSemana(f);
     anunciar(`Semana ${isoWeek(f)}, ${rangoTexto(f)}. ${est.texto}.`);
@@ -563,6 +573,7 @@
     const errores = [];
     const cierre = ventanaError(f);
     if (cierre) { mostrarError([{ msg: cierre }]); return; }
+    if (protegido(f)) { mostrarError([{ msg: "Este reporte ya está guardado. Toca Editar si necesitas modificarlo." }]); return; }
 
     const nombreEl = rootEl.querySelector("#icNombre");
     const nombre = nombreEl.value.trim();
@@ -640,6 +651,7 @@
       S.reabierto = null;
       S.sinMov = null;
       S.borrador = null;
+      S.edicion = null;
       const guardadoRep = reporteDe(f);
       const dosis = esCovid() ? CC().totalDosis(v) : Object.values(v).reduce((a, x) => a + x, 0);
       const mt = metaTotal();
@@ -712,7 +724,7 @@
       chip.style.display = "flex";
       const verde = "status-chip-v5 flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-wider";
       const rojo = "status-chip-v5 flex items-center gap-1.5 px-3 py-1 bg-rose-500/10 border border-rose-500/20 text-rose-600 rounded-full text-[10px] font-black uppercase tracking-wider";
-      chipTxt.textContent = S.guardando ? "Guardando..." : est.id === "cerrada" ? "Aún no abre" : rep ? "Reporte Guardado" : "Listo";
+      chipTxt.textContent = S.guardando ? "Guardando..." : est.id === "cerrada" ? "Aún no abre" : rep ? (enEdicion(S.fecha) ? "Editando" : "Reporte Guardado") : "Listo";
       chip.className = est.id === "cerrada" ? rojo : verde;
     }
 
@@ -728,18 +740,43 @@
 
     const save = document.getElementById("hubSaveBtn");
     if (save) {
-      const bloqueado = !est.editable || !!S.guardando;
+      const proteg = protegido(S.fecha);
+      const bloqueado = !est.editable || !!S.guardando || proteg;
       save.disabled = bloqueado;
       save.style.setProperty("display", "flex", "important");
       save.style.background = bloqueado ? "#e2e8f0" : "";
       save.style.color = bloqueado ? "#475569" : "";
       save.style.pointerEvents = bloqueado ? "none" : "";
       const cuenta = t.sinMov ? "sin movimiento" : `${t.esta} dosis esta semana`;
-      const label = !est.editable ? `Guardar reporte de ${nombreVac()}: la semana aún no se puede capturar` : `${rep ? "Actualizar" : "Guardar"} reporte de ${nombreVac()}, ${cuenta}`;
+      const label = !est.editable ? `Guardar reporte de ${nombreVac()}: la semana aún no se puede capturar`
+        : proteg ? `Reporte de ${nombreVac()} guardado: toca Editar para modificarlo`
+        : `${rep ? "Actualizar" : "Guardar"} reporte de ${nombreVac()}, ${cuenta}`;
       save.setAttribute("aria-label", label);
       save.title = label;
     }
-    ["hubEditBtn", "hubCancelBtn"].forEach(id => { const b = document.getElementById(id); if (b) b.style.setProperty("display", "none", "important"); });
+    const mostrar = { hubEditBtn: protegido(S.fecha), hubCancelBtn: enEdicion(S.fecha) && !!rep };
+    Object.keys(mostrar).forEach(id => {
+      const b = document.getElementById(id);
+      if (!b) return;
+      if (mostrar[id]) b.style.setProperty("display", "flex", "important"); else b.style.setProperty("display", "none", "important");
+    });
+  }
+
+  function editar() {
+    if (!S || !S.listo || !protegido(S.fecha)) return;
+    S.edicion = { vac: S.vac || "INFLUENZA", fecha: S.fecha };
+    pintar();
+    const primero = Array.from(rootEl.querySelectorAll("input[data-rubro]")).find(i => !i.disabled);
+    if (primero) primero.focus({ preventScroll: false });
+    cfg.toast("Modo edición activado: corrige y toca Guardar para actualizar el reporte.", "success");
+    anunciar("Modo edición activado. Las cantidades ya se pueden modificar.");
+  }
+  function cancelarEdicion() {
+    if (!S || !S.listo || !enEdicion(S.fecha)) return;
+    S.edicion = null; S.sinMov = null; S.reabierto = null; S.borrador = null;
+    pintar();
+    cfg.toast("Edición cancelada: el reporte quedó como estaba.", "error");
+    anunciar("Edición cancelada. El reporte quedó como estaba.");
   }
 
   // Anuncia el total para lectores de pantalla sin hablar en cada tecla
@@ -797,6 +834,8 @@
     },
     abrir,
     guardar() { return S && S.listo ? guardar() : Promise.resolve(); },
+    editar,
+    cancelarEdicion,
     sincronizarHub
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -1709,3 +1709,27 @@ test('Metas COVID (municipal): el total de la comparación va en dosis equivalen
   await expect(page.locator('#cmp_TOTAL')).toContainText('Faltan 300');
   await expect(page.locator('#tot_meta')).toHaveText('6,300');
 });
+
+test('Botón «Editar» del hub: círculo solo ícono (igual que Guardar/Cancelar), con nombre accesible y foco visible', async ({ page }) => {
+  await page.goto('/reference.html');
+  await page.addStyleTag({ url: '/style.css' });
+  const idx = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
+  const btn = idx.match(/<button id="hubEditBtn"[\s\S]*?<\/button>/)[0].replace('style="display:none"', '');
+  await page.evaluate((h) => { document.body.innerHTML = h + '<button id="otro">x</button>'; }, btn);
+  const r = await page.evaluate(() => {
+    const b = document.getElementById('hubEditBtn');
+    const cs = getComputedStyle(b);
+    const txt = [...b.querySelectorAll('span:not(.material-symbols-rounded)')].map(s => getComputedStyle(s).display);
+    b.focus();
+    return { w: b.offsetWidth, h: b.offsetHeight, radio: cs.borderTopLeftRadius, txt,
+      label: b.getAttribute('aria-label'), tipo: b.type, iconoOculto: b.querySelector('.material-symbols-rounded').getAttribute('aria-hidden') };
+  });
+  expect(r.w).toBe(56); expect(r.h).toBe(56);
+  expect(r.txt).toEqual(['none']);
+  expect(r.label).toBe('Editar reporte');
+  expect(r.iconoOculto).toBe('true');
+  await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');
+  const foco = await page.evaluate(() => { const cs = getComputedStyle(document.getElementById('hubEditBtn')); return { r: cs.borderTopLeftRadius, o: cs.outlineStyle }; });
+  expect(foco.o).toBe('solid');
+  expect(parseFloat(foco.r)).toBeGreaterThanOrEqual(28);
+});

@@ -356,6 +356,56 @@ function updateInfluenzaWeekBtnLabel(fecha) {
 }
 
 let SIN_MOVIMIENTO_INF = false;
+
+// Modo edición: un reporte ya guardado de la semana se abre BLOQUEADO (no se cambia un dato por accidente) y las
+// casillas solo se habilitan al presionar «Editar» del botón flotante. Se sale al guardar, al cancelar o al cambiar de semana.
+let _capEdicion = null;   // { vac: "INFLUENZA"|"COVID", fecha }
+function capVacunaActual() { return (typeof _capturaVacuna !== "undefined" && _capturaVacuna === "COVID") ? "COVID" : "INFLUENZA"; }
+function capReporteGuardado(fecha, vac) {
+  const lista = vac === "COVID" ? (typeof _covidCapturasCache !== "undefined" ? _covidCapturasCache : []) : _influenzaCapturasCache;
+  return (lista || []).some(r => r.fecha === fecha);
+}
+function capEditando(fecha, vac) { return !!(_capEdicion && _capEdicion.fecha === fecha && _capEdicion.vac === vac); }
+/** true = hay reporte guardado, la semana sigue abierta y todavía no se entró a «Editar». */
+function capBloqueadaPorGuardado(fecha, vac) {
+  vac = vac || capVacunaActual();
+  fecha = fecha || document.getElementById("influenza_semana")?.value;
+  return !!fecha && influenzaEstadoCaptura(fecha).abierta && capReporteGuardado(fecha, vac) && !capEditando(fecha, vac);
+}
+function capSincronizarNombre() {
+  const inp = document.getElementById("nombreINFLUENZA");
+  const fecha = document.getElementById("influenza_semana")?.value;
+  if (!inp || !fecha) return;
+  inp.disabled = !influenzaEstadoCaptura(fecha).abierta || capBloqueadaPorGuardado(fecha, capVacunaActual());
+}
+function capRepintar() {
+  updateInfluenzaSinMovimientoUI();
+  renderCaptureGrid();      // también repinta COVID-19
+  capSincronizarNombre();
+  if (typeof syncCommandHub === "function") syncCommandHub();
+}
+window.capturaModoEdicion = {
+  guardado: () => { const f = document.getElementById("influenza_semana")?.value; return !!f && capReporteGuardado(f, capVacunaActual()); },
+  editando: () => { const f = document.getElementById("influenza_semana")?.value; return capEditando(f, capVacunaActual()); },
+  entrar() {
+    const fecha = document.getElementById("influenza_semana")?.value;
+    const vac = capVacunaActual();
+    if (!fecha || !influenzaEstadoCaptura(fecha).abierta) return;
+    _capEdicion = { vac, fecha };
+    capRepintar();
+    const cont = document.getElementById(vac === "COVID" ? "covidCapturaContainer" : "influenzaCaptureGroupsContainer");
+    const primero = Array.from(cont?.querySelectorAll(".inf-input") || []).find(i => !i.disabled);
+    if (primero) { primero.scrollIntoView({ behavior: "smooth", block: "center" }); primero.focus({ preventScroll: true }); }
+    showToast("Modo edición activado: corrige y presiona Guardar para actualizar el reporte.", true, "info");
+  },
+  cancelar() {
+    _capEdicion = null; _infSinMovReabierto = null; SIN_MOVIMIENTO_INF = false;
+    const nom = document.getElementById("nombreINFLUENZA"); if (nom) delete nom.dataset.tocado;
+    capRepintar();
+    showToast("Edición cancelada: el reporte quedó como estaba.", true, "info");
+  },
+  terminar() { _capEdicion = null; }
+};
 // Un reporte guardado «Sin movimiento» se puede reabrir mientras la semana siga abierta (la semana corre de lunes a
 // domingo, así que puede haber dosis después de haberlo marcado): aquí se recuerda esa decisión por semana.
 let _infSinMovReabierto = null;   // { fecha, valor }
@@ -381,7 +431,7 @@ function updateInfluenzaSinMovimientoUI() {
     chkINF.checked = SIN_MOVIMIENTO_INF;
     chkINF.disabled = false;
   }
-  if (!influenzaEstadoCaptura(selectedFecha).abierta) chkINF.disabled = true;
+  if (!influenzaEstadoCaptura(selectedFecha).abierta || capBloqueadaPorGuardado(selectedFecha, "INFLUENZA")) chkINF.disabled = true;
 
   // Update styles
   const iconBg = document.getElementById("iconSinMovimientoINFBg");
@@ -527,6 +577,7 @@ async function initInfluenzaCaptureFlow() {
       weekSelect.addEventListener("change", (e) => {
         SIN_MOVIMIENTO_INF = false;
         _infSinMovReabierto = null;
+        _capEdicion = null;
         const nomInp = document.getElementById("nombreINFLUENZA");
         if (nomInp) delete nomInp.dataset.tocado;
         updateInfluenzaWeekBtnLabel(e.target.value);
@@ -997,8 +1048,15 @@ function renderCaptureGrid() {
     cerrado.innerHTML = `<span class="material-symbols-rounded">lock_clock</span><div><b>Captura cerrada.</b> ${estado.motivo} Puedes revisar la tabla, pero todavía no se puede guardar información.</div>`;
     container.appendChild(cerrado);
   }
-  const nombreInp = document.getElementById("nombreINFLUENZA");
-  if (nombreInp) nombreInp.disabled = capturaCerrada;
+  const bloqGuardado = capBloqueadaPorGuardado(selectedFecha, "INFLUENZA");
+  capSincronizarNombre();
+  if (bloqGuardado && capVacunaActual() === "INFLUENZA") {
+    const bloq = document.createElement("div");
+    bloq.className = "inf-aviso inf-aviso--protegido";
+    bloq.setAttribute("role", "note");
+    bloq.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">lock</span><div><b>Reporte guardado y protegido.</b> Para cambiar una cantidad presiona <b>Editar</b> en el botón flotante.</div>`;
+    container.appendChild(bloq);
+  }
   const avisoHtml = avisoReglasSemana(selectedFecha);
   if (avisoHtml && !capturaCerrada) {
     const aviso = document.createElement("div");
@@ -1101,7 +1159,7 @@ function renderCaptureGrid() {
       const acum = acumuladosPrevios[rb.id];
       const val = isSinMovActive ? 0 : (currentValores[rb.id] !== undefined ? currentValores[rb.id] : "");
       const reglaCal = reglaDosisRubro(rb, selectedFecha);
-      const isLocked = meta === 0 || isSinMovActive || !!reglaCal || capturaCerrada;
+      const isLocked = meta === 0 || isSinMovActive || !!reglaCal || capturaCerrada || bloqGuardado;
 
       const row = document.createElement("tr");
 
@@ -1113,7 +1171,7 @@ function renderCaptureGrid() {
 
       const rubroTxt = `${String(rb.grupo || rb.categoria || "").replace(/"/g, "&quot;")} · ${String(rb.edad || "").replace(/"/g, "&quot;")}`;
       const motivoBloqueo = meta === 0 ? "Sin meta asignada para este grupo: no se captura"
-        : (capturaCerrada ? "La captura de esta semana está cerrada" : (isSinMovActive ? "Marcaste «Sin movimiento»: esta semana se guarda en ceros" : "Este grupo no se captura en esta fecha"));
+        : (capturaCerrada ? "La captura de esta semana está cerrada" : bloqGuardado ? "Reporte guardado: presiona Editar para modificarlo" : (isSinMovActive ? "Marcaste «Sin movimiento»: esta semana se guarda en ceros" : "Este grupo no se captura en esta fecha"));
 
       row.innerHTML = `
         <th scope="row" class="p-3 inf-fila-edad">
@@ -1668,6 +1726,10 @@ async function saveInfluenzaReport() {
     showToast(cierre.motivo, false, "bad");
     return;
   }
+  if (capBloqueadaPorGuardado(selectedFecha, "INFLUENZA")) {
+    showToast("Este reporte ya está guardado. Presiona Editar si necesitas modificarlo.", false, "warn");
+    return;
+  }
 
   if (!nombre) {
     showToast("Por favor ingresa el nombre de quien reporta la captura.", false, "bad");
@@ -1723,6 +1785,7 @@ async function saveInfluenzaReport() {
     action: async () => {
       const res = await AppService.call("saveinfluenza_captura", payload);
       _infSinMovReabierto = null;
+      _capEdicion = null;
       try { localStorage.setItem(`sirevaq_inf_nombre_${USER?.clues}`, nombre); } catch (e) { /* sin almacenamiento */ }
       await loadInfluenzaUnitData();
       const folioGuardado = res?.folio || influenzaFolio(_influenzaCapturasCache.find(r => r.fecha === selectedFecha));
@@ -7426,6 +7489,8 @@ function aplicarVacunaCaptura() {
   if (inf) inf.hidden = _capturaVacuna === "COVID";
   if (cov) cov.hidden = _capturaVacuna !== "COVID" || !tiene;
   actualizarContadorDosisHub();
+  capSincronizarNombre();
+  if (typeof syncCommandHub === "function") syncCommandHub();
 }
 
 function elegirVacunaCaptura(vac) {
@@ -7450,6 +7515,7 @@ function renderCovidCaptura() {
     capturas: _covidCapturasCache,
     fecha,
     cerrada: !estado.abierta,
+    bloqueada: capBloqueadaPorGuardado(fecha, "COVID"),
     motivo: estado.motivo,
     USER,
     alCambiar: actualizarContadorDosisHub,
@@ -7484,6 +7550,7 @@ async function guardarCovidDesdePanel() {
 async function guardarCapturaCovid(fecha, p) {
   const cierre = influenzaEstadoCaptura(fecha);
   if (!cierre.abierta) { showToast(cierre.motivo, false, "bad"); return; }
+  if (capBloqueadaPorGuardado(fecha, "COVID")) { showToast("Este reporte ya está guardado. Presiona Editar si necesitas modificarlo.", false, "warn"); return; }
   const campana = document.getElementById("influenza_campana").value;
   const total = window.CovidCaptura.totalDosis(p.valores);
   await AppService.runCapture({
@@ -7500,6 +7567,7 @@ async function guardarCapturaCovid(fecha, p) {
       });
       const r = await AppService.call("getcovid_capturas", { clues: USER.clues, anio_campana: campana }, { silent: true });
       _covidCapturasCache = (r && r.data) || [];
+      _capEdicion = null;
       renderCovidCaptura();
       if (res && res.folio) showToast(`Folio del reporte de COVID-19: ${res.folio}`, true, "info");
       return res;

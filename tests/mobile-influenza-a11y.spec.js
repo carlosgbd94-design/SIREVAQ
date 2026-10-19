@@ -70,6 +70,9 @@ for (const oscuro of [false, true]) {
       await page.click('#dockItemINFC');
       await page.waitForSelector('#icMeta');
       expect(await axe(page, '#panelINFC')).toEqual([]);
+      await expect(page.locator('#ic_r1')).toBeDisabled();       // reporte guardado: protegido hasta «Editar»
+      await page.click('#hubEditBtn');
+      expect(await axe(page, '#panelINFC')).toEqual([]);
       await page.fill('#ic_r1', '30');                    // rebasa la meta → aria-invalid + aviso
       await page.fill('#icNombre', '');
       await page.click('#hubSaveBtn');

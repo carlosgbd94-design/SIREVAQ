@@ -8356,12 +8356,13 @@ html.sirevaq-scroll-locked .btn-save-animate {
 .edit-btn-premium {
   background: var(--md-sys-color-surface);
   color: #003870 !important;
-  border-radius: 28px;
+  border-radius: 50%;
+  width: 56px;
   height: 56px;
+  min-width: 56px;
   min-height: 56px;
   flex-shrink: 0;
-  padding: 0 20px 0 16px;
-  gap: 8px;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8376,19 +8377,33 @@ html.sirevaq-scroll-locked .btn-save-animate {
   font-size: 26px !important;
 }
 
-/* El texto «Editar» se ve siempre: el usuario debe notar que su captura guardada se puede modificar. */
+/* Solo ícono (como Guardar y Cancelar): el nombre accesible lo da aria-label/title del botón. */
 .edit-btn-premium span:not(.material-symbols-rounded) {
-  display: inline !important;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
+  display: none !important;
 }
 
-.edit-btn-premium:hover {
-  background: var(--md-sys-color-surface-container);
-  border-color: #0061f2;
-  color: #0061f2 !important;
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .edit-btn-premium:hover {
+    background: #0061f2;
+    color: #ffffff !important;
+    transform: scale(1.05) translateY(-2px);
+  }
+}
+
+.edit-btn-premium:active {
+  transform: scale(0.95);
+}
+
+/* El foco global fija border-radius:4px; aquí se conserva el círculo */
+.edit-btn-premium:focus-visible {
+  outline: 3px solid #0f172a;
+  outline-offset: 3px;
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edit-btn-premium { transition: none; }
+  .edit-btn-premium:hover, .edit-btn-premium:active { transform: none; }
 }
 
 .cancel-btn-premium {
@@ -14220,8 +14235,8 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaMetas .meta-total-row td.meta-fx-total { overflow: visible; }
 
 /* Panel de captura de Influenza: guía por pasos, ayuda y aviso de captura cerrada */
-.inf-aviso--cerrada { display: flex; align-items: flex-start; gap: 10px; border-color: #cbd5e1; background: #f1f5f9; color: #334155; }
-.inf-aviso--cerrada > .material-symbols-rounded { font-size: 20px; color: #64748b; flex: 0 0 auto; }
+.inf-aviso--cerrada, .inf-aviso--protegido { display: flex; align-items: flex-start; gap: 10px; border-color: #cbd5e1; background: #f1f5f9; color: #334155; }
+.inf-aviso--cerrada > .material-symbols-rounded, .inf-aviso--protegido > .material-symbols-rounded { font-size: 20px; color: #64748b; flex: 0 0 auto; }
 #influenzaPasosGuia { display: flex; flex-direction: column; gap: 10px; }
 .inf-pasos-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .inf-paso { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-radius: 20px; border: 1px solid #e2e8f0; background: #ffffff; box-shadow: 0 1px 3px rgba(15, 23, 42, .05); min-width: 0; }

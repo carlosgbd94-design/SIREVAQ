@@ -3994,6 +3994,7 @@
         document.getElementById('jeringa_reconst_5ml_0605500438')?.addEventListener('input', syncNeedles);
 
         document.getElementById('hubEditBtn')?.addEventListener('click', () => {
+            if (activePanel === 'INFC') { window.MobileInfluenzaCap?.editar(); syncCommandHub(); return; }
             if (activePanel === 'SR') isEditingSR = true;
             if (activePanel === 'CONS') isEditingCONS = true;
             if (activePanel === 'BIO') isEditingBIO = true;
@@ -4002,6 +4003,7 @@
         });
 
         document.getElementById('hubCancelBtn')?.addEventListener('click', async () => {
+            if (activePanel === 'INFC') { window.MobileInfluenzaCap?.cancelarEdicion(); syncCommandHub(); return; }
             if (activePanel === 'SR') {
                 isEditingSR = false;
                 await prefillPreviousReport();
