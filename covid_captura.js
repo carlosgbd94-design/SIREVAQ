@@ -57,24 +57,37 @@
   }
 
   /**
+   * Regla de calendario (igual que Influenza): la 2ª dosis de 6 a 59 meses (c2) no se captura durante el 1er mes de la
+   * campaña, porque va un mes después de la 1ª. null = se puede capturar; si no, { tipo, fecha, etiqueta, texto }.
+   * Las fechas de la campaña se editan en «Fechas Campaña»; la regla vive en influenza_reglas.js.
+   */
+  function reglaRubro(r, fecha, inicio, fin) {
+    if (r !== "c2" || !root.InfluenzaReglas) return null;
+    return root.InfluenzaReglas.reglaDosis("Segunda dosis", fecha, inicio, fin);
+  }
+
+  /**
    * Valida un reporte contra la meta de la unidad. metas = { c1..c6 }; acumOtras = { c1..c6 } de las demás semanas;
    * previo = valores ya guardados de esta semana (lo que ya estaba no bloquea, igual que en Influenza).
+   * reglas = { c2: regla|null } (opcional, de reglaRubro): un rubro bloqueado por calendario no admite dosis nuevas.
    * Devuelve { error, excedidos: [{rubro, exceso}] }.
    */
-  function validar(valores, metas, acumOtras, previo) {
+  function validar(valores, metas, acumOtras, previo, reglas) {
     const nuevo = porRubro(valores);
     const antes = porRubro(previo || {});
     const excedidos = [];
-    let sinMeta = null;
+    let sinMeta = null, bloqueado = null;
     RUBROS.forEach((r) => {
       if (nuevo[r] <= antes[r]) return;
+      if (reglas && reglas[r]) { bloqueado = bloqueado || { r, regla: reglas[r] }; return; }
       const meta = n(metas && metas[r]);
       if (!meta) { sinMeta = sinMeta || r; return; }
       const exceso = n(acumOtras && acumOtras[r]) + nuevo[r] - meta;
       if (exceso > 0) excedidos.push({ rubro: r, exceso });
     });
     let error = null;
-    if (sinMeta) error = `${ETIQUETA[sinMeta]}: la unidad no tiene meta de COVID-19 asignada en este rubro.`;
+    if (bloqueado) error = `${ETIQUETA[bloqueado.r]}: ${bloqueado.regla.texto}`;
+    else if (sinMeta) error = `${ETIQUETA[sinMeta]}: la unidad no tiene meta de COVID-19 asignada en este rubro.`;
     else if (excedidos.length) error = `No se puede guardar el reporte: ${ETIQUETA[excedidos[0].rubro]} supera la meta de tu unidad por ${excedidos[0].exceso} dosis (Moderna y Pfizer suman contra la misma meta).`;
     return { error, excedidos };
   }
@@ -130,7 +143,7 @@
   }
 
   const api = { RUBROS, MARCAS, RUBROS_MARCA, ETIQUETA, CENSIA, SIS_CLAVE, SIS_REFUERZO_6_59,
-    limpiar, porRubro, totalDosis, validar, paqueteCensia, sisPorClave, movimientoPorMarca, delMes };
+    limpiar, porRubro, totalDosis, reglaRubro, validar, paqueteCensia, sisPorClave, movimientoPorMarca, delMes };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.CovidCaptura = api;
 })(typeof window !== "undefined" ? window : globalThis);

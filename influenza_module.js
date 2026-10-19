@@ -7453,6 +7453,7 @@ function renderCovidCaptura() {
     motivo: estado.motivo,
     USER,
     alCambiar: actualizarContadorDosisHub,
+    reglaRubro: (r) => window.CovidCaptura.reglaRubro(r, fecha, _campaignConfig.fecha_inicio, _campaignConfig.fecha_fin),
     censia: {
       url: CENSIA_URL,
       guia: censiaGuiaExtension,

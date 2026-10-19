@@ -121,3 +121,49 @@ test('Panel con reporte guardado: ofrece CeNSIA y entrega el paquete con casilla
   expect(p.valores.BIE200CM).toBe(10);
   expect(p.valores.BIO97CP).toBe(1);
 });
+
+// ---- Calendario: la 2ª dosis de 6 a 59 meses (c2) no va en el 1er mes de la campaña (igual que Influenza) ----
+test.describe('COVID-19: 2ª dosis bloqueada el 1er mes', () => {
+  const R = require(path.join(raiz, 'influenza_reglas.js'));
+  const INI = '2026-10-01', FIN = '2027-01-31';
+  const conReglas = () => { global.InfluenzaReglas = R; };
+
+  test('c2 se bloquea antes de inicio + 1 mes y se abre desde esa fecha; el resto de rubros nunca', () => {
+    conReglas();
+    expect(C.reglaRubro('c2', '2026-10-16', INI, FIN).etiqueta).toBe('Desde 1 nov');
+    expect(C.reglaRubro('c2', '2026-10-30', INI, FIN)).not.toBeNull();
+    expect(C.reglaRubro('c2', '2026-11-06', INI, FIN)).toBeNull();
+    ['c1', 'c3', 'c4', 'c5', 'c6'].forEach((r) => expect(C.reglaRubro(r, '2026-10-16', INI, FIN)).toBeNull());
+  });
+
+  test('validar rechaza dosis nuevas en un rubro bloqueado y acepta el resto', () => {
+    conReglas();
+    const reglas = { c2: C.reglaRubro('c2', '2026-10-16', INI, FIN) };
+    const v = { MODERNA: { c1: 2, c2: 3 }, PFIZER: {} };
+    const r = C.validar(v, { c1: 10, c2: 10 }, {}, {}, reglas);
+    expect(r.error).toContain('2ª dosis');
+    expect(r.error).toContain('1 nov 2026');
+    expect(C.validar({ MODERNA: { c1: 2 }, PFIZER: {} }, { c1: 10, c2: 10 }, {}, {}, reglas).error).toBeNull();
+    // ya abierta (noviembre) no estorba
+    expect(C.validar(v, { c1: 10, c2: 10 }, {}, {}, { c2: C.reglaRubro('c2', '2026-11-06', INI, FIN) }).error).toBeNull();
+  });
+
+  test('el panel deshabilita c2 con su etiqueta «Desde 1 nov» y avisa; en noviembre queda habilitado', async ({ page }) => {
+    await page.setContent('<div id="covidCapturaContainer"></div>');
+    await page.addScriptTag({ path: path.join(raiz, 'influenza_reglas.js') });
+    await page.addScriptTag({ path: path.join(raiz, 'covid_captura.js') });
+    await page.addScriptTag({ path: path.join(raiz, 'covid_captura_ui.js') });
+    const pintar = (fecha) => page.evaluate((f) => window.CovidCapturaUI.render({
+      container: document.getElementById('covidCapturaContainer'), metas: { c1: 50, c2: 50, c3: 50 }, capturas: [], fecha: f, cerrada: false, USER: {},
+      reglaRubro: (r) => window.CovidCaptura.reglaRubro(r, f, '2026-10-01', '2027-01-31')
+    }), fecha);
+    await pintar('2026-10-16');
+    await expect(page.locator('#input_cov_MODERNA_c2')).toBeDisabled();
+    await expect(page.locator('#input_cov_MODERNA_c1')).toBeEnabled();
+    await expect(page.locator('.inf-pill-regla')).toHaveText('Desde 1 nov');
+    await expect(page.locator('.inf-aviso')).toContainText('2ª dosis no disponible esta semana');
+    await pintar('2026-11-06');
+    await expect(page.locator('#input_cov_MODERNA_c2')).toBeEnabled();
+    await expect(page.locator('.inf-aviso')).toHaveCount(0);
+  });
+});

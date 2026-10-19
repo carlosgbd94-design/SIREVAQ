@@ -3,7 +3,7 @@
  * Un reporte por semana; el nuevo reemplaza al anterior. Se guarda con el botón azul de guardar del panel de captura.
  * La lógica vive en covid_captura.js; aquí solo se pinta.
  *
- * ctx = { container, metas, capturas, fecha, cerrada, motivo, USER, alCambiar(),
+ * ctx = { container, metas, capturas, fecha, cerrada, motivo, USER, alCambiar(), reglaRubro(r) -> regla|null (calendario),
  *         censia: { url, hoy(), fechaAplicacion(fecha), enviarPaquete(paquete) -> enlace } }
  */
 (function (root) {
@@ -67,6 +67,18 @@
       box.appendChild(reemplazo);
     }
 
+    // Reglas de calendario por rubro (2ª dosis no en el 1er mes de la campaña, igual que Influenza)
+    const reglas = {};
+    C.RUBROS.forEach((r) => { reglas[r] = ctx.reglaRubro ? ctx.reglaRubro(r) : null; });
+    const reglasAviso = {};
+    C.RUBROS.forEach((r) => { if (reglas[r] && Number(metas[r] || 0) > 0) reglasAviso[reglas[r].tipo] = reglas[r]; });
+    Object.values(reglasAviso).forEach((rg) => {
+      const av = document.createElement("div");
+      av.className = "inf-aviso";
+      av.innerHTML = `<b>${rg.tipo === "segunda" ? "2ª dosis" : "1ª dosis"} no disponible esta semana.</b> ${esc(rg.texto)}`;
+      box.appendChild(av);
+    });
+
     if (actual) renderCensia(box, ctx, actual);
 
     // Una sola tarjeta (como cada grupo de Influenza): una fila por grupo, con Moderna y Pfizer lado a lado.
@@ -102,6 +114,7 @@
       const celda = (m) => {
         if (!C.RUBROS_MARCA[m].includes(r)) return `<td class="p-3 text-center inf-num" aria-label="${MARCA_TXT[m]}: no aplica a este grupo"><span aria-hidden="true">—</span></td>`;
         const val = Number(previo?.[m]?.[r]) || 0;
+        if (reglas[r]) return `<td class="p-3 text-center"><input type="number" id="input_cov_${m}_${r}" class="inf-input" data-m="${m}" data-r="${r}" disabled placeholder="—" title="${esc(reglas[r].texto)}" aria-label="${MARCA_TXT[m]}, ${esc(EDAD[r])}: no disponible por calendario"></td>`;
         return `<td class="p-3 text-center">
           <input type="number" min="0" step="1" inputmode="numeric" id="input_cov_${m}_${r}" class="inf-input" data-m="${m}" data-r="${r}"
             aria-label="${MARCA_TXT[m]}, ${esc(EDAD[r])}: dosis aplicadas esta semana" aria-describedby="disp_cov_${r}"
@@ -111,7 +124,7 @@
       const row = document.createElement("tr");
       row.className = "inf-fila";
       row.innerHTML = `
-        <th scope="row" class="p-3 inf-fila-edad"><span class="inf-edad">${esc(EDAD[r])}</span></th>
+        <th scope="row" class="p-3 inf-fila-edad"><span class="inf-edad">${esc(EDAD[r])}</span>${reglas[r] ? `<span class="inf-pill-regla">${esc(reglas[r].etiqueta)}</span>` : ""}</th>
         <td class="p-3 text-center inf-num">${fmt(meta)}</td>
         <td class="p-3 text-center inf-num inf-num--acum">${fmt(acumRubro[r])}</td>
         ${celda("MODERNA")}${celda("PFIZER")}
@@ -168,7 +181,7 @@
       /** Lo tecleado + su validación contra la meta (la usa el guardado del panel de captura). */
       recoger: () => {
         const v = leer();
-        const val = C.validar(v, metas, acumRubro, previo);
+        const val = C.validar(v, metas, acumRubro, previo, reglas);
         return { valores: v, error: val.error, sin_movimiento: C.totalDosis(v) === 0 };
       }
     };

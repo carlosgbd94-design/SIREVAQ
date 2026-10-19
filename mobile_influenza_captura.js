@@ -114,6 +114,9 @@
   const metaTotal = () => (esCovid()
     ? CC().RUBROS.reduce((a, r) => a + num(S.covid.metas[r]), 0)
     : Object.values(S.metas).reduce((a, v) => a + num(v), 0));
+  function reglaCovid(r, f) {
+    return CC().reglaRubro(r, f, S.camp.fecha_inicio, S.camp.fecha_fin);
+  }
   function reglaDosis(rb, f) {
     return R().reglaDosis(rb.grupo, f, S.camp.fecha_inicio, S.camp.fecha_fin);
   }
@@ -204,6 +207,7 @@
     const avisos = [];
     const vistos = {};
     if (!esCovid() && metaTotal() > 0) rubros().forEach(rb => { const r = reglaDosis(rb, f); if (r && !vistos[r.tipo]) { vistos[r.tipo] = 1; avisos.push(r); } });
+    if (esCovid()) rubrosCovid().forEach(r => { const g = reglaCovid(r, f); if (g && !vistos[g.tipo]) { vistos[g.tipo] = 1; avisos.push(g); } });
 
     const grupos = {};
     rubros().forEach(rb => { (grupos[`${rb.categoria} - ${rb.grupo}`] = grupos[`${rb.categoria} - ${rb.grupo}`] || []).push(rb); });
@@ -343,12 +347,13 @@
     const C = CC();
     const filas = rubrosCovid().map(r => {
       const meta = num(S.covid.metas[r]);
+      const regla = reglaCovid(r, f);   // calendario: la 2ª dosis no va en el 1er mes de la campaña
       const marcas = C.MARCAS.map(m => {
         if (!C.RUBROS_MARCA[m].includes(r)) return "";
         const id = `cv_${m}_${r}`;
         const previo = rep && rep.valores && rep.valores[m] ? rep.valores[m][r] : "";
         const val = borr[id] !== undefined ? borr[id] : (previo > 0 ? previo : "");
-        const deshab = !editable || S.sinMov;
+        const deshab = !editable || S.sinMov || !!regla;
         const nombre = `${MARCA_TXT[m]}, ${EDAD_COVID[r]}`;
         return `<div class="ic-marca">
           <span class="ic-marca-nom">${MARCA_TXT[m]}</span>
@@ -360,8 +365,8 @@
           </div>
         </div>`;
       }).join("");
-      return `<div class="ic-rubro" data-rubro="cv_${r}">
-        <div class="ic-rubro-cab"><span class="ic-edad">${esc(EDAD_COVID[r])}</span></div>
+      return `<div class="ic-rubro${regla ? " ic-rubro--bloq" : ""}" data-rubro="cv_${r}">
+        <div class="ic-rubro-cab"><span class="ic-edad">${esc(EDAD_COVID[r])}</span>${regla ? `<span class="ic-pill">${esc(regla.etiqueta)}</span>` : ""}</div>
         <div class="ic-datos ic-datos--fila">
           <span>Meta <b>${meta}</b></span>
           <span>Antes <b>${acumuladoCovid(r)}</b></span>
@@ -569,7 +574,9 @@
       if (!S.sinMov) {
         const acum = {};
         CC().RUBROS.forEach(r => { acum[r] = acumuladoCovid(r); });
-        const val = CC().validar(v, S.covid.metas, acum, rep ? rep.valores : {});
+        const reglasCov = {};
+        CC().RUBROS.forEach(r => { reglasCov[r] = reglaCovid(r, f); });
+        const val = CC().validar(v, S.covid.metas, acum, rep ? rep.valores : {}, reglasCov);
         if (val.error) errores.push({ msg: val.error, el: rootEl.querySelector("input[data-marca]:not(:disabled)") });
       }
     } else if (!S.sinMov) {
