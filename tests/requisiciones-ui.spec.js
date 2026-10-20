@@ -1355,6 +1355,7 @@ test('Requisiciones: el Kardex del año se baja desde Exportar (solo Jurisdicci�
   const ws = wb.worksheets[0];
   const salidas = []; ws.eachRow((row) => { if (row.getCell(2).value === 'JS-1') salidas.push([row.getCell(8).value, row.getCell(10).value]); });
   expect(salidas).toEqual([['CORREGIDORA', 20], ['CORREGIDORA', 30]]);   // una por unidad (en orden alfabético)
+  expect(ws.getImages()).toHaveLength(2);                                      // logos oficiales en la tarjeta
   expect(errores).toEqual([]);
 });
 

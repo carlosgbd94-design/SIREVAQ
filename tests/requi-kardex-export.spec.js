@@ -144,3 +144,15 @@ test('sin fecha de recepción se avisa y la fecha queda en blanco; un año sin d
   const wb = await abrir(vacio, 'UNIDAD');
   expect(wb.worksheets.map((w) => w.name)).toEqual(['SIN MOVIMIENTOS']);
 });
+
+test('los dos logos oficiales van en cada tarjeta, con su proporción', async () => {
+  const fs = require('fs');
+  const assets = fs.readFileSync(require('path').join(__dirname, '..', 'requisiciones_assets.js'), 'utf8');
+  const logo = (n) => assets.match(new RegExp(`${n} = "(data:image/png;base64,[^"]+)"`))[1];
+  const buffer = await generar(armarModelo(entrada), { ExcelJS, nivel: 'UNIDAD', logos: { salud: logo('REQUI_LOGO_SALUD'), queretaro: logo('REQUI_LOGO_QUERETARO') } });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const ws = wb.getWorksheet('BCG');                    // 2 tarjetas (sep y oct) = 4 imágenes
+  expect(ws.getImages()).toHaveLength(4);
+  expect(wb.model.media).toHaveLength(2);               // el mismo archivo de imagen se reutiliza
+});

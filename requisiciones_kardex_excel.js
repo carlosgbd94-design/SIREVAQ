@@ -257,8 +257,9 @@
     wb.creator = 'SIREVAQ';
     const ids = {};
     if (logos) {
-      if (logos.salud) ids.salud = wb.addImage({ base64: logos.salud, extension: 'png' });
-      if (logos.queretaro) ids.queretaro = wb.addImage({ base64: logos.queretaro, extension: 'png' });
+      const crudo = (d) => String(d).replace(/^data:image\/\w+;base64,/, '');
+      if (logos.salud) ids.salud = wb.addImage({ base64: crudo(logos.salud), extension: 'png' });
+      if (logos.queretaro) ids.queretaro = wb.addImage({ base64: crudo(logos.queretaro), extension: 'png' });
     }
     const usados = new Set();
     modelo.hojas.forEach((hoja) => {
@@ -273,8 +274,8 @@
       hoja.tarjetas.forEach((tarjeta, ti) => {
         if (ti > 0) ws.getRow(r0 - 1).addPageBreak();
         [r0, r0 + 1, r0 + 2].forEach((r) => { ws.getRow(r).height = 21; });
-        if (ids.salud) ws.addImage(ids.salud, { tl: { col: 1.03, row: r0 - 1 }, ext: { width: 248, height: 64 } });
-        if (ids.queretaro) ws.addImage(ids.queretaro, { tl: { col: 13.24, row: r0 - 1 }, ext: { width: 215, height: 62 } });
+        if (ids.salud !== undefined) ws.addImage(ids.salud, { tl: { col: 1.03, row: r0 - 1 }, ext: { width: 248, height: 84 } });
+        if (ids.queretaro !== undefined) ws.addImage(ids.queretaro, { tl: { col: 13.24, row: r0 - 1 }, ext: { width: 293, height: 85 } });
         let r = pintarEncabezado(ws, r0, hoja, tarjeta, modelo.anio, responsable);
 
         // SALDO ANTERIOR (lo que no salió de cámara fría en la tarjeta anterior; 0 en la primera).

@@ -3524,6 +3524,14 @@ async function exportarRutas() {
 // elegido, armadas con lo ya capturado (ver requisiciones_kardex_excel.js). Un .zip con dos
 // libros: por unidad y por municipio.
 // ---------------------------------------------------------------------------
+function cargarScript(src) {
+  return new Promise((ok, fallo) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = ok; s.onerror = () => fallo(new Error('no se pudo cargar ' + src));
+    document.head.appendChild(s);
+  });
+}
+
 async function exportarKardex() {
   if (!estado.puedeEditar) { toast('El kardex solo lo descarga Jurisdicción.', true); return; }
   if (estado.exportando) { toast('Ya se está generando un archivo; espera a que termine.', true); return; }
@@ -3546,6 +3554,7 @@ async function exportarKardex() {
     const K = window.RequiKardexExcel;
     const modelo = K.armarModelo({ anio, catalogo: estado.catalogo, requisiciones: reqs, items, distMunicipio: dMuni, distUnidad: dUni, unidades: estado.unidades });
     if (!modelo.hojas.length) { cargaCerrar(); toast(`En ${anio} todavía no hay lo surtido capturado: no hay nada que poner en el kardex.`, true); return; }
+    if (!window.REQUI_LOGO_SALUD) await cargarScript('requisiciones_assets.js');   // logos oficiales (pesan ~130 KB: solo se bajan al exportar)
     const opciones = { ExcelJS: window.ExcelJS, logos: { salud: window.REQUI_LOGO_SALUD, queretaro: window.REQUI_LOGO_QUERETARO }, responsable: (firmas && firmas.elaboro_nombre) || '' };
     await cargaAvance('Generando el libro por unidad…', 0.55);
     const porUnidad = await K.generar(modelo, { ...opciones, nivel: 'UNIDAD' });
