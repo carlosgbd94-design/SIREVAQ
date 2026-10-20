@@ -1323,3 +1323,45 @@ test('Requisiciones (jurisdicción): los botones de la captura rápida no se par
   expect(r.ws.every((v) => v === 'nowrap')).toBe(true);
   expect(r.ws.length).toBeGreaterThanOrEqual(5);
 });
+
+test('Requisiciones: el Kardex del año se baja desde Exportar (solo Jurisdicción) como .zip con los dos libros', async ({ page }, testInfo) => {
+  const ExcelJS = require('exceljs');
+  const JSZip = require('jszip');
+  const errores = await preparar(page, { conReq: true, libs: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.evaluate(() => {
+    const db = window.__FAKE_DB__;
+    db.requi_lotes.push({ id: 'l1', requi_biologico_id: 'bio-srp', numero_lote: 'L1', caducidad: '2027-08-31' });
+    const base = { requisicion_id: 'req-hoy', requi_biologico_id: 'bio-srp', lote_id: 'l1' };
+    db.requi_items_jurisdiccion.push({ id: 'i1', ...base, cantidad_surtida: 50 });
+    db.requi_distribucion_municipio.push({ id: 'm1', ...base, municipio: 'CORREGIDORA', cantidad: 50 });
+    db.requi_distribucion_unidad.push({ id: 'u1', ...base, unidad_id: 'un-c1', cantidad: 30 }, { id: 'u2', ...base, unidad_id: 'un-c2', cantidad: 20 });
+  });
+  await page.click('#btnAbrirExportar');
+  await expect(page.locator('#seccionKardex')).toBeVisible();
+  const descarga = page.waitForEvent('download');
+  await page.click('#btnExportarKardex');
+  const archivo = await descarga;
+  expect(archivo.suggestedFilename()).toMatch(/^KARDEX_\d{4}\.zip$/);
+  const ruta = testInfo.outputPath('kardex.zip');
+  await archivo.saveAs(ruta);
+  const zip = await JSZip.loadAsync(require('fs').readFileSync(ruta));
+  const nombres = Object.keys(zip.files).sort();
+  expect(nombres).toHaveLength(2);
+  expect(nombres[0]).toMatch(/^CONTROL DE BIOLOGICO \d{4} \(TARJETAS\)\.xlsx$/);
+  expect(nombres[1]).toMatch(/^CONTROL DE BIOLOGICO \d{4} POR MUNICIPIO \(TARJETAS\)\.xlsx$/);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await zip.files[nombres[0]].async('nodebuffer'));
+  const ws = wb.worksheets[0];
+  const salidas = []; ws.eachRow((row) => { if (row.getCell(2).value === 'JS-1') salidas.push([row.getCell(8).value, row.getCell(10).value]); });
+  expect(salidas).toEqual([['CORREGIDORA', 20], ['CORREGIDORA', 30]]);   // una por unidad (en orden alfabético)
+  expect(errores).toEqual([]);
+});
+
+test('Requisiciones: el perfil municipal no ve el Kardex del año', async ({ page }) => {
+  const errores = await preparar(page, { rol: 'MUNICIPAL', conReq: true, muni: 'QUERETARO' });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#btnAbrirExportar');
+  await expect(page.locator('#seccionKardex')).toBeHidden();
+  expect(errores).toEqual([]);
+});

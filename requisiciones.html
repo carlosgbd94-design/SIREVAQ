@@ -21,7 +21,8 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
 <script defer src="requisiciones_rutas_excel.js"></script>
-<script defer src="requisiciones_ui.js?v=17"></script>
+<script defer src="requisiciones_kardex_excel.js"></script>
+<script defer src="requisiciones_ui.js?v=18"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -649,6 +650,14 @@
                 </fieldset>
                 <button class="btn btn-primary btn-sm pe-boton" id="btnExportarRutas">
                   <span class="material-symbols-rounded" style="font-size:16px">route</span> Descargar distribución de rutas
+                </button>
+              </section>
+
+              <section class="pe-seccion" id="seccionKardex" style="display:none;" aria-labelledby="peTituloKardex">
+                <h3 id="peTituloKardex"><span class="pe-num" id="peNumKardex">3</span> Kardex del año</h3>
+                <p class="pe-ayuda">Tarjetas de control de biológicos del año elegido, armadas con lo capturado aquí: un libro por unidad y otro por municipio, en un solo .zip.</p>
+                <button class="btn btn-primary btn-sm pe-boton" id="btnExportarKardex">
+                  <span class="material-symbols-rounded" style="font-size:16px">inventory_2</span> Descargar Kardex (.zip)
                 </button>
               </section>
             </div>

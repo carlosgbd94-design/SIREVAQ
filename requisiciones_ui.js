@@ -614,6 +614,8 @@ async function cargarSesionReal() {
   estado.perfil = perfil;
   const rol = String(perfil.rol || '').toUpperCase();
   estado.puedeEditar = rol === 'ADMIN' || rol === 'JURISDICCIONAL';
+  // Kardex del año: solo Jurisdicción (y Admin).
+  $('seccionKardex').style.display = estado.puedeEditar ? '' : 'none';
   // Perfil municipal: solo sus municipios (los de su asignación), nada de jurisdicción ni de otros municipios.
   estado.esMunicipal = rol === 'MUNICIPAL';
   estado.munisPermitidos = estado.esMunicipal
@@ -3517,6 +3519,54 @@ async function exportarRutas() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Kardex del año (solo Jurisdicción): las tarjetas de control de biológicos de TODO el año
+// elegido, armadas con lo ya capturado (ver requisiciones_kardex_excel.js). Un .zip con dos
+// libros: por unidad y por municipio.
+// ---------------------------------------------------------------------------
+async function exportarKardex() {
+  if (!estado.puedeEditar) { toast('El kardex solo lo descarga Jurisdicción.', true); return; }
+  if (estado.exportando) { toast('Ya se está generando un archivo; espera a que termine.', true); return; }
+  const anio = Number($('selAnio').value);
+  estado.exportando = true;
+  await cargaAbrir('Generando kardex', `Leyendo las requisiciones de ${anio}…`);
+  try {
+    if (window.ensureLibsLoaded) await window.ensureLibsLoaded('exceljs', 'jszip');
+    const { data: reqs, error } = await estado.db.from('requi_requisiciones').select('*').eq('anio', anio);
+    if (error) throw error;
+    const ids = (reqs || []).map((r) => r.id);
+    if (!ids.length) { cargaCerrar(); toast(`No hay requisiciones capturadas en ${anio}.`, true); return; }
+    await cargaAvance('Leyendo lo surtido y el reparto…', 0.2);
+    const items = await traerTodo(() => estado.db.from('requi_items_jurisdiccion').select('*, requi_lotes(numero_lote, caducidad)').in('requisicion_id', ids));
+    const dMuni = await traerTodo(() => estado.db.from('requi_distribucion_municipio').select('*').in('requisicion_id', ids));
+    const dUni = await traerTodo(() => estado.db.from('requi_distribucion_unidad').select('*').in('requisicion_id', ids));
+    if (items.incompleto || dMuni.incompleto || dUni.incompleto) { cargaCerrar(); return; }
+    const { data: firmas } = await estado.db.from('requi_firmas').select('elaboro_nombre').eq('nivel', 'JURISDICCIONAL').eq('destino', 'JURISDICCION').maybeSingle();
+    await cargaAvance('Armando las tarjetas…', 0.4);
+    const K = window.RequiKardexExcel;
+    const modelo = K.armarModelo({ anio, catalogo: estado.catalogo, requisiciones: reqs, items, distMunicipio: dMuni, distUnidad: dUni, unidades: estado.unidades });
+    if (!modelo.hojas.length) { cargaCerrar(); toast(`En ${anio} todavía no hay lo surtido capturado: no hay nada que poner en el kardex.`, true); return; }
+    const opciones = { ExcelJS: window.ExcelJS, logos: { salud: window.REQUI_LOGO_SALUD, queretaro: window.REQUI_LOGO_QUERETARO }, responsable: (firmas && firmas.elaboro_nombre) || '' };
+    await cargaAvance('Generando el libro por unidad…', 0.55);
+    const porUnidad = await K.generar(modelo, { ...opciones, nivel: 'UNIDAD' });
+    await cargaAvance('Generando el libro por municipio…', 0.8);
+    const porMunicipio = await K.generar(modelo, { ...opciones, nivel: 'MUNICIPIO' });
+    const zip = new JSZip();
+    zip.file(`CONTROL DE BIOLOGICO ${anio} (TARJETAS).xlsx`, porUnidad);
+    zip.file(`CONTROL DE BIOLOGICO ${anio} POR MUNICIPIO (TARJETAS).xlsx`, porMunicipio);
+    await cargaAvance('Descargando el archivo…', 0.95);
+    descargarBlob(await zip.generateAsync({ type: 'blob' }), `KARDEX_${anio}.zip`);
+    cargaCerrar();
+    const hojas = plural(modelo.hojas.length, 'biológico', 'biológicos');
+    toast(`Kardex ${anio} listo: ${hojas}.` + (modelo.avisos.length ? ' Ojo: ' + modelo.avisos.join(' ') : ''), !!modelo.avisos.length);
+  } catch (e) {
+    cargaCerrar();
+    toast('No se pudo generar el kardex: ' + (e.message || e), true);
+  } finally {
+    estado.exportando = false;
+  }
+}
+
 function togglePanelExportar(forzarCerrado) {
   const panel = $('panelExportar');
   const abierto = panel.style.display !== 'none';
@@ -3587,6 +3637,7 @@ function instalarEventos() {
   $('btnGuardarFirmasJuris').addEventListener('click', guardarFirmasJurisdiccionales);
   $('btnExportarMasivo').addEventListener('click', exportarMasivo);
   $('btnExportarRutas').addEventListener('click', exportarRutas);
+  $('btnExportarKardex').addEventListener('click', exportarKardex);
   $('btnToggleResponsables').addEventListener('click', toggleResponsables);
   $('btnAbrirExportar').addEventListener('click', (ev) => { ev.stopPropagation(); togglePanelExportar(); });
   $('btnCerrarExportar').addEventListener('click', () => togglePanelExportar('devolverFoco'));
