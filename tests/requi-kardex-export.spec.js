@@ -103,7 +103,7 @@ test('dos entregas en el mes = dos bloques en la misma tarjeta; lo no repartido 
   expect(sin).toMatchObject({ destino: 'QUERETARO', j: 18 });
   // Entregas 1 y 2: 60 + 40 entran, salen 20+30+10 y 40 -> queda 0 al final
   expect(oct[oct.length - 1].l).toBe(0);
-  expect(modelo.avisos.some((a) => a.includes('18 frascos de QUERETARO'))).toBe(true);
+  expect(modelo.avisos.some((a) => a.includes('OCTUBRE: falta repartir entre unidades') && a.includes('BCG'))).toBe(true);
 });
 
 test('varios lotes: una entrada por lote, salidas sumadas por unidad con el desglose por lote', async () => {

@@ -62,6 +62,7 @@
   // ---------------------------------------------------------------------------
   function armarModelo({ anio, catalogo, requisiciones, items, distMunicipio, distUnidad, unidades, lotes }) {
     const avisos = new Set();
+    const sinRepartir = new Map(); // mes -> Set(biológicos con destinos sin repartir entre sus unidades)
     const bioPorId = {};
     catalogo.forEach((b) => { bioPorId[b.id] = b; });
     const unidadPorId = {};
@@ -114,7 +115,7 @@
           const resto = totalMuni - sumaUnidades;
           if (resto > 0) {
             salidas.push({ ...base, unidad: hospital ? HOSPITALES[destino] : 'SIN REPARTIR A UNIDADES', frascos: resto, soloUnidad: true, sinRepartir: !hospital });
-            if (!hospital) avisos.add(`${nombreBio(bio)} (${MESES[req.mes - 1]}): ${resto} frascos de ${destino} aún no se reparten entre sus unidades.`);
+            if (!hospital) { if (!sinRepartir.has(req.mes)) sinRepartir.set(req.mes, new Set()); sinRepartir.get(req.mes).add(nombreBio(bio)); }
           }
         });
         const asignadoMuni = dm.reduce((s, d) => s + num(d.cantidad), 0);
@@ -140,6 +141,10 @@
         return tarjeta;
       });
       return { bio: h.bio, hoja: nombreHoja(nombreBio(h.bio)), titulo: nombreBio(h.bio), clave: h.bio.clave_articulo || '', dpf: dosisPorFrasco(h.bio), tarjetas };
+    });
+    [...sinRepartir.keys()].sort((a, b) => a - b).forEach((mes) => {
+      const nombres = [...sinRepartir.get(mes)];
+      avisos.add(`${MESES[mes - 1]}: falta repartir entre unidades (salen como «SIN REPARTIR A UNIDADES») en ${nombres.join(', ')}.`);
     });
     return { anio, hojas: lista, avisos: [...avisos] };
   }
