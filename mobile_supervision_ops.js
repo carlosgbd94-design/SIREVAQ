@@ -267,7 +267,7 @@
     const pedidas = Math.min(4, Math.max(1, Number(r.solicitud_botellas) || 4));
     return `<div class="sv-confirma" id="svPinEnt" role="alertdialog" aria-labelledby="svPinEntT">
       <h3 id="svPinEntT">Registrar entrega · ${esc(r.unidad || r.clues)}</h3>
-      <label class="sv-fld"><span>Botellas entregadas</span><select id="svPinCant" class="sv-sel">${[1, 2, 3, 4].map((n) => `<option value="${n}"${n === pedidas ? " selected" : ""}>${n}</option>`).join("")}</select></label>
+      <label class="sv-fld"><span>Botellas entregadas</span><select id="svPinCant" class="sv-sel">${Array.from({ length: 20 }, (_, i) => i + 1).map((n) => `<option value="${n}"${n === pedidas ? " selected" : ""}>${n}</option>`).join("")}</select></label>
       <label class="sv-fld"><span>Entregado por</span><input type="text" id="svPinPor" class="sv-txt" maxlength="80" value="${esc(perfil().nombre || perfil().usuario || "")}"></label>
       <label class="sv-fld"><span>Fecha de entrega</span><input type="date" id="svPinFecha" class="sv-txt" value="${hoyYmd()}" max="${hoyYmd()}"></label>
       <label class="sv-fld"><span>Comentario (opcional)</span><textarea id="svPinCom" class="sv-txt sv-area" rows="3" maxlength="400"></textarea></label>
@@ -287,13 +287,13 @@
     if (!r) return;
     const por = root.querySelector("#svPinPor").value.trim() || perfil().usuario;
     const fecha = root.querySelector("#svPinFecha").value || hoyYmd();
-    const cant = Math.min(4, Math.max(1, parseInt(root.querySelector("#svPinCant").value, 10) || 4));
+    const cant = Math.min(20, Math.max(1, parseInt(root.querySelector("#svPinCant").value, 10) || 4));
     const com = root.querySelector("#svPinCom").value.trim();
     PINOL.guardando = true; PINOL.errorEntrega = null; pintarPinol();
     try {
       const cambios = {
         estatus: "ENTREGADO", entregado_por: por, timestamp_entrega: ahoraIso(), fecha_entrega: fecha,
-        comentario_entrega: com || null, solicitud_botellas: cant
+        comentario_entrega: com || null, cantidad_entregada: cant
       };
       const { data, error } = await db().from("pinol_solicitudes").update(cambios).eq("id", r.id).eq("estatus", "PENDIENTE").select("id");
       if (error) throw error;

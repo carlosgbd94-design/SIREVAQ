@@ -8107,8 +8107,9 @@ async function supabaseRequest(action = "", payload, options = {}) {
           fecha_entrega: payload.fecha_entrega || todayYmdLocal(),
           comentario_entrega: payload.comentario_notificacion ? payload.comentario_notificacion.trim() : null
         };
-        if (payload.solicitud_botellas) {
-          updateObj.solicitud_botellas = Number(payload.solicitud_botellas);
+        // Lo entregado va en cantidad_entregada; solicitud_botellas conserva lo que la unidad pidió.
+        if (payload.cantidad_entregada) {
+          updateObj.cantidad_entregada = Number(payload.cantidad_entregada);
         }
         const { error: updateError } = await supabase
           .from('pinol_solicitudes')
@@ -18848,7 +18849,16 @@ function formatFechaMemorandumText(dateStr) {
   return `${d.getDate()} DE ${meses[d.getMonth()]} DE ${d.getFullYear()}`;
 }
 
-function openPinolEntregaModal(item) {
+let PINOL_ENTREGA_EDIT = false;
+
+// Lo que realmente se entregó: cantidad_entregada si existe; si no, lo que la unidad pidió (registros viejos).
+function pinolCantidadEntregada(x) {
+  const e = Number(x?.cantidad_entregada);
+  if (e > 0) return e;
+  return Number(x?.solicitud_botellas) > 0 ? Number(x.solicitud_botellas) : 4;
+}
+
+function openPinolEntregaModal(item, opts) {
   PINOL_ENTREGA_CTX = item || null;
 
   if ($("pinolEntregaMetaMunicipio")) $("pinolEntregaMetaMunicipio").textContent = item?.municipio || "—";
@@ -18860,12 +18870,19 @@ function openPinolEntregaModal(item) {
   if ($("pinolFechaEntregaInput")) {
     $("pinolFechaEntregaInput").value = item?.fecha_entrega || todayStr;
   }
+  PINOL_ENTREGA_EDIT = !!(opts && opts.editar);
   if ($("pinolCantidadEntregar")) {
-    $("pinolCantidadEntregar").value = item?.solicitud_botellas || item?.cantidad || 4;
+    $("pinolCantidadEntregar").value = pinolCantidadEntregada(item);
   }
   if ($("pinolEntregadoPorInput")) {
     $("pinolEntregadoPorInput").value = item?.entregado_por || "L.E. LIZBETH URIBE PANTOJA";
   }
+  if (PINOL_ENTREGA_EDIT && $("pinolEntregaComentario")) $("pinolEntregaComentario").value = item?.comentario_entrega || "";
+  if ($("pinolEntregaTitle")) $("pinolEntregaTitle").textContent = PINOL_ENTREGA_EDIT ? "Corregir entrega registrada" : "Confirmar Entrega y Generar Memorándum";
+  if ($("pinolEntregaSub")) $("pinolEntregaSub").textContent = PINOL_ENTREGA_EDIT
+    ? "Cambia la fecha, la cantidad o el responsable. El estatus de la solicitud no se modifica."
+    : "Confirma la fecha física de entrega y los datos para generar el acuse impreso en 2 copias.";
+  if ($("btnConfirmarEntregaPinol")) $("btnConfirmarEntregaPinol").lastChild.textContent = PINOL_ENTREGA_EDIT ? "Guardar corrección" : "Solo guardar entrega";
 
   $("pinolEntregaModal")?.classList.add("show");
 
@@ -18890,18 +18907,47 @@ async function confirmPinolDeliveredFromModal(andPrint = false) {
 
   const defaultDate = typeof todayYmdLocal === "function" ? todayYmdLocal() : new Date().toISOString().split('T')[0];
   const fechaEntrega = $("pinolFechaEntregaInput")?.value || defaultDate;
-  const cantidad = Number($("pinolCantidadEntregar")?.value || item.solicitud_botellas || 4);
+  const MAXE = window.PinolRuta?.MAX_ENTREGA || 20;
+  const cantidad = Math.round(Number($("pinolCantidadEntregar")?.value));
+  if (!(cantidad >= 1) || cantidad > MAXE) {
+    showToast(`La cantidad a entregar debe ser de 1 a ${MAXE} botellas`, false, "warn", { title: "Revisa la cantidad" });
+    $("pinolCantidadEntregar")?.focus();
+    return;
+  }
   const entregadoPor = String($("pinolEntregadoPorInput")?.value || "L.E. LIZBETH URIBE PANTOJA").trim();
   const comentario = String($("pinolEntregaComentario")?.value || "").trim();
+  const editar = PINOL_ENTREGA_EDIT;
 
   item.fecha_entrega = fechaEntrega;
-  item.solicitud_botellas = cantidad;
+  item.cantidad_entregada = cantidad;
   item.entregado_por = entregadoPor;
+  if (editar) item.comentario_entrega = comentario || null;
 
   closePinolEntregaModal();
-  showOverlay("Guardando entrega de solicitud…", "Pinol");
 
-  await markPinolDelivered(item.id, comentario, { fechaEntrega, cantidad, entregadoPor });
+  if (editar) {
+    // Corrección de una entrega ya hecha: no cambia el estatus ni vuelve a avisar a la unidad.
+    showOverlay("Guardando corrección…", "Pinol");
+    try {
+      const { error } = await window.supabase.from("pinol_solicitudes")
+        .update({ fecha_entrega: fechaEntrega, cantidad_entregada: cantidad, entregado_por: entregadoPor, comentario_entrega: comentario || null })
+        .eq("id", item.id);
+      if (error) throw error;
+      showToast("Entrega corregida", true, "good");
+      invalidatePinolCache();
+      await refreshPinol();
+    } catch (err) {
+      console.error("Corregir entrega Pinol:", err);
+      showToast("No se pudo corregir la entrega: " + (err.message || err), false, "bad");
+      hideOverlay();
+      return;
+    } finally {
+      hideOverlay();
+    }
+  } else {
+    showOverlay("Guardando entrega de solicitud…", "Pinol");
+    await markPinolDelivered(item.id, comentario, { fechaEntrega, cantidad, entregadoPor });
+  }
 
   if (andPrint) {
     setTimeout(() => {
@@ -18920,7 +18966,7 @@ async function markPinolDelivered(id, comentario = "", extraData = null) {
     };
     if (extraData) {
       if (extraData.fechaEntrega) payload.fecha_entrega = extraData.fechaEntrega;
-      if (extraData.cantidad) payload.solicitud_botellas = extraData.cantidad;
+      if (extraData.cantidad) payload.cantidad_entregada = extraData.cantidad;
       if (extraData.entregadoPor) payload.entregado_por = extraData.entregadoPor;
     }
 
@@ -18964,7 +19010,7 @@ function imprimirAcusePinol(solicitudOrId) {
   const municipio = (item.municipio || "—").toUpperCase();
   const clues = (item.clues || "—").toUpperCase();
   const unidad = (item.unidad || "UNIDAD DE SALUD").toUpperCase();
-  const cantidad = item.solicitud_botellas || item.cantidad || 4;
+  const cantidad = pinolCantidadEntregada(item);
   const entregadoPor = (item.entregado_por || "L.E. LIZBETH URIBE PANTOJA").toUpperCase();
 
   const logos = window.PINOL_LOGOS || {};
@@ -19666,6 +19712,7 @@ function renderPinolCommandCenter() {
       actionContent += `<button type="button" class="pn-pure-btn pn-pure-surtir btnPinolDeliver" data-id="${escapeAttr(id)}" title="Surtir Insumos"><span class="material-symbols-rounded">local_shipping</span></button>`;
     } else {
       actionContent += `<button type="button" class="pn-pure-btn pn-pure-acuse" onclick="imprimirAcusePinol('${escapeAttr(id)}')" title="Imprimir Acuse"><span class="material-symbols-rounded">print</span></button>`;
+      actionContent += `<button type="button" class="pn-pure-btn pn-pure-edit btnPinolEdit" data-id="${escapeAttr(id)}" title="Corregir entrega (fecha, cantidad, responsable)" aria-label="Corregir entrega"><span class="material-symbols-rounded">edit</span></button>`;
     }
 
     actionContent += `<button type="button" class="pn-pure-btn pn-pure-history" onclick="openPinolUnitDrawer('${escapeAttr(id)}')" title="Ficha de Trazabilidad"><span class="material-symbols-rounded">history</span></button>`;
@@ -19689,7 +19736,7 @@ function renderPinolCommandCenter() {
           <div class="text-[11px] font-mono font-bold text-slate-400">${escapeHtml(x?.clues || "")}</div>
         </td>
         <td class="text-center" style="vertical-align: middle !important;">${stockBadge}</td>
-        <td class="text-center font-black text-slate-900" style="vertical-align: middle !important;">${solicitado} pzas <span class="text-[10px] text-slate-400 font-normal">(${(solicitado * 0.828).toFixed(1)}L)</span></td>
+        <td class="text-center font-black text-slate-900" style="vertical-align: middle !important;">${solicitado} pzas <span class="text-[10px] text-slate-400 font-normal">(${(solicitado * 0.828).toFixed(1)}L)</span>${(estatus !== "PENDIENTE" && Number(x?.cantidad_entregada) > 0 && Number(x.cantidad_entregada) !== solicitado) ? `<div style="font-size:10.5px; font-weight:800; margin-top:2px; color:#166534;">entregó ${Number(x.cantidad_entregada)} pzas</div>` : ""}</td>
         <td class="text-center" style="vertical-align: middle !important;">${obsHtml}</td>
         <td class="text-xs font-semibold text-slate-600" style="vertical-align: middle !important;">${escapeHtml(fechaEntregaFormateada || "—")}</td>
         <td style="vertical-align: middle !important;">${estatusHtml}${sinConfirmarHtml}</td>
@@ -19727,6 +19774,15 @@ function bindPinolTableEvents(items) {
       const id = btn.getAttribute("data-id");
       const item = (window._pinolRawItems || []).find(x => String(x?.id) === String(id));
       if (item) openPinolEntregaModal(item);
+    };
+  });
+
+  // Botones corregir una entrega ya registrada
+  document.querySelectorAll(".btnPinolEdit").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.getAttribute("data-id");
+      const item = (window._pinolRawItems || []).find(x => String(x?.id) === String(id));
+      if (item) openPinolEntregaModal(item, { editar: true });
     };
   });
 
@@ -19827,7 +19883,8 @@ $("btnConfirmarBatchPinol")?.addEventListener("click", async () => {
   if (!selectedItems.length) return;
 
   const fechaEntrega = $("pinolBatchFechaInput")?.value || todayYmdLocal();
-  const cantidadPiezas = parseInt($("pinolBatchCantidadInput")?.value) || 4;
+  const MAXE = window.PinolRuta?.MAX_ENTREGA || 20;
+  const cantidadPiezas = Math.min(MAXE, Math.max(1, parseInt($("pinolBatchCantidadInput")?.value) || 4));
   const entregadoPor = ($("pinolBatchEntregadoPor")?.value || "L.E. LIZBETH URIBE PANTOJA").trim();
   const comentario = ($("pinolBatchComentario")?.value || "").trim();
 
@@ -19841,7 +19898,7 @@ $("btnConfirmarBatchPinol")?.addEventListener("click", async () => {
       timestamp_entrega: new Date().toISOString(),
       entregado_por: entregadoPor,
       comentario_entrega: comentario,
-      cantidad_entregada: Math.min(cantidadPiezas, 4)
+      cantidad_entregada: cantidadPiezas
     };
 
     const { error } = await window.supabase
@@ -19858,7 +19915,7 @@ $("btnConfirmarBatchPinol")?.addEventListener("click", async () => {
     await refreshPinol();
 
     // Ofrecer impresión de la Guía de Ruta
-    imprimirGuiaEmbarquePinol(selectedItems, { fecha: fechaEntrega, responsable: entregadoPor, vehiculo: comentario, cantidad: Math.min(cantidadPiezas, 4) });
+    imprimirGuiaEmbarquePinol(selectedItems, { fecha: fechaEntrega, responsable: entregadoPor, vehiculo: comentario, cantidad: cantidadPiezas });
   } catch (err) {
     console.error("Error en surtido masivo:", err);
     showToast("Error al procesar surtido masivo", false, "bad");
@@ -19909,7 +19966,7 @@ function openPinolUnitDrawer(idOrClues) {
                 ${escapeHtml(it.estatus || 'PENDIENTE')}
               </span>
             </div>
-            ${it.fecha_entrega ? `<div class="text-xs font-bold text-emerald-700 mt-2">🚚 Entregado el: ${escapeHtml(formatPinolDate(it.fecha_entrega))} por ${escapeHtml(it.entregado_por || '—')}</div>` : ''}
+            ${it.fecha_entrega ? `<div class="text-xs font-bold text-emerald-700 mt-2">🚚 Entregado el: ${escapeHtml(formatPinolDate(it.fecha_entrega))} (${pinolCantidadEntregada(it)} pza(s)) por ${escapeHtml(it.entregado_por || '—')}</div>` : ''}
             ${it.observaciones ? `<div class="text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200 mt-2 text-slate-700"><b>Obs:</b> ${escapeHtml(it.observaciones)}</div>` : ''}
           </div>
         `).join("")}

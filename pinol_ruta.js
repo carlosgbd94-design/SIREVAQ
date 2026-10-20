@@ -13,7 +13,8 @@
   "use strict";
 
   const LITROS_BOTELLA = 0.828;
-  const MAX_BOTELLAS = 4;           // norma institucional: hasta 4 botellas por unidad
+  const MAX_BOTELLAS = 4;           // norma institucional: hasta 4 botellas que PIDE cada unidad
+  const MAX_ENTREGA = 20;           // lo que el municipio puede ENTREGAR de más cuando la situación lo amerita
   const DIAS_ESPERA_ALERTA = 7;     // una solicitud pendiente con más días ya es rezago
   const DIAS_SIN_CONFIRMAR = 5;     // enviada y sin confirmar por la unidad
 
@@ -205,7 +206,7 @@
   }
 
   const API = {
-    LITROS_BOTELLA, MAX_BOTELLAS, DIAS_ESPERA_ALERTA, DIAS_SIN_CONFIRMAR,
+    LITROS_BOTELLA, MAX_BOTELLAS, MAX_ENTREGA, DIAS_ESPERA_ALERTA, DIAS_SIN_CONFIRMAR,
     botellasSugeridas, resumenHistorialUnidad,
     esperaDias, sinConfirmarDias, esCritica, cantidadInicial, sugerirRuta, ordenarParadas, totales, municipiosDe, resumenAlertas, htmlGuia, fechaLarga
   };
@@ -378,7 +379,7 @@
     else ol.innerHTML = paradas.map((x, i) => `<li class="pr-stop">
         <span class="pr-n" aria-hidden="true">${i + 1}</span>
         <span class="pr-name"><b>${esc(x.unidad)}</b><small>${esc(x.municipio || "")} · ${esc(x.clues)}</small></span>
-        <input class="pr-in pr-q" type="number" min="1" max="${MAX_BOTELLAS}" step="1" inputmode="numeric" data-pr="qty" data-id="${esc(x.id)}" value="${S.cant[String(x.id)]}" aria-label="Botellas para ${esc(x.unidad)}">
+        <input class="pr-in pr-q" type="number" min="1" max="${MAX_ENTREGA}" step="1" inputmode="numeric" data-pr="qty" data-id="${esc(x.id)}" value="${S.cant[String(x.id)]}" aria-label="Botellas para ${esc(x.unidad)}">
         <button type="button" class="pr-ib" data-pr="subir" data-id="${esc(x.id)}" aria-label="Subir ${esc(x.unidad)} en la ruta" ${i === 0 ? "disabled" : ""}>${ICO("arrow_upward")}</button>
         <button type="button" class="pr-ib" data-pr="bajar" data-id="${esc(x.id)}" aria-label="Bajar ${esc(x.unidad)} en la ruta" ${i === paradas.length - 1 ? "disabled" : ""}>${ICO("arrow_downward")}</button>
         <button type="button" class="pr-ib" data-pr="quitar" data-id="${esc(x.id)}" aria-label="Quitar ${esc(x.unidad)} de la ruta">${ICO("close")}</button></li>`).join("");
@@ -429,7 +430,7 @@
     const t = e.target;
     if (t.id === "prBuscar") { S.texto = t.value; return pintarLista(); }
     if (t.dataset && t.dataset.pr === "qty") {
-      const v = Math.min(MAX_BOTELLAS, Math.max(1, Math.round(num(t.value)) || 1));
+      const v = Math.min(MAX_ENTREGA, Math.max(1, Math.round(num(t.value)) || 1));
       S.cant[String(t.dataset.id)] = v;
       if (t.value !== "" && String(v) !== t.value) t.value = String(v);
       const paradas = S.orden.map(porId).filter(Boolean);
@@ -513,7 +514,7 @@
       let actualizadas = 0;
       for (const [q, ids] of porCantidad) {
         const { data, error } = await root.supabase.from("pinol_solicitudes")
-          .update({ estatus: "ENTREGADO", fecha_entrega: meta.fecha, timestamp_entrega: new Date().toISOString(), entregado_por: meta.responsable, comentario_entrega: meta.vehiculo || null, cantidad_entregada: Math.min(q, MAX_BOTELLAS) })
+          .update({ estatus: "ENTREGADO", fecha_entrega: meta.fecha, timestamp_entrega: new Date().toISOString(), entregado_por: meta.responsable, comentario_entrega: meta.vehiculo || null, cantidad_entregada: Math.min(q, MAX_ENTREGA) })
           .in("id", ids).eq("estatus", "PENDIENTE").select("id");
         if (error) throw error;
         actualizadas += (data || []).length;

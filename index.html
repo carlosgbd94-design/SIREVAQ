@@ -6643,8 +6643,8 @@
           <span class="material-symbols-rounded" style="font-size:18px;">inventory_2</span>
           Gestión de Insumos • Acuse Oficial
         </div>
-        <div class="modalTitle" style="font-weight:900; font-size: 20px; color: #0f172a; margin-bottom:4px;">Confirmar Entrega y Generar Memorándum</div>
-        <div class="modalSub" style="color:#64748b; font-size: 13px; line-height:1.5;">
+        <div class="modalTitle" id="pinolEntregaTitle" style="font-weight:900; font-size: 20px; color: #0f172a; margin-bottom:4px;">Confirmar Entrega y Generar Memorándum</div>
+        <div class="modalSub" id="pinolEntregaSub" style="color:#64748b; font-size: 13px; line-height:1.5;">
           Confirma la fecha física de entrega y los datos para generar el acuse impreso en 2 copias.
         </div>
       </div>
@@ -6688,7 +6688,7 @@
             <label style="color:#0f172a; font-weight:800; font-size:12px; margin-bottom:6px; display:block;">
               CANTIDAD A ENTREGAR (PZAS)
             </label>
-            <input type="number" id="pinolCantidadEntregar" min="1" step="1" value="4"
+            <input type="number" id="pinolCantidadEntregar" min="1" max="20" step="1" value="4"
               style="width: 100%; height: 44px; border-radius: 14px !important; border: 1px solid rgba(203, 213, 225, 0.8); padding: 0 16px; font-weight:700; box-shadow: 0 1px 3px rgba(15,23,42,0.06);" />
           </div>
         </div>
@@ -6802,7 +6802,7 @@
           </div>
           <div>
             <label class="block text-xs font-extrabold text-slate-800 mb-1">CANTIDAD POR UNIDAD (PZAS)</label>
-            <input type="number" id="pinolBatchCantidadInput" min="1" max="4" value="4" class="w-full h-[44px] border border-slate-300 rounded-xl px-4 font-bold text-slate-800" style="height: 44px; border-radius: 14px !important;" />
+            <input type="number" id="pinolBatchCantidadInput" min="1" max="20" value="4" class="w-full h-[44px] border border-slate-300 rounded-xl px-4 font-bold text-slate-800" style="height: 44px; border-radius: 14px !important;" />
           </div>
         </div>
 
@@ -6817,7 +6817,7 @@
         </div>
 
         <div class="p-3 bg-emerald-50 border-l-4 border-emerald-600 rounded-r-xl text-xs font-semibold text-emerald-800">
-          ⚠️ Norma Institucional: Se asignará hasta un máximo de 4 botellas (828 mL c/u) por unidad de salud.
+          ⚠️ Norma Institucional: cada unidad pide hasta 4 botellas (828 mL c/u); si hace falta puedes entregar más (hasta 20).
         </div>
       </div>
 

@@ -115,7 +115,7 @@ test.describe('Móvil · operaciones de supervisión', () => {
     await page.click('#svPinEntOk');
     await expect.poll(() => estado.db.pinol_solicitudes.find((r) => r.id === 'p1').estatus).toBe('ENTREGADO');
     const fila = estado.db.pinol_solicitudes.find((r) => r.id === 'p1');
-    expect(fila).toMatchObject({ solicitud_botellas: 3, comentario_entrega: 'Entregado en ventanilla', entregado_por: 'Sup' });
+    expect(fila).toMatchObject({ cantidad_entregada: 3, comentario_entrega: 'Entregado en ventanilla', entregado_por: 'Sup' });
     const patch = reqs.find((r) => r.m === 'PATCH' && r.nombre === 'pinol_solicitudes');
     expect(patch.q).toContain('estatus=eq.PENDIENTE');
     await expect.poll(() => estado.db.notificaciones_perfil.filter((r) => r.notificacion_id === 'NOTIF:PINOL_ENTREGA:p1').length).toBeGreaterThan(0);

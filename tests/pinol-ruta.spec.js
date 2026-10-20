@@ -198,8 +198,10 @@ test.describe('Panel de Pinol (ADMIN): armar la ruta', () => {
     await expect(page.locator('#prParadas .pr-stop')).toHaveCount(0);
     await page.locator('#prLista input[data-id=p1]').check();
     await page.locator('#prLista input[data-id=p3]').check();
-    await page.locator('#prParadas input[data-pr=qty][data-id=p1]').fill('9');          // se acota a 4
-    await expect(page.locator('#prParadas input[data-pr=qty][data-id=p1]')).toHaveValue('4');
+    await page.locator('#prParadas input[data-pr=qty][data-id=p1]').fill('9');          // entregar más de 4 sí se permite
+    await expect(page.locator('#prParadas input[data-pr=qty][data-id=p1]')).toHaveValue('9');
+    await page.locator('#prParadas input[data-pr=qty][data-id=p1]').fill('99');         // tope de entrega: 20
+    await expect(page.locator('#prParadas input[data-pr=qty][data-id=p1]')).toHaveValue('20');
     await page.locator('#prParadas input[data-pr=qty][data-id=p1]').fill('3');
     await page.locator('#prParadas [data-pr=bajar][data-id=p1]').click();
     await expect(page.locator('#prParadas .pr-stop').first()).toContainText('UNIDAD P3');
@@ -244,6 +246,40 @@ test.describe('Panel de Pinol (ADMIN): armar la ruta', () => {
     expect(por('p2').estatus).toBe('PENDIENTE');                  // las no elegidas siguen pendientes
     expect(por('p4').estatus).toBe('PENDIENTE');
     expect((await page.evaluate(() => window.__abiertas.length))).toBe(1);
+    expect(errores).toEqual([]);
+  });
+
+  test('se pueden entregar más de 4 botellas (6) aunque la unidad solo pida hasta 4', async ({ page }) => {
+    const { estado, srv, errores } = await preparar(page, 'ADMIN', lote());
+    await page.evaluate(() => refreshPinol());
+    await mostrar(page, 'btnPinolPrintGuia');
+    await page.locator('#btnPinolPrintGuia').click();
+    await page.locator('#prLista input[data-id=p1]').check();
+    await page.locator('#prParadas input[data-pr=qty]').first().fill('6');
+    await page.locator('#prResp').fill('Ana Pérez');
+    await page.locator('#prSurtir').click();
+    await expect(page.locator('#pinolRutaOverlay')).toBeHidden();
+    const p = srv.reqs.filter((r) => r.m === 'PATCH' && r.nombre === 'pinol_solicitudes');
+    expect(p[0].body.cantidad_entregada).toBe(6);
+    expect(estado.db.pinol_solicitudes.find((r) => r.id === 'p1').cantidad_entregada).toBe(6);
+    expect(errores).toEqual([]);
+  });
+
+  test('corregir una entrega ya hecha: cambia cantidad sin tocar el estatus ni lo que pidió la unidad', async ({ page }) => {
+    const { estado, srv, errores } = await preparar(page, 'ADMIN', lote());
+    estado.db.pinol_solicitudes.find((r) => r.id === 'p3').estatus = 'ENTREGADO';
+    await page.evaluate(() => invalidatePinolCache && invalidatePinolCache());
+    await page.evaluate(() => refreshPinol());
+    await mostrar(page, 'btnPinolPrintGuia');
+    await page.locator('.btnPinolEdit[data-id=p3]').click();
+    await page.locator('#pinolCantidadEntregar').fill('6');
+    await page.locator('#btnConfirmarEntregaPinol').click();
+    await expect.poll(() => estado.db.pinol_solicitudes.find((r) => r.id === 'p3').cantidad_entregada).toBe(6);
+    const fila = estado.db.pinol_solicitudes.find((r) => r.id === 'p3');
+    expect(fila.estatus).toBe('ENTREGADO');
+    expect(fila.solicitud_botellas).toBe(2);
+    const p = srv.reqs.filter((r) => r.m === 'PATCH' && r.nombre === 'pinol_solicitudes').pop();
+    expect(p.body.estatus).toBeUndefined();
     expect(errores).toEqual([]);
   });
 
