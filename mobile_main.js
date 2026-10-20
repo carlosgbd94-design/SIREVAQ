@@ -3409,34 +3409,7 @@
                             };
                             await supabaseClient.from('notificaciones').insert(desabastoRecord);
                         
-                            // Fan-out a supervisores municipales y admins
-                            const { data: activeUsers } = await supabaseClient.from('usuarios_legacy').select('usuario, rol, municipios_allowed').eq('activo', 'SI');
-                            const recipients = new Set();
-                            (activeUsers || []).forEach(u => {
-                                const r = String(u.rol || '').toUpperCase();
-                                if (r === 'ADMIN' || r === 'JURISDICCIONAL' || r === 'VISUALIZADOR_JURISDICCIONAL') {
-                                    recipients.add(u.usuario);
-                                } else if (r === 'MUNICIPAL') {
-                                    let allowed = u.municipios_allowed;
-                                    if (typeof allowed === 'string') { try { allowed = JSON.parse(allowed); } catch (e) { allowed = [allowed]; } }
-                                    const normAllowed = (Array.isArray(allowed) ? allowed : []).map(m => String(m).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
-                                    const normMuni = String(muniFilter).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                                    if (normAllowed.includes("*") || normAllowed.includes(normMuni)) {
-                                        recipients.add(u.usuario);
-                                    }
-                                }
-                            });
-                            recipients.delete(currentProfile.usuario);
-                            const recipientList = Array.from(recipients).filter(Boolean);
-                            if (recipientList.length > 0) {
-                                const fanoutRows = recipientList.map(u => ({
-                                    notificacion_id: notifId,
-                                    usuario: u,
-                                    status: 'UNREAD',
-                                    deleted: false
-                                }));
-                                await supabaseClient.from('notificaciones_perfil').upsert(fanoutRows, { onConflict: 'notificacion_id,usuario', ignoreDuplicates: true });
-                            }
+                            // El reparto a los destinatarios (notificaciones_perfil) lo hace el trigger fanout_notification_trigger en la base.
                         } catch (eNotif) {
                             console.warn("[Mobile] Error creando alerta de desabasto:", eNotif);
                         }
