@@ -47,7 +47,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.69"></script>
+<script defer src="biovac_ui.js?v=2026.72"></script>
 <script defer src="sis06p_biovac_module.js?v=2026.56"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.20"></script>
@@ -738,6 +738,13 @@ window.onunhandledrejection = function (event) {
   .panel-resolver.abierto { display: block; }
   .panel-resolver .campos { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
   .panel-resolver .campos .campo { width: 140px; }
+  /* opciones del dictamen: casilla a la izquierda del texto, sin mayúsculas */
+  .panel-resolver .campo .opcion-dictamen {
+    display: flex; flex-direction: row; align-items: center; gap: 8px;
+    font-size: 12.5px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text); cursor: pointer;
+  }
+  .panel-resolver .campo .opcion-dictamen input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--primary); }
+  .panel-resolver .campo .opcion-dictamen.deshabilitada { opacity: .5; cursor: not-allowed; }
   .panel-resolver .acciones { margin-top: 10px; display: flex; gap: 8px; }
   .panel-resolver p { margin: 0 0 10px; font-size: 11.5px; color: var(--muted); }
 

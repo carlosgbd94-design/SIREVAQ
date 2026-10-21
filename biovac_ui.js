@@ -1857,7 +1857,9 @@ function semaforoCaducidad(caducidadIso) {
 function loteVencido(caducidadIso) {
   if (!caducidadIso || !estado.movimiento) return false;
   const finDeMes = ultimoDiaMes(estado.movimiento.anio, estado.movimiento.mes);
-  return caducidadIso < finDeMes;
+  // La caducidad es por MES (OCT-26 caduca el 31): en el Movimiento de ese mes
+  // ya no puede quedar existencia. Igual que biovac_trg_20_autocalc.
+  return caducidadIso.slice(0, 7) <= finDeMes.slice(0, 7);
 }
 
 // Aviso comparativo paloteo (SIS-06-P/Influenza) vs. lo que se está dando
@@ -2082,9 +2084,12 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
 
   let botonResolver = '';
   let filaResolver = '';
-  if (editable && subcategoria === 'arf' && Number(dosis) > 0) {
+  if (editable && subcategoria === 'arf' && Number(dosis) > 0 && caducado) {
+    // Caducado: se da de baja sin esperar el dictamen (acuerdo), el lote completo.
+    botonResolver = `<button class="btn-resolver arf" data-action="desechar-caducado" data-renglon="${r.id}" title="Da de baja los ${dosis} frascos en A.R.F.: el lote caduca en ${formatMmmAa(lote.caducidad)}, no se espera el dictamen"><span class="material-symbols-rounded">delete_sweep</span> Desechar por caducidad</button>`;
+  } else if (editable && subcategoria === 'arf' && Number(dosis) > 0) {
     botonResolver = `<button class="btn-resolver arf" data-action="toggle-resolver" data-renglon="${r.id}"><span class="material-symbols-rounded">task_alt</span> Dictamen</button>`;
-    filaResolver = `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelResolverArfHtml(r.id)}</td></tr>`;
+    filaResolver =`<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelResolverArfHtml(r.id, dosis, lote.caducidad, caducado)}</td></tr>`;
   } else if (editable && subcategoria === 'canje' && Number(dosis) > 0) {
     botonResolver = `<button class="btn-resolver canje" data-action="toggle-resolver" data-renglon="${r.id}"><span class="material-symbols-rounded">sync_alt</span> Canje</button>`;
     filaResolver = `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelResolverCanjeHtml(r.id, bio)}</td></tr>`;
@@ -2092,7 +2097,9 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     // Un lote Normal (o parte de él) se manda a dictamen: pasa a un renglón
     // A.R.F. del mismo lote. Es el sentido inverso del botón "Dictamen" de
     // arriba -- ese resuelve un A.R.F. ya existente, este lo crea.
-    botonResolver = `<button class="btn-resolver arf" data-action="toggle-resolver" data-renglon="${r.id}"><span class="material-symbols-rounded">gavel</span> Pasar a A.R.F.</button>`;
+    botonResolver = caducado
+      ? `<button class="btn-resolver arf" data-action="desechar-caducado" data-renglon="${r.id}" title="Da de baja los ${dosis} frascos: el lote caduca en ${formatMmmAa(lote.caducidad)}"><span class="material-symbols-rounded">delete_sweep</span> Desechar por caducidad</button>`
+      : `<button class="btn-resolver arf" data-action="toggle-resolver" data-renglon="${r.id}"><span class="material-symbols-rounded">gavel</span> Pasar a A.R.F.</button>`;
     filaResolver = `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelPasarArfHtml(r.id, dosis)}</td></tr>`;
   }
 
@@ -2122,17 +2129,29 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   </tr>${filaResolver}`;
 }
 
-function panelResolverArfHtml(renglonId) {
-  return `<div class="panel-resolver" data-panel-arf="${renglonId}">
-    <p>El dictamen llegó y la vacuna se reutiliza: la existencia se traslada íntegra a un renglón normal de este mismo lote. (Si el dictamen ordena desecharla, regístralo como "Dosis desechadas" arriba, sin usar este botón.)</p>
+// Dictamen de A.R.F.: elegir qué pasó con la existencia (total o parcial).
+// Si el lote ya caduca en este mes (o antes) solo se puede desechar: aunque
+// el dictamen sea favorable ya no se puede aplicar.
+function panelResolverArfHtml(renglonId, existencia, caducidadIso, caducado) {
+  const n = `arf_res_${renglonId}`;
+  const cad = formatMmmAa(caducidadIso);
+  return `<div class="panel-resolver" data-panel-arf="${renglonId}" data-existencia="${existencia}" data-caducado="${caducado ? 1 : 0}">
+    <p>Existencia en A.R.F.: <strong>${existencia}</strong> frasco(s). ${caducado
+      ? `<strong>Este lote caduca en ${cad}</strong>: ya no puede reutilizarse aunque el dictamen sea favorable, así que debe desecharse.`
+      : 'El dictamen es por lote: aplica a todo lo que está en A.R.F. (para mandar solo una parte a A.R.F. usa «Pasar a A.R.F.» desde el lote Normal).'}</p>
     <div class="campos">
+      <div class="campo" style="width:340px">
+        <label>Resultado</label>
+        <label class="opcion-dictamen${caducado ? ' deshabilitada' : ''}"><input type="radio" name="${n}" value="REUTILIZAR" data-resultado-arf ${caducado ? 'disabled' : 'checked'}> Favorable: se reutiliza (pasa a Normal)</label>
+        <label class="opcion-dictamen"><input type="radio" name="${n}" value="DESECHAR" data-resultado-arf ${caducado ? 'checked' : ''}> Desfavorable o caducado: se desecha</label>
+      </div>
       <div class="campo" style="width:300px">
         <label>Motivo / resultado del dictamen</label>
-        <input type="text" data-motivo-arf placeholder="Ej. Dictamen favorable, se reintegra a existencia">
+        <input type="text" data-motivo-arf value="${caducado ? 'Caducidad ' + cad : ''}" placeholder="Ej. Dictamen favorable / Dictamen desfavorable">
       </div>
     </div>
     <div class="acciones">
-      <button class="btn-primario btn-mini" data-action="confirmar-resolver-arf" data-renglon="${renglonId}"><span class="material-symbols-rounded">check</span> Reactivar a normal</button>
+      <button class="btn-primario btn-mini" data-action="confirmar-resolver-arf" data-renglon="${renglonId}"><span class="material-symbols-rounded">check</span> Aplicar resultado</button>
       <button class="btn-fantasma btn-mini" data-action="cancelar-resolver" data-renglon="${renglonId}">Cancelar</button>
     </div>
   </div>`;
@@ -3044,18 +3063,50 @@ async function agregarLote(bioId, panel) {
 // sustituye por el lote nuevo recibido, que entra como existencia normal.
 // ---------------------------------------------------------------------------
 
-async function reactivarArf(renglonId, panel) {
-  const usuario = usuarioActual();
-  if (!usuario) return;
-  const motivo = panel.querySelector('[data-motivo-arf]').value.trim();
-  if (!motivo) { toast('Escribe el motivo o resultado del dictamen.', 'error'); return; }
-  const { error } = await estado.db.rpc('biovac_reclasificar_arf_normal', {
-    p_renglon_id: renglonId, p_usuario: usuario, p_rol: (estado.perfil ? estado.perfil.rol : 'MUNICIPAL'), p_motivo: motivo
+async function llamarDictamen(renglonId, resultado, monto, motivo) {
+  const { error } = await estado.db.rpc('biovac_dictamen_arf', {
+    p_renglon_id: renglonId, p_resultado: resultado, p_monto: monto, p_usuario: usuarioActual(),
+    p_rol: (estado.perfil ? estado.perfil.rol : 'MUNICIPAL'), p_motivo: motivo
   });
-  if (error) { toast('No se pudo reactivar: ' + error.message, 'error'); return; }
-  toast('Lote reactivado a existencia normal.', 'ok');
+  if (error) { toast('No se pudo registrar: ' + error.message, 'error'); return false; }
   await cargarRenglones();
   render();
+  return true;
+}
+
+async function reactivarArf(renglonId, panel) {
+  if (!usuarioActual()) return;
+  const existencia = Number(panel.dataset.existencia) || 0;
+  const sel = panel.querySelector('[data-resultado-arf]:checked');
+  const resultado = sel ? sel.value : '';
+  const monto = existencia;
+  const motivo = panel.querySelector('[data-motivo-arf]').value.trim();
+  if (!resultado) { toast('Elige el resultado del dictamen.', 'error'); return; }
+  if (!motivo) { toast('Escribe el motivo o resultado del dictamen.', 'error'); return; }
+  if (resultado === 'DESECHAR') {
+    const ok = await mostrarModal({
+      titulo: 'Desechar existencia',
+      mensaje: `Se darán de baja ${monto} frasco(s) de este lote como desechados. Esta acción queda en la auditoría.`,
+      textoAceptar: 'Desechar'
+    });
+    if (!ok) return;
+  }
+  const hecho = await llamarDictamen(renglonId, resultado, Math.min(monto, existencia), motivo);
+  if (hecho) toast(resultado === 'DESECHAR' ? 'Existencia desechada.' : 'Existencia reactivada a normal.', 'ok');
+}
+
+// Lote Normal que ya caducó con existencia: se desecha completo con un clic.
+async function desecharCaducado(renglonId) {
+  if (!usuarioActual()) return;
+  const r = estado.renglones.find((x) => x.id === renglonId);
+  const cad = r ? formatMmmAa(r.biovac_lotes.caducidad) : '';
+  const ok = await mostrarModal({
+    titulo: 'Desechar por caducidad',
+    mensaje: `El lote caduca en ${cad}: toda su existencia se dará de baja como desechada. Esta acción queda en la auditoría.`,
+    textoAceptar: 'Desechar'
+  });
+  if (!ok) return;
+  if (await llamarDictamen(renglonId, 'DESECHAR', null, 'Caducidad ' + cad)) toast('Existencia desechada por caducidad.', 'ok');
 }
 
 async function resolverCanje(renglonId, panel) {
@@ -3683,6 +3734,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else {
         panel.classList.remove('abierto');
       }
+      return;
+    }
+    if (accion === 'desechar-caducado') {
+      desecharCaducado(btn.dataset.renglon);
       return;
     }
     if (accion === 'confirmar-resolver-arf') {
