@@ -855,6 +855,21 @@ const CENSIA_URL = "https://siscensia.salud.gob.mx/influenza26/ssa/captura.php";
 // Ficha del complemento en la Chrome Web Store (se llena al publicarlo); vacío = aún no disponible.
 const CENSIA_EXT_URL = "https://chromewebstore.google.com/detail/noofpbkapekpjcfegnmcndjejmkpmbin";
 const censiaExtInstalada = () => document.documentElement.hasAttribute("data-sirevaq-censia-ext");
+// Última versión publicada del complemento (debe coincidir con extension-censia/manifest.json; lo vigila una prueba).
+const CENSIA_EXT_VERSION_ACTUAL = "1.1.2";
+/** ¿La versión instalada es anterior a la última? Solo con versión legible («1.1.1»); si no se puede leer, no se avisa nada. */
+function censiaExtDesactualizada() {
+  const v = document.documentElement.getAttribute("data-sirevaq-censia-ext") || "";
+  if (!/^\d+(\.\d+){0,2}$/.test(v)) return false;
+  const a = v.split(".").map(Number), b = CENSIA_EXT_VERSION_ACTUAL.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) < (b[i] || 0);
+  return false;
+}
+// El complemento avisa cuando se actualiza con esta página abierta: su parte vieja queda huérfana hasta recargar
+window.addEventListener("message", (e) => {
+  if (e.source !== window || !e.data || e.data.source !== "sirevaq-ext" || e.data.type !== "ext-updated") return;
+  showToast("El complemento se actualizó. Recarga esta página (F5) para que siga funcionando.", true, "warn", { duration: 12000 });
+});
 
 /** Entrega el paquete al complemento y espera su confirmación. Si el complemento se actualizó con esta página ya abierta,
  *  su parte vieja queda huérfana y no responde: se avisa que hay que recargar en vez de abrir CeNSIA vacío sin explicación. */
@@ -1014,6 +1029,7 @@ function censiaGuiaExtension() {
   if (censiaExtInstalada()) {
     d.innerHTML = `
       <p class="inf-censia__ok"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span><span><b>Complemento instalado.</b> Así se usa:</span></p>
+      ${censiaExtDesactualizada() ? `<p class="inf-censia__aviso" data-ext-vieja><span class="material-symbols-rounded" aria-hidden="true">info</span><span><b>Hay una versión nueva del complemento</b> (tienes la ${document.documentElement.getAttribute("data-sirevaq-censia-ext")}; la última es la ${CENSIA_EXT_VERSION_ACTUAL}). Chrome la instala sola en unas horas. Para adelantarla, escribe <b>chrome://extensions</b> en una pestaña nueva, activa «Modo de desarrollador» (arriba a la derecha) y pulsa <b>Actualizar</b>.</span></p>` : ""}
       <ol class="inf-censia__pasos inf-censia__pasos--grandes">
         <li>Pulsa <b>Abrir CeNSIA y rellenar</b>. CeNSIA se abre en otra pestaña.</li>
         <li>Si CeNSIA te pide usuario y contraseña, entra como siempre y ve a <b>Dosis Aplicadas → Captura</b>.</li>

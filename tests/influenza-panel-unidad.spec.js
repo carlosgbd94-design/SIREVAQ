@@ -549,6 +549,22 @@ test.describe('Paso a CeNSIA', () => {
     expect(errores).toEqual([]);
   });
 
+  test('actualización del complemento: avisa si la versión instalada es vieja y si se actualiza con la página abierta', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-17T11:00:00' });
+    const manifiesto = JSON.parse(require('fs').readFileSync(path.join(__dirname, '..', 'extension-censia', 'manifest.json'), 'utf8'));
+    expect(await page.evaluate(() => CENSIA_EXT_VERSION_ACTUAL)).toBe(manifiesto.version);
+    const pintar = (v) => page.evaluate((ver) => { document.documentElement.setAttribute('data-sirevaq-censia-ext', ver); renderCaptureGrid(); }, v);
+    await pintar('1.1.1');
+    await expect(page.locator('[data-ext-vieja]')).toContainText('1.1.1');
+    await pintar(manifiesto.version);
+    await expect(page.locator('.inf-censia__ok')).toBeVisible();
+    await expect(page.locator('[data-ext-vieja]')).toHaveCount(0);
+    // el complemento avisa que se actualizó con la página abierta
+    await page.evaluate(() => window.postMessage({ source: 'sirevaq-ext', type: 'ext-updated' }, location.origin));
+    await expect(page.locator('.toast-new').filter({ hasText: 'El complemento se actualizó' }).first()).toBeVisible({ timeout: 5000 });
+    expect(errores).toEqual([]);
+  });
+
   test('guía visual: recorre los 8 pasos con capturas que cargan, se maneja con teclado y devuelve el foco', async ({ page }) => {
     const { errores } = await abrirPanel(page, { fecha: '2026-10-17T11:00:00' });
     const boton = page.locator('[data-guia]').first();

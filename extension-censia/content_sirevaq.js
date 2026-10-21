@@ -1,9 +1,19 @@
-// Corre en SIREVAQ. Hace dos cosas, nada más:
+// Corre en SIREVAQ. Hace tres cosas, nada más:
 //  1) avisa a la página que el complemento está instalado (atributo en <html>);
-//  2) cuando la página le manda el paquete de dosis, lo guarda para CeNSIA.
+//  2) cuando la página le manda el paquete de dosis, lo guarda para CeNSIA;
+//  3) si el complemento se actualiza con la página abierta, se lo avisa para que pida recargar.
 (function () {
   "use strict";
   document.documentElement.setAttribute("data-sirevaq-censia-ext", chrome.runtime.getManifest().version);
+
+  // Al actualizarse el complemento, esta copia queda huérfana (chrome.runtime.id desaparece): se avisa una sola vez
+  var vigia = setInterval(function () {
+    var vivo = false;
+    try { vivo = !!(chrome.runtime && chrome.runtime.id); } catch (e) { vivo = false; }
+    if (vivo) return;
+    clearInterval(vigia);
+    window.postMessage({ source: "sirevaq-ext", type: "ext-updated" }, location.origin);
+  }, 3000);
 
   window.addEventListener("message", function (ev) {
     if (ev.source !== window || ev.origin !== location.origin) return;
