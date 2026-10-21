@@ -573,6 +573,13 @@ test.describe('Paso a CeNSIA', () => {
     const dlg = page.getByRole('dialog');
     await expect(dlg).toBeVisible();
     await expect(page.locator('#cgCuenta')).toHaveText('Paso 1 de 8');
+    // accesibilidad (axe) de la ventana en un paso con cursor y en el de la tarjeta
+    await page.addScriptTag({ content: require('fs').readFileSync(path.join(__dirname, '..', 'node_modules', 'axe-core', 'axe.min.js'), 'utf8') });
+    const axeGuia = () => page.evaluate(async () => {
+      const r = await window.axe.run('#cgFondo', { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'] }, rules: { 'heading-order': { enabled: false } } });
+      return r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+    });
+    expect(await axeGuia()).toEqual([]);
     for (let n = 1; n <= 8; n++) {
       const img = page.locator('.cg-img > img');
       await expect(img).toBeVisible();
@@ -586,6 +593,7 @@ test.describe('Paso a CeNSIA', () => {
       if (n < 8) await page.keyboard.press('ArrowRight');
     }
     await expect(page.locator('#cgSig')).toHaveText('Listo');
+    expect(await axeGuia()).toEqual([]);
     await page.keyboard.press('ArrowLeft');
     await expect(page.locator('#cgCuenta')).toHaveText('Paso 7 de 8');
     await page.keyboard.press('Escape');

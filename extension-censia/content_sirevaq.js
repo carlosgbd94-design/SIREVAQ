@@ -20,7 +20,8 @@
     var m = ev.data;
     if (!m || m.source !== "sirevaq" || m.type !== "censia-payload") return;
     var p = m.payload;
-    if (!p || p.v !== 1 || typeof p.clues !== "string" || typeof p.fecha !== "string" || !p.valores) return;
+    if (!p || p.v !== 1 || typeof p.clues !== "string" || p.clues.length > 40 || typeof p.fecha !== "string" || !p.valores) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.fecha)) return;      // la fecha se muestra en CeNSIA: solo AAAA-MM-DD
     // Solo cifras enteras >= 0 con códigos de casilla válidos
     var limpio = {};
     Object.keys(p.valores).forEach(function (k) {

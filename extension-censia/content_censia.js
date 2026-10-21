@@ -96,7 +96,7 @@
       el.value = d.valores[k]; ev(el, "input"); ev(el, "change");
       n++; total += d.valores[k];
     });
-    var fecha = d.fecha.split("-").reverse().join("/");
+    var fecha = esc(d.fecha.split("-").reverse().join("/"));
     var resumen = n + (n === 1 ? " casilla" : " casillas") + " · " + total.toLocaleString("es-MX") + " dosis · " + fecha;
     var guardar = "<strong>Verifica y revisa las dosis:</strong> compara cada cifra con tu reporte y confirma que todo esté bien antes de pulsar <b>Guardar</b>. " + MARCA + " nunca guarda por ti.";
     aviso(MARCA + " rellenó tu reporte", resumen, "Eligiendo tu unidad…", "ok");

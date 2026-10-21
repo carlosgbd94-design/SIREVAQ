@@ -949,6 +949,7 @@ function censiaAbrirGuiaVisual(disparador) {
     if (!cont) return;
     const p = pasos[i];
     const k = Math.min(1, (escena.clientWidth - 20) / p.w, (escena.clientHeight - 20) / p.h);
+    if (!(k > 0)) return; // escena aún sin tamaño (oculta)
     cont.style.width = Math.round(p.w * k) + "px";
     cont.style.height = Math.round(p.h * k) + "px";
     cont.style.setProperty("--k", String(k));
