@@ -548,6 +548,39 @@ test.describe('Paso a CeNSIA', () => {
     expect(paq.clues).toBe('QTSSA001904');
     expect(errores).toEqual([]);
   });
+
+  test('guía visual: recorre los 8 pasos con capturas que cargan, se maneja con teclado y devuelve el foco', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-17T11:00:00' });
+    const boton = page.locator('[data-guia]').first();
+    await boton.scrollIntoViewIfNeeded();
+    await boton.click();
+    const dlg = page.getByRole('dialog');
+    await expect(dlg).toBeVisible();
+    await expect(page.locator('#cgCuenta')).toHaveText('Paso 1 de 8');
+    for (let n = 1; n <= 8; n++) {
+      const img = page.locator('.cg-img > img');
+      await expect(img).toBeVisible();
+      await expect.poll(() => img.evaluate((i) => i.complete && i.naturalWidth > 0)).toBe(true);
+      // pasos 1-7: cursor + recuadro del botón; paso 8: réplica de la tarjeta del complemento
+      await expect(page.locator(n < 8 ? '.cg-cursor' : '.cg-demo')).toHaveCount(1);
+      if (process.env.GUARDAR_CAPTURAS && (n === 2 || n === 8)) {
+        await page.waitForTimeout(1900);
+        await dlg.screenshot({ path: path.join(process.env.GUARDAR_CAPTURAS, `sirevaq_guia_paso${n}.png`) });
+      }
+      if (n < 8) await page.keyboard.press('ArrowRight');
+    }
+    await expect(page.locator('#cgSig')).toHaveText('Listo');
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.locator('#cgCuenta')).toHaveText('Paso 7 de 8');
+    await page.keyboard.press('Escape');
+    await expect(dlg).toHaveCount(0);
+    await expect(boton).toBeFocused();
+    // con el complemento ya instalado la guía empieza en «Abrir CeNSIA y rellenar»
+    await page.evaluate(() => { document.documentElement.setAttribute('data-sirevaq-censia-ext', '1.1.1'); renderCaptureGrid(); });
+    await page.locator('[data-guia]').first().click();
+    await expect(page.locator('#cgCuenta')).toHaveText('Paso 6 de 8');
+    expect(errores).toEqual([]);
+  });
 });
 
 test.describe('Paso a CeNSIA: confirmación del complemento', () => {

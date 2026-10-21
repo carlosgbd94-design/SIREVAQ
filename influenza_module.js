@@ -871,6 +871,141 @@ function censiaEntregarPaquete(paquete) {
   }, 1800);
 }
 
+/** Guía visual paso a paso (capturas en assets/guia_censia/): un cursor animado muestra dónde pulsar en cada captura.
+ *  t = recuadro del botón [x, y, ancho, alto] en píxeles de la captura (w × h); sin t no hay cursor.
+ *  La captura del paso 8 lleva encima la tarjeta real del complemento reproducida en HTML (tarjeta: [x, y] en la captura). */
+const CENSIA_GUIA_PASOS = [
+  { fase: "Para empezar", img: "01-temporada.webp", w: 995, h: 110, t: [483, 30, 232, 51],
+    alt: "Pestañas de la captura de reportes con «Temporada invernal» resaltada",
+    titulo: "Abre «Temporada invernal»",
+    texto: "En Captura de reportes entra a la pestaña <b>Temporada invernal</b> y guarda tu reporte de la semana. Al guardarlo aparece la tarjeta «Siguiente paso: captura en CeNSIA»." },
+  { fase: "Instalación · solo una vez", img: "02-instalar.webp", w: 759, h: 205, t: [31, 129, 168, 40],
+    alt: "Tarjeta «Siguiente paso» con el botón Instalar complemento",
+    titulo: "Pulsa «Instalar complemento»",
+    texto: "Se abre la tienda de Chrome en otra pestaña. Esto se hace una sola vez." },
+  { fase: "Instalación · solo una vez", img: "03-tienda.webp", w: 1120, h: 150, t: [921, 34, 168, 40],
+    alt: "Ficha de la extensión en la Chrome Web Store con el botón Agregar a Chrome",
+    titulo: "Pulsa «Agregar a Chrome»",
+    texto: "En la pestaña de la tienda, pulsa el botón azul que está arriba a la derecha." },
+  { fase: "Instalación · solo una vez", img: "04-confirmar.webp", w: 446, h: 216, t: [204, 159, 132, 38],
+    alt: "Ventana de Chrome que pregunta si quieres instalar la extensión",
+    titulo: "Confirma con «Añadir extensión»",
+    texto: "Chrome pregunta si quieres instalarla. Pulsa <b>Añadir extensión</b> (en algunas versiones dice «Agregar extensión»)." },
+  { fase: "Instalación · solo una vez", img: "02-instalar.webp", w: 759, h: 205, t: [208, 129, 112, 40],
+    alt: "Tarjeta «Siguiente paso» con el botón Ya lo instalé",
+    titulo: "Regresa y pulsa «Ya lo instalé»",
+    texto: "Vuelve a la pestaña de SIREVAQ y pulsa <b>Ya lo instalé</b>. La página se recarga y reconoce el complemento. No tendrás que repetir estos pasos." },
+  { fase: "Cada reporte", img: "05-abrir.webp", w: 759, h: 295, t: [17, 238, 176, 40],
+    alt: "Tarjeta «Siguiente paso» con el complemento instalado y el botón Abrir CeNSIA y rellenar",
+    titulo: "Pulsa «Abrir CeNSIA y rellenar»",
+    texto: "CeNSIA se abre en otra pestaña y el complemento le entrega tus cifras." },
+  { fase: "Cada reporte", img: "06-campana.webp", w: 500, h: 390, t: [73, 20, 350, 99],
+    alt: "Menú de CeNSIA con la campaña Influenza-COVID-19 2026-2027",
+    titulo: "Entra a CeNSIA y elige la campaña",
+    texto: "Inicia sesión si te lo pide y pulsa <b>Campaña Influenza-COVID-19 2026-2027</b>. Si no llegas solo a la captura, en el menú de la izquierda ve a <b>Dosis Aplicadas → Captura</b>." },
+  { fase: "Cada reporte", img: "07-revisar.webp", w: 700, h: 260, tarjeta: [70, 8],
+    alt: "Pantalla de captura de CeNSIA con el aviso de que SIREVAQ rellenó las casillas",
+    titulo: "Verifica y revisa las dosis, y guarda",
+    texto: "Las casillas aparecen llenas y sale este aviso. <b>Compara cada cifra con tu reporte</b> y confirma que todo esté bien; solo entonces pulsa <b>Guardar</b> en CeNSIA. SIREVAQ nunca guarda por ti." }
+];
+
+function censiaAbrirGuiaVisual(disparador) {
+  if (document.getElementById("cgFondo")) return;
+  const pasos = CENSIA_GUIA_PASOS;
+  let i = censiaExtInstalada() ? 5 : 0; // con el complemento ya instalado se salta la instalación
+  const marca = `<span class="cg-marca">SIREVA<img src="assets/logo_nuevo.png" alt="Q"></span>`;
+  const fondo = document.createElement("div");
+  fondo.id = "cgFondo";
+  fondo.className = "cg-fondo";
+  fondo.innerHTML = `
+    <div class="cg-modal" role="dialog" aria-modal="true" aria-labelledby="cgTit">
+      <div class="cg-cab"><span class="cg-fase" id="cgFase"></span><span class="cg-cuenta" id="cgCuenta"></span><button type="button" class="cg-cerrar" id="cgCerrar">Cerrar</button></div>
+      <div class="cg-escena" id="cgEscena"></div>
+      <h3 class="cg-tit" id="cgTit"></h3>
+      <p class="cg-txt" id="cgTxt" aria-live="polite"></p>
+      <div class="cg-pie"><div class="cg-puntos" id="cgPuntos"></div><div class="cg-nav"><button type="button" class="cg-btn is-sec" id="cgAnt">Anterior</button><button type="button" class="cg-btn" id="cgSig">Siguiente</button></div></div>
+    </div>`;
+  const $ = (id) => fondo.querySelector("#" + id);
+  const escena = $("cgEscena");
+  let ro = null;
+
+  const ajustar = () => {
+    const cont = escena.firstElementChild;
+    if (!cont) return;
+    const p = pasos[i];
+    const k = Math.min(1, (escena.clientWidth - 20) / p.w, (escena.clientHeight - 20) / p.h);
+    cont.style.width = Math.round(p.w * k) + "px";
+    cont.style.height = Math.round(p.h * k) + "px";
+    cont.style.setProperty("--k", String(k));
+  };
+  const pintar = () => {
+    const p = pasos[i];
+    const pc = (v, tot) => (v / tot * 100).toFixed(2) + "%";
+    const lim = (v) => Math.max(6, Math.min(94, v));
+    let extra = "";
+    if (p.t) {
+      const [x, y, w, h] = p.t;
+      const tx = (x + w * 0.62) / p.w * 100, ty = (y + h * 0.6) / p.h * 100;
+      const sx = lim(tx - 22), sy = lim(ty + 45);
+      extra = `<span class="cg-anillo" aria-hidden="true" style="left:${pc(x, p.w)};top:${pc(y, p.h)};width:${pc(w, p.w)};height:${pc(h, p.h)}"></span>
+        <span class="cg-onda" aria-hidden="true" style="--x:${tx.toFixed(2)}%;--y:${ty.toFixed(2)}%"></span>
+        <span class="cg-cursor" aria-hidden="true" style="--x:${tx.toFixed(2)}%;--y:${ty.toFixed(2)}%;--sx:${sx.toFixed(2)}%;--sy:${sy.toFixed(2)}%"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M4 2l15 9.5-6.6 1.3 3.9 7.2-2.9 1.6-3.9-7.2L5 19.5z" fill="#fff" stroke="#0f172a" stroke-width="1.6" stroke-linejoin="round"/></svg></span>`;
+    }
+    if (p.tarjeta) {
+      extra = `<div class="cg-demo" aria-hidden="true" style="left:${pc(p.tarjeta[0], p.w)};top:${pc(p.tarjeta[1], p.h)}">
+        <span class="cg-demo__i"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.5l3 3 6-6.5"/></svg></span>
+        <div class="cg-demo__c"><p class="cg-demo__h">${marca} rellenó tu reporte</p>
+          <p class="cg-demo__r">PEDRO ESCOBEDO · QTSSA001863<br>46 casillas · 687 dosis · 21/10/2026</p>
+          <p class="cg-demo__p"><strong>Verifica y revisa las dosis:</strong> compara cada cifra con tu reporte y confirma que todo esté bien antes de pulsar <b>GUARDAR</b>. ${marca} nunca guarda por ti.</p></div>
+        <span class="cg-demo__x">Cerrar</span></div>`;
+    }
+    escena.innerHTML = `<div class="cg-img"><img src="assets/guia_censia/${p.img}" width="${p.w}" height="${p.h}" alt="${p.alt}">${extra}</div>`;
+    $("cgFase").textContent = p.fase;
+    $("cgCuenta").textContent = `Paso ${i + 1} de ${pasos.length}`;
+    $("cgTit").textContent = p.titulo;
+    $("cgTxt").innerHTML = p.texto;
+    $("cgAnt").disabled = i === 0;
+    $("cgSig").textContent = i === pasos.length - 1 ? "Listo" : "Siguiente";
+    $("cgPuntos").innerHTML = pasos.map((_, n) => `<button type="button" class="cg-punto" data-ir="${n}" aria-label="Ir al paso ${n + 1}"${n === i ? ' aria-current="step"' : ""}></button>`).join("");
+    ajustar();
+  };
+  const cerrar = () => {
+    if (ro) ro.disconnect();
+    document.removeEventListener("keydown", teclas, true);
+    fondo.remove();
+    document.body.style.overflow = fondo._overflow || "";
+    if (disparador && disparador.isConnected) disparador.focus();
+  };
+  const ir = (n) => { i = Math.max(0, Math.min(pasos.length - 1, n)); pintar(); };
+  const teclas = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cerrar(); }
+    else if (e.key === "ArrowRight") ir(i + 1);
+    else if (e.key === "ArrowLeft") ir(i - 1);
+    else if (e.key === "Tab") { // el foco no sale de la ventana
+      const foc = [...fondo.querySelectorAll("button:not([disabled])")];
+      if (!foc.length) return;
+      const a = document.activeElement, pri = foc[0], ult = foc[foc.length - 1];
+      if (e.shiftKey && (a === pri || !fondo.contains(a))) { e.preventDefault(); ult.focus(); }
+      else if (!e.shiftKey && (a === ult || !fondo.contains(a))) { e.preventDefault(); pri.focus(); }
+    }
+  };
+  fondo.addEventListener("click", (e) => {
+    if (e.target === fondo) return cerrar();
+    const dot = e.target.closest("[data-ir]");
+    if (dot) { ir(Number(dot.dataset.ir)); dot.blur(); }
+  });
+  $("cgCerrar").addEventListener("click", cerrar);
+  $("cgAnt").addEventListener("click", () => ir(i - 1));
+  $("cgSig").addEventListener("click", () => (i === pasos.length - 1 ? cerrar() : ir(i + 1)));
+  document.addEventListener("keydown", teclas, true);
+  fondo._overflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+  document.body.appendChild(fondo);
+  pintar();
+  if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(ajustar); ro.observe(escena); }
+  $("cgSig").focus();
+}
+
 /** Guía para quien no conoce el complemento: cómo instalarlo (solo una vez) o, ya instalado, cómo se usa.
  *  Se comparte entre la tarjeta de Influenza y la de COVID-19. */
 function censiaGuiaExtension() {
@@ -883,7 +1018,9 @@ function censiaGuiaExtension() {
         <li>Pulsa <b>Abrir CeNSIA y rellenar</b>. CeNSIA se abre en otra pestaña.</li>
         <li>Si CeNSIA te pide usuario y contraseña, entra como siempre y ve a <b>Dosis Aplicadas → Captura</b>.</li>
         <li>Las casillas aparecen llenas solas. Revisa las cifras y pulsa <b>Guardar</b> en CeNSIA.</li>
-      </ol>`;
+      </ol>
+      <div class="inf-censia__acciones"><button type="button" class="inf-censia__btn is-sec" data-guia>Ver guía paso a paso</button></div>`;
+    d.querySelector("[data-guia]").addEventListener("click", (e) => censiaAbrirGuiaVisual(e.currentTarget));
     return d;
   }
   if (!CENSIA_EXT_URL) return d;
@@ -892,16 +1029,18 @@ function censiaGuiaExtension() {
       <p class="inf-censia__instala-tit"><span class="material-symbols-rounded" aria-hidden="true">extension</span><b>Primero instala el complemento (solo una vez, tarda 1 minuto)</b></p>
       <ol class="inf-censia__pasos inf-censia__pasos--grandes">
         <li>Pulsa el botón <b>Instalar complemento</b>. Se abre la tienda de Chrome en otra pestaña.</li>
-        <li>En esa pestaña pulsa el botón azul <b>Agregar a Chrome</b> y, si Chrome pregunta, <b>Agregar extensión</b>.</li>
+        <li>En esa pestaña pulsa el botón azul <b>Agregar a Chrome</b> y, si Chrome pregunta, <b>Añadir extensión</b>.</li>
         <li>Regresa a esta pestaña y pulsa <b>Ya lo instalé</b>. Listo: no tendrás que hacerlo otra vez.</li>
       </ol>
       <div class="inf-censia__acciones">
         <a class="inf-censia__btn" href="${CENSIA_EXT_URL}" target="_blank" rel="noopener">Instalar complemento</a>
         <button type="button" class="inf-censia__btn is-sec" data-recargar>Ya lo instalé</button>
+        <button type="button" class="inf-censia__btn is-sec" data-guia>Ver guía paso a paso</button>
       </div>
       <p class="inf-censia__nota">Solo funciona en Google Chrome de computadora, no en el celular.</p>
     </div>`;
   d.querySelector("[data-recargar]").addEventListener("click", () => location.reload());
+  d.querySelector("[data-guia]").addEventListener("click", (e) => censiaAbrirGuiaVisual(e.currentTarget));
   return d;
 }
 
