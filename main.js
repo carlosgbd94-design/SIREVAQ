@@ -103,7 +103,44 @@ if (!window.supabase || typeof window.supabase.createClient !== 'function') {
     document.body.appendChild(overlay);
   });
 } else {
+  // Al arrancar, varios módulos piden las MISMAS lecturas de catálogo (avisos, calendario, parámetros...):
+  // se llegaron a ver 3 peticiones idénticas por tabla. Durante los primeros segundos se reutiliza la
+  // respuesta de una lectura idéntica (misma URL y mismo token); cualquier escritura (POST/PATCH/DELETE,
+  // incluidas las RPC) vacía todo, y pasada la ventana de arranque no se reutiliza nada.
+  const _BOOT_DEDUPE_MS = 12000;
+  const _BOOT_DEDUPE_TTL_MS = 6000;
+  const _bootDedupeAt = Date.now();
+  const _bootDedupeCache = new Map();
+  const _BOOT_DEDUPE_RPC_LECTURA = /\/rest\/v1\/rpc\/(get_[a-z0-9_]+|influenza_capture_hits_rpc)(\?|$)/;
+  const _BOOT_DEDUPE_TABLAS = /\/rest\/v1\/(notificaciones|notificaciones_perfil|calendario_pedidos|calendario_capacitaciones|biologicos_catalogo|biologicos_params|biologicos_pedido|biologicos_existencia|existencia_detalle|consumibles|unidades)\?/;
+  const _bootDedupeFetch = (input, init) => {
+    try {
+      const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      // Las RPC de solo lectura (get_*, influenza_capture_hits_rpc) no cambian datos: no vacían la caché.
+      if (method !== "GET" && !(method === "POST" && _BOOT_DEDUPE_RPC_LECTURA.test(url))) { _bootDedupeCache.clear(); return fetch(input, init); }
+      if (method !== "GET") return fetch(input, init);
+      const now = Date.now();
+      if (now - _bootDedupeAt > _BOOT_DEDUPE_MS) { _bootDedupeCache.clear(); return fetch(input, init); }
+      if ((init && init.signal) || !_BOOT_DEDUPE_TABLAS.test(url)) return fetch(input, init);
+      const h = init && init.headers;
+      const hv = (n) => !h ? "" : (typeof h.get === "function" ? h.get(n) : (h[n] || h[n.toLowerCase()])) || "";
+      // Accept distingue "lista" de "un solo objeto" (maybeSingle/single): misma URL, distinta respuesta.
+      const key = `${url}|${hv("Authorization")}|${hv("Accept")}|${hv("Prefer")}|${hv("Range")}`;
+      const hit = _bootDedupeCache.get(key);
+      if (hit && now - hit.t < _BOOT_DEDUPE_TTL_MS) return hit.p.then((r) => r.clone());
+      const p = fetch(input, init).then(
+        (r) => { if (!r.ok) _bootDedupeCache.delete(key); return r; },
+        (e) => { _bootDedupeCache.delete(key); throw e; }
+      );
+      _bootDedupeCache.set(key, { t: now, p });
+      return p.then((r) => r.clone());
+    } catch (_) {
+      return fetch(input, init);
+    }
+  };
   window.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    global: { fetch: _bootDedupeFetch },
     auth: {
       experimental: {
         passkey: true
