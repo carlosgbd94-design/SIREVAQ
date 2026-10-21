@@ -707,6 +707,10 @@ function clearSession() {
     localStorage.removeItem("JS1_TOKEN");
     localStorage.removeItem("JS1_USER");
 
+    // Si el arranque no pudo validar la sesión por un fallo de RED (no porque la sesión sea inválida),
+    // la sesión guardada se conserva: al volver el internet, recargar la página la retoma sola.
+    if (window.__JS1_AUTH_NETWORK_FAIL) return;
+
     // 🛡️ Limpieza agresiva de llaves de Supabase (Senior UX Security)
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -9597,7 +9601,10 @@ function bindNavigationUiEvents() {
   $("btnLogout")?.addEventListener("click", async () => {
     showOverlay("Cerrando sesión...", "Desconectando");
     try {
-      await window.supabase.auth.signOut();
+      // scope "local": solo cierra ESTE dispositivo. El cierre global (por defecto) revoca TODAS las sesiones
+      // de la cuenta, y una cuenta de unidad la usan varias personas/equipos a la vez: cuando uno salía,
+      // a los demás se les cerraba la sesión "de la nada" ("Refresh Token Not Found" / "Session not found").
+      await window.supabase.auth.signOut({ scope: "local" });
     } catch (err) {
       console.warn("Error al cerrar sesión en Supabase:", err);
     }
@@ -9606,6 +9613,7 @@ function bindNavigationUiEvents() {
     resetOpsPrewarmFlags();
     USER = null;
     TOKEN = null;
+    window.__JS1_AUTH_NETWORK_FAIL = false;
     clearSession();
     window.__JS1_DIRTY = true;
 
@@ -9857,6 +9865,7 @@ async function hydrateSessionUi(user, status, opts = {}) {
     window.location.reload();
     return;
   }
+  window.__JS1_AUTH_NETWORK_FAIL = false; // hay sesión válida: cualquier limpieza posterior vuelve a ser normal
   exposeAppFns();
   assertCriticalFns();
 
@@ -11711,17 +11720,39 @@ async function whoami() {
     // 1. Verificar que existe un usuario autenticado de forma real (vía getUser para mayor seguridad)
     // La sesión sale del almacenamiento local (rápido); la validación del usuario en el servidor y la
     // consulta del perfil van en paralelo en lugar de una tras otra.
-    const { data: { session } } = await window.supabase.auth.getSession();
-    if (!session) {
-      clearSession();
+    // Un fallo de red (típico en unidades con internet inestable) NO es una sesión inválida: se reintenta
+    // y, si sigue sin haber red, se conserva la sesión guardada en vez de borrarla.
+    const esFalloDeRed = (err) => !!err && (
+      err.name === "AuthRetryableFetchError" ||
+      (typeof err.status === "number" && (err.status === 0 || err.status >= 500)) ||
+      /failed to fetch|load failed|networkerror|network request failed|timeout/i.test(String(err.message || ""))
+    );
+    let session = null, userRes = null, perfilRes = null, user = null, redFallida = false;
+    for (let intento = 0; intento < 3; intento++) {
+      if (intento) await new Promise((r) => setTimeout(r, intento * 1500));
+      redFallida = false;
+      const sRes = await window.supabase.auth.getSession();
+      session = sRes && sRes.data && sRes.data.session;
+      if (!session) {
+        if (esFalloDeRed(sRes && sRes.error)) { redFallida = true; continue; }
+        clearSession();
+        return null;
+      }
+      [userRes, perfilRes] = await Promise.all([
+        window.supabase.auth.getUser(),
+        window.supabase.from('perfiles').select('*').eq('id', session.user.id).single()
+      ]);
+      user = userRes && userRes.data && userRes.data.user;
+      if (esFalloDeRed(userRes && userRes.error)) { redFallida = true; continue; }
+      break;
+    }
+    if (redFallida) {
+      console.warn("[whoami] Sin red para validar la sesión; se conserva la sesión guardada");
+      window.__JS1_AUTH_NETWORK_FAIL = true;
+      try { showToast("Sin conexión estable. Tu sesión sigue guardada: recarga la página cuando tengas internet.", false, "warn"); } catch (_) { /* aún sin UI */ }
       return null;
     }
-
-    const [userRes, perfilRes] = await Promise.all([
-      window.supabase.auth.getUser(),
-      window.supabase.from('perfiles').select('*').eq('id', session.user.id).single()
-    ]);
-    const user = userRes && userRes.data && userRes.data.user;
+    window.__JS1_AUTH_NETWORK_FAIL = false;
 
     if ((userRes && userRes.error) || !user) {
       console.warn("[whoami] No hay usuario Auth activo o token inválido");

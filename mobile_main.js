@@ -3766,7 +3766,7 @@
         document.getElementById('btnProfileContactMobile')?.addEventListener('click', () => window.openContactoModal());
         document.getElementById('btnProfileChangePasswordMobile')?.addEventListener('click', () => window.openChangePasswordFlow());
         document.getElementById('btnLogout')?.addEventListener('click', async () => {
-            await supabaseClient.auth.signOut();
+            await supabaseClient.auth.signOut({ scope: 'local' }); // solo este dispositivo: el cierre global saca a los demás que usan la misma cuenta
             location.reload();
         });
 
