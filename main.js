@@ -9812,7 +9812,9 @@ async function hydrateSessionUi(user, status, opts = {}) {
   // estilos/paneles del rol anterior (ej. entrar a ADMIN, salir y entrar a UNIDAD
   // mezclaba los paneles). Una sola recarga limpia lo evita; la sesión ya quedó
   // guardada y el arranque la recoge con el velo de carga puesto.
-  if (window.__JS1_DIRTY && user) {
+  // Mismo usuario y mismo rol que la sesión anterior: el DOM ya es el correcto, no hace falta recargar.
+  const mismoUsuario = !!user && window.__JS1_LAST_UID && window.__JS1_LAST_UID === user.uid && window.__JS1_LAST_ROL === user.rol;
+  if (window.__JS1_DIRTY && user && !mismoUsuario) {
     window.__JS1_RELOADING = true;
     showOverlay("Cargando tu sesión…", "Iniciando");
     window.location.reload();
@@ -9840,6 +9842,12 @@ async function hydrateSessionUi(user, status, opts = {}) {
   } = opts;
 
   setLoggedInUI(user, status);
+  // Las medallas de unidad/municipio no dependen del status: se piden ya, en paralelo con lotes y unitStatus.
+  if (user && (user.rol === "UNIDAD" || user.rol === "MUNICIPAL")) {
+    try { refreshComplianceMedals(new Date().getFullYear(), ""); } catch (_) { /* se reintenta al pintar la tarjeta */ }
+  }
+  window.__JS1_LAST_UID = user && user.uid;
+  window.__JS1_LAST_ROL = user && user.rol;
   showRightColumn(true);
   hideOverlay();
   // Interfaz lista: se libera la guardia de arranque YA, sin esperar a los datos (lotes, resumen, etc.),
@@ -11664,29 +11672,29 @@ function setSavedStamp() {
 async function whoami() {
   try {
     // 1. Verificar que existe un usuario autenticado de forma real (vía getUser para mayor seguridad)
-    const { data: { user }, error: userError } = await window.supabase.auth.getUser();
-
-    if (userError || !user) {
-      console.warn("[whoami] No hay usuario Auth activo o token inválido");
-      clearSession();
-      return null;
-    }
-
-    // 2. Recuperar la sesión para obtener el access_token fresco
+    // La sesión sale del almacenamiento local (rápido); la validación del usuario en el servidor y la
+    // consulta del perfil van en paralelo en lugar de una tras otra.
     const { data: { session } } = await window.supabase.auth.getSession();
     if (!session) {
       clearSession();
       return null;
     }
 
+    const [userRes, perfilRes] = await Promise.all([
+      window.supabase.auth.getUser(),
+      window.supabase.from('perfiles').select('*').eq('id', session.user.id).single()
+    ]);
+    const user = userRes && userRes.data && userRes.data.user;
+
+    if ((userRes && userRes.error) || !user) {
+      console.warn("[whoami] No hay usuario Auth activo o token inválido");
+      clearSession();
+      return null;
+    }
+
     TOKEN = session.access_token;
 
-    // 3. Consultar perfil fresco desde la DB (respeta RLS)
-    const { data: perfil, error: perfilError } = await window.supabase
-      .from('perfiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
+    const { data: perfil, error: perfilError } = perfilRes;
 
     if (perfilError || !perfil) {
       console.warn("[whoami] Perfil no encontrado en DB, usando fallback de metadata:", session.user.id, perfilError);
@@ -16759,28 +16767,46 @@ const DEFERRED_LIB_URLS = {
 };
 const _deferredLibPromises = {};
 let _deferredLibsLoaded = false;
+let _heavyLibsStarted = false;
+// Las gráficas (echarts) y el CSV/confeti pueden hacer falta nada más entrar, así que arrancan de inmediato.
+// El resto (Excel, PDF, ZIP) solo se usa al exportar: ejecutarlas justo al iniciar sesión (xlsx y html2pdf
+// pesan ~0.5 s de CPU) competía con el pintado de la interfaz. Esas arrancan en un hueco libre del navegador
+// (máximo 2.5 s después) o al instante si alguien las pide con ensureLibsLoaded.
+const DEFERRED_LIBS_EARLY = ["echarts", "papaparse", "confetti"];
+function _injectDeferredLib(name) {
+  if (_deferredLibPromises[name]) return;
+  const src = DEFERRED_LIB_URLS[name];
+  _deferredLibPromises[name] = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = false; // ejecutar en orden de insercion (como el antiguo defer)
+    script.onload = () => resolve();
+    script.onerror = () => {
+      console.warn(`[SIREVAQ] No se pudo cargar en segundo plano: ${src}`);
+      reject(new Error(`No se pudo cargar ${src}`));
+    };
+    document.head.appendChild(script);
+  });
+  _deferredLibPromises[name].catch(() => {}); // evita "unhandled rejection"; quien espera lo maneja
+}
+function loadHeavyFeatureLibraries() {
+  if (_heavyLibsStarted) return;
+  _heavyLibsStarted = true;
+  // Mismo orden relativo de siempre (autotable debe correr después de jsPDF).
+  Object.keys(DEFERRED_LIB_URLS).filter((n) => !DEFERRED_LIBS_EARLY.includes(n)).forEach(_injectDeferredLib);
+}
 function loadDeferredFeatureLibraries() {
   if (_deferredLibsLoaded) return;
   _deferredLibsLoaded = true;
-  Object.entries(DEFERRED_LIB_URLS).forEach(([name, src]) => {
-    _deferredLibPromises[name] = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = src;
-      script.async = false; // ejecutar en orden de insercion (como el antiguo defer)
-      script.onload = () => resolve();
-      script.onerror = () => {
-        console.warn(`[SIREVAQ] No se pudo cargar en segundo plano: ${src}`);
-        reject(new Error(`No se pudo cargar ${src}`));
-      };
-      document.head.appendChild(script);
-    });
-    _deferredLibPromises[name].catch(() => {}); // evita "unhandled rejection"; quien espera lo maneja
-  });
+  DEFERRED_LIBS_EARLY.forEach(_injectDeferredLib);
+  if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(loadHeavyFeatureLibraries, { timeout: 2500 });
+  else setTimeout(loadHeavyFeatureLibraries, 1500);
 }
 
 /** Espera a que terminen (y ejecuten) las librerias diferidas indicadas. */
 function ensureLibsLoaded(...names) {
   loadDeferredFeatureLibraries();
+  loadHeavyFeatureLibraries();
   return Promise.all(names.map((n) => _deferredLibPromises[n]));
 }
 
@@ -20286,6 +20312,9 @@ async function getYearMedals(year, { clues = null, municipio = null } = {}) {
     ttl: MEDALS_CACHE_TTL,
     shouldCache: (d) => Array.isArray(d),
     fetcher: async () => {
+      // La campaña se pide en paralelo con las métricas (antes esperaba a que terminaran).
+      const campPromise = Promise.resolve(getActiveCampaign());
+      campPromise.catch(() => { });
       try {
         // meses x unidades (ya ordenado por mes, clues): pasa de 1000 con más de ~83 unidades.
         const rows = [];
@@ -20308,7 +20337,7 @@ async function getYearMedals(year, { clues = null, municipio = null } = {}) {
         let camp = null;
         let capturesByClues = new Map();
         try {
-          const { data: activeCamp } = await getActiveCampaign();
+          const { data: activeCamp } = await campPromise;
           if (activeCamp && activeCamp.fecha_inicio <= `${y}-12-31` && activeCamp.fecha_fin >= `${y}-01-01`) {
             camp = activeCamp;
             const meses = [...new Set(rows.map(r => r.mes))];
@@ -20397,7 +20426,34 @@ function refreshComplianceMedals(year, selectedMuni, { clearIfNone = false } = {
       : (esVistaGlobal && scope.municipio ? `Logros del Año · ${scope.municipio}` : "Logros del Año");
   }
   const seq = ++_medalsRenderSeq;
-  getYearMedals(year, scope).then(medals => { if (seq === _medalsRenderSeq) renderUnitMedals(medals); });
+  // Pintado inmediato con la última foto guardada (si hay) mientras llegan los datos frescos.
+  const snapKey = medalsSnapshotKey(year, scope);
+  const snap = readMedalsSnapshot(snapKey);
+  if (snap) renderUnitMedals(snap);
+  getYearMedals(year, scope).then(medals => {
+    if (seq !== _medalsRenderSeq) return;
+    if (Array.isArray(medals)) writeMedalsSnapshot(snapKey, medals);
+    else if (snap) return; // fallo de red: se conserva lo ya pintado
+    renderUnitMedals(medals);
+  });
+}
+
+// Foto de las medallas en localStorage (sobrevive a pestañas nuevas): solo acelera el primer pintado,
+// los datos reales siempre se piden y la reemplazan.
+function medalsSnapshotKey(year, scope) {
+  const u = USER && (USER.usuario || USER.email || USER.id) ? (USER.usuario || USER.email || USER.id) : "anon";
+  const s = scope.clues ? `U:${String(scope.clues).trim().toUpperCase()}` : `M:${normalizeText(scope.municipio || "")}`;
+  return `sirevaq_medals::${u}::${Number(year)}::${s}`;
+}
+function readMedalsSnapshot(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    const p = raw && JSON.parse(raw);
+    return p && Array.isArray(p.data) && Date.now() - Number(p.ts || 0) < 7 * 86400000 ? p.data : null;
+  } catch (_) { return null; }
+}
+function writeMedalsSnapshot(key, data) {
+  try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); } catch (_) { /* sin almacenamiento */ }
 }
 
 const MEDAL_TIER_UI = {

@@ -4,7 +4,7 @@
  * Versión: 2026.4
  */
 
-const CACHE_NAME = 'js1-reportes-v2026-298';
+const CACHE_NAME = 'js1-reportes-v2026-299';
 
 // IMPORTANTE: index.html YA NO carga main.js/rda_ui.js/etc. sueltos -- desde que existe
 // build-bundle.js carga dist/bundle-head.js y dist/bundle-body.js (empaquetados). Antes
@@ -32,6 +32,12 @@ const STATIC_ASSETS = [
   './mobile_supervision_rda.js',
   './mobile_supervision.css',
   './medal_badges.js',
+  './vendor/supabase-js-2.117.2.js',
+  './vendor/dexie-3.2.4.min.js',
+  './vendor/lucide-1.52.0.min.js',
+  './vendor/dayjs-1.11.10.min.js',
+  './vendor/just-validate-4.3.0.min.js',
+  './vendor/gsap-3.12.5.min.js',
   './assets/weather/clear-day.svg',
   './assets/weather/clear-night.svg',
   './assets/weather/partly-cloudy-day.svg',
@@ -122,6 +128,21 @@ self.addEventListener('fetch', (event) => {
 
   // Solo manejar solicitudes GET
   if (event.request.method !== 'GET') return;
+
+  // Librerías de terceros copiadas al proyecto: el nombre lleva la versión (nunca cambian de contenido),
+  // así que se sirven de la caché sin esperar a la red. Si no están guardadas, se piden y se guardan.
+  if (url.origin === self.location.origin && /\/vendor\/[^/]+\.js$/.test(url.pathname)) {
+    event.respondWith(
+      caches.match(event.request).catch(() => null).then((hit) => hit || fetch(event.request).then((res) => {
+        if (res && res.ok) {
+          const copia = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(event.request, copia)).catch(() => { });
+        }
+        return res;
+      }))
+    );
+    return;
+  }
 
   event.respondWith(
     // Estrategia: Network First → Caché como respaldo

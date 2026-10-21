@@ -58,6 +58,7 @@
       pointer-events: none !important;
     }
   </style>
+  <link rel="preconnect" href="https://utclfqjietlxzlorxhrs.supabase.co" crossorigin>
   <title>SIREVAQ</title>
   <script>
     // Un enlace de recuperación de contraseña debe ir siempre a reset.html (página
@@ -89,8 +90,8 @@
   <!-- xlsx.full.min.js (SheetJS) se movió a loadDeferredFeatureLibraries() en
        main.js: solo lo usan funciones de exportación del dashboard, nunca la
        pantalla de login, así que no tiene por qué bloquear DOMContentLoaded. -->
-  <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js" defer></script>
-  <script src="https://unpkg.com/lucide@1.52.0/dist/umd/lucide.min.js" defer></script>
+  <script src="vendor/dexie-3.2.4.min.js" defer></script>
+  <script src="vendor/lucide-1.52.0.min.js" defer></script>
 
   <!-- Módulos de Optimización y Modales SIREVAQ -->
   <script src="sirevaq_storage.js" defer></script>
@@ -118,9 +119,10 @@
   <!-- Fuentes e iconos -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
-    rel="stylesheet">
+  <!-- Fuentes de texto (display=swap): no bloquean el primer pintado; el texto sale con la fuente del sistema y cambia al llegar. -->
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"></noscript>
   <!-- Iconos: subconjunto de Material Symbols (391 iconos, ~58 KB en vez de ~540 KB). La lista sale de cruzar
        los textos de index.html/JS/CSS con el catalogo oficial (scripts/icons-scan.js). Si agregas un icono nuevo,
        regenera la lista con: node scripts/icons-scan.js -->
@@ -339,7 +341,7 @@
   </style>
 
   <!-- Scripts externos -->
-  <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+  <script defer src="vendor/supabase-js-2.117.2.js"></script>
 
   <!-- ExcelJS, ECharts, PapaParse, html2pdf/html2canvas/jsPDF(-autotable), JSZip y
        canvas-confetti se movieron a loadDeferredFeatureLibraries() en main.js:
@@ -349,9 +351,9 @@
        de la página -- incluida la de un visitante que ni sesión tiene. -->
 
   <!-- Modern Libraries (Dates, Validation, Animations) -->
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.10/dayjs.min.js"></script>
-  <script defer src="https://unpkg.com/just-validate@4.3.0/dist/just-validate.production.min.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script defer src="vendor/dayjs-1.11.10.min.js"></script>
+  <script defer src="vendor/just-validate-4.3.0.min.js"></script>
+  <script defer src="vendor/gsap-3.12.5.min.js"></script>
 
   <!-- 🛡️ Guardián de carga de bundles: si dist/bundle-head.js o dist/bundle-body.js
        fallan al descargar (red inestable, típico en unidades rurales), esos <script defer>
@@ -392,7 +394,7 @@
   <script defer src="guias_contenido.js?v=3"></script>
   <script defer src="ayuda.js?v=21"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.279" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.281" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -6464,7 +6466,7 @@
             <div style="display: flex; gap: 20px; align-items: center;">
               <img
                 src="assets/Seseq_vertical_2025.png"
-                alt="Seseq Logo" style="height: 60px;">
+                alt="Seseq Logo" loading="lazy" decoding="async" style="height: 60px;">
               <div>
                 <h1
                   style="margin: 0; font-size: 32px; font-weight: 900; color: var(--md-sys-color-on-surface); letter-spacing: -0.03em;">
