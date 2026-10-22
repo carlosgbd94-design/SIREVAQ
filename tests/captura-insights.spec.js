@@ -88,6 +88,16 @@ test.describe('Cálculo de indicadores (sin navegador)', () => {
     expect(r.tiles.map((x) => x.id)).toEqual(['insuf', 'ceros', 'sinmov']);
   });
 
+  test('Pedido: vacunas de temporada no generan riesgo de desabasto', () => {
+    const rows = ['INFLUENZA', 'COVID-19', 'VPH', 'VARICELA', 'BCG'].map((b) => (
+      { clues: 'C1', biologico: b, pedido_frascos: 1, existencia_actual_frascos: 0, promedio_frascos: 10 }
+    ));
+    const an = CI.analizarBio(rows, null);
+    expect(an.unidades.get('C1').alertas.map((a) => a.bio)).toEqual(['BCG']);
+    expect(CI.revisionRenglonBio(rows[0]).tipo).toBe(null);
+    expect(CI.revisionRenglonBio(rows[4]).tipo).toBe('riesgo');
+  });
+
   test('Pedido: sobrepedido, riesgo, exceso, sin pedido y fuera de ventana', () => {
     const rows = [
       { clues: 'C1', biologico: 'TD', pedido_frascos: 30, existencia_actual_frascos: 1, promedio_frascos: 10, timestamp: '2026-10-22T18:00:00Z' }, // 30 > 2×10

@@ -83,6 +83,12 @@
     return 10;
   }
 
+  /** Vacunas de temporada/campaña: su existencia baja por diseño, no cuentan como riesgo de desabasto. */
+  function esTemporada(bio) {
+    const n = norm(bio);
+    return ["INFLUENZA", "COVID", "VPH", "VARICELA"].some((k) => n.includes(k));
+  }
+
   const ORDEN_MUNI = ["CORREGIDORA", "HUIMILPAN", "MARQUES", "QUERETARO"];
   const ETIQ_MUNI = { CORREGIDORA: "Corregidora", HUIMILPAN: "Huimilpan", MARQUES: "El Marqués", QUERETARO: "Querétaro" };
   function muniKey(m) {
@@ -272,7 +278,7 @@
         if (prom > 0) {
           const cob = (exi + ped) / prom;
           if (ped > 2 * prom) u.alertas.push({ bio, tipo: "sobrepedido", texto: `${bio}: pide ${fmt(ped)} frascos y su consumo mensual es ${fmt(prom, 1)}` });
-          else if (cob < 1) u.alertas.push({ bio, tipo: "riesgo", texto: `${bio}: con existencia y pedido le alcanza para ${fmt(cob, 1)} meses` });
+          else if (cob < 1 && !esTemporada(bio)) u.alertas.push({ bio, tipo: "riesgo", texto: `${bio}: con existencia y pedido le alcanza para ${fmt(cob, 1)} meses` });
           else if (exi >= 2 * prom && ped > 0) u.alertas.push({ bio, tipo: "exceso", texto: `${bio}: ya tiene ${fmt(exi)} frascos (≥2 meses) y aun así pide ${fmt(ped)}` });
         }
       });
@@ -580,7 +586,7 @@
     if (prom <= 0) return { cobertura: null, tipo: null, texto: "" };
     const cob = (exi + ped) / prom;
     if (ped > 2 * prom) return { cobertura: cob, tipo: "sobrepedido", texto: "Sobrepedido" };
-    if (cob < 1) return { cobertura: cob, tipo: "riesgo", texto: "Riesgo de desabasto" };
+    if (cob < 1 && !esTemporada(r.biologico)) return { cobertura: cob, tipo: "riesgo", texto: "Riesgo de desabasto" };
     if (exi >= 2 * prom && ped > 0) return { cobertura: cob, tipo: "exceso", texto: "Ya tiene existencia" };
     return { cobertura: cob, tipo: null, texto: "" };
   }
