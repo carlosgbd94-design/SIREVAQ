@@ -10066,8 +10066,24 @@ function loteHospitalKeyForUser_(user) {
   return "";
 }
 
+// Los lotes se leen al iniciar sesión; si la jurisdicción asigna uno nuevo mientras la unidad
+// tiene la app abierta, no aparecía en el desplegable de Existencia hasta recargar. Se vuelven
+// a leer (como mucho 1 vez por minuto) al regresar a la pestaña y al abrir la captura.
+let LOTES_LOADED_AT = 0;
+function refreshBatchesIfStale(maxAgeMs = 60000) {
+  const user = window.USER || AppState.user;
+  if (!user || (Date.now() - LOTES_LOADED_AT) < maxAgeMs) return;
+  LOTES_LOADED_AT = Date.now();
+  loadBatchesForSession(user).catch(() => { });
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshBatchesIfStale();
+});
+window.addEventListener("focus", () => refreshBatchesIfStale());
+
 async function loadBatchesForSession(user) {
   if (!user) return;
+  LOTES_LOADED_AT = Date.now();
   try {
     console.log("🟢 1. Cargando catálogos y lotes desde Supabase...");
 
@@ -15296,6 +15312,7 @@ function activateMain(tab) {
 
 function activateCapture(tab) {
   const role = String((USER && USER.rol) || "").trim().toUpperCase();
+  if (tab === "SR") refreshBatchesIfStale(15000);
   // "Volver a mi SINBA-SIS" solo acompaña a quien llegó desde su SIS: al irse de Influenza deja de mostrarse.
   if (tab !== "INFLUENZA") {
     const volverSIS = document.getElementById("influenzaVolverSIS");

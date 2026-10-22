@@ -2880,14 +2880,20 @@ async function obtenerLotesCatalogoCentral(bio, categoria) {
   if (!nombres || !municipioLotes) return [];
 
   const key = bio.clave + '::' + categoria + '::' + municipioLotes;
-  if (estado.catalogoLotesCentral[key]?.length) return estado.catalogoLotesCentral[key];
 
+  // Se consulta SIEMPRE al abrir el desplegable: antes se reusaba la lista cacheada de la sesión
+  // si no estaba vacía, y un lote dado de alta en el panel Lotes mientras la unidad tenía
+  // el SINBA-SIS abierto (o desde que cargó la página) no aparecía hasta recargar. El caché
+  // queda solo como respaldo si la consulta falla (sin red).
   const tiposMatriz = TIPOS_MATRIZ_POR_CATEGORIA[categoria] || [categoria];
   const { data, error } = await estado.db.from('lotes')
     .select('lote, caducidad, municipio')
     .in('biologico', nombres).in('tipo', tiposMatriz);
-  if (error) { console.error('[BioVac] Error consultando catálogo central de lotes:', error); return []; }
-  if (!data) return [];
+  if (error) {
+    console.error('[BioVac] Error consultando catálogo central de lotes:', error);
+    return estado.catalogoLotesCentral[key] || [];
+  }
+  if (!data) return estado.catalogoLotesCentral[key] || [];
 
   const vistos = new Map();
   for (const fila of data) {
