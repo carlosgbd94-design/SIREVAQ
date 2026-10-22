@@ -440,6 +440,40 @@ html.dark .touch-stepper-wrap .stepper-btn {
   background: rgba(0, 0, 0, 0.08);
 }
 
+/* El campo con stepper reparte el ancho: etiqueta compacta, botones de 40px y
+   un input con espacio real para los dígitos (sin el padding de 12px que los tapaba). */
+.cascade-field:has(.touch-stepper-wrap) {
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.cascade-field:has(.touch-stepper-wrap) label {
+  letter-spacing: 0.06em;
+}
+
+.touch-stepper-wrap {
+  min-width: 0;
+  gap: 6px !important;
+}
+
+.touch-stepper-wrap .stepper-btn {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
+.touch-stepper-wrap input {
+  flex: 1 1 auto;
+  width: auto !important;
+  min-width: 52px;
+  padding: 0 4px;
+  text-align: center;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 👥 Overlays and Modals */
 .dropdown-overlay {
   position: fixed;
