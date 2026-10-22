@@ -15180,7 +15180,8 @@ function activateMain(tab) {
 
   if (pCap) {
     pCap.removeAttribute("style");
-    if (tab === "CAP") {
+    // «Captura de Reportes» (título + pestañas de captura) es solo de UNIDAD; los demás roles ven el resumen de captura.
+    if (tab === "CAP" && AppState.rol === "UNIDAD") {
       pCap.classList.remove("hidden");
       pCap.style.display = "block";
     } else {
