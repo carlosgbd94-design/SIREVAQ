@@ -51,6 +51,13 @@
     return t;
   }
 
+  /** Dosis por marca: { MODERNA, PFIZER } (suma de todos los grupos de cada marca). */
+  function totalPorMarca(valores) {
+    const t = {};
+    MARCAS.forEach((m) => { t[m] = RUBROS.reduce((s, r) => s + n(valores && valores[m] && valores[m][r]), 0); });
+    return t;
+  }
+
   function totalDosis(valores) {
     const t = porRubro(valores);
     return RUBROS.reduce((s, r) => s + t[r], 0);
@@ -143,7 +150,7 @@
   }
 
   const api = { RUBROS, MARCAS, RUBROS_MARCA, ETIQUETA, CENSIA, SIS_CLAVE, SIS_REFUERZO_6_59,
-    limpiar, porRubro, totalDosis, reglaRubro, validar, paqueteCensia, sisPorClave, movimientoPorMarca, delMes };
+    limpiar, porRubro, totalPorMarca, totalDosis, reglaRubro, validar, paqueteCensia, sisPorClave, movimientoPorMarca, delMes };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.CovidCaptura = api;
 })(typeof window !== "undefined" ? window : globalThis);

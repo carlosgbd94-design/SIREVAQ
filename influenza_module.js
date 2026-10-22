@@ -736,16 +736,25 @@ function actualizarContadorDosisHub() {
   if (!box) return;
   if (typeof _capturaVacuna !== "undefined" && _capturaVacuna === "COVID" && window.CovidCapturaUI) {
     const t = window.CovidCapturaUI.totalActual();
+    const pm = window.CovidCapturaUI.totalPorMarcaActual();
+    const f = (n) => Number(n || 0).toLocaleString("es-MX");
     const el = document.getElementById("hubDosisSemana");
-    if (el) el.textContent = t.toLocaleString("es-MX");
+    if (el) el.textContent = f(t);
+    const marcas = document.getElementById("hubDosisMarcas");
+    if (marcas) {
+      marcas.innerHTML = `<span class="hub-marca hub-marca--mod"><small>Moderna</small><b>${f(pm.MODERNA)}</b></span><span class="hub-marca hub-marca--pfz"><small>Pfizer</small><b>${f(pm.PFIZER)}</b></span>`;
+      marcas.hidden = false;
+    }
     box.hidden = false;
     clearTimeout(_hubDosisTimer);
     _hubDosisTimer = setTimeout(() => {
       const sr = document.getElementById("hubDosisSr");
-      if (sr) sr.textContent = `${t.toLocaleString("es-MX")} ${t === 1 ? "dosis capturada" : "dosis capturadas"} esta semana.`;
+      if (sr) sr.textContent = `${f(t)} ${t === 1 ? "dosis capturada" : "dosis capturadas"} esta semana: Moderna ${f(pm.MODERNA)}, Pfizer ${f(pm.PFIZER)}.`;
     }, 700);
     return;
   }
+  const marcasInf = document.getElementById("hubDosisMarcas");
+  if (marcasInf) marcasInf.hidden = true;
   const grid = document.getElementById("influenzaCaptureGroupsContainer");
   const sinMov = !!document.getElementById("chkSinMovimientoINF")?.checked;
   let semana = 0, previo = 0;
@@ -1119,14 +1128,28 @@ function censiaMarcadorFn() {
   } else manual();
 }
 
+/** Casillas de CeNSIA de TODO lo guardado en la semana (Influenza + COVID-19). CeNSIA tiene una sola pantalla de captura y el
+ *  complemento lleva un solo paquete: si cada panel mandara solo lo suyo, el segundo pisaría al primero. */
+function censiaValoresSemana(fechaSemana, reporteInf) {
+  const valores = {};
+  if (reporteInf) INFLUENZA_RUBROS.forEach((rb, i) => { valores[CENSIA_CODIGOS[i]] = Number(reporteInf.valores?.[rb.id] || 0); });
+  const totalInf = Object.values(valores).reduce((a, b) => a + b, 0);
+  let totalCov = 0;
+  const cov = typeof _covidCapturasCache !== "undefined" ? _covidCapturasCache.find((r) => r.fecha === fechaSemana) : null;
+  if (cov && window.CovidCaptura) {
+    const pq = window.CovidCaptura.paqueteCensia(cov.valores);
+    Object.keys(pq).forEach((k) => { valores[k] = pq[k]; totalCov += pq[k]; });
+  }
+  return { valores, totalInf, totalCov };
+}
+
 /** Tarjeta «Pasar a CeNSIA»: aparece cuando la semana ya está guardada en SIREVAQ. */
 function renderPasoCensia(container, fechaSemana, reporte) {
   const hoy = influenzaHoy();
   const fecha = censiaFechaAplicacion(fechaSemana, hoy);
   const clave = `sirevaq_censia_${USER?.clues}_${fechaSemana}`;
-  const valores = {};
-  INFLUENZA_RUBROS.forEach((rb, i) => { valores[CENSIA_CODIGOS[i]] = Number(reporte.valores?.[rb.id] || 0); });
-  const total = Object.values(valores).reduce((a, b) => a + b, 0);
+  const { valores, totalInf, totalCov } = censiaValoresSemana(fechaSemana, reporte);
+  const total = totalInf + totalCov;
   const armar = () => btoa(unescape(encodeURIComponent(JSON.stringify({ v: 1, t: Date.now(), clues: USER?.clues, fecha, valores }))));
   const enlace = `${CENSIA_URL}#sirevaq=${encodeURIComponent(armar())}`;
   let previo = null;
@@ -1138,7 +1161,7 @@ function renderPasoCensia(container, fechaSemana, reporte) {
   box.setAttribute("aria-label", "Pasar este reporte a CeNSIA");
   box.innerHTML = `
     <div class="inf-censia__tit"><span class="material-symbols-rounded" aria-hidden="true">cloud_upload</span><b>Siguiente paso: captura en CeNSIA</b></div>
-    <p>Este reporte (${total.toLocaleString("es-MX")} dosis) también se captura en la plataforma federal. SIREVAQ rellena las casillas con fecha <b>${fmtF(fecha)}</b>; tú revisas y pulsas <b>Guardar</b> allá.</p>
+    <p>Este reporte (${total.toLocaleString("es-MX")} dosis${totalCov > 0 ? `: Influenza ${totalInf.toLocaleString("es-MX")} · COVID-19 ${totalCov.toLocaleString("es-MX")}` : ""}) también se captura en la plataforma federal. SIREVAQ rellena las casillas con fecha <b>${fmtF(fecha)}</b>; tú revisas y pulsas <b>Guardar</b> allá.</p>
     <div id="infCensiaGuia"></div>
     ${previo ? `<p class="inf-censia__aviso"><span class="material-symbols-rounded" aria-hidden="true">info</span><span>Ya abriste CeNSIA con este reporte el ${previo}. En CeNSIA las capturas <b>se suman</b> (a diferencia de SIREVAQ, que reemplaza): si ya lo guardaste allá, no lo vuelvas a guardar; si cambió algo, captura en CeNSIA solo la diferencia.</span></p>` : ""}
     <div class="inf-censia__acciones">
@@ -7729,6 +7752,9 @@ function renderCovidCaptura() {
       hoy: influenzaHoy,
       fechaAplicacion: (f) => censiaFechaAplicacion(f, influenzaHoy()),
       enviarPaquete: (paquete) => {
+        // Un solo paquete con COVID-19 + lo de Influenza guardado esa semana (si lo hay)
+        const repInf = (_influenzaCapturasCache || []).find((r) => r.fecha === fecha) || null;
+        paquete = { ...paquete, valores: censiaValoresSemana(fecha, repInf).valores };
         const token = btoa(unescape(encodeURIComponent(JSON.stringify({ v: 1, t: Date.now(), clues: paquete.clues, fecha: paquete.fecha, valores: paquete.valores }))));
         if (censiaExtInstalada()) censiaEntregarPaquete(paquete);
         try { navigator.clipboard?.writeText("SIREVAQ1:" + token).catch(() => { }); } catch (e) { /* sin portapapeles */ }
