@@ -360,6 +360,43 @@
         
         initTheme();
         await fetchProfile();
+
+        // La barra de paneles depende solo del perfil: se arma antes de las demás cargas
+        // para que no se vea primero la barra de captura por defecto y luego la correcta.
+        // Validación de Influenza (solo supervisión): muestra la pestaña y prepara el módulo
+        if (window.MobileInfluenzaVal) {
+            window.MobileInfluenzaVal.init({
+                getClient: () => supabaseClient,
+                getProfile: () => currentProfile,
+                toast: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'success')
+            });
+            const dockInf = document.getElementById('dockItemINF');
+            if (dockInf) dockInf.hidden = !window.MobileInfluenzaVal.puedeUsar();
+        }
+
+        // Captura semanal de Influenza (solo perfil UNIDAD)
+        if (window.MobileInfluenzaCap) {
+            window.MobileInfluenzaCap.init({
+                getClient: () => supabaseClient,
+                getProfile: () => currentProfile,
+                toast: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'success')
+            });
+            const dockInfC = document.getElementById('dockItemINFC');
+            if (dockInfC) dockInfC.hidden = !window.MobileInfluenzaCap.puedeUsar();
+        }
+
+        // Perfiles de supervisión: barra propia (Resumen · Influenza · Avisos · Capacitación · Más)
+        if (window.MobileSupervision) {
+            window.MobileSupervision.init({
+                getClient: () => supabaseClient,
+                getProfile: () => currentProfile,
+                toast: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'success'),
+                irA: (id) => switchPanel(id),
+                volver: () => ultimoPanelCaptura
+            });
+        }
+        document.getElementById('mobileCaptureDockWrapper')?.classList.add('dock-lista');
+
         await fetchCatalogs();
         await fetchTargetDate();
         canCaptureConsGlobal = checkConsumiblesCaptureWindow();
@@ -404,38 +441,6 @@
         initNotificationsRealtime();
         initPinolRealtimeMobile();
         
-        // Validación de Influenza (solo supervisión): muestra la pestaña y prepara el módulo
-        if (window.MobileInfluenzaVal) {
-            window.MobileInfluenzaVal.init({
-                getClient: () => supabaseClient,
-                getProfile: () => currentProfile,
-                toast: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'success')
-            });
-            const dockInf = document.getElementById('dockItemINF');
-            if (dockInf) dockInf.hidden = !window.MobileInfluenzaVal.puedeUsar();
-        }
-
-        // Captura semanal de Influenza (solo perfil UNIDAD)
-        if (window.MobileInfluenzaCap) {
-            window.MobileInfluenzaCap.init({
-                getClient: () => supabaseClient,
-                getProfile: () => currentProfile,
-                toast: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'success')
-            });
-            const dockInfC = document.getElementById('dockItemINFC');
-            if (dockInfC) dockInfC.hidden = !window.MobileInfluenzaCap.puedeUsar();
-        }
-
-        // Perfiles de supervisión: barra propia (Resumen · Influenza · Avisos · Capacitación · Más)
-        if (window.MobileSupervision) {
-            window.MobileSupervision.init({
-                getClient: () => supabaseClient,
-                getProfile: () => currentProfile,
-                toast: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'success'),
-                irA: (id) => switchPanel(id),
-                volver: () => ultimoPanelCaptura
-            });
-        }
         // Perfil UNIDAD: acceso a los indicadores de su propia unidad
         const btnInd = document.getElementById('btnMisIndicadores');
         if (btnInd) {

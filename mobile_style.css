@@ -440,6 +440,9 @@ html.dark .touch-stepper-wrap .stepper-btn {
   background: rgba(0, 0, 0, 0.08);
 }
 
+/* La barra de paneles espera a conocer el perfil: así no se ve primero la de captura por defecto. */
+#mobileCaptureDockWrapper:not(.dock-lista) { visibility: hidden; }
+
 /* El campo con stepper reparte el ancho: etiqueta compacta, botones de 40px y
    un input con espacio real para los dígitos (sin el padding de 12px que los tapaba). */
 .cascade-field:has(.touch-stepper-wrap) {
