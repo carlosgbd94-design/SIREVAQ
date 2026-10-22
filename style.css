@@ -15901,3 +15901,13 @@ html body .modern-input-group input[type="date"]:not(.evd-date) {
   .cg-cursor { animation:none; opacity:1; }
   .cg-onda { display:none; }
 }
+
+/* Captura de Influenza: tarjetas más compactas (renglones ~50 px en vez de ~80 px). El porcentaje y «X de Y» van en una línea y la barra debajo. */
+.inf-cap-card { padding: 18px 20px !important; gap: 12px !important; }
+.inf-cap-tabla tbody tr.inf-fila > th, .inf-cap-tabla tbody tr.inf-fila > td { padding: 8px 12px; }
+#formINFLUENZA input.inf-input { width: 80px !important; height: 34px !important; min-height: 34px !important; border-radius: 10px !important; }
+.inf-cap-tabla .inf-av { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 2px 8px; max-width: 170px; margin: 0 auto 5px; }
+.inf-cap-tabla .inf-col-avance .inf-pct { margin: 0; padding: 1px 7px; font-size: 11px; }
+.inf-cap-tabla .inf-col-avance .inf-disp { display: inline-flex; align-items: center; justify-content: center; font-size: 12px; white-space: nowrap; }
+.inf-cap-tabla .inf-col-avance .inf-disp:empty { display: none; }
+.inf-cap-tabla .inf-col-avance .inf-barra { height: 5px; max-width: 170px; margin: 0 auto; }

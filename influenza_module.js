@@ -1140,7 +1140,7 @@ function renderPasoCensia(container, fechaSemana, reporte) {
     <div class="inf-censia__tit"><span class="material-symbols-rounded" aria-hidden="true">cloud_upload</span><b>Siguiente paso: captura en CeNSIA</b></div>
     <p>Este reporte (${total.toLocaleString("es-MX")} dosis) también se captura en la plataforma federal. SIREVAQ rellena las casillas con fecha <b>${fmtF(fecha)}</b>; tú revisas y pulsas <b>Guardar</b> allá.</p>
     <div id="infCensiaGuia"></div>
-    ${previo ? `<p class="inf-censia__aviso"><span class="material-symbols-rounded" aria-hidden="true">info</span>Ya abriste CeNSIA con este reporte el ${previo}. En CeNSIA las capturas <b>se suman</b> (a diferencia de SIREVAQ, que reemplaza): si ya lo guardaste allá, no lo vuelvas a guardar; si cambió algo, captura en CeNSIA solo la diferencia.</p>` : ""}
+    ${previo ? `<p class="inf-censia__aviso"><span class="material-symbols-rounded" aria-hidden="true">info</span><span>Ya abriste CeNSIA con este reporte el ${previo}. En CeNSIA las capturas <b>se suman</b> (a diferencia de SIREVAQ, que reemplaza): si ya lo guardaste allá, no lo vuelvas a guardar; si cambió algo, captura en CeNSIA solo la diferencia.</span></p>` : ""}
     <div class="inf-censia__acciones">
       <a class="inf-censia__btn" id="infCensiaAbrir" href="${enlace}" target="_blank" rel="noopener">Abrir CeNSIA y rellenar</a>
       <button type="button" class="inf-censia__btn is-sec" id="infCensiaAyuda" aria-expanded="false" aria-controls="infCensiaPasos"${censiaExtInstalada() ? " hidden" : ""}>Prefiero no instalar nada (para personas con experiencia)</button>
@@ -1283,7 +1283,7 @@ function renderCaptureGrid() {
       return;
     }
     const card = document.createElement("div");
-    card.className = "bg-white border border-slate-200 rounded-[24px] p-6 shadow-sm flex flex-col gap-4";
+    card.className = "inf-cap-card bg-white border border-slate-200 rounded-[24px] p-6 shadow-sm flex flex-col gap-4";
     card.style.backgroundColor = "#ffffff";
 
     card.innerHTML = `
@@ -1347,11 +1347,13 @@ function renderCaptureGrid() {
           >
         </td>
         <td class="p-3 text-center inf-col-avance">
-          <span id="pct_inf_${rb.id}" class="inf-pct" data-tono="${t}">${meta > 0 ? pct + '%' : 'N/A'}</span>
+          <div class="inf-av">
+            <span id="pct_inf_${rb.id}" class="inf-pct" data-tono="${t}">${meta > 0 ? pct + '%' : 'N/A'}</span>
+            <span id="disp_inf_${rb.id}" class="inf-disp">${meta > 0 ? `${acum + currentVal} de ${meta}` : ''}</span>
+          </div>
           <div class="inf-barra">
             <div id="bar_inf_${rb.id}" class="inf-barra-fill" data-tono="${t}" role="progressbar" aria-label="Avance contra la meta" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(pct, 100)}" style="width:${Math.min(pct, 100)}%;"></div>
           </div>
-          <span id="disp_inf_${rb.id}" class="inf-disp">${meta > 0 ? `${acum + currentVal} de ${meta}` : ''}</span>
         </td>
       `;
       tbody.appendChild(row);
