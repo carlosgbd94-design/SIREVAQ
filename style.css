@@ -7959,7 +7959,7 @@ input, textarea, select, [contenteditable] {
 .nav-tab.active[onclick*="'SR'"] .material-symbols-rounded { color: #0284c7; }   /* Blue (Biológicos) */
 .nav-tab.active[onclick*="'CONS'"] .material-symbols-rounded { color: #059669; } /* Green (Consumibles) */
 .nav-tab.active[onclick*="'BIO'"] .material-symbols-rounded { color: #e11d48; }  /* Red (Pedido) */
-.nav-tab.active[onclick*="'INFLUENZA'"] .material-symbols-rounded { color: #f1bdad; } /* Light Salmon (Official Influenza Color) */
+.nav-tab.active[onclick*="'INFLUENZA'"] .material-symbols-rounded { color: #F3C3C3; } /* Light Salmon (Official Influenza Color) */
 .nav-tab.active[onclick*="'PINOL'"] .material-symbols-rounded { color: #d97706; } /* Orange (Pinol) */
 
 /* ==========================================================================
@@ -12614,11 +12614,11 @@ html.dark .whatsapp-support-card:hover {
 
 /* ===== 💉 INFLUENZA META-LOGRO PREMIUM STYLING ===== */
 #tabINFLUENZA.active .material-symbols-rounded {
-  color: #f1bdad !important; /* Official Influenza color */
+  color: #F3C3C3 !important; /* Official Influenza color */
 }
 
 #tabOPS_INFLUENZA.active .material-symbols-rounded {
-  color: #f1bdad !important;
+  color: #F3C3C3 !important;
 }
 
 #formINFLUENZA div.bg-surface {
@@ -15964,7 +15964,7 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 
 /* Selector de vacuna de la temporada invernal (captura de UNIDAD, resumen de la unidad y Live View).
    Cada vacuna conserva su color: Influenza terracota, COVID-19 cian. Plano, sin relieve. */
-.vx-seg { --vx-inf:#b4452b; --vx-inf-bg:#fdf2ee; --vx-inf-fg:#7a2a16; --vx-inf-bd:#f1bdad; --vx-cov:#0e7490; --vx-cov-bg:#ecfeff; --vx-cov-fg:#0b5566; --vx-cov-bd:#a5e3ee; }
+.vx-seg { --vx-inf:#9F2241; --vx-inf-bg:#FFEFEF; --vx-inf-fg:#633E55; --vx-inf-bd:#F3C3C3; --vx-cov:#0e7490; --vx-cov-bg:#ecfeff; --vx-cov-fg:#0b5566; --vx-cov-bd:#a5e3ee; }
 .vx-seg.cvc-seg { display:flex; flex-direction:column; gap:10px; padding:14px 16px; border:1px solid #cbd5e1; border-radius:18px; background:#ffffff; align-self:stretch; }
 .vx-seg.cvc-seg[hidden], .vx-seg[hidden] { display:none; }
 .vx-seg--vivo { display:inline-flex; align-items:center; }
@@ -15987,7 +15987,7 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 .vx-btn.cvc-seg-btn { min-height:48px; padding:6px 18px 6px 12px; border-radius:14px; }
 /* El formulario de captura toma el color de la vacuna elegida */
 #covidCapturaContainer:not([hidden]) { border-left:5px solid #0e7490; padding-left:14px; border-radius:6px; }
-#influenzaCaptureGroupsContainer:not([hidden]) { border-left:5px solid #b4452b; padding-left:14px; border-radius:6px; }
+#influenzaCaptureGroupsContainer:not([hidden]) { border-left:5px solid #9F2241; padding-left:14px; border-radius:6px; }
 @media (max-width: 520px) { .vx-opciones { flex-direction:column; } .vx-btn { width:100%; } }
 
 /* Botón «Toda la jurisdicción» del Concentrado de Avances (Admin y Jurisdicción). */

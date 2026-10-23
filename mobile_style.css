@@ -1762,3 +1762,16 @@ html.dark .mis-indicadores-txt small, html.dark .mis-indicadores > .material-sym
 /* Textos de ejemplo (placeholder) con contraste suficiente (4.5:1) */
 #captureContentArea input::placeholder, #captureContentArea textarea::placeholder { color: #64748b !important; opacity: 1 !important; }
 html.dark #captureContentArea input::placeholder, html.dark #captureContentArea textarea::placeholder { color: #a8b3c4 !important; }
+
+/* Selector de vacuna: Influenza terracota y COVID-19 cian, con el estado de cada una en la semana. */
+#panelINFC .ic-vac-lead { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 14px; font-weight: 600; color: #334155; line-height: 1.4; }
+#panelINFC .ic-vac-lead .material-symbols-rounded { font-size: 20px; color: #0e7490; flex: none; }
+#panelINFC .ic-vac { background: transparent; padding: 0; gap: 8px; }
+#panelINFC .ic-vac-btn { display: flex; align-items: center; justify-content: flex-start; gap: 8px; min-height: 56px; padding: 6px 10px; border: 2px solid var(--vx-bd); background: var(--vx-bg); color: var(--vx-fg); text-align: left; }
+#panelINFC .ic-vac-btn[data-vac="INFLUENZA"] { --vx: #9F2241; --vx-bg: #FFEFEF; --vx-fg: #633E55; --vx-bd: #F3C3C3; }
+#panelINFC .ic-vac-btn[data-vac="COVID"] { --vx: #0e7490; --vx-bg: #ecfeff; --vx-fg: #0b5566; --vx-bd: #a5e3ee; }
+#panelINFC .ic-vac-btn .material-symbols-rounded { font-size: 24px; flex: none; }
+#panelINFC .ic-vac-txt { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+#panelINFC .ic-vac-txt small { font-size: 11px; font-weight: 700; opacity: .9; }
+#panelINFC .ic-vac-btn[aria-pressed="true"] { background: var(--vx); border-color: var(--vx); color: #fff; box-shadow: none; }
+html.dark #panelINFC .ic-vac-lead { color: #e2e8f0; }

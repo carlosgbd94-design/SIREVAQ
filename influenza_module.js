@@ -2792,8 +2792,13 @@ function infAmbito() {
     : { juris: false, muni, etiqueta: infMuniEtiqueta(muni) };
 }
 
+/** Los hospitales (HENM, NHGQ) son destinos aparte: no forman parte de las cuentas del municipio de Querétaro. */
+function infEsHospital(u) { return FRASCO_DESTINOS.some(d => d.hospital && d.clues === u.clues); }
+
 function infUnidadesAmbito(amb) {
-  return amb.juris ? _allUnidades.slice() : _allUnidades.filter(u => String(u.municipio).toUpperCase() === amb.muni);
+  return amb.juris
+    ? _allUnidades.slice()
+    : _allUnidades.filter(u => String(u.municipio).toUpperCase() === amb.muni && !infEsHospital(u));
 }
 
 /** Dosis de un reporte semanal. COVID-19: dosis equivalentes de 0.5 mL (las pediátricas de 0.25 mL cuentan la mitad). */
@@ -2856,8 +2861,8 @@ function infEsperadoPct() {
 function infTonoAvanceAmbito(meta, pct, esperado) {
   if (!(meta > 0)) return "none";
   // Al corriente si va a ≥ 90 % de lo esperado; rezagado por debajo de 60 %. Con la campaña recién abierta
-  // (esperado < 5 %) nada se califica como rezago.
-  if (esperado < 5 || pct >= esperado * 0.9) return "ok";
+  // (esperado < 10 %) nada se califica como rezago.
+  if (esperado < 10 || pct >= esperado * 0.9) return "ok";
   return pct >= esperado * 0.6 ? "warn" : "bad";
 }
 
@@ -2970,7 +2975,7 @@ function renderAvancesAndConcentrados() {
   const sinReporte = unidadesConMeta.length - conReporte;
   const eq = cov ? "dosis equiv. (0.5 mL)" : "dosis";
   const t = INF_TONO[tonoTot];
-  const color = cov ? { c: "#0e7490", bg: "#ecfeff", d: "#0b5566" } : { c: "#b4452b", bg: "#fdf2ee", d: "#7a2a16" };
+  const color = cov ? { c: "#0e7490", bg: "#ecfeff", d: "#0b5566" } : { c: "#9F2241", bg: "#FFEFEF", d: "#633E55" };
 
   const kpi = (icono, etiqueta, valor, nota, c, bg, d) => `
       <div class="kpiCard" style="border-left-color:${c} !important;background-color:${bg} !important;--kpi-color:${c};--kpi-bg:${bg};">
@@ -3026,12 +3031,19 @@ function renderAvancesAndConcentrados() {
   if (amb.juris) {
     const MUNIS = ["QUERETARO", "CORREGIDORA", "MARQUES", "HUIMILPAN"];
     MUNIS.forEach(m => {
-      const grupo = ordenar(filas.filter(f => String(f.u.municipio).toUpperCase() === m));
+      const grupo = ordenar(filas.filter(f => String(f.u.municipio).toUpperCase() === m && !infEsHospital(f.u)));
       if (!grupo.length) return;
       html += totalHtml(`${infMuniEtiqueta(m)} · subtotal`, grupo, "background:#f5f3ff;border-top:2px solid #ddd6fe;color:#3b0764");
       html += grupo.map(filaHtml).join("");
     });
-    const otras = ordenar(filas.filter(f => !MUNIS.includes(String(f.u.municipio).toUpperCase())));
+    // Cada hospital es un destino aparte, con su propio subtotal (la Jurisdicción son 4 municipios + los hospitales)
+    FRASCO_DESTINOS.filter(d => d.hospital).forEach(d => {
+      const grupo = filas.filter(f => f.u.clues === d.clues);
+      if (!grupo.length) return;
+      html += totalHtml(`${d.label} · hospital`, grupo, "background:#fff1f2;border-top:2px solid #fecdd3;color:#881337");
+      html += grupo.map(filaHtml).join("");
+    });
+    const otras = ordenar(filas.filter(f => !MUNIS.includes(String(f.u.municipio).toUpperCase()) && !infEsHospital(f.u)));
     if (otras.length) html += otras.map(filaHtml).join("");
     html += totalHtml("TOTAL JURISDICCIÓN", filas, "background:#ede9fe;border-top:2px solid #7c3aed;color:#3b0764");
   } else {
@@ -4179,7 +4191,9 @@ let _cobDatos = null;
 function infCalcularCobertura(muniParam) {
   const weeks = generateCampaignWeeks();
   const muni = String(muniParam || document.getElementById("adminInfluenzaMuni")?.value || "").toUpperCase();
-  const unidades = _allUnidades.filter(u => String(u.municipio || "").toUpperCase() === muni);
+  let unidades = _allUnidades.filter(u => String(u.municipio || "").toUpperCase() === muni);
+  // COVID-19 solo se espera de las unidades con meta asignada (Influenza sí a todas, aunque sea «Sin movimiento»)
+  if (esCovid()) unidades = unidades.filter(u => infMetaUnidad(u) > 0);
   const porClave = new Map();
   infCapturasVista().forEach(r => porClave.set(`${r.clues}|${r.fecha}`, r));
 
@@ -7324,7 +7338,7 @@ function frascoFechaCorta(f) {
 function renderFrascosBalance() {
   const tbody = document.getElementById("frascosBalanceTbody");
   if (!tbody) return;
-  const esJuris = USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL";
+  const esJuris = ["ADMIN", "JURISDICCIONAL", "VISUALIZADOR_JURISDICCIONAL"].includes(String(USER.rol || "").toUpperCase());
   const muni = document.getElementById("adminInfluenzaMuni")?.value;
   const unidades = esJuris ? _allUnidades.slice() : frascoUnidadesMunicipio(muni || "");
   const orden = FRASCO_DESTINOS.map(d => d.id);

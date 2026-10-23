@@ -303,7 +303,8 @@
   function analizarInf(caps, metas, camp, semana, hoy, rubros) {
     const unidades = new Map();
     const metaDe = new Map();
-    (metas || []).forEach((m) => { metaDe.set(String(m.clues || "").trim().toUpperCase(), totalValores(m.metas)); });
+    // Solo metas de UNIDAD: las filas de municipio/Jurisdicción (sin clues) ya son la suma de las unidades y la duplicarían.
+    (metas || []).forEach((m) => { const k = String(m.clues || "").trim().toUpperCase(); if (k) metaDe.set(k, totalValores(m.metas)); });
     const acum = new Map();
     const serie = new Map(); // fecha → dosis jurisdiccionales
     const semanaRows = new Map();

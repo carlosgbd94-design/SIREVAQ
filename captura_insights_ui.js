@@ -132,11 +132,26 @@
     if (!camp) return { an: CI.analizarInf([], [], null, data.fIniStr, hoyLocal(), []), racha: null };
     const [caps, metas] = await Promise.all([
       traer(() => sb().from("influenza_capturas").select("id,clues,fecha,valores,updated_at,sin_movimiento,editado_por").eq("anio_campana", camp.nombre).order("id")),
-      traer(() => sb().from("influenza_metas").select("id,clues,metas").eq("anio_campana", camp.nombre).order("id"))
+      traer(() => sb().from("influenza_metas").select("id,clues,metas").eq("anio_campana", camp.nombre).not("clues", "is", null).order("id"))
     ]);
     const rubros = typeof INFLUENZA_RUBROS !== "undefined" ? INFLUENZA_RUBROS : [];
     const lunes = CI.lunesDe(data.fIniStr);
     return { an: CI.analizarInf(caps, metas, camp, data.fIniStr, hoyLocal(), rubros), racha: CI.rachaSemanal(caps.filter((r) => r.fecha < lunes), lunes, 4), unidadRacha: "sem." };
+  }
+
+  /** COVID-19: los reportes llevan las dosis por marca y por grupo; se pasan a dosis por grupo (c1..c6) para reusar el análisis de Influenza. */
+  async function cargarCov(data) {
+    const gac = root.getActiveCampaign || (typeof getActiveCampaign === "function" ? getActiveCampaign : null);
+    const camp = gac ? ((await gac()).data || null) : null;
+    const rubros = (root.CovidFrascos && root.CovidFrascos.RUBROS) || [];
+    if (!camp) return { an: CI.analizarInf([], [], null, data.fIniStr, hoyLocal(), rubros), racha: null };
+    const [caps, metas] = await Promise.all([
+      traer(() => sb().from("covid_capturas").select("id,clues,fecha,valores,updated_at,sin_movimiento,editado_por").eq("anio_campana", camp.nombre).order("id")),
+      traer(() => sb().from("covid_metas").select("id,clues,metas").eq("anio_campana", camp.nombre).not("clues", "is", null).order("id"))
+    ]);
+    const planas = caps.map((r) => ({ ...r, valores: root.CovidCaptura ? root.CovidCaptura.porRubro(r.valores) : {} }));
+    const lunes = CI.lunesDe(data.fIniStr);
+    return { an: CI.analizarInf(planas, metas, camp, data.fIniStr, hoyLocal(), rubros), racha: CI.rachaSemanal(planas.filter((r) => r.fecha < lunes), lunes, 4), unidadRacha: "sem." };
   }
 
   /* ───────────────────────────── filtros ───────────────────────────── */
@@ -287,7 +302,8 @@
     enlazar();
     const tipo = data.tipo || "SR";
     const w = data.active_window ? `${data.active_window.fecha}|${data.active_window.tipo_pedido}` : "";
-    const key = `${tipo}|${data.fecha}|${w}|${(data.capturadas || []).length}|${(data.faltantes || []).length}`;
+    const esCov = tipo === "INF" && data.vacuna === "COVID";
+    const key = `${tipo}${esCov ? ":COVID" : ""}|${data.fecha}|${w}|${(data.capturadas || []).length}|${(data.faltantes || []).length}`;
     const mismoPeriodo = S.tipo === tipo && S.key && S.key.split("|").slice(0, 3).join("|") === key.split("|").slice(0, 3).join("|");
     S.key = key; S.tipo = tipo; S.data = data; S.ctx = ctx || {};
     if (!mismoPeriodo) S.filtro = { muni: null, texto: "", set: null, etiqueta: "" };
@@ -297,7 +313,7 @@
     S.error = null;
     render();
     try {
-      const cargar = { SR: cargarSR, CONS: cargarCons, BIO: cargarBio, INF: cargarInf }[tipo];
+      const cargar = esCov ? cargarCov : { SR: cargarSR, CONS: cargarCons, BIO: cargarBio, INF: cargarInf }[tipo];
       if (!cargar) return;
       const r = await cargar(data);
       if (S.key !== key) return; // llegó otra consulta mientras tanto

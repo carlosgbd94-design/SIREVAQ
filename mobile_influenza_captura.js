@@ -268,9 +268,12 @@
           <h2 id="icTitulo" tabindex="-1">Temporada invernal</h2>
           <p>Reporte semanal de dosis de ${nombreVac()} aplicadas en tu unidad.</p>
         </div>
-        ${hayCovid() ? `<div class="ic-vac" role="group" aria-label="Vacuna a reportar">
-          <button type="button" class="ic-vac-btn" data-vac="INFLUENZA" aria-pressed="${!esCovid()}">Influenza</button>
-          <button type="button" class="ic-vac-btn" data-vac="COVID" aria-pressed="${esCovid()}">COVID-19</button>
+        ${hayCovid() ? `<p class="ic-vac-lead"><span class="material-symbols-rounded" aria-hidden="true">ac_unit</span>Tu unidad reporta <b>dos vacunas</b>. Elige cuál capturas esta semana.</p>
+        <div class="ic-vac" role="group" aria-label="Vacuna a reportar">
+          ${[["INFLUENZA", "Influenza", "vaccines"], ["COVID", "COVID-19", "coronavirus"]].map(([v, txt, ico]) => {
+            const ya = (v === "COVID" ? S.covid.capturas : S.capturas || []).some(r => r.fecha === S.fecha);
+            return `<button type="button" class="ic-vac-btn" data-vac="${v}" aria-pressed="${(v === "COVID") === esCovid()}"><span class="material-symbols-rounded" aria-hidden="true">${ico}</span><span class="ic-vac-txt"><b>${txt}</b><small>${ya ? "✓ Guardado esta semana" : "Sin reportar esta semana"}</small></span></button>`;
+          }).join("")}
         </div>` : ""}
         ${op.exito ? `<div class="ic-exito" id="icExito" role="status" tabindex="-1">
             <span class="material-symbols-rounded" aria-hidden="true">task_alt</span>
