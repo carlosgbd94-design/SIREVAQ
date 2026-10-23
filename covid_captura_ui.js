@@ -218,7 +218,7 @@
     const fmtF = (s) => s.split("-").reverse().join("/");
     const clave = `sirevaq_censia_covid_${ctx.USER?.clues}_${ctx.fecha}`;
     let previo = null;
-    try { previo = localStorage.getItem(clave); } catch (e) { /* sin almacenamiento */ }
+    try { previo = localStorage.getItem(clave) || localStorage.getItem(`sirevaq_censia_${ctx.USER?.clues}_${ctx.fecha}`); } catch (e) { /* sin almacenamiento */ }
     const marcas = C.MARCAS.map((m) => {
       const t = C.RUBROS.reduce((s, r) => s + (Number(reporte.valores?.[m]?.[r]) || 0), 0);
       return t > 0 ? `${MARCA_TXT[m]} ${fmt(t)}` : "";
@@ -240,7 +240,7 @@
     abrir.addEventListener("click", () => {
       const enlace = cz.enviarPaquete({ v: 1, clues: ctx.USER?.clues, fecha, valores: paquete });
       if (enlace) abrir.href = enlace;
-      try { localStorage.setItem(clave, fmtF(cz.hoy())); } catch (e) { /* sin almacenamiento */ }
+      try { localStorage.setItem(clave, fmtF(cz.hoy())); if (cz.marcarInfluenza) cz.marcarInfluenza(fmtF(cz.hoy())); } catch (e) { /* sin almacenamiento */ }
     });
   }
 

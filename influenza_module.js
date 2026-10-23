@@ -865,7 +865,7 @@ const CENSIA_URL = "https://siscensia.salud.gob.mx/influenza26/ssa/captura.php";
 const CENSIA_EXT_URL = "https://chromewebstore.google.com/detail/noofpbkapekpjcfegnmcndjejmkpmbin";
 const censiaExtInstalada = () => document.documentElement.hasAttribute("data-sirevaq-censia-ext");
 // Última versión publicada del complemento (debe coincidir con extension-censia/manifest.json; lo vigila una prueba).
-const CENSIA_EXT_VERSION_ACTUAL = "1.1.2";
+const CENSIA_EXT_VERSION_ACTUAL = "1.1.3";
 /** ¿La versión instalada es anterior a la última? Solo con versión legible («1.1.1»); si no se puede leer, no se avisa nada. */
 function censiaExtDesactualizada() {
   const v = document.documentElement.getAttribute("data-sirevaq-censia-ext") || "";
@@ -1152,8 +1152,10 @@ function renderPasoCensia(container, fechaSemana, reporte) {
   const total = totalInf + totalCov;
   const armar = () => btoa(unescape(encodeURIComponent(JSON.stringify({ v: 1, t: Date.now(), clues: USER?.clues, fecha, valores }))));
   const enlace = `${CENSIA_URL}#sirevaq=${encodeURIComponent(armar())}`;
+  // El paquete lleva Influenza + COVID-19: si cualquiera de los dos ya se abrió en CeNSIA, volver a abrirlo duplicaría casillas
+  const claveCov = `sirevaq_censia_covid_${USER?.clues}_${fechaSemana}`;
   let previo = null;
-  try { previo = localStorage.getItem(clave); } catch (e) { /* sin almacenamiento */ }
+  try { previo = localStorage.getItem(clave) || localStorage.getItem(claveCov); } catch (e) { /* sin almacenamiento */ }
   const fmtF = (s) => s.split("-").reverse().join("/");
 
   const box = document.createElement("section");
@@ -1195,7 +1197,7 @@ function renderPasoCensia(container, fechaSemana, reporte) {
     }
     // Respaldo para el marcador: CeNSIA borra el «#» al iniciar sesión, así que también va al portapapeles
     try { navigator.clipboard?.writeText("SIREVAQ1:" + token).catch(() => { }); } catch (e) { /* sin portapapeles */ }
-    try { localStorage.setItem(clave, fmtF(influenzaHoy())); } catch (e) { /* sin almacenamiento */ }
+    try { localStorage.setItem(clave, fmtF(influenzaHoy())); if (totalCov > 0) localStorage.setItem(claveCov, fmtF(influenzaHoy())); } catch (e) { /* sin almacenamiento */ }
   });
 }
 
@@ -2296,7 +2298,7 @@ function vacunaPintarSelectores() {
 
 // Subpestañas que solo existen para Influenza (captura semanal, reportes por semana y fechas de
 // campaña). Con COVID-19 el panel muestra únicamente lo suyo: Distribución de Metas y Control de Frascos.
-const TEMPORADA_SOLO_INFLUENZA = ["subtabInfluenzaAvances", "subtabInfluenzaValidacion", "subtabInfluenzaConfig"];
+const TEMPORADA_SOLO_INFLUENZA = ["subtabInfluenzaValidacion", "subtabInfluenzaConfig"];
 function temporadaAplicarVacuna() {
   TEMPORADA_SOLO_INFLUENZA.forEach(id => {
     const el = document.getElementById(id);
@@ -2768,6 +2770,134 @@ async function exportMunicipalConcentradoExcel(muni, fecha) {
 // 1. AVANCES Y CONCENTRADOS ADMIN/MUNI
 let _currentEditingReport = null;
 
+// ─── Concentrado de Avances (Influenza y COVID-19) ───────────────────────────────────────────────────────
+// Todo se calcula por UNIDAD (clues) del ámbito elegido: un municipio o, para Jurisdicción/Admin, toda la
+// jurisdicción. Así los hospitales (HENM y NHGQ, cuyos frascos se registran como destino propio) entran en las
+// cuentas de Querétaro, y las dosis, la meta y los frascos siempre hablan de las mismas unidades.
+const INF_ROLES_JURIS = ["ADMIN", "JURISDICCIONAL", "VISUALIZADOR_JURISDICCIONAL"];
+let _avancesJuris = false;
+// Tonos del avance: se compara contra lo esperado a la fecha (tiempo transcurrido de la campaña), no contra 95 %.
+const INF_TONO = {
+  ok:   { fg: "#065f46", bg: "#d1fae5", bd: "#6ee7b7", bar: "#10b981", txt: "Al corriente" },
+  warn: { fg: "#92400e", bg: "#fef3c7", bd: "#fcd34d", bar: "#f59e0b", txt: "Por debajo" },
+  bad:  { fg: "#9f1239", bg: "#ffe4e6", bd: "#fda4af", bar: "#f43f5e", txt: "Rezagado" },
+  none: { fg: "#475569", bg: "#f1f5f9", bd: "#cbd5e1", bar: "#94a3b8", txt: "Sin meta" }
+};
+
+function infAmbito() {
+  const muni = String(document.getElementById("adminInfluenzaMuni")?.value || "").toUpperCase();
+  const juris = _avancesJuris && INF_ROLES_JURIS.includes(String(USER?.rol || "").toUpperCase());
+  return juris
+    ? { juris: true, muni: "JURISDICCION", etiqueta: "Jurisdicción (municipios y hospitales)" }
+    : { juris: false, muni, etiqueta: infMuniEtiqueta(muni) };
+}
+
+function infUnidadesAmbito(amb) {
+  return amb.juris ? _allUnidades.slice() : _allUnidades.filter(u => String(u.municipio).toUpperCase() === amb.muni);
+}
+
+/** Dosis de un reporte semanal. COVID-19: dosis equivalentes de 0.5 mL (las pediátricas de 0.25 mL cuentan la mitad). */
+function infDosisReporte(c) {
+  if (esCovid()) {
+    const t = window.CovidCaptura ? window.CovidCaptura.porRubro(c.valores) : {};
+    return CovidFrascos.RUBROS.reduce((s, r) => s + Number(t[r.id] || 0) * metaPesoRubro(r.id), 0);
+  }
+  return Object.values(c.valores || {}).reduce((s, v) => s + Number(v || 0), 0);
+}
+
+function infMetaRegistro(rec) {
+  if (!rec || !rec.metas) return 0;
+  return rubrosMetas().reduce((s, r) => s + Number(rec.metas[r.id] || 0) * metaPesoRubro(r.id), 0);
+}
+
+/** Meta de la unidad en las mismas unidades que las dosis. Un hospital de COVID-19 guarda su meta en el destino. */
+function infMetaUnidad(u) {
+  const arr = metasVista();
+  const rec = arr.find(m => m.clues === u.clues);
+  if (rec) return infMetaRegistro(rec);
+  if (esCovid()) {
+    const h = FRASCO_DESTINOS.find(d => d.hospital && d.clues === u.clues);
+    if (h) return infMetaRegistro(arr.find(m => !m.clues && String(m.municipio).toUpperCase() === h.id));
+  }
+  return 0;
+}
+
+/** Datos de las unidades del ámbito: meta, dosis (acumuladas hasta `maxFecha`; las del filtro en `rango`) y frascos entregados. */
+function infDatosAmbito(amb, minFecha, maxFecha) {
+  const units = infUnidadesAmbito(amb);
+  const porClues = {};
+  units.forEach(u => { porClues[u.clues] = { u, meta: infMetaUnidad(u), rango: 0, acum: 0, frascos: 0, dosisFrascos: 0, ultima: "" }; });
+  infCapturasVista().forEach(c => {
+    const f = porClues[c.clues];
+    if (!f) return;
+    const d = infDosisReporte(c);
+    if (c.fecha <= maxFecha) f.acum += d;
+    if (c.fecha >= minFecha && c.fecha <= maxFecha) f.rango += d;
+    if (c.fecha > f.ultima) f.ultima = c.fecha;
+  });
+  (esCovid() ? _covidFrascosAll : _adminFrascosArray).forEach(d => {
+    const f = porClues[d.clues];
+    if (!f) return;
+    const n = Number(d.cantidad_frascos || 0);
+    f.frascos += n;
+    f.dosisFrascos += n * (esCovid() ? CovidFrascos.dosisPorFrasco(d.marca) : DOSIS_POR_FRASCO);
+  });
+  return Object.values(porClues);
+}
+
+/** Porcentaje esperado a hoy: tiempo transcurrido de la campaña (0-100). */
+function infEsperadoPct() {
+  const t0 = Date.parse((_campaignConfig.fecha_inicio || "") + "T12:00:00");
+  const t1 = Date.parse((_campaignConfig.fecha_fin || "") + "T12:00:00");
+  const t = Date.parse(influenzaHoy() + "T12:00:00");
+  return (t1 > t0) ? Math.max(0, Math.min(100, (t - t0) * 100 / (t1 - t0))) : 0;
+}
+
+function infTonoAvanceAmbito(meta, pct, esperado) {
+  if (!(meta > 0)) return "none";
+  // Al corriente si va a ≥ 90 % de lo esperado; rezagado por debajo de 60 %. Con la campaña recién abierta
+  // (esperado < 5 %) nada se califica como rezago.
+  if (esperado < 5 || pct >= esperado * 0.9) return "ok";
+  return pct >= esperado * 0.6 ? "warn" : "bad";
+}
+
+function infFmt(n, dec) {
+  const v = Number(n) || 0;
+  return v.toLocaleString("es-MX", { maximumFractionDigits: dec == null ? 1 : dec });
+}
+
+function infPill(tono, texto) {
+  const t = INF_TONO[tono] || INF_TONO.none;
+  return `<span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:10px;font-weight:800;background:${t.bg};color:${t.fg};border:1px solid ${t.bd};white-space:nowrap">${texto || t.txt}</span>`;
+}
+
+function infBarraPct(pct, tono) {
+  const t = INF_TONO[tono] || INF_TONO.none;
+  const w = Math.max(0, Math.min(100, pct));
+  return `<div style="display:flex;align-items:center;gap:8px;justify-content:center"><div style="width:70px;height:8px;border-radius:99px;background:#e2e8f0;overflow:hidden"><div style="height:100%;width:${w}%;background:${t.bar};border-radius:99px"></div></div><b style="min-width:44px;text-align:right;color:${t.fg};font-variant-numeric:tabular-nums">${infFmt(pct)}%</b></div>`;
+}
+
+/** Botón «Toda la jurisdicción» del filtro: solo para Admin y Jurisdicción; deja sin efecto el selector de municipio. */
+function infBindAmbito() {
+  const wrap = document.getElementById("avancesAmbitoJuris");
+  if (!wrap) return;
+  const puede = INF_ROLES_JURIS.includes(String(USER?.rol || "").toUpperCase());
+  wrap.style.display = puede ? "" : "none";
+  if (!puede) _avancesJuris = false;
+  const btn = wrap.querySelector("button");
+  if (btn) {
+    btn.setAttribute("aria-pressed", String(_avancesJuris));
+    if (!btn.dataset.bound) {
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => { _avancesJuris = !_avancesJuris; renderAvancesAndConcentrados(); });
+    }
+  }
+  const muniBox = document.getElementById("adminInfluenzaMuniBox");
+  if (muniBox) muniBox.style.opacity = _avancesJuris ? "0.45" : "";
+  const sel = document.getElementById("adminInfluenzaMuni");
+  if (sel) sel.disabled = _avancesJuris;
+}
+
 function renderAvancesAndConcentrados() {
   const semInicioSelect = document.getElementById("adminInfluenzaSemanaInicio");
   const semFinSelect = document.getElementById("adminInfluenzaSemanaFin");
@@ -2775,7 +2905,9 @@ function renderAvancesAndConcentrados() {
 
   const semInicio = semInicioSelect.value;
   const semFin = semFinSelect.value;
-  const muni = document.getElementById("adminInfluenzaMuni").value;
+  infBindAmbito();
+  const amb = infAmbito();
+  const cov = esCovid();
 
   const muniFrascosBox = document.getElementById("muniFrascosAnalisisBox");
   const muniTableContainer = document.getElementById("adminInfluenzaMunicipalTableContainer");
@@ -2784,36 +2916,28 @@ function renderAvancesAndConcentrados() {
 
   if (unitDetailContainer) unitDetailContainer.classList.add("hidden");
 
-  // Limpiar y reasignar listener de exportar concentrado e histórico detallado
+  // Las exportaciones de este concentrado son las plantillas de Influenza: con COVID-19 no aplican aquí
+  // (su Excel de metas y de frascos vive en Distribución de Metas y Control de Frascos).
+  const exportBox = document.getElementById("dropdownExportInfluenzaContainer");
+  if (exportBox) exportBox.style.display = cov ? "none" : "";
+  const scopeBox = document.getElementById("adminInfluenzaExportScopeBox");
+  if (scopeBox) {
+    const r = String(USER?.rol || "").toUpperCase();
+    scopeBox.style.setProperty("display", (!cov && (r === "ADMIN" || r === "JURISDICCIONAL")) ? "block" : "none", "important");
+  }
+
   const exportBtn = document.getElementById("btnExportInfluenzaConcentrado");
-  if (exportBtn) {
-    exportBtn.onclick = () => {
-      exportConcentradoSimpleExcel();
-    };
-  }
-
+  if (exportBtn) exportBtn.onclick = () => { exportConcentradoSimpleExcel(); };
   const exportDetailedBtn = document.getElementById("btnExportConcentradoConUnidades");
-  if (exportDetailedBtn) {
-    exportDetailedBtn.onclick = () => {
-      exportConcentradoDetalladoUnidadesExcel();
-    };
-  }
+  if (exportDetailedBtn) exportDetailedBtn.onclick = () => { exportConcentradoDetalladoUnidadesExcel(); };
 
-  // Lógica de toggle para el dropdown de exportación
   const trigger = document.getElementById("btnExportInfluenzaDropdownTrigger");
   const menu = document.getElementById("exportInfluenzaMenu");
   if (trigger && menu) {
-    trigger.onclick = (e) => {
-      e.stopPropagation();
-      menu.classList.toggle("hidden");
-    };
-    
-    // Cerrar al hacer clic fuera
+    trigger.onclick = (e) => { e.stopPropagation(); menu.classList.toggle("hidden"); };
     if (!window._exportDropdownOutsideClickListener) {
       window._exportDropdownOutsideClickListener = (e) => {
-        if (!trigger.contains(e.target) && !menu.contains(e.target)) {
-          menu.classList.add("hidden");
-        }
+        if (!trigger.contains(e.target) && !menu.contains(e.target)) menu.classList.add("hidden");
       };
       document.addEventListener("click", window._exportDropdownOutsideClickListener);
     }
@@ -2825,118 +2949,111 @@ function renderAvancesAndConcentrados() {
   const minFecha = semInicio < semFin ? semInicio : semFin;
   const maxFecha = semInicio < semFin ? semFin : semInicio;
 
-  // Actualizar gráficos y proyecciones
-  updateInfluenzaDashboardVisuals(muni, minFecha, maxFecha);
+  updateInfluenzaDashboardVisuals(amb, minFecha, maxFecha);
 
-  // Obtener unidades del municipio
-  const units = _allUnidades.filter(u => u.municipio.toUpperCase() === muni.toUpperCase());
+  const filas = infDatosAmbito(amb, minFecha, maxFecha);
+  const esperado = infEsperadoPct();
+  const suma = (arr, k) => arr.reduce((s, f) => s + f[k], 0);
+  const metaTot = suma(filas, "meta");
+  const acumTot = suma(filas, "acum");
+  const rangoTot = suma(filas, "rango");
+  const frascosTot = suma(filas, "frascos");
+  const dosisFrascosTot = suma(filas, "dosisFrascos");
+  const pctTot = metaTot > 0 ? acumTot * 100 / metaTot : 0;
+  const tonoTot = infTonoAvanceAmbito(metaTot, pctTot, esperado);
+  // En resguardo = lo entregado menos lo aplicado hasta la semana final del filtro (acumulado: entregas y dosis son del mismo corte).
+  const resguardoDosis = dosisFrascosTot - acumTot;
+  const dosisPorFr = frascosTot > 0 ? dosisFrascosTot / frascosTot : (cov ? CovidFrascos.dosisPorFrasco(_marcaCovid) : DOSIS_POR_FRASCO);
+  const resguardoFr = resguardoDosis / dosisPorFr;
+  const unidadesConMeta = filas.filter(f => f.meta > 0);
+  const conReporte = unidadesConMeta.filter(f => f.ultima).length;
+  const sinReporte = unidadesConMeta.length - conReporte;
+  const eq = cov ? "dosis equiv. (0.5 mL)" : "dosis";
+  const t = INF_TONO[tonoTot];
+  const color = cov ? { c: "#0e7490", bg: "#ecfeff", d: "#0b5566" } : { c: "#b4452b", bg: "#fdf2ee", d: "#7a2a16" };
 
-  // Sumar dosis aplicadas en el municipio de todos los reportes capturados para el rango seleccionado
-  const municipalReportsInRange = _adminCapturasArray.filter(r => r.fecha >= minFecha && r.fecha <= maxFecha && r.municipio.toUpperCase() === muni.toUpperCase());
-  let totalDosesRange = 0;
-  municipalReportsInRange.forEach(r => {
-    Object.values(r.valores).forEach(v => totalDosesRange += Number(v || 0));
-  });
-
-  // Calcular frascos entregados acumulado en el municipio
-  let totalFrascosEntregados = 0;
-  _adminFrascosArray.forEach(d => {
-    if (d.municipio.toUpperCase() === muni.toUpperCase()) {
-      totalFrascosEntregados += Number(d.cantidad_frascos || 0);
-    }
-  });
-
-  const frascosAplicadosRange = totalDosesRange / 10;
-  const dif = totalFrascosEntregados - frascosAplicadosRange;
-
+  const kpi = (icono, etiqueta, valor, nota, c, bg, d) => `
+      <div class="kpiCard" style="border-left-color:${c} !important;background-color:${bg} !important;--kpi-color:${c};--kpi-bg:${bg};">
+        <div class="kpiHeader"><div class="kpiCardLabel" style="color:${c};">${etiqueta}</div><div class="kpiIcon"><span class="material-symbols-rounded">${icono}</span></div></div>
+        <div class="kpiCardValue" style="color:${d};">${valor}</div>
+        <div style="font-size:10px;font-weight:800;color:${c};text-transform:uppercase;margin-top:6px;">${nota}</div>
+      </div>`;
   muniFrascosBox.innerHTML = `
-    <div class="text-xs font-black text-violet-950 uppercase tracking-widest mb-3 mt-6 ml-1">Resumen Municipal: ${muni} (Semanas del ${minFecha} al ${maxFecha})</div>
-    <div class="dashboardKpis w-full" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;">
-      <!-- KPI 1: Dosis Aplicadas -->
-      <div class="kpiCard" style="border-left-color: #6366f1 !important; background-color: #f5f3ff !important; --kpi-color: #6366f1; --kpi-bg: #e0e7ff;">
-        <div class="kpiHeader">
-          <div class="kpiCardLabel" style="color: #4f46e5;">Dosis Aplicadas</div>
-          <div class="kpiIcon"><span class="material-symbols-rounded">vaccines</span></div>
-        </div>
-        <div class="kpiCardValue" style="color: #312e81;">${totalDosesRange.toLocaleString('es-MX')}</div>
-        <div style="font-size: 10px; font-weight: 800; color: #6366f1; text-transform: uppercase; margin-top: 6px;">${frascosAplicadosRange.toLocaleString('es-MX')} frascos equiv.</div>
-      </div>
-      
-      <!-- KPI 2: Frascos Entregados -->
-      <div class="kpiCard" style="border-left-color: #a855f7 !important; background-color: #faf5ff !important; --kpi-color: #a855f7; --kpi-bg: #f3e8ff;">
-        <div class="kpiHeader">
-          <div class="kpiCardLabel" style="color: #9333ea;">Frascos Entregados</div>
-          <div class="kpiIcon"><span class="material-symbols-rounded">inventory_2</span></div>
-        </div>
-        <div class="kpiCardValue" style="color: #581c87;">${totalFrascosEntregados.toLocaleString('es-MX')}</div>
-        <div style="font-size: 10px; font-weight: 800; color: #a855f7; text-transform: uppercase; margin-top: 6px;">${(totalFrascosEntregados * 10).toLocaleString('es-MX')} dosis equiv.</div>
-      </div>
-
-      <!-- KPI 3: Estimado en Resguardo -->
-      <div class="kpiCard" style="border-left-color: #ec4899 !important; background-color: #fdf2f8 !important; --kpi-color: #ec4899; --kpi-bg: #fce7f3;">
-        <div class="kpiHeader">
-          <div class="kpiCardLabel" style="color: #db2777;">Diferencia en Resguardo</div>
-          <div class="kpiIcon"><span class="material-symbols-rounded">hourglass_empty</span></div>
-        </div>
-        <div class="kpiCardValue" style="color: #831843;">${dif.toLocaleString('es-MX')}</div>
-        <div style="font-size: 10px; font-weight: 800; color: #ec4899; text-transform: uppercase; margin-top: 6px;">${(dif * 10).toLocaleString('es-MX')} dosis equiv.</div>
-      </div>
+    <div class="text-xs font-black text-violet-950 uppercase tracking-widest mb-3 mt-6 ml-1" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="display:inline-block;padding:3px 12px;border-radius:99px;background:${color.bg};color:${color.d};border:1px solid ${color.c}55">${cov ? "COVID-19" : "Influenza"}</span>
+      <span>Resumen: ${amb.etiqueta} (semanas del ${minFecha} al ${maxFecha})</span>
     </div>
-  `;
+    <div class="dashboardKpis w-full" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;">
+      <div class="kpiCard" style="border-left-color:${t.bar} !important;background-color:${t.bg} !important;--kpi-color:${t.bar};--kpi-bg:${t.bg};">
+        <div class="kpiHeader"><div class="kpiCardLabel" style="color:${t.fg};">Avance contra la meta</div><div class="kpiIcon"><span class="material-symbols-rounded">flag</span></div></div>
+        <div class="kpiCardValue" style="color:${t.fg};">${metaTot > 0 ? infFmt(pctTot) + "%" : "—"}</div>
+        <div style="font-size:10px;font-weight:800;color:${t.fg};text-transform:uppercase;margin-top:6px;">${infFmt(acumTot, 0)} de ${infFmt(metaTot, 0)} ${eq}${metaTot > 0 ? " · esperado a hoy " + infFmt(esperado) + "%" : ""}</div>
+      </div>
+      ${kpi("vaccines", "Dosis aplicadas (rango)", infFmt(rangoTot, 0), `${infFmt(rangoTot / dosisPorFr)} frascos equiv.`, "#6366f1", "#f5f3ff", "#312e81")}
+      ${kpi("inventory_2", "Frascos entregados", infFmt(frascosTot, 0), `${infFmt(dosisFrascosTot, 0)} ${eq}`, "#a855f7", "#faf5ff", "#581c87")}
+      ${kpi(resguardoDosis < 0 ? "warning" : "hourglass_empty", "Diferencia en resguardo", infFmt(resguardoFr), `${infFmt(resguardoDosis, 0)} ${eq}${resguardoDosis < 0 ? " · aplicó más de lo entregado" : ""}`, resguardoDosis < 0 ? "#e11d48" : "#ec4899", resguardoDosis < 0 ? "#fff1f2" : "#fdf2f8", resguardoDosis < 0 ? "#9f1239" : "#831843")}
+      ${kpi("fact_check", "Unidades con reporte", `${conReporte}<span style="font-size:14px;font-weight:700"> / ${unidadesConMeta.length}</span>`, sinReporte > 0 ? `${sinReporte} sin ningún reporte` : "Todas ya reportaron", sinReporte > 0 ? "#d97706" : "#059669", sinReporte > 0 ? "#fffbeb" : "#ecfdf5", sinReporte > 0 ? "#92400e" : "#065f46")}
+    </div>`;
 
-  // Renderizar desglose de unidades
-  muniTbody.innerHTML = "";
-  units.forEach(u => {
-    // Sumar metas de la unidad
-    const unitMetaRecord = _adminMetasArray.find(m => m.clues === u.clues);
-    let totalMeta = 0;
-    if (unitMetaRecord && unitMetaRecord.metas) {
-      Object.values(unitMetaRecord.metas).forEach(v => totalMeta += Number(v || 0));
-    }
-
-    // Sumar capturas acumuladas de la unidad en el rango seleccionado
-    let totalAcumulado = 0;
-    _adminCapturasArray.forEach(c => {
-      if (c.clues === u.clues && c.fecha >= minFecha && c.fecha <= maxFecha) {
-        Object.values(c.valores).forEach(v => totalAcumulado += Number(v || 0));
-      }
+  // Tabla: por unidad; en Jurisdicción, agrupada por municipio con su subtotal.
+  const filaHtml = (f) => {
+    const pct = f.meta > 0 ? f.acum * 100 / f.meta : 0;
+    const tono = infTonoAvanceAmbito(f.meta, pct, esperado);
+    return `<tr class="border-b border-slate-100 hover:bg-slate-50" data-clues="${f.u.clues}" style="${cov ? "" : "cursor:pointer"}">
+      <td class="p-3 text-xs font-semibold text-slate-700">${f.u.unidad}${f.meta > 0 && !f.ultima ? ` <span style="margin-left:6px">${infPill("bad", "Sin reportes")}</span>` : ""}</td>
+      <td class="p-3 text-xs text-slate-500 font-mono">${f.u.clues}</td>
+      <td class="p-3 text-center text-xs font-bold text-slate-600">${f.meta > 0 ? infFmt(f.meta, 0) : '<span style="color:#94a3b8">sin meta</span>'}</td>
+      <td class="p-3 text-center text-xs font-bold text-violet-950">${infFmt(f.acum, 0)}</td>
+      <td class="p-3 text-center text-xs font-bold">${f.meta > 0 ? infBarraPct(pct, tono) : "—"}</td>
+      <td class="p-3 text-center text-xs font-bold text-slate-700">${f.frascos ? infFmt(f.frascos, 0) : ""}</td>
+      <td class="p-3 text-center text-xs font-bold text-slate-500">${f.dosisFrascos ? infFmt(f.dosisFrascos, 0) : ""}</td>
+    </tr>`;
+  };
+  const totalHtml = (txt, arr, estilo) => {
+    const m = suma(arr, "meta"), a = suma(arr, "acum"), fr = suma(arr, "frascos"), df = suma(arr, "dosisFrascos");
+    const pct = m > 0 ? a * 100 / m : 0;
+    return `<tr style="${estilo}">
+      <td class="p-3 text-xs font-black" colspan="2">${txt}</td>
+      <td class="p-3 text-center text-xs font-black">${infFmt(m, 0)}</td>
+      <td class="p-3 text-center text-xs font-black">${infFmt(a, 0)}</td>
+      <td class="p-3 text-center text-xs font-black">${m > 0 ? infBarraPct(pct, infTonoAvanceAmbito(m, pct, esperado)) : "—"}</td>
+      <td class="p-3 text-center text-xs font-black">${fr ? infFmt(fr, 0) : ""}</td>
+      <td class="p-3 text-center text-xs font-black">${df ? infFmt(df, 0) : ""}</td>
+    </tr>`;
+  };
+  const ordenar = (arr) => arr.slice().sort((a, b) => String(a.u.unidad).localeCompare(String(b.u.unidad), "es"));
+  let html = "";
+  if (amb.juris) {
+    const MUNIS = ["QUERETARO", "CORREGIDORA", "MARQUES", "HUIMILPAN"];
+    MUNIS.forEach(m => {
+      const grupo = ordenar(filas.filter(f => String(f.u.municipio).toUpperCase() === m));
+      if (!grupo.length) return;
+      html += totalHtml(`${infMuniEtiqueta(m)} · subtotal`, grupo, "background:#f5f3ff;border-top:2px solid #ddd6fe;color:#3b0764");
+      html += grupo.map(filaHtml).join("");
     });
-
-    // Calcular %
-    const pct = totalMeta > 0 ? ((totalAcumulado / totalMeta) * 100).toFixed(1) : "0.0";
-
-    // Sumar frascos entregados
-    let unitFrascos = 0;
-    _adminFrascosArray.forEach(d => {
-      if (d.clues === u.clues) {
-        unitFrascos += Number(d.cantidad_frascos || 0);
-      }
+    const otras = ordenar(filas.filter(f => !MUNIS.includes(String(f.u.municipio).toUpperCase())));
+    if (otras.length) html += otras.map(filaHtml).join("");
+    html += totalHtml("TOTAL JURISDICCIÓN", filas, "background:#ede9fe;border-top:2px solid #7c3aed;color:#3b0764");
+  } else {
+    html = ordenar(filas).map(filaHtml).join("") + totalHtml(`TOTAL ${amb.etiqueta.toUpperCase()}`, filas, "background:#f5f3ff;border-top:2px solid #7c3aed;color:#3b0764");
+  }
+  muniTbody.innerHTML = html;
+  if (!cov) {
+    muniTbody.querySelectorAll("tr[data-clues]").forEach(tr => {
+      tr.onclick = () => {
+        const u = _allUnidades.find(x => x.clues === tr.dataset.clues);
+        if (u) renderUnitDetail(u.clues, u.unidad, minFecha, maxFecha);
+      };
     });
-    const unitDosisEquiv = unitFrascos * 10;
-
-    const row = document.createElement("tr");
-    row.className = "border-b border-slate-100 hover:bg-slate-50";
-    row.innerHTML = `
-      <td class="p-3 text-xs font-semibold text-slate-700">${u.unidad}</td>
-      <td class="p-3 text-xs text-slate-500 font-mono">${u.clues}</td>
-      <td class="p-3 text-center text-xs font-bold text-slate-600">${totalMeta.toLocaleString('es-MX')}</td>
-      <td class="p-3 text-center text-xs font-bold text-violet-950">${totalAcumulado.toLocaleString('es-MX')}</td>
-      <td class="p-3 text-center text-xs font-bold ${Number(pct) >= 95 ? 'text-emerald-600' : 'text-slate-600'}">${pct}%</td>
-      <td class="p-3 text-center text-xs font-bold text-slate-700">${unitFrascos}</td>
-      <td class="p-3 text-center text-xs font-bold text-slate-500">${unitDosisEquiv.toLocaleString('es-MX')}</td>
-    `;
-    row.onclick = () => {
-      renderUnitDetail(u.clues, u.unidad, minFecha, maxFecha);
-    };
-    muniTbody.appendChild(row);
-  });
+  }
 }
 
-function updateInfluenzaDashboardVisuals(muni, minFecha, maxFecha) {
+function updateInfluenzaDashboardVisuals(amb, minFecha, maxFecha) {
   const projCard = document.getElementById("influenzaProjectionCard");
   const topGrid = document.getElementById("influenzaTopGrid");
   const trendContainer = document.getElementById("influenzaTrendContainer");
-  
+  const cov = esCovid();
+
   if (topGrid) {
     topGrid.classList.remove("hidden");
     topGrid.style.setProperty("display", "grid", "important");
@@ -2947,48 +3064,34 @@ function updateInfluenzaDashboardVisuals(muni, minFecha, maxFecha) {
     trendContainer.classList.remove("hidden");
     trendContainer.style.setProperty("display", "block", "important");
   }
-  
+
   const campaignWeeks = generateCampaignWeeks();
   const weeksSorted = campaignWeeks.map(w => w.fecha).sort();
   const totalWeeks = weeksSorted.length;
-  
-  const municipalReportsInRange = _adminCapturasArray.filter(r => r.fecha >= minFecha && r.fecha <= maxFecha && r.municipio.toUpperCase() === muni.toUpperCase());
-  
-  let municipalMetaTotal = 0;
-  const muniUnits = _allUnidades.filter(u => u.municipio.toUpperCase() === muni.toUpperCase());
-  muniUnits.forEach(u => {
-    const mRecord = _adminMetasArray.find(r => r.clues === u.clues);
-    if (mRecord && mRecord.metas) {
-      Object.values(mRecord.metas).forEach(v => municipalMetaTotal += Number(v || 0));
-    }
-  });
+
+  const units = infUnidadesAmbito(amb);
+  const cluesSet = new Set(units.map(u => u.clues));
+  const capturas = infCapturasVista().filter(c => cluesSet.has(c.clues));
+  const reportsInRange = capturas.filter(r => r.fecha >= minFecha && r.fecha <= maxFecha);
+  const municipalMetaTotal = units.reduce((s, u) => s + infMetaUnidad(u), 0);
 
   let runningCumulative = 0;
   const trendLabels = [];
   const actualTrend = [];
   const expectedTrend = [];
-  
-  // Semanas transcurridas: las que ya abrieron hasta hoy (sin pasar de la «Semana fin» elegida). Antes se tomaba la
-  // semana fin del filtro (la última de la campaña), lo que diluía la velocidad entre semanas futuras.
+
+  // Semanas transcurridas: las que ya abrieron hasta hoy (sin pasar de la «Semana fin» elegida).
   const hoyStr = influenzaHoy();
   const semanasAbiertas = weeksSorted.filter(f => influenzaSemanaAbre(f) <= hoyStr).length;
   const currentWeekIndex = Math.max(1, Math.min(weeksSorted.indexOf(maxFecha) + 1 || totalWeeks, semanasAbiertas || 1));
 
   weeksSorted.forEach((wFecha, idx) => {
-    const weekNum = campaignWeeks.find(cw => cw.fecha === wFecha)?.semana || "N/A";
-    trendLabels.push(`Sem. ${weekNum}${campaignWeeks.find(cw => cw.fecha === wFecha)?.corte ? " (corte)" : ""}`);
-    
-    let weekDoses = 0;
-    _adminCapturasArray.forEach(c => {
-      if (c.municipio.toUpperCase() === muni.toUpperCase() && c.fecha === wFecha) {
-        Object.values(c.valores).forEach(v => weekDoses += Number(v || 0));
-      }
-    });
+    const cw = campaignWeeks.find(x => x.fecha === wFecha);
+    trendLabels.push(`Sem. ${cw?.semana || "N/A"}${cw?.corte ? " (corte)" : ""}`);
+    const weekDoses = capturas.filter(c => c.fecha === wFecha).reduce((s, c) => s + infDosisReporte(c), 0);
     runningCumulative += weekDoses;
-    actualTrend.push(runningCumulative);
-    
-    const expected = municipalMetaTotal > 0 ? Math.round((municipalMetaTotal / totalWeeks) * (idx + 1)) : 0;
-    expectedTrend.push(expected);
+    actualTrend.push(Math.round(runningCumulative * 10) / 10);
+    expectedTrend.push(municipalMetaTotal > 0 ? Math.round((municipalMetaTotal / totalWeeks) * (idx + 1)) : 0);
   });
 
   const accumulatedUpToMax = actualTrend[currentWeekIndex - 1] || 0;
@@ -2996,9 +3099,13 @@ function updateInfluenzaDashboardVisuals(muni, minFecha, maxFecha) {
   const semanasRestantes = Math.max(0, totalWeeks - currentWeekIndex);
   const projectedEndValue = Math.round(accumulatedUpToMax + velocity * semanasRestantes);
   const projectedPct = municipalMetaTotal > 0 ? Math.round((projectedEndValue / municipalMetaTotal) * 100) : 0;
-  
+
   let statusText, statusBadgeClass, statusDesc;
-  if (currentWeekIndex < 4) {
+  if (municipalMetaTotal <= 0) {
+    statusText = "⚪ Sin meta";
+    statusBadgeClass = "bg-slate-100 text-slate-700 border-slate-300";
+    statusDesc = "Este ámbito no tiene meta asignada, así que no se puede proyectar el cierre.";
+  } else if (currentWeekIndex < 4) {
     statusText = "⚪ Preliminar";
     statusBadgeClass = "bg-slate-100 text-slate-700 border-slate-300";
     statusDesc = `Solo hay ${currentWeekIndex === 1 ? "1 semana" : currentWeekIndex + " semanas"} de campaña: la proyección (${projectedPct}% de la meta) se estabiliza a partir de la 4.ª semana.`;
@@ -3020,8 +3127,8 @@ function updateInfluenzaDashboardVisuals(muni, minFecha, maxFecha) {
     projCard.innerHTML = `
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-violet-100 pb-3">
         <div>
-          <div class="text-[10px] font-black text-violet-600 uppercase tracking-widest">Predicción y Proyecciones de Cierre</div>
-          <h3 class="text-xs font-black text-slate-800 mt-1">Análisis de Cumplimiento Municipal: ${muni}</h3>
+          <div class="text-[10px] font-black text-violet-600 uppercase tracking-widest">Predicción y Proyecciones de Cierre · ${cov ? "COVID-19" : "Influenza"}</div>
+          <h3 class="text-xs font-black text-slate-800 mt-1">Análisis de Cumplimiento: ${amb.etiqueta}</h3>
         </div>
         <span class="px-3 py-1 rounded-full text-[9px] font-black border ${statusBadgeClass} transition-all">${statusText}</span>
       </div>
@@ -3033,8 +3140,8 @@ function updateInfluenzaDashboardVisuals(muni, minFecha, maxFecha) {
         </div>
         <div class="bg-white/60 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
           <div class="text-[9px] font-bold text-slate-450 uppercase leading-none">Meta Asignada</div>
-          <div class="text-base font-extrabold text-slate-700 mt-1.5 leading-none">${municipalMetaTotal.toLocaleString('es-MX')} <span class="text-xs font-bold text-slate-500">dosis</span></div>
-          <div class="text-[10px] text-slate-500 mt-1.5 leading-none">Avance: ${accumulatedUpToMax.toLocaleString('es-MX')} (${municipalMetaTotal > 0 ? Math.round(accumulatedUpToMax / municipalMetaTotal * 100) : 0}%)</div>
+          <div class="text-base font-extrabold text-slate-700 mt-1.5 leading-none">${Math.round(municipalMetaTotal).toLocaleString('es-MX')} <span class="text-xs font-bold text-slate-500">dosis</span></div>
+          <div class="text-[10px] text-slate-500 mt-1.5 leading-none">Avance: ${Math.round(accumulatedUpToMax).toLocaleString('es-MX')} (${municipalMetaTotal > 0 ? Math.round(accumulatedUpToMax / municipalMetaTotal * 100) : 0}%)</div>
         </div>
         <div class="bg-white/60 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
           <div class="text-[9px] font-bold text-slate-450 uppercase leading-none">Proyección de Cierre</div>
@@ -3048,209 +3155,105 @@ function updateInfluenzaDashboardVisuals(muni, minFecha, maxFecha) {
     `;
   }
 
-  // 2. Render Trend EChart
+  // Tendencia
   const ctxTrend = document.getElementById("adminInfluenzaTrendChart");
   if (ctxTrend && typeof echarts !== 'undefined') {
-    if (_adminInfluenzaTrendChart) {
-      _adminInfluenzaTrendChart.dispose();
-    }
+    if (_adminInfluenzaTrendChart) _adminInfluenzaTrendChart.dispose();
     _adminInfluenzaTrendChart = echarts.init(ctxTrend);
-    
+    const colorLinea = cov ? "#0e7490" : "#6d28d9";
+    const rgb = cov ? "14, 116, 144" : "109, 40, 217";
     const visibleActual = actualTrend.slice(0, currentWeekIndex);
-    
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'line' }
-      },
-      legend: {
-        data: ['Avance Real Acumulado', 'Meta Lineal Sugerida'],
-        bottom: 0,
-        textStyle: { fontSize: 9, fontWeight: 'bold' }
-      },
+    _adminInfluenzaTrendChart.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'line' } },
+      legend: { data: ['Avance Real Acumulado', 'Meta Lineal Sugerida'], bottom: 0, textStyle: { fontSize: 9, fontWeight: 'bold' } },
       grid: { left: '3%', right: '4%', top: '8%', bottom: '15%', containLabel: true },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: trendLabels,
-        axisLabel: { fontSize: 8 }
-      },
-      yAxis: {
-        type: 'value',
-        axisLabel: { fontSize: 8 }
-      },
+      xAxis: { type: 'category', boundaryGap: false, data: trendLabels, axisLabel: { fontSize: 8 } },
+      yAxis: { type: 'value', axisLabel: { fontSize: 8 } },
       series: [
         {
-          name: 'Avance Real Acumulado',
-          type: 'line',
-          smooth: true,
-          data: visibleActual,
-          itemStyle: { color: '#6d28d9' },
-          lineStyle: { width: 3 },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: 'rgba(109, 40, 217, 0.2)' },
-              { offset: 1, color: 'rgba(109, 40, 217, 0)' }
-            ])
-          }
+          name: 'Avance Real Acumulado', type: 'line', smooth: true, data: visibleActual,
+          itemStyle: { color: colorLinea }, lineStyle: { width: 3 },
+          areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: `rgba(${rgb}, 0.2)` }, { offset: 1, color: `rgba(${rgb}, 0)` }]) }
         },
-        {
-          name: 'Meta Lineal Sugerida',
-          type: 'line',
-          smooth: true,
-          data: expectedTrend,
-          itemStyle: { color: '#94a3b8' },
-          lineStyle: { type: 'dashed', width: 2 }
-        }
+        { name: 'Meta Lineal Sugerida', type: 'line', smooth: true, data: expectedTrend, itemStyle: { color: '#94a3b8' }, lineStyle: { type: 'dashed', width: 2 } }
       ]
-    };
-    _adminInfluenzaTrendChart.setOption(option);
+    });
   }
 
-  // 3. Render Group Distribution EChart
+  // Distribución por grupo
   const ctxBreakdown = document.getElementById("adminInfluenzaBreakdownChart");
   if (ctxBreakdown && typeof echarts !== 'undefined') {
-    if (_adminInfluenzaBreakdownChart) {
-      _adminInfluenzaBreakdownChart.dispose();
-    }
+    if (_adminInfluenzaBreakdownChart) _adminInfluenzaBreakdownChart.dispose();
     _adminInfluenzaBreakdownChart = echarts.init(ctxBreakdown);
 
-    let primDosis = 0;
-    let segDosis = 0;
-    let revac = 0;
-    let riskGroups = 0;
-    let comorbidities = 0;
-
-    municipalReportsInRange.forEach(r => {
-      INFLUENZA_RUBROS.forEach(rb => {
-        const val = Number(r.valores[rb.id] || 0);
-        if (rb.grupo === "Primera dosis") primDosis += val;
-        else if (rb.grupo === "Segunda dosis") segDosis += val;
-        else if (rb.grupo === "Revacunación") revac += val;
-        else if (rb.grupo === "Grupos de riesgo") riskGroups += val;
-        else comorbidities += val;
+    let pieData;
+    if (cov) {
+      // COVID-19: dosis tal como se aplican (las pediátricas de 0.25 mL se cuentan completas), por grupo
+      const porRubro = {};
+      reportsInRange.forEach(r => {
+        const t = window.CovidCaptura ? window.CovidCaptura.porRubro(r.valores) : {};
+        CovidFrascos.RUBROS.forEach(rb => { porRubro[rb.id] = (porRubro[rb.id] || 0) + Number(t[rb.id] || 0); });
       });
-    });
-
-    const pieData = [
-      { value: primDosis, name: 'Primera dosis' },
-      { value: segDosis, name: 'Segunda dosis' },
-      { value: revac, name: 'Revacunación' },
-      { value: riskGroups, name: 'Grupos de riesgo' },
-      { value: comorbidities, name: 'Comorbilidades' }
-    ].filter(item => item.value > 0);
+      const nombre = { c1: "Niñas y niños 6-59 m · 1ª", c2: "Niñas y niños 6-59 m · 2ª", c3: "5-59 años con riesgo", c4: "60 años y más", c5: "Embarazadas", c6: "Personal de salud" };
+      pieData = CovidFrascos.RUBROS.map(rb => ({ value: porRubro[rb.id] || 0, name: nombre[rb.id] })).filter(i => i.value > 0);
+    } else {
+      let primDosis = 0, segDosis = 0, revac = 0, riskGroups = 0, comorbidities = 0;
+      reportsInRange.forEach(r => {
+        INFLUENZA_RUBROS.forEach(rb => {
+          const val = Number(r.valores[rb.id] || 0);
+          if (rb.grupo === "Primera dosis") primDosis += val;
+          else if (rb.grupo === "Segunda dosis") segDosis += val;
+          else if (rb.grupo === "Revacunación") revac += val;
+          else if (rb.grupo === "Grupos de riesgo") riskGroups += val;
+          else comorbidities += val;
+        });
+      });
+      pieData = [
+        { value: primDosis, name: 'Primera dosis' }, { value: segDosis, name: 'Segunda dosis' }, { value: revac, name: 'Revacunación' },
+        { value: riskGroups, name: 'Grupos de riesgo' }, { value: comorbidities, name: 'Comorbilidades' }
+      ].filter(item => item.value > 0);
+    }
 
     const totalDoses = pieData.reduce((sum, item) => sum + item.value, 0);
     const hasData = totalDoses > 0;
+    const grad = (a, b) => new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: a }, { offset: 1, color: b }]);
+    const paleta = cov
+      ? [grad('#22d3ee', '#0891b2'), grad('#67e8f9', '#06b6d4'), grad('#8b5cf6', '#6d28d9'), grad('#f59e0b', '#d97706'), grad('#ec4899', '#db2777'), grad('#14b8a6', '#0d9488')]
+      : [grad('#8b5cf6', '#6d28d9'), grad('#14b8a6', '#0d9488'), grad('#ec4899', '#db2777'), grad('#f59e0b', '#d97706'), grad('#6366f1', '#4f46e5')];
 
-    const option = {
+    _adminInfluenzaBreakdownChart.setOption({
       tooltip: {
-        trigger: 'item',
-        formatter: '{b}: <b>{c}</b> ({d}%)',
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        borderColor: '#e2e8f0',
-        borderWidth: 1,
-        textStyle: { color: '#334155', fontSize: 11, fontWeight: 'bold' },
-        shadowColor: 'rgba(0,0,0,0.05)',
-        shadowBlur: 10
+        trigger: 'item', formatter: '{b}: <b>{c}</b> ({d}%)', backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        borderColor: '#e2e8f0', borderWidth: 1, textStyle: { color: '#334155', fontSize: 11, fontWeight: 'bold' },
+        shadowColor: 'rgba(0,0,0,0.05)', shadowBlur: 10
       },
-      legend: {
-        bottom: 0,
-        itemWidth: 12,
-        itemHeight: 12,
-        itemGap: 12,
-        textStyle: { fontSize: 9, fontWeight: 'bold', color: '#64748b' }
-      },
-      series: [
-        {
-          name: 'Población',
-          type: 'pie',
-          radius: ['52%', '72%'],
-          avoidLabelOverlap: false,
-          itemStyle: {
-            borderRadius: 8,
-            borderColor: '#fff',
-            borderWidth: 2,
-            shadowColor: 'rgba(0, 0, 0, 0.04)',
-            shadowBlur: 8
-          },
+      legend: { bottom: 0, itemWidth: 12, itemHeight: 12, itemGap: 12, textStyle: { fontSize: 9, fontWeight: 'bold', color: '#64748b' } },
+      series: [{
+        name: 'Población', type: 'pie', radius: ['52%', '72%'], avoidLabelOverlap: false,
+        itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2, shadowColor: 'rgba(0, 0, 0, 0.04)', shadowBlur: 8 },
+        label: {
+          show: hasData, position: 'center',
+          formatter: '{total|' + totalDoses.toLocaleString('es-MX') + '}\n{label|dosis}',
+          rich: {
+            total: { fontSize: 16, fontWeight: '900', color: '#1e1b4b', lineHeight: 22 },
+            label: { fontSize: 9, color: '#94a3b8', fontWeight: 'bold', textTransform: 'uppercase' }
+          }
+        },
+        emphasis: { itemStyle: { shadowBlur: 12, shadowOffsetX: 0, shadowColor: 'rgba(0, 0, 0, 0.08)' } },
+        labelLine: { show: false },
+        color: paleta,
+        data: hasData ? pieData : [{
+          value: 1, name: 'Sin datos', itemStyle: { color: '#fbcfe8', borderRadius: 8 },
           label: {
-            show: hasData,
-            position: 'center',
-            formatter: '{total|' + totalDoses.toLocaleString('es-MX') + '}\n{label|dosis}',
+            show: true, position: 'center', formatter: '{total|Sin Datos}\n{label|campaña}',
             rich: {
-              total: {
-                fontSize: 16,
-                fontWeight: '900',
-                color: '#1e1b4b',
-                lineHeight: 22
-              },
-              label: {
-                fontSize: 9,
-                color: '#94a3b8',
-                fontWeight: 'bold',
-                textTransform: 'uppercase'
-              }
+              total: { fontSize: 16, fontWeight: '900', color: '#db2777', lineHeight: 22 },
+              label: { fontSize: 9, color: '#f472b6', fontWeight: 'bold', textTransform: 'uppercase' }
             }
-          },
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 12,
-              shadowOffsetX: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.08)'
-            }
-          },
-          labelLine: { show: false },
-          color: [
-            new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#8b5cf6' },
-              { offset: 1, color: '#6d28d9' }
-            ]),
-            new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#14b8a6' },
-              { offset: 1, color: '#0d9488' }
-            ]),
-            new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#ec4899' },
-              { offset: 1, color: '#db2777' }
-            ]),
-            new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#f59e0b' },
-              { offset: 1, color: '#d97706' }
-            ]),
-            new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#6366f1' },
-              { offset: 1, color: '#4f46e5' }
-            ])
-          ],
-          data: hasData ? pieData : [{
-            value: 1,
-            name: 'Sin datos',
-            itemStyle: { color: '#fbcfe8', borderRadius: 8 },
-            label: {
-              show: true,
-              position: 'center',
-              formatter: '{total|Sin Datos}\n{label|campaña}',
-              rich: {
-                total: {
-                  fontSize: 16,
-                  fontWeight: '900',
-                  color: '#db2777',
-                  lineHeight: 22
-                },
-                label: {
-                  fontSize: 9,
-                  color: '#f472b6',
-                  fontWeight: 'bold',
-                  textTransform: 'uppercase'
-                }
-              }
-            }
-          }]
-        }
-      ]
-    };
-    _adminInfluenzaBreakdownChart.setOption(option);
+          }
+        }]
+      }]
+    });
   }
 
   if (!window._influenzaResizeListenerAttached) {
@@ -7709,6 +7712,13 @@ function aplicarVacunaCaptura() {
   if (sel) {
     sel.hidden = !tiene;
     sel.querySelectorAll("[data-vac]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.vac === _capturaVacuna)));
+    // Estado de cada vacuna en la semana elegida: así se ve de un vistazo cuál falta por reportar
+    const sem = document.getElementById("influenza_semana")?.value;
+    const guardado = { INFLUENZA: (_influenzaCapturasCache || []).some(r => r.fecha === sem), COVID: (_covidCapturasCache || []).some(r => r.fecha === sem) };
+    sel.querySelectorAll("[data-vac]").forEach(b => {
+      const est = b.querySelector(".vx-estado");
+      if (est) est.textContent = sem ? (guardado[b.dataset.vac] ? "✓ Guardado esta semana" : "Sin reportar esta semana") : "";
+    });
   }
   const inf = document.getElementById("influenzaCaptureGroupsContainer");
   const cov = document.getElementById("covidCapturaContainer");
@@ -7751,6 +7761,11 @@ function renderCovidCaptura() {
       guia: censiaGuiaExtension,
       hoy: influenzaHoy,
       fechaAplicacion: (f) => censiaFechaAplicacion(f, influenzaHoy()),
+      // Si esa semana había Influenza guardada, el paquete también la llevó: se marca para avisar si se vuelve a abrir CeNSIA
+      marcarInfluenza: (hoyTxt) => {
+        const f = document.getElementById("influenza_semana")?.value;
+        if ((_influenzaCapturasCache || []).some((r) => r.fecha === f)) localStorage.setItem(`sirevaq_censia_${USER?.clues}_${f}`, hoyTxt);
+      },
       enviarPaquete: (paquete) => {
         // Un solo paquete con COVID-19 + lo de Influenza guardado esa semana (si lo hay)
         const repInf = (_influenzaCapturasCache || []).find((r) => r.fecha === fecha) || null;

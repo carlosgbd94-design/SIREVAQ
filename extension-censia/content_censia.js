@@ -19,7 +19,7 @@
     '@media (prefers-reduced-motion:reduce){.b{animation:none}}' +
     '.i{flex:none;width:24px;height:24px;color:#15803d;margin-top:1px}.mal .i{color:#b45309}.i svg{width:24px;height:24px;display:block}' +
     '.c{flex:1;min-width:0}.h{font:600 16px/1.35 system-ui,Segoe UI,sans-serif;margin:0 0 2px}' +
-    '.m{font-weight:inherit;color:#43474e}.h .m,.p .m{font-weight:700}.p .q{height:.78em;vertical-align:-.01em;margin-left:.05em}.q{height:.8em;width:auto;vertical-align:-.03em;margin-left:0}' +
+    '.m{font-weight:inherit;color:#43474e}.h .m,.p .m{font-weight:700}.p .q{height:.7em;vertical-align:-.01em;margin-left:.05em}.q{height:.8em;width:auto;vertical-align:-.03em;margin-left:0}' +
     '.r{margin:0 0 10px;color:#64748b;font-size:13px}' +
     '.p{margin:0;color:#334155}.p strong{color:#0f172a;font-weight:700}' +
     '.p b{display:inline-block;background:#15803d;color:#fff;font-weight:700;font-size:13px;letter-spacing:.04em;text-transform:uppercase;border-radius:6px;padding:0 8px;line-height:1.6}' +
@@ -89,15 +89,23 @@
   function rellenar(d) {
     var f = document.querySelector("input[type=date]");
     if (f) { f.value = d.fecha; ev(f, "input"); ev(f, "change"); }
-    var n = 0, total = 0;
+    var n = 0, total = 0, por = { inf: 0, mod: 0, pfz: 0 };
     Object.keys(d.valores).forEach(function (k) {
       var el = document.getElementById(k);
       if (!el || el.disabled) return;
       el.value = d.valores[k]; ev(el, "input"); ev(el, "change");
       n++; total += d.valores[k];
+      // COVID-19: el sufijo del id marca la vacuna (CM = Moderna, CP = Pfizer; 2ª dosis termina en 2); lo demás es Influenza
+      if (/CM\d?$/.test(k)) por.mod += d.valores[k]; else if (/CP\d?$/.test(k)) por.pfz += d.valores[k]; else por.inf += d.valores[k];
     });
     var fecha = esc(d.fecha.split("-").reverse().join("/"));
-    var resumen = n + (n === 1 ? " casilla" : " casillas") + " · " + total.toLocaleString("es-MX") + " dosis · " + fecha;
+    var fm = function (x) { return x.toLocaleString("es-MX"); };
+    var partes = [];
+    if (por.inf > 0) partes.push("<strong>" + fm(por.inf) + "</strong> de Influenza");
+    if (por.mod > 0) partes.push("<strong>" + fm(por.mod) + "</strong> de COVID-19 Moderna");
+    if (por.pfz > 0) partes.push("<strong>" + fm(por.pfz) + "</strong> de COVID-19 Pfizer");
+    var resumen = "Se copiaron " + n + (n === 1 ? " casilla" : " casillas") + " · " + fm(total) + " dosis · " + fecha +
+      (partes.length > 1 ? "<br>" + partes.join(" · ") : "");
     var guardar = "<strong>Verifica y revisa las dosis:</strong> compara cada cifra con tu reporte y confirma que todo esté bien antes de pulsar <b>Guardar</b>. " + MARCA + " nunca guarda por ti.";
     aviso(MARCA + " rellenó tu reporte", resumen, "Eligiendo tu unidad…", "ok");
     elegirUnidad(d.clues).then(function (ok) {

@@ -15948,7 +15948,8 @@ html.dark .fr-unit, html.dark .bio-unit { background: #2a1d05; color: #fcd34d; b
 /* Encabezados con etiqueta de unidad: los títulos quedan en la misma línea y la etiqueta cuelga debajo */
 .bio-card-sticky-header { align-items: start; }
 .bio-card-sticky-header > div { line-height: 20px; }
-#srCaptureTable thead th .fr-unit { display: inline-block; margin: 0 0 0 6px; }
+#srCaptureTable thead th { vertical-align: middle; }
+#srCaptureTable thead th .fr-unit { display: inline-block; margin: 4px 2px 0 0; }
 
 /* ===== Campos de fecha de toda la página: texto centrado entre la orilla izquierda y el ícono de calendario (derecha) =====
    La regla global les dejaba 52 px a la izquierda (ícono izquierdo que ya no existe) y la fecha quedaba pegada al ícono.
@@ -15960,3 +15961,37 @@ html body input[type="date"]:not(.evd-date)::-webkit-datetime-edit { display: fl
 html body .modern-input-group input[type="date"]:not(.evd-date) { text-align: left; }
 html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-date-and-time-value { text-align: left; }
 html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetime-edit { display: inline-block; margin-right: 0; padding: 1px 0 0; }
+
+/* Selector de vacuna de la temporada invernal (captura de UNIDAD, resumen de la unidad y Live View).
+   Cada vacuna conserva su color: Influenza terracota, COVID-19 cian. Plano, sin relieve. */
+.vx-seg { --vx-inf:#b4452b; --vx-inf-bg:#fdf2ee; --vx-inf-fg:#7a2a16; --vx-inf-bd:#f1bdad; --vx-cov:#0e7490; --vx-cov-bg:#ecfeff; --vx-cov-fg:#0b5566; --vx-cov-bd:#a5e3ee; }
+.vx-seg.cvc-seg { display:flex; flex-direction:column; gap:10px; padding:14px 16px; border:1px solid #cbd5e1; border-radius:18px; background:#ffffff; align-self:stretch; }
+.vx-seg.cvc-seg[hidden], .vx-seg[hidden] { display:none; }
+.vx-seg--vivo { display:inline-flex; align-items:center; }
+.vx-lead { display:flex; align-items:center; gap:8px; margin:0; font-size:13px; font-weight:600; color:#334155; line-height:1.4; }
+.vx-lead .material-symbols-rounded { font-size:20px; color:#0e7490; flex:none; }
+.vx-opciones { display:flex; flex-wrap:wrap; gap:10px; }
+.vx-btn { display:inline-flex; align-items:center; gap:10px; min-height:48px; padding:6px 18px 6px 12px; border:2px solid var(--vx-bd); border-radius:14px; background:var(--vx-bg); color:var(--vx-fg); font:inherit; font-weight:800; font-size:14px; cursor:pointer; text-align:left; transition:background-color .16s ease, color .16s ease, border-color .16s ease; }
+.vx-seg--vivo .vx-btn { min-height:44px; }
+.vx-btn[data-vac="INFLUENZA"] { --vx:var(--vx-inf); --vx-bg:var(--vx-inf-bg); --vx-fg:var(--vx-inf-fg); --vx-bd:var(--vx-inf-bd); }
+.vx-btn[data-vac="COVID"] { --vx:var(--vx-cov); --vx-bg:var(--vx-cov-bg); --vx-fg:var(--vx-cov-fg); --vx-bd:var(--vx-cov-bd); }
+.vx-btn .vx-ico { font-size:24px; width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; background:#ffffff; color:var(--vx); flex:none; }
+.vx-btn .vx-txt { display:flex; flex-direction:column; line-height:1.2; }
+.vx-btn .vx-txt b { font-weight:800; }
+.vx-btn .vx-estado { font-size:11px; font-weight:700; opacity:.85; }
+.vx-btn .vx-estado:empty { display:none; }
+.vx-btn[aria-pressed="true"] { background:var(--vx); border-color:var(--vx); color:#ffffff; }
+.vx-btn[aria-pressed="true"] .vx-ico { background:rgba(255,255,255,.2); color:#ffffff; }
+.vx-btn[aria-pressed="true"] .vx-estado { opacity:1; }
+.vx-btn:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+.vx-btn.cvc-seg-btn { min-height:48px; padding:6px 18px 6px 12px; border-radius:14px; }
+/* El formulario de captura toma el color de la vacuna elegida */
+#covidCapturaContainer:not([hidden]) { border-left:5px solid #0e7490; padding-left:14px; border-radius:6px; }
+#influenzaCaptureGroupsContainer:not([hidden]) { border-left:5px solid #b4452b; padding-left:14px; border-radius:6px; }
+@media (max-width: 520px) { .vx-opciones { flex-direction:column; } .vx-btn { width:100%; } }
+
+/* Botón «Toda la jurisdicción» del Concentrado de Avances (Admin y Jurisdicción). */
+.vx-alcance { display:inline-flex; align-items:center; gap:8px; min-height:40px; padding:0 16px; border:1px solid #cbd5e1; border-radius:12px; background:#ffffff; color:#334155; font:inherit; font-weight:800; font-size:13px; cursor:pointer; transition:background-color .16s ease, color .16s ease, border-color .16s ease; }
+.vx-alcance .material-symbols-rounded { font-size:20px; }
+.vx-alcance[aria-pressed="true"] { background:#4c1d95; border-color:#4c1d95; color:#ffffff; }
+.vx-alcance:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }

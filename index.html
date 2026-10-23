@@ -1436,7 +1436,7 @@
                       <th class="p-4 py-3 text-center">Caducidad</th>
                       <th class="p-4 py-3 text-center">Recepción</th>
                       <th class="p-4 py-3 text-center">Origen</th>
-                      <th class="p-4 py-3 text-center">Cantidad<span class="fr-unit">frascos</span>
+                      <th class="p-4 py-3 text-center">Cantidad<br><span class="fr-unit">frascos</span>
                         <span class="material-symbols-rounded" style="font-size:14px; color:#d97706; cursor:help; vertical-align:middle; margin-left:2px;" title="Si capturas un decimal en TD, DPT, Influenza o Hepatitis B, te pediremos la fecha de apertura del frasco (vigencia de 28 días una vez abierto). BCG y SR quedan excluidas por el manual." aria-label="Información sobre decimales y fecha de apertura" role="img">info</span>
                       </th>
                       <th class="p-4 py-3 text-center">Acción</th>
@@ -1780,9 +1780,18 @@
               <!-- Formulario de Captura -->
               <div class="flex-1 flex flex-col gap-6 w-full">
                 <!-- Vacuna que se reporta (solo si la unidad tiene meta de COVID-19); el guardado es el mismo botón azul -->
-                <div id="capVacunaSel" class="cvc-seg" role="group" aria-label="Vacuna que vas a reportar" hidden>
-                  <button type="button" class="cvc-seg-btn" data-vac="INFLUENZA" aria-pressed="true">Influenza</button>
-                  <button type="button" class="cvc-seg-btn" data-vac="COVID" aria-pressed="false">COVID-19</button>
+                <div id="capVacunaSel" class="cvc-seg vx-seg vx-seg--captura" role="group" aria-label="Vacuna que vas a reportar" hidden>
+                  <p class="vx-lead"><span class="material-symbols-rounded" aria-hidden="true">ac_unit</span>Tu unidad reporta <b>dos vacunas</b> en la temporada invernal. Elige cuál vas a capturar esta semana.</p>
+                  <div class="vx-opciones">
+                    <button type="button" class="cvc-seg-btn vx-btn" data-vac="INFLUENZA" aria-pressed="true">
+                      <span class="material-symbols-rounded vx-ico" aria-hidden="true">vaccines</span>
+                      <span class="vx-txt"><b>Influenza</b><small class="vx-estado"></small></span>
+                    </button>
+                    <button type="button" class="cvc-seg-btn vx-btn" data-vac="COVID" aria-pressed="false">
+                      <span class="material-symbols-rounded vx-ico" aria-hidden="true">coronavirus</span>
+                      <span class="vx-txt"><b>COVID-19</b><small class="vx-estado"></small></span>
+                    </button>
+                  </div>
                 </div>
                 <!-- Contenedor Dinámico Agrupado de Captura -->
                 <div id="influenzaCaptureGroupsContainer" class="flex flex-col gap-6 rounded-2xl relative z-0">
@@ -1813,9 +1822,11 @@
                 </div>
               </section>
 
-              <div id="resumenVacunaSel" class="cvc-seg" role="group" aria-label="Vacuna del resumen" hidden>
-                <button type="button" class="cvc-seg-btn" data-vac="INFLUENZA" aria-pressed="true">Influenza</button>
-                <button type="button" class="cvc-seg-btn" data-vac="COVID" aria-pressed="false">COVID-19</button>
+              <div id="resumenVacunaSel" class="cvc-seg vx-seg" role="group" aria-label="Vacuna del resumen" hidden>
+                <div class="vx-opciones">
+                  <button type="button" class="cvc-seg-btn vx-btn" data-vac="INFLUENZA" aria-pressed="true"><span class="material-symbols-rounded vx-ico" aria-hidden="true">vaccines</span><span class="vx-txt"><b>Influenza</b></span></button>
+                  <button type="button" class="cvc-seg-btn vx-btn" data-vac="COVID" aria-pressed="false"><span class="material-symbols-rounded vx-ico" aria-hidden="true">coronavirus</span><span class="vx-txt"><b>COVID-19</b></span></button>
+                </div>
               </div>
 
               <section class="cp-card" aria-labelledby="ipResS1">
@@ -2488,6 +2499,13 @@
               <option value="CONS">Consumibles</option>
               <option value="BIO">Pedido de biológico</option>
             </select>
+            <!-- Vacuna del reporte de temporada invernal (solo con ese tipo elegido): Influenza | COVID-19 -->
+            <div id="summaryVacuna" class="vx-seg vx-seg--vivo" role="group" aria-label="Vacuna del reporte de temporada invernal" hidden>
+              <div class="vx-opciones">
+                <button type="button" class="vx-btn" data-vac="INFLUENZA" aria-pressed="true"><span class="material-symbols-rounded vx-ico" aria-hidden="true">vaccines</span><span class="vx-txt"><b>Influenza</b></span></button>
+                <button type="button" class="vx-btn" data-vac="COVID" aria-pressed="false"><span class="material-symbols-rounded vx-ico" aria-hidden="true">coronavirus</span><span class="vx-txt"><b>COVID-19</b></span></button>
+              </div>
+            </div>
             <!-- Fecha -->
             <input type="date" id="summaryFecha" class="src-pill-input" style="width:165px !important;" aria-label="Fecha del resumen">
             <!-- Barra de Avance -->
@@ -2963,6 +2981,12 @@
                 class="w-full bg-surface border border-slate-300 rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 outline-none">
                 <!-- Generado dinámicamente -->
               </select>
+            </div>
+            <div id="avancesAmbitoJuris" class="min-w-[170px]" style="display:none">
+              <span class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Alcance</span>
+              <button type="button" class="vx-alcance" aria-pressed="false" title="Suma los 4 municipios y los hospitales">
+                <span class="material-symbols-rounded" aria-hidden="true">public</span>Toda la jurisdicción
+              </button>
             </div>
             <div class="flex-1 min-w-[120px]">
               <label for="adminInfluenzaSemanaInicio"
