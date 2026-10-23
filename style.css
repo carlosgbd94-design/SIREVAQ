@@ -15922,3 +15922,10 @@ html body .modern-input-group input[type="date"]:not(.evd-date) {
 .inf-cap-tabla .inf-col-avance .inf-disp { display: inline-flex; align-items: center; justify-content: center; font-size: 12px; white-space: nowrap; }
 .inf-cap-tabla .inf-col-avance .inf-disp:empty { display: none; }
 .inf-cap-tabla .inf-col-avance .inf-barra { height: 5px; max-width: 170px; margin: 0 auto; }
+
+/* Cabecera fija: la fila ocupa todo el ancho pero NO debe interceptar clics; solo sus bloques (marca, acciones, perfil).
+   Si no, tapa la parte alta de las botoneras que pasan por debajo al hacer scroll. */
+#mainHeader .header-row { pointer-events: none; }
+#mainHeader .header-row > * { pointer-events: auto; }
+#mainHeader #userControlsGroup, #mainHeader #headerActions { pointer-events: none; }
+#mainHeader #userControlsGroup > *, #mainHeader #headerActions > * { pointer-events: auto; }
