@@ -33,7 +33,7 @@
     if (error) throw error;
     UNIDADES = (data || []).filter(A.enAlcance).sort((a, b) =>
       String(a.municipio || "").localeCompare(String(b.municipio || ""), "es") ||
-      String(a.unidad || "").localeCompare(String(b.unidad || ""), "es"));
+      String(a.clues || "").trim().localeCompare(String(b.clues || "").trim()));
     return UNIDADES;
   }
 

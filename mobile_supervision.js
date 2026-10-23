@@ -157,7 +157,7 @@
     if (error) throw error;
     S.unidades = (data || []).filter(enAlcance).sort((a, b) =>
       String(a.municipio || "").localeCompare(String(b.municipio || ""), "es") ||
-      String(a.unidad || "").localeCompare(String(b.unidad || ""), "es"));
+      String(a.clues || "").trim().localeCompare(String(b.clues || "").trim()));
     // Campaña de Influenza vigente (si no hay, el resumen no ofrece ese tipo)
     S.campInf = null;
     try {

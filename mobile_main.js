@@ -2530,7 +2530,7 @@
         filtered.sort((a, b) => {
             const muniComp = String(a.municipio || "").localeCompare(String(b.municipio || ""));
             if (muniComp !== 0) return muniComp;
-            return String(a.unidad || "").localeCompare(String(b.unidad || ""));
+            return String(a.clues || "").localeCompare(String(b.clues || ""));
         });
 
         let html = "";
