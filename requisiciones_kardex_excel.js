@@ -281,8 +281,8 @@
         // SALDO ANTERIOR (lo que no salió de cámara fría en la tarjeta anterior; 0 en la primera).
         estiloRenglon(ws, r, COLOR_SALDO, false);
         celda(ws, `B${r}`, 'SALDO ANTERIOR', { numFmt: undefined });
-        ws.getCell(`L${r}`).value = tarjeta.saldoAnterior;
-        ws.getCell(`M${r}`).value = { formula: `L${r}*${hoja.dpf}`, result: tarjeta.saldoAnterior * hoja.dpf };
+        ws.getCell(`L${r}`).value = tarjeta.saldoAnterior || null; // saldo inicial en 0: celda vacía
+        ws.getCell(`M${r}`).value = tarjeta.saldoAnterior ? { formula: `L${r}*${hoja.dpf}`, result: tarjeta.saldoAnterior * hoja.dpf } : null;
         let filaPrev = r, saldo = tarjeta.saldoAnterior;
         r++;
 

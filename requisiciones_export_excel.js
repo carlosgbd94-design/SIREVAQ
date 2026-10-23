@@ -213,7 +213,7 @@
 
       registros.forEach((r, i) => {
         const fila = base + i;
-        if (r.cantidad !== undefined && r.cantidad !== null) {
+        if (Number(r.cantidad) > 0) {
           // El formato real no distingue autorizado/surtido en la práctica
           // -- se repite el mismo número en ambas columnas.
           escribir(ws, `G${fila}`, r.cantidad);

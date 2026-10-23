@@ -17458,9 +17458,9 @@ async function generateProfessionalXLSX(tipo, data, fIni, fFin, selectedMunicipi
     ws.getCell(headerRowIdx, colIndex).value = `${clues} - ${mapUnidades[clues]}`;
     ws.getCell(headerRowIdx, colIndex).fill = headerFill;
     ws.getCell(headerRowIdx, colIndex).font = fontWhite;
-    ws.getCell(headerRowIdx, colIndex).alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    ws.getCell(headerRowIdx, colIndex).alignment = { vertical: 'middle', horizontal: 'center', wrapText: true, ...(tipo === "BIO" ? { textRotation: 90 } : {}) };
     ws.getCell(headerRowIdx, colIndex).border = borderAll;
-    ws.getColumn(colIndex).width = 20;
+    ws.getColumn(colIndex).width = tipo === "BIO" ? 6.57 : 20;
 
     if (tipo === "BIO") {
       ws.getCell(4, colIndex).value = "PEDIDO";
@@ -17479,7 +17479,7 @@ async function generateProfessionalXLSX(tipo, data, fIni, fFin, selectedMunicipi
   colIndex++;
 
   ws.getColumn(1).width = 30;
-  headerRow.height = 40;
+  headerRow.height = tipo === "BIO" ? 140.25 : 40;
 
   let rowCursor = tipo === "BIO" ? 5 : 4;
 
@@ -17517,12 +17517,12 @@ async function generateProfessionalXLSX(tipo, data, fIni, fFin, selectedMunicipi
       }
 
       rowTotal += val;
-      // En el pedido de biológico, quien no pidió queda con la celda vacía (sin el 0).
-      ws.getCell(rowCursor, cIdx).value = (tipo === "BIO" && !val) ? null : Number(val);
+      // Sin dato (0) la celda queda vacía, en pedido, consumibles y existencia.
+      ws.getCell(rowCursor, cIdx).value = val ? Number(val) : null;
       ws.getCell(rowCursor, cIdx).fill = { type: 'pattern', pattern: 'solid', fgColor: bgColor };
       ws.getCell(rowCursor, cIdx).border = borderAll;
       ws.getCell(rowCursor, cIdx).alignment = { horizontal: 'center', vertical: 'middle' };
-      ws.getCell(rowCursor, cIdx).font = { name: 'Arial Nova', size: 11, bold: true };
+      ws.getCell(rowCursor, cIdx).font = { name: 'Arial Nova', size: tipo === "BIO" ? 16 : 11, bold: true };
       cIdx++;
     });
 
@@ -17533,8 +17533,9 @@ async function generateProfessionalXLSX(tipo, data, fIni, fFin, selectedMunicipi
       : Number(rowTotal);
     ws.getCell(rowCursor, cIdx).border = borderAll;
     ws.getCell(rowCursor, cIdx).alignment = { horizontal: 'center', vertical: 'middle' };
-    ws.getCell(rowCursor, cIdx).font = { name: 'Arial Nova', size: 11, bold: true };
+    ws.getCell(rowCursor, cIdx).font = { name: 'Arial Nova', size: tipo === "BIO" ? 16 : 11, bold: true };
     ws.getCell(rowCursor, cIdx).fill = { type: 'pattern', pattern: 'solid', fgColor: bgColor };
+    if (tipo === "BIO") ws.getRow(rowCursor).height = 20.25;
     rowCursor++;
   });
 
@@ -17553,6 +17554,12 @@ async function generateProfessionalXLSX(tipo, data, fIni, fFin, selectedMunicipi
     });
     column.width = Math.max(14, Math.min(maxLen + 4, 50));
   });
+  if (tipo === "BIO") {
+    // Pedido de biológico: columnas angostas (nombre de la unidad en vertical) y TOTAL un poco más ancha.
+    for (let c = 2; c <= 1 + arrClues.length; c++) ws.getColumn(c).width = 6.57;
+    ws.getColumn(2 + arrClues.length).width = 12.57;
+    ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1, horizontalCentered: true };
+  }
 
   const buffer = await wb.xlsx.writeBuffer();
   const todayStr = new Date().toISOString().split('T')[0];

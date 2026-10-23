@@ -231,7 +231,8 @@
         estiloDato(c1, { texto: true, relleno: COLOR.prioritario });
         cols.forEach((c, i) => {
           const cell = g.getCell(fila, i + 2);
-          cell.value = { formula: `${letra(i + 2)}${filaDe[u.clues]}`, result: u.valores[c.clave] || 0 };
+          const ref = `${letra(i + 2)}${filaDe[u.clues]}`;
+          cell.value = { formula: `IF(${ref}=0,"",${ref})`, result: u.valores[c.clave] || '' };
           estiloDato(cell, { relleno: COLOR.prioritario });
         });
         fila++;

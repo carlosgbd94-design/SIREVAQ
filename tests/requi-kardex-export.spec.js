@@ -79,7 +79,7 @@ test('POR UNIDAD: entrada con folio/fecha/lote/caducidad, salidas por unidad y s
   const rows = renglones(wb.getWorksheet('BCG'));
   // Septiembre
   const sep = rows.slice(0, rows.findIndex((r, i) => i > 0 && r.b === 'SALDO ANTERIOR'));
-  expect(sep[0]).toMatchObject({ b: 'SALDO ANTERIOR', l: 0 });
+  expect(sep[0]).toMatchObject({ b: 'SALDO ANTERIOR', l: null });
   expect(sep[1]).toMatchObject({ b: 'CAMARA FRIA', fecha: '2026-09-04', lote: 'BCG1', f: 100, dosisE: 1000, destino: 'JS-1', l: 100, m: 1000, obs: 'VC/0033/2026' });
   const salidas = sep.slice(2);
   expect(salidas.map((s) => [s.destino, s.obs, s.j, s.k, s.l])).toEqual([
