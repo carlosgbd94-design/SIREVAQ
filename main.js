@@ -23127,7 +23127,7 @@ function renderLiveCharts(tipo, leftData, rightData, vacuna) {
             return `<li>
               <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; font-size:13px; color:#0f172a;">
                 <span style="font-weight:700;">${esc(k)}</span>
-                <span style="font-weight:800; font-variant-numeric:tabular-nums;">${num(v)} <span style="font-weight:600; color:#475569;">· ${pct}%</span></span>
+                <span style="font-weight:800; font-variant-numeric:tabular-nums;">${num(v)} <span style="font-weight:600; color:#475569;">dosis · ${pct}% del total</span></span>
               </div>
               <div style="height:8px; border-radius:4px; background:${pc.fondo}; border:1px solid ${pc.borde}; margin-top:6px; overflow:hidden;">
                 <div style="height:100%; width:${Math.max(3, pct)}%; background:${color}; border-radius:4px;"></div>
@@ -23139,8 +23139,8 @@ function renderLiveCharts(tipo, leftData, rightData, vacuna) {
             <h3 style="margin:0 0 ${nota ? 4 : 14}px; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:${pc.titulo};">${kicker}</h3>${nota ? `<p style="margin:0 0 14px; font-size:12px; color:#475569;">${nota}</p>` : ""}${inner}</section>`;
         infEl.innerHTML = `<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px;">
           ${card("Total de la semana", `<div style="font-size:44px; line-height:1; font-weight:900; color:${pc.cifra}; font-variant-numeric:tabular-nums;">${num(total)}</div><p style="margin:8px 0 0; font-size:13px; color:#475569;">dosis de ${esCov ? "COVID-19" : "influenza"} aplicadas</p>`)}
-          ${card(esCov ? "Por marca" : "Por población", barras(leftData, pc.barra1), "% de las dosis de esta semana (no es avance de meta)")}
-          ${card(esCov ? "Por grupo" : "Por esquema", barras(rightData, pc.barra2), "% de las dosis de esta semana (no es avance de meta)")}
+          ${card(esCov ? "Por marca" : "Por población", barras(leftData, pc.barra1), `De las ${num(total)} dosis aplicadas esta semana, cuántas ${esCov ? "fueron de cada marca" : "fueron para cada población"}. Cada barra es su parte del total.`)}
+          ${card(esCov ? "Por grupo" : "Por esquema", barras(rightData, pc.barra2), `De las ${num(total)} dosis aplicadas esta semana, cuántas ${esCov ? "fueron para cada grupo" : "fueron de cada esquema o grupo de riesgo"}. No es el avance contra la meta (eso está arriba).`)}
         </div>`;
         infEl.style.display = "block";
       } else {
