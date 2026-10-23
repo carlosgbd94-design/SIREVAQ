@@ -17517,7 +17517,8 @@ async function generateProfessionalXLSX(tipo, data, fIni, fFin, selectedMunicipi
       }
 
       rowTotal += val;
-      ws.getCell(rowCursor, cIdx).value = Number(val);
+      // En el pedido de biológico, quien no pidió queda con la celda vacía (sin el 0).
+      ws.getCell(rowCursor, cIdx).value = (tipo === "BIO" && !val) ? null : Number(val);
       ws.getCell(rowCursor, cIdx).fill = { type: 'pattern', pattern: 'solid', fgColor: bgColor };
       ws.getCell(rowCursor, cIdx).border = borderAll;
       ws.getCell(rowCursor, cIdx).alignment = { horizontal: 'center', vertical: 'middle' };
