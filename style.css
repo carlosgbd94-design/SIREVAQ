@@ -15929,3 +15929,34 @@ html body .modern-input-group input[type="date"]:not(.evd-date) {
 #mainHeader .header-row > * { pointer-events: auto; }
 #mainHeader #userControlsGroup, #mainHeader #headerActions { pointer-events: none; }
 #mainHeader #userControlsGroup > *, #mainHeader #headerActions > * { pointer-events: auto; }
+
+/* Unidad de captura: FRASCOS (no dosis). Etiqueta ámbar visible en encabezados, filas y tarjetas móviles. */
+.fr-unit {
+  display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; vertical-align: middle;
+  background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
+  font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; line-height: 1.5;
+}
+th .fr-unit, .bio-card-sticky-header .fr-unit { display: block; margin: 4px auto 0; width: fit-content; }
+.fr-unit--dosis { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+.bio-unit {
+  display: inline-block; padding: 0 8px; border-radius: 999px; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
+  font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; line-height: 1.6;
+}
+.fr-nota { margin: 0 16px 12px; }
+html.dark .fr-unit, html.dark .bio-unit { background: #2a1d05; color: #fcd34d; border-color: #78350f; }
+
+/* Encabezados con etiqueta de unidad: los títulos quedan en la misma línea y la etiqueta cuelga debajo */
+.bio-card-sticky-header { align-items: start; }
+.bio-card-sticky-header > div { line-height: 20px; }
+#srCaptureTable thead th .fr-unit { display: inline-block; margin: 0 0 0 6px; }
+
+/* ===== Campos de fecha de toda la página: texto centrado entre la orilla izquierda y el ícono de calendario (derecha) =====
+   La regla global les dejaba 52 px a la izquierda (ícono izquierdo que ya no existe) y la fecha quedaba pegada al ícono.
+   Chrome no centra los campos internos con text-align del input, por eso se centra el contenedor interno.
+   Los de .modern-input-group traen su propio ícono a la izquierda y no se tocan. .evd-date conserva el ícono nativo. */
+html body input[type="date"]:not(.evd-date) { padding: 0 38px 0 6px !important; text-align: center; }
+html body input[type="date"]:not(.evd-date)::-webkit-date-and-time-value { text-align: center; }
+html body input[type="date"]:not(.evd-date)::-webkit-datetime-edit { display: flex; justify-content: center; padding: 0; margin-right: 22px; }
+html body .modern-input-group input[type="date"]:not(.evd-date) { text-align: left; }
+html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-date-and-time-value { text-align: left; }
+html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetime-edit { display: inline-block; margin-right: 0; padding: 1px 0 0; }

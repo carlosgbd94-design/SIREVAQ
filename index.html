@@ -1422,6 +1422,10 @@
                 <h3 class="cp-card-title" id="cpSrS2">Lotes en existencia</h3>
                 <span class="cp-card-desc">Una fila por cada lote y origen. Usa el botón de abajo para agregar más.</span>
               </div>
+              <div class="cp-note is-warn fr-nota" role="note">
+                <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
+                <div><b>La cantidad se captura en FRASCOS, no en dosis.</b> Cuenta los frascos que tienes físicamente (un frasco cerrado = 1). Si un frasco está abierto, anota la fracción que queda (por ejemplo 0.5).</div>
+              </div>
               <div class="cp-tablewrap">
                 <table class="w-full border-collapse text-left text-[13px] whitespace-nowrap" id="srCaptureTable">
                   <thead>
@@ -1432,8 +1436,7 @@
                       <th class="p-4 py-3 text-center">Caducidad</th>
                       <th class="p-4 py-3 text-center">Recepción</th>
                       <th class="p-4 py-3 text-center">Origen</th>
-                      <th class="p-4 py-3 text-center">Cantidad<br><span
-                          class="text-[10px] lowercase font-normal opacity-85">(frascos)</span>
+                      <th class="p-4 py-3 text-center">Cantidad<span class="fr-unit">frascos</span>
                         <span class="material-symbols-rounded" style="font-size:14px; color:#d97706; cursor:help; vertical-align:middle; margin-left:2px;" title="Si capturas un decimal en TD, DPT, Influenza o Hepatitis B, te pediremos la fecha de apertura del frasco (vigencia de 28 días una vez abierto). BCG y SR quedan excluidas por el manual." aria-label="Información sobre decimales y fecha de apertura" role="img">info</span>
                       </th>
                       <th class="p-4 py-3 text-center">Acción</th>
@@ -1655,13 +1658,17 @@
                 <h3 class="cp-card-title" id="cpBioS2">Existencia y pedido por biológico</h3>
                 <span class="cp-card-desc">Escribe cuántos frascos tienes y cuántos pides. Los avisos aparecen al lado de cada biológico.</span>
               </div>
+              <div class="cp-note is-warn fr-nota" role="note">
+                <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
+                <div><b>Existencia y pedido se capturan en FRASCOS, no en dosis.</b> Cuenta los frascos que tienes y los que necesitas (no multipliques por las dosis que trae cada uno). Solo el Mín / Máx se muestra en dosis.</div>
+              </div>
               <div class="cp-scroll overflow-y-auto">
                 <div class="bio-card-sticky-header mb-3">
                   <div class="pl-2">Biológico</div>
-                  <div class="text-center">Existencia</div>
-                  <div class="text-center">Pedido</div>
+                  <div class="text-center">Existencia<span class="fr-unit">frascos</span></div>
+                  <div class="text-center">Pedido<span class="fr-unit">frascos</span></div>
                   <div class="text-center">Promedio</div>
-                  <div class="text-center">Mín / Máx</div>
+                  <div class="text-center">Mín / Máx<span class="fr-unit fr-unit--dosis">dosis</span></div>
                   <div class="text-center pr-2">Validación lógica</div>
                 </div>
 

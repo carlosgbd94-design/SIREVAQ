@@ -10853,8 +10853,7 @@ window.addSRRow = function (data = null) {
       <td class="sr-cad-cell p-4 py-3 font-black text-[13px] text-slate-900/60" data-label="Caducidad">—</td>
       <td class="p-4 py-3" data-label="Recepción">
         <div class="relative group w-full">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-rounded text-slate-400 text-[18px] pointer-events-none transition-colors group-focus-within:text-primary">calendar_month</span>
-          <input type="date" style="padding-left: 38px !important;" class="sr-recepcion-input w-full bg-slate-50 border-2 border-slate-400 rounded-xl pr-3 py-2 text-[14px] font-black text-slate-900 focus:border-primary focus:bg-white focus:shadow-[0_4px_10px_rgba(0,51,102,0.08)] outline-none transition-all" value="${data?.fecha_recepcion || ""}">
+          <input type="date" class="sr-recepcion-input w-full bg-slate-50 border-2 border-slate-400 rounded-xl pr-3 py-2 text-[14px] font-black text-slate-900 focus:border-primary focus:bg-white focus:shadow-[0_4px_10px_rgba(0,51,102,0.08)] outline-none transition-all" value="${data?.fecha_recepcion || ""}">
           <div class="sr-permanencia-hint" style="display: none;"></div>
         </div>
       </td>
@@ -12543,21 +12542,23 @@ function renderBioRows(rows) {
       </div>
       <!-- 🛡️ WRAPPER GRID HORIZONTAL DE INPUTS (Optimizado para Mobile y Desktop) -->
       <div class="bio-card-inputs-row">
-        <div class="text-center flex items-center justify-center">
+        <div class="text-center flex flex-col items-center justify-center gap-1">
           <input
             class="bioInput"
             style="width: 80px; height: 48px; text-align: center; font-size: 18px; font-weight: 900; border: 2px solid #cbd5e1; border-radius: 12px; background: #ffffff; outline: none; box-shadow: 0 2px 4px rgba(0,0,0,0.02);"
             type="number" min="0" step="any" inputmode="decimal"
             data-i="${i}" data-kind="existencia"
             value="${r.existencia_actual_frascos ?? ""}" placeholder="0">
+          <span class="bio-unit">frascos</span>
         </div>
-        <div class="text-center flex items-center justify-center">
+        <div class="text-center flex flex-col items-center justify-center gap-1">
           <input
             class="bioInput"
             style="width: 80px; height: 48px; text-align: center; font-size: 18px; font-weight: 900; border: 2px solid #cbd5e1; border-radius: 12px; background: #ffffff; outline: none; color: #0f172a; box-shadow: 0 2px 4px rgba(0,0,0,0.02);"
             type="number" min="0" step="1" inputmode="numeric"
             data-i="${i}" data-kind="pedido"
             value="${r.pedido_frascos ?? ""}" placeholder="0">
+          <span class="bio-unit">frascos</span>
         </div>
       </div>
       <div class="text-center">

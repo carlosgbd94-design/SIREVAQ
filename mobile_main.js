@@ -1071,7 +1071,7 @@
                     </select>
                 </div>
                 <div class="cascade-field">
-                    <label for="${cardId}_qty">Cantidad (frascos)
+                    <label for="${cardId}_qty">Cantidad <span class="fr-unit">frascos</span>
                         <span class="material-symbols-rounded" style="font-size:14px; color:#b45309; vertical-align:middle;" role="img" aria-label="Si capturas un decimal en TD, DPT, Influenza o Hepatitis B, te pediremos la fecha de apertura del frasco (vigencia de 28 días una vez abierto). BCG y SR quedan excluidas por el manual." title="Si capturas un decimal en TD, DPT, Influenza o Hepatitis B, te pediremos la fecha de apertura del frasco (vigencia de 28 días una vez abierto). BCG y SR quedan excluidas por el manual.">info</span>
                     </label>
                     <div class="touch-stepper-wrap flex items-center gap-2">
@@ -1868,7 +1868,7 @@
                         <span>Mín/Máx: <strong class="text-slate-700 dark:text-slate-200">${minDosis}/${maxDosis} d.</strong></span>
                     </div>
                     <div class="cascade-field">
-                        <label for="${bioDomId}_ex">Existencia</label>
+                        <label for="${bioDomId}_ex">Existencia <span class="fr-unit">frascos</span></label>
                         <div class="touch-stepper-wrap flex items-center gap-2">
                             <button type="button" class="stepper-btn" aria-label="Disminuir existencia de ${bio.biologico}" onclick="const inp=this.nextElementSibling; inp.value=Math.max(0, (parseInt(inp.value)||0)-1); inp.dispatchEvent(new Event('input'));">-</button>
                             <input id="${bioDomId}_ex" type="number" inputmode="numeric" aria-describedby="${bioDomId}_st" data-bio-id="${bio.id}" data-bio-name="${bio.biologico}" data-field="existencia" value="0" min="0" class="w-full text-center font-black bio-exist-input">
@@ -1876,7 +1876,7 @@
                         </div>
                     </div>
                     <div class="cascade-field">
-                        <label for="${bioDomId}_pe">Pedido</label>
+                        <label for="${bioDomId}_pe">Pedido <span class="fr-unit">frascos</span></label>
                         <div class="touch-stepper-wrap flex items-center gap-2">
                             <button type="button" class="stepper-btn" aria-label="Disminuir pedido de ${bio.biologico}" onclick="const inp=this.nextElementSibling; inp.value=Math.max(0, (parseInt(inp.value)||0)-1); inp.dispatchEvent(new Event('input'));">-</button>
                             <input id="${bioDomId}_pe" type="number" inputmode="numeric" aria-describedby="${bioDomId}_st" data-bio-id="${bio.id}" data-bio-name="${bio.biologico}" data-field="pedido" value="0" min="0" class="w-full text-center font-black bio-ped-input">
