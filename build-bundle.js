@@ -51,6 +51,7 @@ const GROUP_HEAD = [
 const GROUP_BODY = [
   'rda_calculator.js',
   'rda_parser.js',
+  'proyeccion_consumo.js', // antes que param_calculator.js: el modo «Proyección inteligente» lo usa
   'param_calculator.js',
   'jeringas_calculator.js',
   'auditoria_console.js',

@@ -494,10 +494,10 @@ window.spmToggleCalcMode = function() {
     const colchonWrap = document.getElementById('spmColchonInputWrap');
     const serviceWrap = document.getElementById('spmServiceLevelWrap');
     const leadTimeWrap = document.getElementById('spmLeadTimeWrap');
-    const usesServiceLevel = (mode === 'nivel_servicio' || mode === 'reabasto_inteligente');
+    const usesServiceLevel = (mode === 'nivel_servicio' || mode === 'reabasto_inteligente' || mode === 'proyeccion_inteligente');
     if (colchonWrap) colchonWrap.style.display = usesServiceLevel ? 'none' : 'flex';
     if (serviceWrap) serviceWrap.style.display = usesServiceLevel ? 'flex' : 'none';
-    if (leadTimeWrap) leadTimeWrap.style.display = (mode === 'reabasto_inteligente') ? 'flex' : 'none';
+    if (leadTimeWrap) leadTimeWrap.style.display = (mode === 'reabasto_inteligente' || mode === 'proyeccion_inteligente') ? 'flex' : 'none';
 };
 
 /** Muestra/oculta la explicación de "Colchón fijo" vs "Nivel de servicio". */
@@ -566,6 +566,254 @@ function spmComputeSmartReplenishmentTarget(monthlyTotals, year, zScore, leadTim
     return Number.isFinite(target) ? Math.max(0, target) : 0;
 }
 
+// 8s. PROYECCIÓN INTELIGENTE (proyeccion_consumo.js): propone Promedio/Mínimo/Máximo del mes que sigue por unidad y biológico,
+//     con su explicación y su confianza. No guarda nada: pasa por la vista previa, donde se elige qué aplicar.
+// Campañas/temporadas: no siguen un consumo mensual regular, igual que en el motor SQL de reabasto.
+const SPM_PROY_EXCLUIDOS = ['INFLUENZA', 'VPH'];
+// Columna de biologicos_existencia (frascos en existencia por captura semanal) de cada biológico
+const SPM_COL_EXISTENCIA = {
+    "BCG": "bcg", "HEPATITIS B": "hepatitis_b", "HEXAVALENTE": "hexavalente", "DPT": "dpt", "ROTAVIRUS": "rotavirus",
+    "NEUMOCOCICA 13": "neumococica_13", "SRP": "srp", "SR": "sr", "VARICELA": "varicela", "HEPATITIS A": "hepatitis_a",
+    "TD": "td", "TDPA": "tdpa"
+};
+
+/** Existencia de las últimas 8 semanas por unidad: { clues: [{ fecha, bcg, ... }] } (para detectar desabasto y sobreexistencia). */
+async function spmCargarExistenciaReciente() {
+    const desde = new Date(Date.now() - 56 * 86400000).toISOString().slice(0, 10);
+    const cols = ['clues', 'fecha'].concat(Object.values(SPM_COL_EXISTENCIA)).join(',');
+    const porClues = {};
+    let from = 0;
+    for (;;) {
+        const { data, error } = await window.supabase.from('biologicos_existencia').select(cols).gte('fecha', desde).order('fecha', { ascending: false }).range(from, from + 999);
+        if (error) throw error;
+        (data || []).forEach((r) => { (porClues[r.clues] = porClues[r.clues] || []).push(r); });
+        if (!data || data.length < 1000) break;
+        from += 1000;
+    }
+    return porClues;
+}
+
+/** Señales de existencia de un biológico en una unidad: semanas en cero (con consumo) → meses, y sobreexistencia sostenida. */
+function spmSenalesExistencia(filas, bio, promedioActualFrascos, consumoReciente) {
+    const col = SPM_COL_EXISTENCIA[bio];
+    if (!col || !filas || filas.length < 3) return { mesesSinExistencia: 0, sobreexistencia: false };
+    const vals = filas.map((r) => (r[col] === null || r[col] === undefined ? null : Number(r[col]))).filter((v) => v !== null);
+    if (vals.length < 3) return { mesesSinExistencia: 0, sobreexistencia: false };
+    // En cero solo cuenta como desabasto si la unidad sí consumía ese biológico
+    const ceros = consumoReciente > 0 ? vals.filter((v) => v === 0).length : 0;
+    const mesesSinExistencia = Math.min(4, Math.round((ceros / vals.length) * 4));
+    const ult4 = vals.slice(0, 4);
+    const prom4 = ult4.reduce((a, b) => a + b, 0) / ult4.length;
+    const sobreexistencia = promedioActualFrascos > 0 && ult4.length >= 3 && prom4 >= 2 * promedioActualFrascos;
+    return { mesesSinExistencia, sobreexistencia };
+}
+
+window.spmRunSmartProjection = async function(opts) {
+    const PC = window.ProyeccionConsumo;
+    if (!PC) {
+        if (typeof showToast === 'function') showToast('No se cargó el motor de proyección. Recarga la página.', false, 'bad');
+        return;
+    }
+    const bioSisMapping = await window.spmLoadBioSisMapping();
+    if (Object.keys(bioSisMapping).length === 0) return;
+
+    const hoy = new Date();
+    const objetivo = PC.mesObjetivo(hoy);
+    const anios = [hoy.getFullYear() - 1, hoy.getFullYear()];
+    const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+    const ok = await window.showConfirmDialog(
+        "Proyección inteligente",
+        `Voy a proyectar el consumo de ${MONTH_NAMES[objetivo.mes]} ${objetivo.anio} de cada unidad y biológico con el histórico SIS de ${anios[0]} y ${anios[1]}, la existencia de las últimas semanas y el nivel de servicio elegido (${opts.serviceLevelPct}%, entrega ~${opts.leadTimeWeeksMean} sem. ±${opts.leadTimeStdWeeks}). Nada se guarda hasta que elijas qué aplicar en la vista previa.`
+    );
+    if (!ok) return;
+
+    if (typeof showOverlay === 'function') showOverlay("Proyectando el consumo de cada unidad...", "Proyección inteligente");
+    try {
+        // 1. Meses cargados en cada año
+        const mesesCargados = [];
+        for (const anio of anios) {
+            const { data, error } = await window.supabase.rpc('get_registros_sis_active_months', { p_anio: anio });
+            if (error) throw error;
+            (data || []).map((r) => r.mes).filter((m) => Number.isInteger(m) && m >= 1 && m <= 12).sort((a, b) => a - b)
+                .forEach((m) => mesesCargados.push({ anio, mes: m }));
+        }
+        if (mesesCargados.length === 0) {
+            if (typeof showToast === 'function') showToast(`No hay registros SIS cargados de ${anios[0]} ni ${anios[1]}. No se modificó ningún parámetro.`, false, 'bad');
+            return;
+        }
+
+        // 2. Producción SIS mensual de ambos años, SIN las filas en cero (el 91 % del SIS son ceros: así son ~44 páginas, no ~470)
+        const regMap = {};
+        {
+            let from = 0, hayMas = true;
+            while (hayMas) {
+                const { data: chunk, error } = await window.supabase.rpc('get_registros_sis_mensual_nz', { p_anio_desde: anios[0], p_anio_hasta: anios[1] }).range(from, from + 999);
+                if (error) throw error;
+                (chunk || []).forEach((r) => { const k = `${r.clues}|${r.variable_sis}|${r.anio}|${r.mes}`; regMap[k] = (regMap[k] || 0) + (r.total_valor || 0); });
+                if (!chunk || chunk.length < 1000) hayMas = false; else from += 1000;
+            }
+        }
+
+        // 3. Línea de tiempo contigua desde el primer mes cargado hasta el último; los meses no cargados quedan en null
+        const primero = mesesCargados[0], ultimo = mesesCargados[mesesCargados.length - 1];
+        const cargado = new Set(mesesCargados.map((m) => `${m.anio}-${m.mes}`));
+        const linea = [];
+        for (let i = primero.anio * 12 + primero.mes - 1; i <= ultimo.anio * 12 + ultimo.mes - 1; i++) {
+            linea.push({ anio: Math.floor(i / 12), mes: (i % 12) + 1 });
+        }
+        const valorMes = (clues, vars, m) => {
+            if (!cargado.has(`${m.anio}-${m.mes}`)) return null;
+            let t = 0;
+            vars.forEach((v) => { t += regMap[`${clues}|${v}|${m.anio}|${m.mes}`] || 0; });
+            return t;
+        };
+
+        const bios = OFFICIAL_BIO_ORDER.filter((b) => !SPM_PROY_EXCLUIDOS.includes(b));
+        const unidades = window._spmUnitsList;
+        const series = {};   // `${clues}|${bio}` -> serie
+        unidades.forEach((u) => bios.forEach((bio) => {
+            const vars = bioSisMapping[bio] || [];
+            series[`${u.clues}|${bio}`] = linea.map((m) => ({ anio: m.anio, mes: m.mes, dosis: valorMes(u.clues, vars, m) }));
+        }));
+
+        // 4. Mes parcial: si el último mes cargado trae menos del 40 % de lo normal, no es consumo real sino carga a medias
+        let mesParcial = null;
+        const parcial = PC.detectarMesParcial(Object.values(series));
+        if (parcial) {
+            mesParcial = parcial;
+            Object.keys(series).forEach((k) => { const s = series[k]; if (s.length) s[s.length - 1] = { ...s[s.length - 1], dosis: null }; });
+        }
+
+        // 5. Existencia reciente (no bloquea el cálculo si falla)
+        let existencia = {};
+        try { existencia = await spmCargarExistenciaReciente(); } catch (e) { console.warn('[param_calculator] sin señales de existencia:', e); }
+
+        // 6. Índice estacional y eventos por biológico (con todas las unidades) y proyección de cada unidad
+        const changes = [];
+        const MIN_DOSIS_FLOOR = 5;
+        bios.forEach((bio) => {
+            const grupo = unidades.map((u) => series[`${u.clues}|${bio}`]);
+            const eventos = PC.detectarEventos(grupo);
+            const indiceGrupo = PC.indiceEstacionalGrupo(grupo, eventos);
+            const dpf = DEFAULT_DOSES_PER_BOTTLE[bio.toUpperCase()] || 1;
+            unidades.forEach((u) => {
+                const serie = series[`${u.clues}|${bio}`];
+                const existing = window._spmParamsMap[`${u.clues}|${bio}`] || {};
+                const ult3 = serie.slice(-3).map((p) => p.dosis).filter((v) => v !== null);
+                const consumoReciente = ult3.reduce((a, b) => a + b, 0);
+                const senales = spmSenalesExistencia(existencia[u.clues], bio, Number(existing.promedio_frascos) || 0, consumoReciente);
+                const r = PC.proyectar({
+                    serie, objetivo, dosisPorFrasco: dpf, nivelZ: opts.zScore, leadSem: opts.leadTimeWeeksMean, leadStdSem: opts.leadTimeStdWeeks,
+                    indiceGrupo, eventos, senales, pisoMin: MIN_DOSIS_FLOOR
+                });
+                if (!r) return;
+                const oldProm = existing.promedio_frascos !== undefined ? existing.promedio_frascos : 0;
+                const oldMin = existing.min_dosis !== undefined ? existing.min_dosis : 0;
+                const oldMax = existing.max_dosis !== undefined ? existing.max_dosis : 0;
+                if (oldProm === r.promedioFrascos && oldMin === r.minDosis && oldMax === r.maxDosis) return;
+                changes.push({
+                    clues: u.clues, unidad: u.unidad, municipio: u.municipio, biologico: bio,
+                    oldProm, oldMin, oldMax, newProm: r.promedioFrascos, newMin: r.minDosis, newMax: r.maxDosis,
+                    proy: r, sel: r.confianza.nivel !== 'baja',
+                    record: { clues: u.clues, unidad: u.unidad, municipio: u.municipio, biologico: bio, promedio_frascos: r.promedioFrascos,
+                        min_dosis: r.minDosis, max_dosis: r.maxDosis, multiplo_pedido: dpf, activo: 'SI' }
+                });
+            });
+        });
+
+        window._spmPendingCalcRecords = null;
+        window._spmPendingCalcChanges = changes;
+        window.spmShowCalcPreview(changes, {
+            calcMode: 'proyeccion_inteligente', objetivo, mesParcial, ultimoMes: ultimo, primerMes: primero,
+            serviceLevelPct: opts.serviceLevelPct, zScore: opts.zScore, leadTimeWeeksMean: opts.leadTimeWeeksMean, leadTimeStdWeeks: opts.leadTimeStdWeeks,
+            existenciaCargada: Object.keys(existencia).length > 0
+        });
+    } catch (e) {
+        console.error("Error en la proyección inteligente:", e);
+        if (typeof showToast === 'function') showToast("Error en la proyección: " + e.message, false, 'bad');
+    } finally {
+        if (typeof hideOverlay === 'function') hideOverlay();
+    }
+};
+
+/** Vista previa de la proyección: confianza, explicación y casilla por propuesta (las de confianza baja vienen sin marcar). */
+window.spmRenderProyeccionPreview = function(changes, meta) {
+    const modal = document.getElementById('spmCalcPreviewModal');
+    const body = document.getElementById('spmCalcPreviewBody');
+    const summary = document.getElementById('spmCalcPreviewSummary');
+    const btnConfirm = document.getElementById('spmBtnCalcPreviewConfirm');
+    const MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const cuenta = (n) => changes.filter((c) => c.proy.confianza.nivel === n).length;
+
+    const aviso = [];
+    if (meta.mesParcial) aviso.push(`${MESES[meta.mesParcial.mes]} ${meta.mesParcial.anio} está cargado a medias (${Math.round(meta.mesParcial.proporcion * 100)} % de lo normal): no se usó.`);
+    if (!meta.existenciaCargada) aviso.push('No se pudo leer la existencia reciente: no se consideraron desabasto ni sobreexistencia.');
+    summary.innerHTML = `Proyección de <b>${MESES[meta.objetivo.mes]} ${meta.objetivo.anio}</b> con el SIS de ${MESES[meta.primerMes.mes]} ${meta.primerMes.anio} a ${MESES[meta.ultimoMes.mes]} ${meta.ultimoMes.anio} · `
+        + `${changes.length} propuestas con cambios · confianza alta ${cuenta('alta')}, media ${cuenta('media')}, baja ${cuenta('baja')} (las bajas vienen sin marcar) · nivel de servicio ${meta.serviceLevelPct}%, entrega ~${meta.leadTimeWeeksMean} sem.`
+        + (aviso.length ? `<br><span class="spm-pr-aviso">${aviso.map(esc).join(' ')}</span>` : '');
+
+    if (changes.length === 0) {
+        body.innerHTML = `<div style="padding:30px; text-align:center; color:#64748b; font-size:13px;">La proyección coincide con los valores guardados. No es necesario cambiar nada.</div>`;
+        if (btnConfirm) btnConfirm.style.display = 'none';
+        modal.style.display = 'flex';
+        return;
+    }
+    if (btnConfirm) btnConfirm.style.display = 'inline-flex';
+
+    const chip = (n) => `<span class="spm-pr-conf spm-pr-conf--${n}">${n === 'alta' ? 'Alta' : n === 'media' ? 'Media' : 'Baja'}</span>`;
+    const orden = { baja: 0, media: 1, alta: 2 };
+    const filas = changes.map((c, i) => ({ c, i })).sort((a, b) =>
+        String(a.c.municipio).localeCompare(String(b.c.municipio), 'es') || String(a.c.unidad).localeCompare(String(b.c.unidad), 'es')
+        || orden[a.c.proy.confianza.nivel] - orden[b.c.proy.confianza.nivel]);
+    const rows = filas.map(({ c, i }) => {
+        const p = c.proy;
+        return `<tr data-conf="${p.confianza.nivel}">
+            <td class="spm-pr-chk"><input type="checkbox" data-i="${i}" ${c.sel ? 'checked' : ''} aria-label="Aplicar ${esc(c.biologico)} de ${esc(c.unidad)}"></td>
+            <td>${esc(c.municipio)}</td><td>${esc(c.unidad)}</td><td>${esc(c.biologico)}</td>
+            <td class="spm-pr-num"><b>${p.proyeccionDosis.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</b><small>${p.banda.p10.toLocaleString('es-MX')}–${p.banda.p95.toLocaleString('es-MX')}</small></td>
+            <td class="spm-preview-diff">${c.oldProm} &rarr; <strong>${c.newProm}</strong></td>
+            <td class="spm-preview-diff">${c.oldMin} &rarr; <strong>${c.newMin}</strong></td>
+            <td class="spm-preview-diff">${c.oldMax} &rarr; <strong>${c.newMax}</strong></td>
+            <td>${chip(p.confianza.nivel)}</td>
+            <td class="spm-pr-why"><details><summary>${esc(p.razones[0])}</summary><ul>${p.razones.slice(1).map((r) => `<li>${esc(r)}</li>`).join('')}${p.confianza.motivos.length ? `<li><b>Confianza:</b> ${esc(p.confianza.motivos.join('; '))}.</li>` : ''}</ul></details></td>
+        </tr>`;
+    }).join('');
+    body.innerHTML = `
+        <div class="spm-pr-barra">
+            <label><input type="checkbox" id="spmPrTodas"> Marcar todas</label>
+            <label><input type="checkbox" id="spmPrOcultaBajas"> Ocultar confianza baja</label>
+            <span id="spmPrConteo" class="spm-pr-conteo"></span>
+        </div>
+        <table class="spm-preview-table spm-pr-tabla">
+            <thead><tr><th><span class="vl-sr">Aplicar</span></th><th>Municipio</th><th>Unidad</th><th>Biológico</th>
+                <th title="Dosis proyectadas del mes y rango probable">Proyección (dosis)</th><th>Promedio (frascos)</th><th>Mínimo (dosis)</th><th>Máximo (dosis)</th><th>Confianza</th><th>Por qué</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+
+    const actualizarConteo = () => {
+        const n = changes.filter((c) => c.sel).length;
+        const el = document.getElementById('spmPrConteo');
+        if (el) el.textContent = `${n} de ${changes.length} marcadas para aplicar`;
+        if (btnConfirm) btnConfirm.textContent = n > 0 ? `Aplicar ${n} marcadas` : 'Nada marcado';
+        if (btnConfirm) btnConfirm.disabled = n === 0;
+        const todas = document.getElementById('spmPrTodas');
+        if (todas) todas.checked = n === changes.length;
+    };
+    body.querySelectorAll('input[data-i]').forEach((cb) => { cb.onchange = () => { changes[Number(cb.dataset.i)].sel = cb.checked; actualizarConteo(); }; });
+    document.getElementById('spmPrTodas').onchange = (e) => {
+        changes.forEach((c) => { c.sel = e.target.checked; });
+        body.querySelectorAll('input[data-i]').forEach((cb) => { cb.checked = e.target.checked; });
+        actualizarConteo();
+    };
+    document.getElementById('spmPrOcultaBajas').onchange = (e) => {
+        body.querySelectorAll('tbody tr[data-conf="baja"]').forEach((tr) => { tr.style.display = e.target.checked ? 'none' : ''; });
+    };
+    actualizarConteo();
+    modal.style.display = 'flex';
+};
+
 window.spmRunAdminCalculation = async function() {
     // Respaldo por si el botón queda visible para Municipal por algún problema de CSS (ya
     // pasó una vez): sin esto, el único freno era ocultar el botón, y si ese freno fallaba
@@ -599,7 +847,7 @@ window.spmRunAdminCalculation = async function() {
     const calcModeEl = document.getElementById('spmCalcMode');
     const calcModeRaw = calcModeEl?.value;
     const calcMode = (calcModeRaw === 'nivel_servicio' || calcModeRaw === 'reabasto_inteligente') ? calcModeRaw : 'colchon_fijo';
-    const usesServiceLevel = (calcMode === 'nivel_servicio' || calcMode === 'reabasto_inteligente');
+    const usesServiceLevel = (calcMode === 'nivel_servicio' || calcMode === 'reabasto_inteligente' || calcModeRaw === 'proyeccion_inteligente');
     const SPM_Z_SCORES = { '90': 1.28, '95': 1.65, '99': 2.33 };
     const serviceLevelEl = document.getElementById('spmServiceLevel');
     const serviceLevelPct = usesServiceLevel ? (serviceLevelEl?.value || '95') : null;
@@ -613,6 +861,11 @@ window.spmRunAdminCalculation = async function() {
     if (!Number.isFinite(leadTimeWeeksMean) || leadTimeWeeksMean < 0) leadTimeWeeksMean = 2;
     let leadTimeStdWeeks = parseFloat(leadTimeStdEl?.value);
     if (!Number.isFinite(leadTimeStdWeeks) || leadTimeStdWeeks < 0) leadTimeStdWeeks = 1;
+
+    // Modo «Proyección inteligente»: tiene su propio flujo (proyeccion_consumo.js) y su propia vista previa
+    if (calcModeRaw === 'proyeccion_inteligente') {
+        return window.spmRunSmartProjection({ serviceLevelPct, zScore, leadTimeWeeksMean, leadTimeStdWeeks });
+    }
 
     let confirmMsg;
     if (calcMode === 'reabasto_inteligente') {
@@ -811,6 +1064,13 @@ window.spmShowCalcPreview = function(changes, meta) {
     const summary = document.getElementById('spmCalcPreviewSummary');
     const btnConfirm = document.getElementById('spmBtnCalcPreviewConfirm');
     if (!modal || !body || !summary) return;
+    if (meta && meta.calcMode === 'proyeccion_inteligente') {
+        modal.classList.add('spm-preview--proy');
+        return window.spmRenderProyeccionPreview(changes, meta);
+    }
+    modal.classList.remove('spm-preview--proy');
+    window._spmPendingCalcChanges = null;
+    if (btnConfirm) { btnConfirm.disabled = false; btnConfirm.textContent = 'Confirmar y Guardar en Supabase'; }
 
     const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
     const modeLabel = meta.calcMode === 'reabasto_inteligente'
@@ -853,6 +1113,7 @@ window.spmShowCalcPreview = function(changes, meta) {
 
 window.spmCancelCalcPreview = function() {
     window._spmPendingCalcRecords = null;
+    window._spmPendingCalcChanges = null;
     const modal = document.getElementById('spmCalcPreviewModal');
     if (modal) modal.style.display = 'none';
     if (typeof showToast === 'function') {
@@ -862,7 +1123,10 @@ window.spmCancelCalcPreview = function() {
 
 // 8c. CONFIRMAR Y PERSISTIR EL CÁLCULO MASIVO EN SUPABASE
 window.spmConfirmCalcSave = async function() {
-    const records = window._spmPendingCalcRecords;
+    // Proyección inteligente: solo lo que quedó marcado en la vista previa
+    const records = window._spmPendingCalcChanges
+        ? window._spmPendingCalcChanges.filter((c) => c.sel).map((c) => c.record)
+        : window._spmPendingCalcRecords;
     const modal = document.getElementById('spmCalcPreviewModal');
 
     if (!records || records.length === 0) {
@@ -899,6 +1163,7 @@ window.spmConfirmCalcSave = async function() {
         }
 
         window._spmPendingCalcRecords = null;
+        window._spmPendingCalcChanges = null;
         if (modal) modal.style.display = 'none';
 
         // Refrescar lista lateral (puntos de revisión) y la matriz de la unidad activa

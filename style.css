@@ -15995,3 +15995,24 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 .vx-alcance .material-symbols-rounded { font-size:20px; }
 .vx-alcance[aria-pressed="true"] { background:#4c1d95; border-color:#4c1d95; color:#ffffff; }
 .vx-alcance:focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+
+/* Parámetros: vista previa de la «Proyección inteligente» (confianza, explicación y casilla por propuesta). */
+#spmCalcPreviewModal.spm-preview--proy .spm-preview-card { max-width: min(1560px, 97vw) !important; }
+#spmCalcPreviewModal .spm-pr-aviso { display: inline-block; margin-top: 6px; color: #92400e; font-weight: 800; }
+#spmCalcPreviewModal .spm-pr-barra { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; box-sizing: border-box; min-height: 46px; padding: 0 16px; background: #ffffff; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 5; font-size: 12.5px; font-weight: 700; color: #334155; }
+#spmCalcPreviewModal .spm-pr-barra label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+#spmCalcPreviewModal .spm-pr-conteo { margin-left: auto; color: #475569; }
+#spmCalcPreviewModal .spm-pr-tabla th { top: 46px !important; z-index: 4; }
+#spmCalcPreviewModal .spm-pr-tabla td { white-space: normal !important; vertical-align: top !important; }
+#spmCalcPreviewModal .spm-pr-chk { width: 36px; text-align: center; }
+#spmCalcPreviewModal .spm-pr-chk input { width: 18px; height: 18px; }
+#spmCalcPreviewModal .spm-pr-num { text-align: right; white-space: nowrap !important; }
+#spmCalcPreviewModal .spm-pr-num small { display: block; font-size: 10.5px; font-weight: 700; color: #64748b; }
+#spmCalcPreviewModal .spm-pr-conf { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 800; border: 1px solid; }
+#spmCalcPreviewModal .spm-pr-conf--alta { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+#spmCalcPreviewModal .spm-pr-conf--media { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+#spmCalcPreviewModal .spm-pr-conf--baja { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+#spmCalcPreviewModal .spm-pr-why { min-width: 300px; max-width: 460px; font-weight: 600; }
+#spmCalcPreviewModal .spm-pr-why summary { cursor: pointer; color: #1e293b; }
+#spmCalcPreviewModal .spm-pr-why ul { margin: 6px 0 0; padding-left: 18px; color: #475569; font-size: 12px; line-height: 1.45; }
+#spmBtnCalcPreviewConfirm:disabled { opacity: .5; cursor: not-allowed; }
