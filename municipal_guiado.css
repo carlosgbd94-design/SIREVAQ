@@ -38,7 +38,7 @@ button.pt { cursor: pointer; }
   display: inline-flex; align-items: center; gap: 7px; border: 1.5px solid var(--outline-variant); background: #fff; color: var(--text);
   border-radius: 999px; padding: 6px 12px; font: 700 12px inherit; font-family: inherit; cursor: pointer; box-shadow: none;
 }
-.mun-chip b { font-size: 10.5px; background: var(--surface-container); border-radius: 999px; padding: 1px 7px; color: var(--muted); }
+.mun-chip b { font-size: 10.5px; background: var(--surface-container); border-radius: 999px; padding: 1px 7px; color: #4b5b70; }
 .mun-chip.activo { border-color: var(--secondary); background: #f0f9ff; color: var(--primary); }
 @media (hover: hover) and (pointer: fine) { .mun-chip:hover { border-color: var(--secondary); } }
 
@@ -267,3 +267,6 @@ body.mun-guiado button.pt:focus-visible,
 
 /* Texto solo para lectores de pantalla (estado de cada paso de la ruta) */
 .mun-ruta-paso .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Los títulos a los que el cierre guiado manda el foco al cambiar de hoja no dibujan un marco (el foco es solo para lectores de pantalla). */
+body.mun-guiado [tabindex="-1"]:focus, body.mun-guiado [tabindex="-1"]:focus-visible { outline: none !important; }

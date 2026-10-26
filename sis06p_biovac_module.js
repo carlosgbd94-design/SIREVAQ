@@ -323,7 +323,7 @@
     const activa = datosUnidadActiva();
     const container = document.getElementById('sis06pCaptureGroupsContainer');
     if (!activa) {
-      if (container) container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Selecciona una unidad (CLUES) específica arriba -- "Jurisdicción (suma)" no aplica a SIS-06-P.</div>';
+      if (container) container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Selecciona una unidad (CLUES) específica arriba — "Jurisdicción (suma)" no aplica a SIS-06-P.</div>';
       renderCEH();
       renderInfluenza();
       actualizarDock();
@@ -390,7 +390,7 @@
     const descripcion = (v.dosis && v.dosis !== v.grupo_poblacional)
       ? `${v.grupo_poblacional || ''} · ${v.dosis}`
       : (v.grupo_poblacional || v.dosis || '');
-    return `${v.biologico} -- ${descripcion}${v.edad ? ' (' + v.edad + ')' : ''}`;
+    return `${v.biologico} — ${descripcion}${v.edad ? ' (' + v.edad + ')' : ''}`;
   }
 
   function renderPanelCambiosPendientes() {
@@ -406,11 +406,11 @@
     lista.innerHTML = _correccionesPendientesCache.map((c) => `
       <div style="background:#fff; border:1px solid var(--warning-border); border-radius:10px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
         <div style="font-size:11.5px;">
-          <strong>${c.fila_excel != null ? labelDeFila(c.fila_excel) : (c.detalle || 'Ajuste')}</strong>${c.subconteo ? ' -- ' + (SUBCONTEO_LABEL[c.subconteo] || c.subconteo) : ''}:
+          <strong>${c.fila_excel != null ? labelDeFila(c.fila_excel) : (c.detalle || 'Ajuste')}</strong>${c.subconteo ? ' — ' + (SUBCONTEO_LABEL[c.subconteo] || c.subconteo) : ''}:
           <span style="color:var(--muted); text-decoration:line-through;">${c.valor_anterior}</span>
           <span class="material-symbols-rounded" style="font-size:12px; vertical-align:middle;">arrow_forward</span>
           <strong style="color:var(--warning);">${c.valor_nuevo}</strong>
-          <span style="color:var(--muted);"> -- ${c.usuario}, ${new Date(c.creado_en).toLocaleDateString('es-MX')}</span>
+          <span style="color:var(--muted);"> — ${c.usuario}, ${new Date(c.creado_en).toLocaleDateString('es-MX')}</span>
         </div>
         <button class="btn-mini btn-secundario" data-aceptar-correccion="${c.id}"><span class="material-symbols-rounded">check</span> Aceptar</button>
       </div>
@@ -826,7 +826,7 @@
       banner.style.display = 'none';
     } else {
       banner.style.cssText += 'background:var(--warning-bg); color:var(--warning);';
-      banner.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">schedule</span> Todavía puedes ir prellenando tu concentrado -- el envío se habilita del ${destacada(fechaLargaMX(_ventanaCache.inicio_envio))} al ${destacada(fechaLargaMX(_ventanaCache.fin_envio))}.`;
+      banner.innerHTML = `<span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">schedule</span> Todavía puedes ir prellenando tu concentrado — el envío se habilita del ${destacada(fechaLargaMX(_ventanaCache.inicio_envio))} al ${destacada(fechaLargaMX(_ventanaCache.fin_envio))}.`;
     }
   }
 
@@ -835,7 +835,7 @@
     const container = document.getElementById('sis06pCaptureGroupsContainer');
     if (!container) return;
     if (!activa) {
-      container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Selecciona una unidad (CLUES) específica arriba -- "Jurisdicción (suma)" no aplica a SIS-06-P.</div>';
+      container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Selecciona una unidad (CLUES) específica arriba — "Jurisdicción (suma)" no aplica a SIS-06-P.</div>';
       return;
     }
     container.innerHTML = '';
@@ -862,7 +862,7 @@
     const badge = document.getElementById('sis06pBadgeEstado');
     if (badge) {
       badge.className = 'estado-badge estado-' + estadoActual;
-      badge.textContent = estadoActual === 'BORRADOR' ? 'Borrador' : estadoActual === 'ENVIADO' ? 'Enviado -- pendiente de validación' : 'Información validada';
+      badge.textContent = estadoActual === 'BORRADOR' ? 'Borrador' : estadoActual === 'ENVIADO' ? 'Enviado — pendiente de validación' : 'Información validada';
     }
     renderBannerVentana(estadoActual);
     renderConciliacion(soloLectura, currentReport);
@@ -897,7 +897,7 @@
         btnEnviar.classList.toggle('con-diferencias', !fueraDeEnvio && noConcilia);
         btnEnviar.title = fueraDeEnvio
           ? 'Fuera de la ventana de envío'
-          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden -- púlsalo para ver en qué' : '';
+          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden — púlsalo para ver en qué' : '';
       }
       if (btnValidar) btnValidar.style.display = 'none';
       if (btnImprimir) btnImprimir.style.display = estadoActual === 'VALIDADO' ? 'inline-flex' : 'none';
@@ -907,7 +907,7 @@
       if (btnValidar) btnValidar.style.display = (currentReport && estadoActual === 'ENVIADO') ? 'inline-flex' : 'none';
       if (btnImprimir) btnImprimir.style.display = 'none';
       if (!currentReport || estadoActual === 'BORRADOR') {
-        container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Esta unidad todavía no envía su concentrado de este mes -- nada que revisar todavía.</div>';
+        container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Esta unidad todavía no envía su concentrado de este mes — nada que revisar todavía.</div>';
         return;
       }
     }
@@ -1139,7 +1139,7 @@
 
     const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
     if (esUnidad && currentReport && currentReport.estado !== 'BORRADOR') {
-      toast('Este concentrado ya fue enviado -- no puedes editarlo directamente.', 'error');
+      toast('Este concentrado ya fue enviado — no puedes editarlo directamente.', 'error');
       return false;
     }
     if (fueraDeVentanaDeCaptura(currentReport)) {
@@ -1153,7 +1153,7 @@
       return false;
     }
     if (!esUnidad && (!currentReport || currentReport.estado === 'BORRADOR')) {
-      toast('Esta unidad todavía no envía su concentrado -- nada que corregir.', 'error');
+      toast('Esta unidad todavía no envía su concentrado — nada que corregir.', 'error');
       return false;
     }
 
@@ -1269,7 +1269,7 @@
     const anio = Number(document.getElementById('selAnio').value);
     const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
     if (!currentReport) { toast('Guarda tu concentrado antes de enviarlo.', 'error'); return; }
-    if (_sinGuardar) { toast('Tienes cambios sin guardar en el paloteo -- guárdalos antes de enviar.', 'error'); return; }
+    if (_sinGuardar) { toast('Tienes cambios sin guardar en el paloteo — guárdalos antes de enviar.', 'error'); return; }
     if (!responsableElaboracion()) {
       const campo = document.getElementById('selUsuario');
       await mostrarModal({
@@ -1373,7 +1373,7 @@
         target_usuario: null,
         type: 'SIS_VALIDADO',
         title: 'Concentrado SIS-06-P validado',
-        message: `El concentrado SIS-06-P de ${mesNombre(mes)} ${anio} ya fue validado -- ya puedes descargar, exportar e imprimir el Excel oficial.`,
+        message: `El concentrado SIS-06-P de ${mesNombre(mes)} ${anio} ya fue validado — ya puedes descargar, exportar e imprimir el Excel oficial.`,
         meta_json: JSON.stringify({ source: 'SIS06P', clues: activa.clues, mes, anio }),
         status: 'UNREAD'
       });
@@ -1482,8 +1482,8 @@
       <div style="padding:20px; font-family:sans-serif;">
         <h2 style="margin:0 0 4px;">Concentrado Mensual SIS-06-P</h2>
         <p style="margin:0 0 16px; font-size:13px;">
-          ${activa.unidad} (${activa.clues}) -- ${activa.municipio}<br>
-          ${mesNombre(mes)} ${anio} -- Validado por ${currentReport.validado_por || ''} el ${currentReport.validado_en ? new Date(currentReport.validado_en).toLocaleDateString('es-MX') : ''}
+          ${activa.unidad} (${activa.clues}) · ${activa.municipio}<br>
+          ${mesNombre(mes)} ${anio} — Validado por ${currentReport.validado_por || ''} el ${currentReport.validado_en ? new Date(currentReport.validado_en).toLocaleDateString('es-MX') : ''}
         </p>
       </div>
     `;
@@ -1597,7 +1597,7 @@
     const titulo = document.getElementById('csvPanelTitulo');
     const subtitulo = document.getElementById('csvPanelSubtitulo');
     if (titulo && subtitulo) {
-      titulo.textContent = 'CSV -- concentrado completo del municipio';
+      titulo.textContent = 'CSV — concentrado completo del municipio';
       subtitulo.textContent = 'Vista previa con todas las CLUES del municipio, una fila por clave SIS: incluye borradores y se va llenando (0 mientras no capturan). El archivo que se descarga solo sale cuando TODAS las unidades están validadas.';
     }
 
@@ -2117,7 +2117,7 @@
 
       const hojasExtra = 'SIS-SS-CE-H-2026' + (influenzaIncluida ? ' + SIS-SS-IE Mensual (Influenza)' : '');
       if (movimientoErrorMsg) {
-        toast('Excel generado solo con SIS-06-P -- no se pudo incluir Movimiento de Biológico: ' + movimientoErrorMsg, 'error');
+        toast('Excel generado solo con SIS-06-P — no se pudo incluir Movimiento de Biológico: ' + movimientoErrorMsg, 'error');
       } else if (movimientoIncluido) {
         toast(`✅ Excel generado: SIS-06-P + Movimiento de Biológico + ${hojasExtra}.`, 'ok');
       } else {
@@ -2340,7 +2340,7 @@
   const MSG_SIN_UNIDAD = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Selecciona una unidad (CLUES) específica arriba para ver esta hoja.</div>';
 
   function etiquetaEstadoSIS(e) {
-    return e === 'VALIDADO' ? 'Información validada' : e === 'ENVIADO' ? 'Enviado -- pendiente de validación' : 'Borrador';
+    return e === 'VALIDADO' ? 'Información validada' : e === 'ENVIADO' ? 'Enviado — pendiente de validación' : 'Borrador';
   }
 
   function tarjetaDato(titulo, valor) {
@@ -2716,7 +2716,7 @@
         msg = `Todavía no hay reportes semanales de Influenza en ${mesNombre(mes)}. Se capturan cada jueves o viernes en Meta-Logro Influenza; aquí aparecen solos.`;
         estilo = 'background:var(--warning-bg); color:var(--warning); border:1px solid var(--warning-border);';
       } else {
-        msg = `Corte de ${mesNombre(mes)}: ${n} reporte(s) semanal(es) de Meta-Logro. Si un reporte cambia allá, aquí se actualiza solo -- no hay nada que copiar ni capturar dos veces.`;
+        msg = `Corte de ${mesNombre(mes)}: ${n} reporte(s) semanal(es) de Meta-Logro. Si un reporte cambia allá, aquí se actualiza solo — no hay nada que copiar ni capturar dos veces.`;
         estilo = 'background:var(--success-bg); color:var(--success);';
       }
       aviso.style.cssText = `display:block; margin-bottom:12px; padding:9px 13px; border-radius:12px; font-size:12px; font-weight:700; ${estilo}`;
@@ -3206,7 +3206,7 @@
     else if (_sinGuardar) detalle = 'Cambios sin guardar';
     else if (fueraDeVentanaDeCaptura(captura)) detalle = 'Este mes está fuera de su ventana de captura';
     else if (!captura) detalle = 'Aún sin guardar este mes';
-    else if (filas !== null && difs.length) detalle = `${difs.length} biológico${difs.length === 1 ? '' : 's'} no coincide${difs.length === 1 ? '' : 'n'} -- corrige antes de enviar`;
+    else if (filas !== null && difs.length) detalle = `${difs.length} biológico${difs.length === 1 ? '' : 's'} no coincide${difs.length === 1 ? '' : 'n'} — corrige antes de enviar`;
     else if (v && !v.dentro_envio) detalle = `Envío del ${fechaMesCorta(v.inicio_envio)} al ${fechaMesCorta(v.fin_envio)}`;
     else if (v) detalle = `Listo para enviar hasta el ${fechaMesCorta(v.fin_envio)}`;
     caja.style.display = 'flex';
@@ -3242,7 +3242,7 @@
         btnEnviar.classList.toggle('con-diferencias', !fueraDeVentana && noConcilia);
         btnEnviar.title = fueraDeVentana
           ? 'Fuera de la ventana de envío'
-          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden -- púlsalo para ver en qué' : 'Enviar el SINBA-SIS para validación';
+          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden — púlsalo para ver en qué' : 'Enviar el SINBA-SIS para validación';
       }
       renderInfluenza();
       renderRutaMes();

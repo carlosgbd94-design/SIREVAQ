@@ -70,7 +70,7 @@
     if (titulo && subtitulo) {
       if (esJurisdiccional) {
         titulo.textContent = 'Avance de validación por municipio';
-        subtitulo.textContent = 'Vista informativa: quién ya validó, quién tiene envíos pendientes de validar y quién no ha enviado -- cada municipio valida a sus propias unidades.';
+        subtitulo.textContent = 'Vista informativa: quién ya validó, quién tiene envíos pendientes de validar y quién no ha enviado — cada municipio valida a sus propias unidades.';
       } else {
         titulo.textContent = 'Seguimiento SIS-06-P';
         subtitulo.textContent = 'Quién ya envió su concentrado del mes seleccionado arriba, y quién falta.';
@@ -183,7 +183,7 @@
         const antes = new Date() < new Date(v.inicio_envio + 'T00:00:00');
         banner.style.cssText = 'display:block; margin-bottom:14px; padding:10px 14px; border-radius:12px; font-size:12px; font-weight:700; background:#f1f5f9; color:#475569;';
         banner.textContent = antes
-          ? `El envío de este mes se habilita del ${fecha(v.inicio_envio)} al ${fecha(v.fin_envio)}. Hasta entonces las unidades solo pueden prellenar -- todas aparecen como "Sin enviar".`
+          ? `El envío de este mes se habilita del ${fecha(v.inicio_envio)} al ${fecha(v.fin_envio)}. Hasta entonces las unidades solo pueden prellenar — todas aparecen como "Sin enviar".`
           : `La ventana de envío de este mes ya cerró (${fecha(v.inicio_envio)} al ${fecha(v.fin_envio)}).`;
       }
       // Solo el administrador puede mover las fechas de un mes (p. ej. para que una
@@ -453,7 +453,7 @@
       barra.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 16px;';
       barra.innerHTML = `
         <span style="font-size:12.5px; font-weight:700; color:${completo ? 'var(--success)' : 'var(--muted)'};">
-          ${completo ? '✅' : '⏳'} ${etiqueta}: ${nValidado}/${unidadesGrupo.length} unidad(es) validada(s)${completo ? '' : ' -- faltan por validar para poder exportar'}
+          ${completo ? '✅' : '⏳'} ${etiqueta}: ${nValidado}/${unidadesGrupo.length} unidad(es) validada(s)${completo ? '' : ' — faltan por validar para poder exportar'}
         </span>
       `;
       const btn = document.createElement('button');
@@ -551,12 +551,12 @@
         return { total: 0, conDiferencia: 0 };
       }
       if (conDiferencia.length === 0) {
-        cont.innerHTML = `<div style="font-size:11.5px; font-weight:700; color:var(--success); padding:6px 0;">✅ Conciliación paloteo vs. movimiento: las ${porUnidad.size} unidad(es) con captura coinciden en todos sus biológicos.</div>`;
+        cont.innerHTML = `<div style="font-size:11.5px; font-weight:700; color:var(--success); padding:6px 0;">✅ Conciliación paloteo vs. movimiento: ${porUnidad.size === 1 ? 'la única unidad con captura coincide' : 'las ' + porUnidad.size + ' unidades con captura coinciden'} en todos sus biológicos.</div>`;
         return { total: porUnidad.size, conDiferencia: 0 };
       }
       cont.innerHTML = `
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); margin:4px 0 8px;">
-          Conciliación paloteo (SIS-06-P) vs. aplicado (Movimiento de Biológico) -- ${conDiferencia.length} unidad(es) con diferencia
+          Conciliación paloteo (SIS-06-P) vs. aplicado (Movimiento de Biológico) · ${conDiferencia.length === 1 ? '1 unidad con diferencia' : conDiferencia.length + ' unidades con diferencia'}
         </div>
         ${conDiferencia.map(([clues, u]) => {
           const dif = u.filas.filter((f) => !f.coincide);
@@ -567,11 +567,11 @@
               <span>${dif.length === 1 ? '1 biológico no coincide' : dif.length + ' biológicos no coinciden'}</span>
             </div>
             <div style="overflow-x:auto;">
-            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <table style="width:100%; min-width:420px; border-collapse:collapse; table-layout:fixed; font-size:12px;">
               <thead><tr style="border-bottom:1px solid var(--outline-variant);">
-                <th style="text-align:left; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Biológico</th>
-                <th style="text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Paloteo</th>
-                <th style="text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Aplicado</th>
+                <th scope="col" style="text-align:left; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Biológico</th>
+                <th scope="col" style="width:120px; text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Paloteo</th>
+                <th scope="col" style="width:120px; text-align:center; padding:6px 8px; font-size:10px; text-transform:uppercase; color:var(--muted);">Aplicado</th>
               </tr></thead>
               <tbody>
                 ${dif.map((f) => `
@@ -736,7 +736,7 @@
     // su municipio.
     const puede = rol === 'MUNICIPAL' || (rol === 'JURISDICCIONAL' && fila && ES_HOSPITAL[fila.municipio]);
     if (!puede) {
-      toast('Solo el municipal (o la jurisdicción, en hospitales) puede ver el detalle de una unidad -- aquí solo se ve el estatus general.', 'error');
+      toast('Solo el municipal (o la jurisdicción, en hospitales) puede ver el detalle de una unidad — aquí solo se ve el estatus general.', 'error');
       return;
     }
     const selUnidadRevision = document.getElementById('selUnidadRevision');

@@ -355,7 +355,7 @@
         <div class="mun-chips">${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}${r.omitida ? chip('OMITIDA', 'Sin envío') : ''}</div>
       </div>
       <div class="mun-grid">${visibles.map((f) => `
-        <button type="button" class="mun-unidad ${CLASE_EST[estadoDe(f)]}" data-clues="${esc(f.clues)}">
+        <button type="button" class="mun-unidad ${CLASE_EST[estadoDe(f)]}" data-clues="${esc(f.clues)}" title="${esc((f.unidad || f.clues) + ' · ' + detalleUnidad(f))}">
           <span class="mun-dot"></span>
           <span class="mun-u-txt"><b>${esc(f.unidad || f.clues)}</b><small>${esc(f.clues)} · ${esc(detalleUnidad(f))}</small></span>
           <span class="mun-u-pills"><span class="mun-pill ${CLASE_EST[estadoDe(f)]}">${ETIQUETA[estadoDe(f)]}</span>${pillConciliacion(f)}${Number(f.correcciones_pendientes) > 0 ? `<span class="mun-pill aviso" title="Correcciones pendientes">${f.correcciones_pendientes}</span>` : ''}</span>

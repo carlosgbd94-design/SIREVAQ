@@ -880,7 +880,7 @@ function renderFilaConcentrado(f) {
     <td>
       <div class="lote-texto">${f.numero_lote}<span data-corr-chip="${f.lote_id}|${f.categoria}"></span></div>
       ${f.categoria !== 'NORMAL' ? `<span class="tag-${f.categoria.toLowerCase()}">${f.categoria}</span>` : ''}
-      ${f.es_provisional ? `<span class="tag-provisional" title="Al menos una unidad de este municipio todavía no envía su SINBA-SIS -- el número puede cambiar">Provisional</span>` : ''}
+      ${f.es_provisional ? `<span class="tag-provisional" title="Al menos una unidad de este municipio todavía no envía su SINBA-SIS — el número puede cambiar">Provisional</span>` : ''}
     </td>
     <td><div class="caducidad-chip ${semaforo}"><span class="semaforo"></span>${formatMmmAa(f.caducidad)}</div></td>
     <td class="c-ant">${redondearFrascos(f.existencia_anterior_frascos)}</td>

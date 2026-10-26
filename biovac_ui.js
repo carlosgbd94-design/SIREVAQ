@@ -566,7 +566,7 @@ async function cargarCatalogo() {
     // unidades de Querétaro pero se manejan aparte, como municipios, así que
     // la jurisdicción revisa/valida su SIS (solo esas CLUES). La opción vacía
     // = vista jurisdiccional normal (Movimiento de municipio/hospital).
-    const opcionesRevision = (lista) => lista.map((x) => `<option value="${x.id}">${x.clues} -- ${x.nombre} (${x.municipio})</option>`).join('');
+    const opcionesRevision = (lista) => lista.map((x) => `<option value="${x.id}">${x.clues} — ${x.nombre} (${x.municipio})</option>`).join('');
     if (rol === 'MUNICIPAL') selUnidadRevision.innerHTML = opcionesRevision(unidadesClues);
     else if (rol === 'JURISDICCIONAL') {
       selUnidadRevision.innerHTML = '<option value="">— Vista jurisdiccional (sin revisar una unidad) —</option>'
@@ -641,7 +641,7 @@ async function confirmarSalidaSIS06P() {
   if (!hayPaloteoSinGuardar()) return true;
   const guardar = await mostrarModal({
     titulo: 'Paloteo SIS-06-P sin guardar',
-    mensaje: 'Capturaste datos en el paloteo SIS-06-P que todavía no se guardan -- si sales ahora se pierden. ¿Guardar ahora y continuar? (Cancelar = quedarte aquí.)',
+    mensaje: 'Capturaste datos en el paloteo SIS-06-P que todavía no se guardan — si sales ahora se pierden. ¿Guardar ahora y continuar? (Cancelar = quedarte aquí.)',
     textoAceptar: 'Guardar y continuar'
   });
   if (!guardar) return false;
@@ -1354,7 +1354,7 @@ async function cargarMovimientoJurisdiccional(anio, mes) {
     aplicadas_a: f.aplicadas_a, aplicadas_b: f.aplicadas_b,
     desechadas_a: f.desechadas_a, desechadas_b: f.desechadas_b,
     existencia_final_frascos: f.existencia_final_frascos,
-    observaciones: `${f.es_provisional ? 'Provisional -- ' : ''}${f.unidades_cerradas}/${f.unidades_reportando} ${f.unidades_reportando === 1 ? 'municipio u hospital cerrado' : 'municipios u hospitales cerrados'}`,
+    observaciones: `${f.es_provisional ? 'Provisional — ' : ''}${f.unidades_cerradas}/${f.unidades_reportando} ${f.unidades_reportando === 1 ? 'municipio u hospital cerrado' : 'municipios u hospitales cerrados'}`,
     biovac_lotes: {
       id: f.lote_id, numero_lote: f.numero_lote, caducidad: f.caducidad,
       dosis_por_frasco_override: f.dosis_por_frasco_override, biologico_id: f.biologico_id
@@ -1612,7 +1612,7 @@ async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
   // el concepto en otro sistema. Roles revisores (MUNICIPAL/JURISDICCIONAL/
   // ADMIN) ya conocen el término -- mismo aviso corto que a nivel municipio.
   const mensaje = esUnidad
-    ? `Tu jurisdicción ya te asignó ${candidatos.length} lote(s) de biológico este mes y se van a precargar ahora en tu Movimiento como "recibido" -- no se puede rechazar. `
+    ? `Tu jurisdicción ya te asignó ${candidatos.length} lote(s) de biológico este mes y se van a precargar ahora en tu Movimiento como "recibido" — no se puede rechazar. `
       + '¿Qué es un "lote"? Imagina que en vez de vacunas fueran manzanas: un lote es como una '
       + 'caja concreta de manzanas que llegó en un solo embarque, con su propio número de lote '
       + '(la etiqueta de esa caja) y su propia fecha de caducidad. Cada lote que recibes se registra '
@@ -1974,7 +1974,7 @@ function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, 
       border:1px solid ${coincide ? 'rgba(16,185,129,.3)' : 'var(--warning-border)'};
       display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
       <span><span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">${coincide ? 'check_circle' : 'compare_arrows'}</span>
-      ${fuente} ${totalSIS06P}${info.ajustePaloteo ? ` (incluye ${info.ajustePaloteo} de comodín de sustitución)` : ''} dosis aplicadas de ${info.claves.length > 1 ? `${info.etiqueta.replace(' (se concilian juntas)', '')} (juntas)` : 'este biológico'} este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas}${info.ajusteAplicado ? ` (incluye ${info.ajusteAplicado} de comodín de sustitución)` : ''} aplicadas${info.claves.length > 1 ? ' entre los biológicos del grupo' : ''} -- deben ser iguales: no se puede enviar el SIS mientras no coincidan)`}.</span>
+      ${fuente} ${totalSIS06P}${info.ajustePaloteo ? ` (incluye ${info.ajustePaloteo} de comodín de sustitución)` : ''} dosis aplicadas de ${info.claves.length > 1 ? `${info.etiqueta.replace(' (se concilian juntas)', '')} (juntas)` : 'este biológico'} este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas}${info.ajusteAplicado ? ` (incluye ${info.ajusteAplicado} de comodín de sustitución)` : ''} aplicadas${info.claves.length > 1 ? ' entre los biológicos del grupo' : ''} — deben ser iguales: no se puede enviar el SIS mientras no coincidan)`}.</span>
       ${avisoPar}
       ${botonCovid}
       ${puedeUsarTotal ? `<button type="button" class="btn-mini btn-secundario" data-action="usar-total-influenza" data-renglon="${normalesLotes[0].id}" data-total="${totalSIS06P}"><span class="material-symbols-rounded">sync</span> Usar este total aquí</button>` : ''}
@@ -2234,7 +2234,7 @@ function renderPanelAgregar(bio) {
       <div class="campo campo-lote">
         <label>2. N° de lote</label>
         <select data-nuevo-lote disabled><option value="">Primero elige el Estatus…</option></select>
-        <span class="ayuda">Lotes dados de alta en Carga de lotes por municipio -- para A.R.F. se ofrecen también los lotes dados de alta como Normal, porque suele ser el mismo lote en dictamen</span>
+        <span class="ayuda">Lotes dados de alta en Carga de lotes por municipio — para A.R.F. se ofrecen también los lotes dados de alta como Normal, porque suele ser el mismo lote en dictamen</span>
       </div>
       <div class="campo">
         <label>Caducidad</label>
@@ -2840,7 +2840,7 @@ async function eliminarRenglon(renglonId) {
   const { error } = await estado.db.from('biovac_renglones').delete().eq('id', renglonId);
   if (error) {
     if (error.code === '23503') {
-      toast('No se pudo eliminar: este renglón tiene historial de auditoría vinculado. Intenta de nuevo -- si persiste, avísale al desarrollador.', 'error');
+      toast('No se pudo eliminar: este renglón tiene historial de auditoría vinculado. Intenta de nuevo — si persiste, avísale al desarrollador.', 'error');
     } else {
       toast('Error al eliminar: ' + error.message, 'error');
     }
@@ -2959,7 +2959,7 @@ async function poblarSelectLote(bio, categoria, selectEl) {
       return `<option value="${l.lote}" data-cad="${l.caducidad || ''}">${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}${usado ? ' (ya está en tu tabla)' : ''}</option>`;
     })
     .join('');
-  const vacio = !lista.length ? '<option value="" disabled>Sin lotes con este Estatus dados de alta para este municipio -- regístralo en Carga de lotes por municipio</option>' : '';
+  const vacio = !lista.length ? '<option value="" disabled>Sin lotes con este Estatus dados de alta para este municipio — regístralo en Carga de lotes por municipio</option>' : '';
   selectEl.innerHTML = `<option value="">Selecciona un lote…</option>${opciones}${vacio}`;
   selectEl.disabled = false;
 }
@@ -3382,12 +3382,12 @@ function renderResumenAnalisis(parsed) {
   let html = `<div class="resumen-importador">
     <p><b>${parsed.meses.length}</b> mes(es) con datos: ${parsed.meses.map((m) => `${m.mesClave} ${m.anio}`).join(', ')}.</p>`;
   if (noReconocidos.size) {
-    html += `<p class="aviso">⚠ ${noReconocidos.size} nombre(s) de biológico no reconocido(s) en el archivo (asígnalos abajo, en "Biológicos no reconocidos" -- si se dejan sin asignar, se omiten): ${[...noReconocidos].join(', ')}</p>`;
+    html += `<p class="aviso">⚠ ${noReconocidos.size} nombre(s) de biológico no reconocido(s) en el archivo (asígnalos abajo, en "Biológicos no reconocidos" — si se dejan sin asignar, se omiten): ${[...noReconocidos].join(', ')}</p>`;
   }
   if (advertenciasTotal) {
     html += `<p class="aviso">⚠ ${advertenciasTotal} fila(s) con datos pero sin número de lote identificable (se omiten).</p>`;
   }
-  html += `<p>Revisa la tabla de abajo y corrige lo que haga falta -- lote, caducidad, cantidades, categoría (Normal/A.R.F./Canje) -- antes de confirmar. Al confirmar, cada mes se guarda y se cierra automáticamente en orden; si un mes ya estaba cerrado en el sistema, se conserva tal cual y no se toca.</p></div>`;
+  html += `<p>Revisa la tabla de abajo y corrige lo que haga falta — lote, caducidad, cantidades, categoría (Normal/A.R.F./Canje) — antes de confirmar. Al confirmar, cada mes se guarda y se cierra automáticamente en orden; si un mes ya estaba cerrado en el sistema, se conserva tal cual y no se toca.</p></div>`;
   cont.innerHTML = html;
 }
 

@@ -35,7 +35,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=8">
 <link rel="stylesheet" href="ayuda.css?v=6">
-<link rel="stylesheet" href="municipal_guiado.css?v=9">
+<link rel="stylesheet" href="municipal_guiado.css?v=12">
 <script defer src="guias_contenido.js?v=4"></script>
 <script defer src="ayuda.js?v=21"></script>
 <script defer src="a11y_global.js?v=6"></script>
@@ -47,12 +47,12 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.74"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.57"></script>
+<script defer src="biovac_ui.js?v=2026.75"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.58"></script>
 <script defer src="sis_csv.js?v=2"></script>
-<script defer src="sis06p_dashboard_module.js?v=2026.22"></script>
+<script defer src="sis06p_dashboard_module.js?v=2026.23"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
-<script defer src="municipal_guiado.js?v=15"></script>
+<script defer src="municipal_guiado.js?v=16"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -1112,7 +1112,7 @@ window.onunhandledrejection = function (event) {
   <div id="sis06pPanelCambiosPendientes" style="display:none; margin-bottom:16px; background:var(--warning-bg); border:1.5px solid var(--warning-border); border-radius:16px; padding:14px 18px;">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
       <div>
-        <strong style="color:var(--warning); font-size:13px;">El municipal corrigió información -- revísala</strong>
+        <strong style="color:var(--warning); font-size:13px;">El municipal corrigió información — revísala</strong>
         <p style="margin:2px 0 0; font-size:12px; color:var(--text);">Verifica cada cambio y acéptalo para que quede como definitivo.</p>
       </div>
       <button type="button" class="btn-mini btn-secundario" id="btnAceptarTodosCambios"><span class="material-symbols-rounded">done_all</span> Aceptar todos</button>
@@ -1177,8 +1177,8 @@ window.onunhandledrejection = function (event) {
         <span class="material-symbols-rounded" style="color:var(--secondary);">description</span>
       </div>
       <div>
-        <h2 id="csvPanelTitulo">CSV -- lo que se subirá a RDA</h2>
-        <p class="subtitulo" id="csvPanelSubtitulo">Mes seleccionado arriba, una fila por clave SIS con su valor -- mismo formato que ya acepta el panel RDA.</p>
+        <h2 id="csvPanelTitulo">CSV · lo que se subirá a RDA</h2>
+        <p class="subtitulo" id="csvPanelSubtitulo">Mes seleccionado arriba, una fila por clave SIS con su valor — mismo formato que ya acepta el panel RDA.</p>
       </div>
     </div>
     <div style="display:flex; align-items:center; gap:8px;"><button type="button" class="ayuda-btn" data-ayuda="csv" title="Qué contiene el CSV" aria-label="Qué contiene el CSV"><span class="material-symbols-rounded">help</span></button>
