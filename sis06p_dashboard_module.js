@@ -538,7 +538,15 @@
       // corta en 1000: se pide por bloques (la función ya ordena por clues, etiqueta) para no perder unidades.
       const { data, error } = await window.rpcPorBloques(estado.db, 'sis06p_comparativo', { p_mes: mes, p_anio: anio });
       if (error) throw error;
-      const filas = data.filter((f) => f.municipio === municipio);
+      // Solo se concilian las unidades que ya enviaron (o ya están validadas): una unidad que todavía prellena no tiene nada que
+      // cuadrar y llenaría la lista de falsas diferencias. Se dice cuántas faltan.
+      const seg = Array.isArray(window.__sis06pUltimasFilas) ? window.__sis06pUltimasFilas : null;
+      const enviadas = seg ? new Set(seg.filter((x) => x.estado === 'ENVIADO' || x.estado === 'VALIDADO').map((x) => x.clues)) : null;
+      const sinEnviar = seg ? seg.filter((x) => x.municipio === municipio && x.estado !== 'ENVIADO' && x.estado !== 'VALIDADO').length : 0;
+      const filas = data.filter((f) => f.municipio === municipio && (!enviadas || enviadas.has(f.clues)));
+      const notaSinEnviar = sinEnviar > 0
+        ? `<div style="font-size:11.5px; color:var(--muted); padding:4px 0;">${sinEnviar === 1 ? 'Falta 1 unidad por enviar' : 'Faltan ' + sinEnviar + ' unidades por enviar'}: se concilian cuando envíen.</div>`
+        : '';
       const porUnidad = new Map();
       filas.forEach((f) => {
         if (!porUnidad.has(f.clues)) porUnidad.set(f.clues, { unidad: f.unidad, filas: [] });
@@ -547,17 +555,18 @@
       const conDiferencia = [...porUnidad.entries()].filter(([, u]) => u.filas.some((f) => !f.coincide));
 
       if (porUnidad.size === 0) {
-        cont.innerHTML = '<div style="font-size:11.5px; color:var(--muted); font-style:italic; padding:6px 0;">Ninguna unidad tiene paloteo ni movimiento capturado todavía para conciliar.</div>';
+        cont.innerHTML = '<div style="font-size:11.5px; color:var(--muted); font-style:italic; padding:6px 0;">Ninguna unidad ha enviado todavía: la conciliación empieza cuando lleguen los primeros envíos.</div>' + notaSinEnviar;
         return { total: 0, conDiferencia: 0 };
       }
       if (conDiferencia.length === 0) {
-        cont.innerHTML = `<div style="font-size:11.5px; font-weight:700; color:var(--success); padding:6px 0;">✅ Conciliación paloteo vs. movimiento: ${porUnidad.size === 1 ? 'la única unidad con captura coincide' : 'las ' + porUnidad.size + ' unidades con captura coinciden'} en todos sus biológicos.</div>`;
+        cont.innerHTML = `<div style="font-size:11.5px; font-weight:700; color:var(--success); padding:6px 0;">✅ Conciliación paloteo vs. movimiento: ${porUnidad.size === 1 ? 'la única unidad con captura coincide' : 'las ' + porUnidad.size + ' unidades con captura coinciden'} en todos sus biológicos.</div>${notaSinEnviar}`;
         return { total: porUnidad.size, conDiferencia: 0 };
       }
       cont.innerHTML = `
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); margin:4px 0 8px;">
           Conciliación paloteo (SIS-06-P) vs. aplicado (Movimiento de Biológico) · ${conDiferencia.length === 1 ? '1 unidad con diferencia' : conDiferencia.length + ' unidades con diferencia'}
         </div>
+        ${notaSinEnviar}
         ${conDiferencia.map(([clues, u]) => {
           const dif = u.filas.filter((f) => !f.coincide);
           return `

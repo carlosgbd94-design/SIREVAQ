@@ -692,7 +692,7 @@
       return;
     }
     const eraU = eraUnidades(mes, anio);
-    const intro = eraU ? `<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">group_work</span><span><b>Se arma solo con lo que envían tus unidades</b> y lo puedes ajustar (recibido, aplicadas y desechadas): la existencia anterior viene del mes pasado. Descárgalo e imprímelo para validarlo con la Jurisdicción; al empatar, ciérralo con <b>Cerrar mes</b>.</span></p>`
+    const intro = eraU ? `<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">group_work</span><span><b>Se arma solo con lo que envían tus unidades</b>. Lo que reportan las unidades se corrige en la unidad (cada lote tiene su desglose «Por unidad»); aquí solo se ajustan los lotes que ninguna unidad reporta. La existencia anterior viene del mes pasado. Descárgalo e imprímelo para validarlo con la Jurisdicción; al empatar, ciérralo con <b>Cerrar mes</b>.</span></p>`
       : esManual ? `<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span><span><b>${nombreMes(mes)} se captura a mano en el municipio</b>, porque las unidades todavía no capturan el suyo. Desde octubre se arma con tus unidades.</span></p>` : '';
     if (!info.mov) {
       caja.innerHTML = chipEstado('pend', eraU ? 'Aparece al enviar la 1.ª unidad' : 'Sin iniciar', eraU ? 'hourglass_top' : 'radio_button_unchecked');

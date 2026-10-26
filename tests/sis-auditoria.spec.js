@@ -35,7 +35,7 @@ async function repetidos(page) {
 test.use({ viewport: { width: 1400, height: 1000 } });
 
 async function revisar(page, informe, etiqueta) {
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(1000);   // las tarjetas entran con animación (hasta ~0.8 s): se mide con el color final
   if (FOTOS) await page.screenshot({ path: path.join(FOTOS, etiqueta.replace(/\W+/g, '_') + '.png'), fullPage: true });
   informe[etiqueta] = { axe: await axe(page), ids: await repetidos(page) };
 }
@@ -129,4 +129,51 @@ test('Mes con el que abre el SIS: la unidad pasa al mes en curso después de la 
     municipal26oct: { anio: 2026, mes: 9 },
     juris8oct: { anio: 2026, mes: 9 }
   });
+});
+
+test('Movimiento del municipio: desglose por unidad de un lote (suma, requisición, ajuste manual) accesible y con acción para corregir en la unidad', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await page.addScriptTag({ content: AXE });
+  const r = await page.evaluate(async () => {
+    estado.requisicionPorLote = new Map([['LC1', { numero_lote: 'LC1', requisicion: 30 }]]);
+    const ren = { id: 'r1', categoria: 'NORMAL', recibido_frascos: 33, aplicadas_a: 10, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, biovac_lotes: { numero_lote: 'LC1' } };
+    const aporte = [
+      { clues: 'QTSSA000001', unidad: 'C.S. ALFA', estado: 'CERRADO', rec: 20, apl: 6, des: 0 },
+      { clues: 'QTSSA000002', unidad: 'C.S. BETA', estado: 'CERRADO', rec: 10, apl: 4, des: 0 },
+      { clues: 'QTSSA000003', unidad: 'C.S. GAMMA', estado: 'BORRADOR', rec: 5, apl: 0, des: 0 }
+    ];
+    const host = document.createElement('div'); host.id = 'prueba';
+    host.innerHTML = '<table><tbody>' + filaPorUnidadHtml(ren, aporte, 9) + '</tbody></table>';
+    document.body.appendChild(host);
+    host.querySelector('tr').hidden = false;
+    const a = await window.axe.run('#prueba', { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'best-practice'] }, resultTypes: ['violations'] });
+    return { texto: host.innerText.replace(/\s+/g, ' '), botones: host.querySelectorAll('[data-action="corregir-en-unidad"]').length, violaciones: a.violations.map((v) => v.id) };
+  });
+  expect(r.violaciones).toEqual([]);
+  expect(r.botones).toBe(3);
+  expect(r.texto).toContain('Suma de unidades enviadas 30');      // solo suman las que ya enviaron
+  expect(r.texto).toContain('Aún no suma');                         // la que no ha enviado se avisa
+  expect(r.texto).toContain('La requisición asignó 30');            // comparación contra la requisición
+  expect(r.texto).toContain('no cuadra');                           // 30 de la requisición vs 35 capturados por las unidades
+  expect(r.texto).toContain('ajuste manual');                       // municipio 33 vs 30 de las unidades enviadas
+});
+
+test('Aviso de biológico caducado: solo cuenta existencia NORMAL; lo que ya está en A.R.F. o canje no se vuelve a avisar', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  const html = await page.evaluate(() => {
+    const hoy = new Date();
+    estado.movimiento = { anio: hoy.getFullYear(), mes: hoy.getMonth() + 1, estado: 'BORRADOR' };
+    const esteMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`;
+    estado.biologicos = [{ id: 'b1', nombre_excel: 'BCG' }];
+    const ren = (categoria, lote, cad, fin) => ({ categoria, existencia_final_frascos: fin, biovac_lotes: { numero_lote: lote, caducidad: cad, biologico_id: 'b1' } });
+    estado.renglones = [ren('NORMAL', 'LOTE-NORMAL', '2025-06-01', 4), ren('CANJE', 'LOTE-CANJE', '2025-06-01', 10), ren('ARF', 'LOTE-ARF', '2023-08-01', 2), ren('NORMAL', 'LOTE-SANO', '2028-01-01', 9), ren('NORMAL', 'LOTE-MES', esteMes, 3)];
+    return avisoCaducidadMovimiento();
+  });
+  expect(html).toContain('LOTE-NORMAL');
+  expect(html).not.toContain('LOTE-CANJE');
+  expect(html).not.toContain('LOTE-ARF');
+  expect(html).not.toContain('LOTE-SANO');
+  // El que caduca este mismo mes sale aparte: todavía no está caducado hoy, pero no puede cerrar el mes con existencia
+  expect(html).toContain('LOTE-MES');
+  expect(html).toContain('caduca al terminar este mes');
 });

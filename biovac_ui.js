@@ -252,6 +252,42 @@ function movimientoBloqueadoParaUnidad() {
   return movimientoEnviadoParaUnidad() || movimientoFueraDeVentanaParaUnidad();
 }
 
+function escHtmlBV(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+// Desglose por unidad del Movimiento del municipio: qué aportó cada unidad a cada lote (y, para comparar, lo que dice la requisición).
+// estado.aporteUnidades: Map "lote_id|categoria" -> [{ clues, unidad, estado, rec, apl, des }]
+async function cargarAporteUnidades(m) {
+  const mun = ((estado.unidades || []).find((x) => x.id === m.unidad_id) || {}).municipio;
+  const unidades = (estado.unidadesClues || estado.unidades || []).filter((u) => u.municipio === mun && u.clues && !u.clues.startsWith('JS1-') && u.activo !== false);
+  const porId = new Map(unidades.map((u) => [u.id, u]));
+  const aporte = new Map();
+  if (!porId.size) { estado.aporteUnidades = aporte; return; }
+  const { data: movs, error: e1 } = await estado.db.from('biovac_movimientos').select('id, unidad_id, estado')
+    .in('unidad_id', [...porId.keys()]).eq('anio', m.anio).eq('mes', m.mes);
+  if (e1) throw e1;
+  const porMov = new Map((movs || []).map((x) => [x.id, x]));
+  if (porMov.size) {
+    const ids = [...porMov.keys()];
+    for (let i = 0; i < ids.length; i += 40) {
+      const { data: rens, error: e2 } = await estado.db.from('biovac_renglones')
+        .select('lote_id, categoria, movimiento_id, recibido_frascos, aplicadas_a, aplicadas_b, desechadas_a, desechadas_b')
+        .in('movimiento_id', ids.slice(i, i + 40));
+      if (e2) throw e2;
+      (rens || []).forEach((r) => {
+        const mv = porMov.get(r.movimiento_id); const u = porId.get(mv.unidad_id);
+        const k = `${r.lote_id}|${r.categoria}`;
+        if (!aporte.has(k)) aporte.set(k, []);
+        aporte.get(k).push({ clues: u.clues, unidad: u.nombre, estado: mv.estado,
+          rec: Number(r.recibido_frascos) || 0, apl: (Number(r.aplicadas_a) || 0) + (Number(r.aplicadas_b) || 0), des: (Number(r.desechadas_a) || 0) + (Number(r.desechadas_b) || 0) });
+      });
+    }
+  }
+  estado.aporteUnidades = aporte;
+  // Requisición del municipio por número de lote (para comparar con lo recibido por las unidades)
+  const { data: rq } = await estado.db.rpc('sis06p_recibido_vs_requisicion', { p_mes: m.mes, p_anio: m.anio, p_municipio: mun });
+  estado.requisicionPorLote = new Map((rq || []).map((f) => [String(f.numero_lote || '').toUpperCase(), f]));
+}
+
 function esErrorDeRed(err) {
   const msg = String((err && (err.message || err)) || '');
   return (typeof navigator !== 'undefined' && navigator.onLine === false)
@@ -1219,6 +1255,11 @@ async function cargarMovimientoInterno() {
   }
   await cargarRenglones();
   estado.anteriorEditable = await calcularAnteriorEditable(unidadId, anio, mes);
+  estado.aporteUnidades = null;
+  estado.requisicionPorLote = null;
+  if (movimientoDelMunicipioPorUnidades(movimiento) && estado.perfil && estado.perfil.rol !== 'UNIDAD') {
+    try { await cargarAporteUnidades(movimiento); } catch (e) { console.warn('[BioVac] No se pudo cargar el desglose por unidad:', e); estado.aporteUnidades = null; }
+  }
   if (estado.perfil && estado.perfil.rol === 'UNIDAD') {
     await cargarSIS06PTotalesParaComparar(anio, mes);
     if (window.SIS06PBiovac) window.SIS06PBiovac.aplicarResponsable();
@@ -1793,19 +1834,28 @@ function renderBloques(editable) {
 
 // Aviso de biológico caducado / próximo a caducar (<= DIAS_PROXIMO_A_VENCER) entre los lotes con existencia final.
 function avisoCaducidadMovimiento() {
-  const conExistencia = (estado.renglones || []).filter((r) => Number(r.existencia_final_frascos) > 0 && r.biovac_lotes && r.biovac_lotes.caducidad);
+  // Solo existencia NORMAL (la que todavía se puede usar o hay que dar de baja): lo que ya está en A.R.F. o en canje ya fue
+  // apartado y tiene su propio estado por renglón (etiqueta «Caducado» y botón para darlo de baja), no vuelve a avisarse aquí.
+  const conExistencia = (estado.renglones || []).filter((r) => r.categoria === 'NORMAL' && Number(r.existencia_final_frascos) > 0 && r.biovac_lotes && r.biovac_lotes.caducidad);
   const nombre = (r) => {
     const bio = (estado.biologicos || []).find((b) => b.id === r.biovac_lotes.biologico_id);
     return `${bio ? bio.nombre_excel.replace(/\n/g, ' ') : 'Biológico'} · lote ${r.biovac_lotes.numero_lote} (${formatMmmAa(r.biovac_lotes.caducidad)})`;
   };
-  const vencidos = conExistencia.filter((r) => loteVencido(r.biovac_lotes.caducidad) || semaforoCaducidad(r.biovac_lotes.caducidad) === 'sem-vencido');
-  const proximos = conExistencia.filter((r) => !vencidos.includes(r) && semaforoCaducidad(r.biovac_lotes.caducidad) === 'sem-proximo');
-  if (!vencidos.length && !proximos.length) return '';
+  const noUsable = conExistencia.filter((r) => loteVencido(r.biovac_lotes.caducidad) || semaforoCaducidad(r.biovac_lotes.caducidad) === 'sem-vencido');
+  // La caducidad es por MES (OCT-26 caduca el 31): mientras ese mes no termina el lote todavía no está caducado, pero el
+  // Movimiento de ese mes no puede cerrar con existencia; se avisa aparte para no decir «caducado» de algo que aún sirve hoy.
+  const hoyIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const finDeMesCaducidad = (iso) => ultimoDiaMes(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)));
+  const vencidos = noUsable.filter((r) => finDeMesCaducidad(r.biovac_lotes.caducidad) < hoyIso);
+  const caducanEsteMes = noUsable.filter((r) => !vencidos.includes(r));
+  const proximos = conExistencia.filter((r) => !noUsable.includes(r) && semaforoCaducidad(r.biovac_lotes.caducidad) === 'sem-proximo');
+  if (!vencidos.length && !caducanEsteMes.length && !proximos.length) return '';
   const lista = (rs) => `<ul>${[...new Set(rs.map(nombre))].map((t) => `<li>${t}</li>`).join('')}</ul>`;
   const bloque = (cls, icono, titulo, rs, ayuda) => rs.length
     ? `<div class="aviso-caducidad ${cls}" role="alert"><span class="material-symbols-rounded" aria-hidden="true">${icono}</span><div><b>${titulo}</b><small>${ayuda}</small>${lista(rs)}</div></div>` : '';
   return `<div class="avisos-caducidad">
-    ${bloque('vencido', 'event_busy', 'Biológico caducado con existencia', vencidos, 'Regístralo como desechado (o en A.R.F./canje si aplica) antes de cerrar el mes.')}
+    ${bloque('vencido', 'event_busy', 'Biológico caduca al terminar este mes', caducanEsteMes, 'Su caducidad es este mes: aplícalo, o dalo de baja o pásalo a A.R.F. o canje antes de cerrar el mes.')}
+    ${bloque('vencido', 'event_busy', 'Biológico caducado con existencia', vencidos, 'Dalo de baja como desechado, o pásalo a A.R.F. o canje si aplica, antes de cerrar el mes.')}
     ${bloque('proximo', 'schedule', `Próximo a caducar (menos de ${DIAS_PROXIMO_A_VENCER} días)`, proximos, 'Prioriza su uso o avisa a tu municipio para redistribuirlo.')}
   </div>`;
 }
@@ -2112,7 +2162,11 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   const tagAjusteAnt = (estado.anteriorEditable === false && Math.abs(ajusteAnt) > 0.0001)
     ? `<span class="tag-ajuste-ant" title="Ajuste manual sobre el cierre del mes anterior (${ajusteAnt > 0 ? '+' : ''}${redondearFrascos(ajusteAnt)}). Si ese mes cambia, este ajuste se conserva.">${ajusteAnt > 0 ? '+' : ''}${redondearFrascos(ajusteAnt)} ajuste</span>`
     : '';
-  const campo = (campo, valor, clase) => editable
+  // Movimiento del municipio armado con sus unidades: lo que reportan las unidades se corrige en la unidad (con motivo y
+  // auditoría) y el municipio se actualiza solo; aquí solo se ajustan los lotes que NINGUNA unidad reporta (almacén municipal).
+  const aporte = estado.aporteUnidades && estado.aporteUnidades.get(`${r.lote_id}|${r.categoria}`);
+  const porUnidades = Boolean(editable && aporte && aporte.length);
+  const campo = (campo, valor, clase) => (editable && !porUnidades)
     ? `<input type="number" step="any" inputmode="decimal" class="${clase || ''}" data-renglon="${r.id}" data-campo="${campo}" value="${valor ? valor : ''}" placeholder="0">`
     : `<span>${valor || 0}</span>`;
 
@@ -2144,7 +2198,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
 
   return `<tr class="${subcategoria ? 'categoria-' + subcategoria : ''}">
     <td>
-      <div class="lote-texto">${lote.numero_lote}${tagEditado}<span data-etiqueta-corr="${lote.id}|${r.categoria}"></span>${botonResolver}</div>
+      <div class="lote-texto">${lote.numero_lote}${tagEditado}<span data-etiqueta-corr="${lote.id}|${r.categoria}"></span>${botonResolver}${porUnidades ? `<button type="button" class="btn-resolver unidades" data-action="ver-por-unidad" data-renglon="${r.id}" aria-expanded="${estado.unidadesAbiertas && estado.unidadesAbiertas.has(r.id) ? 'true' : 'false'}" title="Qué aportó cada unidad a este lote; ahí se corrige"><span class="material-symbols-rounded" aria-hidden="true">groups</span> Por unidad</button>` : ''}</div>
     </td>
     <td>
       <div class="caducidad-chip ${semaforo}"><span class="semaforo"></span>${formatMmmAa(lote.caducidad)}</div>
@@ -2160,7 +2214,43 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     <td class="col-final c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}" data-existencia-final="${r.id}">${dosis}</span></td>
     <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}</td>
     <td>${editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
-  </tr>${filaResolver}`;
+  </tr>${filaResolver}${porUnidades ? filaPorUnidadHtml(r, aporte, cols) : ''}`;
+}
+
+// Detalle por unidad de un lote del municipio: suma de lo que reportó cada unidad y, si el municipio trae algo distinto,
+// de dónde sale la diferencia. «Abrir en la unidad» lleva a su Movimiento en modo corrección (queda en la auditoría).
+function filaPorUnidadHtml(r, aporte, cols) {
+  const num = (v) => redondearFrascos(v) || 0;
+  const enviadas = aporte.filter((a) => a.estado === 'CERRADO');
+  const suma = (arr, k) => arr.reduce((t, a) => t + a[k], 0);
+  const ordenadas = [...aporte].sort((x, y) => String(x.unidad).localeCompare(String(y.unidad), 'es'));
+  const abierta = Boolean(estado.unidadesAbiertas && estado.unidadesAbiertas.has(r.id));
+  const dRec = (Number(r.recibido_frascos) || 0) - suma(enviadas, 'rec');
+  const dApl = ((Number(r.aplicadas_a) || 0) + (Number(r.aplicadas_b) || 0)) - suma(enviadas, 'apl');
+  const dDes = ((Number(r.desechadas_a) || 0) + (Number(r.desechadas_b) || 0)) - suma(enviadas, 'des');
+  const hayAjuste = Math.abs(dRec) > 0.001 || Math.abs(dApl) > 0.001 || Math.abs(dDes) > 0.001;
+  const signo = (v) => (v > 0 ? '+' : '') + num(v);
+  const rq = estado.requisicionPorLote && r.categoria === 'NORMAL' ? estado.requisicionPorLote.get(String(r.biovac_lotes.numero_lote || '').toUpperCase()) : null;
+  const sumaRec = suma(aporte, 'rec');
+  const lineaRq = rq
+    ? `<p class="por-unidad-nota ${Math.abs(Number(rq.requisicion) - sumaRec) < 0.001 ? 'ok' : 'aviso'}"><span class="material-symbols-rounded" aria-hidden="true">${Math.abs(Number(rq.requisicion) - sumaRec) < 0.001 ? 'check_circle' : 'warning'}</span> La requisición asignó <b>${num(rq.requisicion)}</b> frasco(s) de este lote al municipio y las unidades suman <b>${num(sumaRec)}</b> recibidos${Math.abs(Number(rq.requisicion) - sumaRec) < 0.001 ? ': cuadra.' : ': no cuadra; revisa qué unidad capturó distinto.'}</p>`
+    : '';
+  const lineaAjuste = hayAjuste
+    ? `<p class="por-unidad-nota aviso"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span> El municipio trae un ajuste manual sobre lo que sumaron las unidades enviadas (recibido ${signo(dRec)}, aplicadas ${signo(dApl)}, desechadas ${signo(dDes)}). Para cambiarlo corrige en la unidad correspondiente.</p>`
+    : '';
+  return `<tr class="fila-por-unidad" data-panel-unidades="${r.id}"${abierta ? '' : ' hidden'}><td colspan="${cols}">
+    <div class="por-unidad">
+      <table class="tabla-por-unidad"><caption class="sr-solo">Lo que aportó cada unidad al lote ${escHtmlBV(String(r.biovac_lotes.numero_lote || ''))}</caption>
+        <thead><tr><th scope="col">Unidad</th><th scope="col">Recibido</th><th scope="col">Aplicadas</th><th scope="col">Desechadas</th><th scope="col">Estado</th><th scope="col"><span class="sr-solo">Acción</span></th></tr></thead>
+        <tbody>${ordenadas.map((a) => `<tr>
+          <th scope="row">${escHtmlBV(a.unidad)}</th><td>${num(a.rec)}</td><td>${num(a.apl)}</td><td>${num(a.des)}</td>
+          <td>${a.estado === 'CERRADO' ? '<span class="mini-estado ok">Enviado</span>' : '<span class="mini-estado">Aún no suma</span>'}</td>
+          <td><button type="button" class="btn-mini btn-secundario" data-action="corregir-en-unidad" data-clues="${escHtmlBV(a.clues)}" aria-label="Abrir ${escHtmlBV(a.unidad)} para corregir su Movimiento"><span class="material-symbols-rounded" aria-hidden="true">open_in_new</span> Abrir en la unidad</button></td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr><th scope="row">Suma de unidades enviadas</th><td>${num(suma(enviadas, 'rec'))}</td><td>${num(suma(enviadas, 'apl'))}</td><td>${num(suma(enviadas, 'des'))}</td><td colspan="2"></td></tr></tfoot>
+      </table>
+      ${lineaRq}${lineaAjuste}
+    </div></td></tr>`;
 }
 
 // Dictamen de A.R.F.: elegir qué pasó con la existencia (total o parcial).
@@ -2786,7 +2876,7 @@ function renderBannerMovimiento(m, esJurisdiccional) {
   // Movimiento del municipio (desde octubre): se arma SOLO con lo que envían las unidades y se ajusta aquí.
   if (rol !== 'UNIDAD' && movimientoDelMunicipioPorUnidades() && (m.estado === 'BORRADOR' || m.estado === 'EN_CORRECCION')) {
     cont.insertAdjacentHTML('afterbegin', `<div class="banner-mov info"><span class="material-symbols-rounded" aria-hidden="true">auto_awesome</span>
-      <div class="texto"><b>Se arma solo con tus unidades</b>Cada envío se suma aquí. La existencia anterior viene del mes pasado y no se edita; recibido, aplicadas y desechadas sí puedes ajustarlas, y tus ajustes se conservan.</div></div>
+      <div class="texto"><b>Se arma solo con tus unidades</b>Cada envío se suma aquí. La existencia anterior viene del mes pasado y no se edita. Lo que reportan las unidades se corrige en la unidad (botón «Por unidad» de cada lote), con motivo y auditoría; aquí solo se ajustan los lotes que ninguna unidad reporta.</div></div>
       <div id="discrepanciasMunicipio" class="disc-caja" aria-live="polite"></div>`);
     const u = (estado.unidades || []).find((x) => x.id === m.unidad_id);
     if (u) pintarDiscrepanciasMunicipio(document.getElementById('discrepanciasMunicipio'), u.municipio, m.mes, m.anio);
@@ -3746,6 +3836,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (accion === 'eliminar-renglon') { eliminarRenglon(btn.dataset.renglon); return; }
     if (accion === 'editar-ant') { alternarEdicionAnterior(btn.dataset.renglon); return; }
+    if (accion === 'ver-por-unidad') {
+      const fila = document.querySelector(`[data-panel-unidades="${btn.dataset.renglon}"]`);
+      if (!fila) return;
+      const abre = fila.hidden;
+      fila.hidden = !abre;
+      btn.setAttribute('aria-expanded', String(abre));
+      estado.unidadesAbiertas = estado.unidadesAbiertas || new Set();
+      if (abre) estado.unidadesAbiertas.add(btn.dataset.renglon); else estado.unidadesAbiertas.delete(btn.dataset.renglon);
+      return;
+    }
+    if (accion === 'corregir-en-unidad') {
+      if (window.MunicipalGuiado && window.MunicipalGuiado.activo && window.MunicipalGuiado.activo()) window.MunicipalGuiado.revisar(btn.dataset.clues, 'btnSeccionMovimiento');
+      else toast('Abre la unidad desde «Revisión» para corregir su Movimiento.', 'error');
+      return;
+    }
     if (accion === 'ir-a-recibido') { irACasillaRecibido(btn.dataset.renglon); return; }
     if (accion === 'usar-covid-capturado') { usarCovidCapturadoEnRenglon(btn.dataset.renglon, Number(btn.dataset.a) || 0, Number(btn.dataset.b) || 0); return; }
     if (accion === 'usar-total-influenza') { usarTotalInfluenzaEnRenglon(btn.dataset.renglon, Number(btn.dataset.total)); return; }
