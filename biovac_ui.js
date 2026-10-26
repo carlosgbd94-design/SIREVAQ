@@ -27,6 +27,16 @@ function periodoQueSeReporta(hoy) {
   return m === 0 ? { anio: d.getFullYear() - 1, mes: 12 } : { anio: d.getFullYear(), mes: m };
 }
 
+// Mes con el que abre la pantalla. Municipal, Jurisdicción y Admin siguen en el mes que se reporta (el anterior: aún
+// validan y revisan lo recién cerrado). La UNIDAD, pasada la ventana de envío del mes anterior (los primeros 7 días),
+// abre el mes en curso, que es el que prellena; así ya no se le abre un mes que no puede capturar.
+function periodoActivo(hoy) {
+  const d = hoy || new Date();
+  const rol = (typeof estado !== 'undefined' && estado && estado.perfil) ? estado.perfil.rol : null;
+  if (rol === 'UNIDAD' && d.getDate() > 7) return { anio: d.getFullYear(), mes: d.getMonth() + 1 };
+  return periodoQueSeReporta(d);
+}
+
 // Etiqueta junto al selector: deja claro si lo elegido es el mes que se reporta, el mes en curso o uno histórico.
 function actualizarChipPeriodo() {
   const chip = document.getElementById('chipPeriodo');
@@ -36,7 +46,7 @@ function actualizarChipPeriodo() {
   const mes = Number(selMes.value);
   const anio = Number(selAnio.value);
   if (!mes || !anio) { chip.textContent = ''; return; }
-  const rep = periodoQueSeReporta();
+  const rep = periodoActivo();
   const hoy = new Date();
   const idx = anio * 12 + mes;
   const idxRep = rep.anio * 12 + rep.mes;
@@ -229,9 +239,17 @@ function responsableElaboracion() {
 // SIS-06-P + Movimiento + Influenza son UN documento: una vez enviado, la
 // unidad ya no escribe nada (solo el municipal). El servidor lo exige con
 // triggers; esto solo evita ofrecerle casillas que de todos modos rechazaría.
-function movimientoBloqueadoParaUnidad() {
+function movimientoEnviadoParaUnidad() {
   return Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD'
     && estado.sis06pEstadoActual && estado.sis06pEstadoActual !== 'BORRADOR');
+}
+// Mes fuera de su ventana de captura (ya cerró, o todavía no abre): mismo candado que SIS-06-P, que el servidor también aplica.
+function movimientoFueraDeVentanaParaUnidad() {
+  return Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD' && window.SIS06PBiovac
+    && window.SIS06PBiovac.fueraDeVentana && window.SIS06PBiovac.fueraDeVentana());
+}
+function movimientoBloqueadoParaUnidad() {
+  return movimientoEnviadoParaUnidad() || movimientoFueraDeVentanaParaUnidad();
 }
 
 function esErrorDeRed(err) {
@@ -584,7 +602,7 @@ async function cargarCatalogo() {
   // que la primera pintada de Seguimiento/comparativo salía vacía hasta que
   // el usuario tocaba a mano el selector de mes o año).
   // El SIS se reporta del mes que acaba de cerrar: en octubre se abre Septiembre (en enero, Diciembre del año anterior).
-  const { anio: anioReporte, mes: mesReporte } = periodoQueSeReporta();
+  const { anio: anioReporte, mes: mesReporte } = periodoActivo();
   const selAnio = document.getElementById('selAnio');
   const anioActual = new Date().getFullYear();
   const anios = [];
@@ -1661,6 +1679,9 @@ async function crearMovimiento() {
   await cargarMovimiento();
 }
 
+// El SIS-06-P avisa cuando ya conoce la ventana del mes: el Movimiento se vuelve a pintar con ese candado.
+window.__biovacRefrescarPorVentana = () => { if (estado.movimiento && estado.perfil && estado.perfil.rol === 'UNIDAD') render(); };
+
 function render() {
   // Mismo resguardo que cargarMovimiento(): si para cuando esto corre el
   // usuario ya no está en la pestaña Movimiento (la cambió mientras algo
@@ -2402,7 +2423,7 @@ async function guardarCampoRenglon(input) {
   if (movimientoBloqueadoParaUnidad()) {
     pendQuitar(renglonId, campo);
     camposSinGuardar.delete(input);
-    toast('El SINBA-SIS de este mes ya fue enviado: el Movimiento ya no se puede modificar.', 'error');
+    toast(movimientoEnviadoParaUnidad() ? 'El SINBA-SIS de este mes ya fue enviado: el Movimiento ya no se puede modificar.' : 'Este mes está fuera de su ventana de captura: el Movimiento no se puede modificar.', 'error');
     return;
   }
   if (r && campo !== 'observaciones') {
@@ -2741,8 +2762,11 @@ function renderBannerMovimiento(m, esJurisdiccional) {
   const rol = estado.perfil ? estado.perfil.rol : null;
   if (esJurisdiccional || !rol) { cont.innerHTML = ''; return; }
   if (rol === 'UNIDAD' && movimientoBloqueadoParaUnidad()) {
-    cont.innerHTML = `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock</span>
-      <div class="texto"><b>Enviado: solo lectura</b>Ya enviaste el SINBA-SIS de este mes, así que el Movimiento de Biológico no se puede modificar. Si algo está mal, pide la corrección al municipal.</div></div>`;
+    cont.innerHTML = movimientoEnviadoParaUnidad()
+      ? `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock</span>
+      <div class="texto"><b>Enviado: solo lectura</b>Ya enviaste el SINBA-SIS de este mes, así que el Movimiento de Biológico no se puede modificar. Si algo está mal, pide la corrección al municipal.</div></div>`
+      : `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock_clock</span>
+      <div class="texto"><b>Fuera de la ventana de captura: solo lectura</b>Este mes ya no (o todavía no) se puede capturar. El aviso de SIS-06-P dice las fechas; si necesitas capturarlo, pide al administrador que habilite el mes.</div></div>`;
   } else if (m.estado === 'CERRADO' && rol !== 'UNIDAD') {
     const porEnvio = estado.sis06pEstadoActual && estado.sis06pEstadoActual !== 'BORRADOR';
     const quien = m.cerrado_por ? ` por ${String(m.cerrado_por).replace(/[<>&"]/g, '')}` : '';

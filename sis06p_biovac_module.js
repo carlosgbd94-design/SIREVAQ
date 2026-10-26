@@ -355,6 +355,7 @@
       const { data: ventana, error: e4 } = await estado.db.rpc('sis06p_ventana_envio', { p_anio: anio, p_mes: mes });
       if (e4) { console.warn('[SIS-06-P] Error cargando ventana:', e4); _ventanaCache = null; }
       else _ventanaCache = (ventana && ventana[0]) || null;
+      if (window.__biovacRefrescarPorVentana) window.__biovacRefrescarPorVentana();
 
       await cargarCorreccionesPendientes(activa.clues);
       await cargarConciliacion(activa.clues);

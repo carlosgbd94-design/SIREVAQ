@@ -107,3 +107,26 @@ test.describe('SIS en teléfono', () => {
     expect(problemas(informe)).toEqual({});
   });
 });
+
+test('Mes con el que abre el SIS: la unidad pasa al mes en curso después de la ventana; municipal y jurisdicción siguen en el reportado', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  const r = await page.evaluate(() => {
+    const con = (rol, f) => { estado.perfil = { ...estado.perfil, rol }; return periodoActivo(f); };
+    return {
+      unidad26oct: con('UNIDAD', new Date(2026, 9, 26)),
+      unidad5oct: con('UNIDAD', new Date(2026, 9, 5)),
+      unidad7ene: con('UNIDAD', new Date(2026, 0, 7)),
+      unidad8ene: con('UNIDAD', new Date(2026, 0, 8)),
+      municipal26oct: con('MUNICIPAL', new Date(2026, 9, 26)),
+      juris8oct: con('JURISDICCIONAL', new Date(2026, 9, 8))
+    };
+  });
+  expect(r).toEqual({
+    unidad26oct: { anio: 2026, mes: 10 },
+    unidad5oct: { anio: 2026, mes: 9 },
+    unidad7ene: { anio: 2025, mes: 12 },
+    unidad8ene: { anio: 2026, mes: 1 },
+    municipal26oct: { anio: 2026, mes: 9 },
+    juris8oct: { anio: 2026, mes: 9 }
+  });
+});
