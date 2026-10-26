@@ -1357,6 +1357,8 @@ test('Requisiciones: el Kardex del mes se baja desde Exportar (solo Jurisdicció
     db.requi_distribucion_unidad.push({ id: 'u1', ...base, unidad_id: 'un-c1', cantidad: 30 }, { id: 'u2', ...base, unidad_id: 'un-c2', cantidad: 20 });
   });
   await page.click('#btnAbrirExportar');
+  await expect(page.locator('#tabExpRutas')).toBeHidden();      // Rutas es solo del perfil municipal de Querétaro
+  await expect(page.locator('#tabExpKardex')).toBeVisible();
   await page.click('#tabExpKardex');
   await expect(page.locator('#seccionKardex')).toBeVisible();
   const descarga = page.waitForEvent('download');
@@ -1384,5 +1386,8 @@ test('Requisiciones: el perfil municipal no ve el Kardex del mes', async ({ page
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
   await page.click('#btnAbrirExportar');
   await expect(page.locator('#seccionKardex')).toBeHidden();
+  await expect(page.locator('#tabExpKardex')).toBeHidden();
+  await expect(page.locator('#tabExpJuris')).toBeHidden();
+  await expect(page.locator('#tabExpRutas')).toBeVisible();     // municipal de Querétaro
   expect(errores).toEqual([]);
 });
