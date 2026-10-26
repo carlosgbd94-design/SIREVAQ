@@ -112,17 +112,17 @@
     if (!cont || !st.activo) return;
     const ps = estadoPasos();
     cont.innerHTML = `
-      <ol class="ruta-pasos" aria-label="Pasos del cierre del mes">
+      <div class="ruta-pasos" role="group" aria-label="Pasos del cierre del mes">
         ${PASOS.map((p, i) => {
           const e = ps[i];
           const cls = e.hecho ? 'hecho' : (e.alerta ? 'alerta' : (st.paso === p.n ? 'actual' : ''));
           const estadoTxt = e.hecho ? 'completo' : (e.alerta ? 'requiere atención' : (st.paso === p.n ? 'paso actual' : 'pendiente'));
-          return `<li class="ruta-paso ${cls} mun-ruta-paso" data-mpaso="${p.n}" role="button" tabindex="0" ${st.paso === p.n ? 'aria-current="step"' : ''} aria-label="Paso ${p.n}, ${p.t}: ${esc(e.texto)} (${estadoTxt})" title="Ir al paso ${p.n}">
+          return `<div class="ruta-paso ${cls} mun-ruta-paso" data-mpaso="${p.n}" role="button" tabindex="0" ${st.paso === p.n ? 'aria-current="step"' : ''} title="Ir al paso ${p.n}">
             <span class="ruta-num" aria-hidden="true">${e.hecho ? '<span class="material-symbols-rounded">check</span>' : (e.alerta ? '<span class="material-symbols-rounded">priority_high</span>' : p.n)}</span>
-            <span class="ruta-txt"><b>${p.t}</b><small>${esc(e.texto)}</small></span>
-          </li>`;
+            <span class="ruta-txt"><b>${p.t}</b><small>${esc(e.texto)}</small><span class="sr-only"> (${estadoTxt})</span></span>
+          </div>`;
         }).join('')}
-      </ol>
+      </div>
       <button type="button" class="ayuda-btn ruta-ayuda" data-ayuda="municipal" title="Cómo funciona el cierre del mes" aria-label="Cómo funciona el cierre del mes"><span class="material-symbols-rounded">help</span></button>`;
     PASOS.forEach((p, i) => {
       const el = $('pildoraMun' + p.n);
@@ -414,10 +414,10 @@
         ${e === 'OMITIDA' ? '<button type="button" class="btn-secundario btn-mini" id="munQuitarSinEnvio" title="Volver a esperar el envío de esta unidad"><span class="material-symbols-rounded" aria-hidden="true">undo</span> Volver a esperarla</button>' : ''}
       </div>
       <div class="puntos mun-rev-puntos">${puntosHtml(lista, f && f.clues)}</div>
-      <div class="mun-hojas" role="tablist">${HOJAS.map((h) => `
+      <div class="mun-hojas"><div class="mun-hojas-tabs" role="tablist" aria-label="Hojas de revisión de la unidad">${HOJAS.map((h) => `
         <button type="button" class="mun-hoja" data-hoja="${h.id}" style="--hoja:${h.color};" role="tab">
           <span class="material-symbols-rounded">${h.icono}</span>${h.t}<span class="mun-hoja-pildora" data-pildora="${h.pildora}"></span>
-        </button>`).join('')}
+        </button>`).join('')}</div>
         <button type="button" class="ayuda-btn" data-ayuda="mun_revision" title="Cómo revisar y validar" aria-label="Cómo revisar y validar" style="margin-left:auto;"><span class="material-symbols-rounded">help</span></button>
       </div>`;
     espejoHojas();

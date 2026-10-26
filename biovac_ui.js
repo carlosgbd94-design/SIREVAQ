@@ -531,7 +531,12 @@ async function cargarCatalogo() {
   // UNIDAD sigue viendo su propia fila real (RLS ya la limita a esa sola).
   const selUnidad = document.getElementById('selUnidad');
   const unidadesParaSelUnidad = rol === 'UNIDAD' ? unidadesClues : unidadesPseudo;
-  const opcionesUnidad = unidadesParaSelUnidad.map((u) => `<option value="${u.id}">${u.nombre} (${u.municipio})</option>`);
+  // Municipios y hospitales con su nombre de siempre y en orden fijo (no alfabético por código).
+  const ETIQUETA_DESTINO = { CORREGIDORA: 'Corregidora', HUIMILPAN: 'Huimilpan', MARQUES: 'El Marqués', QUERETARO: 'Querétaro', NHG: 'Nuevo Hospital General', HENM: 'Hospital del Niño y la Mujer (HENM)' };
+  const ORDEN_DESTINO = ['CORREGIDORA', 'HUIMILPAN', 'MARQUES', 'QUERETARO', 'NHG', 'HENM'];
+  const ordenDestino = (u) => { const i = ORDEN_DESTINO.indexOf(u.municipio); return i < 0 ? 99 : i; };
+  const listaSelUnidad = rol === 'UNIDAD' ? unidadesParaSelUnidad : [...unidadesParaSelUnidad].sort((a, b) => ordenDestino(a) - ordenDestino(b));
+  const opcionesUnidad = listaSelUnidad.map((u) => `<option value="${u.id}">${rol === 'UNIDAD' ? `${u.nombre} (${u.municipio})` : (ETIQUETA_DESTINO[u.municipio] || u.nombre)}</option>`);
   if (rol === 'JURISDICCIONAL' || rol === 'ADMIN') {
     opcionesUnidad.unshift(`<option value="${UNIDAD_JURISDICCION}">Jurisdicción (suma de ${unidadesPseudo.length === 1 ? 'el municipio' : 'los ' + unidadesPseudo.length + ' municipios y hospitales'})</option>`);
   }
@@ -1121,7 +1126,14 @@ function recargarMovimientoPorFiltro() {
   cargarMovimiento();
 }
 
+// Mientras se consulta (puede tardar unos segundos) se muestra un aviso en lugar de una pantalla en blanco.
 async function cargarMovimiento() {
+  const aviso = document.getElementById('panelCargandoMov');
+  if (aviso) aviso.style.display = 'flex';
+  try { await cargarMovimientoInterno(); } finally { if (aviso) aviso.style.display = 'none'; }
+}
+
+async function cargarMovimientoInterno() {
   const unidadId = unidadIdMovimientoActivo();
   const anio = Number(document.getElementById('selAnio').value);
   const mes = Number(document.getElementById('selMes').value);
@@ -1700,7 +1712,8 @@ function render() {
   document.getElementById('btnCerrarMes').style.display = (m.estado === 'BORRADOR' && !movimientoBloqueadoParaUnidad()
     && !(estado.perfil && estado.perfil.rol === 'UNIDAD')) ? 'inline-block' : 'none';
   // La unidad no reabre un mes ya cerrado (el servidor tampoco lo permite): solo MUNICIPAL/JURISDICCIONAL/ADMIN.
-  document.getElementById('btnAbrirCorreccion').style.display = (m.estado === 'CERRADO' && !(estado.perfil && estado.perfil.rol === 'UNIDAD')) ? 'inline-block' : 'none';
+  // «Reabrir» de la cabecera duplicaba el «Corregir movimiento» del aviso de arriba de la tabla (hacen lo mismo): se deja solo el del aviso, que además explica qué pasa.
+  document.getElementById('btnAbrirCorreccion').style.display = 'none';
   document.getElementById('btnAplicarCorreccion').style.display = m.estado === 'EN_CORRECCION' ? 'inline-block' : 'none';
   document.getElementById('btnGuardarCabecera').disabled = !cabeceraEditable;
 

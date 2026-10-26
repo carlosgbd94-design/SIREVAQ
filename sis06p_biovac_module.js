@@ -941,7 +941,7 @@
       const idCuerpo = 'sisCuerpo_' + _normBio(biologico).replace(/[^A-Z0-9]+/gi, '_');
       header.setAttribute('aria-expanded', 'false');
       header.setAttribute('aria-controls', idCuerpo);
-      header.setAttribute('aria-label', biologico + ': ' + capturadas + ' de ' + vars.length + ' variables capturadas');
+      header.setAttribute('aria-label', biologico + ' ' + capturadas + '/' + vars.length + ' variables capturadas');
       // El degradado de fondo es la "personalidad" de cada tarjeta -- muy
       // sutil (6% de opacidad) y en `background-image`, aparte de
       // `background-color`, para que el :hover (definido en CSS) se pueda

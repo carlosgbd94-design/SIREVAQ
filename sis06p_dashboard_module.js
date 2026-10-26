@@ -50,6 +50,9 @@
   const ORDEN_MUNICIPIOS = ['QUERETARO', 'CORREGIDORA', 'MARQUES', 'HUIMILPAN', 'NHG', 'HENM'];
   const ES_HOSPITAL = { NHG: true, HENM: true };
 
+  // Filtro por estatus de la tabla (se elige con las tarjetas de conteo; se vuelve a tocar para quitarlo).
+  let filtroEstatus = null;
+
   async function render() {
     const tbody = document.getElementById('seguimientoTbody');
     const contadores = document.getElementById('seguimientoContadores');
@@ -105,12 +108,20 @@
       { key: 'VALIDADO', label: 'Validado', color: ESTADO_COLOR.VALIDADO }
     ];
     if (conteos.SIN_ENVIO > 0) tarjetas.push({ key: 'SIN_ENVIO', label: 'Sin envío (se continúa)', color: ESTADO_COLOR.SIN_ENVIO });
+    const claveFila = (f) => ((f.estado === 'ENVIADO' || f.estado === 'VALIDADO') ? f.estado : (f.sin_envio ? 'SIN_ENVIO' : 'SIN_ENVIAR'));
+    const filtrable = !esJurisdiccional;   // en la vista jurisdiccional las tarjetas son solo informativas
     contadores.innerHTML = tarjetas.map((t) => `
-      <div style="background:${t.color.bg}; border-radius:14px; padding:14px 16px;">
+      <${filtrable ? 'button type="button"' : 'div'} ${filtrable ? `data-filtro-estatus="${t.key}" aria-pressed="${filtroEstatus === t.key}" title="${filtroEstatus === t.key ? 'Quitar el filtro' : 'Ver solo estas unidades'}"` : ''} style="background:${t.color.bg}; border-radius:14px; padding:14px 16px; display:block; width:100%; text-align:left; border:2px solid ${filtroEstatus === t.key ? t.color.text : 'transparent'}; font-family:inherit; ${filtrable ? 'cursor:pointer;' : ''}">
         <div style="font-size:24px; font-weight:900; color:${t.color.text};">${conteos[t.key] || 0}</div>
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:${t.color.text};">${t.label}</div>
-      </div>
+      </${filtrable ? 'button' : 'div'}>
     `).join('');
+    if (filtrable) {
+      contadores.querySelectorAll('[data-filtro-estatus]').forEach((b) => b.addEventListener('click', () => {
+        filtroEstatus = filtroEstatus === b.dataset.filtroEstatus ? null : b.dataset.filtroEstatus;
+        render();
+      }));
+    }
     await renderBannerVentana(mes, anio);
 
     if (esJurisdiccional) {
@@ -124,7 +135,7 @@
 
     if (vistaGrupos) vistaGrupos.style.display = 'none';
     if (vistaTabla) vistaTabla.style.display = 'block';
-    renderTabla(tbody, filas);
+    renderTabla(tbody, filtroEstatus ? filas.filter((f) => claveFila(f) === filtroEstatus) : filas);
 
     if (rolActual === 'MUNICIPAL') renderExportOficial(filas, mes, anio);
     else {
@@ -262,8 +273,8 @@
       else detalle = detalleAvance(f);
 
       return `
-        <tr style="border-bottom:1px solid #f1f5f9; cursor:pointer;" data-clues="${f.clues}">
-          <td style="padding:9px;">${f.municipio || ''}</td>
+        <tr style="border-bottom:1px solid #f1f5f9; cursor:pointer;" data-clues="${f.clues}" tabindex="0" role="button" aria-label="Revisar ${String(f.unidad || f.clues).replace(/"/g, '')}">
+          <td style="padding:9px;">${MUNICIPIO_LABEL[f.municipio] || f.municipio || ''}</td>
           <td style="padding:9px; font-family:monospace;">${f.clues}</td>
           <td style="padding:9px;">${f.unidad || ''}</td>
           <td style="padding:9px; text-align:center;">
@@ -280,6 +291,7 @@
 
     tbody.querySelectorAll('tr[data-clues]').forEach((tr) => {
       tr.addEventListener('click', () => irARevisarUnidad(tr.getAttribute('data-clues')));
+      tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); irARevisarUnidad(tr.getAttribute('data-clues')); } });
     });
   }
 

@@ -500,16 +500,16 @@ function pintarRutaJur() {
   if (!cont) return;
   const ps = estadoPasosJur();
   cont.innerHTML = `
-    <ol class="ruta-pasos">
+    <div class="ruta-pasos" role="group" aria-label="Pasos del concentrado jurisdiccional">
       ${PASOS_JUR.map((p, i) => {
         const e = ps[i];
         const cls = e.hecho ? 'hecho' : (e.alerta ? 'alerta' : (estado.paso === p.n ? 'actual' : ''));
-        return `<li class="ruta-paso ${cls}" data-jpaso="${p.n}" title="Ir al paso ${p.n}">
+        return `<div class="ruta-paso ${cls}" data-jpaso="${p.n}" role="button" tabindex="0" ${estado.paso === p.n ? 'aria-current="step"' : ''} title="Ir al paso ${p.n}">
           <span class="ruta-num">${e.hecho ? '<span class="material-symbols-rounded">check</span>' : (e.alerta ? '<span class="material-symbols-rounded">priority_high</span>' : p.n)}</span>
           <span class="ruta-txt"><b>${p.t}</b><small>${escJ(e.texto)}</small></span>
-        </li>`;
+        </div>`;
       }).join('')}
-    </ol>
+    </div>
     <button type="button" class="ayuda-btn ruta-ayuda" data-ayuda="jur" title="Cómo funciona el concentrado jurisdiccional" aria-label="Cómo funciona el concentrado jurisdiccional"><span class="material-symbols-rounded">help</span></button>`;
   PASOS_JUR.forEach((p, i) => {
     const el = document.getElementById('pildoraJ' + p.n);
@@ -1271,6 +1271,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnSiguiente').addEventListener('click', () => activarPasoJur(Math.min(4, estado.paso + 1)));
   if (window.DockGlass) window.DockGlass.instalar(document.getElementById('dockJTabs'));
 
+  // Los pasos de arriba son botones: también responden a Enter y Espacio.
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const paso = ev.target.closest && ev.target.closest('.ruta-paso[data-jpaso]');
+    if (paso) { ev.preventDefault(); activarPasoJur(Number(paso.dataset.jpaso)); }
+  });
   document.addEventListener('click', (ev) => {
     const paso = ev.target.closest('[data-jpaso]');
     if (paso) { activarPasoJur(Number(paso.dataset.jpaso)); return; }
