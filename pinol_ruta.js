@@ -174,6 +174,7 @@
           <div style="font-size:15px;font-weight:900;text-transform:uppercase;">Servicios de Salud del Estado de Querétaro</div>
           <div style="font-size:12.5px;font-weight:800;color:#166534;text-transform:uppercase;">Guía de despacho y ruta de entrega</div>
           <div style="font-size:10.5px;font-weight:700;color:#475569;">Insumos de desinfección de red de frío (Pinol® 828 mL)</div>
+          ${m.folio ? `<div style="font-size:11px;font-weight:900;color:#0f172a;margin-top:2px;">FOLIO ${esc(m.folio)}${m.reimpresion ? ` · <span style="color:#991b1b;">REIMPRESIÓN${m.reimpresion !== true && m.reimpresion !== "" ? " " + esc(m.reimpresion) : ""}</span>` : ""}</div>` : ""}
         </div>
         <div style="flex:0 0 auto;max-width:30%;">${logos.logo2 ? `<img src="${logos.logo2}" style="height:44px;max-width:100%;width:auto;object-fit:contain;display:block;margin-left:auto;" alt="">` : ""}</div>
       </div>
@@ -211,6 +212,29 @@
     esperaDias, sinConfirmarDias, esCritica, cantidadInicial, sugerirRuta, ordenarParadas, totales, municipiosDe, resumenAlertas, htmlGuia, fechaLarga
   };
   root.PinolRuta = API;
+  const claveFolio = (r) => `RUTA-${String(r.numero == null ? 0 : r.numero).padStart(4, "0")}`;
+
+  /** Foto de las paradas tal como salen en la guía: orden, cantidad acotada y los datos que imprime la guía. */
+  function instantanea(paradas, cantidades) {
+    return (paradas || []).map((x) => {
+      const q = cantidades && cantidades[String(x.id)] != null ? num(cantidades[String(x.id)]) : cantidadInicial(x);
+      return {
+        id: String(x.id), clues: x.clues || "", unidad: x.unidad || "", municipio: x.municipio || "",
+        existencia_actual_botellas: num(x.existencia_actual_botellas), solicitud_botellas: num(x.solicitud_botellas),
+        observaciones: x.observaciones || "", cantidad: Math.min(MAX_ENTREGA, Math.max(1, Math.round(q) || 1))
+      };
+    });
+  }
+  /** De una ruta guardada a lo que necesita htmlGuia: paradas (en su orden) + meta. */
+  function guiaDeRuta(ruta, opciones) {
+    const op = opciones || {};
+    const paradas = (ruta.paradas || []).map((p) => ({ ...p, estatus: "PENDIENTE" }));   // «PENDIENTE» solo para que la guía marque SIN EXISTENCIA como al imprimirla
+    const cantidades = {};
+    paradas.forEach((p) => { cantidades[String(p.id)] = num(p.cantidad); });
+    return { paradas, meta: { fecha: ruta.fecha, responsable: ruta.responsable, vehiculo: ruta.vehiculo || "", cantidades, logos: op.logos || {}, folio: claveFolio(ruta), reimpresion: op.reimpresion ? (op.fechaReimpresion || "") : "" } };
+  }
+  Object.assign(API, { instantanea, guiaDeRuta, claveFolio });
+
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   if (typeof document === "undefined") return;
 
@@ -273,7 +297,7 @@
   @media (max-width:820px){#pinolRutaOverlay .pr-body{grid-template-columns:1fr;overflow-y:auto}#pinolRutaOverlay .pr-col{overflow:visible}#pinolRutaOverlay .pr-col+.pr-col{border-left:none;border-top:1px solid #e2e8f0}#pinolRutaOverlay .pr-list,#pinolRutaOverlay .pr-stops{overflow:visible}#pinolRutaOverlay .pr-box{max-height:100vh;border-radius:0}}
   `;
 
-  const S = { orden: [], cant: {}, filtro: "todas", texto: "", abierto: false, opener: null };
+  const S = { orden: [], cant: {}, filtro: "todas", texto: "", abierto: false, opener: null, rutas: [], textoRutas: "", rutaAbierta: null, ultimaRuta: null };
   const $ = (id) => document.getElementById(id);
   const hoyYmd = () => (typeof root.todayYmdLocal === "function" ? root.todayYmdLocal() : new Date().toLocaleDateString("en-CA"));
   const ICO = (n) => `<span class="material-symbols-rounded" aria-hidden="true">${n}</span>`;
@@ -315,7 +339,7 @@
       <div class="pr-foot"><span class="aviso" id="prAviso"></span>
         <button type="button" class="pr-btn" data-pr="ordenar">${ICO("sort")}Ordenar por municipio</button>
         <button type="button" class="pr-btn sol" data-pr="imprimir" id="prImprimir">${ICO("print")}Imprimir guía</button>
-        <button type="button" class="pr-btn ok" data-pr="surtir" id="prSurtir">${ICO("local_shipping")}Imprimir y marcar en tránsito</button>
+        <button type="button" class="pr-btn ok" data-pr="surtir" id="prSurtir">${ICO("local_shipping")}Marcar en tránsito y guardar ruta</button>
       </div></div>`;
     document.body.appendChild(o);
     o.addEventListener("click", alClic);
@@ -504,35 +528,230 @@
     if (!marcar) { imprimirHtml(paradas, meta); return; }
     if (!meta.responsable) { if (typeof root.showToast === "function") root.showToast("Indica el responsable de la entrega para marcar la ruta en tránsito.", false, "warn"); $("prResp").focus(); return; }
     const t = totales(paradas, S.cant);
-    const ok = await root.showConfirmDialog("Marcar la ruta en tránsito", `Se marcarán ${t.paradas} solicitud(es) como enviadas (${t.botellas} botellas, ${t.litros.toFixed(1)} L) con fecha ${meta.fecha}. Cada unidad recibirá su aviso para confirmar la recepción.`);
+    const ok = await root.showConfirmDialog("Marcar la ruta en tránsito", `Se marcarán ${t.paradas} solicitud(es) como enviadas (${t.botellas} botellas, ${t.litros.toFixed(1)} L) con fecha ${meta.fecha}. La ruta queda guardada para poder reimprimir la guía, y cada unidad recibirá su aviso para confirmar la recepción.`);
     if (!ok) return;
+    // Guarda la ruta y marca las unidades en una sola operación; luego un aviso con «Imprimir guía» que no se pierde al cerrar ventanas
+    const r = await despacharYAvisar(paradas, meta);
+    if (r) cerrar();
+  }
+
+  /* ───────────────────────────── rutas despachadas: guardado, aviso y reimpresión ───────────────────────────── */
+  const ESTILOS_RUTAS = `
+  #pinolRutaListo,#pinolRutasOverlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.55)}
+  #pinolRutaListo{z-index:2700}#pinolRutasOverlay{z-index:2650}
+  #pinolRutaListo.show,#pinolRutasOverlay.show{display:flex}
+  .pl-box{width:100%;max-width:520px;background:#fff;border-radius:22px;padding:22px;color:#0f172a;box-shadow:0 20px 50px rgba(15,23,42,.35);font-family:inherit}
+  .pl-ico{width:52px;height:52px;border-radius:16px;background:#d1fae5;color:#065f46;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+  .pl-ico .material-symbols-rounded{font-size:30px}
+  .pl-box h3{margin:0 0 4px;font-size:19px;font-weight:900}
+  .pl-box p{margin:0 0 4px;font-size:13px;font-weight:600;color:#334155;line-height:1.45}
+  .pl-box .pl-datos{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 14px}
+  .pl-chip{display:inline-flex;gap:4px;align-items:center;padding:3px 10px;border-radius:99px;background:#f1f5f9;border:1px solid #cbd5e1;font-size:12px;font-weight:800;color:#1e293b}
+  .pl-aviso{padding:10px 12px;border-radius:12px;background:#fef3c7;border:1px solid #fcd34d;color:#78350f;font-size:12.5px;font-weight:700;margin:0 0 12px}
+  .pl-acciones{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:6px}
+  .pl-btn{font-family:inherit;min-height:0!important;height:42px!important;padding:0 16px!important;border-radius:12px!important;border:1px solid #0f172a!important;background:#fff!important;color:#0f172a!important;font-size:13px!important;font-weight:800!important;display:inline-flex!important;align-items:center;gap:6px;cursor:pointer;transition:none!important}
+  .pl-btn.sol{background:#0f172a!important;color:#fff!important}
+  .pl-btn .material-symbols-rounded{font-size:19px}
+  .pl-btn:focus-visible,.pl-in:focus-visible{outline:3px solid #0369a1!important;outline-offset:2px}
+  .pl-btn[disabled]{opacity:.5;cursor:default}
+  .pl-hist{width:100%;max-width:1040px;max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:22px;overflow:hidden;color:#0f172a;box-shadow:0 20px 50px rgba(15,23,42,.35);font-family:inherit}
+  .pl-hist-head{display:flex;align-items:flex-start;gap:12px;padding:16px 20px;border-bottom:1px solid #e2e8f0}
+  .pl-hist-head h3{margin:0;font-size:18px;font-weight:900}
+  .pl-hist-head p{margin:2px 0 0;font-size:12px;font-weight:600;color:#475569}
+  .pl-x{margin-left:auto}
+  .pl-in{height:38px!important;min-height:0!important;padding:0 12px!important;border:1px solid #94a3b8!important;border-radius:10px!important;background:#fff!important;font-size:13px;font-weight:600;font-family:inherit;color:#0f172a}
+  .pl-bar{display:flex;gap:10px;align-items:center;padding:12px 20px;border-bottom:1px solid #e2e8f0}
+  .pl-lista{overflow-y:auto;padding:8px 14px 16px;margin:0;list-style:none;flex:1}
+  .pl-ruta{border:1px solid #cbd5e1;border-radius:14px;margin-top:8px;background:#fff}
+  .pl-fila{display:flex;align-items:center;gap:12px;padding:10px 14px;flex-wrap:wrap}
+  .pl-folio{font-family:monospace;font-size:13px;font-weight:900;background:#0f172a;color:#fff;border-radius:8px;padding:3px 9px}
+  .pl-main{flex:1;min-width:200px}
+  .pl-main b{display:block;font-size:13.5px;font-weight:800}
+  .pl-main small{font-size:11.5px;font-weight:600;color:#475569}
+  .pl-tags{display:flex;gap:5px;flex-wrap:wrap}
+  .pl-t{padding:1px 9px;border-radius:99px;font-size:11px;font-weight:800;background:#f1f5f9;border:1px solid #cbd5e1;color:#334155;white-space:nowrap}
+  .pl-t.ok{background:#d1fae5;border-color:#6ee7b7;color:#065f46}.pl-t.am{background:#fef3c7;border-color:#fcd34d;color:#78350f}
+  .pl-det{padding:0 14px 12px;font-size:12.5px;font-weight:600;color:#1e293b}
+  .pl-det ol{margin:6px 0 0;padding-left:22px}
+  .pl-det li{padding:2px 0}
+  .pl-vacio{padding:34px 16px;text-align:center;font-size:13px;font-weight:600;color:#475569}
+  `;
+
+  const usuarioNombre = () => String((root.USER && (root.USER.nombre || root.USER.usuario)) || "");
+
+  /** Marca la ruta en tránsito Y la guarda, todo en una transacción del servidor. Devuelve la ruta guardada. */
+  async function despachar(paradas, meta) {
+    const snap = instantanea(paradas, meta.cantidades);
+    const { data, error } = await root.supabase.rpc("pinol_despachar_ruta", {
+      p_fecha: meta.fecha, p_responsable: meta.responsable, p_vehiculo: meta.vehiculo || null, p_paradas: snap
+    });
+    if (error) throw error;
+    const res = data || {};
+    const { data: ruta, error: e2 } = await root.supabase.from("pinol_rutas").select("*").eq("id", res.ruta_id).single();
+    if (e2) throw e2;
+    return { ruta, actualizadas: res.actualizadas || 0, omitidas: res.omitidas || 0 };
+  }
+  Object.assign(API, { despachar });
+
+  /** Imprime una ruta guardada. La primera impresión es la original; las siguientes llevan la leyenda de reimpresión. */
+  function imprimirRuta(ruta, esReimpresion) {
+    const g = guiaDeRuta(ruta, { logos: root.PINOL_LOGOS || {}, reimpresion: esReimpresion, fechaReimpresion: new Date().toLocaleDateString("es-MX") });
+    const ok = imprimirHtml(g.paradas, g.meta);
+    if (ok) {
+      // Contador de impresiones: informativo, no debe estorbar si falla
+      root.supabase.from("pinol_rutas").update({ impresiones: num(ruta.impresiones) + 1, ultima_impresion_ts: new Date().toISOString(), ultima_impresion_por: usuarioNombre() || null })
+        .eq("id", ruta.id).then(() => { ruta.impresiones = num(ruta.impresiones) + 1; }, () => { /* sin contador */ });
+    }
+    return ok;
+  }
+  Object.assign(API, { imprimirRuta });
+
+  function construirDomRutas() {
+    if ($("pinolRutaListo")) return;
+    const st = document.createElement("style"); st.id = "pinolRutasStyles"; st.textContent = ESTILOS_RUTAS; document.head.appendChild(st);
+    const l = document.createElement("div");
+    l.id = "pinolRutaListo";
+    l.innerHTML = `<div class="pl-box" role="dialog" aria-modal="true" aria-labelledby="plTitulo">
+      <div class="pl-ico" aria-hidden="true"><span class="material-symbols-rounded">task_alt</span></div>
+      <h3 id="plTitulo">Ruta guardada y en tránsito</h3>
+      <p id="plTexto"></p>
+      <div class="pl-datos" id="plDatos"></div>
+      <div class="pl-aviso" id="plAviso" hidden></div>
+      <p style="font-size:12px;color:#475569">La guía queda guardada: si cierras la ventana de impresión o no sale, la reimprimes desde <b>Rutas despachadas</b>. Imprimirla otra vez no cambia nada en las unidades.</p>
+      <div class="pl-acciones">
+        <button type="button" class="pl-btn" data-pl="historial"><span class="material-symbols-rounded" aria-hidden="true">history</span>Rutas despachadas</button>
+        <button type="button" class="pl-btn" data-pl="cerrar">Cerrar</button>
+        <button type="button" class="pl-btn sol" data-pl="imprimir" id="plImprimir"><span class="material-symbols-rounded" aria-hidden="true">print</span>Imprimir guía</button>
+      </div></div>`;
+    document.body.appendChild(l);
+    l.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-pl]"); if (!b) return;
+      if (b.dataset.pl === "cerrar") return cerrarListo();
+      if (b.dataset.pl === "imprimir" && S.ultimaRuta) { imprimirRuta(S.ultimaRuta, S.ultimaRuta._yaImpresa); S.ultimaRuta._yaImpresa = true; return; }
+      if (b.dataset.pl === "historial") { cerrarListo(); abrirHistorial(); }
+    });
+    l.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); cerrarListo(); } else atrapaFoco(e, l); });
+
+    const h = document.createElement("div");
+    h.id = "pinolRutasOverlay";
+    h.innerHTML = `<div class="pl-hist" role="dialog" aria-modal="true" aria-labelledby="phTitulo">
+      <div class="pl-hist-head"><div><h3 id="phTitulo">Rutas despachadas</h3><p>Cada ruta que se marca en tránsito queda guardada. Reimprime la guía cuando la necesites: no cambia el estatus de las unidades.</p></div>
+        <button type="button" class="pr-ib pl-x pl-btn" data-ph="cerrar" aria-label="Cerrar" style="width:38px;padding:0!important;justify-content:center"><span class="material-symbols-rounded" aria-hidden="true">close</span></button></div>
+      <div class="pl-bar"><input id="phBuscar" class="pl-in" type="search" placeholder="Buscar folio, unidad, responsable o municipio" aria-label="Buscar ruta" autocomplete="off" style="flex:1"><span id="phConteo" style="font-size:12px;font-weight:700;color:#475569"></span></div>
+      <ul class="pl-lista" id="phLista" aria-live="polite"></ul></div>`;
+    document.body.appendChild(h);
+    h.addEventListener("click", alClicHistorial);
+    h.addEventListener("mousedown", (e) => { if (e.target === h) cerrarHistorial(); });
+    h.addEventListener("input", (e) => { if (e.target.id === "phBuscar") { S.textoRutas = e.target.value; pintarHistorial(); } });
+    h.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); cerrarHistorial(); } else atrapaFoco(e, h); });
+  }
+  function atrapaFoco(e, cont) {
+    if (e.key !== "Tab") return;
+    const f = [...cont.querySelectorAll("button, input, summary, [tabindex]:not([tabindex='-1'])")].filter((el) => !el.disabled && el.offsetParent !== null);
+    if (!f.length) return;
+    const p = f[0], u = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === p) { e.preventDefault(); u.focus(); }
+    else if (!e.shiftKey && document.activeElement === u) { e.preventDefault(); p.focus(); }
+  }
+
+  function mostrarListo(ruta, res) {
+    construirDomRutas();
+    S.ultimaRuta = ruta; ruta._yaImpresa = false;
+    S.openerListo = document.activeElement;
+    $("plTexto").textContent = `${claveFolio(ruta)} · salida ${root.PinolRuta.fechaLarga(ruta.fecha)}. Las unidades ya aparecen en tránsito y recibirán su aviso para confirmar la recepción.`;
+    $("plDatos").innerHTML = `<span class="pl-chip">${ruta.total_paradas} ${ruta.total_paradas === 1 ? "unidad" : "unidades"}</span><span class="pl-chip">${num(ruta.total_botellas)} botellas</span><span class="pl-chip">${esc(ruta.responsable)}</span>${ruta.vehiculo ? `<span class="pl-chip">${esc(ruta.vehiculo)}</span>` : ""}`;
+    const av = $("plAviso");
+    av.hidden = !res.omitidas;
+    av.textContent = res.omitidas ? `${res.omitidas} solicitud(es) ya no estaban pendientes (alguien más las surtió): no se tocaron y no van en esta guía.` : "";
+    $("pinolRutaListo").classList.add("show");
+    setTimeout(() => $("plImprimir").focus(), 30);
+  }
+  function cerrarListo() {
+    const l = $("pinolRutaListo"); if (!l) return;
+    l.classList.remove("show");
+    if (S.openerListo && document.contains(S.openerListo)) S.openerListo.focus();
+  }
+
+  /* ───────────── historial ───────────── */
+  async function cargarRutas() {
+    const { data, error } = await root.supabase.from("pinol_rutas").select("*").order("numero", { ascending: false }).limit(300);
+    if (error) throw error;
+    S.rutas = data || [];
+  }
+  const recibidasDe = (r) => {
+    const mias = (root._pinolRawItems || []).filter((x) => String(x.ruta_id || "") === String(r.id));
+    return mias.length ? { n: mias.filter((x) => estatusDe(x) === "RECIBIDO").length, de: mias.length } : null;
+  };
+  function pintarHistorial() {
+    const ul = $("phLista"); if (!ul) return;
+    const q = norm(S.textoRutas || "");
+    const lista = (S.rutas || []).filter((r) => !q || norm(`${claveFolio(r)} ${r.responsable} ${r.vehiculo || ""} ${(r.municipios || []).join(" ")} ${(r.paradas || []).map((p) => p.unidad + " " + p.clues).join(" ")}`).includes(q));
+    $("phConteo").textContent = `${lista.length} de ${(S.rutas || []).length}`;
+    if (!lista.length) { ul.innerHTML = `<li class="pl-vacio">${(S.rutas || []).length ? "Ninguna ruta coincide con la búsqueda." : "Todavía no hay rutas despachadas."}</li>`; return; }
+    ul.innerHTML = lista.map((r) => {
+      const rec = recibidasDe(r);
+      const abierta = S.rutaAbierta === r.id;
+      return `<li class="pl-ruta"><div class="pl-fila">
+          <span class="pl-folio">${esc(claveFolio(r))}</span>
+          <span class="pl-main"><b>${esc(root.PinolRuta.fechaLarga(r.fecha))} · ${esc((r.municipios || []).join(", ") || "—")}</b><small>${esc(r.responsable)}${r.vehiculo ? " · " + esc(r.vehiculo) : ""}</small></span>
+          <span class="pl-tags"><span class="pl-t">${r.total_paradas} ${r.total_paradas === 1 ? "unidad" : "unidades"}</span><span class="pl-t">${num(r.total_botellas)} bot.</span>
+            ${rec ? `<span class="pl-t ${rec.n === rec.de ? "ok" : "am"}">${rec.n} de ${rec.de} recibidas</span>` : ""}
+            ${r.reconstruida ? `<span class="pl-t am" title="Armada después, con las solicitudes que seguían en la tabla: el orden de las paradas es por municipio y unidad">reconstruida</span>` : ""}
+            ${num(r.impresiones) ? `<span class="pl-t">impresa ${num(r.impresiones)} ${num(r.impresiones) === 1 ? "vez" : "veces"}</span>` : ""}</span>
+          <button type="button" class="pl-btn" data-ph="ver" data-id="${esc(r.id)}" aria-expanded="${abierta}">${abierta ? "Ocultar" : "Ver paradas"}</button>
+          <button type="button" class="pl-btn sol" data-ph="imprimir" data-id="${esc(r.id)}" aria-label="Reimprimir la guía ${esc(claveFolio(r))}"><span class="material-symbols-rounded" aria-hidden="true">print</span>Reimprimir</button>
+        </div>
+        ${abierta ? `<div class="pl-det"><ol>${(r.paradas || []).map((p) => `<li><b>${esc(p.unidad)}</b> · ${esc(p.clues)} · ${esc(p.municipio)} — ${num(p.cantidad)} botella(s)</li>`).join("")}</ol></div>` : ""}</li>`;
+    }).join("");
+  }
+  function alClicHistorial(e) {
+    const b = e.target.closest("[data-ph]"); if (!b) return;
+    const a = b.dataset.ph;
+    if (a === "cerrar") return cerrarHistorial();
+    const r = (S.rutas || []).find((x) => String(x.id) === String(b.dataset.id));
+    if (a === "ver" && r) { S.rutaAbierta = S.rutaAbierta === r.id ? null : r.id; pintarHistorial(); return $("phLista").querySelector(`[data-ph=ver][data-id="${cssEsc(r.id)}"]`)?.focus(); }
+    if (a === "imprimir" && r) {
+      const ya = num(r.impresiones) > 0;
+      const ok = imprimirRuta(r, true);
+      if (ok) { if (typeof root.showToast === "function") root.showToast(`${claveFolio(r)}: guía enviada a impresión${ya ? "" : ""}.`, true, "good"); setTimeout(pintarHistorial, 700); }
+    }
+  }
+  async function abrirHistorial() {
+    construirDomRutas();
+    S.openerHist = document.activeElement; S.textoRutas = ""; S.rutaAbierta = null;
+    $("phBuscar").value = "";
+    $("phLista").innerHTML = `<li class="pl-vacio">Cargando rutas…</li>`;
+    $("pinolRutasOverlay").classList.add("show");
+    try { await cargarRutas(); pintarHistorial(); }
+    catch (err) { console.error("[PinolRuta] historial:", err); $("phLista").innerHTML = `<li class="pl-vacio">No se pudo cargar el historial de rutas: ${esc(err.message || err)}</li>`; }
+    setTimeout(() => $("phBuscar").focus(), 30);
+  }
+  function cerrarHistorial() {
+    const h = $("pinolRutasOverlay"); if (!h) return;
+    h.classList.remove("show");
+    if (S.openerHist && document.contains(S.openerHist)) S.openerHist.focus();
+  }
+
+  /** Despacha las paradas (marca en tránsito + guarda la ruta) y muestra el aviso con «Imprimir guía». Lo usan el armador y el surtido masivo. */
+  async function despacharYAvisar(paradas, meta) {
     try {
       root.showOverlay("Marcando la ruta en tránsito...", "Pinol");
-      // Una actualización por cantidad distinta; solo toca solicitudes que SIGUEN pendientes (nadie las surtió mientras tanto)
-      const porCantidad = new Map();
-      paradas.forEach((x) => { const q = S.cant[String(x.id)]; if (!porCantidad.has(q)) porCantidad.set(q, []); porCantidad.get(q).push(x.id); });
-      let actualizadas = 0;
-      for (const [q, ids] of porCantidad) {
-        const { data, error } = await root.supabase.from("pinol_solicitudes")
-          .update({ estatus: "ENTREGADO", fecha_entrega: meta.fecha, timestamp_entrega: new Date().toISOString(), entregado_por: meta.responsable, comentario_entrega: meta.vehiculo || null, cantidad_entregada: Math.min(q, MAX_ENTREGA) })
-          .in("id", ids).eq("estatus", "PENDIENTE").select("id");
-        if (error) throw error;
-        actualizadas += (data || []).length;
-      }
-      const omitidas = paradas.length - actualizadas;
+      const r = await despachar(paradas, meta);
       root.hideOverlay();
       if (typeof root.invalidatePinolCache === "function") root.invalidatePinolCache();
       root._pinolSelectedIds && root._pinolSelectedIds.clear();
       if (typeof root.refreshPinol === "function") await root.refreshPinol();
-      if (typeof root.showToast === "function") root.showToast(omitidas ? `${actualizadas} surtidas; ${omitidas} ya no estaban pendientes y no se tocaron.` : `${actualizadas} solicitudes marcadas en tránsito`, !omitidas, omitidas ? "warn" : "good");
-      imprimirHtml(paradas, meta);
-      cerrar();
+      if (typeof root.showToast === "function") root.showToast(r.omitidas ? `${r.actualizadas} surtidas; ${r.omitidas} ya no estaban pendientes y no se tocaron.` : `${r.actualizadas} solicitudes marcadas en tránsito`, !r.omitidas, r.omitidas ? "warn" : "good");
+      mostrarListo(r.ruta, r);
+      return r;
     } catch (err) {
-      console.error("[PinolRuta] surtir ruta:", err);
+      console.error("[PinolRuta] despachar ruta:", err);
       try { root.hideOverlay(); } catch (e) { /* ya cerrado */ }
       if (typeof root.showToast === "function") root.showToast("No se pudo marcar la ruta: " + (err.message || err), false, "bad");
+      return null;
     }
   }
+  Object.assign(API, { despacharYAvisar, abrirHistorial, cerrarHistorial });
 
   Object.assign(API, { abrir, cerrar, imprimirHtml, _estado: S });
 })(typeof window !== "undefined" ? window : globalThis);

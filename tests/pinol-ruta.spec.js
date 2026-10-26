@@ -66,6 +66,23 @@ test.describe('Ruta de Pinol: cálculo', () => {
     expect(html).toContain('CORREGIDORA · 1 unidad(es) · 2 bot');  // subtotal por municipio cuando son varios
   });
 
+  test('ruta guardada: la foto conserva orden y cantidades acotadas, y la guía de una reimpresión lleva folio y leyenda', () => {
+    const snap = PR.instantanea([items[2], items[0]], { p3: 2, p1: 99 });
+    expect(snap.map((p) => [p.id, p.cantidad])).toEqual([['p3', 2], ['p1', 20]]);              // orden de la ruta y tope de 20
+    expect(snap[0]).toMatchObject({ clues: 'C-p3', unidad: 'UNIDAD P3', municipio: 'CORREGIDORA', existencia_actual_botellas: 1, solicitud_botellas: 2 });
+    const ruta = { numero: 7, fecha: '2026-10-18', responsable: 'ANA PÉREZ', vehiculo: 'Camioneta 3', paradas: snap, impresiones: 0 };
+    expect(PR.claveFolio(ruta)).toBe('RUTA-0007');
+    const orig = PR.guiaDeRuta(ruta, {});
+    expect(orig.meta.reimpresion).toBe('');
+    expect(PR.htmlGuia(orig.paradas, orig.meta)).toContain('FOLIO RUTA-0007');
+    expect(PR.htmlGuia(orig.paradas, orig.meta)).not.toContain('REIMPRESIÓN');
+    const re = PR.guiaDeRuta(ruta, { reimpresion: true, fechaReimpresion: '26/10/2026' });
+    const html = PR.htmlGuia(re.paradas, re.meta);
+    expect(html).toContain('REIMPRESIÓN 26/10/2026');
+    expect(html).toContain('20 pz');
+    expect(html.indexOf('UNIDAD P3')).toBeLessThan(html.indexOf('UNIDAD P1'));
+  });
+
   test('ayudas de la unidad: botellas sugeridas y su historial', () => {
     expect(PR.botellasSugeridas(1)).toEqual({ n: 3, aviso: '' });
     expect(PR.botellasSugeridas(0)).toEqual({ n: 4, aviso: '' });
@@ -115,6 +132,21 @@ function creaServidor(estado) {
       const nombre = url.pathname.replace('/rest/v1/', '');
       let body = null; try { body = JSON.parse(req.postData() || 'null'); } catch (e) { /* sin cuerpo */ }
       reqs.push({ m, nombre, q: url.search, body });
+      if (nombre === 'rpc/pinol_despachar_ruta') {
+        // Igual que la función del servidor: marca solo lo que sigue pendiente y guarda la ruta con la foto de las paradas
+        const sol = tabla('pinol_solicitudes'), rutas = tabla('pinol_rutas'), ids = [];
+        (body.p_paradas || []).forEach((p) => {
+          const r = sol.find((x) => x.id === p.id && x.estatus === 'PENDIENTE'); if (!r) return;
+          Object.assign(r, { estatus: 'ENTREGADO', fecha_entrega: body.p_fecha, entregado_por: String(body.p_responsable).trim(), comentario_entrega: body.p_vehiculo || null, cantidad_entregada: Math.min(20, Math.max(1, p.cantidad || 1)) });
+          ids.push(p.id);
+        });
+        if (!ids.length) return json(400, { code: 'P0001', message: 'Ninguna de las solicitudes seguía pendiente: no se marcó nada.' });
+        const snap = body.p_paradas.filter((p) => ids.includes(p.id)).map((p) => ({ ...p, cantidad: Math.min(20, Math.max(1, p.cantidad || 1)) }));
+        const ruta = { id: 'ruta-' + (rutas.length + 1), numero: rutas.length + 1, fecha: body.p_fecha, responsable: String(body.p_responsable).trim(), vehiculo: body.p_vehiculo || null,
+          municipios: [...new Set(snap.map((p) => p.municipio))], total_paradas: snap.length, total_botellas: snap.reduce((a, p) => a + p.cantidad, 0), paradas: snap, impresiones: 0, reconstruida: false };
+        rutas.push(ruta); ids.forEach((id) => { sol.find((x) => x.id === id).ruta_id = ruta.id; });
+        return json(200, { ruta_id: ruta.id, numero: ruta.numero, actualizadas: ids.length, omitidas: body.p_paradas.length - ids.length });
+      }
       if (nombre.startsWith('rpc/')) return json(200, null);
       const filas = tabla(nombre); const pasa = filtros(url);
       if (m === 'GET' || m === 'HEAD') {
@@ -133,7 +165,7 @@ function creaServidor(estado) {
 }
 
 async function preparar(page, rol, filas, usuario = {}) {
-  const estado = { db: { pinol_solicitudes: filas.map((f) => ({ ...f })), notificaciones: [], notificaciones_perfil: [] }, rpc: {} };
+  const estado = { db: { pinol_solicitudes: filas.map((f) => ({ ...f })), notificaciones: [], notificaciones_perfil: [], pinol_rutas: [] }, rpc: {} };
   const srv = creaServidor(estado);
   const errores = [];
   page.on('pageerror', (e) => errores.push('PAGEERROR: ' + e.message));
@@ -235,18 +267,135 @@ test.describe('Panel de Pinol (ADMIN): armar la ruta', () => {
     estado.db.pinol_solicitudes.find((r) => r.id === 'p3').estatus = 'ENTREGADO';
     await page.locator('#prSurtir').click();
     await expect(page.locator('#pinolRutaOverlay')).toBeHidden();
-    const patches = srv.reqs.filter((r) => r.m === 'PATCH' && r.nombre === 'pinol_solicitudes');
-    expect(patches).toHaveLength(2);
-    patches.forEach((p) => { expect(p.q).toContain('estatus=eq.PENDIENTE'); expect(p.body.estatus).toBe('ENTREGADO'); expect(p.body.entregado_por).toBe('Ana Pérez'); });
-    expect(patches.map((p) => p.body.cantidad_entregada).sort()).toEqual([2, 3]);
+    await expect(page.locator('#pinolRutaListo')).toBeVisible();
+    // una sola operación atómica con las paradas elegidas, en su orden y con sus cantidades
+    const rpcs = srv.reqs.filter((r) => r.nombre === 'rpc/pinol_despachar_ruta');
+    expect(rpcs).toHaveLength(1);
+    expect(rpcs[0].body.p_responsable).toBe('Ana Pérez');
+    expect(rpcs[0].body.p_paradas.map((p) => [p.id, p.cantidad]).sort()).toEqual([['p1', 3], ['p3', 2]]);
+    expect(srv.reqs.filter((r) => r.m === 'PATCH' && r.nombre === 'pinol_solicitudes')).toHaveLength(0);   // ya no hay un PATCH suelto por cantidad
     const por = (id) => estado.db.pinol_solicitudes.find((r) => r.id === id);
     expect(por('p1').estatus).toBe('ENTREGADO');
     expect(por('p1').cantidad_entregada).toBe(3);
+    expect(por('p1').ruta_id).toBe('ruta-1');
     expect(por('p3').cantidad_entregada).toBeUndefined();        // no se tocó: ya estaba surtida
     expect(por('p2').estatus).toBe('PENDIENTE');                  // las no elegidas siguen pendientes
     expect(por('p4').estatus).toBe('PENDIENTE');
+    await expect(page.locator('#plAviso')).toContainText('1 solicitud');   // avisa que p3 ya no estaba pendiente
+    // la impresión es del botón del aviso (no se pierde si el navegador bloquea o se cierra la ventana)
+    expect((await page.evaluate(() => window.__abiertas.length))).toBe(0);
+    await page.locator('#plImprimir').click();
     expect((await page.evaluate(() => window.__abiertas.length))).toBe(1);
+    const html = await page.evaluate(() => window.__abiertas.pop());
+    expect(html).toContain('RUTA-0001');
+    expect(html).not.toContain('REIMPRESIÓN');                    // la primera es la original
+    expect(html).toContain('UNIDAD P1');
+    expect(html).not.toContain('UNIDAD P3');                      // no salió: otra persona ya la había surtido
     expect(errores).toEqual([]);
+  });
+
+  test('si se cierra la ventana de impresión la ruta NO se pierde: se reimprime desde «Rutas despachadas» sin tocar el estatus', async ({ page }) => {
+    const { estado, srv, errores } = await preparar(page, 'ADMIN', lote());
+    await page.evaluate(() => refreshPinol());
+    await mostrar(page, 'btnPinolPrintGuia');
+    await page.locator('#btnPinolPrintGuia').click();
+    await page.locator('#prLista input[data-id=p1]').check();
+    await page.locator('#prLista input[data-id=p3]').check();
+    await page.locator('#prParadas [data-pr=subir][data-id=p3]').click();         // el orden que se dio (P3 y luego P1) debe conservarse
+    await page.locator('#prParadas input[data-pr=qty][data-id=p1]').fill('7');
+    await page.locator('#prResp').fill('Ana Pérez');
+    await page.locator('#prVeh').fill('Camioneta 3');
+    await page.locator('#prSurtir').click();
+    await expect(page.locator('#pinolRutaListo')).toBeVisible();
+    // «por error se cierra la ventana»: sin imprimir nada
+    await page.locator('#pinolRutaListo [data-pl=cerrar]').click();
+    await expect(page.locator('#pinolRutaListo')).toBeHidden();
+    expect(await page.evaluate(() => window.__abiertas.length)).toBe(0);
+    const parchesAntes = srv.reqs.filter((r) => r.m === 'PATCH' && r.nombre === 'pinol_solicitudes').length;
+
+    // y aun con la tabla refrescada (las unidades ya no son «pendientes») la ruta sigue ahí
+    await page.evaluate(() => refreshPinol());
+    await page.locator('#btnPinolRutasHistorial').click();
+    await expect(page.locator('#pinolRutasOverlay')).toBeVisible();
+    await expect(page.locator('#phLista .pl-ruta')).toHaveCount(1);
+    await expect(page.locator('#phLista')).toContainText('RUTA-0001');
+    await expect(page.locator('#phLista')).toContainText('Ana Pérez');
+    await expect(page.locator('#phLista')).toContainText('Camioneta 3');
+    await expect(page.locator('#phLista')).toContainText('2 unidades');
+    await page.locator('#phLista [data-ph=ver]').click();
+    await expect(page.locator('#phLista .pl-det li')).toHaveCount(2);
+    await page.locator('#phLista [data-ph=imprimir]').click();
+    const html = await page.evaluate(() => window.__abiertas.pop());
+    expect(html).toContain('RUTA-0001');
+    expect(html).toContain('REIMPRESIÓN');
+    expect(html).toContain('Camioneta 3');
+    expect(html.indexOf('UNIDAD P3')).toBeLessThan(html.indexOf('UNIDAD P1'));      // mismo orden que se armó
+    expect(html).toContain('7 pz');                                                     // misma cantidad
+    // reimprimir no toca a las unidades ni crea otra ruta
+    expect(srv.reqs.filter((r) => r.m === 'PATCH' && r.nombre === 'pinol_solicitudes').length).toBe(parchesAntes);
+    expect(srv.reqs.filter((r) => r.nombre === 'rpc/pinol_despachar_ruta')).toHaveLength(1);
+    expect(estado.db.pinol_solicitudes.find((r) => r.id === 'p1').estatus).toBe('ENTREGADO');
+    await expect.poll(() => estado.db.pinol_rutas[0].impresiones).toBe(1);              // cuenta las impresiones
+    expect(errores).toEqual([]);
+  });
+
+  test('historial: rutas reconstruidas se marcan, se busca por unidad y se reimprime una ruta que ya no tiene solicitudes en la tabla', async ({ page }) => {
+    const { estado, errores } = await preparar(page, 'ADMIN', lote());
+    estado.db.pinol_rutas.push(
+      { id: 'r-vieja', numero: 3, fecha: '2026-08-12', responsable: 'L.E. LIZBETH URIBE PANTOJA', vehiculo: null, municipios: ['CORREGIDORA'], total_paradas: 1, total_botellas: 2, impresiones: 0, reconstruida: true,
+        paradas: [{ id: 'borrada', clues: 'C-zz', unidad: 'UNIDAD YA BORRADA', municipio: 'CORREGIDORA', existencia_actual_botellas: 0, solicitud_botellas: 2, observaciones: '', cantidad: 2 }] },
+      { id: 'r-nueva', numero: 4, fecha: '2026-10-09', responsable: 'ANA', vehiculo: 'camioneta', municipios: ['QUERETARO'], total_paradas: 1, total_botellas: 4, impresiones: 2, reconstruida: false,
+        paradas: [{ id: 'x', clues: 'C-x', unidad: 'OTRA UNIDAD', municipio: 'QUERETARO', existencia_actual_botellas: 1, solicitud_botellas: 3, observaciones: '', cantidad: 4 }] });
+    await page.evaluate(() => refreshPinol());
+    await mostrar(page, 'btnPinolRutasHistorial');
+    await page.locator('#btnPinolRutasHistorial').click();
+    await expect(page.locator('#phLista .pl-ruta')).toHaveCount(2);
+    await expect(page.locator('#phLista .pl-ruta').first()).toContainText('RUTA-0004');          // la más reciente primero
+    await expect(page.locator('#phLista')).toContainText('reconstruida');
+    await expect(page.locator('#phLista')).toContainText('impresa 2 veces');
+    await page.locator('#phBuscar').fill('borrada');
+    await expect(page.locator('#phLista .pl-ruta')).toHaveCount(1);
+    await expect(page.locator('#phConteo')).toContainText('1 de 2');
+    await page.locator('#phLista [data-ph=imprimir]').click();
+    const html = await page.evaluate(() => window.__abiertas.pop());
+    expect(html).toContain('UNIDAD YA BORRADA');
+    expect(html).toContain('RUTA-0003');
+    expect(html).toContain('SIN EXISTENCIA');                                                   // existencia 0 al despachar
+    await page.locator('#phBuscar').fill('nada que coincida');
+    await expect(page.locator('#phLista')).toContainText('Ninguna ruta coincide');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#pinolRutasOverlay')).toBeHidden();
+    expect(errores).toEqual([]);
+  });
+
+  test('el surtido masivo (modal antiguo) también guarda la ruta para reimprimirla', async ({ page }) => {
+    const { estado, srv, errores } = await preparar(page, 'ADMIN', lote());
+    await page.evaluate(() => refreshPinol());
+    await mostrar(page, 'btnPinolBatchDispatch');
+    await page.evaluate(() => { window._pinolSelectedIds.add('p2'); window._pinolSelectedIds.add('p4'); openPinolBatchModal(); });
+    await page.locator('#pinolBatchEntregadoPor').fill('Ana Pérez');
+    await page.locator('#btnConfirmarBatchPinol').click();
+    await expect(page.locator('#pinolRutaListo')).toBeVisible();
+    expect(srv.reqs.filter((r) => r.nombre === 'rpc/pinol_despachar_ruta')).toHaveLength(1);
+    expect(estado.db.pinol_rutas).toHaveLength(1);
+    expect(estado.db.pinol_rutas[0].total_paradas).toBe(2);
+    expect(estado.db.pinol_solicitudes.find((r) => r.id === 'p2').ruta_id).toBe('ruta-1');
+    expect(errores).toEqual([]);
+  });
+
+  test('si falla el guardado de la ruta no se marca nada y se avisa', async ({ page }) => {
+    const { estado, errores } = await preparar(page, 'ADMIN', lote());
+    await page.evaluate(() => refreshPinol());
+    await mostrar(page, 'btnPinolPrintGuia');
+    await page.locator('#btnPinolPrintGuia').click();
+    await page.locator('#prLista input[data-id=p1]').check();
+    await page.locator('#prResp').fill('Ana Pérez');
+    estado.db.pinol_solicitudes.find((r) => r.id === 'p1').estatus = 'ENTREGADO';       // otra persona la surtió justo antes
+    await page.locator('#prSurtir').click();
+    await expect(page.locator('#pinolRutaListo')).toBeHidden();
+    await expect(page.locator('#pinolRutaOverlay')).toBeVisible();                          // el armador sigue abierto para corregir
+    expect(estado.db.pinol_rutas).toHaveLength(0);                                          // y no quedó una ruta fantasma
+    expect(errores.filter((e) => !/despachar ruta|400/i.test(e))).toEqual([]);
   });
 
   test('se pueden entregar más de 4 botellas (6) aunque la unidad solo pida hasta 4', async ({ page }) => {
@@ -259,8 +408,8 @@ test.describe('Panel de Pinol (ADMIN): armar la ruta', () => {
     await page.locator('#prResp').fill('Ana Pérez');
     await page.locator('#prSurtir').click();
     await expect(page.locator('#pinolRutaOverlay')).toBeHidden();
-    const p = srv.reqs.filter((r) => r.m === 'PATCH' && r.nombre === 'pinol_solicitudes');
-    expect(p[0].body.cantidad_entregada).toBe(6);
+    const rpc = srv.reqs.filter((r) => r.nombre === 'rpc/pinol_despachar_ruta');
+    expect(rpc[0].body.p_paradas[0].cantidad).toBe(6);
     expect(estado.db.pinol_solicitudes.find((r) => r.id === 'p1').cantidad_entregada).toBe(6);
     expect(errores).toEqual([]);
   });
@@ -301,6 +450,37 @@ test.describe('Panel de Pinol (ADMIN): armar la ruta', () => {
     expect(html).toContain("UNIDAD P1");
     expect(html).toContain("UNIDAD P3");
     expect(errores).toEqual([]);
+  });
+
+  test('accesibilidad del aviso de ruta guardada y del historial de rutas (axe, teclado y foco)', async ({ page }) => {
+    const fs = require('fs'); const path = require('path');
+    const AXE = fs.readFileSync(path.join(__dirname, '..', 'node_modules', 'axe-core', 'axe.min.js'), 'utf8');
+    const { estado } = await preparar(page, 'ADMIN', lote());
+    estado.db.pinol_rutas.push({ id: 'r1', numero: 1, fecha: '2026-10-09', responsable: 'ANA', vehiculo: 'camioneta', municipios: ['QUERETARO'], total_paradas: 1, total_botellas: 4, impresiones: 0, reconstruida: true,
+      paradas: [{ id: 'x', clues: 'C-x', unidad: 'OTRA UNIDAD', municipio: 'QUERETARO', existencia_actual_botellas: 1, solicitud_botellas: 3, observaciones: '', cantidad: 4 }] });
+    await page.evaluate(() => refreshPinol());
+    await mostrar(page, 'btnPinolPrintGuia');
+    await page.addScriptTag({ content: AXE });
+    const axe = (sel) => page.evaluate(async (s) => (await window.axe.run(s, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'] } })).violations.map((x) => x.id + ': ' + x.nodes.map((n) => n.target.join(' ')).join(' | ')), sel);
+    // aviso después de marcar la ruta
+    await page.locator('#btnPinolPrintGuia').click();
+    await page.locator('#prLista input[data-id=p1]').check();
+    await page.locator('#prResp').fill('Ana Pérez');
+    await page.locator('#prSurtir').click();
+    await expect(page.locator('#pinolRutaListo')).toBeVisible();
+    await expect(page.locator('#plImprimir')).toBeFocused();                  // el foco cae en «Imprimir guía»
+    expect(await axe('#pinolRutaListo')).toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#pinolRutaListo')).toBeHidden();
+    // historial
+    await page.locator('#btnPinolRutasHistorial').click();
+    await expect(page.locator('#phLista .pl-ruta')).toHaveCount(2);
+    await expect(page.locator('#phBuscar')).toBeFocused();
+    await page.locator('#phLista [data-ph=ver]').first().click();
+    expect(await axe('#pinolRutasOverlay')).toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#pinolRutasOverlay')).toBeHidden();
+    await expect(page.locator('#btnPinolRutasHistorial')).toBeFocused();       // el foco regresa al botón que lo abrió
   });
 
   test('accesibilidad del armador (axe)', async ({ page }) => {

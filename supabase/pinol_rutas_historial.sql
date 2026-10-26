@@ -1,0 +1,23 @@
+-- ============================================================================
+-- Rutas de entrega de Pinol guardadas (historial y reimpresión de la guía)
+-- ============================================================================
+-- Espejo del estado YA APLICADO en Supabase (proyecto utclfqjietlxzlorxhrs, 2026-10-26) vía las migraciones
+-- pinol_rutas_historial_reimpresion, pinol_despachar_ruta_rpc y pinol_despachar_ruta_cantidad_acotada.
+-- Documenta el estado final; no es un script para volver a correr.
+--
+-- Problema: al marcar una ruta en tránsito las solicitudes pasan a ENTREGADO y el armador solo lista PENDIENTES; si se cerraba
+-- la ventana de impresión no había forma de volver a imprimir la guía. Reconstruirla desde las solicitudes tampoco sirve:
+-- trg_pinol_autoclean_recibido borra las RECIBIDO de la unidad cuando hace una nueva solicitud.
+--
+-- Solución:
+--  · public.pinol_rutas: foto de cada ruta (fecha, responsable, vehículo, municipios y `paradas` jsonb con orden y cantidades:
+--    [{id, clues, unidad, municipio, existencia_actual_botellas, solicitud_botellas, observaciones, cantidad}]). Folio = RUTA-<numero>.
+--    Inmutable (trigger fn_pinol_rutas_inmutable): solo cambian los contadores de impresión.
+--  · public.pinol_solicitudes.ruta_id (FK, on delete set null) liga cada solicitud con su ruta.
+--  · RLS: ADMIN todo; MUNICIPAL select/insert/update de las rutas cuyos municipios son todos de los suyos (mismo criterio que pinol_solicitudes).
+--  · public.pinol_despachar_ruta(p_fecha, p_responsable, p_vehiculo, p_paradas jsonb) → jsonb {ruta_id, numero, actualizadas, omitidas}
+--    SECURITY INVOKER (RLS aplica): en UNA transacción marca ENTREGADO solo lo que sigue PENDIENTE (cantidad acotada a 1..20),
+--    guarda la ruta con lo que de verdad salió y liga las solicitudes. Si nada seguía pendiente, falla y no guarda nada.
+--  · Relleno inicial: las 39 solicitudes ENTREGADO/RECIBIDO que ya estaban en la tabla se agruparon en 24 rutas «reconstruidas»
+--    (por fecha, responsable, observación y minuto de entrega; orden por municipio y unidad, porque el original no se guardó).
+-- Definiciones completas: ver las migraciones citadas.

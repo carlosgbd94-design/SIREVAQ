@@ -7270,7 +7270,8 @@ async function supabaseRequest(action = "", payload, options = {}) {
           estatus_visual: d.estatus_visual,
           fecha_entrega: d.fecha_entrega || d.timestamp_entrega,
           entregado_por: d.entregado_por,
-          recibido_ts: d.recibido_ts
+          recibido_ts: d.recibido_ts,
+          ruta_id: d.ruta_id || null
         }));
 
         return { ok: true, data: legacyData };
@@ -20067,6 +20068,8 @@ $("pinolFiltroEstatus")?.addEventListener("change", () => renderPinolCommandCent
 
 // Batch Modal Handlers
 $("btnPinolBatchDispatch")?.addEventListener("click", () => openPinolBatchModal());
+// Rutas ya despachadas: reimprimir la guía sin tocar el estatus de las unidades (pinol_ruta.js)
+$("btnPinolRutasHistorial")?.addEventListener("click", () => window.PinolRuta?.abrirHistorial());
 // La Guía de Ruta ya no imprime «todas las pendientes»: abre el armador para elegir qué unidades van (pinol_ruta.js)
 $("btnPinolPrintGuia")?.addEventListener("click", () => {
   if (window.PinolRuta) { window.PinolRuta.abrir(); return; }
@@ -20114,32 +20117,14 @@ $("btnConfirmarBatchPinol")?.addEventListener("click", async () => {
 
   try {
     showOverlay("Procesando surtido masivo de insumos...");
-    const ids = selectedItems.map(x => x.id);
-
-    const updatePayload = {
-      estatus: 'ENTREGADO',
-      fecha_entrega: fechaEntrega,
-      timestamp_entrega: new Date().toISOString(),
-      entregado_por: entregadoPor,
-      comentario_entrega: comentario,
-      cantidad_entregada: cantidadPiezas
-    };
-
-    const { error } = await window.supabase
-      .from('pinol_solicitudes')
-      .update(updatePayload)
-      .in('id', ids);
-
-    if (error) throw error;
-
-    showToast(`✅ ${ids.length} solicitudes surtidas correctamente`, true, "good");
-    window._pinolSelectedIds.clear();
+    // La ruta se guarda junto con el cambio de estatus (pinol_despachar_ruta): así la guía se puede reimprimir desde
+    // «Rutas despachadas» aunque se cierre la ventana de impresión.
     closePinolBatchModal();
-    invalidatePinolCache();
-    await refreshPinol();
-
-    // Ofrecer impresión de la Guía de Ruta
-    imprimirGuiaEmbarquePinol(selectedItems, { fecha: fechaEntrega, responsable: entregadoPor, vehiculo: comentario, cantidad: cantidadPiezas });
+    hideOverlay();
+    const ordenadas = window.PinolRuta.ordenarParadas(selectedItems, todayYmdLocal());
+    const cantidades = {};
+    ordenadas.forEach(x => { cantidades[String(x.id)] = cantidadPiezas; });
+    await window.PinolRuta.despacharYAvisar(ordenadas, { fecha: fechaEntrega, responsable: entregadoPor, vehiculo: comentario, cantidades });
   } catch (err) {
     console.error("Error en surtido masivo:", err);
     showToast("Error al procesar surtido masivo", false, "bad");
