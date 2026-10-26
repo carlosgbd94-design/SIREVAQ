@@ -185,7 +185,7 @@ async function cargarSesionReal() {
     if (recordado && !esNombreTecnico(recordado)) inp.value = recordado;
     inp.readOnly = false;
     document.getElementById('labelSelUsuario').textContent = 'Responsable de la información';
-    inp.placeholder = 'Tu nombre completo (quien elabora este SIS)';
+    inp.placeholder = 'Tu nombre completo';
     inp.setAttribute('autocomplete', 'name');
     inp.title = 'Nombre de quien elabora la información: sale como responsable en todas las hojas del SINBA-SIS. Puedes cambiarlo.';
   } else {
@@ -536,7 +536,7 @@ async function cargarCatalogo() {
   const ORDEN_DESTINO = ['CORREGIDORA', 'HUIMILPAN', 'MARQUES', 'QUERETARO', 'NHG', 'HENM'];
   const ordenDestino = (u) => { const i = ORDEN_DESTINO.indexOf(u.municipio); return i < 0 ? 99 : i; };
   const listaSelUnidad = rol === 'UNIDAD' ? unidadesParaSelUnidad : [...unidadesParaSelUnidad].sort((a, b) => ordenDestino(a) - ordenDestino(b));
-  const opcionesUnidad = listaSelUnidad.map((u) => `<option value="${u.id}">${rol === 'UNIDAD' ? `${u.nombre} (${u.municipio})` : (ETIQUETA_DESTINO[u.municipio] || u.nombre)}</option>`);
+  const opcionesUnidad = listaSelUnidad.map((u) => `<option value="${u.id}">${rol === 'UNIDAD' ? `${u.nombre} (${ETIQUETA_DESTINO[u.municipio] || u.municipio})` : (ETIQUETA_DESTINO[u.municipio] || u.nombre)}</option>`);
   if (rol === 'JURISDICCIONAL' || rol === 'ADMIN') {
     opcionesUnidad.unshift(`<option value="${UNIDAD_JURISDICCION}">Jurisdicción (suma de ${unidadesPseudo.length === 1 ? 'el municipio' : 'los ' + unidadesPseudo.length + ' municipios y hospitales'})</option>`);
   }
@@ -1841,7 +1841,7 @@ function encabezadoColumnas(split, clave) {
       <th class="c-des" colspan="${split ? 2 : 1}"><span class="th-con-icono"><span class="material-symbols-rounded">delete_sweep</span>Dosis desechadas</span></th>
       <th class="c-fin"${rs}><span class="th-con-icono"><span class="material-symbols-rounded">calculate</span>Final</span></th>
       <th${rs}>Observaciones</th>
-      <th${rs}></th>
+      <th${rs}><span class="sr-solo">Acciones</span></th>
     </tr>
     ${subfila}
   </thead>`;

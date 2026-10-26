@@ -47,7 +47,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.75"></script>
+<script defer src="biovac_ui.js?v=2026.78"></script>
 <script defer src="sis06p_biovac_module.js?v=2026.58"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.23"></script>
@@ -58,7 +58,7 @@ window.onunhandledrejection = function (event) {
     --primary: #0f172a; --secondary: #0ea5e9;
     --surface: #ffffff; --surface-container: #f1f4f8;
     --outline: #73777f; --outline-variant: #e2e8f0;
-    --text: #1a1c20; --muted: #64748b;
+    --text: #1a1c20; --muted: #546073;
     --error: #ba1a1a; --error-bg: #fef2f2; --error-border: #fecaca;
     --success: #047857; --success-bg: #f0fdf9;
     --warning: #b45309; --warning-bg: #fffbeb; --warning-border: #fde68a;
@@ -539,8 +539,10 @@ window.onunhandledrejection = function (event) {
   table.renglones .btn-fantasma[data-action="eliminar-renglon"]:hover { background: var(--error-bg); color: var(--error); }
 
   .lote-texto { font-weight: 800; font-size: 14px; color: var(--primary); letter-spacing: -.01em; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .ayuda-franja, .ayuda-franja > span { color: #4b5b70; }
+  .sr-solo { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .caducidad-chip {
-    display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; color: var(--muted);
+    display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; color: #4b5b70;
     background: var(--surface-container); border: 1px solid var(--outline-variant);
     padding: 3px 9px; border-radius: 7px; letter-spacing: .02em;
   }
