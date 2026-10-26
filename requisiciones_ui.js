@@ -88,7 +88,7 @@ const estado = {
   plantillaBuffer: null,
   pasoActual: 1,
   bioRapido: null,     // biológico elegido en la captura rápida (Paso 1)
-  soloConLotes: false, // Paso 1: ocultar biológicos sin lotes
+  soloConLotes: null,  // Paso 1: ocultar biológicos sin lotes (null = automático: se activa solo cuando ya hay lotes)
   filtroBio2: '',      // Paso 2: biológico filtrado ('' = todos)
   municipioPaso3: 'CORREGIDORA',
   avance: null,
@@ -686,24 +686,22 @@ async function renderFirmasMunicipio() {
   const porDestino = {};
   (data || []).forEach((f) => { porDestino[f.destino] = f; });
 
-  cont.innerHTML = MUNICIPIOS_REALES.map((m) => {
+  const val = (v) => String(v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  cont.innerHTML = `<div class="firma-muni-cab" aria-hidden="true"><span>Municipio</span><span>Responsable municipal · firma abajo a la derecha</span><span>Quien entrega · firma abajo a la izquierda</span><span></span></div>`
+    + MUNICIPIOS_REALES.map((m) => {
     const d = porDestino[m.v] || {};
     return `
-      <div class="firma-bloque" data-firma-municipio="${m.v}" style="margin-bottom:0; background:var(--surface);">
-        <div class="firma-bloque-titulo" style="color:inherit;">${m.l}</div>
-        <div class="firma-cuadro">
-          <div class="firma-celda">
-            <span class="firma-pos">Responsable municipal · abajo derecha del municipio / abajo izquierda de sus unidades</span>
-            <div class="campo"><label>Nombre</label><input type="text" class="inp-firma-recibe-n" aria-label="Responsable municipal: nombre (${m.l})" value="${(d.recibe_nombre || '').replace(/"/g, '&quot;')}"></div>
-            <div class="campo"><label>Cargo</label><input type="text" class="inp-firma-recibe-c" aria-label="Responsable municipal: cargo (${m.l})" value="${(d.recibe_cargo || '').replace(/"/g, '&quot;')}"></div>
-          </div>
-          <div class="firma-celda">
-            <span class="firma-pos">Quien entrega · abajo izquierda de la requisición del municipio</span>
-            <div class="campo"><label>Nombre</label><input type="text" class="inp-firma-entrega-n" aria-label="Entrega: nombre (${m.l})" value="${(d.entrega_nombre || '').replace(/"/g, '&quot;')}"></div>
-            <div class="campo"><label>Cargo</label><input type="text" class="inp-firma-entrega-c" aria-label="Entrega: cargo (${m.l})" value="${(d.entrega_cargo || '').replace(/"/g, '&quot;')}"></div>
-          </div>
+      <div class="firma-muni" data-firma-municipio="${m.v}">
+        <b>${m.l}</b>
+        <div class="firma-par" data-rol="Responsable municipal · firma abajo a la derecha">
+          <input type="text" class="inp-firma-recibe-n" placeholder="Nombre" aria-label="Responsable municipal: nombre (${m.l})" value="${val(d.recibe_nombre)}">
+          <input type="text" class="inp-firma-recibe-c" placeholder="Cargo" aria-label="Responsable municipal: cargo (${m.l})" value="${val(d.recibe_cargo)}">
         </div>
-        <div style="margin-top:10px;"><button class="btn btn-primary btn-sm" data-guardar-firma-municipio="${m.v}"><span class="material-symbols-rounded" style="font-size:14px">save</span> Guardar ${m.l}</button></div>
+        <div class="firma-par" data-rol="Quien entrega · firma abajo a la izquierda">
+          <input type="text" class="inp-firma-entrega-n" placeholder="Nombre" aria-label="Quien entrega: nombre (${m.l})" value="${val(d.entrega_nombre)}">
+          <input type="text" class="inp-firma-entrega-c" placeholder="Cargo" aria-label="Quien entrega: cargo (${m.l})" value="${val(d.entrega_cargo)}">
+        </div>
+        <button class="btn btn-primary btn-sm" data-guardar-firma-municipio="${m.v}" aria-label="Guardar firmas de ${m.l}"><span class="material-symbols-rounded" style="font-size:14px">save</span> Guardar</button>
       </div>
     `;
   }).join('');
@@ -997,6 +995,7 @@ async function toggleExplorador() {
   const panel = $('panelExplorador');
   const abrir = panel.style.display === 'none';
   panel.style.display = abrir ? 'block' : 'none';
+  $('btnAbrirExplorador').setAttribute('aria-expanded', abrir ? 'true' : 'false');
   if (!abrir) return;
 
   const { data, error } = await estado.db.from('requi_requisiciones')
@@ -1201,12 +1200,14 @@ function calcularAvance() {
 
 function plural(n, uno, varios) { return `${n} ${n === 1 ? uno : varios}`; }
 
-function htmlAvance(titulo, resumen, puntos, porcentaje, leyenda) {
-  return `
-    <div class="avance-cab"><div><b>${titulo}</b><small>${resumen}</small></div>${porcentaje != null ? `<span class="avance-pct">${porcentaje}%</span>` : ''}</div>
-    ${porcentaje != null ? `<div class="avance-barra"><i style="width:${porcentaje}%"></i></div>` : ''}
-    <div class="puntos">${puntos.map((p) => `<button type="button" class="pt ${p.est}" title="${esc(p.titulo)}" ${p.datos}></button>`).join('')}</div>
-    <div class="leyenda">${leyenda.map(([cls, txt]) => `<span><i class="pt ${cls}"></i>${txt}</span>`).join('')}</div>`;
+// Barra compacta de avance (los títulos y conteos ya salen en el stepper y en la barra de abajo).
+function htmlAvance(etiqueta, resumen, puntos, porcentaje, leyenda) {
+  const barra = porcentaje != null
+    ? `<div class="avance-fila"><span class="avance-etiqueta">${etiqueta}</span><div class="avance-barra" role="progressbar" aria-label="${esc(etiqueta)}: ${resumen}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${porcentaje}"><i style="width:${porcentaje}%"></i></div><span class="avance-pct">${porcentaje}%</span></div>`
+    : '';
+  return `${barra}
+    <div class="avance-pie"><div class="puntos" role="group" aria-label="${esc(etiqueta)}: un punto por cada lote">${puntos.map((p) => `<button type="button" class="pt ${p.est}" title="${esc(p.titulo)}" aria-label="${esc(p.titulo)}" ${p.datos}></button>`).join('')}</div>
+    <div class="leyenda">${leyenda.map(([cls, txt]) => `<span><i class="pt ${cls}"></i>${txt}</span>`).join('')}</div></div>`;
 }
 
 function renderAvance() {
@@ -1256,20 +1257,15 @@ function renderAvance() {
   $('btnSiguiente').style.display = estado.pasoActual < 3 ? 'inline-flex' : 'none';
 
   // Resumen con puntos de cada paso
-  $('avancePaso1').innerHTML = htmlAvance(
-    'Paso 1 de 3 · Lo surtido', esc(pasos[0].texto),
-    estado.catalogo.map((bio) => {
-      const n = itemsDe(bio.id).length;
-      return { est: n ? 'completo' : 'vacio', titulo: `${bio.nombre}: ${n ? plural(n, 'lote', 'lotes') : 'sin lotes'}`, datos: `data-ir="p1" data-bio="${bio.id}"` };
-    }), null, [['vacio', 'sin lotes'], ['completo', 'con lotes']]);
+  $('avancePaso1').innerHTML = '';   // los chips de la captura rápida ya muestran, por biológico, cuántos lotes lleva
 
   $('avancePaso2').innerHTML = htmlAvance(
-    'Paso 2 de 3 · Municipios y hospitales', esc(pasos[1].texto),
+    'Avance del reparto', esc(pasos[1].texto),
     a.p2.map((x) => ({ est: x.est, titulo: `${nombreCorto(estado.catalogo.find((b) => b.id === x.bio) || {})} · lote ${numeroLoteDe(x.bio, x.lote)}: ${x.est === 'completo' ? 'repartido por completo' : x.est === 'vacio' ? 'sin repartir' : 'quedan ' + (x.disp - x.rep)}`, datos: `data-ir="p2" data-bio="${x.bio}" data-lote="${x.lote}"` })),
     a.p2.length ? pct(c2, a.p2.length) : null, [['vacio', 'sin repartir'], ['parcial', 'con saldo'], ['completo', 'completo']]);
 
   $('avancePaso3').innerHTML = htmlAvance(
-    estado.esMunicipal ? 'Reparto a unidades' : 'Paso 3 de 3 · Unidades', esc(pasos[2].texto),
+    'Avance del reparto', esc(pasos[2].texto),
     a.p3.map((x) => ({ est: x.est, titulo: `${etiquetaMunicipio(x.muni)} · ${nombreCorto(estado.catalogo.find((b) => b.id === x.bio) || {})} lote ${numeroLoteDe(x.bio, x.lote)}: ${x.est === 'completo' ? 'repartido por completo' : x.est === 'vacio' ? 'sin repartir' : 'quedan ' + (x.disp - x.rep)}`, datos: `data-ir="p3" data-muni="${x.muni}" data-bio="${x.bio}" data-lote="${x.lote}"` })),
     a.p3.length ? pct(c3, a.p3.length) : null, [['vacio', 'sin repartir'], ['parcial', 'con saldo'], ['completo', 'completo']]);
 }
@@ -1537,8 +1533,13 @@ function renderPaso1() {
   renderAvisoPendientes();
   renderChipsBio();
   renderRapidaBio();
-  $('chkSoloConLotes').classList.toggle('activo', estado.soloConLotes);
-  const visibles = estado.catalogo.filter((bio) => !estado.soloConLotes || itemsDe(bio.id).length);
+  const hayLotes = estado.catalogo.some((bio) => itemsDe(bio.id).length);
+  const soloLotes = estado.soloConLotes === null ? hayLotes : estado.soloConLotes;
+  $('chkSoloConLotes').classList.toggle('activo', soloLotes);
+  $('chkSoloConLotes').setAttribute('aria-pressed', soloLotes ? 'true' : 'false');
+  const visibles = estado.catalogo.filter((bio) => !soloLotes || itemsDe(bio.id).length);
+  $('infoSoloConLotes').textContent = soloLotes && visibles.length < estado.catalogo.length
+    ? `Mostrando ${visibles.length} de ${estado.catalogo.length} biológicos (los demás aún no tienen lotes)` : '';
   $('tbodyBiologicos').innerHTML = visibles.map(filasBiologicoHtml).join('')
     || '<tr><td colspan="4" style="color:var(--muted)">Todavía no hay lotes capturados.</td></tr>';
 }
@@ -3645,6 +3646,8 @@ function toggleResponsables() {
   const abierto = cuerpo.style.display !== 'none';
   cuerpo.style.display = abierto ? 'none' : 'block';
   icono.style.transform = abierto ? 'rotate(0deg)' : 'rotate(180deg)';
+  $('btnToggleResponsables').setAttribute('aria-expanded', abierto ? 'false' : 'true');
+  $('tarjetaResponsables').classList.toggle('abierta', !abierto);
 }
 
 // Cada paso se dibuja al entrar (siempre desde lo guardado), así lo capturado
@@ -3750,7 +3753,7 @@ function instalarEventos() {
   $('menuTraerLista').addEventListener('click', () => setTimeout(cerrarMenuTraer, 0));
   document.addEventListener('click', (ev) => { if (!ev.target.closest('#menuTraer')) cerrarMenuTraer(); });
   $('menuTraer').addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && $('menuTraerLista').style.display !== 'none') { ev.stopPropagation(); cerrarMenuTraer(); $('btnMenuTraer').focus(); } });
-  $('chkSoloConLotes').addEventListener('click', () => { estado.soloConLotes = !estado.soloConLotes; renderPaso1(); });
+  $('chkSoloConLotes').addEventListener('click', () => { estado.soloConLotes = !$('chkSoloConLotes').classList.contains('activo'); renderPaso1(); });
   $('tbodyBiologicos').addEventListener('click', clicTablaPaso1);
   $('tbodyBiologicos').addEventListener('keydown', teclaTablaPaso1);
   $('tbodyBiologicos').addEventListener('input', (ev) => {

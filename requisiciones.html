@@ -22,7 +22,7 @@
 <script defer src="requisiciones_export_excel.js"></script>
 <script defer src="requisiciones_rutas_excel.js"></script>
 <script defer src="requisiciones_kardex_excel.js?v=2"></script>
-<script defer src="requisiciones_ui.js?v=23"></script>
+<script defer src="requisiciones_ui.js?v=25"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -148,6 +148,24 @@
   .firma-cuadro { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
   .firma-celda { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--outline-variant); border-radius: 10px; background: var(--surface, #fff); }
   .firma-pos { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  /* Encabezado que se pliega: un botón de verdad (teclado + lector de pantalla) y sin hueco cuando está cerrado. */
+  .tarjeta-plegable > h2 { margin: 0; }
+  .tarjeta-plegable.abierta > h2 { margin-bottom: 10px; }
+  .plegable-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 2px 0; border: 0; background: transparent; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+  .plegable-btn:focus-visible { outline: 2px solid var(--secondary); outline-offset: 4px; border-radius: 8px; }
+  /* Firmas por municipio: una fila por municipio con los encabezados una sola vez. */
+  .firma-muni-cab, .firma-muni { display: grid; grid-template-columns: 110px 1fr 1fr 96px; gap: 12px; align-items: center; }
+  .firma-muni > .btn { justify-content: center; }
+  .firma-muni-cab { padding: 0 12px 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .firma-muni { padding: 10px 12px; margin-top: 8px; background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 12px; }
+  .firma-muni > b { font-size: 13px; color: var(--primary); }
+  .firma-muni .firma-par { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .firma-muni .firma-par input { width: 100%; }
+  @media (max-width: 900px) {
+    .firma-muni-cab { display: none; }
+    .firma-muni { grid-template-columns: 1fr; }
+    .firma-muni .firma-par::before { content: attr(data-rol); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  }
   .firma-celda input { width: 100%; }
   .lista-destinos-firma { display: flex; flex-direction: column; gap: 10px; }
   .destinos-masivos { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
@@ -195,7 +213,7 @@
      edición de un lote ya capturado (activarEdicionItem) -- el lápiz
      reemplaza el texto por inputs + check/cancelar, sin salir de la fila. */
   .clave-bio { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; }
-  .clave-bio .icon-btn-pure { padding: 2px; }
+  .clave-bio .icon-btn-pure { padding: 5px; margin: -4px 0; }
   .clave-bio .icon-btn-pure .material-symbols-rounded { font-size: 13px; }
   .clave-bio input[type=text] { padding: 3px 6px; font-size: 11px; }
   .clave-bio .inp-editar-clave-articulo { width: 130px; }
@@ -266,7 +284,7 @@
   /* Explorador de historial -- panel de ancho completo (no flotante como el
      de exportar) porque su contenido es una tabla que necesita todo el
      espacio disponible para leerse bien. */
-  .panel-explorador { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--outline-variant); }
+  .panel-explorador { margin-top: 12px; }
   #tbodyExplorador tr.activa td { background: #eff6ff; }
   #tbodyExplorador tr.activa td:first-child { border-left: 3px solid var(--secondary); }
 
@@ -314,15 +332,20 @@
   }
 
   /* Avance de cada paso: barra + un punto por lote (o biológico / asignación). */
-  .avance { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 20px; padding: 14px 20px; margin-bottom: 16px; box-shadow: var(--shadow-1); }
-  .avance-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-  .avance-cab b { font: 800 13.5px 'Poppins', sans-serif; color: var(--primary); }
-  .avance-cab small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 600; }
-  .avance-pct { font: 800 18px 'Poppins', sans-serif; color: var(--primary); }
-  .avance-barra { height: 6px; border-radius: 6px; background: #e2e8f0; margin: 10px 0 0; overflow: hidden; }
+  .avance { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 20px; padding: 12px 20px; margin-bottom: 16px; box-shadow: var(--shadow-1); }
+  .avance:empty { display: none; }
+  .avance-fila { display: flex; align-items: center; gap: 14px; }
+  .avance-etiqueta { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); white-space: nowrap; }
+  .avance-pct { font: 800 16px 'Poppins', sans-serif; color: var(--primary); min-width: 44px; text-align: right; }
+  .avance-barra { flex: 1; height: 6px; border-radius: 6px; background: #e2e8f0; overflow: hidden; }
   .avance-barra i { display: block; height: 100%; background: #16a34a; border-radius: 6px; transition: width .35s ease; }
-  .puntos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .avance-pie { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin-top: 8px; }
+  .avance-pie .puntos, .avance-pie .leyenda { margin-top: 0; }
+  .puntos { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 12px; }
+  /* El punto se ve de 13 px pero el área tocable es de 22 px (borde transparente + background-clip). */
   .pt { width: 13px; height: 13px; border-radius: 50%; border: none; padding: 0; background: #cbd5e1; flex: none; display: inline-block; transition: transform .15s ease; }
+  button.pt { width: 22px; height: 22px; padding: 4.5px; background-clip: content-box; }
+  button.pt:focus-visible { outline: 2px solid var(--secondary); outline-offset: 0; }
   button.pt { cursor: pointer; }
   .pt.parcial { background: #f59e0b; }
   .pt.completo { background: #16a34a; }
@@ -343,7 +366,8 @@
   .chip-bio.parcial b { background: #fef3c7; color: var(--warning); }
   .chip-bio.activo { border-color: var(--c, var(--secondary)); background: #f0f9ff; background: color-mix(in srgb, var(--c, #0ea5e9) 11%, #fff); }
   @media (hover: hover) and (pointer: fine) { .chip-bio:hover { border-color: var(--c, var(--secondary)); } }
-  .chip-filtro.activo { background: #eff6ff; border-color: var(--secondary); color: var(--secondary); }
+  .info-filtro { margin-left: auto; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .chip-filtro.activo { background: #eff6ff; border-color: var(--secondary); color: #075985; }
 
   /* Captura rápida (Paso 1) */
   .rapida {
@@ -356,7 +380,8 @@
   .rb-nombre { font-weight: 800; font-size: 13.5px; color: var(--text); }
   .rb-sub { font-size: 11.5px; color: var(--muted); font-weight: 600; }
   .rapida-lote input { width: 190px; }
-  .rapida-nota { min-height: 22px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .rapida-nota { margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .rapida-nota:empty { display: none; }
   .rapida-nota .pill { margin-left: 0; margin-right: 6px; }
 
   .punto-bio { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; flex: none; }
@@ -622,8 +647,12 @@
   .asig-fila .campo:first-child { flex: 1 1 180px; }
   .modal-resumen.ok { color: #15803d; }
   .modal-resumen.aviso { color: var(--warning); }
-  .trans-subir { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; padding: 12px; background: var(--surface-container); border-radius: 14px; margin-bottom: 14px; }
-  .trans-nombre { font: 800 12.5px 'Poppins', sans-serif; color: var(--primary); flex: 1 1 100%; }
+  .trans-subir { display: flex; flex-direction: column; gap: 12px; padding: 12px; background: var(--surface-container); border-radius: 14px; margin-bottom: 14px; }
+  .trans-fila { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+  .trans-selects .campo { flex: 1 1 120px; }
+  .trans-selects select { width: 100%; }
+  .trans-archivo-fila { align-items: center; }
+  .trans-nombre { font: 800 12.5px 'Poppins', sans-serif; color: var(--primary); }
   .trans-ver { display: inline-flex; align-items: center; gap: 6px; color: var(--secondary); font-weight: 700; text-decoration: none; }
   .trans-ver:hover { text-decoration: underline; }
   .trans-archivo { font-size: 12px; color: var(--muted); align-self: center; }
@@ -718,7 +747,7 @@
           </div>
         </div>
         <button class="btn btn-outline btn-sm solo-edicion" id="btnAbrirTransferencias" title="Repositorio de transferencias (PDF)"><span class="material-symbols-rounded" style="font-size:16px">folder_copy</span> Transferencias</button>
-        <button class="icon-btn-pure" id="btnAbrirExplorador" title="Historial de requisiciones"><span class="material-symbols-rounded">history</span></button>
+        <button class="icon-btn-pure" id="btnAbrirExplorador" title="Historial de requisiciones" aria-label="Historial de requisiciones" aria-expanded="false" aria-controls="panelExplorador"><span class="material-symbols-rounded">history</span></button>
         <span class="badge-role" id="badgeRol">Cargando sesión…</span>
       </div>
     </div>
@@ -753,7 +782,7 @@
     <div class="hint" id="hintCabecera" style="margin-top:12px; display:none;"></div>
 
     <div class="panel-explorador" id="panelExplorador" style="display:none;">
-      <p class="hint" style="margin-bottom:10px;">Historial de requisiciones capturadas -- da clic en "Abrir" para saltar directo a ese mes.</p>
+      <p class="hint" style="margin-bottom:10px;"><b>Historial de requisiciones.</b> Toca «Abrir» para ir directo a ese mes y entrega.</p>
       <div class="tbl-scroll" style="max-height:280px;">
         <table class="tbl">
           <thead><tr><th>Mes</th><th>Estado</th><th><span class="sr-only">Detalle</span></th><th>Fecha de recepción</th><th>Creó</th><th><span class="sr-only">Acciones</span></th></tr></thead>
@@ -763,11 +792,11 @@
     </div>
   </div>
 
-  <div class="tarjeta solo-edicion">
-    <h2 id="btnToggleResponsables" style="cursor:pointer; user-select:none;">
-      <span class="material-symbols-rounded">draw</span> Nombres que salen en las firmas
-      <span class="material-symbols-rounded" id="iconoToggleResponsables" style="margin-left:auto; transition:transform .2s;">expand_more</span>
-    </h2>
+  <div class="tarjeta solo-edicion tarjeta-plegable" id="tarjetaResponsables">
+    <h2><button type="button" class="plegable-btn" id="btnToggleResponsables" aria-expanded="false" aria-controls="cuerpoResponsables">
+      <span class="material-symbols-rounded" aria-hidden="true">draw</span> Nombres que salen en las firmas
+      <span class="material-symbols-rounded" id="iconoToggleResponsables" aria-hidden="true" style="margin-left:auto; transition:transform .2s;">expand_more</span>
+    </button></h2>
     <div id="cuerpoResponsables" style="display:none;">
       <p class="hint">Cada requisición impresa tiene 4 espacios de firma. Aquí se capturan una sola vez los nombres (casi siempre son los mismos cada mes) y se reutilizan en todas. Solo hay que tocar esto cuando cambie una persona.</p>
 
@@ -899,7 +928,8 @@
 
       <div class="tarjeta">
         <h2 style="margin:0 0 10px;"><span class="material-symbols-rounded">inventory</span> Lo surtido por biológico
-          <button type="button" class="chip-filtro" id="chkSoloConLotes" style="margin-left:auto;">Solo con lotes</button>
+          <small class="info-filtro" id="infoSoloConLotes"></small>
+          <button type="button" class="chip-filtro" id="chkSoloConLotes" aria-pressed="false">Solo con lotes</button>
         </h2>
         <div class="tbl-scroll">
           <table class="tbl">
@@ -1117,13 +1147,17 @@
       </div>
       <div class="modal-cuerpo">
         <div class="trans-subir">
-          <div class="campo"><label for="transMes">Mes</label><select id="transMes"></select></div>
-          <div class="campo"><label for="transAnio">Año</label><select id="transAnio"></select></div>
-          <div class="campo"><label for="transEntrega">Entrega</label><select id="transEntrega"><option value="1">Entrega 1</option></select></div>
-          <label class="btn btn-outline btn-sm" style="cursor:pointer;"><span class="material-symbols-rounded" style="font-size:15px">upload_file</span> Elegir PDF
-            <input type="file" id="transArchivo" accept="application/pdf,.pdf" style="display:none;"></label>
-          <span class="trans-archivo" id="transArchivoNombre">Ningún PDF elegido</span>
-          <button type="button" class="btn btn-primary btn-sm" id="transSubir" disabled style="margin-left:auto;">Subir</button>
+          <div class="trans-fila trans-selects">
+            <div class="campo"><label for="transMes">Mes</label><select id="transMes"></select></div>
+            <div class="campo"><label for="transAnio">Año</label><select id="transAnio"></select></div>
+            <div class="campo"><label for="transEntrega">Entrega</label><select id="transEntrega"><option value="1">Entrega 1</option></select></div>
+          </div>
+          <div class="trans-fila trans-archivo-fila">
+            <label class="btn btn-outline btn-sm" style="cursor:pointer;"><span class="material-symbols-rounded" style="font-size:15px">upload_file</span> Elegir PDF
+              <input type="file" id="transArchivo" accept="application/pdf,.pdf" style="display:none;"></label>
+            <span class="trans-archivo" id="transArchivoNombre">Ningún PDF elegido</span>
+            <button type="button" class="btn btn-primary btn-sm" id="transSubir" disabled style="margin-left:auto;">Subir</button>
+          </div>
           <div class="trans-nombre">Se guardará como: <span id="transNombre"></span></div>
         </div>
         <div class="tbl-scroll" style="max-height:320px;">
