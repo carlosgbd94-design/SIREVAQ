@@ -187,7 +187,7 @@
         P(2, 'Lote, caducidad, cantidad', 'Escribe el lote y presiona Enter. Si el lote ya lo conocía el sistema, la caducidad aparece sola y Enter te manda directo a la cantidad.'),
         P(3, 'Enter guarda y sigue', 'Se guarda y regresas al campo Lote, listo para el siguiente lote del mismo biológico.'),
         I('event', '#0284c7', 'Caducidad', 'Se teclea DD-MM-AA (150729, 15-07-29 o 15/07/29) y a un lado ves cómo se mostrará: JUL-29. También entiende 07-29 o JUL-29 (toma el último día del mes).'),
-        I('content_paste', '#7c3aed', 'Muchos lotes de golpe', 'Copia las filas de Excel (biológico, lote, caducidad y cantidad) y pégalas en el campo Lote o usa «Pegar desde Excel». Antes de importar ves cómo se entendió cada fila.')
+        I('content_paste', '#7c3aed', 'Muchos lotes de golpe', 'Copia las filas de Excel (biológico, lote, caducidad y cantidad) y pégalas en el campo Lote. Antes de importar ves cómo se entendió cada fila.')
       ] },
       { titulo: 'Paso 1 · Corregir y lotes por llegar', bloques: [
         T('Revisar y corregir'),

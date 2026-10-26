@@ -100,8 +100,9 @@ test('Requisiciones: flujo completo por pasos (captura rápida, pegado, matrices
   await page.fill('#rapLote', '');
 
   // --- Paso 1: pegar desde Excel ----------------------------------------------
-  await page.click('#btnPegarSurtido');
-  await page.fill('#pegarTexto', ['HEXAVALENTE\tHX001\tMAR-27\t400', 'TD\tTD77\t04/27\t100', 'XYZ\tQQ99\t\t10', 'SRP\tAB123\t\t1000'].join('\n'));
+  // El pegado de Excel ya no tiene botón: pegar varias filas directo en el campo Lote abre la vista previa (sin biológico elegido).
+  await page.press('#rapLote', 'Escape');
+  await page.evaluate((t) => { const d = new DataTransfer(); d.setData('text/plain', t); document.getElementById('rapLote').dispatchEvent(new ClipboardEvent('paste', { clipboardData: d, bubbles: true, cancelable: true })); }, ['HEXAVALENTE\tHX001\tMAR-27\t400', 'TD\tTD77\t04/27\t100', 'XYZ\tQQ99\t\t10', 'SRP\tAB123\t\t1000'].join('\n'));
   await expect(page.locator('#pegarVista tbody tr')).toHaveCount(4);
   await expect(page.locator('#pegarVista')).toContainText('Reemplaza 1000');
   await expect(page.locator('#pegarResumen')).toContainText('3 lotes por importar');
@@ -894,6 +895,7 @@ test('Requisiciones: traer el reparto de influenza llena los pasos 1-3 con lote 
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
   await page.evaluate(() => { window.__AUTO_CONFIRMAR__ = false; });
 
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerInfluenza');
   await expect(page.locator('#modalInfluenza')).toBeVisible();
   await expect(page.locator('#infEntrega option')).toHaveCount(1);
@@ -915,6 +917,7 @@ test('Requisiciones: traer el reparto de influenza llena los pasos 1-3 con lote 
   expect(await db(page, "db.requi_requisiciones.find((r) => r.id === 'req-hoy').influenza_entrega")).toBe(1);
 
   // Con la entrega ya vinculada a esta requisición se puede volver a traer (reemplaza) y avisa el reemplazo
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerInfluenza');
   await expect(page.locator('#infDetalle')).toContainText('se reemplazan');
   await page.click('#infCancelar');
@@ -930,6 +933,7 @@ test('Requisiciones: capturar el lote real de lo traído "por definir" lo ASIGNA
   const errores = await preparar(page, { conReq: true });
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
   await page.evaluate(() => { window.__AUTO_CONFIRMAR__ = true; });
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerInfluenza');
   await page.click('#infTraer');
   await expect(page.locator('#modalInfluenza')).toBeHidden();
@@ -951,6 +955,7 @@ test('Requisiciones: la entrega de influenza ya vinculada a otra requisición no
     window.__FAKE_DB__.requi_requisiciones.push({ id: 'req-otra', anio: 2026, mes: 9, entrega: 1, etiqueta: 'Influenza', estado: 'BORRADOR', fue_corregido: false, creado_por: 'x', fecha_envio: null,
       influenza_campana: 'Campaña Influenza 2026-2027', influenza_entrega: 1 });
   });
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerInfluenza');
   await expect(page.locator('#infEntrega')).toContainText('ya vinculada');
   await expect(page.locator('#infDetalle')).toContainText('ya está vinculada');
@@ -966,11 +971,13 @@ test('Requisiciones: la confirmación de reemplazar se ve por encima del modal d
   const errores = await preparar(page, { conReq: true });
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
   // Primera vez: se trae el reparto (los avisos se aceptan solos)
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerInfluenza');
   await page.click('#infTraer');
   await expect(page.locator('#modalInfluenza')).toBeHidden();
   await page.evaluate(() => { window.__AUTO_CONFIRMAR__ = false; });
   // Segunda vez: ya hay influenza, así que pide confirmar el reemplazo con el modal todavía abierto
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerInfluenza');
   await expect(page.locator('#infDetalle')).toContainText('se reemplazan');
   await page.click('#infTraer');
@@ -1009,6 +1016,7 @@ test('Requisiciones: Traer pedido de biológico propone el mes anterior y solo t
   // Sin pulsar el botón no se trae nada
   expect(await db(page, "db.requi_items_jurisdiccion.length")).toBe(0);
 
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerPedido');
   await expect(page.locator('#modalPedido')).toBeVisible();
   await expect(page.locator('#pedMes option').first()).toContainText('el que corresponde');
@@ -1035,6 +1043,7 @@ test('Requisiciones: con más de un pedido en el mes deja elegir y trae el elegi
   const errores = await preparar(page, { conReq: true });
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
 
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerPedido');
   await expect(page.locator('#pedOpciones input[type=radio]')).toHaveCount(2);
   await expect(page.locator('#pedAviso')).toContainText('Se detectaron 2 pedidos');
@@ -1062,6 +1071,7 @@ test('Requisiciones: un pedido ya vinculado a otra requisición no se puede trae
     window.__FAKE_DB__.requi_requisiciones.push({ id: 'req-otra', anio: 2026, mes: 9, entrega: 1, etiqueta: null, estado: 'BORRADOR', fue_corregido: false, creado_por: 'x', fecha_envio: null,
       pedido_fecha: window.__PEDIDO_PREF__ + '-22' });
   });
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerPedido');
   await expect(page.locator('#pedOpciones')).toContainText('Ya vinculado');
   await expect(page.locator('#pedOpciones input[type=radio]')).toBeDisabled();
@@ -1074,7 +1084,9 @@ test('Requisiciones: Traer pedido es accesible (grupo con leyenda, Escape cierra
   await page.addInitScript(pedidosDelMesAnterior());
   const errores = await preparar(page, { conReq: true });
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
-  await page.focus('#btnTraerPedido');
+  await page.focus('#btnMenuTraer');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#btnTraerPedido')).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.locator('#modalPedido')).toBeVisible();
   await expect(page.locator('#modalPedido [role=dialog]')).toHaveAttribute('aria-modal', 'true');
@@ -1092,7 +1104,7 @@ test('Requisiciones: Traer pedido es accesible (grupo con leyenda, Escape cierra
   }
   await page.keyboard.press('Escape');
   await expect(page.locator('#modalPedido')).toBeHidden();
-  await expect(page.locator('#btnTraerPedido')).toBeFocused();
+  await expect(page.locator('#btnMenuTraer')).toBeFocused();
   expect(errores).toEqual([]);
 });
 
@@ -1115,6 +1127,7 @@ test('Requisiciones: si la base rechaza traer el pedido (se cerró mientras tant
   await page.addInitScript(pedidosDelMesAnterior());
   const errores = await preparar(page, { conReq: true });
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerPedido');
   await expect(page.locator('#pedTraer')).toBeEnabled();
   await page.evaluate(() => { window.__FAKE_DB__.requi_requisiciones.find((r) => r.id === 'req-hoy').estado = 'CERRADA'; });
@@ -1131,6 +1144,7 @@ test('Requisiciones: cambiar de mes en Traer pedido recarga la lista y avisa que
   await page.addInitScript(pedidosDelMesAnterior());
   const errores = await preparar(page, { conReq: true });
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerPedido');
   await expect(page.locator('#pedOpciones input[type=radio]')).toHaveCount(1);
   // El mes en curso no tiene pedidos en el simulador: lista vacía, botón apagado y aviso
@@ -1158,6 +1172,7 @@ test('Requisiciones: los extraordinarios hechos en el mes de la requisición se 
   });
   const errores = await preparar(page, { conReq: true });
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerPedido');
   await expect(page.locator('#pedOpciones input[type=radio]')).toHaveCount(2);
   await expect(page.locator('#pedOpciones')).toContainText('Hecho en');
@@ -1183,6 +1198,7 @@ test('Requisiciones: traer el reparto de COVID-19 trae Moderna y Pfizer en rengl
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
   await page.evaluate(() => { window.__AUTO_CONFIRMAR__ = false; });
 
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerCovid');
   await expect(page.locator('#modalCovid')).toBeVisible();
   await expect(page.locator('#covDetalleModerna')).toContainText('70 frascos recibidos');
@@ -1206,6 +1222,7 @@ test('Requisiciones: traer el reparto de COVID-19 trae Moderna y Pfizer en rengl
   expect(await db(page, "db.requi_requisiciones.filter((r) => r.covid_moderna_entrega).length")).toBe(1);
 
   // Volver a abrir: ya están vinculadas a esta requisición y se avisa el reemplazo por marca
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerCovid');
   await expect(page.locator('#covDetalleModerna')).toContainText('se reemplazan');
   await expect(page.locator('#covDetallePfizer')).toContainText('se reemplazan');
@@ -1225,6 +1242,7 @@ test('Requisiciones: la entrega de COVID-19 ya vinculada a otra requisición no 
     window.__FAKE_DB__.requi_requisiciones.push({ id: 'req-otra', anio: 2026, mes: 8, entrega: 1, etiqueta: null, estado: 'CERRADA',
       covid_campana: 'Campaña Influenza 2026-2027', covid_moderna_entrega: 1, covid_pfizer_entrega: 1 });
   });
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerCovid');
   await expect(page.locator('#covDetalleModerna')).toContainText('ya está vinculada');
   await expect(page.locator('#covTraer')).toBeDisabled();
@@ -1238,8 +1256,7 @@ test('Requisiciones COVID (municipal): ve Moderna y Pfizer por separado solo de 
   await expect(page.locator('#panelPaso3')).toHaveClass(/activo/);
 
   // La jurisdicción trae el reparto; el municipal no tiene esos botones ni la edición
-  await expect(page.locator('#btnTraerCovid')).toBeHidden();
-  await expect(page.locator('#btnTraerInfluenza')).toBeHidden();
+  await expect(page.locator('#btnMenuTraer')).toBeHidden();
 
   // Paso 3 (reparto a unidades): Moderna y Pfizer en columnas/renglones separados, en frascos
   const matriz = page.locator('#matrizUnidad');
@@ -1263,7 +1280,7 @@ test('Requisiciones COVID (jurisdicción): ve a todos los municipios con Moderna
   await page.addInitScript(() => { window.__FAKE_COVID__ = true; window.__FAKE_COVID_REPARTIDO__ = true; });
   const errores = await preparar(page, { conReq: true });
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
-  await expect(page.locator('#btnTraerCovid')).toBeVisible();
+  await expect(page.locator('#btnMenuTraer')).toBeVisible();
   const porBio = "Object.fromEntries(db.requi_items_jurisdiccion.map((i) => [i.requi_biologico_id, i.cantidad_surtida]))";
   expect(await db(page, porBio)).toEqual({ 'bio-mod': 70, 'bio-pfz': 10 });
   expect(errores).toEqual([]);
@@ -1306,6 +1323,7 @@ test('Requisiciones COVID (municipal): el Excel de su municipio trae Moderna y P
 test('Requisiciones: la entrega de COVID-19 se nombra «Temporada 2026-2027» (no «Campaña Influenza») y sin «Temporada invernal >»', async ({ page }) => {
   await page.addInitScript(() => { window.__FAKE_COVID__ = true; });
   await preparar(page, { conReq: true });
+  await page.click('#btnMenuTraer');
   await page.click('#btnTraerCovid');
   await expect(page.locator('#covModerna option').nth(1)).toHaveText('Temporada 2026-2027 · 1ª entrega · 70 frascos');
   await expect(page.locator('#modalCovid')).not.toContainText('Campaña Influenza');
@@ -1316,15 +1334,15 @@ test('Requisiciones (jurisdicción): los botones de la captura rápida no se par
   await page.addInitScript(() => { window.__FAKE_COVID__ = true; });
   await preparar(page, { conReq: true });
   const r = await page.evaluate(() => {
-    const h = document.querySelector('#panelPaso1 .tarjeta > h2');
+    const h = document.querySelector('#panelPaso1 .cr-acciones');
     return { wrap: getComputedStyle(h).flexWrap, ws: [...h.querySelectorAll('.btn')].map((b) => getComputedStyle(b).whiteSpace) };
   });
   expect(r.wrap).toBe('wrap');
   expect(r.ws.every((v) => v === 'nowrap')).toBe(true);
-  expect(r.ws.length).toBeGreaterThanOrEqual(5);
+  expect(r.ws.length).toBeGreaterThanOrEqual(3);
 });
 
-test('Requisiciones: el Kardex del año se baja desde Exportar (solo Jurisdicción) como .zip con los dos libros', async ({ page }, testInfo) => {
+test('Requisiciones: el Kardex del mes se baja desde Exportar (solo Jurisdicción) como .zip con los dos libros', async ({ page }, testInfo) => {
   const ExcelJS = require('exceljs');
   const JSZip = require('jszip');
   const errores = await preparar(page, { conReq: true, libs: true });
@@ -1342,14 +1360,14 @@ test('Requisiciones: el Kardex del año se baja desde Exportar (solo Jurisdicci�
   const descarga = page.waitForEvent('download');
   await page.click('#btnExportarKardex');
   const archivo = await descarga;
-  expect(archivo.suggestedFilename()).toMatch(/^KARDEX_\d{4}\.zip$/);
+  expect(archivo.suggestedFilename()).toMatch(/^KARDEX_[A-ZÁÉÍÓÚ]+_\d{4}\.zip$/);
   const ruta = testInfo.outputPath('kardex.zip');
   await archivo.saveAs(ruta);
   const zip = await JSZip.loadAsync(require('fs').readFileSync(ruta));
   const nombres = Object.keys(zip.files).sort();
   expect(nombres).toHaveLength(2);
-  expect(nombres[0]).toMatch(/^CONTROL DE BIOLOGICO \d{4} \(TARJETAS\)\.xlsx$/);
-  expect(nombres[1]).toMatch(/^CONTROL DE BIOLOGICO \d{4} POR MUNICIPIO \(TARJETAS\)\.xlsx$/);
+  expect(nombres[0]).toMatch(/^CONTROL DE BIOLOGICO [A-ZÁÉÍÓÚ]+ \d{4} \(TARJETAS\)\.xlsx$/);
+  expect(nombres[1]).toMatch(/^CONTROL DE BIOLOGICO [A-ZÁÉÍÓÚ]+ \d{4} POR MUNICIPIO \(TARJETAS\)\.xlsx$/);
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await zip.files[nombres[0]].async('nodebuffer'));
   const ws = wb.worksheets[0];
@@ -1359,7 +1377,7 @@ test('Requisiciones: el Kardex del año se baja desde Exportar (solo Jurisdicci�
   expect(errores).toEqual([]);
 });
 
-test('Requisiciones: el perfil municipal no ve el Kardex del año', async ({ page }) => {
+test('Requisiciones: el perfil municipal no ve el Kardex del mes', async ({ page }) => {
   const errores = await preparar(page, { rol: 'MUNICIPAL', conReq: true, muni: 'QUERETARO' });
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
   await page.click('#btnAbrirExportar');

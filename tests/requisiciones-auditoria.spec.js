@@ -83,9 +83,8 @@ test('AUDITORÍA: sin violaciones de accesibilidad ni controles/ids repetidos en
   await page.click('#chipsBio .chip-bio[data-bio="bio-srp"]');
   await page.keyboard.type('AB123'); await page.keyboard.press('Enter');
   await page.keyboard.type('150227'); await page.keyboard.type('1000'); await page.keyboard.press('Enter');
-  await page.click('#btnPegarSurtido');
+  await page.evaluate((t) => { const d = new DataTransfer(); d.setData('text/plain', t); document.getElementById('rapLote').dispatchEvent(new ClipboardEvent('paste', { clipboardData: d, bubbles: true, cancelable: true })); }, ['HEXAVALENTE\tHX001\tMAR-27\t400', 'TD\tTD77\t04/27\t100'].join('\n'));
   await revisar('modal pegar');
-  await page.fill('#pegarTexto', ['HEXAVALENTE\tHX001\tMAR-27\t400', 'TD\tTD77\t04/27\t100'].join('\n'));
   await page.click('#pegarImportar');
   await expect(page.locator('#modalPegar')).toBeHidden();
   await revisar('paso 1 con lotes');
@@ -117,9 +116,11 @@ test('la fecha de recepción capturada es la que se queda al cerrar y no el últ
   expect(await db(page, 'db.requi_requisiciones[db.requi_requisiciones.length-1].fecha_envio || null')).toBeNull();
   // La barra del mes ya no trae botones de «cargar» ni «guardar» (cargar es automático y Guardar vive abajo)
   await expect(page.locator('#btnCargar, #btnGuardarCabecera')).toHaveCount(0);
-  // Todo el control de entrega cabe en una sola fila de la barra cuando hay espacio
-  const filas = await page.evaluate(() => new Set([...document.querySelectorAll('#selAnio, #selMes, #barraEntregas, #campoFechaRecepcion')].map((e) => Math.round(e.getBoundingClientRect().top / 20))).size);
-  expect(filas).toBe(1);
+  // Año y mes comparten fila; las entregas (y la fecha de recepción) van juntas en su propio panel debajo
+  const sel = await page.evaluate(() => ({ a: document.getElementById('selAnio').getBoundingClientRect().top, m: document.getElementById('selMes').getBoundingClientRect().top,
+    panel: document.getElementById('barraEntregas').getBoundingClientRect().bottom, dentro: document.getElementById('barraEntregas').contains(document.getElementById('campoFechaRecepcion')) }));
+  expect(Math.abs(sel.a - sel.m)).toBeLessThan(4);
+  expect(sel.dentro).toBe(true);
   await campo.fill('2026-10-07');
   await campo.dispatchEvent('change');
   await expect.poll(() => db(page, 'db.requi_requisiciones[db.requi_requisiciones.length-1].fecha_envio')).toBe('2026-10-07');

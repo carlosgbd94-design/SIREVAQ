@@ -182,6 +182,7 @@
       update(obj) { q.op = 'update'; q.payload = obj; return api; },
       delete() { q.op = 'delete'; return api; },
       eq(c, v) { q.filtros.push((r) => r[c] === v); return api; },
+      lte(c, v) { q.filtros.push((r) => r[c] <= v); return api; },
       not(c, op, v) { if (op === 'is') q.filtros.push((r) => (v === null ? r[c] != null : r[c] !== v)); return api; },
       gt(c, v) { q.filtros.push((r) => r[c] > v); return api; },
       or(expr) {

@@ -12,7 +12,7 @@
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=8">
 <link rel="stylesheet" href="ayuda.css?v=6">
-<script defer src="guias_contenido.js?v=3"></script>
+<script defer src="guias_contenido.js?v=4"></script>
 <script defer src="ayuda.js?v=21"></script>
 <script defer src="a11y_global.js?v=6"></script>
 <script defer src="dock_glass.js?v=4"></script>
@@ -21,8 +21,8 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="requisiciones_export_excel.js"></script>
 <script defer src="requisiciones_rutas_excel.js"></script>
-<script defer src="requisiciones_kardex_excel.js"></script>
-<script defer src="requisiciones_ui.js?v=18"></script>
+<script defer src="requisiciones_kardex_excel.js?v=2"></script>
+<script defer src="requisiciones_ui.js?v=20"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -426,9 +426,22 @@
   table.vista-pegado td { padding: 6px 8px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
   table.vista-pegado tr.fila-error td { background: var(--error-bg); }
   table.vista-pegado select { padding: 4px 6px; font-size: 12px; max-width: 200px; }
-  /* Barra de «Captura rápida»: los botones no se parten en dos líneas; si no caben, la barra baja de renglón. */
-  #panelPaso1 .tarjeta > h2 { flex-wrap: wrap; row-gap: 8px; }
-  #panelPaso1 .tarjeta > h2 .btn { white-space: nowrap; }
+  /* Captura rápida: título a la izquierda, acciones agrupadas a la derecha (Traer… reúne los tres orígenes de la plataforma). */
+  .cr-cabecera { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; }
+  .cr-cabecera h2 { margin: 0; }
+  .cr-acciones { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .cr-acciones .btn { white-space: nowrap; }
+  .cr-guia { margin: 10px 0 0; }
+  .menu-traer { position: relative; }
+  .menu-traer-lista { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 320px; padding: 6px; background: #fff;
+    border: 1px solid var(--outline-variant); border-radius: 16px; box-shadow: 0 12px 32px rgba(15,23,42,.16); display: flex; flex-direction: column; gap: 2px; }
+  .menu-traer-lista[style*="display:none"], .menu-traer-lista[style*="display: none"] { display: none !important; }
+  .menu-traer-op { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; cursor: pointer; text-align: left; font-family: inherit; color: var(--text); }
+  .menu-traer-op > .material-symbols-rounded { font-size: 22px; color: var(--secondary); flex: none; }
+  .menu-traer-op b { display: block; font-size: 13px; }
+  .menu-traer-op small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 600; margin-top: 1px; }
+  @media (hover: hover) and (pointer: fine) { .menu-traer-op:hover { background: var(--surface-container); } }
+  .menu-traer-op:focus-visible { outline: 3px solid rgba(14,165,233,.45); outline-offset: -2px; }
   /* Traer pedido de biológico: un recuadro por pedido del mes (ordinario / extraordinarios) */
   .ped-grupo { border: 0; margin: 12px 0 0; padding: 0; min-width: 0; }
   .ped-grupo legend { font-size: 10px; color: var(--primary); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; padding: 0; margin-bottom: 6px; }
@@ -448,10 +461,26 @@
   .ped-vacio { font-size: 13px; color: var(--muted); padding: 14px; border: 1.5px dashed var(--outline-variant); border-radius: 14px; text-align: center; }
   /* Lotes por definir / asignar lotes / transferencias */
   /* Entregas del mes, vista previa de caducidad, prellenado de cantidades */
-  .barra-entregas { display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: 4px; }
+  /* Cabecera: periodo (año / mes / estado) y debajo el panel de entregas del mes. */
+  .periodo-panel { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .periodo-fila { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+  .barra-entregas { display: none; align-items: center; justify-content: space-between; gap: 10px 20px; flex-wrap: wrap;
+    padding: 10px 12px; background: var(--surface-container); border-radius: 16px; }
+  .entregas-lado { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; min-width: 0; }
+  .entregas-titulo { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+  .entregas-titulo .material-symbols-rounded { font-size: 18px; color: var(--secondary); }
   .barra-entregas .entregas-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .entrega-tab { display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; min-height: 40px; padding: 5px 14px;
+    border: 1.5px solid transparent; border-radius: 12px; background: #fff; color: var(--text); font: 700 13px inherit; font-family: inherit; cursor: pointer; text-align: left;
+    box-shadow: 0 1px 2px rgba(15,23,42,.06); transition: border-color .15s ease, background-color .15s ease; }
+  .entrega-tab small { font-size: 10.5px; font-weight: 700; color: var(--muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .entrega-tab.activo { border-color: var(--secondary); background: #f0f9ff; color: var(--primary); }
+  .entrega-tab.activo small { color: var(--secondary); }
+  @media (hover: hover) and (pointer: fine) { .entrega-tab:hover { border-color: var(--secondary); } }
+  .entrega-tab:focus-visible { outline: 3px solid rgba(14,165,233,.45); outline-offset: 2px; }
+  .entregas-acciones { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   /* Fecha en que se recibió la entrega activa: misma altura y bordes que los demás campos de la barra. */
-  .fecha-recepcion { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 0 4px 0 12px; min-height: 38px; box-sizing: border-box;
+  .fecha-recepcion { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px 0 12px; min-height: 38px; box-sizing: border-box;
     background: #fff; border: 1px solid var(--outline-variant); border-radius: 10px; }
   .fecha-recepcion:focus-within { border-color: var(--secondary); box-shadow: 0 0 0 3px rgba(14,165,233,.15); }
   .fecha-recepcion label { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
@@ -654,10 +683,10 @@
               </section>
 
               <section class="pe-seccion" id="seccionKardex" style="display:none;" aria-labelledby="peTituloKardex">
-                <h3 id="peTituloKardex"><span class="pe-num" id="peNumKardex">3</span> Kardex del año</h3>
-                <p class="pe-ayuda">Tarjetas de control de biológicos del año elegido, armadas con lo capturado aquí: un libro por unidad y otro por municipio, en un solo .zip.</p>
+                <h3 id="peTituloKardex"><span class="pe-num" id="peNumKardex">3</span> Kardex del mes</h3>
+                <p class="pe-ayuda" id="kardexAyuda">Tarjetas de control de biológicos del mes elegido arriba, armadas con lo capturado aquí: un libro por unidad y otro por municipio, en un solo .zip. Las entregas del mes van acumuladas en una sola tarjeta y cada entrada conserva la fecha de su entrega.</p>
                 <button class="btn btn-primary btn-sm pe-boton" id="btnExportarKardex">
-                  <span class="material-symbols-rounded" style="font-size:16px">inventory_2</span> Descargar Kardex (.zip)
+                  <span class="material-symbols-rounded" style="font-size:16px">inventory_2</span> Descargar Kardex del mes (.zip)
                 </button>
               </section>
             </div>
@@ -669,24 +698,30 @@
       </div>
     </div>
 
-    <div class="barra" style="margin-top:16px; align-items:flex-end; flex-wrap:wrap; gap:12px;">
-      <div class="campo">
-        <label>Año</label>
-        <select id="selAnio" aria-label="Año"></select>
+    <div class="periodo-panel">
+      <div class="periodo-fila">
+        <div class="campo">
+          <label for="selAnio">Año</label>
+          <select id="selAnio" aria-label="Año"></select>
+        </div>
+        <div class="campo">
+          <label for="selMes">Mes</label>
+          <select id="selMes" aria-label="Mes"></select>
+        </div>
+        <span id="badgesEstadoRequisicion" style="display:none; gap:6px; align-items:center;"></span>
       </div>
-      <div class="campo">
-        <label>Mes</label>
-        <select id="selMes" aria-label="Mes"></select>
-      </div>
-      <span id="badgesEstadoRequisicion" style="display:none; gap:6px; align-items:center;"></span>
       <div class="barra-entregas" id="barraEntregas">
-        <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;">Entregas del mes</span>
-        <div class="entregas-chips"></div>
-        <button type="button" class="icon-btn-pure solo-edicion" id="btnRenombrarEntrega" title="Ponerle nombre a esta entrega (ej. Influenza)"><span class="material-symbols-rounded" style="font-size:17px">edit</span></button>
-        <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnNuevaEntrega" title="Llegó otra entrega este mes: se captura y reparte por separado"><span class="material-symbols-rounded" style="font-size:15px">add</span> Nueva entrega</button>
-        <div class="fecha-recepcion" id="campoFechaRecepcion" style="display:none;">
-          <label for="inpFechaRecepcion"><span class="material-symbols-rounded" aria-hidden="true">event</span>Recibida el</label>
-          <input type="date" id="inpFechaRecepcion" min="2000-01-01" max="2100-12-31" title="Fecha en que se recibió esta entrega: es la que sale en el Excel">
+        <div class="entregas-lado">
+          <span class="entregas-titulo"><span class="material-symbols-rounded" aria-hidden="true">local_shipping</span>Entregas del mes</span>
+          <div class="entregas-chips" role="group" aria-label="Entregas del mes"></div>
+        </div>
+        <div class="entregas-acciones">
+          <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnRenombrarEntrega" title="Ponerle nombre a esta entrega (ej. Influenza)"><span class="material-symbols-rounded" style="font-size:15px">edit</span> Nombrar</button>
+          <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnNuevaEntrega" title="Llegó otra entrega este mes: se captura y reparte por separado"><span class="material-symbols-rounded" style="font-size:15px">add</span> Nueva entrega</button>
+          <div class="fecha-recepcion" id="campoFechaRecepcion" style="display:none;">
+            <label for="inpFechaRecepcion"><span class="material-symbols-rounded" aria-hidden="true">event</span>Recibida el</label>
+            <input type="date" id="inpFechaRecepcion" min="2000-01-01" max="2100-12-31" title="Fecha en que se recibió esta entrega: es la que sale en el Excel">
+          </div>
         </div>
       </div>
     </div>
@@ -808,15 +843,22 @@
       <div class="avance" id="avancePaso1"></div>
 
       <div class="tarjeta solo-edicion">
-        <h2 style="margin:0 0 4px;"><span class="material-symbols-rounded">bolt</span> Captura rápida<button type="button" class="ayuda-btn" data-ayuda="requi" data-ayuda-paso="1" title="Cómo funciona el paso 1" aria-label="Cómo funciona el paso 1"><span class="material-symbols-rounded">help</span></button>
-          <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSyncLotes" style="margin-left:auto;" title="Revisa que los lotes repartidos este mes estén dados de alta en el panel Lotes (nunca duplica ni borra)"><span class="material-symbols-rounded" style="font-size:15px">sync</span> Sincronizar lotes</button>
-          <button type="button" class="btn btn-outline btn-sm" id="btnPrellenar" style="margin-left:8px;" title="Capturar solo cuánto llegó de cada biológico; los lotes se asignan después"><span class="material-symbols-rounded" style="font-size:15px">format_list_numbered</span> Prellenar cantidades</button>
-          <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnTraerInfluenza" style="margin-left:8px;" title="Llenar la influenza con el reparto de frascos que ya hicieron Jurisdicción y los municipios"><span class="material-symbols-rounded" style="font-size:15px">vaccines</span> Traer reparto de influenza</button>
-          <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnTraerCovid" style="margin-left:8px;" title="Llenar COVID-19 (Moderna y Pfizer, por separado) con el reparto de frascos que ya hicieron Jurisdicción y los municipios"><span class="material-symbols-rounded" style="font-size:15px">vaccines</span> Traer reparto de COVID-19</button>
-          <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnTraerPedido" style="margin-left:8px;" title="Llenar las cantidades de esta requisición con el pedido de biológico que capturaron las unidades (ordinario o extraordinario)"><span class="material-symbols-rounded" style="font-size:15px">request_quote</span> Traer pedido de biológico</button>
-          <button type="button" class="btn btn-outline btn-sm" id="btnPegarSurtido"><span class="material-symbols-rounded" style="font-size:15px">content_paste</span> Pegar desde Excel</button>
-        </h2>
-        <p class="hint" style="margin-top:8px;"><b>1.</b> Toca el biológico · <b>2.</b> escribe lote, caducidad y cantidad · <b>Enter</b> guarda y te deja listo para el siguiente lote del mismo biológico. <b>¿Aún no hay lotes?</b> Usa <b>Prellenar cantidades</b> (todos los biológicos de golpe) o deja el lote vacío; después los asignas con "Asignar lotes". La caducidad se teclea <b>DD-MM-AA</b> y se muestra MMM-AA.</p>
+        <div class="cr-cabecera">
+          <h2><span class="material-symbols-rounded">bolt</span> Captura rápida<button type="button" class="ayuda-btn" data-ayuda="requi" data-ayuda-paso="1" title="Cómo funciona el paso 1" aria-label="Cómo funciona el paso 1"><span class="material-symbols-rounded">help</span></button></h2>
+          <div class="cr-acciones">
+            <div class="menu-traer" id="menuTraer">
+              <button type="button" class="btn btn-primary btn-sm solo-edicion" id="btnMenuTraer" aria-haspopup="true" aria-expanded="false" aria-controls="menuTraerLista"><span class="material-symbols-rounded" style="font-size:16px">download</span> Traer desde la plataforma <span class="material-symbols-rounded" style="font-size:16px">expand_more</span></button>
+              <div class="menu-traer-lista" id="menuTraerLista" role="group" aria-label="Traer desde la plataforma" style="display:none;">
+                <button type="button" class="menu-traer-op solo-edicion" id="btnTraerPedido" title="Llenar las cantidades de esta requisición con el pedido de biológico que capturaron las unidades (ordinario o extraordinario). Si las unidades lo corrigen, vuelve a traerlo y se sobrescribe."><span class="material-symbols-rounded">request_quote</span><span><b>Pedido de biológico</b><small>Lo que pidieron las unidades (con sus correcciones)</small></span></button>
+                <button type="button" class="menu-traer-op solo-edicion" id="btnTraerInfluenza" title="Llenar la influenza con el reparto de frascos que ya hicieron Jurisdicción y los municipios"><span class="material-symbols-rounded">vaccines</span><span><b>Reparto de influenza</b><small>Frascos repartidos por Jurisdicción y municipios</small></span></button>
+                <button type="button" class="menu-traer-op solo-edicion" id="btnTraerCovid" title="Llenar COVID-19 (Moderna y Pfizer, por separado) con el reparto de frascos que ya hicieron Jurisdicción y los municipios"><span class="material-symbols-rounded">vaccines</span><span><b>Reparto de COVID-19</b><small>Moderna y Pfizer por separado</small></span></button>
+              </div>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" id="btnPrellenar" title="Capturar solo cuánto llegó de cada biológico; los lotes se asignan después"><span class="material-symbols-rounded" style="font-size:15px">format_list_numbered</span> Prellenar cantidades</button>
+            <button type="button" class="btn btn-outline btn-sm solo-edicion" id="btnSyncLotes" title="Revisa que los lotes repartidos este mes estén dados de alta en el panel Lotes (nunca duplica ni borra)"><span class="material-symbols-rounded" style="font-size:15px">sync</span> Sincronizar lotes</button>
+          </div>
+        </div>
+        <p class="hint cr-guia"><b>1.</b> Toca el biológico · <b>2.</b> escribe lote, caducidad (<b>DD-MM-AA</b>) y cantidad · <b>Enter</b> guarda y te deja listo para el siguiente lote. ¿Aún no hay lotes? Usa <b>Prellenar cantidades</b> o deja el lote vacío y luego usa "Asignar lotes".</p>
         <div class="chips-bio" id="chipsBio"></div>
         <div class="rapida" id="rapida">
           <div class="rapida-bio" id="rapidaBio"></div>

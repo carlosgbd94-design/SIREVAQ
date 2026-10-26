@@ -1,15 +1,16 @@
 // ============================================================================
 // Requisiciones — Kardex 2026 (tarjetas de control de biológicos)
 //
-// Genera, a partir de lo ya capturado en Requisiciones, los dos libros que hoy se
+// Genera, a partir de lo ya capturado en Requisiciones y para UN MES, los dos libros que hoy se
 // llenan a mano ("Formatos/KARDEX 2026"):
 //   * POR UNIDAD     -> "CONTROL DE BIOLOGICO 2026 (TARJETAS).xlsx": una salida por unidad.
 //   * POR MUNICIPIO  -> "CONTROL DE BIOLOGICO 2026 POR MUNICIPIO (TARJETAS).xlsx": una salida por municipio.
 //
 // Estructura (idéntica en ambos): una hoja por biológico; en cada hoja, una TARJETA por
-// mes con encabezado (logos, biológico, clave, responsable, mes) y, debajo, un BLOQUE por
-// entrega del mes: SALDO ANTERIOR, una entrada "CAMARA FRIA" por lote (fecha de recepción,
-// lote, caducidad, frascos, dosis, folio) y las salidas con el saldo corrido.
+// mes con encabezado (logos, biológico, clave, responsable, mes): SALDO ANTERIOR, una entrada
+// "CAMARA FRIA" por lote (con la fecha de recepción de SU entrega, lote, caducidad, frascos, dosis,
+// folio) y las salidas con el saldo corrido. Las entregas del mes NO se separan: van acumuladas en
+// una sola tarjeta mensual y cada entrada conserva la fecha de su entrega.
 // Las cantidades de Requisiciones ya están en frascos; las dosis = frascos × dosis por frasco.
 //
 // armarModelo() es puro (se prueba en Node); generar() arma el .xlsx con ExcelJS.
@@ -57,11 +58,13 @@
 
   // ---------------------------------------------------------------------------
   // Modelo: { anio, hojas: [{ bio, hoja, titulo, clave, dpf, tarjetas: [{ mes, saldoAnterior, bloques }] }], avisos }
-  //   bloque = { req, fecha, folio, entradas: [{ lote, caducidad, frascos }], salidas: [...] }
+  //   bloque (uno por mes y biológico, con todas sus entregas) = { req, reqs, fecha (la última entrega), entradas: [{ lote, caducidad, frascos, fecha, folio }], salidas: [...] }
   //   salida = { destino, destinoImpreso, unidad (obs), frascos, hospital, detalle }
   // ---------------------------------------------------------------------------
-  function armarModelo({ anio, catalogo, requisiciones, items, distMunicipio, distUnidad, unidades, lotes }) {
-    const avisos = new Set();
+  function armarModelo({ anio, mes: soloMes, catalogo, requisiciones, items, distMunicipio, distUnidad, unidades, lotes }) {
+    // Con `mes` solo salen las tarjetas (y avisos) de ese mes; los anteriores únicamente alimentan el saldo anterior.
+    const avisosPorMes = new Map(); // texto -> mes
+    const avisos = { add(texto, mes) { if (!avisosPorMes.has(texto)) avisosPorMes.set(texto, mes); } };
     const sinRepartir = new Map(); // mes -> Set(biológicos con destinos sin repartir entre sus unidades)
     const bioPorId = {};
     catalogo.forEach((b) => { bioPorId[b.id] = b; });
@@ -69,14 +72,14 @@
     (unidades || []).forEach((u) => { unidadPorId[u.id] = u; });
     const loteTxt = (it) => (it.requi_lotes && it.requi_lotes.numero_lote) || (lotes && lotes[it.lote_id] && lotes[it.lote_id].numero_lote) || '';
 
-    const reqs = requisiciones.filter((r) => r.anio === anio).sort((a, b) => a.mes - b.mes || (a.entrega || 1) - (b.entrega || 1));
+    const reqs = requisiciones.filter((r) => r.anio === anio && (!soloMes || r.mes <= soloMes)).sort((a, b) => a.mes - b.mes || (a.entrega || 1) - (b.entrega || 1));
     const hojas = new Map(); // bio.id -> { bio, porMes: Map(mes -> bloques[]) }
 
     reqs.forEach((req) => {
       const delReq = items.filter((i) => i.requisicion_id === req.id && num(i.cantidad_surtida) > 0);
       if (!delReq.length) return;
       const fecha = fechaRecepcion(req);
-      if (!fecha) avisos.add(`La entrega ${req.entrega || 1} de ${MESES[req.mes - 1]} no tiene fecha de recepción: sus fechas quedaron en blanco.`);
+      if (!fecha) avisos.add(`La entrega ${req.entrega || 1} de ${MESES[req.mes - 1]} no tiene fecha de recepción: sus fechas quedaron en blanco.`, req.mes);
       const biosDelReq = [...new Set(delReq.map((i) => i.requi_biologico_id))];
       biosDelReq.forEach((bioId) => {
         const bio = bioPorId[bioId];
@@ -84,7 +87,7 @@
         const entradas = delReq.filter((i) => i.requi_biologico_id === bioId)
           .map((i) => ({ loteId: i.lote_id, lote: loteTxt(i), caducidad: (i.requi_lotes && i.requi_lotes.caducidad) || '', frascos: num(i.cantidad_surtida) }))
           .sort((a, b) => String(a.lote).localeCompare(String(b.lote), 'es'));
-        if (entradas.some((e) => e.lote === 'POR DEFINIR')) avisos.add(`${nombreBio(bio)} (${MESES[req.mes - 1]}) tiene lote POR DEFINIR: asígnalo en Requisiciones y vuelve a exportar.`);
+        if (entradas.some((e) => e.lote === 'POR DEFINIR')) avisos.add(`${nombreBio(bio)} (${MESES[req.mes - 1]}) tiene lote POR DEFINIR: asígnalo en Requisiciones y vuelve a exportar.`, req.mes);
         const multiLote = entradas.length > 1;
         const detalleDe = (filas) => {
           if (!multiLote) return '';
@@ -109,7 +112,7 @@
           })).sort(porNombre);
           const sumaUnidades = filasUnidad.reduce((s, u) => s + u.frascos, 0);
           if (!totalMuni && !sumaUnidades) return;
-          if (sumaUnidades > totalMuni) avisos.add(`${nombreBio(bio)} (${MESES[req.mes - 1]}): las unidades de ${destino} suman más que lo asignado al municipio.`);
+          if (sumaUnidades > totalMuni) avisos.add(`${nombreBio(bio)} (${MESES[req.mes - 1]}): las unidades de ${destino} suman más que lo asignado al municipio.`, req.mes);
           const base = { destino, destinoImpreso: DESTINO_IMPRESO[destino], hospital, municipal: { frascos: totalMuni, detalle: detalleDe(filasMuni) } };
           filasUnidad.forEach((u) => salidas.push({ ...base, unidad: u.nombre + u.detalle, frascos: u.frascos, soloUnidad: true }));
           const resto = totalMuni - sumaUnidades;
@@ -120,7 +123,7 @@
         });
         const asignadoMuni = dm.reduce((s, d) => s + num(d.cantidad), 0);
         const surtido = entradas.reduce((s, e) => s + e.frascos, 0);
-        if (asignadoMuni > surtido) avisos.add(`${nombreBio(bio)} (${MESES[req.mes - 1]}): lo asignado a municipios rebasa lo surtido.`);
+        if (asignadoMuni > surtido) avisos.add(`${nombreBio(bio)} (${MESES[req.mes - 1]}): lo asignado a municipios rebasa lo surtido.`, req.mes);
 
         let h = hojas.get(bioId);
         if (!h) { h = { bio, porMes: new Map() }; hojas.set(bioId, h); }
@@ -131,8 +134,8 @@
 
     const lista = [...hojas.values()].sort((a, b) => (a.bio.orden || 0) - (b.bio.orden || 0)).map((h) => {
       let saldo = 0; // frascos al cierre de la tarjeta anterior
-      const tarjetas = [...h.porMes.keys()].sort((a, b) => a - b).map((mes) => {
-        const bloques = h.porMes.get(mes);
+      const todas = [...h.porMes.keys()].sort((a, b) => a - b).map((mes) => {
+        const bloques = [fusionarEntregas(h.porMes.get(mes))];   // una sola tarjeta por mes: las entregas van acumuladas
         const tarjeta = { mes, saldoAnterior: saldo, bloques };
         bloques.forEach((b) => {
           saldo += b.entradas.reduce((s, e) => s + e.frascos, 0);
@@ -140,13 +143,34 @@
         });
         return tarjeta;
       });
+      const tarjetas = soloMes ? todas.filter((t) => t.mes === soloMes) : todas;
       return { bio: h.bio, hoja: nombreHoja(nombreBio(h.bio)), titulo: nombreBio(h.bio), clave: h.bio.clave_articulo || '', dpf: dosisPorFrasco(h.bio), tarjetas };
-    });
+    }).filter((h) => h.tarjetas.length);
     [...sinRepartir.keys()].sort((a, b) => a - b).forEach((mes) => {
       const nombres = [...sinRepartir.get(mes)];
-      avisos.add(`${MESES[mes - 1]}: falta repartir entre unidades (salen como «SIN REPARTIR A UNIDADES») en ${nombres.join(', ')}.`);
+      avisos.add(`${MESES[mes - 1]}: falta repartir entre unidades (salen como «SIN REPARTIR A UNIDADES») en ${nombres.join(', ')}.`, mes);
     });
-    return { anio, hojas: lista, avisos: [...avisos] };
+    const avisosFinal = [...avisosPorMes].filter(([, m]) => !soloMes || m === soloMes).map(([t]) => t);
+    return { anio, mes: soloMes || null, hojas: lista, avisos: avisosFinal };
+  }
+
+  // Junta las entregas de un mes (un bloque por entrega) en UN bloque mensual: las entradas conservan
+  // la fecha y el folio de su entrega; las salidas se acumulan por destino/unidad con la fecha de la
+  // última entrega del mes.
+  function fusionarEntregas(bloques) {
+    const entradas = [];
+    bloques.forEach((b) => b.entradas.forEach((e, i) => entradas.push({ ...e, fecha: b.fecha, folio: i === 0 ? b.folio : '' })));
+    const fechas = bloques.map((b) => b.fecha).filter(Boolean).sort();
+    const porClave = new Map();
+    bloques.forEach((b) => b.salidas.forEach((s) => {
+      const k = `${s.destino}|${s.unidad}`;
+      if (!porClave.has(k)) porClave.set(k, { ...s, municipal: undefined });
+      else porClave.get(k).frascos += s.frascos;
+    }));
+    const salidas = [...porClave.values()].sort((x, y) => ORDEN_DESTINOS.indexOf(x.destino) - ORDEN_DESTINOS.indexOf(y.destino)
+      || (x.sinRepartir || (x.hospital ? 1 : 0)) - (y.sinRepartir || (y.hospital ? 1 : 0)) || String(x.unidad).localeCompare(String(y.unidad), 'es'));
+    return { req: bloques[0].req, reqs: bloques.map((b) => b.req), fecha: fechas.length ? fechas[fechas.length - 1] : '', folio: '',
+      entradas, salidas, municipal: bloques.flatMap((b) => b.municipal) };
   }
 
   function nombreHoja(n) { return String(n).replace(/[\\/?*\[\]:]/g, ' ').slice(0, 31).trim(); }
@@ -295,18 +319,19 @@
 
         tarjeta.bloques.forEach((bloque) => {
           const fecha = fechaXl(bloque.fecha);
-          bloque.entradas.forEach((e, i) => {
+          bloque.entradas.forEach((e) => {
+            const fechaE = fechaXl(e.fecha || bloque.fecha);
             estiloRenglon(ws, r, COLOR_ENTRADA, false);
             ws.getCell(`B${r}`).value = 'CAMARA FRIA';
-            if (fecha) ws.getCell(`C${r}`).value = fecha;
+            if (fechaE) ws.getCell(`C${r}`).value = fechaE;
             ws.getCell(`D${r}`).value = e.lote;
             if (e.caducidad) ws.getCell(`E${r}`).value = fechaXl(e.caducidad);
             ws.getCell(`F${r}`).value = e.frascos;
             ws.getCell(`G${r}`).value = { formula: `F${r}*${hoja.dpf}`, result: e.frascos * hoja.dpf };
             ws.getCell(`H${r}`).value = 'JS-1';
-            if (fecha) ws.getCell(`I${r}`).value = fecha;
+            if (fechaE) ws.getCell(`I${r}`).value = fechaE;
             ws.getCell(`N${r}`).value = '4°';
-            if (i === 0 && bloque.folio) ws.getCell(`O${r}`).value = bloque.folio;
+            if (e.folio) ws.getCell(`O${r}`).value = e.folio;
             filaSaldo(r, e.frascos, 0);
             r++;
           });
@@ -327,7 +352,7 @@
         r0 = r + 1;
       });
     });
-    if (!modelo.hojas.length) wb.addWorksheet('SIN MOVIMIENTOS').getCell('A1').value = `No hay requisiciones con lo surtido capturado en ${modelo.anio}.`;
+    if (!modelo.hojas.length) wb.addWorksheet('SIN MOVIMIENTOS').getCell('A1').value = `No hay requisiciones con lo surtido capturado en ${modelo.mes ? MESES[modelo.mes - 1] + ' de ' : ''}${modelo.anio}.`;
     return wb.xlsx.writeBuffer();
   }
 

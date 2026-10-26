@@ -1,4 +1,4 @@
-// Kardex 2026 (requisiciones_kardex_excel.js): tarjetas por biológico y mes, con un bloque por entrega,
+// Kardex mensual (requisiciones_kardex_excel.js): una tarjeta por biológico y mes con las entregas acumuladas,
 // entradas "CAMARA FRIA" por lote y salidas por unidad / por municipio con saldo corrido.
 const { test, expect } = require('@playwright/test');
 const ExcelJS = require('exceljs');
@@ -91,19 +91,40 @@ test('POR UNIDAD: entrada con folio/fecha/lote/caducidad, salidas por unidad y s
   expect(salidas.every((s) => s.b === 'JS-1')).toBe(true);
 });
 
-test('dos entregas en el mes = dos bloques en la misma tarjeta; lo no repartido a unidades se avisa y cuadra el saldo', async () => {
+test('dos entregas en el mes = UNA tarjeta acumulada; cada entrada conserva la fecha de su entrega; lo no repartido a unidades se avisa y cuadra el saldo', async () => {
   const modelo = armarModelo(entrada);
+  const bcg = modelo.hojas.find((h) => h.hoja === 'BCG');
+  expect(bcg.tarjetas.find((t) => t.mes === 10).bloques).toHaveLength(1);   // no hay un bloque/kardex por entrega
   const wb = await abrir(modelo, 'UNIDAD');
   const rows = renglones(wb.getWorksheet('BCG'));
   const oct = rows.slice(rows.findIndex((r, i) => i > 0 && r.b === 'SALDO ANTERIOR'));
+  expect(oct.filter((r) => r.b === 'SALDO ANTERIOR')).toHaveLength(1);
   expect(oct.filter((r) => r.b === 'CAMARA FRIA').map((r) => [r.fecha, r.lote, r.f, r.obs])).toEqual([
     ['2026-10-05', 'BCG2', 60, 'VC/0040/2026'], ['2026-10-16', 'BCG2', 40, 'E-VC/0041/2026']
   ]);
-  const sin = oct.find((r) => r.obs === 'SIN REPARTIR A UNIDADES' && r.destino === 'QUERETARO');
-  expect(sin).toMatchObject({ destino: 'QUERETARO', j: 18 });
-  // Entregas 1 y 2: 60 + 40 entran, salen 20+30+10 y 40 -> queda 0 al final
+  // Las salidas del mes van acumuladas: lo que quedó sin repartir de las dos entregas (18 + 40) sale en un solo renglón
+  const sin = oct.filter((r) => r.obs === 'SIN REPARTIR A UNIDADES' && r.destino === 'QUERETARO');
+  expect(sin).toHaveLength(1);
+  expect(sin[0].j).toBe(58);
+  // Entran 60 + 40 y salen 20+12+58+10 -> queda 0 al final
   expect(oct[oct.length - 1].l).toBe(0);
   expect(modelo.avisos.some((a) => a.includes('OCTUBRE: falta repartir entre unidades') && a.includes('BCG'))).toBe(true);
+});
+
+test('con mes: solo sale ese mes (con el saldo anterior de los previos) y sus avisos', async () => {
+  const m = armarModelo({ ...entrada, mes: 10 });
+  expect(m.mes).toBe(10);
+  m.hojas.forEach((h) => expect(h.tarjetas.map((t) => t.mes)).toEqual([10]));
+  expect(m.hojas.map((h) => h.hoja)).toEqual(['HEXAVALENTE', 'BCG', 'COVID-19 PFIZER']);
+  const sep = armarModelo({ ...entrada, mes: 9 });
+  expect(sep.hojas.map((h) => h.hoja)).toEqual(['BCG']);                  // en septiembre solo hubo BCG
+  expect(sep.avisos.some((a) => a.includes('OCTUBRE'))).toBe(false);
+  const wb = await abrir(m, 'UNIDAD');
+  expect(wb.getWorksheet('BCG').getCell('N7').value).toBe('OCTUBRE');
+  const rows = renglones(wb.getWorksheet('BCG'));
+  expect(rows.filter((r) => r.b === 'SALDO ANTERIOR')).toHaveLength(1);
+  const vacio = armarModelo({ ...entrada, mes: 3 });
+  expect(vacio.hojas).toEqual([]);
 });
 
 test('varios lotes: una entrada por lote, salidas sumadas por unidad con el desglose por lote', async () => {
@@ -152,7 +173,7 @@ test('los dos logos oficiales van en cada tarjeta, con su proporción', async ()
   const buffer = await generar(armarModelo(entrada), { ExcelJS, nivel: 'UNIDAD', logos: { salud: logo('REQUI_LOGO_SALUD'), queretaro: logo('REQUI_LOGO_QUERETARO') } });
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
-  const ws = wb.getWorksheet('BCG');                    // 2 tarjetas (sep y oct) = 4 imágenes
+  const ws = wb.getWorksheet('BCG');                    // 2 tarjetas (sep y oct, una por mes) = 4 imágenes
   expect(ws.getImages()).toHaveLength(4);
   expect(wb.model.media).toHaveLength(2);               // el mismo archivo de imagen se reutiliza
 });

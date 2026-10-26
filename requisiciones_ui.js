@@ -614,7 +614,7 @@ async function cargarSesionReal() {
   estado.perfil = perfil;
   const rol = String(perfil.rol || '').toUpperCase();
   estado.puedeEditar = rol === 'ADMIN' || rol === 'JURISDICCIONAL';
-  // Kardex del año: solo Jurisdicción (y Admin).
+  // Kardex del mes: solo Jurisdicción (y Admin).
   $('seccionKardex').style.display = estado.puedeEditar ? '' : 'none';
   // Perfil municipal: solo sus municipios (los de su asignación), nada de jurisdicción ni de otros municipios.
   estado.esMunicipal = rol === 'MUNICIPAL';
@@ -790,8 +790,8 @@ function renderEntregas() {
   if (!lista.length) { barra.style.display = 'none'; return; }
   barra.style.display = 'flex';
   barra.querySelector('.entregas-chips').innerHTML = lista.map((e) => `
-    <button type="button" class="chip-bio ${estado.requisicion && estado.requisicion.id === e.id ? 'activo' : ''}" data-entrega="${e.entrega}" style="--c:#0284c7">
-      <i></i>Entrega ${e.entrega}${e.etiqueta ? `<b>${esc(e.etiqueta)}</b>` : ''}
+    <button type="button" class="entrega-tab ${estado.requisicion && estado.requisicion.id === e.id ? 'activo' : ''}" data-entrega="${e.entrega}" aria-pressed="${estado.requisicion && estado.requisicion.id === e.id ? 'true' : 'false'}">
+      Entrega ${e.entrega}${e.etiqueta ? `<small title="${esc(e.etiqueta)}">${esc(e.etiqueta)}</small>` : ''}
     </button>`).join('');
 }
 
@@ -2221,8 +2221,8 @@ function actualizarDetallePedido() {
   if (otra) { detalle = `Este pedido ya está vinculado a la requisición de ${etiquetaMes(otra)} · Entrega ${otra.entrega}.`; bloquea = true; }
   else if (!(p.unidades > 0)) { detalle = 'Este pedido está abierto pero ninguna unidad lo ha capturado todavía.'; bloquea = true; }
   else {
-    detalle = 'Los biológicos que vengan en el pedido reemplazan lo que ya tengas de ellos; los demás no se tocan.';
-    if (conLote.size) detalle += ` ${plural(conLote.size, 'biológico ya tiene lotes asignados y se respeta', 'biológicos ya tienen lotes asignados y se respetan')}.`;
+    detalle = 'Se sobrescribe con lo que hoy tienen pedido las unidades (también sus correcciones): lo que cambió se reemplaza y lo que ya no piden se retira.';
+    if (conLote.size) detalle += ` ${plural(conLote.size, 'biológico tiene lotes asignados: se conservan si no cambió', 'biológicos tienen lotes asignados: se conservan si no cambiaron')}; si cambió, vuelve a "por definir".`;
   }
   $('pedDetalle').textContent = detalle;
   $('pedTraer').disabled = bloquea;
@@ -2306,7 +2306,9 @@ function cerrarTraerPedido() {
   document.body.style.overflow = '';
   const o = estado.pedidoOrigenFoco;
   estado.pedidoOrigenFoco = null;
-  if (o && o.isConnected && o.focus) o.focus();
+  // Si el botón de origen estaba en el menú «Traer…» (ya cerrado), el foco vuelve al botón del menú.
+  const destino = o && o.isConnected && o.offsetParent !== null ? o : $('btnMenuTraer');
+  if (destino && destino.focus) destino.focus();
 }
 
 async function traerPedidoBiologico() {
@@ -2315,7 +2317,7 @@ async function traerPedidoBiologico() {
   const capturados = new Set(estado.items.filter((i) => Number(i.cantidad_surtida) > 0).map((i) => i.requi_biologico_id)).size;
   if (capturados > 0 && !(await confirmar({
     titulo: 'Traer el pedido a esta requisición', tono: 'aviso', aceptar: 'Traer pedido',
-    mensaje: `Esta requisición ya tiene ${plural(capturados, 'biológico capturado', 'biológicos capturados')}. Los que vengan en el pedido ${nombrePedido(p)} se reemplazan por lo que pidieron las unidades; los demás no se tocan, y los que ya tienen lotes asignados se respetan.`
+    mensaje: `Esta requisición ya tiene ${plural(capturados, 'biológico capturado', 'biológicos capturados')}. Se sobrescribe con lo que hoy tienen pedido las unidades en ${nombrePedido(p)} (incluidas sus correcciones): lo que cambió se reemplaza, lo que ya no piden se retira y lo que no cambió se queda igual. Si un biológico cambió y ya tenía lotes asignados, vuelve a "por definir". Lo que capturaste a mano de biológicos que no vienen en el pedido no se toca.`
   }))) return;
   $('pedTraer').disabled = true;
   try {
@@ -2325,9 +2327,12 @@ async function traerPedidoBiologico() {
     estado.lotesPorBiologico = {};
     cerrarTraerPedido();
     await cargarDatosRequisicion();
-    const base = `Se trajo el pedido ${nombrePedido(p)}: ${Number(data.frascos).toLocaleString('es-MX')} frascos de ${plural(data.biologicos.length, 'biológico', 'biológicos')}. Los lotes quedan por definir.`;
+    const base = `Se ${capturados > 0 ? 'actualizó con' : 'trajo'} el pedido ${nombrePedido(p)}: ${Number(data.frascos).toLocaleString('es-MX')} frascos de ${plural(data.biologicos.length, 'biológico', 'biológicos')}. Los lotes quedan por definir.`;
     const avisos = [];
-    if ((data.omitidos_con_lotes || []).length) avisos.push(`no se tocaron por tener lotes asignados: ${data.omitidos_con_lotes.map((n) => n.replace(/^VACUNA\s+/i, '')).join(', ')}`);
+    const corto = (l) => (l || []).map((n) => n.replace(/^VACUNA\s+/i, '')).join(', ');
+    if ((data.reemplazados_con_lotes || []).length) avisos.push(`tenían lotes y volvieron a "por definir" porque cambió el pedido (vuelve a asignarlos): ${corto(data.reemplazados_con_lotes)}`);
+    if ((data.retirados || []).length) avisos.push(`ya no vienen en el pedido y se retiraron: ${corto(data.retirados)}`);
+    if ((data.sin_cambios || []).length) avisos.push(`sin cambios, se conservaron sus lotes: ${corto(data.sin_cambios)}`);
     if (Number(data.influenza_pedida) > 0) avisos.push(`el pedido incluye ${Number(data.influenza_pedida).toLocaleString('es-MX')} frascos de influenza que no se traen de aquí (usa "Traer reparto de influenza")`);
     if ((data.sin_equivalencia || []).length) avisos.push(`sin equivalencia en Requisiciones, captúralos a mano: ${data.sin_equivalencia.map((x) => `${x.biologico} (${Number(x.frascos).toLocaleString('es-MX')})`).join(', ')}`);
     if ((data.clues_sin_unidad || []).length) avisos.push(`CLUES sin unidad en Requisiciones: ${data.clues_sin_unidad.map((x) => x.clues).join(', ')}`);
@@ -2459,7 +2464,7 @@ function renderVistaPegado() {
       <thead><tr><th><span class="sr-only">Incluir</span></th><th>Biológico</th><th>Lote</th><th>Caducidad</th><th>Cantidad</th><th>Estado</th></tr></thead>
       <tbody>${filas.map((f, i) => `
         <tr class="${f.error ? 'fila-error' : ''}">
-          <td><input type="checkbox" data-pegar-inc="${i}" ${f.incluir ? 'checked' : ''} ${f.error ? 'disabled' : ''}></td>
+          <td><input type="checkbox" data-pegar-inc="${i}" aria-label="Importar la fila ${i + 1}" ${f.incluir ? 'checked' : ''} ${f.error ? 'disabled' : ''}></td>
           <td>${f.bio ? esc(nombreCorto(f.bio)) : `<select data-pegar-bio="${i}"><option value="">Elegir…</option>${opciones}</select>`}</td>
           <td>${esc(f.lote) || '—'}</td>
           <td>${f.caducidad ? cadHtml(f.caducidad) : '—'}</td>
@@ -3520,9 +3525,10 @@ async function exportarRutas() {
 }
 
 // ---------------------------------------------------------------------------
-// Kardex del año (solo Jurisdicción): las tarjetas de control de biológicos de TODO el año
-// elegido, armadas con lo ya capturado (ver requisiciones_kardex_excel.js). Un .zip con dos
-// libros: por unidad y por municipio.
+// Kardex del mes (solo Jurisdicción): las tarjetas de control de biológicos del MES elegido (año y
+// mes de la barra de arriba), con todas sus entregas acumuladas y la fecha de cada una en sus
+// entradas; los meses anteriores del año solo aportan el saldo anterior (ver requisiciones_kardex_excel.js).
+// Un .zip con dos libros: por unidad y por municipio.
 // ---------------------------------------------------------------------------
 function cargarScript(src) {
   return new Promise((ok, fallo) => {
@@ -3536,14 +3542,17 @@ async function exportarKardex() {
   if (!estado.puedeEditar) { toast('El kardex solo lo descarga Jurisdicción.', true); return; }
   if (estado.exportando) { toast('Ya se está generando un archivo; espera a que termine.', true); return; }
   const anio = Number($('selAnio').value);
+  const mes = Number($('selMes').value);
+  const mesTxt = (MESES.find((m) => m.v === mes) || { l: String(mes) }).l;
+  const mesMay = mesTxt.toUpperCase();
   estado.exportando = true;
-  await cargaAbrir('Generando kardex', `Leyendo las requisiciones de ${anio}…`);
+  await cargaAbrir('Generando kardex', `Leyendo las requisiciones de ${mesTxt} ${anio}…`);
   try {
     if (window.ensureLibsLoaded) await window.ensureLibsLoaded('exceljs', 'jszip');
-    const { data: reqs, error } = await estado.db.from('requi_requisiciones').select('*').eq('anio', anio);
+    const { data: reqs, error } = await estado.db.from('requi_requisiciones').select('*').eq('anio', anio).lte('mes', mes);
     if (error) throw error;
     const ids = (reqs || []).map((r) => r.id);
-    if (!ids.length) { cargaCerrar(); toast(`No hay requisiciones capturadas en ${anio}.`, true); return; }
+    if (!ids.length) { cargaCerrar(); toast(`No hay requisiciones capturadas hasta ${mesTxt} ${anio}.`, true); return; }
     await cargaAvance('Leyendo lo surtido y el reparto…', 0.2);
     const items = await traerTodo(() => estado.db.from('requi_items_jurisdiccion').select('*, requi_lotes(numero_lote, caducidad)').in('requisicion_id', ids));
     const dMuni = await traerTodo(() => estado.db.from('requi_distribucion_municipio').select('*').in('requisicion_id', ids));
@@ -3552,8 +3561,8 @@ async function exportarKardex() {
     const { data: firmas } = await estado.db.from('requi_firmas').select('elaboro_nombre').eq('nivel', 'JURISDICCIONAL').eq('destino', 'JURISDICCION').maybeSingle();
     await cargaAvance('Armando las tarjetas…', 0.4);
     const K = window.RequiKardexExcel;
-    const modelo = K.armarModelo({ anio, catalogo: estado.catalogo, requisiciones: reqs, items, distMunicipio: dMuni, distUnidad: dUni, unidades: estado.unidades });
-    if (!modelo.hojas.length) { cargaCerrar(); toast(`En ${anio} todavía no hay lo surtido capturado: no hay nada que poner en el kardex.`, true); return; }
+    const modelo = K.armarModelo({ anio, mes, catalogo: estado.catalogo, requisiciones: reqs, items, distMunicipio: dMuni, distUnidad: dUni, unidades: estado.unidades });
+    if (!modelo.hojas.length) { cargaCerrar(); toast(`En ${mesTxt} ${anio} todavía no hay lo surtido capturado: no hay nada que poner en el kardex.`, true); return; }
     if (!window.REQUI_LOGO_SALUD) await cargarScript('requisiciones_assets.js');   // logos oficiales (pesan ~130 KB: solo se bajan al exportar)
     const opciones = { ExcelJS: window.ExcelJS, logos: { salud: window.REQUI_LOGO_SALUD, queretaro: window.REQUI_LOGO_QUERETARO }, responsable: (firmas && firmas.elaboro_nombre) || '' };
     await cargaAvance('Generando el libro por unidad…', 0.55);
@@ -3561,13 +3570,13 @@ async function exportarKardex() {
     await cargaAvance('Generando el libro por municipio…', 0.8);
     const porMunicipio = await K.generar(modelo, { ...opciones, nivel: 'MUNICIPIO' });
     const zip = new JSZip();
-    zip.file(`CONTROL DE BIOLOGICO ${anio} (TARJETAS).xlsx`, porUnidad);
-    zip.file(`CONTROL DE BIOLOGICO ${anio} POR MUNICIPIO (TARJETAS).xlsx`, porMunicipio);
+    zip.file(`CONTROL DE BIOLOGICO ${mesMay} ${anio} (TARJETAS).xlsx`, porUnidad);
+    zip.file(`CONTROL DE BIOLOGICO ${mesMay} ${anio} POR MUNICIPIO (TARJETAS).xlsx`, porMunicipio);
     await cargaAvance('Descargando el archivo…', 0.95);
-    descargarBlob(await zip.generateAsync({ type: 'blob' }), `KARDEX_${anio}.zip`);
+    descargarBlob(await zip.generateAsync({ type: 'blob' }), `KARDEX_${mesMay}_${anio}.zip`);
     cargaCerrar();
     const hojas = plural(modelo.hojas.length, 'biológico', 'biológicos');
-    toast(`Kardex ${anio} listo: ${hojas}.` + (modelo.avisos.length ? ' Ojo: ' + modelo.avisos.join(' ') : ''), !!modelo.avisos.length);
+    toast(`Kardex de ${mesTxt} ${anio} listo: ${hojas}.` + (modelo.avisos.length ? ' Ojo: ' + modelo.avisos.join(' ') : ''), !!modelo.avisos.length);
   } catch (e) {
     cargaCerrar();
     toast('No se pudo generar el kardex: ' + (e.message || e), true);
@@ -3684,7 +3693,17 @@ function instalarEventos() {
     const texto = (ev.clipboardData || window.clipboardData).getData('text');
     if (/[\t\n]/.test(texto.trim())) { ev.preventDefault(); abrirPegar(texto); }
   });
-  $('btnPegarSurtido').addEventListener('click', () => abrirPegar(''));
+  // Menú «Traer desde la plataforma»: reúne pedido, influenza y COVID-19; se cierra al elegir, con Escape o al hacer clic fuera.
+  const cerrarMenuTraer = () => { $('menuTraerLista').style.display = 'none'; $('btnMenuTraer').setAttribute('aria-expanded', 'false'); };
+  $('btnMenuTraer').addEventListener('click', () => {
+    const abrir = $('menuTraerLista').style.display === 'none';
+    $('menuTraerLista').style.display = abrir ? 'flex' : 'none';
+    $('btnMenuTraer').setAttribute('aria-expanded', abrir ? 'true' : 'false');
+    if (abrir) { const op = $('menuTraerLista').querySelector('button'); if (op) op.focus(); }
+  });
+  $('menuTraerLista').addEventListener('click', () => setTimeout(cerrarMenuTraer, 0));
+  document.addEventListener('click', (ev) => { if (!ev.target.closest('#menuTraer')) cerrarMenuTraer(); });
+  $('menuTraer').addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && $('menuTraerLista').style.display !== 'none') { ev.stopPropagation(); cerrarMenuTraer(); $('btnMenuTraer').focus(); } });
   $('chkSoloConLotes').addEventListener('click', () => { estado.soloConLotes = !estado.soloConLotes; renderPaso1(); });
   $('tbodyBiologicos').addEventListener('click', clicTablaPaso1);
   $('tbodyBiologicos').addEventListener('keydown', teclaTablaPaso1);
