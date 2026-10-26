@@ -559,6 +559,13 @@
   .pl-hist-head h3{margin:0;font-size:18px;font-weight:900}
   .pl-hist-head p{margin:2px 0 0;font-size:12px;font-weight:600;color:#475569}
   .pl-x{margin-left:auto}
+  /* Botón de ícono sin caja (igual que los del armador): solo el ícono; en mouse sube y brilla, en táctil no */
+  .pl-ib{font-family:inherit;min-height:0!important;width:40px!important;height:40px!important;padding:0!important;border:none!important;border-radius:12px!important;background:transparent!important;color:#0f172a!important;display:inline-flex!important;align-items:center;justify-content:center;cursor:pointer;transition:transform .16s ease,filter .16s ease,color .16s ease!important}
+  .pl-ib .material-symbols-rounded{font-size:24px}
+  .pl-ib:active{transform:scale(.9)!important}
+  .pl-ib:focus-visible{outline:3px solid #0369a1!important;outline-offset:1px}
+  @media (hover:hover) and (pointer:fine){.pl-ib:hover{transform:translateY(-2px);filter:drop-shadow(0 3px 4px rgba(15,23,42,.3))}}
+  @media (prefers-reduced-motion:reduce){.pl-ib{transition:none!important}.pl-ib:hover,.pl-ib:active{transform:none!important}}
   .pl-in{height:38px!important;min-height:0!important;padding:0 12px!important;border:1px solid #94a3b8!important;border-radius:10px!important;background:#fff!important;font-size:13px;font-weight:600;font-family:inherit;color:#0f172a}
   .pl-bar{display:flex;gap:10px;align-items:center;padding:12px 20px;border-bottom:1px solid #e2e8f0}
   .pl-lista{overflow-y:auto;padding:8px 14px 16px;margin:0;list-style:none;flex:1}
@@ -639,7 +646,7 @@
     h.id = "pinolRutasOverlay";
     h.innerHTML = `<div class="pl-hist" role="dialog" aria-modal="true" aria-labelledby="phTitulo">
       <div class="pl-hist-head"><div><h3 id="phTitulo">Rutas despachadas</h3><p>Cada ruta que se marca en tránsito queda guardada. Reimprime la guía cuando la necesites: no cambia el estatus de las unidades.</p></div>
-        <button type="button" class="pr-ib pl-x pl-btn" data-ph="cerrar" aria-label="Cerrar" style="width:38px;padding:0!important;justify-content:center"><span class="material-symbols-rounded" aria-hidden="true">close</span></button></div>
+        <button type="button" class="pl-ib pl-x" data-ph="cerrar" aria-label="Cerrar"><span class="material-symbols-rounded" aria-hidden="true">close</span></button></div>
       <div class="pl-bar"><input id="phBuscar" class="pl-in" type="search" placeholder="Buscar folio, unidad, responsable o municipio" aria-label="Buscar ruta" autocomplete="off" style="flex:1"><span id="phConteo" style="font-size:12px;font-weight:700;color:#475569"></span></div>
       <ul class="pl-lista" id="phLista" aria-live="polite"></ul></div>`;
     document.body.appendChild(h);
