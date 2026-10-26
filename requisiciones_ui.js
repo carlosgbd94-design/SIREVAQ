@@ -1015,7 +1015,7 @@ function renderExplorador(filas) {
         <td>${r.fue_corregido ? '<span class="pill pill-err">Corregido</span>' : ''}</td>
         <td>${fechaRecepcionDe(r) ? formatDdMmAa(fechaRecepcionDe(r)) : '—'}</td>
         <td>${r.creado_por || '—'}</td>
-        <td><button class="btn btn-outline btn-sm btn-abrir-historial" data-id="${r.id}">Abrir</button></td>
+        <td><button class="btn btn-outline btn-sm btn-abrir-historial" data-id="${r.id}" aria-label="Abrir ${mesInfo ? mesInfo.l : r.mes} ${r.anio}, ${esc(etiquetaEntrega(r))}">Abrir</button></td>
       </tr>
     `;
   }).join('') || '<tr><td colspan="6" style="color:var(--muted)">Todavía no hay requisiciones capturadas.</td></tr>';
@@ -1515,7 +1515,7 @@ function renderAvisoPendientes() {
     const bio = bioDe(i.requi_biologico_id);
     return `<button type="button" class="ficha-pend solo-edicion btn-asignar-lotes" data-item="${i.id}" style="--c:${colorDeBio(bio)}" title="Asignar lote a ${esc(bio.nombre || '')}">
       <span class="fp-ico"><span class="material-symbols-rounded">medication_liquid</span></span>
-      <span class="fp-txt"><b>${esc(nombreCorto(bio))}</b><small><strong>${Number(i.cantidad_surtida).toLocaleString('es-MX')}</strong> dosis sin lote</small></span>
+      <span class="fp-txt"><b>${esc(nombreCorto(bio))}</b><small><strong>${Number(i.cantidad_surtida).toLocaleString('es-MX')}</strong> ${Number(i.cantidad_surtida) === 1 ? 'frasco' : 'frascos'} sin lote</small></span>
       <span class="fp-ir material-symbols-rounded">arrow_forward</span>
     </button>`;
   }).join('');
@@ -1672,11 +1672,11 @@ function abrirAsignarLotes(itemId) {
   const pend = esPendiente(item);
   estado.asig = { item, bio, total, pend, filas: [{ lote: '', cad: '', cant: total }] };
   const repartido = sumaMunicipio(item.requi_biologico_id, item.lote_id);
-  const nota = repartido ? ` (${repartido} ya repartidas: el reparto pasa al lote nuevo en orden y lo puedes ajustar en los pasos 2 y 3)` : '';
+  const nota = repartido ? ` (ya repartiste ${repartido}: ese reparto pasa al lote nuevo y lo ajustas en los pasos 2 y 3)` : '';
   $('asigTitulo').textContent = `${pend ? 'Asignar lotes' : 'Cambiar o dividir lote'} · ${nombreCorto(bio)}`;
   $('asigSub').textContent = pend
-    ? `${plural(total, 'dosis sin lote', 'dosis sin lote')}${nota}.`
-    : `Lote actual ${item.requi_lotes.numero_lote}: ${plural(total, 'dosis', 'dosis')}${nota}.`;
+    ? `${plural(total, 'frasco sin lote', 'frascos sin lote')}${nota}.`
+    : `Lote actual ${item.requi_lotes.numero_lote}: ${plural(total, 'frasco', 'frascos')}${nota}.`;
   $('asigAyuda').innerHTML = pend
     ? 'Si llegó un solo lote, déjalo con toda la cantidad. Si llegaron varios, baja la cantidad del primero y toca <b>Agregar otro lote</b>: el nuevo renglón se llena con lo que falta.'
     : 'Para <b>cambiar el número de lote</b>, deja una fila con toda la cantidad. Para <b>dividirlo</b>, captura solo la parte que pasa a otro lote: el resto se queda en el lote actual.';
@@ -1876,7 +1876,7 @@ function valoresCantidades() {
 function actualizarResumenCantidades() {
   const v = valoresCantidades();
   const total = v.reduce((acc, x) => acc + x.cantidad, 0);
-  $('cantResumen').textContent = v.length ? `${plural(v.length, 'biológico', 'biológicos')} · ${total} dosis` : '';
+  $('cantResumen').textContent = v.length ? `${plural(v.length, 'biológico', 'biológicos')} · ${plural(total, 'frasco', 'frascos')}` : '';
   $('cantGuardar').disabled = !v.length;
 }
 
@@ -1968,6 +1968,7 @@ function actualizarDetalleInfluenza() {
   else if (actual > 0) aviso = `Esta requisición ya tiene ${actual.toLocaleString('es-MX')} frascos de influenza: se reemplazan por el reparto.`;
   $('infDetalle').innerHTML = `<b>${Number(op.total_frascos).toLocaleString('es-MX')} frascos recibidos</b> · ${esc(textoDestinos(op.asignacion || {}))}${aviso ? `<br><span style="color:#b45309;font-weight:700">${esc(aviso)}</span>` : ''}`;
   $('infTraer').disabled = bloquea;
+  $('infResumen').textContent = bloquea ? 'No se puede traer esta entrega: lee el aviso en naranja.' : `${Number(op.total_frascos).toLocaleString('es-MX')} frascos`;
 }
 
 async function abrirTraerInfluenza() {
@@ -2003,6 +2004,7 @@ async function abrirTraerInfluenza() {
 function cerrarTraerInfluenza() {
   $('modalInfluenza').style.display = 'none';
   document.body.style.overflow = '';
+  $('btnMenuTraer').focus();   // el botón de origen está dentro del menú, que ya se cerró
 }
 
 async function traerRepartoInfluenza() {
@@ -2084,6 +2086,7 @@ function actualizarDetalleCovid() {
     if (!bloquea) hayQueTraer = true;
   });
   $('covTraer').disabled = !hayQueTraer;
+  $('covResumen').textContent = hayQueTraer ? '' : 'Ninguna marca se puede traer ahora: lee los avisos en naranja o elige otra entrega.';
 }
 
 async function abrirTraerCovid() {
@@ -2121,6 +2124,7 @@ async function abrirTraerCovid() {
 function cerrarTraerCovid() {
   $('modalCovid').style.display = 'none';
   document.body.style.overflow = '';
+  $('btnMenuTraer').focus();
 }
 
 async function traerRepartoCovid() {

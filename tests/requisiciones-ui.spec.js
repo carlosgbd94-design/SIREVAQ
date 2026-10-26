@@ -252,7 +252,7 @@ test('Requisiciones: prellenar cantidades sin lote y repartirlas', async ({ page
   await expect(page.locator('#cantGuardar')).toBeDisabled();
   await page.locator('#cantFilas input').nth(0).fill('120');
   await page.locator('#cantFilas input').nth(1).fill('65');
-  await expect(page.locator('#cantResumen')).toContainText('2 biológicos · 185 dosis');
+  await expect(page.locator('#cantResumen')).toContainText('2 biológicos · 185 frascos');
   await page.click('#cantGuardar');
   await expect(page.locator('#modalCantidades')).toBeHidden();
   await expect.poll(() => db(page, 'db.requi_items_jurisdiccion.filter((i) => i.requisicion_id === "req-hoy").length')).toBe(2);
@@ -323,7 +323,7 @@ test('Requisiciones: asignar lotes (uno o varios) a cantidades prellenadas y el 
   const errores = await preparar(page, { conReq: true });
   await expect(page.locator('#contenidoRequisicion')).toBeVisible();
   await page.click('#btnPrellenar');
-  await page.locator('#cantFilas input').nth(0).fill('65');         // SRP: 65 dosis sin lote
+  await page.locator('#cantFilas input').nth(0).fill("65");         // SRP: 65 frascos sin lote
   await page.click('#cantGuardar');
   await expect(page.locator('#avisoPendientes')).toBeVisible();
 

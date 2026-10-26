@@ -71,7 +71,7 @@ test('AUDITORÍA: sin violaciones de accesibilidad ni controles/ids repetidos en
   test.setTimeout(120000);
   const errores = await preparar(page);
   const informe = {};
-  const revisar = async (etiqueta) => { informe[etiqueta] = { axe: await axe(page), ...(await repetidos(page)) }; };
+  const revisar = async (etiqueta) => { await page.waitForTimeout(350); informe[etiqueta] = { axe: await axe(page), ...(await repetidos(page)) }; };
 
   await expect(page.locator('#tarjetaSinRequisicion')).toBeVisible();
   await revisar('sin requisición');
@@ -127,5 +127,96 @@ test('la fecha de recepción capturada es la que se queda al cerrar y no el últ
   await page.click('#btnCerrarMes');
   await expect.poll(() => db(page, 'db.requi_requisiciones[db.requi_requisiciones.length-1].estado')).toBe('CERRADA');
   expect(await db(page, 'db.requi_requisiciones[db.requi_requisiciones.length-1].fecha_envio')).toBe('2026-10-07');
+  expect(errores).toEqual([]);
+});
+
+// Paneles y modales que la auditoría anterior no abría: Exportar (cada pestaña), firmas, historial, transferencias,
+// asignar lotes, Traer pedido / influenza / COVID-19 y el perfil municipal.
+test('AUDITORÍA: modales y paneles secundarios de Requisiciones sin violaciones de accesibilidad', async ({ page }) => {
+  test.setTimeout(120000);
+  await page.addInitScript(() => {
+    window.__FAKE_INFLUENZA__ = true; window.__FAKE_COVID__ = true; window.__FAKE_PEDIDOS_EXTRA__ = true;
+    const d = new Date(); const m = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    window.__FAKE_PEDIDOS__ = [{ fecha: `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}-22`, tipo: 'MENSUAL', unidades: 68, frascos: 13466 }];
+  });
+  const errores = await preparar(page, { conReq: true });
+  const informe = {};
+  // Se espera a que terminen las transiciones (el aviso emergente entra con opacidad) para medir contrastes reales
+  const revisar = async (etiqueta) => { await page.waitForTimeout(350); informe[etiqueta] = { axe: await axe(page), ...(await repetidos(page)) }; };
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+
+  // Firmas desplegadas
+  await page.click('#btnToggleResponsables');
+  await expect(page.locator('#btnToggleResponsables')).toHaveAttribute('aria-expanded', 'true');
+  await revisar('firmas');
+  await page.click('#btnToggleResponsables');
+
+  // Panel Exportar: cada pestaña
+  await page.click('#btnAbrirExportar');
+  for (const t of ['tabExpMunis', 'tabExpJuris', 'tabExpKardex']) { await page.click('#' + t); await revisar('exportar ' + t); }
+  await page.keyboard.press('Escape');
+
+  // Historial y Transferencias
+  await page.click('#btnAbrirExplorador');
+  await revisar('historial');
+  await page.click('#btnAbrirExplorador');
+  await page.click('#btnAbrirTransferencias');
+  await expect(page.locator('#modalTransferencias')).toBeVisible();
+  await revisar('transferencias');
+  await page.click('#transCerrar2');
+
+  // Traer pedido / influenza / COVID
+  for (const [id, modal] of [['btnTraerPedido', 'modalPedido'], ['btnTraerInfluenza', 'modalInfluenza'], ['btnTraerCovid', 'modalCovid']]) {
+    await page.click('#btnMenuTraer');
+    await page.click('#' + id);
+    await expect(page.locator('#' + modal)).toBeVisible();
+    await page.waitForTimeout(250);
+    await revisar(modal);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#' + modal)).toBeHidden();
+  }
+
+  // Asignar lotes
+  await page.click('#btnPrellenar');
+  await page.locator('#cantFilas input').nth(0).fill('65');
+  await page.click('#cantGuardar');
+  await page.click('#avisoPendientes .btn-asignar-lotes');
+  await expect(page.locator('#modalAsignar')).toBeVisible();
+  await revisar('asignar lotes');
+
+  const problemas = {};
+  for (const [k, v] of Object.entries(informe)) {
+    const p = { axe: v.axe, idsRepetidos: v.idsRepetidos, botonesRepetidos: v.botonesRepetidos };
+    if (p.axe.length || p.idsRepetidos.length || p.botonesRepetidos.length) problemas[k] = p;
+  }
+  expect(problemas).toEqual({});
+  expect(errores).toEqual([]);
+});
+
+test('perfil municipal (Querétaro): sin firmas ni pestañas de Jurisdicción; Exportar con Municipio y Rutas', async ({ page }) => {
+  const errores = await preparar(page, { rol: 'MUNICIPAL', conReq: true, muni: 'QUERETARO' });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await expect(page.locator('#tarjetaResponsables')).toBeHidden();          // la fila de firmas es de Jurisdicción
+  await expect(page.locator('#btnMenuTraer')).toBeHidden();
+  await page.click('#btnAbrirExportar');
+  await expect(page.locator('#tabExpMunis')).toBeVisible();
+  await expect(page.locator('#tabExpRutas')).toBeVisible();                 // Rutas es de Querétaro
+  await expect(page.locator('#tabExpJuris')).toBeHidden();
+  await expect(page.locator('#tabExpKardex')).toBeHidden();
+  await expect(page.locator('#seccionMunis')).toBeVisible();
+  await expect(page.locator('#btnExportarMasivo')).toBeVisible();
+  const r = await axe(page);
+  expect(r).toEqual([]);
+  expect(errores).toEqual([]);
+});
+
+test('perfil municipal (otro municipio): Exportar sin tira de pestañas y sin Rutas', async ({ page }) => {
+  const errores = await preparar(page, { rol: 'MUNICIPAL', conReq: true, muni: 'HUIMILPAN' });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await expect(page.locator('#tarjetaResponsables')).toBeHidden();
+  await page.click('#btnAbrirExportar');
+  await expect(page.locator('#peTabs')).toBeHidden();
+  await expect(page.locator('#seccionMunis')).toBeVisible();
+  await expect(page.locator('#tabExpRutas')).toBeHidden();
   expect(errores).toEqual([]);
 });

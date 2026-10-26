@@ -22,7 +22,7 @@
 <script defer src="requisiciones_export_excel.js"></script>
 <script defer src="requisiciones_rutas_excel.js"></script>
 <script defer src="requisiciones_kardex_excel.js?v=2"></script>
-<script defer src="requisiciones_ui.js?v=25"></script>
+<script defer src="requisiciones_ui.js?v=28"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -386,7 +386,7 @@
 
   .punto-bio { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; flex: none; }
   table.tbl tr.fila-bio.sin-lotes td { color: #94a3b8; }
-  table.tbl tr.fila-bio.sin-lotes strong { color: #64748b; font-weight: 600; }
+  table.tbl tr.fila-bio.sin-lotes strong { color: #475569; font-weight: 600; }
   table.tbl td.lote-cel { padding-left: 36px; }
   .chip-lote { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 12.5px; }
   .chip-lote .material-symbols-rounded { font-size: 15px; color: var(--muted); }
@@ -1143,7 +1143,7 @@
     <div class="modal-hoja" role="dialog" aria-modal="true" aria-labelledby="transTitulo">
       <div class="modal-cab">
         <div><h3 id="transTitulo">Transferencias</h3><p>PDF de la transferencia de cada entrega del mes. Solo lo ven los perfiles Jurisdiccional y Admin.</p></div>
-        <button type="button" class="icon-btn-pure" id="transCerrar" title="Cerrar"><span class="material-symbols-rounded">close</span></button>
+        <button type="button" class="icon-btn-pure" id="transCerrar" title="Cerrar" aria-label="Cerrar Transferencias"><span class="material-symbols-rounded">close</span></button>
       </div>
       <div class="modal-cuerpo">
         <div class="trans-subir">
