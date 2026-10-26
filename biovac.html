@@ -48,7 +48,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
 <script defer src="biovac_ui.js?v=2026.78"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.58"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.60"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.23"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
@@ -269,6 +269,7 @@ window.onunhandledrejection = function (event) {
   /* Contenedores desplegables de la hoja SIS-SS-CE-H (<details>): sin la
      flecha nativa; el chevron propio gira al abrir. */
   details.ceh-acc > summary { list-style: none; }
+  details.ceh-acc > summary > span:not(.ceh-chev) { color: #334155 !important; opacity: 1 !important; }
   details.ceh-acc > summary::-webkit-details-marker { display: none; }
   details.ceh-acc .ceh-chev { transition: transform .2s ease; }
   details.ceh-acc[open] > summary .ceh-chev { transform: rotate(180deg); }

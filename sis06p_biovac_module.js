@@ -2353,11 +2353,15 @@
   // Responsable que se muestra en las hojas: para la unidad, lo del campo
   // del encabezado (así se ve al instante lo que se acaba de teclear).
   function responsableParaMostrar(captura) {
+    let r;
     if (esUnidadSesion()) {
       const v = (document.getElementById('selUsuario') || {}).value;
-      return (v && v.trim()) || (captura && captura.capturado_por) || '';
+      r = (v && v.trim()) || (captura && captura.capturado_por) || '';
+    } else {
+      r = (captura && captura.capturado_por) || '';
     }
-    return (captura && captura.capturado_por) || '';
+    // El usuario técnico (CLUES_NOMBRE) no es una persona: se avisa en vez de mostrarlo como responsable.
+    return (typeof esNombreTecnico === 'function' && esNombreTecnico(r)) ? 'Sin nombre capturado' : r;
   }
 
   // Corte mensual de Influenza: suma, por rubro y por semana, los reportes de
@@ -2711,7 +2715,7 @@
         estilo = 'background:#eef2ff; color:#3730a3;';
       } else if (estadoSIS !== 'BORRADOR') {
         msg = 'Corte congelado: este SINBA-SIS ya fue enviado, así que Influenza de este mes ya no cambia desde la unidad.';
-        estilo = 'background:#f1f5f9; color:#64748b;';
+        estilo = 'background:#f1f5f9; color:#475569;';
       } else if (n === 0) {
         msg = `Todavía no hay reportes semanales de Influenza en ${mesNombre(mes)}. Se capturan cada jueves o viernes en Meta-Logro Influenza; aquí aparecen solos.`;
         estilo = 'background:var(--warning-bg); color:var(--warning); border:1px solid var(--warning-border);';
@@ -2842,8 +2846,8 @@
   function acordeonSIS(llave, titulo, tint, hex, resumen, cuerpo, abiertos) {
     return `
       <details data-ceh-llave="${_esc(llave)}" ${abiertos.has(llave) ? 'open' : ''} class="ceh-acc" style="break-inside:avoid; margin:0 0 10px; border:1px solid var(--outline-variant); border-radius:12px; overflow:hidden; background:#fff;">
-        <summary style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:${tint}; color:${hex}; cursor:pointer; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em;">
-          <span class="material-symbols-rounded ceh-chev" style="font-size:17px;">expand_more</span>
+        <summary style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:${tint}; color:#334155; cursor:pointer; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em;">
+          <span class="material-symbols-rounded ceh-chev" style="font-size:17px; color:${hex};">expand_more</span>
           <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${_esc(titulo)}">${_esc(titulo)}</span>
           ${resumen}
         </summary>

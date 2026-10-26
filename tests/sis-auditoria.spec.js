@@ -81,3 +81,29 @@ test('AUDITORÍA SIS: vista de la unidad (paloteo) y diálogo de envío sin viol
   await revisar(page, informe, 'unidad paloteo');
   expect(problemas(informe)).toEqual({});
 });
+
+// Teléfono (390 px): sin desborde horizontal y sin violaciones, en el cierre del municipal y en la vista de la unidad.
+test.describe('SIS en teléfono', () => {
+  test.use({ viewport: { width: 390, height: 800 }, hasTouch: true, isMobile: true });
+  test('AUDITORÍA SIS móvil: municipal y unidad sin desborde ni violaciones', async ({ page }) => {
+    test.setTimeout(90000);
+    await abrir(page, 'MUNICIPAL');
+    const informe = {};
+    await revisar(page, informe, 'movil municipal');
+    const desborde = async () => page.evaluate(() => ({ x: document.documentElement.scrollWidth > innerWidth + 1, anchos: [...document.querySelectorAll('body *')].filter((e) => e.offsetParent && getComputedStyle(e).position !== 'fixed' && e.getBoundingClientRect().right > innerWidth + 2 && !e.closest('.tabla-wrap, [style*="overflow-x"], .tbl-scroll, .mun-chips, .inf-chips')).map((e) => (e.id || e.className || e.tagName).toString().slice(0, 40)).slice(0, 8) }));
+    const d1 = await desborde();
+    await page.evaluate(() => {
+      const F = window.__FAKE; const mes = Number(document.getElementById('selMes').value); const anio = Number(document.getElementById('selAnio').value);
+      estado.perfil = { id: 'u1', rol: 'UNIDAD', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', usuario: 'prueba' };
+      F.tables.sis_variables.length = 0;
+      F.tables.sis_variables.push({ id: 1, fila_excel: 11, biologico: 'BCG', grupo_poblacional: 'Recién nacido', dosis: 'ÚNICA', edad: null, clave_general: 'VBC01', orden: 1, activo: true });
+      F.tables.sis06p_capturas.length = 0;
+      F.tables.sis06p_capturas.push({ id: 'c1', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes, anio, estado: 'BORRADOR', valores: { 11: { total: 5 } }, ajustes: {}, updated_at: new Date().toISOString() });
+    });
+    await page.evaluate(async () => { document.getElementById('panelSIS06P').style.display = 'block'; await SIS06PBiovac.init(); });
+    await revisar(page, informe, 'movil unidad');
+    const d2 = await desborde();
+    expect({ municipal: d1, unidad: d2 }).toEqual({ municipal: { x: false, anchos: [] }, unidad: { x: false, anchos: [] } });
+    expect(problemas(informe)).toEqual({});
+  });
+});
