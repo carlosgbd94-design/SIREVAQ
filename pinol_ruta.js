@@ -563,12 +563,15 @@
   .pl-bar{display:flex;gap:10px;align-items:center;padding:12px 20px;border-bottom:1px solid #e2e8f0}
   .pl-lista{overflow-y:auto;padding:8px 14px 16px;margin:0;list-style:none;flex:1}
   .pl-ruta{border:1px solid #cbd5e1;border-radius:14px;margin-top:8px;background:#fff}
-  .pl-fila{display:flex;align-items:center;gap:12px;padding:10px 14px;flex-wrap:wrap}
+  .pl-fila{display:flex;align-items:center;gap:12px;padding:10px 14px}
+  .pl-acc{display:flex;gap:8px;flex:none;align-items:center}
+  .pl-acc .pl-btn{white-space:nowrap}
+  @media (max-width:640px){.pl-fila{flex-wrap:wrap}.pl-acc{width:100%;justify-content:flex-end}}
   .pl-folio{font-family:monospace;font-size:13px;font-weight:900;background:#0f172a;color:#fff;border-radius:8px;padding:3px 9px}
-  .pl-main{flex:1;min-width:200px}
+  .pl-main{flex:1 1 0;min-width:0}
   .pl-main b{display:block;font-size:13.5px;font-weight:800}
   .pl-main small{font-size:11.5px;font-weight:600;color:#475569}
-  .pl-tags{display:flex;gap:5px;flex-wrap:wrap}
+  .pl-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
   .pl-t{padding:1px 9px;border-radius:99px;font-size:11px;font-weight:800;background:#f1f5f9;border:1px solid #cbd5e1;color:#334155;white-space:nowrap}
   .pl-t.ok{background:#d1fae5;border-color:#6ee7b7;color:#065f46}.pl-t.am{background:#fef3c7;border-color:#fcd34d;color:#78350f}
   .pl-det{padding:0 14px 12px;font-size:12.5px;font-weight:600;color:#1e293b}
@@ -693,13 +696,15 @@
       const abierta = S.rutaAbierta === r.id;
       return `<li class="pl-ruta"><div class="pl-fila">
           <span class="pl-folio">${esc(claveFolio(r))}</span>
-          <span class="pl-main"><b>${esc(root.PinolRuta.fechaLarga(r.fecha))} · ${esc((r.municipios || []).join(", ") || "—")}</b><small>${esc(r.responsable)}${r.vehiculo ? " · " + esc(r.vehiculo) : ""}</small></span>
-          <span class="pl-tags"><span class="pl-t">${r.total_paradas} ${r.total_paradas === 1 ? "unidad" : "unidades"}</span><span class="pl-t">${num(r.total_botellas)} bot.</span>
-            ${rec ? `<span class="pl-t ${rec.n === rec.de ? "ok" : "am"}">${rec.n} de ${rec.de} recibidas</span>` : ""}
-            ${r.reconstruida ? `<span class="pl-t am" title="Armada después, con las solicitudes que seguían en la tabla: el orden de las paradas es por municipio y unidad">reconstruida</span>` : ""}
-            ${num(r.impresiones) ? `<span class="pl-t">impresa ${num(r.impresiones)} ${num(r.impresiones) === 1 ? "vez" : "veces"}</span>` : ""}</span>
-          <button type="button" class="pl-btn" data-ph="ver" data-id="${esc(r.id)}" aria-expanded="${abierta}">${abierta ? "Ocultar" : "Ver paradas"}</button>
-          <button type="button" class="pl-btn sol" data-ph="imprimir" data-id="${esc(r.id)}" aria-label="Reimprimir la guía ${esc(claveFolio(r))}"><span class="material-symbols-rounded" aria-hidden="true">print</span>Reimprimir</button>
+          <span class="pl-main"><b>${esc(root.PinolRuta.fechaLarga(r.fecha))} · ${esc((r.municipios || []).join(", ") || "—")}</b><small>${esc(r.responsable)}${r.vehiculo ? " · " + esc(r.vehiculo) : ""}</small>
+            <span class="pl-tags"><span class="pl-t">${r.total_paradas} ${r.total_paradas === 1 ? "unidad" : "unidades"}</span><span class="pl-t">${num(r.total_botellas)} bot.</span>
+              ${rec ? `<span class="pl-t ${rec.n === rec.de ? "ok" : "am"}">${rec.n} de ${rec.de} recibidas</span>` : ""}
+              ${r.reconstruida ? `<span class="pl-t am" title="Armada después, con las solicitudes que seguían en la tabla: el orden de las paradas es por municipio y unidad">reconstruida</span>` : ""}
+              ${num(r.impresiones) ? `<span class="pl-t">impresa ${num(r.impresiones)} ${num(r.impresiones) === 1 ? "vez" : "veces"}</span>` : ""}</span></span>
+          <span class="pl-acc">
+            <button type="button" class="pl-btn" data-ph="ver" data-id="${esc(r.id)}" aria-expanded="${abierta}">${abierta ? "Ocultar" : "Ver paradas"}</button>
+            <button type="button" class="pl-btn sol" data-ph="imprimir" data-id="${esc(r.id)}" aria-label="Reimprimir la guía ${esc(claveFolio(r))}"><span class="material-symbols-rounded" aria-hidden="true">print</span>Reimprimir</button>
+          </span>
         </div>
         ${abierta ? `<div class="pl-det"><ol>${(r.paradas || []).map((p) => `<li><b>${esc(p.unidad)}</b> · ${esc(p.clues)} · ${esc(p.municipio)} — ${num(p.cantidad)} botella(s)</li>`).join("")}</ol></div>` : ""}</li>`;
     }).join("");
