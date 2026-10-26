@@ -568,6 +568,7 @@ test('Requisiciones: las confirmaciones son diálogos de SIREVAQ (se cancelan co
   await page.locator('#cantFilas input').nth(0).fill('20');
   await page.click('#cantGuardar');
   await page.click('#btnAbrirExportar');
+  await page.click('#tabExpJuris');
   await page.click('#btnPdfJurisdiccional');
   await expect(page.locator('#confirmarTitulo')).toHaveText('Hay lotes por definir');
   await page.click('#confirmarCancelar');
@@ -1356,6 +1357,7 @@ test('Requisiciones: el Kardex del mes se baja desde Exportar (solo Jurisdicció
     db.requi_distribucion_unidad.push({ id: 'u1', ...base, unidad_id: 'un-c1', cantidad: 30 }, { id: 'u2', ...base, unidad_id: 'un-c2', cantidad: 20 });
   });
   await page.click('#btnAbrirExportar');
+  await page.click('#tabExpKardex');
   await expect(page.locator('#seccionKardex')).toBeVisible();
   const descarga = page.waitForEvent('download');
   await page.click('#btnExportarKardex');

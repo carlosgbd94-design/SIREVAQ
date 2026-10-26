@@ -624,7 +624,7 @@ async function cargarSesionReal() {
   if (!estado.puedeEditar) $('hintPaso3').textContent = 'Aquí ves lo que le tocó a cada unidad, por lote. Con el ícono de descarga de cada renglón bajas el Excel de esa unidad.';
   if (estado.esMunicipal) {
     $('textoTituloMunis').textContent = 'Requisición de mi municipio';
-    $('ayudaMunis').textContent = 'Descarga la requisición de tu municipio; puedes incluir una pestaña por cada unidad.';
+    $('ayudaMunis').textContent = 'Descarga la requisición de tu municipio en Excel. Si quieres, incluye una pestaña por cada unidad.';
   }
   if (estado.esMunicipal) {
     const primero = DESTINOS.find((d) => estado.munisPermitidos.includes(d.v) && !esHospital(d.v));
@@ -3585,6 +3585,44 @@ async function exportarKardex() {
   }
 }
 
+// Pestañas del panel Exportar: una por tipo de archivo. Solo aparecen las que el perfil puede usar
+// (las demás secciones quedan ocultas por su propio display) y, con una sola, no se muestra la tira.
+function seleccionarTabExportar(idPanel, enfocar) {
+  const tabs = [...document.querySelectorAll('#peTabs .pe-tab')].filter((t) => !t.hidden);
+  const tab = tabs.find((t) => t.dataset.panel === idPanel) || tabs[0];
+  if (!tab) return;
+  document.querySelectorAll('#peTabs .pe-tab').forEach((t) => {
+    const activa = t === tab;
+    t.setAttribute('aria-selected', activa ? 'true' : 'false');
+    t.tabIndex = activa ? 0 : -1;
+    $(t.dataset.panel).hidden = !activa;
+  });
+  estado.tabExportar = tab.dataset.panel;
+  if (enfocar) tab.focus();
+}
+
+function actualizarPanelExportar() {
+  const req = estado.requisicion;
+  const mesTxt = (MESES.find((m) => m.v === Number($('selMes').value)) || { l: '' }).l;
+  const periodo = `${mesTxt} ${$('selAnio').value}`;
+  $('peContexto').innerHTML = req
+    ? `Entrega activa: <b>${esc(etiquetaEntrega(req))}</b> · ${esc(periodo)}. El Kardex y las rutas abarcan todo el mes.`
+    : `Todavía no hay requisición de <b>${esc(periodo)}</b>.`;
+  const juris = !estado.esMunicipal;
+  const disponible = {
+    seccionMunis: true,
+    seccionJuris: juris,
+    seccionKardex: !!estado.puedeEditar,
+    seccionRutas: !!estado.esMunicipalQueretaro && estado.entregasMes.length > 0
+  };
+  document.querySelectorAll('#peTabs .pe-tab').forEach((t) => { t.hidden = !disponible[t.dataset.panel]; });
+  $('peTabs').style.display = document.querySelectorAll('#peTabs .pe-tab:not([hidden])').length > 1 ? '' : 'none';
+  $('tabExpMunisTxt').textContent = estado.esMunicipal ? 'Mi municipio' : 'Municipios y hospitales';
+  // Las secciones fuera de las pestañas visibles nunca se muestran (el display propio de cada una lo decide el rol).
+  Object.keys(disponible).forEach((id) => { if (!disponible[id]) $(id).hidden = true; });
+  seleccionarTabExportar(estado.tabExportar, false);
+}
+
 function togglePanelExportar(forzarCerrado) {
   const panel = $('panelExportar');
   const abierto = panel.style.display !== 'none';
@@ -3592,9 +3630,7 @@ function togglePanelExportar(forzarCerrado) {
   panel.style.display = abrir ? 'flex' : 'none';
   $('btnAbrirExportar').setAttribute('aria-expanded', abrir ? 'true' : 'false');
   if (abrir) {
-    // Numeración por jerarquía según lo que ve este perfil (el municipal no tiene la sección de jurisdicción).
-    const visibles = [...panel.querySelectorAll('.pe-seccion')].filter((x) => getComputedStyle(x).display !== 'none');
-    visibles.forEach((x, i) => { const n = x.querySelector('.pe-num'); if (n) n.textContent = String(i + 1); x.classList.toggle('pe-primera', i === 0); });
+    actualizarPanelExportar();
     // Que nunca se salga de la pantalla: alto disponible desde donde abre hasta el borde (menos la barra de abajo).
     panel.style.maxHeight = Math.max(240, window.innerHeight - panel.getBoundingClientRect().top - 100) + 'px';
     setTimeout(() => $('btnCerrarExportar').focus(), 0);
@@ -3661,6 +3697,16 @@ function instalarEventos() {
   $('btnCerrarExportar').addEventListener('click', () => togglePanelExportar('devolverFoco'));
   $('panelExportar').addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); togglePanelExportar('devolverFoco'); } });
   $('panelExportar').addEventListener('click', (ev) => ev.stopPropagation());
+  $('peTabs').addEventListener('click', (ev) => { const t = ev.target.closest('.pe-tab'); if (t) seleccionarTabExportar(t.dataset.panel, false); });
+  $('peTabs').addEventListener('keydown', (ev) => {
+    const tabs = [...document.querySelectorAll('#peTabs .pe-tab')].filter((t) => !t.hidden);
+    const i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    const destino = { ArrowRight: (i + 1) % tabs.length, ArrowLeft: (i - 1 + tabs.length) % tabs.length, Home: 0, End: tabs.length - 1 }[ev.key];
+    if (destino === undefined) return;
+    ev.preventDefault();
+    seleccionarTabExportar(tabs[destino].dataset.panel, true);
+  });
   document.addEventListener('click', () => togglePanelExportar(true));
   $('btnAbrirExplorador').addEventListener('click', toggleExplorador);
   $('btnCerrarMes').addEventListener('click', cerrarMes);

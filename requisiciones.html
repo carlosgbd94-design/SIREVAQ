@@ -22,7 +22,7 @@
 <script defer src="requisiciones_export_excel.js"></script>
 <script defer src="requisiciones_rutas_excel.js"></script>
 <script defer src="requisiciones_kardex_excel.js?v=2"></script>
-<script defer src="requisiciones_ui.js?v=20"></script>
+<script defer src="requisiciones_ui.js?v=22"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -226,27 +226,40 @@
     max-height: calc(100vh - 120px); display: flex; flex-direction: column;
     background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 18px; box-shadow: var(--shadow-2);
   }
-  .pe-cabecera { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px 18px; border-bottom: 1px solid var(--outline-variant); flex: none; }
+  .pe-cabecera { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px 18px; flex: none; }
   .pe-cabecera h2 { margin: 0; font: 800 15px 'Poppins', sans-serif; color: var(--primary); }
-  .pe-cuerpo { overflow-y: auto; overscroll-behavior: contain; padding: 4px 18px 18px; }
-  .pe-seccion { padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--outline-variant); }
-  .pe-seccion.pe-primera { margin-top: 0; border-top: 0; }
-  .pe-seccion .pe-grupo .destinos-masivos { margin-left: 0; }
-  .pe-seccion h3 { display: flex; align-items: center; gap: 8px; margin: 0; font: 800 13px 'Poppins', sans-serif; color: var(--primary); }
-  .pe-num { width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--primary); color: #fff; font: 800 11px 'Poppins', sans-serif; display: inline-flex; align-items: center; justify-content: center; }
-  .pe-ayuda { margin: 4px 0 10px 28px; font-size: 12px; color: var(--muted); line-height: 1.4; }
-  .pe-boton { width: 100%; justify-content: center; margin-top: 12px; }
-  .pe-seccion .filtros-destino, .pe-seccion .destinos-masivos, .pe-opcion, .pe-grupo { margin-left: 28px; }
-  .pe-opcion { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; font-size: 12.5px; cursor: pointer; }
+  /* Qué se exporta: la entrega activa y el mes, siempre a la vista. */
+  .pe-contexto { margin: 0 18px 10px; padding: 8px 12px; border-radius: 12px; background: var(--surface-container); font-size: 12px; color: var(--muted); line-height: 1.4; flex: none; }
+  .pe-contexto b { color: var(--text); }
+  /* Pestañas: una por tipo de archivo (solo se ven las que tu perfil puede usar). */
+  .pe-tabs { display: flex; gap: 4px; margin: 0 18px; padding: 4px; border-radius: 14px; background: var(--surface-container); flex: none; }
+  .pe-tab { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border: 0; border-radius: 10px; background: transparent;
+    color: var(--muted); font: 700 11.5px inherit; font-family: inherit; cursor: pointer; text-align: center; line-height: 1.2; }
+  .pe-tab .material-symbols-rounded { font-size: 20px; }
+  .pe-tab[aria-selected="true"] { background: #fff; color: var(--primary); box-shadow: 0 1px 3px rgba(15,23,42,.12); }
+  .pe-tab[aria-selected="true"] .material-symbols-rounded { color: var(--secondary); }
+  @media (hover: hover) and (pointer: fine) { .pe-tab:hover { color: var(--primary); } }
+  .pe-cuerpo { overflow-y: auto; overscroll-behavior: contain; padding: 14px 18px 18px; }
+  .pe-seccion[hidden] { display: none !important; }
+  .pe-seccion h3 { margin: 0; font: 800 14px 'Poppins', sans-serif; color: var(--primary); }
+  .pe-formatos { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .pe-formato { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #166534; }
+  .pe-formato.zip { background: #e0f2fe; color: #075985; }
+  .pe-ayuda { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  /* El botón de descarga siempre queda a la vista al final del panel, aunque la lista de destinos sea larga. */
+  .pe-boton { width: 100%; justify-content: center; margin-top: 14px; position: sticky; bottom: 0; box-shadow: 0 14px 0 var(--surface), 0 -10px 10px -2px var(--surface); }
+  .pe-cuerpo { padding-bottom: 4px; }
+  .pe-seccion .filtros-destino { margin: 12px 0 8px; }
+  .pe-seccion .destinos-masivos { margin: 0; padding: 2px; }
+  .pe-opcion { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; font-size: 12.5px; cursor: pointer; }
   .pe-opcion input { margin-top: 3px; }
   .pe-opcion small { display: block; color: var(--muted); font-size: 11.5px; font-weight: 500; }
-  .pe-grupo { border: none; padding: 0; margin-top: 10px; min-width: 0; }
+  .pe-grupo { border: none; padding: 0; margin: 12px 0 0; min-width: 0; }
   .pe-grupo legend { padding: 0; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
   .pe-radio { display: flex; align-items: center; gap: 8px; padding: 6px 2px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
-  .pe-cuerpo :focus-visible, .pe-cabecera :focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+  .pe-cuerpo :focus-visible, .pe-cabecera :focus-visible, .pe-tabs :focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
   @media (max-width: 720px) {
     .panel-exportar { position: fixed; left: 12px; right: 12px; top: 64px; width: auto; max-height: calc(100vh - 80px); }
-    .pe-ayuda, .pe-seccion .filtros-destino, .pe-seccion .destinos-masivos, .pe-opcion, .pe-grupo { margin-left: 0; }
   }
 
   /* Explorador de historial -- panel de ancho completo (no flotante como el
@@ -638,19 +651,19 @@
               <h2 id="tituloPanelExportar">Exportar</h2>
               <button type="button" class="icon-btn-pure" id="btnCerrarExportar" aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
             </div>
+            <p class="pe-contexto" id="peContexto" aria-live="polite"></p>
+            <div class="pe-tabs" id="peTabs" role="tablist" aria-label="Qué quieres descargar">
+              <button type="button" class="pe-tab" role="tab" id="tabExpMunis" data-panel="seccionMunis" aria-controls="seccionMunis"><span class="material-symbols-rounded" aria-hidden="true">groups</span><span id="tabExpMunisTxt">Municipios y hospitales</span></button>
+              <button type="button" class="pe-tab" role="tab" id="tabExpJuris" data-panel="seccionJuris" aria-controls="seccionJuris"><span class="material-symbols-rounded" aria-hidden="true">summarize</span>Concentrado</button>
+              <button type="button" class="pe-tab" role="tab" id="tabExpKardex" data-panel="seccionKardex" aria-controls="seccionKardex"><span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>Kardex</button>
+              <button type="button" class="pe-tab" role="tab" id="tabExpRutas" data-panel="seccionRutas" aria-controls="seccionRutas"><span class="material-symbols-rounded" aria-hidden="true">route</span>Rutas</button>
+            </div>
             <div class="pe-cuerpo">
-              <section class="pe-seccion" id="seccionJuris" aria-labelledby="peTituloJuris">
-                <h3 id="peTituloJuris"><span class="pe-num">1</span> Jurisdicción</h3>
-                <p class="pe-ayuda">Lo surtido completo del mes, para toda la jurisdicción.</p>
-                <button class="btn btn-outline btn-sm pe-boton" id="btnPdfJurisdiccional">
-                  <span class="material-symbols-rounded" style="font-size:16px">summarize</span> Concentrado jurisdiccional
-                </button>
-              </section>
-
-              <section class="pe-seccion" aria-labelledby="tituloMunisHosp">
-                <h3 id="tituloMunisHosp"><span class="pe-num" id="peNumMunis">2</span> <span id="textoTituloMunis">Municipios y hospitales</span></h3>
-                <p class="pe-ayuda" id="ayudaMunis">Marca los destinos y descarga el paquete, o usa el ícono de un renglón para bajar solo ese.</p>
-                <div class="filtros-destino" role="group" aria-label="Filtrar destinos">
+              <section class="pe-seccion" id="seccionMunis" role="tabpanel" aria-labelledby="tabExpMunis">
+                <h3 id="tituloMunisHosp"><span id="textoTituloMunis">Requisición por municipio y hospital</span></h3>
+                <div class="pe-formatos"><span class="pe-formato">Excel</span><span class="pe-formato zip">.zip con un archivo por destino</span></div>
+                <p class="pe-ayuda" id="ayudaMunis">Marca los destinos que quieras y descárgalos juntos, o usa la flecha de un renglón para bajar solo ese.</p>
+                <div class="filtros-destino" role="group" aria-label="Marcar destinos por tipo">
                   <button type="button" class="chip-filtro" data-filtro-destino="todos">Todos</button>
                   <button type="button" class="chip-filtro" data-filtro-destino="municipios">Municipios</button>
                   <button type="button" class="chip-filtro" data-filtro-destino="hospitales">Hospitales</button>
@@ -658,16 +671,35 @@
                 <div class="destinos-masivos" id="destinosMasivos"></div>
                 <label class="pe-opcion">
                   <input type="checkbox" id="chkIncluirUnidades" checked>
-                  <span><b>Incluir las unidades</b><small>Una pestaña por cada unidad del municipio, dentro del mismo archivo.</small></span>
+                  <span><b>Incluir las unidades</b><small>Agrega, dentro de cada archivo, una pestaña por cada unidad del municipio.</small></span>
                 </label>
                 <button class="btn btn-primary btn-sm pe-boton" id="btnExportarMasivo">
                   <span class="material-symbols-rounded" style="font-size:16px">folder_zip</span> Descargar seleccionados (.zip)
                 </button>
               </section>
 
-              <section class="pe-seccion" id="seccionRutas" style="display:none;" aria-labelledby="peTituloRutas">
-                <h3 id="peTituloRutas"><span class="pe-num" id="peNumRutas">3</span> Distribución de rutas</h3>
-                <p class="pe-ayuda">Querétaro: hojas GENERAL, RUTA 1, RUTA 2, RUTA 3 y CARAVANAS, tamaño carta.</p>
+              <section class="pe-seccion" id="seccionJuris" role="tabpanel" aria-labelledby="tabExpJuris" hidden>
+                <h3>Concentrado jurisdiccional</h3>
+                <div class="pe-formatos"><span class="pe-formato">Excel</span></div>
+                <p class="pe-ayuda">Un solo archivo con todo lo surtido de la entrega activa, para toda la jurisdicción.</p>
+                <button class="btn btn-primary btn-sm pe-boton" id="btnPdfJurisdiccional">
+                  <span class="material-symbols-rounded" style="font-size:16px">summarize</span> Descargar concentrado
+                </button>
+              </section>
+
+              <section class="pe-seccion" id="seccionKardex" role="tabpanel" aria-labelledby="tabExpKardex" style="display:none;" hidden>
+                <h3 id="peTituloKardex">Kardex del mes</h3>
+                <div class="pe-formatos"><span class="pe-formato">Excel</span><span class="pe-formato zip">.zip con 2 libros</span></div>
+                <p class="pe-ayuda" id="kardexAyuda">Tarjetas de control de biológicos del mes elegido arriba: un libro por unidad y otro por municipio. Junta todas las entregas del mes en una sola tarjeta y cada entrada conserva la fecha de su entrega.</p>
+                <button class="btn btn-primary btn-sm pe-boton" id="btnExportarKardex">
+                  <span class="material-symbols-rounded" style="font-size:16px">inventory_2</span> Descargar Kardex del mes (.zip)
+                </button>
+              </section>
+
+              <section class="pe-seccion" id="seccionRutas" role="tabpanel" aria-labelledby="tabExpRutas" style="display:none;" hidden>
+                <h3 id="peTituloRutas">Distribución de rutas</h3>
+                <div class="pe-formatos"><span class="pe-formato">Excel</span></div>
+                <p class="pe-ayuda">Querétaro: hojas GENERAL, RUTA 1, RUTA 2, RUTA 3 y CARAVANAS, tamaño carta. Elige de qué entregas del mes.</p>
                 <fieldset class="pe-grupo">
                   <legend>Entregas del mes</legend>
                   <div class="destinos-masivos" id="rutasEntregas"></div>
@@ -679,14 +711,6 @@
                 </fieldset>
                 <button class="btn btn-primary btn-sm pe-boton" id="btnExportarRutas">
                   <span class="material-symbols-rounded" style="font-size:16px">route</span> Descargar distribución de rutas
-                </button>
-              </section>
-
-              <section class="pe-seccion" id="seccionKardex" style="display:none;" aria-labelledby="peTituloKardex">
-                <h3 id="peTituloKardex"><span class="pe-num" id="peNumKardex">3</span> Kardex del mes</h3>
-                <p class="pe-ayuda" id="kardexAyuda">Tarjetas de control de biológicos del mes elegido arriba, armadas con lo capturado aquí: un libro por unidad y otro por municipio, en un solo .zip. Las entregas del mes van acumuladas en una sola tarjeta y cada entrada conserva la fecha de su entrega.</p>
-                <button class="btn btn-primary btn-sm pe-boton" id="btnExportarKardex">
-                  <span class="material-symbols-rounded" style="font-size:16px">inventory_2</span> Descargar Kardex del mes (.zip)
                 </button>
               </section>
             </div>
