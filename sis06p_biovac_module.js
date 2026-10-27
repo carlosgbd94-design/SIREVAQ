@@ -3234,7 +3234,8 @@
     caja.style.display = 'flex';
     document.getElementById('dockEstadoTitulo').textContent = est === 'BORRADOR' ? 'Borrador' : est === 'ENVIADO' ? 'Enviado' : 'Validado';
     document.getElementById('dockPunto').className = 'dock-punto ' + (est === 'ENVIADO' ? 'enviado' : est === 'VALIDADO' ? 'validado' : '');
-    const hayDif = est === 'BORRADOR' && filas !== null && difs.length > 0;
+    // Rojo solo cuando el envío ya abrió: antes, lo que falta por cuadrar es parte normal de la captura
+    const hayDif = est === 'BORRADOR' && filas !== null && difs.length > 0 && !(v && !v.dentro_envio);
     document.getElementById('dockPunto').style.background = hayDif ? '#dc2626' : '';
     const detEl = document.getElementById('dockEstadoDetalle');
     detEl.textContent = detalle;
