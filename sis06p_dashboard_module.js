@@ -161,6 +161,8 @@
     const lotes = Number(f.movimiento_lotes) || 0;
     if (dosis === 0 && lotes === 0) return '<span style="color:#cbd5e1;">—</span>';
     const n = Number(f.diferencias) || 0;
+    // Una unidad que todavía no envía sigue capturando: lo que falta por cuadrar es normal, sin tono de advertencia
+    if (n > 0 && f.estado !== 'ENVIADO' && f.estado !== 'VALIDADO') return `<span style="font-size:10px; font-weight:800; background:#f1f5f9; color:#475569; padding:2px 9px; border-radius:20px; white-space:nowrap;">${n} por cuadrar</span>`;
     if (n > 0) return `<span style="font-size:10px; font-weight:800; background:var(--warning-bg); color:var(--warning); padding:2px 9px; border-radius:20px; white-space:nowrap;">${n} ${n === 1 ? 'no coincide' : 'no coinciden'}</span>`;
     return '<span style="font-size:10px; font-weight:800; background:var(--success-bg); color:var(--success); padding:2px 9px; border-radius:20px;">Coincide</span>';
   }
