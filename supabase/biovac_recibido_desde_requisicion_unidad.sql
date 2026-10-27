@@ -18,7 +18,7 @@ as $$
 declare
   v_perfil perfiles%rowtype; v_rol text;
   v_unidad biovac_unidades%rowtype; v_requ uuid;
-  v_inicio date;
+  v_inicio date; v_hosp boolean;
   v_mov uuid; v_estado text;
   v_cargados int := 0; v_ceros int := 0; v_lotes int := 0;
   r record; v_lote uuid; v_n int;
@@ -38,9 +38,11 @@ begin
   end if;
 
   select * into v_unidad from biovac_unidades where clues = p_clues and activo;
-  if not found or p_clues like 'JS1-%' or v_unidad.municipio in ('NHG', 'HENM') then return jsonb_build_object('omitido', 'unidad no aplica'); end if;
-  select valor::date into v_inicio from sis_config where clave = 'inicio_captura_por_unidad';
-  if make_date(p_anio, p_mes, 1) < coalesce(v_inicio, date '2026-10-01') then return jsonb_build_object('omitido', 'mes de prueba'); end if;
+  if not found or p_clues like 'JS1-%' then return jsonb_build_object('omitido', 'unidad no aplica'); end if;
+  -- Los hospitales (HENM, NHG) también heredan su recibido de Requisiciones (reparto de su destino), desde su propio arranque.
+  v_hosp := v_unidad.municipio in ('NHG', 'HENM');
+  select valor::date into v_inicio from sis_config where clave = case when v_hosp then 'inicio_captura_hospitales' else 'inicio_captura_por_unidad' end;
+  if make_date(p_anio, p_mes, 1) < coalesce(v_inicio, case when v_hosp then date '2026-09-01' else date '2026-10-01' end) then return jsonb_build_object('omitido', 'mes anterior al arranque'); end if;
   select id into v_requ from requi_unidades where clues = p_clues limit 1;
   if v_requ is null then return jsonb_build_object('omitido', 'sin unidad en Requisiciones'); end if;
 
@@ -105,23 +107,26 @@ grant execute on function public.biovac_sincronizar_recibido_unidad(text, int, i
 create or replace function public.biovac_trg_recibido_requisicion() returns trigger
 language plpgsql security definer set search_path = public
 as $$
-declare v_clues text; v_muni text; v_anio int; v_mes int; v_inicio date;
+declare v_clues text; v_muni text; v_anio int; v_mes int; v_inicio date; v_mov uuid;
 begin
-  if coalesce(current_setting('biovac.bypass_lock', true), 'off') = 'on' then return new; end if;
-  if coalesce(current_setting('request.path', true), '') like '%/rpc/%' then return new; end if;   -- funciones del sistema (dictamen, reclasificar, sincronizar)
-  if new.categoria is distinct from 'NORMAL' then return new; end if;
+  if coalesce(current_setting('biovac.bypass_lock', true), 'off') = 'on' then return coalesce(new, old); end if;
+  if coalesce(current_setting('request.path', true), '') like '%/rpc/%' then return coalesce(new, old); end if;   -- funciones del sistema (dictamen, reclasificar, sincronizar)
+  if coalesce(new.categoria, old.categoria) is distinct from 'NORMAL' then return coalesce(new, old); end if;
   if tg_op = 'UPDATE' and new.recibido_frascos is not distinct from old.recibido_frascos then return new; end if;
   if tg_op = 'INSERT' and coalesce(new.recibido_frascos, 0) = 0 then return new; end if;
-  if _sis_rol_actual() is distinct from 'UNIDAD' then return new; end if;
+  if tg_op = 'DELETE' and coalesce(old.recibido_frascos, 0) = 0 then return old; end if;
+  if _sis_rol_actual() is distinct from 'UNIDAD' then return coalesce(new, old); end if;
+  v_mov := coalesce(new.movimiento_id, old.movimiento_id);
   select bu.clues, bu.municipio, m.anio, m.mes into v_clues, v_muni, v_anio, v_mes
-  from biovac_movimientos m join biovac_unidades bu on bu.id = m.unidad_id where m.id = new.movimiento_id;
-  if v_clues is null or v_clues like 'JS1-%' or v_muni in ('NHG', 'HENM') then return new; end if;
-  select valor::date into v_inicio from sis_config where clave = 'inicio_captura_por_unidad';
-  if make_date(v_anio, v_mes, 1) < coalesce(v_inicio, date '2026-10-01') then return new; end if;
-  raise exception 'El recibido de la unidad viene de Requisiciones: no se captura ni se cambia aquí. Si algo no coincide con lo que llegó, avisa al municipal.' using errcode = '42501';
+  from biovac_movimientos m join biovac_unidades bu on bu.id = m.unidad_id where m.id = v_mov;
+  if v_clues is null or v_clues like 'JS1-%' then return coalesce(new, old); end if;
+  select valor::date into v_inicio from sis_config
+   where clave = case when v_muni in ('NHG', 'HENM') then 'inicio_captura_hospitales' else 'inicio_captura_por_unidad' end;
+  if make_date(v_anio, v_mes, 1) < coalesce(v_inicio, case when v_muni in ('NHG', 'HENM') then date '2026-09-01' else date '2026-10-01' end) then return coalesce(new, old); end if;
+  raise exception 'El recibido de la unidad viene de Requisiciones: no se captura, no se cambia ni se quita aquí. Si algo no coincide con lo que llegó, avisa al municipal.' using errcode = '42501';
 end;
 $$;
 
 drop trigger if exists trg_biovac_recibido_requisicion on biovac_renglones;
-create trigger trg_biovac_recibido_requisicion before insert or update of recibido_frascos on biovac_renglones
+create trigger trg_biovac_recibido_requisicion before insert or update of recibido_frascos or delete on biovac_renglones
 for each row execute function public.biovac_trg_recibido_requisicion();

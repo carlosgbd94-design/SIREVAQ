@@ -47,7 +47,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.85"></script>
+<script defer src="biovac_ui.js?v=2026.87"></script>
 <script defer src="sis06p_biovac_module.js?v=2026.61"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.24"></script>
@@ -726,6 +726,12 @@ window.onunhandledrejection = function (event) {
   }
   .badge-vencido .material-symbols-rounded { font-size: 12px; }
 
+  .nota-lotes-requisicion { display: flex; align-items: center; gap: 8px; margin: 10px 4px 2px; padding: 9px 12px; border-radius: 12px; background: var(--surface-container); font-size: 12.5px; color: #4b5b70; }
+  .nota-lotes-requisicion .material-symbols-rounded { font-size: 18px; color: var(--secondary); }
+  .nota-panel-agregar { margin: 0 0 10px; font-size: 12.5px; color: #4b5b70; }
+  .nota-lote-requi { display: inline-flex; align-items: center; color: var(--muted); padding: 4px; }
+  .nota-lote-requi .material-symbols-rounded { font-size: 16px; }
+  input.sr-solo { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; opacity: 0; }
   .recibido-requi { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--text); }
   .recibido-requi .material-symbols-rounded { font-size: 14px; color: var(--muted); }
   /* Desglose por unidad dentro del Movimiento del municipio */

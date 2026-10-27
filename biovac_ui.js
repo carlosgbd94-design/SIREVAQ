@@ -1631,13 +1631,27 @@ async function ofrecerCargaDesdeRequisiciones() {
 // Desde el arranque por unidad (octubre 2026) el recibido de cada unidad es EXACTAMENTE lo que Requisiciones le repartió: lo
 // deja igual el servidor (todas las entregas, COVID-19 incluido) y la unidad no lo teclea. Antes lo cargaba el navegador al abrir
 // el Movimiento y la unidad podía cambiarlo.
+function unidadDelMovimiento(m) {
+  const mv = m || estado.movimiento;
+  return mv ? (estado.unidades || []).find((x) => x.id === mv.unidad_id) : null;
+}
 function movimientoRecibeDeRequisicion(m) {
   const mv = m || estado.movimiento;
   if (!mv) return false;
-  return `${mv.anio}-${String(mv.mes).padStart(2, '0')}-01` >= (estado.inicioPorUnidad || '2026-10-01');
+  const u = unidadDelMovimiento(mv);
+  if (u && u.clues && u.clues.startsWith('JS1-')) return false;
+  // Los hospitales (HENM, NHG) también heredan su recibido de Requisiciones, desde su propio arranque.
+  const hospital = Boolean(u && MUNICIPIOS_HOSPITAL.indexOf(u.municipio) >= 0);
+  const inicio = hospital ? (estado.inicioHospitales || '2026-09-01') : (estado.inicioPorUnidad || '2026-10-01');
+  return `${mv.anio}-${String(mv.mes).padStart(2, '0')}-01` >= inicio;
 }
+// El recibido es de solo lectura para la UNIDAD y, en los hospitales, también para la Jurisdicción (que los captura por ellos).
 function recibidoSoloDeRequisicion() {
-  return Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD' && movimientoRecibeDeRequisicion());
+  const rol = estado.perfil ? estado.perfil.rol : null;
+  if (!movimientoRecibeDeRequisicion()) return false;
+  const u = unidadDelMovimiento();
+  const hospital = Boolean(u && MUNICIPIOS_HOSPITAL.indexOf(u.municipio) >= 0);
+  return rol === 'UNIDAD' || (hospital && rol === 'JURISDICCIONAL');
 }
 async function sincronizarRecibidoDesdeRequisicion(unidadClues) {
   const m = estado.movimiento;
@@ -1646,15 +1660,14 @@ async function sincronizarRecibidoDesdeRequisicion(unidadClues) {
   if (data && ((data.renglones_actualizados || 0) > 0 || (data.lotes_nuevos || 0) > 0 || (data.recibido_sin_respaldo_en_cero || 0) > 0)) {
     await cargarRenglones();
     render();
-    toast('Tu recibido se actualizó con lo que Requisiciones te asignó.', 'ok');
+    toast('El recibido se actualizó con lo que Requisiciones asignó.', 'ok');
   }
 }
 
 async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
   if (!unidadClues) return;
   if (!ventanaPrecargaAbierta(estado.movimiento.anio, estado.movimiento.mes)) return;
-  const esHospitalU = ((estado.unidades || []).find((u) => u.clues === unidadClues) || {}).municipio;
-  if (movimientoRecibeDeRequisicion() && MUNICIPIOS_HOSPITAL.indexOf(esHospitalU) < 0) { await sincronizarRecibidoDesdeRequisicion(unidadClues); return; }
+  if (movimientoRecibeDeRequisicion()) { await sincronizarRecibidoDesdeRequisicion(unidadClues); return; }
 
   // Un mes puede tener varias entregas (cada una es su propia requisición): se juntan todas.
   const { data: reqsMes } = await estado.db.from('requi_requisiciones')
@@ -1931,7 +1944,7 @@ function encabezadoColumnas(split, clave) {
       <th style="text-align:left"${rs}>Lote</th>
       <th${rs}>Caducidad</th>
       <th class="c-ant"${rs} title="Lo que quedó del mes anterior (un renglón por lote)"><span class="th-con-icono"><span class="material-symbols-rounded">inventory_2</span>Existencia anterior</span></th>
-      <th class="c-rec"${rs} title="Entradas de este mes. Si recibiste un lote que ya tienes, captúralo aquí en su renglón"><span class="th-con-icono"><span class="material-symbols-rounded">move_to_inbox</span>Recibido</span></th>
+      <th class="c-rec"${rs} title="${recibidoSoloDeRequisicion() ? 'Viene de Requisiciones: no se captura aquí' : 'Entradas de este mes. Si recibiste un lote que ya tienes, captúralo aquí en su renglón'}"><span class="th-con-icono"><span class="material-symbols-rounded">move_to_inbox</span>Recibido</span></th>
       <th class="c-apl" colspan="${split ? 2 : 1}"><span class="th-con-icono"><span class="material-symbols-rounded">vaccines</span>Dosis aplicadas</span></th>
       <th class="c-des" colspan="${split ? 2 : 1}"><span class="th-con-icono"><span class="material-symbols-rounded">delete_sweep</span>Dosis desechadas</span></th>
       <th class="c-fin"${rs}><span class="th-con-icono"><span class="material-symbols-rounded">calculate</span>Final</span></th>
@@ -2240,7 +2253,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     ${split ? `<td class="col-mov c-des col-dosis-1">${campo('desechadas_b', r.desechadas_b)}</td>` : ''}
     <td class="col-final c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}" data-existencia-final="${r.id}">${dosis}</span></td>
     <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}</td>
-    <td>${editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
+    <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<span class="nota-lote-requi" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
   </tr>${filaResolver}${porUnidades ? filaPorUnidadHtml(r, aporte, cols) : ''}`;
 }
 
@@ -2356,13 +2369,22 @@ function panelPasarArfHtml(renglonId, existenciaActual) {
 function renderPanelAgregar(bio) {
   const bioId = bio.id;
   const antOk = anteriorEditablePorRol();
-  return `
-  <button type="button" class="btn-agregar-lote" aria-expanded="false" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add_circle</span> Agregar lote a ${bio.nombre_excel.replace(/\n/g, ' ')}</button>
+  const soloReq = recibidoSoloDeRequisicion();
+  // Con el recibido de Requisiciones ya cargado, «agregar lote» solo sirve para registrar lo que la unidad YA TENÍA del mes
+  // pasado (su primer mes); después ya no hay nada que agregar a mano: los lotes llegan solos.
+  if (soloReq && !antOk) {
+    return `<p class="nota-lotes-requisicion"><span class="material-symbols-rounded" aria-hidden="true">inventory</span><span>Los lotes que recibes llegan <b>solos</b> desde Requisiciones. Si te falta uno, avísale a tu municipal.</span></p>`;
+  }
+  if (soloReq) {
+    return `
+  <button type="button" class="btn-agregar-lote" aria-expanded="false" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add_circle</span> Agregar un lote que ya tenías de ${bio.nombre_excel.replace(/\n/g, ' ')}</button>
   <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
+    <p class="nota-panel-agregar">Solo para lo que te quedó del mes pasado. Lo que recibiste este mes ya está cargado desde Requisiciones.</p>
+    <input type="radio" class="sr-solo" name="tipo-cant-${bioId}" value="ANTERIOR" data-nuevo-tipo-cantidad checked aria-hidden="true" tabindex="-1">
     <div class="campos">
       <div class="campo">
         <label>1. Estatus</label>
-        <select data-nuevo-categoria>
+        <select data-nuevo-categoria aria-label="Estatus del lote">
           <option value="">Selecciona el Estatus…</option>
           <option value="NORMAL">Normal</option>
           <option value="ARF">A.R.F. (en dictamen)</option>
@@ -2371,12 +2393,45 @@ function renderPanelAgregar(bio) {
       </div>
       <div class="campo campo-lote">
         <label>2. N° de lote</label>
-        <select data-nuevo-lote disabled><option value="">Primero elige el Estatus…</option></select>
+        <select data-nuevo-lote disabled aria-label="Número de lote"><option value="">Primero elige el Estatus…</option></select>
+      </div>
+      <div class="campo">
+        <label>Caducidad</label>
+        <input type="text" data-nuevo-caducidad aria-label="Caducidad del lote" placeholder="Se completa al elegir el lote" readonly>
+      </div>
+      <div class="campo">
+        <label>3. Cuántos frascos tenías</label>
+        <input type="number" step="any" data-nuevo-cantidad aria-label="Cuántos frascos" placeholder="0">
+      </div>
+      <div class="alerta-lote-repetido" data-alerta-repetido></div>
+    </div>
+    <div class="acciones">
+      <button class="btn-primario btn-mini" data-action="confirmar-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">check</span> Agregar lote</button>
+      <button class="btn-fantasma btn-mini" data-action="cancelar-agregar" data-bio="${bioId}">Cancelar</button>
+    </div>
+  </div>`;
+  }
+  return `
+  <button type="button" class="btn-agregar-lote" aria-expanded="false" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add_circle</span> Agregar lote a ${bio.nombre_excel.replace(/\n/g, ' ')}</button>
+  <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
+    <div class="campos">
+      <div class="campo">
+        <label>1. Estatus</label>
+        <select data-nuevo-categoria aria-label="Estatus del lote">
+          <option value="">Selecciona el Estatus…</option>
+          <option value="NORMAL">Normal</option>
+          <option value="ARF">A.R.F. (en dictamen)</option>
+          <option value="CANJE">Canje</option>
+        </select>
+      </div>
+      <div class="campo campo-lote">
+        <label>2. N° de lote</label>
+        <select data-nuevo-lote disabled aria-label="Número de lote"><option value="">Primero elige el Estatus…</option></select>
         <span class="ayuda">Lotes dados de alta en Carga de lotes por municipio — para A.R.F. se ofrecen también los lotes dados de alta como Normal, porque suele ser el mismo lote en dictamen</span>
       </div>
       <div class="campo">
         <label>Caducidad</label>
-        <input type="text" data-nuevo-caducidad placeholder="Se completa al elegir el lote" readonly>
+        <input type="text" data-nuevo-caducidad aria-label="Caducidad del lote" placeholder="Se completa al elegir el lote" readonly>
       </div>
       <div class="campo campo-tipo">
         <span class="etiqueta-grupo" id="tipo-cant-lbl-${bioId}">3. Tipo de cantidad</span>
@@ -2387,7 +2442,7 @@ function renderPanelAgregar(bio) {
       </div>
       <div class="campo">
         <label>4. Cuántos frascos</label>
-        <input type="number" step="any" data-nuevo-cantidad placeholder="0">
+        <input type="number" step="any" data-nuevo-cantidad aria-label="Cuántos frascos" placeholder="0">
       </div>
       <div class="alerta-lote-repetido" data-alerta-repetido>
         <span class="material-symbols-rounded">warning</span>
@@ -2970,7 +3025,9 @@ function renderGuiaCaptura(m, editable) {
     <div class="paso ant"><b><i class="n">1</i>Existencia anterior</b>${estado.anteriorEditable === false
       ? 'Viene <u>sola</u> del cierre del mes pasado: no se captura ni se edita.'
       : 'Lo que te quedó del mes pasado: <u>un renglón por lote</u>. Solo se captura este primer mes.'}</div>
-    <div class="paso rec"><b><i class="n">2</i>Recibido</b>Entradas de este mes. ¿Es un lote que ya tienes? Captúralo en <u>su misma fila</u>, no lo agregues otra vez.</div>
+    ${recibidoSoloDeRequisicion()
+      ? '<div class="paso rec"><b><i class="n">2</i>Recibido</b>Viene <u>solo</u> de Requisiciones (candado): ya está cargado, no se captura. Si no coincide con lo que llegó, avisa a tu municipal.</div>'
+      : '<div class="paso rec"><b><i class="n">2</i>Recibido</b>Entradas de este mes. ¿Es un lote que ya tienes? Captúralo en <u>su misma fila</u>, no lo agregues otra vez.</div>'}
     <div class="paso sal"><b><i class="n">3</i>Aplicadas y desechadas</b>Lo que salió durante el mes.</div>
     <div class="paso fin"><b><i class="n">4</i>Final</b>Se calcula sola.${estado.anteriorEditable === false ? ' Con el bote quitas un lote que no corresponde.' : ' Con el lápiz corriges una cifra; con el bote quitas el lote.'}</div>`;
 }

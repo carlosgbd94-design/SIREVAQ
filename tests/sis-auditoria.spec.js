@@ -186,3 +186,35 @@ test('Recibido de la unidad: desde octubre es solo de Requisiciones (la unidad n
   });
   expect(r).toEqual({ unidadOct: true, unidadSep: false, municipalOct: false, adminOct: false, unidadNov: true });
 });
+
+test('Agregar lote de la unidad (con recibido de Requisiciones): primer mes solo existencia anterior; después no hay nada que agregar; hospitales también heredan', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  const r = await page.evaluate(() => {
+    estado.unidades = [{ id: 'u1', clues: 'QTSSA000001', municipio: 'QUERETARO' }, { id: 'h1', clues: 'QTSSA001740', municipio: 'HENM' }];
+    const bio = { id: 'b1', nombre_excel: 'BCG\nfrasco multidosis' };
+    estado.perfil = { ...estado.perfil, rol: 'UNIDAD' };
+    estado.movimiento = { anio: 2026, mes: 10, unidad_id: 'u1', estado: 'BORRADOR' };
+    estado.anteriorEditable = true;
+    const primerMes = renderPanelAgregar(bio);
+    estado.anteriorEditable = false;
+    const despues = renderPanelAgregar(bio);
+    estado.movimiento = { anio: 2026, mes: 9, unidad_id: 'u1', estado: 'BORRADOR' };   // mes de prueba: sigue el flujo anterior
+    estado.anteriorEditable = true;
+    const septiembre = renderPanelAgregar(bio);
+    estado.movimiento = { anio: 2026, mes: 10, unidad_id: 'h1', estado: 'BORRADOR' };
+    estado.perfil = { ...estado.perfil, rol: 'JURISDICCIONAL' };
+    const hospitalJuris = recibidoSoloDeRequisicion();
+    estado.movimiento = { anio: 2026, mes: 10, unidad_id: 'u1', estado: 'BORRADOR' };
+    const unidadJuris = recibidoSoloDeRequisicion();   // la Jurisdicción no bloquea el recibido de una unidad común
+    return { primerMes, despues, septiembre, hospitalJuris, unidadJuris };
+  });
+  expect(r.primerMes).toContain('Agregar un lote que ya tenías');
+  expect(r.primerMes).toContain('Cuántos frascos tenías');
+  expect(r.primerMes).not.toContain('Tipo de cantidad');
+  expect(r.primerMes).not.toContain('Recibido este mes');
+  expect(r.despues).toContain('llegan <b>solos</b> desde Requisiciones');
+  expect(r.despues).not.toContain('data-panel-agregar');
+  expect(r.septiembre).toContain('Tipo de cantidad');               // antes del arranque nada cambia
+  expect(r.hospitalJuris).toBe(true);
+  expect(r.unidadJuris).toBe(false);
+});
