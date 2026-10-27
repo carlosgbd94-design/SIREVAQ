@@ -352,10 +352,10 @@ function explicarValidacion(v) {
     };
   }
   if (v.codigo === 'LOTE_CADUCADO' || v.codigo === 'LOTE_PROXIMO_A_CADUCAR') {
-    const f = filas.filter((x) => Number(x.existencia_final_frascos) > 0);
+    const f = filas.filter((x) => Number(x.existencia_final_frascos) > 0 && (!x.categoria || x.categoria === 'NORMAL'));
     const total = redondearFrascos(suma(f.length ? f : filas, 'existencia_final_frascos'));
     const cad = f.length ? formatMmmAa(f[0].caducidad) : '';
-    const enDictamen = f.some((x) => x.categoria !== 'NORMAL');
+    const enDictamen = false;
     if (v.codigo === 'LOTE_CADUCADO') {
       return {
         que: `Este lote caducó (${cad}) y todavía tiene ${total} frascos en existencia${enDictamen ? ' (parte en A.R.F. o canje)' : ''}.`,
@@ -388,6 +388,8 @@ function avisosDeCaducidad(filas, anio, mes) {
   const vistos = new Map();
   (filas || []).forEach((f) => {
     if (!f.caducidad || !(Number(f.existencia_final_frascos) > 0)) return;
+    // Lo que ya está en A.R.F. o canje está en trámite: solo el stock Normal es utilizable y puede alertar (igual que en la unidad)
+    if (f.categoria && f.categoria !== 'NORMAL') return;
     const cod = f.caducidad < ref ? 'LOTE_CADUCADO' : (f.caducidad <= limite ? 'LOTE_PROXIMO_A_CADUCAR' : null);
     if (!cod) return;
     const k = cod + '|' + f.biologico_id + '|' + f.numero_lote;

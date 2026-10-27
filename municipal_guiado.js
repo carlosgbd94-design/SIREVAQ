@@ -944,7 +944,7 @@
         </nav>`);
     }
     $('rutaMes').style.display = 'flex';
-    document.title = 'SINBA-SIS municipal — SIREVAQ';
+    document.title = st.modo === 'juris' ? 'SINBA-SIS · Cierre de hospitales — SIREVAQ' : 'SINBA-SIS municipal — SIREVAQ';
     // "Usuario" es solo la sesión (queda oculto pero se sigue usando para la auditoría) y
     // "Municipio" solo hace falta si el perfil tiene más de uno.
     const ocultarCampo = (id) => { const c = $(id) && $(id).closest('.campo'); if (c) c.style.display = 'none'; };

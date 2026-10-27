@@ -132,3 +132,16 @@ test('Jurisdicción: el visualizador no tiene acceso a esta pantalla y regresa a
   await page.goto('/biovac_jurisdiccion.html', { waitUntil: 'load' });
   await expect(page).toHaveURL(/index\.html/, { timeout: 15000 });
 });
+
+test('Jurisdicción: un lote caducado que ya está en A.R.F. o canje no genera aviso; el stock Normal sí', async ({ page }) => {
+  await abrir(page);
+  const r = await page.evaluate(() => {
+    const fila = (cat, fin) => ({ caducidad: '2025-06-30', existencia_final_frascos: fin, categoria: cat, biologico_id: 'b1', numero_lote: 'L1', nombre_excel: 'BCG' });
+    return {
+      soloCanje: avisosDeCaducidad([fila('CANJE', 10), fila('ARF', 2)], 2026, 10).length,
+      conNormal: avisosDeCaducidad([fila('CANJE', 10), fila('NORMAL', 3)], 2026, 10).map((a) => a.codigo)
+    };
+  });
+  expect(r.soloCanje).toBe(0);
+  expect(r.conNormal).toEqual(['LOTE_CADUCADO']);
+});
