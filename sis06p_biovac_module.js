@@ -768,12 +768,19 @@
       return;
     }
     const esUnidad = estado.perfil && estado.perfil.rol === 'UNIDAD';
-    cont.style.cssText = 'display:block; margin-bottom:14px; padding:14px 16px; border-radius:12px; font-size:13px; font-weight:700; background:#fef2f2; color:#991b1b; border:2px solid #f87171; box-shadow:0 2px 10px rgba(220,38,38,.15);';
+    // Igual que el aviso de arriba: mientras el envío no abre, lo que falta por cuadrar es parte normal de la captura (tono
+    // tranquilo, sin alarma). Con el envío abierto (o ya enviado) vuelve a ser alerta roja.
+    const sinEnviarC = !currentReport || currentReport.estado === 'BORRADOR';
+    const preliminar = sinEnviarC && Boolean(_ventanaCache) && !_ventanaCache.dentro_envio;
+    cont.setAttribute('role', preliminar ? 'status' : 'alert');
+    cont.style.cssText = preliminar
+      ? 'display:block; margin-bottom:14px; padding:14px 16px; border-radius:12px; font-size:13px; font-weight:700; background:#f8fafc; color:#334155; border:1px solid #cbd5e1;'
+      : 'display:block; margin-bottom:14px; padding:14px 16px; border-radius:12px; font-size:13px; font-weight:700; background:#fef2f2; color:#991b1b; border:2px solid #f87171; box-shadow:0 2px 10px rgba(220,38,38,.15);';
     cont.innerHTML = `
       <div style="display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap; justify-content:space-between;">
-        <div style="flex:1; min-width:240px; font-size:14px; font-weight:800;"><span class="material-symbols-rounded" aria-hidden="true" style="font-size:20px; vertical-align:middle;">error</span>
-          ${dif.length === 1 ? '1 biológico NO coincide' : dif.length + ' biológicos NO coinciden'} con el Movimiento.
-          <div style="font-size:12px; font-weight:600; margin-top:3px;">${esUnidad ? 'No podrás enviar hasta que las dosis aplicadas sean iguales: corrige el paloteo aquí o las «aplicadas» por lote en el Movimiento.' : 'No se puede validar hasta que coincidan: corrige el lado que esté mal (modo revisión).'}</div>
+        <div style="flex:1; min-width:240px; font-size:14px; font-weight:800;"><span class="material-symbols-rounded" aria-hidden="true" style="font-size:20px; vertical-align:middle;">${preliminar ? 'pending_actions' : 'error'}</span>
+          ${preliminar ? (dif.length === 1 ? '1 biológico por cuadrar con el Movimiento' : dif.length + ' biológicos por cuadrar con el Movimiento') : (dif.length === 1 ? '1 biológico NO coincide con el Movimiento.' : dif.length + ' biológicos NO coinciden con el Movimiento.')}
+          <div style="font-size:12px; font-weight:600; margin-top:3px;">${preliminar ? 'Es normal mientras capturas. Antes de enviar, deja las dosis aplicadas iguales: corrige el paloteo aquí o las «aplicadas» por lote en el Movimiento.' : esUnidad ? 'No podrás enviar hasta que las dosis aplicadas sean iguales: corrige el paloteo aquí o las «aplicadas» por lote en el Movimiento.' : 'No se puede validar hasta que coincidan: corrige el lado que esté mal (modo revisión).'}</div>
         </div>
         <button type="button" class="btn-secundario btn-mini" data-dif-ir="mov"><span class="material-symbols-rounded" aria-hidden="true">medication_liquid</span> Ir al Movimiento</button>
       </div>

@@ -71,5 +71,5 @@ update requi_unidades set nombre_impresion='UMME MÉDICO DENTAL', direccion=null
 update requi_unidades set nombre_impresion='C.S. SANTA ROSA JAUREGUI', direccion='Rio Bravo S/N, Rivera Mexicana, SRJ, Querétaro.' where clues='QTSSA012655';
 update requi_unidades set nombre_impresion='C.S SATÉLITE', direccion='Cordillera Himalaya S/N, Colinas del poniente, Satélite, Querétaro' where clues='QTSSA012923';
 update requi_unidades set nombre_impresion='C.S. SAN PEDRO MÁRTIR', direccion='Hidalgo S/N, San Pedro Martir, Querétaro.' where clues='QTSSA012976';
-update requi_unidades set nombre_impresion='C.S LOMAS DE CASABLANCA', direccion='Abraham Catellanos S/N, Reforma Agraria, Querétaro' where clues='QTSSA012982';
+update requi_unidades set nombre_impresion='C.S LOMAS DE CASABLANCA', direccion='Abraham Castellanos S/N, Reforma Agraria, Querétaro.' where clues='QTSSA012982';
 update requi_unidades set nombre_impresion='C.S TLACOTE EL BAJO', direccion='Miguel Hidalgo N.327, Tlacote, Querétaro.' where clues='QTSSA013034';

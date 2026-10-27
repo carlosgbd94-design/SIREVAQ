@@ -47,8 +47,8 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.90"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.62"></script>
+<script defer src="biovac_ui.js?v=2026.92"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.63"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.24"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
@@ -473,6 +473,8 @@ window.onunhandledrejection = function (event) {
   .aviso-caducidad.proximo { background:var(--warning-bg); border-color:var(--warning-border); color:var(--warning); }
 
   .tabla-wrap { overflow-x: auto; border-radius: 14px; border: 1px solid var(--outline-variant); }
+  /* Los textos solo-lector (.sr-solo, absolutos) quedan recortados por la tabla y no ensanchan la página en el teléfono */
+  .bloque .tabla-wrap { position: relative; }
   table.renglones { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; min-width: 720px; }
   table.renglones col.col-lote { width: 16%; }
   table.renglones col.col-caducidad { width: 11%; }
@@ -742,8 +744,8 @@ window.onunhandledrejection = function (event) {
   .aviso-caducidad.vencido small { color: #991b1b; }
   .btn-resolver.mover:hover { border-color: var(--secondary); color: var(--secondary); }
   /* Recibido bloqueado: el número queda centrado como en las demás columnas y el candado va a su lado sin moverlo */
-  .recibido-requi { position: relative; display: inline-block; font-weight: 700; color: var(--text); line-height: 1; }
-  .recibido-requi .recibido-candado { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 4px; font-size: 14px; line-height: 1; color: var(--muted); }
+  .recibido-requi { position: relative; display: inline-block; width: 76px; text-align: center; font-weight: 700; color: var(--text); line-height: 1; }
+  .recibido-requi .recibido-candado { position: absolute; right: 0; top: 50%; transform: translateY(-50%); font-size: 14px; line-height: 1; color: var(--muted); }
   /* Columna de acciones: mismo ancho y mismo borde derecho, con 2 íconos (editar, quitar) o con 1 (candado) */
   table.renglones .acciones-fila { width: 64px; justify-content: flex-end; }
   table.renglones .acciones-fila > .btn-fantasma, table.renglones .nota-lote-requi { width: 28px; height: 28px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; }

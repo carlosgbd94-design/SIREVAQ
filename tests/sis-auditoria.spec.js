@@ -239,3 +239,32 @@ test('Mover existencia: panel accesible con destinos según el estatus (un lote 
   expect(r.canje).toEqual(['NORMAL', 'ARF']);
   expect(r.violaciones).toEqual([]);
 });
+
+// Candados de «Recibido» y de la columna de acciones: misma posición en todas las filas (escritorio y teléfono), sin desborde.
+for (const [nombre, vp] of [['escritorio', { width: 1400, height: 1000 }], ['teléfono 390 px', { width: 390, height: 800 }]]) {
+  test(`Tabla de movimiento (${nombre}): los candados quedan alineados y el panel Mover no desborda`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await abrir(page, 'UNIDAD');
+    const r = await page.evaluate(() => {
+      const bio = { id: 'b1', clave: 'BCG', nombre_excel: 'B.C.G. frasco multidosis', presentacion: 'FRASCO', dosis_por_frasco: 10, regla_especial: null };
+      const lote = (id, n) => ({ id, numero_lote: n, caducidad: '2027-03-31', biologico_id: 'b1' });
+      const ren = (id, l, ant, rec) => ({ id, lote_id: l, categoria: 'NORMAL', biovac_lotes: lote(l, 'L' + l), existencia_anterior_frascos: ant, recibido_frascos: rec, aplicadas_a: 0, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, existencia_final_frascos: ant + rec });
+      estado.perfil = { ...estado.perfil, rol: 'UNIDAD' };
+      estado.movimiento = { id: 'm1', anio: 2026, mes: 10, estado: 'BORRADOR', unidad_id: 'x' };
+      estado.renglones = [ren('r1', 'l1', 1, 0), ren('r2', 'l2', 15, 30), ren('r3', 'l3', 0, 1234)];
+      const host = document.getElementById('contenedorBloques');
+      document.getElementById('panelMovimiento').style.display = 'block';
+      host.innerHTML = renderBiologico(bio, true);
+      host.querySelectorAll('[data-panel-mover]').forEach((p) => p.classList.add('abierto'));
+      const cand = [...host.querySelectorAll('.recibido-candado')].map((e) => e.getBoundingClientRect());
+      const filas = [...host.querySelectorAll('.recibido-candado')].map((e) => { const f = e.closest('tr').getBoundingClientRect(); const b = e.getBoundingClientRect(); return Math.round((b.top + b.bottom) / 2 - (f.top + f.bottom) / 2); });
+      const wrap = host.querySelector('.tabla-wrap');
+      return { n: cand.length, xs: [...new Set(cand.map((b) => Math.round(b.left)))].length, dys: [...new Set(filas)], visibles: cand.every((b) => b.width > 0), pagina: document.documentElement.scrollWidth <= innerWidth + 1, mover: host.querySelectorAll('[data-panel-mover].abierto').length, wrapScroll: wrap.scrollWidth > wrap.clientWidth };
+    });
+    expect(r.n).toBe(3);
+    expect(r.visibles).toBe(true);
+    expect(r.xs).toBe(1);                       // el candado cae en la misma x aunque el número sea 0, 30 o 1234
+    expect(r.dys.every((d) => Math.abs(d) <= 1)).toBe(true);
+    expect(r.pagina).toBe(true);                // la tabla se desplaza dentro de su contenedor, no ensancha la página
+  });
+}
