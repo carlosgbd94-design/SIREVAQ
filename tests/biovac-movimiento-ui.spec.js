@@ -177,21 +177,28 @@ test('Existencia anterior: solo el primer mes se captura; después viene sola', 
   await expect(page.locator('#guiaCaptura .paso.ant')).toContainText('primer mes');
 });
 
-test('Calculo: el primer mes es editable en meses de prueba y en el mes de arranque; el segundo ya no', async ({ page }) => {
+test('Calculo: la existencia anterior solo se captura la PRIMERA VEZ (mientras ningún mes previo tenga información)', async ({ page }) => {
   await abrir(page, 'UNIDAD');
   const r = await page.evaluate(async () => {
     estado.inicioPorUnidad = '2026-10-01';
-    const dbFalso = (movs) => ({ from: () => { const api = { select() { return api; }, eq() { return api; }, lte() { return api; }, then(ok) { return Promise.resolve({ data: movs, error: null }).then(ok); } }; return api; } });
-    estado.db = dbFalso([]);
-    const prueba = await calcularAnteriorEditable('u1', 2026, 9);                  // antes del arranque: de prueba
-    const primer = await calcularAnteriorEditable('u1', 2026, 10);                 // octubre, sin meses previos
-    estado.db = dbFalso([{ anio: 2026, mes: 10 }]);
-    const segundo = await calcularAnteriorEditable('u1', 2026, 11);                // noviembre, ya hay octubre
-    estado.db = dbFalso([{ anio: 2026, mes: 9 }]);
-    const conPrueba = await calcularAnteriorEditable('u1', 2026, 10);              // septiembre de prueba no cuenta
-    return { prueba, primer, segundo, conPrueba };
+    // Base falsa: movimientos previos y los renglones con datos (o ninguno) de esos movimientos
+    const dbFalso = (movs, renglonesConDatos) => ({ from: (tabla) => {
+      const api = { select() { return api; }, eq() { return api; }, lte() { return api; }, in() { return api; }, or() { return api; }, limit() { return api; },
+        then(ok) { return Promise.resolve({ data: tabla === 'biovac_movimientos' ? movs : renglonesConDatos, error: null }).then(ok); } };
+      return api;
+    } });
+    estado.db = dbFalso([], []);
+    const prueba = await calcularAnteriorEditable('u1', 2026, 9);                                   // antes del arranque: de prueba
+    const primer = await calcularAnteriorEditable('u1', 2026, 10);                                  // octubre, sin meses previos
+    estado.db = dbFalso([{ id: 'm10', anio: 2026, mes: 10 }], [{ id: 'r1' }]);
+    const segundoConDatos = await calcularAnteriorEditable('u1', 2026, 11);                         // noviembre, octubre ya tiene información
+    estado.db = dbFalso([{ id: 'm10', anio: 2026, mes: 10 }], []);
+    const segundoSinDatos = await calcularAnteriorEditable('u1', 2026, 11);                         // octubre quedó vacío: sigue siendo la primera vez
+    estado.db = dbFalso([{ id: 'm9', anio: 2026, mes: 9 }], [{ id: 'r1' }]);
+    const conPrueba = await calcularAnteriorEditable('u1', 2026, 10);                               // septiembre de prueba no cuenta
+    return { prueba, primer, segundoConDatos, segundoSinDatos, conPrueba };
   });
-  expect(r).toEqual({ prueba: true, primer: true, segundo: false, conPrueba: true });
+  expect(r).toEqual({ prueba: true, primer: true, segundoConDatos: false, segundoSinDatos: true, conPrueba: true });
 });
 
 test('Municipal: avisos de correcciones de Jurisdicción con la fila gris, la corrección y lo que falta', async ({ page }) => {

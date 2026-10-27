@@ -1889,7 +1889,7 @@ function avisoCaducidadMovimiento() {
   if (!vencidos.length && !caducanEsteMes.length && !proximos.length) return '';
   const lista = (rs) => `<ul>${[...new Set(rs.map(nombre))].map((t) => `<li>${t}</li>`).join('')}</ul>`;
   const bloque = (cls, icono, titulo, rs, ayuda) => rs.length
-    ? `<div class="aviso-caducidad ${cls}" role="alert"><span class="material-symbols-rounded" aria-hidden="true">${icono}</span><div><b>${titulo}</b><small>${ayuda}</small>${lista(rs)}</div></div>` : '';
+    ? `<div class="aviso-caducidad ${cls}" role="status"><span class="material-symbols-rounded" aria-hidden="true">${icono}</span><div><b>${titulo}</b><small>${ayuda}</small>${lista(rs)}</div></div>` : '';
   return `<div class="avisos-caducidad">
     ${bloque('vencido', 'event_busy', 'Biológico caduca al terminar este mes', caducanEsteMes, 'Su caducidad es este mes: aplícalo, o dalo de baja o pásalo a A.R.F. o canje antes de cerrar el mes.')}
     ${bloque('vencido', 'event_busy', 'Biológico caducado con existencia', vencidos, 'Dalo de baja como desechado, o pásalo a A.R.F. o canje si aplica, antes de cerrar el mes.')}
@@ -2203,7 +2203,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   // auditoría) y el municipio se actualiza solo; aquí solo se ajustan los lotes que NINGUNA unidad reporta (almacén municipal).
   const aporte = estado.aporteUnidades && estado.aporteUnidades.get(`${r.lote_id}|${r.categoria}`);
   const porUnidades = Boolean(editable && aporte && aporte.length);
-  const recibidoDeRequisicion = recibidoSoloDeRequisicion() && r.categoria === 'NORMAL';
+  const recibidoDeRequisicion = recibidoSoloDeRequisicion();
   const campo = (campo, valor, clase) => (campo === 'recibido_frascos' && recibidoDeRequisicion)
     ? `<span class="recibido-requi" title="Lo recibido viene de Requisiciones: no se captura aquí. Si no coincide con lo que llegó, avisa al municipal.">${valor || 0}<span class="material-symbols-rounded" aria-hidden="true">lock</span></span>`
     : (editable && !porUnidades)
@@ -2221,15 +2221,16 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   } else if (editable && subcategoria === 'canje' && Number(dosis) > 0) {
     botonResolver = `<button class="btn-resolver canje" data-action="toggle-resolver" data-renglon="${r.id}"><span class="material-symbols-rounded">sync_alt</span> Canje</button>`;
     filaResolver = `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelResolverCanjeHtml(r.id, bio)}</td></tr>`;
-  } else if (editable && !subcategoria && Number(dosis) > 0) {
-    // Un lote Normal (o parte de él) se manda a dictamen: pasa a un renglón
-    // A.R.F. del mismo lote. Es el sentido inverso del botón "Dictamen" de
-    // arriba -- ese resuelve un A.R.F. ya existente, este lo crea.
-    botonResolver = caducado
-      ? `<button class="btn-resolver arf" data-action="desechar-caducado" data-renglon="${r.id}" title="Da de baja los ${dosis} frascos: el lote caduca en ${formatMmmAa(lote.caducidad)}"><span class="material-symbols-rounded">delete_sweep</span> Desechar por caducidad</button>`
-      : `<button class="btn-resolver arf" data-action="toggle-resolver" data-renglon="${r.id}"><span class="material-symbols-rounded">gavel</span> Pasar a A.R.F.</button>`;
-    filaResolver = `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelPasarArfHtml(r.id, dosis)}</td></tr>`;
+  } else if (editable && !subcategoria && Number(dosis) > 0 && caducado) {
+    // Un lote Normal caducado solo se da de baja (mandarlo a A.R.F. o canje está en «Mover»).
+    botonResolver = `<button class="btn-resolver arf" data-action="desechar-caducado" data-renglon="${r.id}" title="Da de baja los ${dosis} frascos: el lote caduca en ${formatMmmAa(lote.caducidad)}"><span class="material-symbols-rounded">delete_sweep</span> Dar de baja</button>`;
   }
+
+  // «Mover»: pasa parte o toda la existencia del lote a otro estatus (Normal, A.R.F., Canje), en cualquier sentido.
+  const puedeMover = editable && Number(dosis) > 0 && !porUnidades;
+  const botonMover = puedeMover
+    ? `<button type="button" class="btn-resolver mover" data-action="toggle-mover" data-renglon="${r.id}" aria-expanded="false" title="Pasar parte o toda la existencia a otro estatus"><span class="material-symbols-rounded" aria-hidden="true">swap_horiz</span> Mover</button>` : '';
+  const filaMover = puedeMover ? `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelMoverHtml(r, dosis, caducado)}</td></tr>` : '';
 
   const edicionJurisdiccion = estado.ultimasEdicionesJurisdiccion.get(r.id);
   const tagEditado = edicionJurisdiccion
@@ -2238,7 +2239,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
 
   return `<tr class="${subcategoria ? 'categoria-' + subcategoria : ''}">
     <td>
-      <div class="lote-texto">${lote.numero_lote}${tagEditado}<span data-etiqueta-corr="${lote.id}|${r.categoria}"></span>${botonResolver}${porUnidades ? `<button type="button" class="btn-resolver unidades" data-action="ver-por-unidad" data-renglon="${r.id}" aria-expanded="${estado.unidadesAbiertas && estado.unidadesAbiertas.has(r.id) ? 'true' : 'false'}" title="Qué aportó cada unidad a este lote; ahí se corrige"><span class="material-symbols-rounded" aria-hidden="true">groups</span> Por unidad</button>` : ''}</div>
+      <div class="lote-texto">${lote.numero_lote}${tagEditado}<span data-etiqueta-corr="${lote.id}|${r.categoria}"></span>${botonResolver}${botonMover}${porUnidades ? `<button type="button" class="btn-resolver unidades" data-action="ver-por-unidad" data-renglon="${r.id}" aria-expanded="${estado.unidadesAbiertas && estado.unidadesAbiertas.has(r.id) ? 'true' : 'false'}" title="Qué aportó cada unidad a este lote; ahí se corrige"><span class="material-symbols-rounded" aria-hidden="true">groups</span> Por unidad</button>` : ''}</div>
     </td>
     <td>
       <div class="caducidad-chip ${semaforo}"><span class="semaforo"></span>${formatMmmAa(lote.caducidad)}</div>
@@ -2254,7 +2255,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     <td class="col-final c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}" data-existencia-final="${r.id}">${dosis}</span></td>
     <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}</td>
     <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<span class="nota-lote-requi" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
-  </tr>${filaResolver}${porUnidades ? filaPorUnidadHtml(r, aporte, cols) : ''}`;
+  </tr>${filaResolver}${filaMover}${porUnidades ? filaPorUnidadHtml(r, aporte, cols) : ''}`;
 }
 
 // Detalle por unidad de un lote del municipio: suma de lo que reportó cada unidad y, si el municipio trae algo distinto,
@@ -2342,6 +2343,33 @@ function panelResolverCanjeHtml(renglonId, bio) {
     <div class="acciones">
       <button class="btn-primario btn-mini" data-action="confirmar-resolver-canje" data-renglon="${renglonId}"><span class="material-symbols-rounded">check</span> Registrar canje</button>
       <button class="btn-fantasma btn-mini" data-action="cancelar-resolver" data-renglon="${renglonId}">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+const NOMBRE_CATEGORIA = { NORMAL: 'Normal (disponible para aplicar)', ARF: 'A.R.F. (en dictamen)', CANJE: 'Canje (por canjear con el proveedor)' };
+function panelMoverHtml(r, existencia, caducado) {
+  const id = r.id;
+  const destinos = ['NORMAL', 'ARF', 'CANJE'].filter((c) => c !== r.categoria && !(c === 'NORMAL' && caducado));
+  return `<div class="panel-resolver" data-panel-mover="${id}" role="group" aria-label="Mover existencia del lote a otro estatus">
+    <p>Pasa parte o toda la existencia de este lote a otro estatus; queda registrado con su motivo. Existencia actual: <b>${existencia}</b> frasco(s).${caducado ? ' El lote está caducado: ya no puede volver a Normal.' : ''}</p>
+    <div class="campos">
+      <div class="campo" style="width:250px">
+        <label for="mover_dest_${id}">Mover a</label>
+        <select id="mover_dest_${id}" data-mover-destino>${destinos.map((c) => `<option value="${c}">${NOMBRE_CATEGORIA[c]}</option>`).join('')}</select>
+      </div>
+      <div class="campo" style="width:170px">
+        <label for="mover_monto_${id}">Cantidad (frascos)</label>
+        <input id="mover_monto_${id}" type="number" step="any" min="0" max="${existencia}" value="${existencia}" data-mover-monto>
+      </div>
+      <div class="campo" style="width:320px">
+        <label for="mover_motivo_${id}">Motivo</label>
+        <input id="mover_motivo_${id}" type="text" data-mover-motivo placeholder="Ej. Falla en cadena de frío, se manda a dictamen">
+      </div>
+    </div>
+    <div class="acciones">
+      <button class="btn-primario btn-mini" data-action="confirmar-mover" data-renglon="${id}"><span class="material-symbols-rounded" aria-hidden="true">check</span> Mover</button>
+      <button class="btn-fantasma btn-mini" data-action="cancelar-mover" data-renglon="${id}">Cancelar</button>
     </div>
   </div>`;
 }
@@ -2813,9 +2841,14 @@ async function calcularAnteriorEditable(unidadId, anio, mes) {
     const idxInicio = Number(inicio.slice(0, 4)) * 12 + Number(inicio.slice(5, 7));
     const idx = anio * 12 + mes;
     if (idx < idxInicio) return true;
-    const { data } = await estado.db.from('biovac_movimientos').select('anio, mes').eq('unidad_id', unidadId).lte('anio', anio);
+    const { data } = await estado.db.from('biovac_movimientos').select('id, anio, mes').eq('unidad_id', unidadId).lte('anio', anio);
     const previos = (data || []).filter((x) => { const i = x.anio * 12 + x.mes; return i < idx && i >= idxInicio; });
-    return previos.length === 0;
+    if (previos.length === 0) return true;
+    // «Primera vez»: la existencia anterior solo se captura mientras la unidad no tenga NINGÚN mes previo con información; en cuanto
+    // hay datos, los meses siguientes la heredan del cierre anterior y la opción ya no aparece (un movimiento vacío no cuenta).
+    const { data: conDatos } = await estado.db.from('biovac_renglones').select('id').in('movimiento_id', previos.map((x) => x.id))
+      .or('existencia_anterior_frascos.neq.0,recibido_frascos.neq.0,aplicadas_a.neq.0,aplicadas_b.neq.0,desechadas_a.neq.0,desechadas_b.neq.0').limit(1);
+    return !(conDatos && conDatos.length);
   } catch (e) {
     return true;
   }
@@ -2950,8 +2983,13 @@ function renderBannerMovimiento(m, esJurisdiccional) {
       <div class="texto"><b>Modo corrección</b>Puedes editar cantidades, corregir la existencia anterior (lápiz), eliminar renglones (bote) o agregar lotes. Al terminar guarda la corrección.</div>
       <button type="button" class="btn-primario" data-banner="guardar"><span class="material-symbols-rounded">check_circle</span> Guardar corrección</button></div>`;
   } else if (rol === 'UNIDAD' && m.estado === 'BORRADOR') {
-    cont.innerHTML = `<div class="banner-mov info"><span class="material-symbols-rounded">info</span>
-      <div class="texto"><b>Tu único candado es Enviar</b>El Movimiento y el paloteo son un solo SINBA-SIS: no hay que «cerrar el mes» aparte. Cuando las dosis aplicadas coincidan, pulsa <b style="display:inline">Enviar</b> en la barra de abajo y todo queda bloqueado a la vez.</div></div>`;
+    // Aviso de una sola vez: la unidad lo lee, pulsa «Entendido» y ya no estorba (queda en este navegador).
+    let visto = false;
+    try { visto = localStorage.getItem('bv_candado_enviar_visto') === '1'; } catch (e) { /* sin storage */ }
+    if (visto) { cont.innerHTML = ''; return; }
+    cont.innerHTML = `<div class="banner-mov info" role="note" aria-label="Aviso: tu único candado es Enviar"><span class="material-symbols-rounded" aria-hidden="true">info</span>
+      <div class="texto"><b>Tu único candado es Enviar</b>El Movimiento y el paloteo son un solo SINBA-SIS: no hay que «cerrar el mes» aparte. Cuando las dosis aplicadas coincidan, pulsa <b style="display:inline">Enviar</b> en la barra de abajo y todo queda bloqueado a la vez.</div>
+      <button type="button" class="btn-fantasma btn-mini" data-banner="entendido"><span class="material-symbols-rounded" aria-hidden="true">check</span> Entendido</button></div>`;
   } else {
     cont.innerHTML = '';
   }
@@ -3350,6 +3388,24 @@ async function resolverCanje(renglonId, panel) {
 // renglón Normal se manda a dictamen y pasa a un renglón A.R.F. del mismo
 // lote (se crea si no existía, o se le suma si ya había uno con existencia
 // pendiente de un dictamen anterior).
+async function moverExistencia(renglonId, panel) {
+  const usuario = usuarioActual();
+  if (!usuario || !panel) return;
+  const destino = panel.querySelector('[data-mover-destino]').value;
+  const monto = Number(panel.querySelector('[data-mover-monto]').value);
+  if (!monto || monto <= 0) { toast('Indica cuántos frascos se mueven.', 'error'); return; }
+  const motivo = panel.querySelector('[data-mover-motivo]').value.trim();
+  if (!motivo) { toast('Escribe el motivo del movimiento.', 'error'); panel.querySelector('[data-mover-motivo]').focus(); return; }
+  const { error } = await estado.db.rpc('biovac_mover_existencia', {
+    p_renglon_id: renglonId, p_destino: destino, p_monto: monto, p_usuario: usuario,
+    p_rol: (estado.perfil ? estado.perfil.rol : 'MUNICIPAL'), p_motivo: motivo
+  });
+  if (error) { toast('No se pudo mover: ' + error.message.replace(/^.*?ERROR:\s*/, ''), 'error'); return; }
+  toast(`${monto} frasco(s) pasaron a ${NOMBRE_CATEGORIA[destino].split(' (')[0]}.`, 'ok');
+  await cargarRenglones();
+  render();
+}
+
 async function pasarNormalAArf(renglonId, panel) {
   const usuario = usuarioActual();
   if (!usuario) return;
@@ -3905,6 +3961,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (bannerMov) bannerMov.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-banner]');
     if (!b) return;
+    if (b.dataset.banner === 'entendido') {
+      try { localStorage.setItem('bv_candado_enviar_visto', '1'); } catch (e) { /* sin storage */ }
+      const cont = document.getElementById('bannerMovimiento'); if (cont) cont.innerHTML = '';
+      const sig = document.querySelector('[data-action="toggle-agregar"], .tarjeta-biologico button, #contenedorBloques button'); if (sig) sig.focus();
+      return;
+    }
     if (b.dataset.banner === 'corregir') abrirCorreccion();
     if (b.dataset.banner === 'guardar') aplicarCorreccion();
   });
@@ -3968,6 +4030,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       return;
     }
+    if (accion === 'toggle-mover' || accion === 'cancelar-mover') {
+      const panel = document.querySelector(`[data-panel-mover="${btn.dataset.renglon}"]`);
+      if (!panel) return;
+      const abre = accion === 'toggle-mover' && !panel.classList.contains('abierto');
+      panel.classList.toggle('abierto', abre);
+      const disp = document.querySelector(`[data-action="toggle-mover"][data-renglon="${btn.dataset.renglon}"]`);
+      if (disp) disp.setAttribute('aria-expanded', String(abre));
+      if (abre) { const f = panel.querySelector('[data-mover-destino]'); if (f) f.focus(); } else if (disp) disp.focus();
+      return;
+    }
+    if (accion === 'confirmar-mover') { moverExistencia(btn.dataset.renglon, document.querySelector(`[data-panel-mover="${btn.dataset.renglon}"]`)); return; }
     if (accion === 'desechar-caducado') {
       desecharCaducado(btn.dataset.renglon);
       return;

@@ -81,7 +81,10 @@ begin
       v_lotes := v_lotes + 1;
     end if;
     insert into biovac_renglones (movimiento_id, lote_id, categoria, recibido_frascos, observaciones)
-    values (v_mov, v_lote, 'NORMAL', r.q, format('Cargado desde Requisiciones (%s frasco(s))', trim_scale(r.q)))
+    -- Lo que ya se movió a A.R.F./Canje conserva su parte de «recibido»: aquí queda el resto, para no contarlo doble
+    values (v_mov, v_lote, 'NORMAL',
+            greatest(r.q - coalesce((select sum(x.recibido_frascos) from biovac_renglones x where x.movimiento_id = v_mov and x.lote_id = v_lote and x.categoria <> 'NORMAL'), 0), 0),
+            format('Cargado desde Requisiciones (%s frasco(s))', trim_scale(r.q)))
     on conflict (movimiento_id, lote_id, categoria) do update
       set recibido_frascos = excluded.recibido_frascos, observaciones = excluded.observaciones
       where biovac_renglones.recibido_frascos is distinct from excluded.recibido_frascos;
@@ -111,7 +114,6 @@ declare v_clues text; v_muni text; v_anio int; v_mes int; v_inicio date; v_mov u
 begin
   if coalesce(current_setting('biovac.bypass_lock', true), 'off') = 'on' then return coalesce(new, old); end if;
   if coalesce(current_setting('request.path', true), '') like '%/rpc/%' then return coalesce(new, old); end if;   -- funciones del sistema (dictamen, reclasificar, sincronizar)
-  if coalesce(new.categoria, old.categoria) is distinct from 'NORMAL' then return coalesce(new, old); end if;
   if tg_op = 'UPDATE' and new.recibido_frascos is not distinct from old.recibido_frascos then return new; end if;
   if tg_op = 'INSERT' and coalesce(new.recibido_frascos, 0) = 0 then return new; end if;
   if tg_op = 'DELETE' and coalesce(old.recibido_frascos, 0) = 0 then return old; end if;

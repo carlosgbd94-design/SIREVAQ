@@ -218,3 +218,24 @@ test('Agregar lote de la unidad (con recibido de Requisiciones): primer mes solo
   expect(r.hospitalJuris).toBe(true);
   expect(r.unidadJuris).toBe(false);
 });
+
+test('Mover existencia: panel accesible con destinos según el estatus (un lote caducado no vuelve a Normal) y aviso de candado descartable', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await page.addScriptTag({ content: AXE });
+  const r = await page.evaluate(async () => {
+    const normal = panelMoverHtml({ id: 'r1', categoria: 'NORMAL' }, 10, false);
+    const arf = panelMoverHtml({ id: 'r2', categoria: 'ARF' }, 5, false);
+    const arfCaducado = panelMoverHtml({ id: 'r3', categoria: 'ARF' }, 5, true);
+    const canje = panelMoverHtml({ id: 'r4', categoria: 'CANJE' }, 3, false);
+    const host = document.createElement('div'); host.id = 'pm'; host.innerHTML = normal + arf; document.body.appendChild(host);
+    host.querySelectorAll('.panel-resolver').forEach((p) => p.classList.add('abierto'));
+    const a = await window.axe.run('#pm', { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'best-practice'] }, resultTypes: ['violations'] });
+    const op = (h) => [...h.matchAll(/<option value="(\w+)"/g)].map((m) => m[1]);
+    return { normal: op(normal), arf: op(arf), arfCaducado: op(arfCaducado), canje: op(canje), violaciones: a.violations.map((v) => v.id) };
+  });
+  expect(r.normal).toEqual(['ARF', 'CANJE']);
+  expect(r.arf).toEqual(['NORMAL', 'CANJE']);
+  expect(r.arfCaducado).toEqual(['CANJE']);
+  expect(r.canje).toEqual(['NORMAL', 'ARF']);
+  expect(r.violaciones).toEqual([]);
+});
