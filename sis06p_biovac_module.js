@@ -304,6 +304,12 @@
     return rol === 'MUNICIPAL' || rol === 'JURISDICCIONAL' || rol === 'ADMIN';
   }
 
+  // En el paso Entrega el municipal ve el municipio completo: la unidad fijada ahí solo sirve para la vista previa del CSV,
+  // así que sus avisos y su estado («Borrador», «por cuadrar») no deben aparecer en esa pantalla.
+  function enEntregaMunicipal() {
+    const mg = window.MunicipalGuiado;
+    return Boolean(mg && mg.activo && mg.activo() && mg.paso && mg.paso() === 4);
+  }
   function datosUnidadActiva() {
     if (!estado.perfil) return null;
     if (estado.perfil.rol === 'UNIDAD') {
@@ -3146,7 +3152,7 @@
     const panelSis = document.getElementById('panelSIS06P');
     const enHojaSis = Boolean(btnHojaSis && btnHojaSis.classList.contains('activo') && panelSis && panelSis.style.display !== 'none');
     // En la hoja SIS-06-P la tarjeta de conciliación (con la tabla y el comodín) ya dice lo mismo: no se duplica.
-    const mostrar = Boolean(datosUnidadActiva()) && dif.length > 0 && (sinEnviar || porValidar) && !enHojaSis;
+    const mostrar = Boolean(datosUnidadActiva()) && !enEntregaMunicipal() && dif.length > 0 && (sinEnviar || porValidar) && !enHojaSis;
     if (!mostrar) { if (el) el.style.display = 'none'; return; }
     if (!el) {
       const ref = document.getElementById('rutaMes') || document.getElementById('sis06pConciliacion');
@@ -3219,7 +3225,7 @@
 
     const caja = document.getElementById('dockEstado');
     if (!caja) return;
-    if (!activaDock) { caja.style.display = 'none'; return; }
+    if (!activaDock || enEntregaMunicipal()) { caja.style.display = 'none'; return; }
     const { est, filas, difs, v } = estadoRuta();
     const esU = esUnidadSesion();
     let detalle = '';

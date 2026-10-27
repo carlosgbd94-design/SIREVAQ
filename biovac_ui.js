@@ -905,6 +905,9 @@ function inicializarToggleSIS06P() {
     document.getElementById('panelSinMovimiento').style.display = 'none';
     document.getElementById('filaCabeceraMovimiento').style.display = 'none';
     document.getElementById('filaBotonesCabecera').style.display = 'none';
+    // El estado del Movimiento es de esa hoja: no se queda en el título cuando se cambia a otra (el SIS-06-P tiene el suyo)
+    const badgeMov = document.getElementById('badgeEstado');
+    if (badgeMov) { badgeMov.textContent = ''; badgeMov.className = 'estado-badge'; }
     document.getElementById('panelImportador').style.display = 'none';
     document.getElementById('btnAbrirImportador').style.display = 'none';
     sincronizarDockMovimientoExtras();

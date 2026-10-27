@@ -69,7 +69,8 @@
     filas.forEach((f) => {
       const e = estadoDe(f);
       if (e === 'VALIDADO') r.validado++; else if (e === 'ENVIADO') r.enviado++; else if (e === 'OMITIDA') r.omitida++; else r.sin++;
-      if (Number(f.diferencias) > 0 && e !== 'OMITIDA') r.difs++;
+      // Solo cuentan las unidades que ya enviaron: una que sigue capturando todavía no tiene por qué cuadrar
+      if (Number(f.diferencias) > 0 && (e === 'ENVIADO' || e === 'VALIDADO')) r.difs++;
     });
     r.enviaron = r.validado + r.enviado;                 // las que sí mandaron su SINBA-SIS
     r.esperadas = r.total - r.omitida;                   // las que se esperaba que enviaran
@@ -956,5 +957,5 @@
     await irAPaso(1, { sinScroll: true });
   }
 
-  window.MunicipalGuiado = { init, activo, pintarEnvios, revisar, irAPaso, refrescarFilas };
+  window.MunicipalGuiado = { init, activo, paso: () => st.paso, pintarEnvios, revisar, irAPaso, refrescarFilas };
 })();
