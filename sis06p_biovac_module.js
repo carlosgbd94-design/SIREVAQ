@@ -3062,7 +3062,7 @@
 
     const pasos = [
       { t: 'Captura', x: hecho1 ? (_sinGuardar ? 'Tienes cambios sin guardar' : 'Guardado en SIS-06-P') : 'Paloteo, Movimiento e Influenza', hecho: hecho1 && !(est === 'BORRADOR' && _sinGuardar) },
-      { t: 'Concilia', x: hecho2 ? 'Paloteo = Movimiento' : (hecho1 && difs.length ? `${difs.length} biológico${difs.length === 1 ? '' : 's'} no coincide${difs.length === 1 ? '' : 'n'}` : 'Las dosis aplicadas deben ser iguales'), hecho: hecho2, alerta: !hecho2 && hecho1 && difs.length > 0 },
+      { t: 'Concilia', x: hecho2 ? 'Paloteo = Movimiento' : (hecho1 && difs.length ? (v && !v.dentro_envio && !enviado ? `${difs.length} por cuadrar antes de enviar` : `${difs.length} biológico${difs.length === 1 ? '' : 's'} no coincide${difs.length === 1 ? '' : 'n'}`) : 'Las dosis aplicadas deben ser iguales'), hecho: hecho2, alerta: !hecho2 && hecho1 && difs.length > 0 && !(v && !v.dentro_envio && !enviado) },
       { t: 'Envía', x: t3, hecho: enviado },
       { t: 'Validación', x: hecho4 ? `Validado${captura && captura.validado_en ? ' el ' + fechaMesCorta(captura.validado_en) : ''}` : (enviado ? 'Esperando al municipal' : 'El municipal revisa y valida'), hecho: hecho4 }
     ];
@@ -3158,14 +3158,24 @@
       });
     }
     const esU = esUnidadSesion();
-    const titulo = sinEnviar
-      ? (esU ? 'Tu SINBA-SIS NO se puede enviar todavía' : 'Este SINBA-SIS no se puede enviar todavía')
-      : 'Este SINBA-SIS no se puede validar todavía';
-    const texto = sinEnviar
-      ? `El paloteo SIS-06-P y el Movimiento de Biológico no coinciden en ${dif.length} biológico${dif.length === 1 ? '' : 's'}. Mientras no cuadren el sistema no lo envía, y el municipal no recibe nada.`
-      : 'El paloteo y el Movimiento ya no coinciden. Corrige el lado que esté mal para poder validarlo.';
+    // Mientras el envío no abre, lo que falta por cuadrar es parte normal de la captura (Influenza y COVID-19 se traen de los
+    // reportes semanales y las dosis aplicadas por lote se registran en Movimiento): se muestra como pendiente, en tono
+    // tranquilo y sin anunciarse como alerta. Con el envío abierto (o ya enviado) sube a alerta roja.
+    const preliminar = sinEnviar && Boolean(_ventanaCache) && !_ventanaCache.dentro_envio;
+    el.classList.toggle('preliminar', preliminar);
+    el.setAttribute('role', preliminar ? 'status' : 'alert');
+    const titulo = preliminar
+      ? 'Por cuadrar antes de enviar'
+      : sinEnviar
+        ? (esU ? 'Tu SINBA-SIS NO se puede enviar todavía' : 'Este SINBA-SIS no se puede enviar todavía')
+        : 'Este SINBA-SIS no se puede validar todavía';
+    const texto = preliminar
+      ? `Tu paloteo y tu Movimiento aún no coinciden en ${dif.length} biológico${dif.length === 1 ? '' : 's'}. Es normal mientras capturas: Influenza y COVID-19 se traen de tus reportes semanales, así que registra sus dosis aplicadas por lote en Movimiento. El envío abre el ${fechaMesCorta(_ventanaCache.inicio_envio)}.`
+      : sinEnviar
+        ? `El paloteo SIS-06-P y el Movimiento de Biológico no coinciden en ${dif.length} biológico${dif.length === 1 ? '' : 's'}. Mientras no cuadren el sistema no lo envía, y el municipal no recibe nada.`
+        : 'El paloteo y el Movimiento ya no coinciden. Corrige el lado que esté mal para poder validarlo.';
     el.innerHTML = `
-      <div class="sis-dif-cab"><span class="material-symbols-rounded">error</span><div><b>${titulo}</b><p>${texto}</p></div></div>
+      <div class="sis-dif-cab"><span class="material-symbols-rounded" aria-hidden="true">${preliminar ? 'pending_actions' : 'error'}</span><div><b>${titulo}</b><p>${texto}</p></div></div>
       <div class="sis-dif-lista">${listaDiferenciasHtml(dif)}</div>
       <div class="sis-dif-acciones">
         <button type="button" class="btn-primario btn-mini" data-dif-ir="paloteo"><span class="material-symbols-rounded">fact_check</span> Ver y corregir el paloteo</button>
@@ -3211,7 +3221,7 @@
     else if (_sinGuardar) detalle = 'Cambios sin guardar';
     else if (fueraDeVentanaDeCaptura(captura)) detalle = 'Este mes está fuera de su ventana de captura';
     else if (!captura) detalle = 'Aún sin guardar este mes';
-    else if (filas !== null && difs.length) detalle = `${difs.length} biológico${difs.length === 1 ? '' : 's'} no coincide${difs.length === 1 ? '' : 'n'} — corrige antes de enviar`;
+    else if (filas !== null && difs.length) detalle = (v && !v.dentro_envio) ? `${difs.length} por cuadrar antes de enviar` : `${difs.length} biológico${difs.length === 1 ? '' : 's'} no coincide${difs.length === 1 ? '' : 'n'} — corrige antes de enviar`;
     else if (v && !v.dentro_envio) detalle = `Envío del ${fechaMesCorta(v.inicio_envio)} al ${fechaMesCorta(v.fin_envio)}`;
     else if (v) detalle = `Listo para enviar hasta el ${fechaMesCorta(v.fin_envio)}`;
     caja.style.display = 'flex';

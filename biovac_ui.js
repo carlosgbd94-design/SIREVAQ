@@ -2205,7 +2205,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   const porUnidades = Boolean(editable && aporte && aporte.length);
   const recibidoDeRequisicion = recibidoSoloDeRequisicion();
   const campo = (campo, valor, clase) => (campo === 'recibido_frascos' && recibidoDeRequisicion)
-    ? `<span class="recibido-requi" title="Lo recibido viene de Requisiciones: no se captura aquí. Si no coincide con lo que llegó, avisa al municipal.">${valor || 0}<span class="material-symbols-rounded" aria-hidden="true">lock</span></span>`
+    ? `<span class="recibido-requi" title="Lo recibido viene de Requisiciones: no se captura aquí. Si no coincide con lo que llegó, avisa al municipal."><span class="recibido-num">${valor || 0}</span><span class="material-symbols-rounded recibido-candado" role="img" aria-label="bloqueado, viene de Requisiciones">lock</span></span>`
     : (editable && !porUnidades)
     ? `<input type="number" step="any" inputmode="decimal" class="${clase || ''}" data-renglon="${r.id}" data-campo="${campo}" value="${valor ? valor : ''}" placeholder="0">`
     : `<span>${valor || 0}</span>`;
@@ -2254,7 +2254,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     ${split ? `<td class="col-mov c-des col-dosis-1">${campo('desechadas_b', r.desechadas_b)}</td>` : ''}
     <td class="col-final c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}" data-existencia-final="${r.id}">${dosis}</span></td>
     <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}</td>
-    <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<span class="nota-lote-requi" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
+    <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<div class="acciones-fila"><span class="nota-lote-requi" role="img" aria-label="Este lote llegó por Requisiciones: no se quita aquí" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span></div>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
   </tr>${filaResolver}${filaMover}${porUnidades ? filaPorUnidadHtml(r, aporte, cols) : ''}`;
 }
 
