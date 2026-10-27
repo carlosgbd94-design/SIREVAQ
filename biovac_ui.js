@@ -2991,7 +2991,7 @@ function renderBannerMovimiento(m, esJurisdiccional) {
     try { visto = localStorage.getItem('bv_candado_enviar_visto') === '1'; } catch (e) { /* sin storage */ }
     if (visto) { cont.innerHTML = ''; return; }
     cont.innerHTML = `<div class="banner-mov info" role="note" aria-label="Aviso: tu único candado es Enviar"><span class="material-symbols-rounded" aria-hidden="true">info</span>
-      <div class="texto"><b>Tu único candado es Enviar</b>El Movimiento y el paloteo son un solo SINBA-SIS: no hay que «cerrar el mes» aparte. Cuando las dosis aplicadas coincidan, pulsa <b style="display:inline">Enviar</b> en la barra de abajo y todo queda bloqueado a la vez.</div>
+      <div class="texto"><b>Tu único candado es Enviar</b>Captura el Movimiento de Biológico y el paloteo (SIS-06-P) y, cuando las dosis aplicadas coincidan en ambos, pulsa <b style="display:inline">Enviar</b> en la barra de abajo. Al enviar, toda tu información del mes queda bloqueada a la vez; no hay ningún otro paso por hacer.</div>
       <button type="button" class="btn-fantasma btn-mini" data-banner="entendido"><span class="material-symbols-rounded" aria-hidden="true">check</span> Entendido</button></div>`;
   } else {
     cont.innerHTML = '';

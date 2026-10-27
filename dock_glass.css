@@ -46,6 +46,10 @@ body.con-dock { padding-bottom: 104px; }
 
 .dock-hojas { position: relative; display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; flex: 0 1 auto; border-radius: 999px; }
 .dock-hojas::-webkit-scrollbar { display: none; }
+/* Si hay pestañas fuera de vista, el borde se difumina en lugar de cortarlas en seco (dock_glass.js pone .corta-izq/.corta-der). */
+.dock-hojas.corta-der { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.dock-hojas.corta-izq { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+.dock-hojas.corta-izq.corta-der { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
 
 /* Resaltado de selección: cápsula tonal (translúcida) con el color de la
    pestaña activa; se desliza de una a otra (ver dock_glass.js). */

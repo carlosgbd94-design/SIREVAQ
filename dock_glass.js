@@ -8,6 +8,7 @@
 
   function mover(cont) {
     if (!cont) return;
+    bordes(cont);
     const tinta = cont.querySelector('.hoja-tinta');
     if (!tinta) return;
     const activa = cont.querySelector('.hoja-tab.activo');
@@ -19,13 +20,24 @@
     // En una barra desbordada (móvil) la pestaña activa siempre queda a la vista.
     if (typeof activa.scrollIntoView === 'function' && cont.scrollWidth > cont.clientWidth) {
       activa.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      bordes(cont);
     }
+  }
+
+  // Difumina el borde por el que aún hay pestañas fuera de vista (en vez de cortarlas en seco).
+  function bordes(cont) {
+    const max = cont.scrollWidth - cont.clientWidth;
+    const izq = max > 2 && cont.scrollLeft > 2;
+    const der = max > 2 && cont.scrollLeft < max - 2;
+    cont.classList.toggle('corta-izq', izq);
+    cont.classList.toggle('corta-der', der);
   }
 
   function instalar(cont) {
     if (!cont || cont.dataset.tinta === '1') return;
     cont.dataset.tinta = '1';
     const tinta = cont.querySelector('.hoja-tinta');
+    cont.addEventListener('scroll', () => bordes(cont), { passive: true });
     new MutationObserver((registros) => {
       // Los cambios de la propia tinta no deben re-dispararse a sí mismos.
       if (registros.every((r) => r.target === tinta)) return;
