@@ -177,3 +177,12 @@ test('Aviso de biológico caducado: solo cuenta existencia NORMAL; lo que ya est
   expect(html).toContain('LOTE-MES');
   expect(html).toContain('caduca al terminar este mes');
 });
+
+test('Recibido de la unidad: desde octubre es solo de Requisiciones (la unidad no lo captura); antes de octubre y para los revisores no cambia', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  const r = await page.evaluate(() => {
+    const con = (rol, anio, mes) => { estado.perfil = { ...estado.perfil, rol }; estado.movimiento = { anio, mes, estado: 'BORRADOR' }; return recibidoSoloDeRequisicion(); };
+    return { unidadOct: con('UNIDAD', 2026, 10), unidadSep: con('UNIDAD', 2026, 9), municipalOct: con('MUNICIPAL', 2026, 10), adminOct: con('ADMIN', 2026, 10), unidadNov: con('UNIDAD', 2026, 11) };
+  });
+  expect(r).toEqual({ unidadOct: true, unidadSep: false, municipalOct: false, adminOct: false, unidadNov: true });
+});

@@ -1628,9 +1628,33 @@ async function ofrecerCargaDesdeRequisiciones() {
 // nada: mismo criterio de "silencio" que el nivel municipio.
 // ---------------------------------------------------------------------------
 
+// Desde el arranque por unidad (octubre 2026) el recibido de cada unidad es EXACTAMENTE lo que Requisiciones le repartió: lo
+// deja igual el servidor (todas las entregas, COVID-19 incluido) y la unidad no lo teclea. Antes lo cargaba el navegador al abrir
+// el Movimiento y la unidad podía cambiarlo.
+function movimientoRecibeDeRequisicion(m) {
+  const mv = m || estado.movimiento;
+  if (!mv) return false;
+  return `${mv.anio}-${String(mv.mes).padStart(2, '0')}-01` >= (estado.inicioPorUnidad || '2026-10-01');
+}
+function recibidoSoloDeRequisicion() {
+  return Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD' && movimientoRecibeDeRequisicion());
+}
+async function sincronizarRecibidoDesdeRequisicion(unidadClues) {
+  const m = estado.movimiento;
+  const { data, error } = await estado.db.rpc('biovac_sincronizar_recibido_unidad', { p_clues: unidadClues, p_anio: m.anio, p_mes: m.mes });
+  if (error) { console.warn('[BioVac] No se pudo sincronizar el recibido con Requisiciones:', error); return; }
+  if (data && ((data.renglones_actualizados || 0) > 0 || (data.lotes_nuevos || 0) > 0 || (data.recibido_sin_respaldo_en_cero || 0) > 0)) {
+    await cargarRenglones();
+    render();
+    toast('Tu recibido se actualizó con lo que Requisiciones te asignó.', 'ok');
+  }
+}
+
 async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
   if (!unidadClues) return;
   if (!ventanaPrecargaAbierta(estado.movimiento.anio, estado.movimiento.mes)) return;
+  const esHospitalU = ((estado.unidades || []).find((u) => u.clues === unidadClues) || {}).municipio;
+  if (movimientoRecibeDeRequisicion() && MUNICIPIOS_HOSPITAL.indexOf(esHospitalU) < 0) { await sincronizarRecibidoDesdeRequisicion(unidadClues); return; }
 
   // Un mes puede tener varias entregas (cada una es su propia requisición): se juntan todas.
   const { data: reqsMes } = await estado.db.from('requi_requisiciones')
@@ -2166,7 +2190,10 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   // auditoría) y el municipio se actualiza solo; aquí solo se ajustan los lotes que NINGUNA unidad reporta (almacén municipal).
   const aporte = estado.aporteUnidades && estado.aporteUnidades.get(`${r.lote_id}|${r.categoria}`);
   const porUnidades = Boolean(editable && aporte && aporte.length);
-  const campo = (campo, valor, clase) => (editable && !porUnidades)
+  const recibidoDeRequisicion = recibidoSoloDeRequisicion() && r.categoria === 'NORMAL';
+  const campo = (campo, valor, clase) => (campo === 'recibido_frascos' && recibidoDeRequisicion)
+    ? `<span class="recibido-requi" title="Lo recibido viene de Requisiciones: no se captura aquí. Si no coincide con lo que llegó, avisa al municipal.">${valor || 0}<span class="material-symbols-rounded" aria-hidden="true">lock</span></span>`
+    : (editable && !porUnidades)
     ? `<input type="number" step="any" inputmode="decimal" class="${clase || ''}" data-renglon="${r.id}" data-campo="${campo}" value="${valor ? valor : ''}" placeholder="0">`
     : `<span>${valor || 0}</span>`;
 
@@ -2355,7 +2382,7 @@ function renderPanelAgregar(bio) {
         <span class="etiqueta-grupo" id="tipo-cant-lbl-${bioId}">3. Tipo de cantidad</span>
         <div class="tipo-cantidad" role="radiogroup" aria-labelledby="tipo-cant-lbl-${bioId}">
           <label class="t-ant${antOk ? '' : ' deshabilitado'}"${antOk ? ' title="Lo que ya tenía del mes pasado"' : ' title="La existencia anterior solo se captura el primer mes: después viene sola del cierre del mes pasado."'}><input type="radio" name="tipo-cant-${bioId}" value="ANTERIOR" data-nuevo-tipo-cantidad ${antOk ? 'checked' : 'disabled'}><span class="material-symbols-rounded t-off" aria-hidden="true">radio_button_unchecked</span><span class="material-symbols-rounded t-on" aria-hidden="true">check_circle</span><b>Existencia anterior</b></label>
-          <label class="t-rec" title="Una entrada nueva de un lote que NO tenía"><input type="radio" name="tipo-cant-${bioId}" value="RECIBIDO" data-nuevo-tipo-cantidad ${antOk ? '' : 'checked'}><span class="material-symbols-rounded t-off" aria-hidden="true">radio_button_unchecked</span><span class="material-symbols-rounded t-on" aria-hidden="true">check_circle</span><b>Recibido este mes</b></label>
+          <label class="t-rec${recibidoSoloDeRequisicion() ? ' deshabilitado' : ''}" title="${recibidoSoloDeRequisicion() ? 'Lo recibido viene de Requisiciones: no se captura aquí' : 'Una entrada nueva de un lote que NO tenía'}"><input type="radio" name="tipo-cant-${bioId}" value="RECIBIDO" data-nuevo-tipo-cantidad ${recibidoSoloDeRequisicion() ? 'disabled' : (antOk ? '' : 'checked')}><span class="material-symbols-rounded t-off" aria-hidden="true">radio_button_unchecked</span><span class="material-symbols-rounded t-on" aria-hidden="true">check_circle</span><b>Recibido este mes</b></label>
         </div>
       </div>
       <div class="campo">
