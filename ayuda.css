@@ -162,3 +162,10 @@
 @media (hover: hover) and (pointer: fine) { .ayuda-hoja .ayuda-extras .ayuda-enlace:hover { background: var(--surface-container, #f1f4f8) !important; color: var(--primary, #0f172a) !important; } }
 .ayuda-hoja .ayuda-pie .ayuda-sec { width: auto !important; height: auto !important; box-shadow: none !important; }
 
+/* Botón que abre un tutorial animado (tutoriales_sis.js) dentro de una guía */
+.ayuda-tutorial { display: flex; align-items: center; gap: 12px; width: 100%; margin: 8px 0; padding: 12px 14px; text-align: left; border: 1.5px solid #bae6fd; background: #f0f9ff; border-radius: 14px; cursor: pointer; font-family: inherit; }
+.ayuda-tutorial:hover { border-color: #0284c7; }
+.ayuda-tutorial:focus-visible { outline: 3px solid #0f172a; outline-offset: 2px; }
+.ayuda-tutorial > .material-symbols-rounded { flex: none; font-size: 34px; color: #0284c7; font-variation-settings: 'FILL' 1; }
+.ayuda-tutorial b { display: block; font-size: 13px; color: var(--primary, #0f172a); }
+.ayuda-tutorial span.t { display: block; font-size: 12px; color: var(--muted, #64748b); line-height: 1.45; }

@@ -753,7 +753,7 @@
     const ok = dif.length === 0;
     const fila = (f) => `
       <tr style="border-bottom:1px solid rgba(0,0,0,.06);">
-        <td style="padding:5px 8px;">${f.etiqueta}</td>
+        <td style="padding:5px 8px;">${f.etiqueta}${f.coincide ? '' : `<div style="font-size:10.5px; font-weight:600; opacity:.85; margin-top:1px;">${Number(f.paloteo) > Number(f.aplicado) ? `Faltan ${_num2(Number(f.paloteo) - Number(f.aplicado))} dosis en el Movimiento (o sobran en el paloteo)` : `Sobran ${_num2(Number(f.aplicado) - Number(f.paloteo))} dosis en el Movimiento (o faltan en el paloteo)`}</div>`}</td>
         <td style="padding:5px 8px; text-align:center; font-weight:800;">${Number(f.paloteo)}</td>
         <td style="padding:5px 8px; text-align:center; font-weight:800;">${Number(f.aplicado)}</td>
         <td style="padding:5px 8px; text-align:center; font-weight:800;">${f.coincide ? '✓' : _num2(Number(f.paloteo) - Number(f.aplicado)) > 0 ? `+${_num2(Number(f.paloteo) - Number(f.aplicado))}` : _num2(Number(f.paloteo) - Number(f.aplicado))}</td>
@@ -791,6 +791,7 @@
         <button type="button" class="btn-secundario btn-mini" data-dif-ir="mov"><span class="material-symbols-rounded" aria-hidden="true">medication_liquid</span> Ir al Movimiento</button>
       </div>
       ${tabla(dif)}
+      ${esUnidad ? '<div style="margin-top:8px;"><button type="button" class="tut-enlace" data-tutorial="cuadrar"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span>Ver cómo se corrige (tutorial corto)</button></div>' : ''}
       ${htmlAjustes(soloLectura, currentReport)}`;
   }
 
@@ -970,7 +971,7 @@
             <span class="sis-card-title">${biologico}</span>
           </span>
           <span style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
-            <span class="sis-card-count" style="background:${capturadas > 0 ? accent.tint : '#f1f5f9'}; color:${capturadas > 0 ? accent.hex : '#526071'};">${capturadas}/${vars.length}</span>
+            <span class="sis-card-count" title="${capturadas} de ${vars.length} variables capturadas (un 0 guardado también cuenta)" style="background:${capturadas > 0 ? accent.tint : '#f1f5f9'}; color:${capturadas > 0 ? accent.hex : '#526071'};">${capturadas}/${vars.length}</span>
             <span class="material-symbols-rounded sis-chevron" style="font-size:18px; color:#94a3b8; transition:transform .32s cubic-bezier(.4,0,.2,1);">expand_more</span>
           </span>
         </div>
@@ -3136,6 +3137,42 @@
     const btn = document.getElementById('btnSeccionMovimiento');
     if (btn) btn.click();
   });
+  // «¿Qué falta para enviar?»: un botón apagado no explica nada al tocarlo. Esta lista dice, en cristiano, qué está listo y qué no.
+  async function explicarEnvio() {
+    if (!esUnidadSesion() || !datosUnidadActiva()) return;
+    const { captura, est, filas, difs, v } = estadoRuta();
+    if (est !== 'BORRADOR') return;
+    const fila = (ok, titulo, falta, extra) => `<div style="display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-bottom:1px solid #eef2f7; text-align:left;">
+      <span class="material-symbols-rounded" aria-hidden="true" style="flex:none; font-size:22px; color:${ok ? '#16a34a' : '#d97706'};">${ok ? 'check_circle' : 'pending'}</span>
+      <div style="min-width:0;"><b style="font-size:13.5px; color:#0f172a;">${_esc(titulo)}</b>${ok ? '' : `<div style="font-size:12.5px; color:#475569; line-height:1.45; margin-top:2px;">${_esc(falta)}</div>`}${ok ? '' : (extra || '')}</div></div>`;
+    const sinCuadrar = filas !== null && difs.length > 0;
+    const items = [
+      { ok: Boolean(captura) && !_sinGuardar, t: 'Tu concentrado está guardado', f: _sinGuardar ? 'Tienes cambios sin guardar: pulsa «Guardar» en la barra de abajo.' : 'Todavía no guardas nada este mes: captura tu SIS-06-P y pulsa «Guardar» en la barra de abajo.' },
+      { ok: Boolean(responsableElaboracion()), t: 'Tu nombre está escrito', f: 'Escribe tu nombre completo en «Responsable de la información», arriba. Sale en las cuatro hojas.' },
+      { ok: filas !== null && !sinCuadrar, t: 'El paloteo y el Movimiento cuadran', f: filas === null ? 'Estamos revisando tus dosis…' : `En ${difs.length === 1 ? 'este biológico' : 'estos ' + difs.length + ' biológicos'} las dosis aplicadas del paloteo (SIS-06-P) no son iguales a las del Movimiento. Corrige el lado que esté mal.`,
+        extra: sinCuadrar ? `<div class="sis-dif-lista" style="flex-direction:column; align-items:stretch; margin-top:6px;">${listaDiferenciasHtml(difs)}</div>` : '' },
+      { ok: Boolean(v && v.dentro_envio), t: 'Ya es fecha de envío', f: v ? `El envío se abre del ${fechaMesCorta(v.inicio_envio)} al ${fechaMesCorta(v.fin_envio)}. Mientras tanto puedes seguir capturando y guardando: no pierdes nada.` : 'El envío se abre en los últimos días del mes.' }
+    ];
+    const faltan = items.filter((i) => !i.ok).length;
+    await mostrarModal({
+      titulo: faltan ? 'Qué falta para enviar' : 'Todo listo para enviar',
+      mensaje: faltan ? (faltan === 1 ? 'Solo te falta 1 cosa. Mientras tanto, el botón «Enviar» se queda apagado.' : `Te faltan ${faltan} cosas. Mientras tanto, el botón «Enviar» se queda apagado.`) : 'Pulsa «Enviar» en la barra de abajo.',
+      detalleHtml: `<div style="display:block; width:100%;">${items.map((i) => fila(i.ok, i.t, i.f, i.extra)).join('')}<div style="padding-top:10px;"><button type="button" class="tut-enlace" data-tutorial="enviar"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span>Ver cómo se envía (tutorial corto)</button></div></div>`,
+      textoAceptar: 'Entendido', sinCancelar: true
+    });
+  }
+  document.addEventListener('click', (ev) => {
+    const caja = ev.target && ev.target.closest ? ev.target.closest('#dockEstado.clicable') : null;
+    if (caja) { explicarEnvio(); return; }
+    const b = document.getElementById('btnEnviarSIS06P');
+    if (!b || !b.disabled || !esUnidadSesion() || b.style.display === 'none') return;
+    const r = b.getBoundingClientRect();
+    if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) explicarEnvio();
+  });
+  document.addEventListener('keydown', (ev) => {
+    if ((ev.key === 'Enter' || ev.key === ' ') && ev.target && ev.target.id === 'dockEstado' && ev.target.classList.contains('clicable')) { ev.preventDefault(); explicarEnvio(); }
+  });
+
   function listaDiferenciasHtml(dif) {
     return dif.map((f) => {
       const d = _num2(Number(f.paloteo) - Number(f.aplicado));
@@ -3238,6 +3275,10 @@
     else if (v && !v.dentro_envio) detalle = `Envío del ${fechaMesCorta(v.inicio_envio)} al ${fechaMesCorta(v.fin_envio)}`;
     else if (v) detalle = `Listo para enviar hasta el ${fechaMesCorta(v.fin_envio)}`;
     caja.style.display = 'flex';
+    const clicable = esU && est === 'BORRADOR';
+    caja.classList.toggle('clicable', clicable);
+    if (clicable) { caja.setAttribute('tabindex', '0'); caja.title = 'Toca para ver qué falta para enviar'; }
+    else { caja.removeAttribute('tabindex'); caja.removeAttribute('title'); }
     document.getElementById('dockEstadoTitulo').textContent = est === 'BORRADOR' ? 'Borrador' : est === 'ENVIADO' ? 'Enviado' : 'Validado';
     document.getElementById('dockPunto').className = 'dock-punto ' + (est === 'ENVIADO' ? 'enviado' : est === 'VALIDADO' ? 'validado' : '');
     // Rojo solo cuando el envío ya abrió: antes, lo que falta por cuadrar es parte normal de la captura
@@ -3245,6 +3286,7 @@
     document.getElementById('dockPunto').style.background = hayDif ? '#dc2626' : '';
     const detEl = document.getElementById('dockEstadoDetalle');
     detEl.textContent = detalle;
+    detEl.title = detalle;
     detEl.style.color = hayDif ? '#dc2626' : '';
     detEl.style.fontWeight = hayDif ? '800' : '';
   }

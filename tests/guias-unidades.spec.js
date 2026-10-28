@@ -52,7 +52,7 @@ test('«¿Qué hay de nuevo?»: se muestra una sola vez por versión y se puede 
   await page.goto('/index.html', { waitUntil: 'load' });
   await page.waitForFunction(() => window.Ayuda && window.GuiasContenido);
   const r = await page.evaluate(() => { localStorage.removeItem('sirevaq_novedades_visto'); const a = Ayuda.novedadesUnaVez(); Ayuda.cerrar(); const b = Ayuda.novedadesUnaVez(); return { a, b, v: localStorage.getItem('sirevaq_novedades_visto') }; });
-  expect(r).toEqual({ a: true, b: false, v: '2026-10' });
+  expect(r).toEqual({ a: true, b: false, v: '2026-10-b' });
   await page.evaluate(() => Ayuda.abrir('novedades'));
   await expect(page.locator('#ayudaTitulo')).toHaveText('¿Qué hay de nuevo?');
   await expect(page.locator('#ayudaSub')).toContainText('Paso 1 de 3');

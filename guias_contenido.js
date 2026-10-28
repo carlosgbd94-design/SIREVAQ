@@ -16,6 +16,8 @@
   const I = (icono, color, nombre, texto, donde) => ({ tipo: 'item', icono, color, nombre, texto, donde });
   const P = (n, nombre, texto) => ({ tipo: 'paso', n, nombre, texto });
   const N = (texto) => ({ tipo: 'nota', texto });
+  // Tutorial animado (solo en la app, dentro del SINBA-SIS): botón que abre la película corta con ese id.
+  const Tu = (id, nombre, texto) => ({ tipo: 'tutorial', id, nombre, texto });
 
   const G = {};
 
@@ -58,16 +60,29 @@
         N('Cada biológico es un contenedor: ábrelo para capturar. Si ves «Cambios sin guardar», falta guardar con el botón de la barra de abajo.')
       ] },
       { titulo: 'Hoja Movimiento de Biológico', bloques: [
-        I('edit_note', '#0284c7', 'Qué capturas por lote', 'Recibido, dosis aplicadas y dosis desechadas. Cada celda se guarda al salir de ella.'),
-        I('calculate', '#d97706', 'Existencia final', 'Existencia anterior + recibido − aplicadas − desechadas. La final pasa sola como anterior del mes siguiente.'),
-        I('add_circle', '#16a34a', 'Agregar lote', 'Si llegó un lote que no está en la lista, agrégalo con el botón del biológico (también A.R.F. y Canje).'),
+        I('edit_note', '#0284c7', 'Qué capturas por lote', 'Solo las dosis aplicadas y las dosis desechadas. Cada celda se guarda al salir de ella.'),
+        I('lock', '#475569', 'Recibido (con candado)', 'Lo que te llegó viene solo desde Requisiciones y no se captura aquí. Si no coincide con lo que de verdad llegó, avisa a tu municipal.'),
+        I('calculate', '#d97706', 'Existencia final', 'Existencia anterior + recibido − aplicadas − desechadas. Se calcula sola, y la final pasa sola como anterior del mes siguiente.'),
+        N('Pasa el puntero por los botones e íconos de la tabla: te explican qué hacen.')
+      ] },
+      { titulo: 'Movimiento: Mover y dosis', bloques: [
+        I('swap_horiz', '#7c3aed', 'Mover', 'Si parte de un lote quedó en dictamen (A.R.F.) o se va a cambiar con el proveedor (Canje), pulsa «Mover», elige cuántos frascos y escribe el motivo.'),
         I('contrast', '#7c3aed', 'Dosis pediátrica y de adulto', 'Hepatitis B y COVID Moderna tienen ambas; para conciliar, la pediátrica cuenta como media dosis.'),
-        N('Lo recibido puede llegar precargado desde la requisición de la Jurisdicción: revísalo y edítalo si algo cambió.')
+        Tu('mover', 'Míralo en un tutorial corto', 'Ver cómo se mueve un lote a A.R.F. o a Canje.'),
+        N('En «Tutoriales cortos» ves los casos difíciles paso a paso.')
+      ] },
+      { titulo: 'Tu primer mes', bloques: [
+        T('La existencia anterior se captura una sola vez'),
+        I('inventory_2', '#0284c7', 'Solo el primer mes', 'La primera vez que tu unidad hace el SINBA-SIS, anotas lo que te quedó del mes pasado, lote por lote. Desde el segundo mes viene sola del cierre anterior y ya no se captura.'),
+        I('add_circle', '#16a34a', 'Agregar un lote que ya tenías', 'Debajo de la tabla de cada biológico. Elige el Estatus y el lote. Si el lote dice «(ya está en tu SIS)» es el mismo que te llegó por Requisiciones: no se duplica, la cantidad se anota como su existencia anterior y su fila se resalta.'),
+        I('edit', '#0284c7', 'El lápiz de la fila', 'También puedes tocar el lápiz ✏️ del lote para escribir o corregir su existencia anterior.'),
+        Tu('primer_mes', 'Míralo en un tutorial corto', 'Ver cómo se anota lo que ya tenías de un lote que te llegó (menos de un minuto).')
       ] },
       { titulo: 'Concilia', bloques: [
         I('compare_arrows', '#16a34a', 'Cómo se ve', 'Bajo cada biológico ves cuántas dosis reportaste en SIS-06-P y cuántas suman tus lotes. En verde: coinciden; si no, te dice la diferencia.'),
-        I('tune', '#0284c7', 'Cómo se corrige', 'Ajusta las «aplicadas» por lote en Movimiento, o el paloteo en SIS-06-P, hasta que sean iguales.'),
+        I('tune', '#0284c7', 'Cómo se corrige', 'La tarjeta dice cuántas dosis faltan o sobran. Corrige el lado que esté mal —las «aplicadas» por lote en Movimiento o el paloteo en SIS-06-P— hasta que sean iguales.'),
         I('swap_horiz', '#d97706', 'Comodín de sustitución', 'Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT), anota cuántas con el comodín.'),
+        Tu('cuadrar', 'Míralo en un tutorial corto', 'Ver cómo se corrige cuando el paloteo y el Movimiento no coinciden.'),
         N('Si las dosis no coinciden, el sistema no deja enviar.')
       ] },
       { titulo: 'Hojas de solo lectura', bloques: [
@@ -76,15 +91,23 @@
         N('Lo aplicado de Antiinfluenza en Movimiento debe ser igual al total de Influenza. Si no, «Usar este total aquí» lo pasa al lote.')
       ] },
       { titulo: 'Envía y validación', bloques: [
-        P(1, 'Revisa', 'Que la conciliación esté en verde y que tu nombre esté escrito.'),
+        Tu('enviar', 'Míralo en un tutorial corto', 'Ver cómo se revisa y se envía el SINBA-SIS.'),
+        P(1, 'Revisa', 'Que la conciliación esté en verde y que tu nombre esté escrito. Si «Enviar» está apagado, tócalo: te dice qué falta.'),
         P(2, 'Envía', 'Con el botón Enviar de la barra de abajo. Te pide confirmar antes de enviar.'),
         P(3, 'Se bloquea', 'SIS-06-P, Movimiento e Influenza ya no se pueden cambiar desde la unidad; el Movimiento se cierra solo.'),
         P(4, 'Validación', 'Si tu municipio corrige algo, te aparece cada cambio y lo aceptas. Ya validado puedes exportar el Excel oficial e imprimir.'),
         N('Con «Historial» consultas todos tus meses y su estatus, sin poder editarlos.')
       ] },
+      { titulo: 'Tutoriales cortos', bloques: [
+        T('Los casos que más dudas dan, en movimiento'),
+        Tu('primer_mes', 'Anotar lo que ya tenías de un lote que te llegó', 'Primer mes: el lote llegó por Requisiciones y también tenías frascos.'),
+        Tu('cuadrar', 'Mi paloteo y mi Movimiento no coinciden', 'Cómo encontrar la diferencia y corregirla.'),
+        Tu('mover', 'Mover un lote a A.R.F. o a Canje', 'Cuando parte de un lote queda en dictamen o se va a cambiar.'),
+        Tu('enviar', 'Enviar tu SINBA-SIS', 'Qué revisar y qué hacer si «Enviar» está apagado.')
+      ] },
       { titulo: 'Si algo pasa', bloques: [
         I('wifi_off', '#d97706', 'Se fue el internet', 'Lo que tecleaste queda respaldado en tu equipo y lo recuperas al volver a abrir el mes. En Movimiento, el cambio se guarda solo al volver la conexión.'),
-        I('block', '#dc2626', 'No puedo enviar', 'Revisa que estés en la fecha de envío, que la conciliación cuadre y que el responsable esté escrito.'),
+        I('block', '#dc2626', 'No puedo enviar', 'Toca el botón «Enviar» apagado: una lista te dice qué falta.'),
         I('edit_off', '#475569', 'Quiero cambiar algo ya enviado', 'Pide a tu municipio que lo corrija en modo revisión; tú verás el cambio para aceptarlo.'),
         I('event_busy', '#0284c7', 'Me equivoqué de mes', 'Cambia «Mes que reportas» arriba: cada mes tiene su propio archivo y su propio estatus.')
       ] }
@@ -149,10 +172,12 @@
     subtitulo: 'Lo nuevo en SIREVAQ para tu unidad. Cada cosa dice dónde encontrarla.',
     pagina: 'novedades_unidades.html', pdf: 'novedades_unidades.pdf',
     volver: 'index.html', volverEtiqueta: 'Volver a SIREVAQ',
-    version: '2026-10',
+    version: '2026-10-b',
     pasos: [
       { titulo: 'SINBA-SIS e Influenza', bloques: [
         I('assignment', '#0284c7', 'SINBA-SIS en un solo archivo', 'Tu mes completo en un lugar: SIS-06-P, Movimiento de Biológico, hoja de claves e Influenza. Una barra abajo te lleva entre hojas y muestra el estatus: captura, concilia, envía y validación.', 'Captura de reportes → SINBA-SIS'),
+        I('play_circle', '#16a34a', 'Tutoriales cortos', 'Pequeñas películas que muestran, con un cursor que se mueve solo, cómo resolver lo que más dudas da: anotar lo que ya tenías de un lote, cuadrar tu paloteo con el Movimiento, mover un lote a A.R.F. o Canje y enviar.', 'Movimiento de Biológico → «Tutoriales cortos»'),
+        I('checklist', '#d97706', '¿Qué falta para enviar?', 'Si el botón «Enviar» está apagado, tócalo: una lista con palomitas te dice qué falta y cómo resolverlo.', 'Barra de abajo del SINBA-SIS'),
         I('vaccines', '#7c3aed', 'Influenza: un reporte por semana', 'La semana (de lunes a domingo) se abre el lunes y la capturas cualquier día. El panel te muestra cuántas dosis llevas contra tu meta y no deja pasarte de ella.', 'Captura de reportes → Influenza')
       ] },
       { titulo: 'Capacitaciones y pedidos', bloques: [

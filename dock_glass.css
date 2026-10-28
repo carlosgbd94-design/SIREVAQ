@@ -85,10 +85,17 @@ body.con-dock { padding-bottom: 104px; }
 .dock-estado { flex: 0 1 auto; min-width: 0; max-width: 290px; display: flex; flex-direction: column; gap: 1px; padding: 0 10px; }
 .dock-estado b { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #0f172a; font-family: 'Poppins', sans-serif; white-space: nowrap; }
 .dock-estado small { font-size: 11px; color: #5b6b80; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock-estado.clicable { cursor: pointer; border-radius: 12px; }
+.dock-estado.clicable:focus-visible { outline: 2px solid #0284c7; outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .dock-estado.clicable:hover small { text-decoration: underline; text-underline-offset: 2px; } }
+/* Enviar apagado: el toque cae en la barra y abre «Qué falta para enviar» (sis06p_biovac_module.js) */
+#btnEnviarSIS06P:disabled { pointer-events: none; }
 .dock-punto { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; flex: none; }
 .dock-punto.enviado { background: #f59e0b; }
 .dock-punto.validado { background: #16a34a; }
 
+/* Barra apretada: la línea de estatus cede su lugar para que ninguna pestaña quede recortada. */
+.dock-sis.dock-compacto .dock-estado { display: none !important; }
 .dock-acciones { display: flex; align-items: center; gap: 4px; flex: none; margin-left: 2px; }
 /* Si ningún botón de acción está visible (p. ej. un rol sin nada que guardar),
    el contenedor desaparece por completo: si no, el "gap" de la cápsula deja un

@@ -1939,8 +1939,8 @@ function encabezadoColumnas(split, clave) {
   const rs = split ? ' rowspan="2"' : '';
   const [mlFraccionada, mlCompleta] = ML_DOSIS_FRACCIONADA[clave] || ['Fraccionada', 'Completa'];
   const subfila = split ? `<tr class="fila-subencabezado">
-    <th class="col-dosis-05">${mlFraccionada}</th><th class="col-dosis-1">${mlCompleta}</th>
-    <th class="col-dosis-05">${mlFraccionada}</th><th class="col-dosis-1">${mlCompleta}</th>
+    <th class="col-dosis-05" title="${mlFraccionada}: dosis pediátrica (media dosis)">${mlFraccionada}</th><th class="col-dosis-1" title="${mlCompleta}: dosis de adulto (dosis completa)">${mlCompleta}</th>
+    <th class="col-dosis-05" title="${mlFraccionada}: dosis pediátrica (media dosis)">${mlFraccionada}</th><th class="col-dosis-1" title="${mlCompleta}: dosis de adulto (dosis completa)">${mlCompleta}</th>
   </tr>` : '';
   return `<thead>
     <tr>
@@ -1963,6 +1963,13 @@ function encabezadoColumnas(split, clave) {
 // verde = con vigencia holgada. Solo es informativo aquí -- el bloqueo real
 // de guardar un lote NORMAL caducado lo hace el motor (biovac_trg_20_autocalc).
 const DIAS_PROXIMO_A_VENCER = 90;
+const TEXTO_NEGATIVA = 'La existencia final no puede ser negativa: aplicaste o desechaste más de lo que tenías. Revisa las aplicadas, las desechadas o la existencia anterior de este lote.';
+function marcarNegativa(celda, negativa) {
+  if (!celda) return;
+  celda.classList.toggle('existencia-negativa', negativa);
+  if (negativa) celda.title = TEXTO_NEGATIVA; else celda.removeAttribute('title');
+}
+
 function semaforoCaducidad(caducidadIso) {
   if (!caducidadIso) return 'sem-ok';
   const hoyMs = Date.now();
@@ -2207,10 +2214,18 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   const aporte = estado.aporteUnidades && estado.aporteUnidades.get(`${r.lote_id}|${r.categoria}`);
   const porUnidades = Boolean(editable && aporte && aporte.length);
   const recibidoDeRequisicion = recibidoSoloDeRequisicion();
+  // Nombre accesible de cada casilla: «lote — columna» (sin esto se armaba con el texto de la celda del lote y salía «Mover»).
+  const [mlFraccionada, mlCompleta] = ML_DOSIS_FRACCIONADA[bio.clave] || ['dosis fraccionada', 'dosis completa'];
+  const ETIQUETA_CAMPO = {
+    existencia_anterior_frascos: 'Existencia anterior (frascos)', recibido_frascos: 'Recibido (frascos)',
+    aplicadas_a: split ? `Dosis aplicadas ${mlFraccionada}` : 'Dosis aplicadas', aplicadas_b: `Dosis aplicadas ${mlCompleta}`,
+    desechadas_a: split ? `Dosis desechadas ${mlFraccionada}` : 'Dosis desechadas', desechadas_b: `Dosis desechadas ${mlCompleta}`
+  };
+  const etiquetaDe = (nombreCampo) => `${lote.numero_lote} — ${ETIQUETA_CAMPO[nombreCampo] || nombreCampo}`;
   const campo = (campo, valor, clase) => (campo === 'recibido_frascos' && recibidoDeRequisicion)
     ? `<span class="recibido-requi" title="Lo recibido viene de Requisiciones: no se captura aquí. Si no coincide con lo que llegó, avisa al municipal."><span class="recibido-num">${valor || 0}</span><span class="material-symbols-rounded recibido-candado" role="img" aria-label="bloqueado, viene de Requisiciones">lock</span></span>`
     : (editable && !porUnidades)
-    ? `<input type="number" step="any" inputmode="decimal" class="${clase || ''}" data-renglon="${r.id}" data-campo="${campo}" value="${valor ? valor : ''}" placeholder="0">`
+    ? `<input type="number" step="any" inputmode="decimal" class="${clase || ''}" data-renglon="${r.id}" data-campo="${campo}" value="${valor ? valor : ''}" placeholder="0" aria-label="${etiquetaDe(campo)}">`
     : `<span>${valor || 0}</span>`;
 
   let botonResolver = '';
@@ -2232,7 +2247,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   // «Mover»: pasa parte o toda la existencia del lote a otro estatus (Normal, A.R.F., Canje), en cualquier sentido.
   const puedeMover = editable && Number(dosis) > 0 && !porUnidades;
   const botonMover = puedeMover
-    ? `<button type="button" class="btn-resolver mover" data-action="toggle-mover" data-renglon="${r.id}" aria-expanded="false" title="Pasar parte o toda la existencia a otro estatus"><span class="material-symbols-rounded" aria-hidden="true">swap_horiz</span> Mover</button>` : '';
+    ? `<button type="button" class="btn-resolver mover" data-action="toggle-mover" data-renglon="${r.id}" aria-expanded="false" title="Mover: pasa parte o todo este lote a otro estatus. A.R.F. si el biológico quedó en dictamen (por ejemplo, falla de cadena de frío); Canje si se va a cambiar con el proveedor."><span class="material-symbols-rounded" aria-hidden="true">swap_horiz</span> Mover</button>` : '';
   const filaMover = puedeMover ? `<tr><td colspan="${cols}" style="padding:0; border-bottom:1px solid #f1f5f9;">${panelMoverHtml(r, dosis, caducado)}</td></tr>` : '';
 
   const edicionJurisdiccion = estado.ultimasEdicionesJurisdiccion.get(r.id);
@@ -2249,15 +2264,15 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
       ${vencidoArf ? '<div class="badge-vencido"><span class="material-symbols-rounded">warning</span> Caducado</div>' : ''}
       ${bloqueadoNormal ? '<div class="badge-vencido"><span class="material-symbols-rounded">warning</span> Debe desecharse</div>' : ''}
     </td>
-    <td class="col-anterior c-ant"><span class="ant-valor" data-ant-valor="${r.id}">${redondearFrascos(r.existencia_anterior_frascos) || 0}</span>${tagAjusteAnt}${puedeEditarAnt ? `<input type="number" step="any" inputmode="decimal" class="ant-input" data-renglon="${r.id}" data-campo="existencia_anterior_frascos" value="${r.existencia_anterior_frascos ? r.existencia_anterior_frascos : ''}" placeholder="0">` : ''}</td>
+    <td class="col-anterior c-ant"><span class="ant-valor" data-ant-valor="${r.id}">${redondearFrascos(r.existencia_anterior_frascos) || 0}</span>${tagAjusteAnt}${puedeEditarAnt ? `<input type="number" step="any" inputmode="decimal" class="ant-input" data-renglon="${r.id}" data-campo="existencia_anterior_frascos" value="${r.existencia_anterior_frascos ? r.existencia_anterior_frascos : ''}" placeholder="0" aria-label="${etiquetaDe('existencia_anterior_frascos')}">` : ''}</td>
     <td class="col-mov c-rec">${campo('recibido_frascos', r.recibido_frascos)}</td>
     <td class="col-mov c-apl${split ? ' col-dosis-05' : ''}">${campo('aplicadas_a', r.aplicadas_a)}</td>
     ${split ? `<td class="col-mov c-apl col-dosis-1">${campo('aplicadas_b', r.aplicadas_b)}</td>` : ''}
     <td class="col-mov c-des${split ? ' col-dosis-05' : ''}">${campo('desechadas_a', r.desechadas_a)}</td>
     ${split ? `<td class="col-mov c-des col-dosis-1">${campo('desechadas_b', r.desechadas_b)}</td>` : ''}
-    <td class="col-final c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}" data-existencia-final="${r.id}">${dosis}</span></td>
+    <td class="col-final c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}"${negativa ? ` title="${TEXTO_NEGATIVA}"` : ''} data-existencia-final="${r.id}">${dosis}</span></td>
     <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}</td>
-    <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Anotar o corregir lo que tenías de este lote del mes pasado (solo este primer mes)" aria-label="Anotar o corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<span class="nota-lote-requi" role="img" aria-label="Este lote llegó por Requisiciones: no se quita aquí" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span></div>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
+    <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Anotar o corregir lo que tenías de este lote del mes pasado (solo este primer mes)" aria-label="Anotar o corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<span class="nota-lote-requi" role="img" aria-label="Este lote llegó por Requisiciones: no se quita aquí" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span></div>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Quitar este lote del SINBA-SIS. Úsalo solo si lo agregaste por error."><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
   </tr>${filaResolver}${filaMover}${porUnidades ? filaPorUnidadHtml(r, aporte, cols) : ''}`;
 }
 
@@ -2355,7 +2370,7 @@ function panelMoverHtml(r, existencia, caducado) {
   const id = r.id;
   const destinos = ['NORMAL', 'ARF', 'CANJE'].filter((c) => c !== r.categoria && !(c === 'NORMAL' && caducado));
   return `<div class="panel-resolver" data-panel-mover="${id}" role="group" aria-label="Mover existencia del lote a otro estatus">
-    <p>Pasa parte o toda la existencia de este lote a otro estatus; queda registrado con su motivo. Existencia actual: <b>${existencia}</b> frasco(s).${caducado ? ' El lote está caducado: ya no puede volver a Normal.' : ''}</p>
+    <p>Pasa parte o toda la existencia de este lote a otro estatus; queda registrado con su motivo. Existencia actual: <b>${existencia}</b> frasco(s).${caducado ? ' El lote está caducado: ya no puede volver a Normal.' : ''} <button type="button" class="tut-enlace" data-tutorial="mover"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span>Ver cómo (tutorial corto)</button></p>
     <div class="campos">
       <div class="campo" style="width:250px">
         <label for="mover_dest_${id}">Mover a</label>
@@ -2420,7 +2435,7 @@ function renderPanelAgregar(bio) {
     return `
   <button type="button" class="btn-agregar-lote" aria-expanded="false" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add_circle</span> Agregar un lote que ya tenías de ${bio.nombre_excel.replace(/\n/g, ' ')}</button>
   <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
-    <p class="nota-panel-agregar">Solo para lo que te quedó del mes pasado. Lo que recibiste este mes ya está cargado desde Requisiciones; si el lote es el mismo (dirá «ya está en tu SIS»), elígelo aquí: no se duplica, la cantidad se anota como su existencia anterior. También puedes usar el lápiz de su fila.</p>
+    <p class="nota-panel-agregar">Solo para lo que te quedó del mes pasado. Lo que recibiste este mes ya está cargado desde Requisiciones; si el lote es el mismo (dirá «ya está en tu SIS»), elígelo aquí: no se duplica, la cantidad se anota como su existencia anterior. También puedes usar el lápiz de su fila. <button type="button" class="tut-enlace" data-tutorial="primer_mes"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span>Ver cómo (tutorial corto)</button></p>
     <input type="radio" class="sr-solo" name="tipo-cant-${bioId}" value="ANTERIOR" data-nuevo-tipo-cantidad checked aria-hidden="true" tabindex="-1">
     <div class="campos">
       <div class="campo">
@@ -2512,7 +2527,7 @@ function recalcularFilaEnVivo(renglonId) {
     aplicadasB: valores.aplicadas_b ?? r.aplicadas_b, desechadasA: valores.desechadas_a ?? r.desechadas_a, desechadasB: valores.desechadas_b ?? r.desechadas_b
   }));
   const celda = document.querySelector(`[data-existencia-final="${renglonId}"]`);
-  if (celda) { celda.textContent = dosis; celda.classList.toggle('existencia-negativa', dosis < 0); }
+  if (celda) { celda.textContent = dosis; marcarNegativa(celda, dosis < 0); }
   recalcularTotalBio(bio.id);
 }
 
@@ -2708,7 +2723,7 @@ async function guardarCampoRenglon(input) {
       if (vista) vista.textContent = redondearFrascos(valor) || 0;
     }
     const celda = document.querySelector(`[data-existencia-final="${renglonId}"]`);
-    if (celda) { celda.textContent = redondearFrascos(final); celda.classList.toggle('existencia-negativa', Number(final) < 0); }
+    if (celda) { celda.textContent = redondearFrascos(final); marcarNegativa(celda, Number(final) < 0); }
   }
   // La píldora de Movimiento y la ruta del mes (barra de hojas) leen la
   // conciliación con el paloteo: se vuelve a pedir al servidor tras guardar.

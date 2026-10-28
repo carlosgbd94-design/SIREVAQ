@@ -33,13 +33,15 @@ window.onunhandledrejection = function (event) {
 })();
 </script>
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="dock_glass.css?v=9">
-<link rel="stylesheet" href="ayuda.css?v=6">
+<link rel="stylesheet" href="dock_glass.css?v=10">
+<link rel="stylesheet" href="ayuda.css?v=7">
 <link rel="stylesheet" href="municipal_guiado.css?v=12">
-<script defer src="guias_contenido.js?v=4"></script>
-<script defer src="ayuda.js?v=21"></script>
+<script defer src="guias_contenido.js?v=5"></script>
+<script defer src="ayuda.js?v=22"></script>
 <script defer src="a11y_global.js?v=6"></script>
-<script defer src="dock_glass.js?v=5"></script>
+<script defer src="dock_glass.js?v=6"></script>
+<script defer src="hints.js?v=3"></script>
+<script defer src="tutoriales_sis.js?v=12"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -47,8 +49,8 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.98"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.66"></script>
+<script defer src="biovac_ui.js?v=2026.101"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.69"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.25"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
@@ -581,6 +583,7 @@ window.onunhandledrejection = function (event) {
     background: rgba(15,23,42,.06); border-radius: 8px; padding: 5px 8px;
   }
   .existencia-negativa { color: var(--error); background: var(--error-bg); }
+  .existencia-negativa::after { content: ' ⚠ revisa'; font-size: 10px; font-weight: 800; white-space: nowrap; }
 
   /* ── Correcciones que pidió Jurisdicción sobre el movimiento del municipio ───────────── */
   .corr-jur { margin-bottom: 14px; padding: 14px 16px; border-radius: 18px; background: #fffbeb; border: 1.5px solid var(--warning-border); }
@@ -887,7 +890,7 @@ window.onunhandledrejection = function (event) {
      para el resto de los usos del modal) -- esta lista aparte sí acepta
      HTML, para que con varios biológicos/lotes a la vez cada uno se lea
      como su propia tarjeta en vez de un párrafo corrido con viñetas. */
-  .modal-detalle { max-height: 220px; overflow-y: auto; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+  .modal-detalle { max-height: min(46vh, 380px); overflow-y: auto; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
   .modal-detalle-item {
     background: var(--surface-container); border: 1px solid var(--outline-variant); border-radius: 10px;
     padding: 8px 10px; font-size: 12px;
@@ -1376,7 +1379,7 @@ window.onunhandledrejection = function (event) {
 </div>
 
 <div id="panelMovimiento">
-  <div class="ayuda-franja"><span>Recibido, aplicadas y desechadas por lote. Existencia, recibido y final van en <b>frascos</b>; aplicadas y desechadas en <b>dosis</b>. Lo aplicado debe cuadrar con tu paloteo de SIS-06-P.</span><button type="button" class="ayuda-btn" data-ayuda="movimiento" title="Cómo funciona Movimiento de Biológico" aria-label="Cómo funciona Movimiento de Biológico"><span class="material-symbols-rounded">help</span></button></div>
+  <div class="ayuda-franja"><span>Recibido, aplicadas y desechadas por lote. Existencia, recibido y final van en <b>frascos</b>; aplicadas y desechadas en <b>dosis</b>. Lo aplicado debe cuadrar con tu paloteo de SIS-06-P.</span><button type="button" class="tut-enlace" data-tutorial="menu"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span>Tutoriales cortos</button><button type="button" class="ayuda-btn" data-ayuda="movimiento" title="Cómo funciona Movimiento de Biológico" aria-label="Cómo funciona Movimiento de Biológico"><span class="material-symbols-rounded">help</span></button></div>
   <div id="bannerPendientes"></div>
   <div id="bannerMovimiento"></div>
   <div id="panelCorreccionesJur"></div>

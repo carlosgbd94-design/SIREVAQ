@@ -178,12 +178,13 @@
         T('Cómo se calcula'),
         I('calculate', '#d97706', 'Existencia final', 'Existencia anterior + recibido − aplicadas − desechadas. La final pasa sola como anterior del mes siguiente.'),
         I('edit_note', '#0284c7', 'Qué capturas por lote', 'Recibido, dosis aplicadas y dosis desechadas. Cada celda se guarda al salir de ella.'),
-        I('add_circle', '#16a34a', 'Agregar lote', 'Si llegó un lote que no está en la lista, agrégalo con el botón del biológico. Los lotes A.R.F. (en dictamen) y Canje se agregan también desde ahí.'),
+        I('add_circle', '#16a34a', 'Agregar un lote que ya tenías', 'Solo en tu primer mes: anota lo que te quedó del mes pasado. Si el lote ya llegó por Requisiciones, elígelo («ya está en tu SIS») y la cantidad se anota como su existencia anterior, sin duplicarlo.'),
+        I('swap_horiz', '#7c3aed', 'Mover', 'Pasa parte o todo un lote a A.R.F. (en dictamen) o a Canje, con su motivo.'),
         I('contrast', '#7c3aed', 'Dosis pediátrica y de adulto', 'Hepatitis B y COVID Moderna tienen dosis pediátrica y de adulto por separado; para conciliar, la pediátrica cuenta como media dosis.'),
         T('Que cuadre con tu paloteo'),
         P(1, 'Compara', 'Bajo cada biológico ves cuántas dosis reportaste en SIS-06-P y cuántas suman tus lotes. En verde: coinciden.'),
         P(2, 'Corrige', 'Ajusta las "aplicadas" por lote aquí, o el paloteo en SIS-06-P, hasta que sean iguales. En Influenza, "Usar este total aquí" pasa el total del mes al lote.'),
-        N('Lo recibido puede llegar precargado desde la requisición de la Jurisdicción; puedes editarlo si algo cambió. Si falla el internet al guardar una casilla, el cambio queda respaldado y se guarda solo al volver la conexión. Al enviar el SINBA-SIS, el Movimiento se cierra solo y ya no se puede modificar desde la unidad.')
+        N('Lo recibido viene solo de Requisiciones (con candado): no se captura aquí; si no coincide con lo que llegó, avisa a tu municipal. Si falla el internet al guardar una casilla, el cambio queda respaldado y se guarda solo al volver la conexión. Al enviar el SINBA-SIS, el Movimiento se cierra solo y ya no se puede modificar desde la unidad.')
       ]
     },
 
@@ -389,6 +390,7 @@
       if (b.tipo === 'item') return `<div class="ayuda-item"><span class="material-symbols-rounded" style="color:${esc(b.color)};">${esc(b.icono)}</span><div><b>${esc(b.nombre)}</b><span class="t">${esc(b.texto)}</span>${b.donde ? `<span class="ayuda-donde"><span class="material-symbols-rounded">near_me</span>${esc(b.donde)}</span>` : ''}</div></div>`;
       if (b.tipo === 'paso') return `<div class="ayuda-paso"><span class="ayuda-num">${esc(b.n)}</span><div><b>${esc(b.nombre)}.</b><span class="t">${esc(b.texto)}</span></div></div>`;
       if (b.tipo === 'nota') return `<div class="ayuda-nota">${esc(b.texto)}</div>`;
+      if (b.tipo === 'tutorial') return window.Tutoriales ? `<button type="button" class="ayuda-tutorial" data-tutorial="${esc(b.id)}"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span><span><b>${esc(b.nombre)}</b><span class="t">${esc(b.texto)}</span></span></button>` : '';
       return '';
     }).join('');
   }

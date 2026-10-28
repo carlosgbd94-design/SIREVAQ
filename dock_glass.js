@@ -26,6 +26,12 @@
 
   // Difumina el borde por el que aún hay pestañas fuera de vista (en vez de cortarlas en seco).
   function bordes(cont) {
+    // Antes de recortar pestañas se cede el lugar de la línea de estatus: sin ella caben todas (el estatus sigue a un toque en «Enviar»).
+    const dock = cont.closest && cont.closest('.dock-sis');
+    if (dock) {
+      dock.classList.remove('dock-compacto');
+      if (cont.scrollWidth - cont.clientWidth > 2) dock.classList.add('dock-compacto');
+    }
     const max = cont.scrollWidth - cont.clientWidth;
     const izq = max > 2 && cont.scrollLeft > 2;
     const der = max > 2 && cont.scrollLeft < max - 2;
