@@ -94,6 +94,12 @@ test('Agregar un lote que ya está en la tabla avisa y lleva a la casilla RECIBI
   await expect(page.locator('[data-nuevo-lote]')).toBeEnabled();
   await page.selectOption('[data-nuevo-lote]', '0374MA108');
   const alerta = page.locator('[data-alerta-repetido]');
+  // como existencia anterior (tipo por omisión) y con cantidad ya capturada: avisa que se edita con el lápiz de su fila
+  await expect(alerta).toBeVisible();
+  await expect(alerta).toContainText('existencia anterior');
+  await expect(page.locator('[data-action="confirmar-agregar"]')).toBeDisabled();
+  // como RECIBIDO: avisa que ya está dado de alta y lleva a la casilla RECIBIDO
+  await page.locator('.tipo-cantidad label.t-rec').click();
   await expect(alerta).toBeVisible();
   await expect(alerta).toContainText('ya está dado de alta');
   await expect(alerta).toContainText('RECIBIDO');
