@@ -2257,7 +2257,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     ${split ? `<td class="col-mov c-des col-dosis-1">${campo('desechadas_b', r.desechadas_b)}</td>` : ''}
     <td class="col-final c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}" data-existencia-final="${r.id}">${dosis}</span></td>
     <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}</td>
-    <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<div class="acciones-fila"><span class="nota-lote-requi" role="img" aria-label="Este lote llegó por Requisiciones: no se quita aquí" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span></div>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
+    <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Anotar o corregir lo que tenías de este lote del mes pasado"><span class="material-symbols-rounded">edit</span></button>` : ''}<span class="nota-lote-requi" role="img" aria-label="Este lote llegó por Requisiciones: no se quita aquí" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span></div>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
   </tr>${filaResolver}${filaMover}${porUnidades ? filaPorUnidadHtml(r, aporte, cols) : ''}`;
 }
 
@@ -2397,6 +2397,16 @@ function panelPasarArfHtml(renglonId, existenciaActual) {
   </div>`;
 }
 
+function alertaRepetidoHtml() {
+  return `<div class="alerta-lote-repetido" data-alerta-repetido role="status">
+        <span class="material-symbols-rounded" aria-hidden="true">warning</span>
+        <div class="texto" data-alerta-repetido-texto></div>
+        <button type="button" class="btn-primario btn-mini" data-action="ir-a-recibido" data-renglon="">
+          <span class="material-symbols-rounded" aria-hidden="true">south</span> Ir a la casilla RECIBIDO de ese lote
+        </button>
+      </div>`;
+}
+
 function renderPanelAgregar(bio) {
   const bioId = bio.id;
   const antOk = anteriorEditablePorRol();
@@ -2410,7 +2420,7 @@ function renderPanelAgregar(bio) {
     return `
   <button type="button" class="btn-agregar-lote" aria-expanded="false" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add_circle</span> Agregar un lote que ya tenías de ${bio.nombre_excel.replace(/\n/g, ' ')}</button>
   <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
-    <p class="nota-panel-agregar">Solo para lo que te quedó del mes pasado. Lo que recibiste este mes ya está cargado desde Requisiciones.</p>
+    <p class="nota-panel-agregar">Solo para lo que te quedó del mes pasado. Lo que recibiste este mes ya está cargado desde Requisiciones; si el lote es el mismo, elígelo aquí y la cantidad se anota en su existencia anterior.</p>
     <input type="radio" class="sr-solo" name="tipo-cant-${bioId}" value="ANTERIOR" data-nuevo-tipo-cantidad checked aria-hidden="true" tabindex="-1">
     <div class="campos">
       <div class="campo">
@@ -2434,7 +2444,7 @@ function renderPanelAgregar(bio) {
         <label>3. Cuántos frascos tenías</label>
         <input type="number" step="any" data-nuevo-cantidad aria-label="Cuántos frascos" placeholder="0">
       </div>
-      <div class="alerta-lote-repetido" data-alerta-repetido></div>
+      ${alertaRepetidoHtml()}
     </div>
     <div class="acciones">
       <button class="btn-primario btn-mini" data-action="confirmar-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">check</span> Agregar lote</button>
@@ -2475,13 +2485,7 @@ function renderPanelAgregar(bio) {
         <label>4. Cuántos frascos</label>
         <input type="number" step="any" data-nuevo-cantidad aria-label="Cuántos frascos" placeholder="0">
       </div>
-      <div class="alerta-lote-repetido" data-alerta-repetido>
-        <span class="material-symbols-rounded">warning</span>
-        <div class="texto" data-alerta-repetido-texto></div>
-        <button type="button" class="btn-primario btn-mini" data-action="ir-a-recibido" data-renglon="">
-          <span class="material-symbols-rounded">south</span> Ir a la casilla RECIBIDO de ese lote
-        </button>
-      </div>
+      ${alertaRepetidoHtml()}
     </div>
     <div class="acciones">
       <button class="btn-primario btn-mini" data-action="confirmar-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">check</span> Agregar lote</button>
@@ -2801,11 +2805,31 @@ function avisarLoteRepetido(panel) {
   const categoria = (panel.querySelector('[data-nuevo-categoria]') || {}).value || '';
   const r = numero ? renglonRepetido(panel.dataset.bio, categoria, numero) : null;
   const btnConfirmar = panel.querySelector('[data-action="confirmar-agregar"]');
+  const btnIr = aviso.querySelector('[data-action="ir-a-recibido"]');
+  const tipo = (panel.querySelector('[data-nuevo-tipo-cantidad]:checked') || {}).value || 'ANTERIOR';
   if (!r) {
     aviso.classList.remove('visible');
     if (btnConfirmar) btnConfirmar.disabled = false;
     return;
   }
+  // El lote ya llegó este mes (Requisiciones) y la unidad lo tenía también del mes pasado: no se duplica el renglón,
+  // lo que tenía se anota en la «Existencia anterior» de ese mismo renglón.
+  if (tipo === 'ANTERIOR' && anteriorEditablePorRol()) {
+    const antActual = Number(r.existencia_anterior_frascos) || 0;
+    if (btnIr) btnIr.style.display = 'none';
+    if (antActual > 0) {
+      aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>El lote ${r.biovac_lotes.numero_lote} ya tiene ${redondearFrascos(antActual)} frasco(s) de existencia anterior.</b> `
+        + 'Para cambiar la cantidad usa el lápiz de su renglón en la tabla.';
+      if (btnConfirmar) btnConfirmar.disabled = true;
+    } else {
+      aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>El lote ${r.biovac_lotes.numero_lote} ya está en tu tabla</b> (recibido este mes: ${redondearFrascos(r.recibido_frascos) || 0}). `
+        + 'Los frascos que tenías del mes pasado se anotan en la <b>existencia anterior</b> de ese mismo renglón: indica la cantidad y pulsa «Agregar lote».';
+      if (btnConfirmar) btnConfirmar.disabled = false;
+    }
+    aviso.classList.add('visible');
+    return;
+  }
+  if (btnIr) btnIr.style.display = '';
   aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>El lote ${r.biovac_lotes.numero_lote} ya está dado de alta en este movimiento</b> `
     + `(existencia anterior: ${redondearFrascos(r.existencia_anterior_frascos) || 0}, recibido: ${r.recibido_frascos || 0}).<br>`
     + 'No lo agregues otra vez: si <b>recibiste ese mismo lote</b>, captura la cantidad en la casilla <b>RECIBIDO</b> de su renglón (la resaltamos por ti).';
@@ -3190,8 +3214,18 @@ function lotesYaEnMovimiento(bioId, categoria) {
 async function poblarSelectLote(bio, categoria, selectEl) {
   selectEl.disabled = true;
   selectEl.innerHTML = '<option value="">Cargando lotes…</option>';
-  const lista = await obtenerLotesCatalogoCentral(bio, categoria);
+  const lista = [...await obtenerLotesCatalogoCentral(bio, categoria)];
   const yaUsados = lotesYaEnMovimiento(bio.id, categoria);
+  // Los lotes que ya están en la tabla (p. ej. los que llegaron por Requisiciones) se ofrecen siempre, aunque la matriz de
+  // «Carga de lotes por municipio» no los tenga: así la unidad puede anotar lo que ya tenía de ese mismo lote.
+  const enLista = new Set(lista.map((l) => String(l.lote).trim().toUpperCase()));
+  for (const r of estado.renglones) {
+    if (r.categoria !== categoria || r.biovac_lotes.biologico_id !== bio.id) continue;
+    const clave = String(r.biovac_lotes.numero_lote || '').trim().toUpperCase();
+    if (enLista.has(clave)) continue;
+    enLista.add(clave);
+    lista.push({ lote: String(r.biovac_lotes.numero_lote).trim(), caducidad: r.biovac_lotes.caducidad });
+  }
   const opciones = lista
     .map((l) => {
       const usado = yaUsados.has(String(l.lote).trim().toUpperCase());
@@ -3251,7 +3285,21 @@ async function agregarLote(bioId, panel) {
   const numeroLote = loteSelect.value.trim();
   const caducidad = loteSelect.selectedOptions[0]?.dataset.cad || null;
   const categoria = panel.querySelector('[data-nuevo-categoria]').value;
-  if (renglonRepetido(bioId, categoria, numeroLote)) {
+  const existente = renglonRepetido(bioId, categoria, numeroLote);
+  const tipoSel = (panel.querySelector('[data-nuevo-tipo-cantidad]:checked') || {}).value || 'ANTERIOR';
+  if (existente && tipoSel === 'ANTERIOR' && anteriorEditablePorRol() && !(Number(existente.existencia_anterior_frascos) > 0)) {
+    const cant = Number(panel.querySelector('[data-nuevo-cantidad]').value) || 0;
+    if (cant <= 0) { toast('Indica cuántos frascos tenías de este lote.', 'error'); return; }
+    const { error } = await estado.db.from('biovac_renglones').update({ existencia_anterior_frascos: cant }).eq('id', existente.id);
+    if (error) { toast('No se pudo anotar: ' + error.message, 'error'); return; }
+    toast('Existencia anterior anotada en el lote que ya estaba en tu tabla.', 'ok');
+    await cargarRenglones();
+    render();
+    if (window.SIS06PBiovac && window.SIS06PBiovac.refrescarConciliacion) window.SIS06PBiovac.refrescarConciliacion();
+    refrescarCorreccionesJurisdiccion();
+    return;
+  }
+  if (existente) {
     avisarLoteRepetido(panel);
     toast('Ese lote ya está en la tabla: si lo recibiste de nuevo, captúralo en su casilla RECIBIDO.', 'error');
     return;
@@ -3932,6 +3980,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       onCambioSelectLote(ev.target);
       const panelAg = ev.target.closest('[data-panel-agregar]');
       if (panelAg) avisarLoteRepetido(panelAg);
+      return;
+    }
+    if (ev.target.matches('[data-nuevo-tipo-cantidad]')) {
+      const panelTipo = ev.target.closest('[data-panel-agregar]');
+      if (panelTipo) avisarLoteRepetido(panelTipo);
       return;
     }
     if (ev.target.matches('[data-nuevo-categoria]')) {

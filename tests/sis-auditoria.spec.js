@@ -219,6 +219,36 @@ test('Agregar lote de la unidad (con recibido de Requisiciones): primer mes solo
   expect(r.unidadJuris).toBe(false);
 });
 
+test('Lote que llegó por Requisiciones y que la unidad ya tenía: se puede anotar su existencia anterior (lápiz en la fila y «Agregar lote» sin duplicar)', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  const r = await page.evaluate(() => {
+    const bio = { id: 'b1', nombre_excel: 'HB', presentacion: 'FRASCO', dosis_por_frasco: 10 };
+    estado.biologicos = [bio];
+    estado.perfil = { ...estado.perfil, rol: 'UNIDAD' };
+    estado.movimiento = { id: 'm1', anio: 2026, mes: 10, unidad_id: 'u1', estado: 'BORRADOR' };
+    estado.anteriorEditable = true;
+    const ren = (id, ant) => ({ id, lote_id: 'l' + id, categoria: 'NORMAL', existencia_anterior_frascos: ant, recibido_frascos: 5, aplicadas_a: 0, aplicadas_b: 0, desechadas_a: 0, desechadas_b: 0, existencia_final_frascos: 5, biovac_lotes: { numero_lote: 'L-' + id, caducidad: '2028-08-01', biologico_id: 'b1' } });
+    estado.renglones = [ren('r1', 0), ren('r2', 3)];
+    const panelHtml = renderPanelAgregar(bio);
+    const cont = document.createElement('div');
+    cont.innerHTML = panelHtml.replace('data-nuevo-lote disabled', 'data-nuevo-lote').replace('<option value="">Primero elige el Estatus…</option>', '<option value="L-r1">L-r1</option><option value="L-r2">L-r2</option>');
+    document.body.appendChild(cont);
+    const panel = cont.querySelector('[data-panel-agregar]');
+    panel.querySelector('[data-nuevo-categoria]').innerHTML = '<option value="NORMAL" selected>Normal</option>';
+    const sel = panel.querySelector('[data-nuevo-lote]');
+    const mira = (lote) => { sel.value = lote; avisarLoteRepetido(panel); const a = panel.querySelector('[data-alerta-repetido]'); return { visible: a.classList.contains('visible'), texto: a.textContent, confirmarOff: panel.querySelector('[data-action="confirmar-agregar"]').disabled }; };
+    const sinAnt = mira('L-r1');
+    const conAnt = mira('L-r2');
+    cont.remove();
+    return { sinAnt, conAnt };
+  });
+  expect(r.sinAnt.visible).toBe(true);
+  expect(r.sinAnt.texto).toContain('existencia anterior');
+  expect(r.sinAnt.confirmarOff).toBe(false);
+  expect(r.conAnt.confirmarOff).toBe(true);
+  expect(r.conAnt.texto).toContain('lápiz');
+});
+
 test('Mover existencia: panel accesible con destinos según el estatus (un lote caducado no vuelve a Normal) y aviso de candado descartable', async ({ page }) => {
   await abrir(page, 'MUNICIPAL');
   await page.addScriptTag({ content: AXE });
