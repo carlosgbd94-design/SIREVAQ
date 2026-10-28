@@ -178,7 +178,7 @@
         T('Cómo se calcula'),
         I('calculate', '#d97706', 'Existencia final', 'Existencia anterior + recibido − aplicadas − desechadas. La final pasa sola como anterior del mes siguiente.'),
         I('edit_note', '#0284c7', 'Qué capturas por lote', 'Recibido, dosis aplicadas y dosis desechadas. Cada celda se guarda al salir de ella.'),
-        I('add_circle', '#16a34a', 'Agregar un lote que ya tenías', 'Solo en tu primer mes: anota lo que te quedó del mes pasado. Si el lote ya llegó por Requisiciones, elígelo («ya está en tu SIS») y la cantidad se anota como su existencia anterior, sin duplicarlo.'),
+        I('add_circle', '#16a34a', 'Agregar un lote que ya tenías', 'Solo en tu primer mes: anota lo que te quedó del mes pasado. Si el lote ya llegó por Requisiciones, elígelo (dirá «lo recibiste este mes») y la cantidad se anota como su existencia anterior, sin duplicarlo.'),
         I('swap_horiz', '#7c3aed', 'Mover', 'Pasa parte o todo un lote a A.R.F. (en dictamen) o a Canje, con su motivo.'),
         I('contrast', '#7c3aed', 'Dosis pediátrica y de adulto', 'Hepatitis B y COVID Moderna tienen dosis pediátrica y de adulto por separado; para conciliar, la pediátrica cuenta como media dosis.'),
         T('Que cuadre con tu paloteo'),

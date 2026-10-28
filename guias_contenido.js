@@ -74,7 +74,7 @@
       { titulo: 'Tu primer mes', bloques: [
         T('La existencia anterior se captura una sola vez'),
         I('inventory_2', '#0284c7', 'Solo el primer mes', 'La primera vez que tu unidad hace el SINBA-SIS, anotas lo que te quedó del mes pasado, lote por lote. Desde el segundo mes viene sola del cierre anterior y ya no se captura.'),
-        I('add_circle', '#16a34a', 'Agregar un lote que ya tenías', 'Debajo de la tabla de cada biológico. Elige el Estatus y el lote. Si el lote dice «(ya está en tu SIS)» es el mismo que te llegó por Requisiciones: no se duplica, la cantidad se anota como su existencia anterior y su fila se resalta.'),
+        I('add_circle', '#16a34a', 'Agregar un lote que ya tenías', 'Debajo de la tabla de cada biológico. Elige el Estatus y el lote. Si el lote dice «(lo recibiste este mes)» es el mismo que te llegó por Requisiciones: no se duplica, la cantidad se anota como su existencia anterior y su fila se resalta.'),
         I('edit', '#0284c7', 'El lápiz de la fila', 'También puedes tocar el lápiz ✏️ del lote para escribir o corregir su existencia anterior.'),
         Tu('primer_mes', 'Míralo en un tutorial corto', 'Ver cómo se anota lo que ya tenías de un lote que te llegó (menos de un minuto).')
       ] },

@@ -2370,7 +2370,7 @@ function panelMoverHtml(r, existencia, caducado) {
   const id = r.id;
   const destinos = ['NORMAL', 'ARF', 'CANJE'].filter((c) => c !== r.categoria && !(c === 'NORMAL' && caducado));
   return `<div class="panel-resolver" data-panel-mover="${id}" role="group" aria-label="Mover existencia del lote a otro estatus">
-    <p>Pasa parte o toda la existencia de este lote a otro estatus; queda registrado con su motivo. Existencia actual: <b>${existencia}</b> frasco(s).${caducado ? ' El lote está caducado: ya no puede volver a Normal.' : ''} <button type="button" class="tut-enlace" data-tutorial="mover"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span>Ver cómo (tutorial corto)</button></p>
+    <p>Pasa parte o toda la existencia de este lote a otro estatus; queda registrado con su motivo. Existencia actual: <b>${existencia}</b> frasco(s).${caducado ? ' El lote está caducado: ya no puede volver a Normal.' : ''} <button type="button" class="tut-enlace" data-tutorial="mover"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span><span class="tut-txt">Ver cómo (tutorial corto)</span></button></p>
     <div class="campos">
       <div class="campo" style="width:250px">
         <label for="mover_dest_${id}">Mover a</label>
@@ -2435,7 +2435,7 @@ function renderPanelAgregar(bio) {
     return `
   <button type="button" class="btn-agregar-lote" aria-expanded="false" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add_circle</span> Agregar un lote que ya tenías de ${bio.nombre_excel.replace(/\n/g, ' ')}</button>
   <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
-    <p class="nota-panel-agregar">Solo para lo que te quedó del mes pasado. Lo que recibiste este mes ya está cargado desde Requisiciones; si el lote es el mismo (dirá «ya está en tu SIS»), elígelo aquí: no se duplica, la cantidad se anota como su existencia anterior. También puedes usar el lápiz de su fila. <button type="button" class="tut-enlace" data-tutorial="primer_mes"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span>Ver cómo (tutorial corto)</button></p>
+    <p class="nota-panel-agregar">Solo para lo que te quedó del mes pasado. Lo que recibiste este mes ya está cargado desde Requisiciones; si es el mismo lote (dirá «lo recibiste este mes»), elígelo aquí: el botón cambia a «Añadir existencia anterior» y los frascos se suman a ese lote, sin duplicarlo. También puedes usar el lápiz de su fila. <button type="button" class="tut-enlace" data-tutorial="primer_mes"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span><span class="tut-txt">Ver cómo (tutorial corto)</span></button></p>
     <input type="radio" class="sr-solo" name="tipo-cant-${bioId}" value="ANTERIOR" data-nuevo-tipo-cantidad checked aria-hidden="true" tabindex="-1">
     <div class="campos">
       <div class="campo">
@@ -2462,7 +2462,7 @@ function renderPanelAgregar(bio) {
       ${alertaRepetidoHtml()}
     </div>
     <div class="acciones">
-      <button class="btn-primario btn-mini" data-action="confirmar-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">check</span> Agregar lote</button>
+      <button class="btn-primario btn-mini" data-action="confirmar-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">check</span> <span data-texto-confirmar>Agregar lote</span></button>
       <button class="btn-fantasma btn-mini" data-action="cancelar-agregar" data-bio="${bioId}">Cancelar</button>
     </div>
   </div>`;
@@ -2503,7 +2503,7 @@ function renderPanelAgregar(bio) {
       ${alertaRepetidoHtml()}
     </div>
     <div class="acciones">
-      <button class="btn-primario btn-mini" data-action="confirmar-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">check</span> Agregar lote</button>
+      <button class="btn-primario btn-mini" data-action="confirmar-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">check</span> <span data-texto-confirmar>Agregar lote</span></button>
       <button class="btn-fantasma btn-mini" data-action="cancelar-agregar" data-bio="${bioId}">Cancelar</button>
     </div>
   </div>`;
@@ -2820,31 +2820,44 @@ function avisarLoteRepetido(panel) {
   const categoria = (panel.querySelector('[data-nuevo-categoria]') || {}).value || '';
   const r = numero ? renglonRepetido(panel.dataset.bio, categoria, numero) : null;
   const btnConfirmar = panel.querySelector('[data-action="confirmar-agregar"]');
+  const txtBtn = btnConfirmar && btnConfirmar.querySelector('[data-texto-confirmar]');
+  const poner = (t) => { if (txtBtn) txtBtn.textContent = t; };
   const btnIr = aviso.querySelector('[data-action="ir-a-recibido"]');
   const tipo = (panel.querySelector('[data-nuevo-tipo-cantidad]:checked') || {}).value || 'ANTERIOR';
+  aviso.classList.remove('info');
   if (!r) {
     aviso.classList.remove('visible');
+    poner('Agregar lote');
     if (btnConfirmar) btnConfirmar.disabled = false;
     return;
   }
   // El lote ya llegó este mes (Requisiciones) y la unidad lo tenía también del mes pasado: no se duplica el renglón,
-  // lo que tenía se anota en la «Existencia anterior» de ese mismo renglón.
+  // lo que tenía se anota en la «Existencia anterior» de ese mismo renglón. El botón lo dice con esas palabras.
   if (tipo === 'ANTERIOR' && anteriorEditablePorRol()) {
     const antActual = Number(r.existencia_anterior_frascos) || 0;
+    const icono = aviso.querySelector('.material-symbols-rounded');
     if (btnIr) btnIr.style.display = 'none';
+    poner('Añadir existencia anterior');
     if (antActual > 0) {
+      poner('Ya tiene existencia anterior');
       aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>El lote ${r.biovac_lotes.numero_lote} ya tiene ${redondearFrascos(antActual)} frasco(s) de existencia anterior.</b> `
-        + 'Para cambiar la cantidad usa el lápiz de su fila (lo resaltamos arriba).';
+        + 'Ya la anotaste, por eso este botón está apagado: no hay nada más que añadir. Si la cantidad es otra, corrígela con el lápiz ✏️ de su fila (la resaltamos arriba).';
+      if (icono) icono.textContent = 'warning';
       if (btnConfirmar) btnConfirmar.disabled = true;
     } else {
-      aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>El lote ${r.biovac_lotes.numero_lote} ya está en tu SIS</b> (recibido este mes: ${redondearFrascos(r.recibido_frascos) || 0}). `
-        + 'Lo resaltamos arriba. No se vuelve a agregar: los frascos que tenías del mes pasado se anotan en su <b>existencia anterior</b>. Indica la cantidad y pulsa «Agregar lote».';
+      aviso.classList.add('info');
+      if (icono) icono.textContent = 'info';
+      aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>Este es el lote que recibiste este mes (${redondearFrascos(r.recibido_frascos) || 0} frascos).</b> `
+        + 'Sí se puede guardar: escribe cuántos frascos de este lote te quedaban del mes pasado y pulsa «Añadir existencia anterior». Se suman a su fila (resaltada arriba), no se crea otra.';
       if (btnConfirmar) btnConfirmar.disabled = false;
     }
     aviso.classList.add('visible');
     resaltarFilaLote(r.id);
     return;
   }
+  const icono = aviso.querySelector('.material-symbols-rounded');
+  if (icono) icono.textContent = 'warning';
+  poner('Agregar lote');
   if (btnIr) btnIr.style.display = '';
   aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>El lote ${r.biovac_lotes.numero_lote} ya está dado de alta en este movimiento</b> `
     + `(existencia anterior: ${redondearFrascos(r.existencia_anterior_frascos) || 0}, recibido: ${r.recibido_frascos || 0}).<br>`
@@ -3257,8 +3270,11 @@ async function poblarSelectLote(bio, categoria, selectEl) {
   }
   const opciones = lista
     .map((l) => {
-      const usado = yaUsados.has(String(l.lote).trim().toUpperCase());
-      return `<option value="${l.lote}" data-cad="${l.caducidad || ''}">${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}${usado ? ' (ya está en tu SIS)' : ''}</option>`;
+      const clave = String(l.lote).trim().toUpperCase();
+      const usado = yaUsados.has(clave);
+      const fila = usado ? estado.renglones.find((r) => r.categoria === categoria && r.biovac_lotes.biologico_id === bio.id && String(r.biovac_lotes.numero_lote || '').trim().toUpperCase() === clave) : null;
+      const marca = !usado ? '' : (fila && Number(fila.recibido_frascos) > 0 ? ' (lo recibiste este mes)' : ' (ya tiene fila arriba)');
+      return `<option value="${l.lote}" data-cad="${l.caducidad || ''}">${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}${marca}</option>`;
     })
     .join('');
   const vacio = !lista.length ? '<option value="" disabled>Sin lotes con este Estatus dados de alta para este municipio — regístralo en Carga de lotes por municipio</option>' : '';

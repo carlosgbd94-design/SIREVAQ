@@ -36,12 +36,12 @@ window.onunhandledrejection = function (event) {
 <link rel="stylesheet" href="dock_glass.css?v=10">
 <link rel="stylesheet" href="ayuda.css?v=7">
 <link rel="stylesheet" href="municipal_guiado.css?v=12">
-<script defer src="guias_contenido.js?v=5"></script>
-<script defer src="ayuda.js?v=22"></script>
+<script defer src="guias_contenido.js?v=6"></script>
+<script defer src="ayuda.js?v=23"></script>
 <script defer src="a11y_global.js?v=6"></script>
 <script defer src="dock_glass.js?v=6"></script>
 <script defer src="hints.js?v=3"></script>
-<script defer src="tutoriales_sis.js?v=12"></script>
+<script defer src="tutoriales_sis.js?v=13"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -49,8 +49,8 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.101"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.69"></script>
+<script defer src="biovac_ui.js?v=2026.103"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.70"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.25"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
@@ -722,6 +722,8 @@ window.onunhandledrejection = function (event) {
   .btn-agregar-lote[aria-expanded="true"] { border-style: solid; background: #f1f5f9; }
   .alerta-lote-repetido { grid-column: 1 / -1; display: none; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 14px; border-radius: 14px; background: var(--warning-bg); border: 1.5px solid var(--warning-border); color: #78350f; font-size: 12.5px; line-height: 1.4; }
   .alerta-lote-repetido.visible { display: flex; }
+  .alerta-lote-repetido.info { background: #eff6ff; border-color: #93c5fd; color: #1e3a8a; }
+  .alerta-lote-repetido.info .material-symbols-rounded { color: #2563eb; }
   .alerta-lote-repetido .material-symbols-rounded { font-size: 26px; color: var(--warning); flex: none; }
   .alerta-lote-repetido .texto { flex: 1; min-width: 220px; }
 
@@ -1379,7 +1381,7 @@ window.onunhandledrejection = function (event) {
 </div>
 
 <div id="panelMovimiento">
-  <div class="ayuda-franja"><span>Recibido, aplicadas y desechadas por lote. Existencia, recibido y final van en <b>frascos</b>; aplicadas y desechadas en <b>dosis</b>. Lo aplicado debe cuadrar con tu paloteo de SIS-06-P.</span><button type="button" class="tut-enlace" data-tutorial="menu"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span>Tutoriales cortos</button><button type="button" class="ayuda-btn" data-ayuda="movimiento" title="Cómo funciona Movimiento de Biológico" aria-label="Cómo funciona Movimiento de Biológico"><span class="material-symbols-rounded">help</span></button></div>
+  <div class="ayuda-franja"><span>Recibido, aplicadas y desechadas por lote. Existencia, recibido y final van en <b>frascos</b>; aplicadas y desechadas en <b>dosis</b>. Lo aplicado debe cuadrar con tu paloteo de SIS-06-P.</span><button type="button" class="tut-enlace" data-tutorial="menu"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span><span class="tut-txt">Tutoriales cortos</span></button><button type="button" class="ayuda-btn" data-ayuda="movimiento" title="Cómo funciona Movimiento de Biológico" aria-label="Cómo funciona Movimiento de Biológico"><span class="material-symbols-rounded">help</span></button></div>
   <div id="bannerPendientes"></div>
   <div id="bannerMovimiento"></div>
   <div id="panelCorreccionesJur"></div>

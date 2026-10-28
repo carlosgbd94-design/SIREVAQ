@@ -66,15 +66,15 @@
   function panelAgregar() {
     return `<button type="button" class="btn-agregar-lote" data-t="btn-agregar" tabindex="-1" aria-expanded="false">${ico('add_circle')} Agregar un lote que ya tenías de B.C.G. frasco multidosis</button>
       <div class="panel-agregar" data-t="panel-agregar">
-        <p class="nota-panel-agregar">Solo para lo que te quedó del mes pasado. Lo que recibiste este mes ya está cargado desde Requisiciones; si el lote es el mismo (dirá «ya está en tu SIS»), elígelo aquí: no se duplica, la cantidad se anota como su existencia anterior.</p>
+        <p class="nota-panel-agregar">Solo para lo que te quedó del mes pasado. Lo que recibiste este mes ya está cargado desde Requisiciones; si es el mismo lote (dirá «lo recibiste este mes»), elígelo aquí: el botón cambia a «Añadir existencia anterior» y los frascos se suman a ese lote, sin duplicarlo.</p>
         <div class="tut-campos">
           <div class="tut-campo"><label>1. Estatus</label>${sel('Selecciona el Estatus…', 'Estatus', 'cat')}</div>
           <div class="tut-campo tut-ancho"><label>2. N° de lote</label>${sel('Primero elige el Estatus…', 'Lote', 'lote')}</div>
           <div class="tut-campo"><label>3. Cuántos frascos tenías</label><div class="tut-entrada" data-t="cant"><span>0</span></div></div>
         </div>
-        <div class="alerta-lote-repetido tut-aviso" data-t="aviso"><span class="material-symbols-rounded" aria-hidden="true">warning</span>
-          <div class="texto"><b>El lote 0374MA108 ya está en tu SIS</b> (recibido este mes: 30). Lo resaltamos arriba. No se vuelve a agregar: los frascos que tenías del mes pasado se anotan en su <b>existencia anterior</b>.</div></div>
-        <div class="acciones"><button type="button" class="btn-primario btn-mini" data-t="btn-confirmar" tabindex="-1">${ico('check')} Agregar lote</button><button type="button" class="btn-fantasma btn-mini" tabindex="-1">Cancelar</button></div>
+        <div class="alerta-lote-repetido info tut-aviso" data-t="aviso"><span class="material-symbols-rounded" aria-hidden="true">info</span>
+          <div class="texto"><b>Este es el lote que recibiste este mes (30 frascos).</b> Sí se puede guardar: escribe cuántos frascos de este lote te quedaban del mes pasado y pulsa «Añadir existencia anterior». Se suman a su fila (resaltada arriba), no se crea otra.</div></div>
+        <div class="acciones"><button type="button" class="btn-primario btn-mini" data-t="btn-confirmar" tabindex="-1">${ico('check')} <span data-t="txt-confirmar">Agregar lote</span></button><button type="button" class="btn-fantasma btn-mini" tabindex="-1">Cancelar</button></div>
       </div>`;
   }
 
@@ -109,10 +109,10 @@
         despues: (r) => { r.querySelector('[data-t="panel-agregar"]').classList.add('abierto'); r.querySelector('[data-t="btn-agregar"]').setAttribute('aria-expanded', 'true'); } },
       { texto: 'Elige el Estatus: «Normal» (lo normal, disponible para aplicar).', cursor: '[data-t="cat"]', clic: true,
         despues: (r) => { r.querySelector('[data-t="cat"] span').textContent = 'Normal'; r.querySelector('[data-t="lote"] span').textContent = 'Selecciona un lote…'; } },
-      { texto: 'Elige el lote. Si dice «(ya está en tu SIS)», es el mismo que te llegó: no se duplica.', detalle: 'La fila se resalta arriba para que veas a cuál te refieres.', cursor: '[data-t="lote"]', clic: true,
-        despues: (r) => { r.querySelector('[data-t="lote"] span').textContent = '0374MA108 — MAR-27 (ya está en tu SIS)'; r.querySelector('[data-t="aviso"]').classList.add('visible'); r.querySelector('[data-t="a"]').classList.add('fila-destacada'); }, espera: 3600 },
+      { texto: 'Elige el lote. Si dice «(lo recibiste este mes)», es el mismo que te llegó: no se duplica.', detalle: 'La fila se resalta arriba y el botón de abajo cambia a «Añadir existencia anterior».', cursor: '[data-t="lote"]', clic: true,
+        despues: (r) => { r.querySelector('[data-t="lote"] span').textContent = '0374MA108 — MAR-27 (lo recibiste este mes)'; r.querySelector('[data-t="txt-confirmar"]').textContent = 'Añadir existencia anterior'; r.querySelector('[data-t="aviso"]').classList.add('visible'); r.querySelector('[data-t="a"]').classList.add('fila-destacada'); }, espera: 3600 },
       { texto: 'Escribe cuántos frascos tenías del mes pasado.', cursor: '[data-t="cant"]', clic: true, tipear: { sel: '[data-t="cant"] span', valor: '4' } },
-      { texto: 'Pulsa «Agregar lote».', cursor: '[data-t="btn-confirmar"]', clic: true,
+      { texto: 'Pulsa «Añadir existencia anterior».', cursor: '[data-t="btn-confirmar"]', clic: true,
         despues: (r) => {
           r.querySelector('[data-t="panel-agregar"]').classList.remove('abierto'); r.querySelector('[data-t="btn-agregar"]').setAttribute('aria-expanded', 'false');
           r.querySelector('[data-t="ant-a"]').textContent = '4'; r.querySelector('[data-t="fin-a"]').textContent = '34';
@@ -309,7 +309,8 @@
       .tut-tarjeta .tut-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--c); background: color-mix(in srgb, var(--c) 14%, white); }
       .tut-tarjeta b { display: block; font-size: 14px; color: #0f172a; line-height: 1.3; } .tut-tarjeta span.s { display: block; margin-top: 3px; font-size: 12.5px; color: #5b6b80; line-height: 1.4; }
       .tut-tarjeta .tut-dur { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 11.5px; font-weight: 800; color: #334155; } .tut-tarjeta .tut-dur .material-symbols-rounded { color: var(--c); }
-      .tut-enlace { display: inline-flex; align-items: center; gap: 4px; border: none; background: none; padding: 0; cursor: pointer; font: 800 12.5px 'Nunito Sans', sans-serif; color: #0369a1; text-decoration: underline; text-underline-offset: 2px; }
+      .tut-enlace { display: inline-flex; align-items: center; gap: 4px; border: none; background: none; padding: 0; cursor: pointer; font: 800 12.5px 'Nunito Sans', sans-serif; color: #0369a1; text-decoration: none; }
+      .tut-enlace .tut-txt { text-decoration: underline; text-underline-offset: 3px; }
       .tut-enlace .material-symbols-rounded { font-size: 18px; }
       @media (max-width: 700px) { .tut-menu { grid-template-columns: 1fr; } .tut-texto { font-size: 16px; } .tut-pantalla { padding: 8px; } .tut-overlay { padding: 8px; align-items: flex-end; } .tut-hoja { max-height: calc(100vh - 16px); } }
       @media (prefers-reduced-motion: reduce) { .tut-cursor { transition: none; } .tut-resalta, .tut-escena .fila-destacada td { animation: none; } .tut-onda { animation: none; opacity: 0; } }`;

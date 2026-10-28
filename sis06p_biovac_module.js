@@ -791,7 +791,7 @@
         <button type="button" class="btn-secundario btn-mini" data-dif-ir="mov"><span class="material-symbols-rounded" aria-hidden="true">medication_liquid</span> Ir al Movimiento</button>
       </div>
       ${tabla(dif)}
-      ${esUnidad ? '<div style="margin-top:8px;"><button type="button" class="tut-enlace" data-tutorial="cuadrar"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span>Ver cómo se corrige (tutorial corto)</button></div>' : ''}
+      ${esUnidad ? '<div style="margin-top:8px;"><button type="button" class="tut-enlace" data-tutorial="cuadrar"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span><span class="tut-txt">Ver cómo se corrige (tutorial corto)</span></button></div>' : ''}
       ${htmlAjustes(soloLectura, currentReport)}`;
   }
 
@@ -3157,7 +3157,7 @@
     await mostrarModal({
       titulo: faltan ? 'Qué falta para enviar' : 'Todo listo para enviar',
       mensaje: faltan ? (faltan === 1 ? 'Solo te falta 1 cosa. Mientras tanto, el botón «Enviar» se queda apagado.' : `Te faltan ${faltan} cosas. Mientras tanto, el botón «Enviar» se queda apagado.`) : 'Pulsa «Enviar» en la barra de abajo.',
-      detalleHtml: `<div style="display:block; width:100%;">${items.map((i) => fila(i.ok, i.t, i.f, i.extra)).join('')}<div style="padding-top:10px;"><button type="button" class="tut-enlace" data-tutorial="enviar"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span>Ver cómo se envía (tutorial corto)</button></div></div>`,
+      detalleHtml: `<div style="display:block; width:100%;">${items.map((i) => fila(i.ok, i.t, i.f, i.extra)).join('')}<div style="padding-top:10px;"><button type="button" class="tut-enlace" data-tutorial="enviar"><span class="material-symbols-rounded" aria-hidden="true">play_circle</span><span class="tut-txt">Ver cómo se envía (tutorial corto)</span></button></div></div>`,
       textoAceptar: 'Entendido', sinCancelar: true
     });
   }
