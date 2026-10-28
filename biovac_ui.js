@@ -2819,7 +2819,7 @@ function avisarLoteRepetido(panel) {
     if (btnIr) btnIr.style.display = 'none';
     if (antActual > 0) {
       aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>El lote ${r.biovac_lotes.numero_lote} ya tiene ${redondearFrascos(antActual)} frasco(s) de existencia anterior.</b> `
-        + 'Para cambiar la cantidad usa el lápiz de su renglón en la tabla.';
+        + 'Para cambiar la cantidad usa el lápiz de su fila (lo resaltamos arriba).';
       if (btnConfirmar) btnConfirmar.disabled = true;
     } else {
       aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>El lote ${r.biovac_lotes.numero_lote} ya está en tu SIS</b> (recibido este mes: ${redondearFrascos(r.recibido_frascos) || 0}). `
