@@ -10351,8 +10351,6 @@ window.BIOS_LIST = [
   "NEUMOCÓCICA 13", "NEUMOCÓCICA 20", "SRP", "SR", "VPH",
   "VARICELA", "HEPATITIS A", "TD", "TDPA", "COVID-19", "INFLUENZA", "VSR"
 ];
-window.LoteEditingIdx = null;
-
 async function activateLotesAdmin() {
   showOverlay("Cargando catálogo de lotes…", "Lotes");
   try {
@@ -10399,6 +10397,49 @@ function loteCapturaHtml_(item) {
     <div style="font-size:10px; opacity:0.6; font-weight:600;">${origen}</div>${sync}`;
 }
 
+// Municipios que se ofrecen al asignar un lote (mismos valores que la cuadrícula de «Carga de lotes por municipio»).
+const MUNIS_LOTE = ["QUERÉTARO", "CORREGIDORA", "EL MARQUÉS", "HUIMILPAN", "HENM", "NHG"];
+let LOTE_GRUPOS = [];
+window.LoteEditingKey = null;
+
+// Un mismo lote (biológico + lote + tipo + caducidad) puede estar asignado a varios municipios: en la BD es una fila por
+// municipio, pero en pantalla se muestra UNA sola fila con sus municipios como etiquetas.
+function agruparLotes(items) {
+  const mapa = new Map();
+  for (const it of items) {
+    const k = [it.biologico, it.lote, it.tipo || "NORMAL", it.caducidad || ""].join("|");
+    let g = mapa.get(k);
+    if (!g) {
+      g = { key: k, biologico: it.biologico, lote: it.lote, tipo: it.tipo || "NORMAL", caducidad: it.caducidad, fecha_recepcion: it.fecha_recepcion, items: [] };
+      mapa.set(k, g);
+    }
+    g.items.push(it);
+  }
+  const ordBio = (b) => { const i = window.BIOS_LIST.indexOf(b); return i < 0 ? 999 : i; };
+  const grupos = [...mapa.values()];
+  for (const g of grupos) {
+    g.items.sort((a, b) => String(a.municipio || "").localeCompare(String(b.municipio || ""), "es"));
+    // La captura que se muestra es la más antigua del grupo (todas suelen compartir hora).
+    g.muestra = g.items.reduce((m, x) => (!m || (x.created_ts && (!m.created_ts || x.created_ts < m.created_ts))) ? x : m, null) || g.items[0];
+  }
+  grupos.sort((a, b) =>
+    ordBio(a.biologico) - ordBio(b.biologico)
+    || String(a.lote || "").localeCompare(String(b.lote || ""))
+    || String(a.tipo).localeCompare(String(b.tipo))
+  );
+  return grupos;
+}
+
+function municipiosChipsHtml(g) {
+  const nombres = g.items.map((i) => String(i.municipio || "").toUpperCase());
+  const comodin = nombres.some((n) => n === "*" || n === "TODOS");
+  const todos = comodin || MUNIS_LOTE.every((m) => nombres.includes(m));
+  if (todos) {
+    return `<div class="lote-munis"><span class="lote-muni-chip lote-muni-todos" title="${escapeHtml(nombres.join(", "))}"><span class="material-symbols-rounded" style="font-size:14px">done_all</span>Todos los municipios</span></div>`;
+  }
+  return `<div class="lote-munis">${nombres.map((n) => `<span class="lote-muni-chip">${escapeHtml(n)}</span>`).join("")}</div>`;
+}
+
 function renderLotesAdmin() {
   const tbody = $("lotesAdminTbody");
   if (!tbody) return;
@@ -10411,77 +10452,73 @@ function renderLotesAdmin() {
     return;
   }
 
-  // Aplicar Filtro Pro
-  let filtered = BATCH_CATALOG;
-  if (BATCH_FILTER === 'critical') filtered = BATCH_CATALOG.filter(x => getExpiryLogistics(x.caducidad).level >= 3 && getExpiryLogistics(x.caducidad).level < 5);
-  if (BATCH_FILTER === 'alert') filtered = BATCH_CATALOG.filter(x => getExpiryLogistics(x.caducidad).level === 2);
-  if (BATCH_FILTER === 'safe') filtered = BATCH_CATALOG.filter(x => getExpiryLogistics(x.caducidad).level === 1);
-  if (BATCH_FILTER === 'expired') filtered = BATCH_CATALOG.filter(x => getExpiryLogistics(x.caducidad).level === 5);
+  // Se agrupa primero (con TODO el catálogo) y luego se filtra por grupo: así un lote nunca se ve a medias
+  // (si buscas un municipio, el lote sigue mostrando todos sus municipios y se edita completo).
+  const nivel = (g) => getExpiryLogistics(g.caducidad).level;
+  let grupos = agruparLotes(BATCH_CATALOG);
+  if (BATCH_FILTER === 'critical') grupos = grupos.filter(g => nivel(g) >= 3 && nivel(g) < 5);
+  if (BATCH_FILTER === 'alert') grupos = grupos.filter(g => nivel(g) === 2);
+  if (BATCH_FILTER === 'safe') grupos = grupos.filter(g => nivel(g) === 1);
+  if (BATCH_FILTER === 'expired') grupos = grupos.filter(g => nivel(g) === 5);
 
-  // 2. Aplicar Búsqueda Inteligente (Lote/Bio)
-  let finalFiltered = filtered;
   if (BATCH_SEARCH_QUERY) {
     const query = BATCH_SEARCH_QUERY.toLowerCase().trim();
-    finalFiltered = filtered.filter(x =>
-      String(x.lote || "").toLowerCase().includes(query) ||
-      String(x.biologico || "").toLowerCase().includes(query) ||
-      String(x.municipio || "").toLowerCase().includes(query)
+    grupos = grupos.filter(g =>
+      String(g.lote || "").toLowerCase().includes(query) ||
+      String(g.biologico || "").toLowerCase().includes(query) ||
+      g.items.some(i => String(i.municipio || "").toLowerCase().includes(query))
     );
   }
+  LOTE_GRUPOS = grupos;
 
-  // Orden estable: biológico (como en BIOS_LIST) > lote > municipio. Sin esto el panel se
-  // mostraba en el orden en que la BD devolvía las filas y un mismo lote quedaba disperso.
-  const ordBio = (b) => { const i = window.BIOS_LIST.indexOf(b); return i < 0 ? 999 : i; };
-  finalFiltered = [...finalFiltered].sort((a, b) =>
-    ordBio(a.biologico) - ordBio(b.biologico)
-    || String(a.lote || "").localeCompare(String(b.lote || ""))
-    || String(a.municipio || "").localeCompare(String(b.municipio || ""), "es")
-  );
-
-  if (!finalFiltered.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="muted" style="padding:24px;">No se encontraron resultados para "${BATCH_SEARCH_QUERY || BATCH_FILTER}".</td></tr>`;
+  if (!grupos.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="muted" style="padding:24px;">No se encontraron resultados para "${escapeHtml(BATCH_SEARCH_QUERY || BATCH_FILTER)}".</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = finalFiltered.map((item) => {
-    const idx = BATCH_CATALOG.indexOf(item);
-    const expiryInfo = getExpiryLogistics(item.caducidad);
+  tbody.innerHTML = grupos.map((g, gi) => {
+    const expiryInfo = getExpiryLogistics(g.caducidad);
 
-    if (window.LoteEditingIdx === idx) {
+    if (window.LoteEditingKey === g.key) {
+      const presentes = g.items.map((i) => String(i.municipio || "").toUpperCase());
+      const opciones = [...new Set([...MUNIS_LOTE, ...presentes.filter((p) => p !== "*" && p !== "TODOS")])];
+      const chips = opciones.map((m, k) => `
+        <label class="lote-muni-edit"><input type="checkbox" class="edMuni_${gi}" value="${escapeHtml(m)}" ${presentes.includes(m) ? "checked" : ""}><span>${escapeHtml(m)}</span></label>`).join("");
       return `
         <tr class="lote-row-edit" style="background: rgba(79, 140, 255, 0.05);">
           <td>
-            <select id="editBio_${idx}" class="inline-edit-input">
-              ${window.BIOS_LIST.map(b => `<option value="${b}" ${item.biologico === b ? 'selected' : ''}>${b}</option>`).join("")}
+            <select id="editBio_${gi}" class="inline-edit-input" aria-label="Biológico">
+              ${window.BIOS_LIST.map(b => `<option value="${b}" ${g.biologico === b ? 'selected' : ''}>${b}</option>`).join("")}
             </select>
-            <div style="font-size:10px; opacity:0.6; font-weight:600; margin-top:4px;">${escapeHtml(item.fecha_recepcion || "—")}</div>
+            <div style="font-size:10px; opacity:0.6; font-weight:600; margin-top:4px;">${escapeHtml(g.fecha_recepcion || "—")}</div>
           </td>
           <td>
-            <input type="text" id="editLote_${idx}" class="inline-edit-input" value="${escapeHtml(item.lote)}" oninput="this.value = this.value.toUpperCase()" />
+            <input type="text" id="editLote_${gi}" class="inline-edit-input" aria-label="Número de lote" value="${escapeHtml(g.lote)}" oninput="this.value = this.value.toUpperCase()" />
           </td>
           <td>
-            <input type="text" id="editCad_${idx}" class="inline-edit-input" value="${escapeHtml(formatToMmmAa(item.caducidad))}" onblur="this.dataset.iso = parseInputToIso(this.value) || ''; this.value = formatToMmmAa(this.dataset.iso || this.value);" data-iso="${escapeHtml(item.caducidad)}" oninput="this.value = this.value.toUpperCase()" />
+            <input type="text" id="editCad_${gi}" class="inline-edit-input" aria-label="Caducidad" value="${escapeHtml(formatToMmmAa(g.caducidad))}" onblur="this.dataset.iso = parseInputToIso(this.value) || ''; this.value = formatToMmmAa(this.dataset.iso || this.value);" data-iso="${escapeHtml(g.caducidad)}" oninput="this.value = this.value.toUpperCase()" />
           </td>
           <td>
-            <select id="editTipo_${idx}" class="inline-edit-input">
-              <option value="NORMAL" ${(item.tipo || "NORMAL") === "NORMAL" ? "selected" : ""}>Normal</option>
-              <option value="ARF" ${item.tipo === "ARF" ? "selected" : ""}>A.R.F.</option>
-              <option value="CANJE" ${item.tipo === "CANJE" ? "selected" : ""}>Canje</option>
+            <select id="editTipo_${gi}" class="inline-edit-input" aria-label="Tipo de lote">
+              <option value="NORMAL" ${g.tipo === "NORMAL" ? "selected" : ""}>Normal</option>
+              <option value="ARF" ${g.tipo === "ARF" ? "selected" : ""}>A.R.F.</option>
+              <option value="CANJE" ${g.tipo === "CANJE" ? "selected" : ""}>Canje</option>
             </select>
           </td>
           <td>
             <div class="status-pill warn" title="En edición"><span class="material-symbols-rounded" style="font-size:16px">edit</span>EDICIÓN</div>
           </td>
-          <td style="font-weight:800; text-transform:uppercase; font-size:11px; letter-spacing:0.02em; color: var(--md-sys-color-on-surface-variant); opacity: 0.7;">
-             ${escapeHtml(item.municipio)}
+          <td>
+            <div class="lote-munis lote-munis-edit" role="group" aria-label="Municipios asignados">${chips}</div>
+            <div style="font-size:10px; opacity:.65; font-weight:700; margin-top:4px;">Marca o desmarca los municipios de este lote.</div>
           </td>
-          <td>${loteCapturaHtml_(item)}</td>
+          <td>${loteCapturaHtml_(g.muestra)}</td>
           <td>
             <div style="display:flex; gap: 4px; justify-content:center;">
-              <button type="button" class="md-edit-btn group save-btn" title="Guardar" onclick="saveLoteEdit(${idx})">
+              <button type="button" class="md-edit-btn group save-btn" title="Guardar cambios" aria-label="Guardar cambios" onclick="saveLoteEdit(${gi})">
                 <span class="material-symbols-rounded">check</span>
               </button>
-              <button type="button" class="md-edit-btn group cancel-btn" title="Cancelar" onclick="cancelLoteEdit()">
+              <button type="button" class="md-edit-btn group cancel-btn" title="Cancelar" aria-label="Cancelar" onclick="cancelLoteEdit()">
                 <span class="material-symbols-rounded">close</span>
               </button>
             </div>
@@ -10493,34 +10530,32 @@ function renderLotesAdmin() {
     return `
         <tr class="lote-row-${expiryInfo.class}">
           <td>
-            <div style="font-weight:900; color:var(--md-sys-color-primary);">${escapeHtml(item.biologico)}</div>
-            <div style="font-size:10px; opacity:0.6; font-weight:600;">${escapeHtml(item.fecha_recepcion || "—")}</div>
+            <div style="font-weight:900; color:var(--md-sys-color-primary);">${escapeHtml(g.biologico)}</div>
+            <div style="font-size:10px; opacity:0.6; font-weight:600;">${escapeHtml(g.fecha_recepcion || "—")}</div>
           </td>
-          <td style="font-family:monospace; font-weight:700; font-size:14px;">${escapeHtml(item.lote)}</td>
+          <td style="font-family:monospace; font-weight:700; font-size:14px;">${escapeHtml(g.lote)}</td>
           <td>
-             <div style="font-weight:900;">${escapeHtml(formatToMmmAa(item.caducidad))}</div>
+             <div style="font-weight:900;">${escapeHtml(formatToMmmAa(g.caducidad))}</div>
              <div class="lote-life-container">
                <div class="lote-life-bar ${expiryInfo.class}" style="width: ${expiryInfo.progress}%"></div>
              </div>
           </td>
-          <td>${tipoLoteBadgeHtml(item.tipo)}</td>
+          <td>${tipoLoteBadgeHtml(g.tipo)}</td>
           <td>
             <div class="status-pill ${expiryInfo.class}" title="${expiryInfo.friendly}">
               <span class="material-symbols-rounded" style="font-size:16px">${expiryInfo.icon}</span>
               ${expiryInfo.label}
             </div>
           </td>
-          <td style="font-weight:800; text-transform:uppercase; font-size:11px; letter-spacing:0.02em;">
-             ${escapeHtml(item.municipio)}
-          </td>
-          <td>${loteCapturaHtml_(item)}</td>
+          <td>${municipiosChipsHtml(g)}</td>
+          <td>${loteCapturaHtml_(g.muestra)}</td>
           <td>
             <div style="display:flex; gap: 4px; justify-content:center;">
-              <button type="button" class="md-edit-btn group" title="Editar lote" onclick="startLoteEdit(${idx})">
+              <button type="button" class="md-edit-btn group" title="Editar este lote y sus municipios" aria-label="Editar el lote ${escapeHtml(g.lote)}" onclick="startLoteEdit(${gi})">
                 <span class="material-symbols-rounded" style="font-size: 20px;">edit</span>
               </button>
-              <button type="button" class="md-delete-btn group" title="Eliminar este lote" onclick="openDeleteLoteModal(${idx})">
-                <svg viewBox="0 0 24 24" class="w-6 h-6">
+              <button type="button" class="md-delete-btn group" title="Eliminar este lote${g.items.length > 1 ? ' de sus ' + g.items.length + ' municipios' : ''}" aria-label="Eliminar el lote ${escapeHtml(g.lote)}" onclick="openDeleteLoteModal(${gi})">
+                <svg viewBox="0 0 24 24" class="w-6 h-6" aria-hidden="true">
                   <path class="trash-lid transition-transform duration-200 group-hover:-translate-y-1" fill="currentColor" d="M15 4V3H9v1H4v2h16V4h-5z" />
                   <path fill="currentColor" d="M5 21a2 2 0 002 2h10a2 2 0 002-2V7H5v14zM8 9h2v10H8V9zm4 0h2v10h-2V9zm4 0h2v10h-2V9z" />
                 </svg>
@@ -10598,7 +10633,8 @@ function updateLogisticsSummary() {
     if (hr) parent.insertBefore(summaryDiv, hr);
   }
 
-  const summary = BATCH_CATALOG.reduce((acc, x) => {
+  const gruposResumen = agruparLotes(BATCH_CATALOG);
+  const summary = gruposResumen.reduce((acc, x) => {
     const exp = getExpiryLogistics(x.caducidad);
     if (exp.level === 5) acc.expired++;
     else if (exp.level >= 3) acc.critical++;
@@ -10612,7 +10648,7 @@ function updateLogisticsSummary() {
         <div class="card-glow"></div>
         <div class="card-icon"><span class="material-symbols-rounded">inventory</span></div>
         <div class="card-content">
-          <span class="val">${BATCH_CATALOG.length}</span>
+          <span class="val">${gruposResumen.length}</span>
           <span class="lbl">TOTAL LOTES</span>
         </div>
       </div>
@@ -10745,62 +10781,86 @@ $("btnAddLoteRow")?.addEventListener("click", async () => {
   $("loteTxt").focus();
 });
 
-window.startLoteEdit = function (idx) {
-  window.LoteEditingIdx = idx;
+window.startLoteEdit = function (gi) {
+  const g = LOTE_GRUPOS[gi];
+  if (!g) return;
+  window.LoteEditingKey = g.key;
   renderLotesAdmin();
+  const campo = document.getElementById(`editLote_${LOTE_GRUPOS.findIndex((x) => x.key === g.key)}`);
+  if (campo) campo.focus();
 }
 
 window.cancelLoteEdit = function () {
-  window.LoteEditingIdx = null;
+  window.LoteEditingKey = null;
   renderLotesAdmin();
 }
 
-window.saveLoteEdit = async function (idx) {
-  const item = BATCH_CATALOG[idx];
-  if (!item) return;
+window.saveLoteEdit = async function (gi) {
+  const g = LOTE_GRUPOS[gi];
+  if (!g) return;
 
-  const bioInput = document.getElementById(`editBio_${idx}`);
-  const loteInput = document.getElementById(`editLote_${idx}`);
-  const cadInput = document.getElementById(`editCad_${idx}`);
-  const tipoInput = document.getElementById(`editTipo_${idx}`);
+  const bioInput = document.getElementById(`editBio_${gi}`);
+  const loteInput = document.getElementById(`editLote_${gi}`);
+  const cadInput = document.getElementById(`editCad_${gi}`);
+  const tipoInput = document.getElementById(`editTipo_${gi}`);
 
   const rawLote = loteInput.value.trim().toUpperCase();
   const rawCad = cadInput.dataset.iso || parseInputToIso(cadInput.value.trim().toUpperCase());
 
-  if (!rawLote || !rawCad) {
-    showToast("Lote y caducidad son obligatorios", false, "warn");
-    return;
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(rawCad)) {
-    showToast("Formato de caducidad inválido.", false, "warn");
+  if (!rawLote) { showToast("Falta el número de lote", false, "warn"); loteInput.focus(); return; }
+  if (!rawCad || !/^\d{4}-\d{2}-\d{2}$/.test(rawCad)) { showToast("Falta la caducidad: escribe mes y año, por ejemplo JUL-27", false, "warn"); cadInput.focus(); return; }
+
+  const seleccion = Array.from(document.querySelectorAll(`.edMuni_${gi}:checked`)).map((c) => c.value);
+  const hayComodin = g.items.some((i) => ["*", "TODOS"].includes(String(i.municipio || "").toUpperCase()));
+  if (!seleccion.length && !hayComodin) {
+    showToast("Deja al menos un municipio. Para quitar el lote por completo usa el bote de basura.", false, "warn");
     return;
   }
 
   const nuevoBiologico = bioInput.value;
-  const nuevoTipo = tipoInput ? tipoInput.value : (item.tipo || "NORMAL");
-  const chocaConOtro = BATCH_CATALOG.some((x, i) => i !== idx && x.biologico === nuevoBiologico && x.lote === rawLote && x.municipio === item.municipio && x.tipo === nuevoTipo);
-  if (chocaConOtro) {
-    showToast("Ya existe un lote igual (mismo biológico, lote, municipio y tipo).", false, "warn");
+  const nuevoTipo = tipoInput ? tipoInput.value : g.tipo;
+
+  // Filas de OTROS lotes que chocarían con el resultado (mismo biológico, lote, tipo y municipio).
+  const otros = BATCH_CATALOG.filter((x) => !g.items.includes(x));
+  const choca = seleccion.find((m) => otros.some((x) => x.biologico === nuevoBiologico && x.lote === rawLote && x.tipo === nuevoTipo && String(x.municipio || "").toUpperCase() === m));
+  if (choca) {
+    showToast(`Ya existe ese lote en ${choca} con otra caducidad. Edita o elimina ese registro primero.`, false, "warn");
     return;
   }
 
-  // Update object
-  item.biologico = nuevoBiologico;
-  item.lote = rawLote;
-  item.caducidad = rawCad;
-  item.tipo = nuevoTipo;
+  const upsert = [];
+  const eliminar = [];
+  for (const it of g.items) {
+    const muni = String(it.municipio || "").toUpperCase();
+    if (hayComodin && (muni === "*" || muni === "TODOS")) { upsert.push({ ...it, biologico: nuevoBiologico, lote: rawLote, caducidad: rawCad, tipo: nuevoTipo }); continue; }
+    if (seleccion.includes(muni)) upsert.push({ ...it, biologico: nuevoBiologico, lote: rawLote, caducidad: rawCad, tipo: nuevoTipo });
+    else eliminar.push(it);
+  }
+  for (const m of seleccion) {
+    if (!g.items.some((i) => String(i.municipio || "").toUpperCase() === m)) {
+      upsert.push({ biologico: nuevoBiologico, lote: rawLote, caducidad: rawCad, fecha_recepcion: g.fecha_recepcion, municipio: m, tipo: nuevoTipo });
+    }
+  }
 
-  window.LoteEditingIdx = null;
+  if (eliminar.length) {
+    const ok = await window.showConfirmDialog(
+      "Quitar municipios",
+      `Vas a quitar el lote ${rawLote} de: ${eliminar.map((x) => x.municipio).join(", ")}. ¿Continuar?`
+    );
+    if (!ok) return;
+  }
+
+  window.LoteEditingKey = null;
 
   await AppService.runCapture({
-    btnId: `editBio_${idx}`,
+    btnId: `editBio_${gi}`,
     title: "Actualizando",
     msg: "Sincronizando cambios del lote...",
     successMsg: "Lote actualizado correctamente",
     eventTitle: "Edición de Lote",
     eventMsg: "Lote editado y guardado en Supabase.",
     action: async () => {
-      return await AppService.call("savelotes", { upsert: [item] });
+      return await AppService.call("savelotes", { upsert, eliminar });
     }
   });
 
@@ -10808,16 +10868,19 @@ window.saveLoteEdit = async function (idx) {
   await refreshLotesAdmin();
 }
 
-let pendingDeleteIdx = null;
+let pendingDeleteKey = null;
 
-window.openDeleteLoteModal = function (idx) {
-  const item = BATCH_CATALOG[idx];
-  if (!item) return;
-  pendingDeleteIdx = idx;
+window.openDeleteLoteModal = function (gi) {
+  const g = LOTE_GRUPOS[gi];
+  if (!g) return;
+  pendingDeleteKey = g.key;
 
   const msgEl = document.getElementById("deleteModalMsg");
   if (msgEl) {
-    msgEl.innerHTML = `Estás a punto de eliminar el lote <strong>${item.lote}</strong> del biológico <strong>${item.biologico}</strong> en <strong>${item.municipio}</strong>. Esta acción no se puede deshacer.`;
+    const munis = g.items.map((i) => escapeHtml(i.municipio)).join(", ");
+    msgEl.innerHTML = `Estás a punto de eliminar el lote <strong>${escapeHtml(g.lote)}</strong> del biológico <strong>${escapeHtml(g.biologico)}</strong> `
+      + (g.items.length > 1 ? `de sus <strong>${g.items.length} municipios</strong> (${munis}). ` : `en <strong>${munis}</strong>. `)
+      + `Esta acción no se puede deshacer.`;
   }
 
   const modal = document.getElementById("premiumDeleteModal");
@@ -10827,23 +10890,23 @@ window.openDeleteLoteModal = function (idx) {
 }
 
 window.closeDeleteModal = function () {
-  pendingDeleteIdx = null;
+  pendingDeleteKey = null;
   const modal = document.getElementById("premiumDeleteModal");
   if (modal) modal.style.display = 'none';
 }
 
 window.confirmDeleteLote = async function () {
-  if (pendingDeleteIdx === null) return;
-  const idx = pendingDeleteIdx;
-  const item = BATCH_CATALOG[idx];
+  if (pendingDeleteKey === null) return;
+  const g = agruparLotes(BATCH_CATALOG).find((x) => x.key === pendingDeleteKey);
 
   closeDeleteModal();
+  if (!g) return;
 
   await AppService.runCapture({
     title: "Eliminando",
     msg: "Actualizando catálogo...",
-    successMsg: "Lote eliminado correctamente",
-    action: () => AppService.call("savelotes", { eliminar: [item] })
+    successMsg: g.items.length > 1 ? `Lote eliminado de ${g.items.length} municipios` : "Lote eliminado correctamente",
+    action: () => AppService.call("savelotes", { eliminar: g.items })
   });
 
   await refreshLotesAdmin();
