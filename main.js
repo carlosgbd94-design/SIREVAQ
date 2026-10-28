@@ -10672,18 +10672,28 @@ $("btnAddLoteRow")?.addEventListener("click", async () => {
   // RECOLECCIÓN MULTIMUNICIPIO
   const selectedMunis = Array.from(document.querySelectorAll(".loteMuniChk:checked")).map(cb => cb.value);
 
-  if (!lote || !caducidad) {
-    showToast("Lote y caducidad son obligatorios", false, "warn");
-    return;
-  }
-
+  // Se dice QUÉ falta y se marca el campo (antes solo salía un aviso general que se iba solo).
+  const marcarFaltante = (el, mensaje) => {
+    if (el) {
+      const caja = el.closest(".modern-input-group") || el;
+      caja.classList.add("campo-faltante");
+      el.addEventListener("input", () => caja.classList.remove("campo-faltante"), { once: true });
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (el.focus) el.focus({ preventScroll: true });
+    }
+    showToast(mensaje, false, "warn");
+  };
+  if (!lote) { marcarFaltante($("loteTxt"), "Falta el número de lote"); return; }
+  if (!caducidad) { marcarFaltante($("loteCad"), "Falta la caducidad: escribe mes y año, por ejemplo JUL-27"); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(caducidad)) { marcarFaltante($("loteCad"), "No entendí la caducidad: escribe mes y año, por ejemplo JUL-27"); return; }
   if (selectedMunis.length === 0) {
-    showToast("Selecciona al menos un municipio", false, "warn");
-    return;
-  }
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(caducidad)) {
-    showToast("Formato de caducidad inválido.", false, "warn");
+    const grid = $("loteMuniGrid");
+    if (grid) {
+      grid.classList.add("campo-faltante");
+      grid.scrollIntoView({ block: "center", behavior: "smooth" });
+      grid.addEventListener("change", () => grid.classList.remove("campo-faltante"), { once: true });
+    }
+    showToast("Elige al menos un municipio (o «Todos»)", false, "warn");
     return;
   }
 
