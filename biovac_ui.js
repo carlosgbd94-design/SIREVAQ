@@ -2257,7 +2257,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     ${split ? `<td class="col-mov c-des col-dosis-1">${campo('desechadas_b', r.desechadas_b)}</td>` : ''}
     <td class="col-final c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}" data-existencia-final="${r.id}">${dosis}</span></td>
     <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}</td>
-    <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Anotar o corregir lo que tenías de este lote del mes pasado"><span class="material-symbols-rounded">edit</span></button>` : ''}<span class="nota-lote-requi" role="img" aria-label="Este lote llegó por Requisiciones: no se quita aquí" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span></div>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
+    <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Anotar o corregir lo que tenías de este lote del mes pasado (solo este primer mes)" aria-label="Anotar o corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<span class="nota-lote-requi" role="img" aria-label="Este lote llegó por Requisiciones: no se quita aquí" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span></div>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Eliminar este lote"><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
   </tr>${filaResolver}${filaMover}${porUnidades ? filaPorUnidadHtml(r, aporte, cols) : ''}`;
 }
 
@@ -2420,7 +2420,7 @@ function renderPanelAgregar(bio) {
     return `
   <button type="button" class="btn-agregar-lote" aria-expanded="false" data-action="toggle-agregar" data-bio="${bioId}"><span class="material-symbols-rounded">add_circle</span> Agregar un lote que ya tenías de ${bio.nombre_excel.replace(/\n/g, ' ')}</button>
   <div class="panel-agregar" data-panel-agregar="${bioId}" data-bio="${bioId}">
-    <p class="nota-panel-agregar">Solo para lo que te quedó del mes pasado. Lo que recibiste este mes ya está cargado desde Requisiciones; si el lote es el mismo, elígelo aquí y la cantidad se anota en su existencia anterior.</p>
+    <p class="nota-panel-agregar">Solo para lo que te quedó del mes pasado. Lo que recibiste este mes ya está cargado desde Requisiciones; si el lote es el mismo (dirá «ya está en tu SIS»), elígelo aquí: no se duplica, la cantidad se anota como su existencia anterior. También puedes usar el lápiz de su fila.</p>
     <input type="radio" class="sr-solo" name="tipo-cant-${bioId}" value="ANTERIOR" data-nuevo-tipo-cantidad checked aria-hidden="true" tabindex="-1">
     <div class="campos">
       <div class="campo">
@@ -2822,11 +2822,12 @@ function avisarLoteRepetido(panel) {
         + 'Para cambiar la cantidad usa el lápiz de su renglón en la tabla.';
       if (btnConfirmar) btnConfirmar.disabled = true;
     } else {
-      aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>El lote ${r.biovac_lotes.numero_lote} ya está en tu tabla</b> (recibido este mes: ${redondearFrascos(r.recibido_frascos) || 0}). `
-        + 'Los frascos que tenías del mes pasado se anotan en la <b>existencia anterior</b> de ese mismo renglón: indica la cantidad y pulsa «Agregar lote».';
+      aviso.querySelector('[data-alerta-repetido-texto]').innerHTML = `<b>El lote ${r.biovac_lotes.numero_lote} ya está en tu SIS</b> (recibido este mes: ${redondearFrascos(r.recibido_frascos) || 0}). `
+        + 'Lo resaltamos arriba. No se vuelve a agregar: los frascos que tenías del mes pasado se anotan en su <b>existencia anterior</b>. Indica la cantidad y pulsa «Agregar lote».';
       if (btnConfirmar) btnConfirmar.disabled = false;
     }
     aviso.classList.add('visible');
+    resaltarFilaLote(r.id);
     return;
   }
   if (btnIr) btnIr.style.display = '';
@@ -2836,6 +2837,19 @@ function avisarLoteRepetido(panel) {
   aviso.querySelector('[data-action="ir-a-recibido"]').dataset.renglon = r.id;
   aviso.classList.add('visible');
   if (btnConfirmar) btnConfirmar.disabled = true;
+}
+
+// Resalta (animado) la fila de un lote para que se vea a cuál se refiere la acción; se acerca a la vista solo si no se ve.
+function resaltarFilaLote(renglonId) {
+  const celda = document.querySelector(`[data-ant-valor="${renglonId}"]`) || document.querySelector(`[data-renglon="${renglonId}"]`);
+  const fila = celda && celda.closest('tr');
+  if (!fila) return;
+  document.querySelectorAll('tr.fila-destacada').forEach((t) => t.classList.remove('fila-destacada'));
+  void fila.offsetWidth;   // reinicia la animación si se vuelve a elegir el mismo lote
+  fila.classList.add('fila-destacada');
+  const rect = fila.getBoundingClientRect();
+  if (rect.top < 80 || rect.bottom > window.innerHeight - 110) fila.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => fila.classList.remove('fila-destacada'), 4600);
 }
 
 function irACasillaRecibido(renglonId) {
@@ -3229,7 +3243,7 @@ async function poblarSelectLote(bio, categoria, selectEl) {
   const opciones = lista
     .map((l) => {
       const usado = yaUsados.has(String(l.lote).trim().toUpperCase());
-      return `<option value="${l.lote}" data-cad="${l.caducidad || ''}">${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}${usado ? ' (ya está en tu tabla)' : ''}</option>`;
+      return `<option value="${l.lote}" data-cad="${l.caducidad || ''}">${l.lote}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}${usado ? ' (ya está en tu SIS)' : ''}</option>`;
     })
     .join('');
   const vacio = !lista.length ? '<option value="" disabled>Sin lotes con este Estatus dados de alta para este municipio — regístralo en Carga de lotes por municipio</option>' : '';
@@ -3292,9 +3306,10 @@ async function agregarLote(bioId, panel) {
     if (cant <= 0) { toast('Indica cuántos frascos tenías de este lote.', 'error'); return; }
     const { error } = await estado.db.from('biovac_renglones').update({ existencia_anterior_frascos: cant }).eq('id', existente.id);
     if (error) { toast('No se pudo anotar: ' + error.message, 'error'); return; }
-    toast('Existencia anterior anotada en el lote que ya estaba en tu tabla.', 'ok');
+    toast('Existencia anterior anotada en el lote que ya estaba en tu SIS.', 'ok');
     await cargarRenglones();
     render();
+    resaltarFilaLote(existente.id);
     if (window.SIS06PBiovac && window.SIS06PBiovac.refrescarConciliacion) window.SIS06PBiovac.refrescarConciliacion();
     refrescarCorreccionesJurisdiccion();
     return;

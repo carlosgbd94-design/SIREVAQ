@@ -47,7 +47,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.96"></script>
+<script defer src="biovac_ui.js?v=2026.97"></script>
 <script defer src="sis06p_biovac_module.js?v=2026.66"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.25"></script>
@@ -638,6 +638,10 @@ window.onunhandledrejection = function (event) {
   table.renglones tr.fila-editando td.c-ant input.ant-input { display: block; }
   table.renglones tr.fila-editando td { box-shadow: inset 0 0 0 9999px rgba(14,165,233,.04); }
   /* Recibido destacado cuando se manda a la unidad a capturar ahí un lote repetido */
+  table.renglones tr.fila-destacada td { animation: filaDestacada 1.15s ease-in-out 4; }
+  @keyframes filaDestacada { 0%, 100% { background-color: transparent; } 50% { background-color: #fef08a; } }
+  table.renglones tr.fila-destacada td.c-ant .ant-valor { outline: 2px solid #0ea5e9; outline-offset: 3px; border-radius: 6px; }
+  @media (prefers-reduced-motion: reduce) { table.renglones tr.fila-destacada td { animation: none; background-color: #fef9c3; } }
   table.renglones td.c-rec.pulso input { animation: pulsoRecibido 1s ease-in-out 4; border-color: #10b981; background: #d1fae5; }
   @keyframes pulsoRecibido { 0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } 50% { box-shadow: 0 0 0 7px rgba(16,185,129,.5); } }
   .acciones-fila { display: inline-flex; gap: 2px; align-items: center; justify-content: center; }
