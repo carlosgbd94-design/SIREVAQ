@@ -3169,10 +3169,7 @@ const COV_RUBRO_TXT = {
   c3: "5 a 59 años con factores de riesgo", c4: "60 años y más", c5: "Personas embarazadas", c6: "Personal de salud"
 };
 
-function covidPorMarcaDatos(amb, mes) {
-  const set = new Set(infUnidadesAmbito(amb).map(u => u.clues));
-  const caps = (_covidCapturasAll || []).filter(c => set.has(c.clues));
-  const frascos = (_covidFrascosAll || []).filter(d => set.has(d.clues));
+function covidPorMarcaDatos(caps, frascos, mes) {
   const RUB = CovidFrascos.RUBROS.map(r => r.id);
   const out = {};
   ["MODERNA", "PFIZER"].forEach(m => {
@@ -3194,13 +3191,27 @@ function covidPorMarcaDatos(amb, mes) {
   return { marcas: out, rubros: RUB };
 }
 
+/** Panel admin / municipal / jurisdiccional: la sección por marca de las unidades del ámbito. */
 function covidPorMarcaHtml(amb, minFecha, maxFecha) {
+  const set = new Set(infUnidadesAmbito(amb).map(u => u.clues));
+  return covidSeccionMarcas({
+    caps: (_covidCapturasAll || []).filter(c => set.has(c.clues)),
+    frascos: (_covidFrascosAll || []).filter(d => set.has(d.clues)),
+    mesSel: _covMesSel, finRango: maxFecha, etiqueta: amb.etiqueta, selId: "covMesSel"
+  });
+}
+
+/** Sección «COVID-19 por marca»: aplicado del mes y acumulado de Moderna y Pfizer, sin redondear. La usan el panel de
+ *  administración (unidades del ámbito) y la unidad (sus propios reportes y sus frascos repartidos). */
+function covidSeccionMarcas({ caps, frascos, mesSel, finRango, etiqueta, selId }) {
   const meses = [...new Set(generateCampaignWeeks().map(w => w.fecha.slice(0, 7)))];
   if (!meses.length) return "";
-  const porDefecto = meses.includes(String(maxFecha).slice(0, 7)) ? String(maxFecha).slice(0, 7) : meses[meses.length - 1];
-  const mes = meses.includes(_covMesSel) ? _covMesSel : porDefecto;
+  const hoyMes = (typeof todayYmdLocal === "function" ? todayYmdLocal() : new Date().toISOString().slice(0, 10)).slice(0, 7);
+  const base = finRango ? String(finRango).slice(0, 7) : hoyMes;
+  const porDefecto = meses.includes(base) ? base : (meses.includes(hoyMes) ? hoyMes : meses[meses.length - 1]);
+  const mes = meses.includes(mesSel) ? mesSel : porDefecto;
   const nomMes = (m) => { const [y, n] = m.split("-").map(Number); return `${INF_MESES_LARGOS[n - 1]} ${y}`; };
-  const { marcas, rubros } = covidPorMarcaDatos(amb, mes);
+  const { marcas, rubros } = covidPorMarcaDatos(caps, frascos, mes);
   const f2 = (n) => infFmt(n, 2);
   const eqTot = (o, k) => rubros.reduce((s, r) => s + (Number(o[k][r]) || 0) * metaPesoRubro(r), 0);
   const rawTot = (o, k) => rubros.reduce((s, r) => s + (Number(o[k][r]) || 0), 0);
@@ -3246,9 +3257,9 @@ function covidPorMarcaHtml(amb, minFecha, maxFecha) {
 
   return `<section class="cvm" aria-label="COVID-19 por marca">
     <div class="cvm-head">
-      <div class="cvm-titulo"><span class="material-symbols-rounded" aria-hidden="true">coronavirus</span>COVID-19 por marca · ${amb.etiqueta}</div>
+      <div class="cvm-titulo"><span class="material-symbols-rounded" aria-hidden="true">coronavirus</span>COVID-19 por marca · ${etiqueta}</div>
       <label class="cvm-mes">Mes
-        <select id="covMesSel" aria-label="Mes de COVID-19">${meses.map(m => `<option value="${m}" ${m === mes ? "selected" : ""}>${nomMes(m)}</option>`).join("")}</select>
+        <select id="${selId}" aria-label="Mes de COVID-19">${meses.map(m => `<option value="${m}" ${m === mes ? "selected" : ""}>${nomMes(m)}</option>`).join("")}</select>
       </label>
     </div>
     <p class="cvm-nota">Dosis aplicadas tal como se capturan (sin redondear). Las pediátricas (6 a 59 meses, 0.25 mL) cuentan media dosis en las equivalencias de 0.5 mL, por eso puede haber decimales.</p>
@@ -7766,6 +7777,8 @@ function renderInfluenzaResumenUnidad() {
   if (!c.metaTotal) {
     kpis.innerHTML = '<div class="frs-balance-nota">Tu unidad aún no tiene meta asignada para esta campaña. Cuando tu municipio la registre, aquí verás tu avance, tu ritmo y el detalle por grupo.</div>';
     grupos.innerHTML = "";
+    const t4 = document.getElementById("ipResS4Card");
+    if (t4) t4.hidden = true;
     return;
   }
 
@@ -7821,6 +7834,7 @@ function renderInfluenzaResumenUnidad() {
     <tbody>${filas.map(filaHtml).join("")}</tbody>
     <tfoot><tr><th scope="row">Total</th><td class="c">${frascoFmt(c.metaTotal)}</td><td class="c"><b>${frascoFmt(c.logro)}</b></td><td class="ip-g-bar"><span>${pct(c.avancePct)}</span></td></tr></tfoot>
   </table>`;
+  pintarDetalleMensualUnidad("INFLUENZA");
 }
 
 // Meta de COVID-19 de la unidad (la lee de covid_metas; el hospital usa la de su destino). Si no tiene, el botón no sale.
@@ -7929,7 +7943,8 @@ function renderCovidResumenUnidad() {
   const sub = document.getElementById("influenzaResumenSub");
   const c = covidResumenCalcular();
   const pct = (n) => (Math.round(n * 10) / 10).toFixed(1) + "%";
-  const f = (n) => Math.round(n).toLocaleString("es-MX");
+  // Las pediátricas (0.25 mL) cuentan media dosis: no se redondea a entero (50.5 se ve 50.5).
+  const f = (n) => Number(n || 0).toLocaleString("es-MX", { maximumFractionDigits: 2 });
   if (sub) sub.textContent = `COVID-19 · Campaña ${campaignSeasonLabel()} · corte al ${influenzaFechaCorta(c.hoy)} · ${USER?.unidad || ""}`;
   const avancePct = c.av.pct == null ? 0 : c.av.pct;
   const diff = avancePct - c.esperadoPct;
@@ -7995,6 +8010,49 @@ function renderCovidResumenUnidad() {
     <tbody>${filas.join("")}</tbody>
     <tfoot><tr><th scope="row">Total (dosis equivalentes de 0.5 mL)</th><td class="c">${f(c.av.metaEq)}</td><td class="c"><b>${f(c.av.aplEq)}</b></td><td class="ip-g-bar"><span>${pct(avancePct)}</span></td></tr></tfoot>
   </table>`;
+  pintarDetalleMensualUnidad("COVID");
+}
+
+// Cuarta tarjeta del resumen de la unidad: lo aplicado POR MES (Influenza) o por marca y por mes (COVID-19).
+let _covMesUnidad = null;
+function pintarDetalleMensualUnidad(vac) {
+  const tarjeta = document.getElementById("ipResS4Card");
+  const cont = document.getElementById("resumenDetalleMensual");
+  const titulo = document.getElementById("ipResS4");
+  const desc = document.getElementById("ipResS4Desc");
+  if (!tarjeta || !cont) return;
+  tarjeta.hidden = false;
+  if (vac === "COVID") {
+    if (titulo) titulo.textContent = "COVID-19 por marca y por mes";
+    if (desc) desc.textContent = "Moderna y Pfizer separadas: lo del mes y el acumulado de la temporada.";
+    cont.innerHTML = covidSeccionMarcas({
+      caps: _covidCapturasCache || [], frascos: _covidDistUnidad || [], mesSel: _covMesUnidad, finRango: null,
+      etiqueta: USER?.unidad || "Tu unidad", selId: "covMesSelUnidad"
+    });
+    const sel = document.getElementById("covMesSelUnidad");
+    if (sel) sel.onchange = () => { _covMesUnidad = sel.value; pintarDetalleMensualUnidad("COVID"); };
+    return;
+  }
+  if (titulo) titulo.textContent = "Influenza por mes";
+  if (desc) desc.textContent = "Lo que has aplicado cada mes y cómo va tu acumulado contra la meta.";
+  const metaTot = INFLUENZA_RUBROS.reduce((a, r) => a + Number((_influenzaMetasCache || {})[r.id] || 0), 0);
+  const semanas = generateCampaignWeeks();
+  const meses = [...new Set(semanas.map(w => w.fecha.slice(0, 7)))];
+  const f = (n) => Number(n || 0).toLocaleString("es-MX");
+  const nomMes = (m) => { const [y, n] = m.split("-").map(Number); return `${INF_MESES_LARGOS[n - 1]} ${y}`; };
+  let acum = 0;
+  const filas = meses.map(m => {
+    const esp = semanas.filter(w => w.fecha.slice(0, 7) === m);
+    const caps = (_influenzaCapturasCache || []).filter(cp => cp.fecha.slice(0, 7) === m);
+    const dosis = caps.reduce((a, cp) => a + _infTotalDosis(cp), 0);
+    acum += dosis;
+    const pct = metaTot > 0 ? (acum * 100 / metaTot).toFixed(1) + "%" : "—";
+    return `<tr><th scope="row" style="text-transform:capitalize">${nomMes(m)}</th><td class="c">${caps.length} de ${esp.length}</td><td class="c"><b>${f(dosis)}</b></td><td class="c">${f(acum)}</td><td class="c">${pct}</td></tr>`;
+  });
+  cont.innerHTML = `<div class="cp-tablewrap"><table class="ip-table">
+    <caption class="sr-only">Dosis de Influenza aplicadas por mes</caption>
+    <thead><tr><th scope="col">Mes</th><th scope="col" class="c">Reportes</th><th scope="col" class="c">Aplicadas en el mes</th><th scope="col" class="c">Acumulado</th><th scope="col" class="c">% de tu meta</th></tr></thead>
+    <tbody>${filas.join("")}</tbody></table></div>`;
 }
 
 function aplicarSelectorResumen() {
