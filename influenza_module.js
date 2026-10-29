@@ -1504,7 +1504,9 @@ function pintarResumenHistorialInfluenza() {
   if (!box) return;
 
   const hoy = new Date().toLocaleDateString("en-CA");
-  const esperados = generateCampaignWeeks().filter(w => w.fecha <= hoy);
+  // Semanas esperadas = las que ya abrieron (la semana se abre el lunes, antes de su viernes): así «capturados» nunca pasa de «esperados».
+  const abre = typeof influenzaSemanaAbre === "function" ? influenzaSemanaAbre : (f) => f;
+  const esperados = generateCampaignWeeks().filter(w => abre(w.fecha) <= hoy);
   const covid = typeof _covidCapturasCache !== "undefined" ? (_covidCapturasCache || []) : [];
   const L = window.InfluenzaReglas ? window.InfluenzaReglas.fechaLarga : (x) => x;
   const fmt = (n) => Number(n || 0).toLocaleString("es-MX");
@@ -3213,7 +3215,9 @@ function covidSeccionMarcas({ caps, frascos, mesSel, finRango, etiqueta, selId }
   const nomMes = (m) => { const [y, n] = m.split("-").map(Number); return `${INF_MESES_LARGOS[n - 1]} ${y}`; };
   const { marcas, rubros } = covidPorMarcaDatos(caps, frascos, mes);
   const f2 = (n) => infFmt(n, 2);
-  const eqTot = (o, k) => rubros.reduce((s, r) => s + (Number(o[k][r]) || 0) * metaPesoRubro(r), 0);
+  // Equivalencia a 0.5 mL: las pediátricas (c1, c2) valen media dosis. Propio de COVID-19, no depende de la vacuna activa del panel.
+  const pesoCov = (r) => (r === "c1" || r === "c2") ? 0.5 : 1;
+  const eqTot = (o, k) => rubros.reduce((s, r) => s + (Number(o[k][r]) || 0) * pesoCov(r), 0);
   const rawTot = (o, k) => rubros.reduce((s, r) => s + (Number(o[k][r]) || 0), 0);
   const COL = { MODERNA: { c: "#0e7490", bg: "#ecfeff", d: "#155e75", t: "Moderna" }, PFIZER: { c: "#0f766e", bg: "#f0fdfa", d: "#115e59", t: "Pfizer" } };
 

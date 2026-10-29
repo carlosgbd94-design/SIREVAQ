@@ -18,7 +18,7 @@ const DATOS = `
   var generateCampaignWeeks = function () { return [{ semana: 43, fecha: '2026-10-23' }, { semana: 44, fecha: '2026-10-30' }, { semana: 47, fecha: '2026-11-20' }]; };
   var todayYmdLocal = function () { return '2026-10-31'; };
   var infFmt = function (n, dec) { return (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: dec == null ? 1 : dec }); };
-  var metaPesoRubro = function (id) { return id === 'c1' || id === 'c2' ? 0.5 : 1; };
+  // Sin metaPesoRubro a propósito: en la unidad no hay vacuna activa de administración y la equivalencia no debe depender de ella
   var _infTotalDosis = function (r) { return Object.values(r.valores || {}).reduce(function (s, v) { return s + Number(v || 0); }, 0); };
   var _influenzaMetasCache = { r1: 1000 };
   var _influenzaCapturasCache = [
