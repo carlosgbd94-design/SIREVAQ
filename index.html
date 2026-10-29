@@ -394,7 +394,7 @@
   <script defer src="guias_contenido.js?v=6"></script>
   <script defer src="ayuda.js?v=23"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.292" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.293" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3055,6 +3055,18 @@
                     <span class="text-xs font-extrabold">Concentrado con Unidades</span>
                     <span class="text-[10px] text-slate-400 font-semibold leading-normal">Desglose de
                       unidades/municipios en columnas</span>
+                  </div>
+                </button>
+
+                <!-- Opción 3: Concentrado por semana capturada -->
+                <button type="button" id="btnExportConcentradoPorSemana"
+                  class="flex items-start gap-3 w-full px-3 py-2.5 text-left rounded-xl transition-all hover:bg-sky-50/80 text-slate-700 hover:text-sky-900 group border-0 bg-transparent cursor-pointer">
+                  <span
+                    class="material-symbols-rounded text-[20px] text-sky-600 bg-sky-100/50 p-1.5 rounded-lg group-hover:bg-sky-150 transition-colors">date_range</span>
+                  <div class="flex flex-col">
+                    <span class="text-xs font-extrabold">Concentrado por semana</span>
+                    <span class="text-[10px] text-slate-400 font-semibold leading-normal">Una columna por cada semana
+                      capturada (según las semanas elegidas)</span>
                   </div>
                 </button>
               </div>
