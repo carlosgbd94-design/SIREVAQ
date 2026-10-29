@@ -274,7 +274,7 @@
       .tut-conc-tabla { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 13px; } .tut-conc-tabla th { text-align: left; font-size: 10.5px; color: #64748b; text-transform: uppercase; padding: 6px 8px; }
       .tut-conc-tabla td { padding: 8px; border-top: 1px solid #eef2f7; font-weight: 700; color: #0f172a; } .tut-dif { color: #dc2626 !important; } .tut-conc.ok .tut-dif { color: #16a34a !important; }
       .tut-lienzo { position: relative; min-height: 470px; display: flex; align-items: flex-end; justify-content: center; padding: 20px 0 6px; }
-      .tut-dock.dock-sis { position: static; transform: none; max-width: 100%; }
+      .tut-dock.dock-sis { position: static; transform: none; max-width: 100%; z-index: 1; }
       .tut-modal { position: absolute; inset: 0 0 78px 0; background: rgba(15,23,42,.4); display: flex; align-items: center; justify-content: center; padding: 12px; border-radius: 12px; }
       .tut-modal-caja { background: #fff; border-radius: 18px; padding: 18px 20px; width: min(430px, 100%); box-shadow: 0 16px 40px rgba(15,23,42,.3); }
       .tut-modal-caja h3 { margin: 0 0 6px; font: 800 15px 'Poppins', sans-serif; color: #0f172a; } .tut-modal-caja p { margin: 0 0 8px; font-size: 12.5px; color: #475569; line-height: 1.45; }
