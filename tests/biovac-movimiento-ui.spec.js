@@ -71,6 +71,9 @@ test('Lápiz: corrige la existencia anterior de un renglón sin borrarlo', async
   await fila.locator('[data-action="editar-ant"]').click();
   await expect(fila).toHaveClass(/fila-editando/);
   await expect(fila.locator('input.ant-input')).toBeVisible();
+  await expect(fila.locator('.chip-editando')).toHaveText(/Editando/);
+  await expect(fila.locator('.pista-edicion')).toBeVisible();
+  await expect(fila.locator('[data-action="editar-ant"]')).toContainText('Listo');
   await fila.locator('input.ant-input').fill('5');
   await fila.locator('input.ant-input').press('Tab');                            // change -> guarda
   await expect.poll(() => page.evaluate(() => window.__updates.length)).toBe(1);
@@ -80,6 +83,7 @@ test('Lápiz: corrige la existencia anterior de un renglón sin borrarlo', async
   await fila.locator('input.ant-input').focus();
   await page.keyboard.press('Enter');
   await expect(fila).not.toHaveClass(/fila-editando/);
+  await expect(fila.locator('.chip-editando')).toHaveCount(0);
 });
 
 test('Agregar un lote que ya está en la tabla avisa y lleva a la casilla RECIBIDO resaltada', async ({ page }) => {

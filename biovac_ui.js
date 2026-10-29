@@ -3008,21 +3008,52 @@ async function cargarCorreccionesJurisdiccion(avisarCumplidas) {
 }
 
 // Lápiz: la existencia anterior se vuelve editable en su renglón (sin borrar toda la fila).
-function alternarEdicionAnterior(renglonId) {
-  const fila = document.querySelector(`input[data-renglon="${renglonId}"][data-campo="existencia_anterior_frascos"]`)?.closest('tr');
+function alternarEdicionAnterior(renglonId, cancelar) {
+  const inp = document.querySelector(`input[data-renglon="${renglonId}"][data-campo="existencia_anterior_frascos"]`);
+  const fila = inp && inp.closest('tr');
   if (!fila) return;
   const activando = !fila.classList.contains('fila-editando');
-  fila.classList.toggle('fila-editando', activando);
+  const celdaAnt = inp.closest('td');
   const btn = fila.querySelector('[data-action="editar-ant"]');
-  if (btn) {
-    btn.classList.toggle('activo', activando);
-    btn.title = activando ? 'Listo' : 'Corregir la existencia anterior de este lote';
-    btn.querySelector('.material-symbols-rounded').textContent = activando ? 'check' : 'edit';
-  }
+  const loteTxt = (fila.querySelector('td') || {}).textContent ? fila.querySelector('td').textContent.replace(/\s+/g, ' ').replace('Mover', '').trim() : '';
   if (activando) {
-    const inp = fila.querySelector('input.ant-input');
+    inp.dataset.valorInicial = inp.value;
+    fila.classList.add('fila-editando');
+    // Retroalimentación: etiqueta «Editando», pista junto a la casilla y botón con texto.
+    const primera = fila.querySelector('td');
+    if (primera && !primera.querySelector('.chip-editando')) {
+      primera.insertAdjacentHTML('beforeend', '<div class="chip-editando" role="status"><span class="material-symbols-rounded" aria-hidden="true">edit</span>Editando</div>');
+    }
+    if (celdaAnt && !celdaAnt.querySelector('.pista-edicion')) {
+      celdaAnt.insertAdjacentHTML('beforeend', '<div class="pista-edicion">Escribe la cantidad y pulsa <b>Enter</b> o «Listo». <b>Esc</b> cancela.</div>');
+    }
+    if (btn) {
+      btn.classList.add('activo');
+      btn.title = 'Terminar de editar';
+      btn.setAttribute('aria-label', 'Terminar de editar la existencia anterior');
+      btn.innerHTML = '<span class="material-symbols-rounded" aria-hidden="true">check</span><span class="txt-listo">Listo</span>';
+    }
     inp.focus(); inp.select();
+    return;
   }
+  const antes = inp.dataset.valorInicial;
+  if (cancelar) inp.value = antes == null ? inp.value : antes;
+  const cambio = !cancelar && antes != null && String(inp.value) !== String(antes);
+  fila.classList.remove('fila-editando');
+  fila.querySelectorAll('.chip-editando, .pista-edicion').forEach((e) => e.remove());
+  if (btn) {
+    btn.classList.remove('activo');
+    btn.title = 'Corregir la existencia anterior de este lote';
+    btn.setAttribute('aria-label', 'Anotar o corregir la existencia anterior de este lote');
+    btn.innerHTML = '<span class="material-symbols-rounded" aria-hidden="true">edit</span>';
+  }
+  // Confirmación visible: la fila parpadea en verde y un aviso dice qué quedó.
+  fila.classList.remove('fila-guardada'); void fila.offsetWidth;
+  fila.classList.add(cancelar ? 'fila-cancelada' : 'fila-guardada');
+  setTimeout(() => fila.classList.remove('fila-guardada', 'fila-cancelada'), 1800);
+  const valor = redondearFrascos(Number(inp.value) || 0);
+  if (cancelar) toast('Sin cambios: la existencia anterior sigue igual.', 'ok');
+  else toast(cambio ? `✅ Existencia anterior de ${loteTxt || 'este lote'}: ${valor} frasco(s). Se guardó.` : 'Listo: no hubo cambios.', 'ok');
 }
 
 // Aviso de arriba de la tabla: cerrado (el municipal puede corregir) / modo corrección.
@@ -4044,6 +4075,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       ev.preventDefault();
       ev.target.blur();
       alternarEdicionAnterior(ev.target.dataset.renglon);
+    } else if (ev.key === 'Escape' && ev.target.matches('input.ant-input')) {
+      ev.preventDefault();
+      alternarEdicionAnterior(ev.target.dataset.renglon, true);
     }
   });
   const bannerPend = document.getElementById('bannerPendientes');

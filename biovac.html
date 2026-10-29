@@ -49,7 +49,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.103"></script>
+<script defer src="biovac_ui.js?v=2026.105"></script>
 <script defer src="sis06p_biovac_module.js?v=2026.70"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.25"></script>
@@ -639,7 +639,25 @@ window.onunhandledrejection = function (event) {
   table.renglones td.c-ant input.ant-input { border-color: #0ea5e9; background: #e0f2fe; display: none; }
   table.renglones tr.fila-editando td.c-ant .ant-valor { display: none; }
   table.renglones tr.fila-editando td.c-ant input.ant-input { display: block; }
-  table.renglones tr.fila-editando td { box-shadow: inset 0 0 0 9999px rgba(14,165,233,.04); }
+  table.renglones tr.fila-editando td { background-color: rgba(14,165,233,.10); animation: entraEdicion .28s ease-out; }
+  table.renglones tr.fila-editando td:first-child { box-shadow: inset 5px 0 0 #0ea5e9; }
+  @keyframes entraEdicion { from { background-color: rgba(14,165,233,.30); } to { background-color: rgba(14,165,233,.10); } }
+  table.renglones tr.fila-editando td.c-ant input.ant-input { box-shadow: 0 0 0 3px rgba(14,165,233,.35); animation: latidoEdicion 1.4s ease-in-out infinite; }
+  @keyframes latidoEdicion { 0%, 100% { box-shadow: 0 0 0 3px rgba(14,165,233,.30); } 50% { box-shadow: 0 0 0 7px rgba(14,165,233,.12); } }
+  .chip-editando { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 9px 2px 6px; border-radius: 999px; background: #0369a1; color: #fff; font-size: 10.5px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; animation: chipEntra .3s ease-out; }
+  .chip-editando .material-symbols-rounded { font-size: 14px; }
+  @keyframes chipEntra { from { opacity: 0; transform: translateY(-4px) scale(.9); } to { opacity: 1; transform: none; } }
+  .pista-edicion { margin-top: 6px; font-size: 11px; line-height: 1.3; font-weight: 700; color: #0369a1; text-align: center; animation: chipEntra .3s ease-out; }
+  .pista-edicion b { background: #e0f2fe; border-radius: 4px; padding: 0 4px; }
+  table.renglones .btn-fantasma[data-action="editar-ant"].activo { background: #0369a1; color: #fff; width: auto !important; min-width: 0 !important; height: 30px !important; padding: 0 9px 0 6px !important; gap: 2px; display: inline-flex; align-items: center; border-radius: 999px !important; white-space: nowrap; }
+  table.renglones .btn-fantasma[data-action="editar-ant"].activo .txt-listo { font-size: 12px; font-weight: 900; }
+  table.renglones tr.fila-editando .acciones-fila { width: auto; }
+  table.renglones tr.fila-editando .acciones-fila > :not(.activo) { display: none; }
+  table.renglones tr.fila-guardada td { animation: filaGuardada 1.6s ease-out; }
+  table.renglones tr.fila-cancelada td { animation: filaCancelada 1s ease-out; }
+  @keyframes filaGuardada { 0% { background-color: rgba(34,197,94,.40); } 100% { background-color: transparent; } }
+  @keyframes filaCancelada { 0% { background-color: rgba(148,163,184,.35); } 100% { background-color: transparent; } }
+  @media (prefers-reduced-motion: reduce) { table.renglones tr.fila-editando td, table.renglones tr.fila-editando td.c-ant input.ant-input, .chip-editando, .pista-edicion, table.renglones tr.fila-guardada td, table.renglones tr.fila-cancelada td { animation: none; } }
   /* Recibido destacado cuando se manda a la unidad a capturar ahí un lote repetido */
   table.renglones tr.fila-destacada td { animation: filaDestacada 1.15s ease-in-out 4; }
   @keyframes filaDestacada { 0%, 100% { background-color: transparent; } 50% { background-color: #fef08a; } }
@@ -648,7 +666,7 @@ window.onunhandledrejection = function (event) {
   table.renglones td.c-rec.pulso input { animation: pulsoRecibido 1s ease-in-out 4; border-color: #10b981; background: #d1fae5; }
   @keyframes pulsoRecibido { 0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } 50% { box-shadow: 0 0 0 7px rgba(16,185,129,.5); } }
   .acciones-fila { display: inline-flex; gap: 2px; align-items: center; justify-content: center; }
-  table.renglones .btn-fantasma[data-action="editar-ant"]:hover, table.renglones .btn-fantasma[data-action="editar-ant"].activo { background: rgba(14,165,233,.14); color: #0369a1; }
+  table.renglones .btn-fantasma[data-action="editar-ant"]:hover { background: rgba(14,165,233,.14); color: #0369a1; }
 
   /* ── Avisos del movimiento (cerrado / corrección) y guía de captura ───────────── */
   .banner-mov { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 16px; border-radius: 16px; margin-bottom: 14px; border: 1.5px solid; }
