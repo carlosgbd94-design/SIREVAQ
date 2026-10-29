@@ -2589,23 +2589,12 @@ function recalcularTotalBio(bioId) {
   }
 }
 
-// Espejo, en el cliente, de las dos seguridades que en la base de datos
-// aplica biovac_trg_20_autocalc (solo sobre renglones NORMALES) -- esto es
-// solo para dar el error al instante sin esperar el viaje al servidor; la
-// base de datos sigue siendo quien realmente lo bloquea.
-// La seguridad "BCG/SR no puede quedar fraccionario" NO se revisa aquí a
-// propósito -- con autoguardado por celda, "aplicadas" y "desechadas" se
-// escriben en dos momentos separados, y el estado intermedio (solo
-// aplicadas tecleado) casi siempre deja un decimal. Bloquear ESE guardado
-// individual hacía imposible capturar el renglón en dos pasos. Esa cuenta
-// debe cerrar exacta al terminar de capturar, no en cada campo -- se revisa
-// del lado del servidor solo al intentar "Cerrar mes" (biovac_cerrar_mes).
+// La caducidad ya NO bloquea el guardado de un renglón (ni en el cliente ni en la base de datos): se puede precargar la
+// existencia anterior o recibir un lote que caduca este mes y desecharlo después. La regla se aplica al cerrar el mes /
+// enviar el SINBA-SIS (biovac_cerrar_mes), y la pantalla avisa antes («Biológico caduca al terminar este mes»).
+// Tampoco se revisa aquí que BCG/SR no quede fraccionario: con autoguardado por celda, «aplicadas» y «desechadas» se
+// escriben en dos momentos y el estado intermedio casi siempre deja un decimal; esa cuenta se revisa al cerrar.
 function validarGuardadoRenglon(r, bio, dosisProspectiva) {
-  if (r.categoria !== 'NORMAL') return null;
-  const lote = r.biovac_lotes;
-  if (Number(dosisProspectiva) > 0 && loteVencido(lote.caducidad)) {
-    return `El lote ${lote.numero_lote} está caducado. Regístralo como desechado antes de guardar.`;
-  }
   return null;
 }
 
