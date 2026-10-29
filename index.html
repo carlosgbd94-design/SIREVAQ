@@ -138,7 +138,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=10">
   <link rel="stylesheet" href="ayuda.css?v=7">
-  <link rel="stylesheet" href="style.css?v=2026.217" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.218" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -394,7 +394,7 @@
   <script defer src="guias_contenido.js?v=6"></script>
   <script defer src="ayuda.js?v=23"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.294" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.295" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -1864,7 +1864,7 @@
               <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <h4 class="text-sm font-black text-violet-950 uppercase tracking-wider m-0">Historial de Reportes Capturados</h4>
                 <div class="flex items-center gap-2">
-                  <button type="button" onclick="ExportManager.exportToExcel('Reportes_Influenza_SIREVAQ', 'Capturas', ['Folio', 'Fecha', 'Dosis'], _influenzaCapturasCache.map(c => [influenzaFolio(c), c.fecha, Object.values(c.valores||{}).reduce((a,b)=>a+Number(b||0),0)]))" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                  <button type="button" onclick="ExportManager.exportToExcel('Reportes_SIREVAQ', 'Capturas', ['Vacuna', 'Folio', 'Fecha', 'Dosis', 'Moderna', 'Pfizer'], historialFilasExcel())" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
                     <span class="material-symbols-rounded text-sm">table_view</span>
                     <span>Excel</span>
                   </button>
@@ -1872,7 +1872,7 @@
                     <span class="material-symbols-rounded text-sm">description</span>
                     <span>Excel Meta-Logro</span>
                   </button>
-                  <button type="button" onclick="ExportManager.exportToPDF('secUnitHistorico', 'Historial_Influenza', 'portrait')" class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                  <button type="button" onclick="ExportManager.exportToPDF('secUnitHistorico', 'Historial_Reportes', 'portrait')" class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
                     <svg class="material-symbols-rounded" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"
                       style="display: inline-block; vertical-align: middle;">
                       <path d="M7,3 H14 L18,7 V19.5 Q18,20.5 17,20.5 H8 Q7,20.5 7,19.5 Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
@@ -1882,6 +1882,13 @@
                     <span>PDF</span>
                   </button>
                 </div>
+              </div>
+
+              <!-- Vacuna del historial: Todos | Influenza | COVID-19 (se muestra si la unidad tiene reportes de COVID-19) -->
+              <div id="influenzaHistorialVacuna" class="inf-hist-vacuna" role="group" aria-label="Vacuna del historial" hidden>
+                <button type="button" data-hv="TODOS" aria-pressed="true">Todos <span class="hv-n"></span></button>
+                <button type="button" data-hv="INFLUENZA" aria-pressed="false" class="hv-inf"><span class="material-symbols-rounded" aria-hidden="true">vaccines</span>Influenza <span class="hv-n"></span></button>
+                <button type="button" data-hv="COVID" aria-pressed="false" class="hv-cov"><span class="material-symbols-rounded" aria-hidden="true">coronavirus</span>COVID-19 <span class="hv-n"></span></button>
               </div>
 
               <!-- Resumen del historial (se pinta desde influenza_module.js: pintarResumenHistorialInfluenza) -->

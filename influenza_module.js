@@ -1483,21 +1483,31 @@ function _infTotalDosis(r) {
   return Object.values(r?.valores || {}).reduce((s, v) => s + Number(v || 0), 0);
 }
 
-/** Tarjetas de resumen del historial: reportes capturados vs. esperados, dosis y avance, sin movimiento y último folio. */
+// Vacuna que se ve en el Historial de reportes de la unidad: "TODOS" | "INFLUENZA" | "COVID".
+let _histVacuna = "TODOS";
+
+/** Dosis de un reporte de COVID-19: total y por marca (dosis tal como se aplican; las pediátricas son de 0.25 mL). */
+function _covTotales(r) {
+  const por = window.CovidCaptura ? window.CovidCaptura.totalPorMarca(r?.valores) : { MODERNA: 0, PFIZER: 0 };
+  return { moderna: por.MODERNA || 0, pfizer: por.PFIZER || 0, total: (por.MODERNA || 0) + (por.PFIZER || 0) };
+}
+function covidFolio(r) {
+  if (!r) return "";
+  if (r.folio) return r.folio;
+  const shortId = r.id ? String(r.id).substring(0, 8).toUpperCase() : "TEMP";
+  return `COV-${String(r.fecha || "").replace(/-/g, "")}-${shortId}`;
+}
+
+/** Tarjetas de resumen del historial: separadas por vacuna (Influenza / COVID-19) para no mezclar sus cifras. */
 function pintarResumenHistorialInfluenza() {
   const box = document.getElementById("influenzaHistorialResumen");
   if (!box) return;
 
   const hoy = new Date().toLocaleDateString("en-CA");
   const esperados = generateCampaignWeeks().filter(w => w.fecha <= hoy);
-  const capturadas = new Set(_influenzaCapturasCache.map(r => r.fecha));
-  const pendientes = esperados.filter(w => !capturadas.has(w.fecha)).length;
-  const dosis = _influenzaCapturasCache.reduce((s, r) => s + _infTotalDosis(r), 0);
-  const meta = Object.values(_influenzaMetasCache).reduce((s, v) => s + Number(v || 0), 0);
-  const avance = meta > 0 ? Math.round((dosis / meta) * 100) : null;
-  const sinMov = _influenzaCapturasCache.filter(r => r.sin_movimiento === true || r.sin_movimiento === "SI").length;
-  const ultimo = [..._influenzaCapturasCache].sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+  const covid = typeof _covidCapturasCache !== "undefined" ? (_covidCapturasCache || []) : [];
   const L = window.InfluenzaReglas ? window.InfluenzaReglas.fechaLarga : (x) => x;
+  const fmt = (n) => Number(n || 0).toLocaleString("es-MX");
 
   const tarjeta = (icono, tono, etiqueta, valor, nota) => `
     <div class="inf-hist-stat">
@@ -1509,21 +1519,82 @@ function pintarResumenHistorialInfluenza() {
       </div>
     </div>`;
 
-  box.innerHTML = [
-    tarjeta("fact_check", pendientes ? "ambar" : "verde", "Reportes capturados", `${_influenzaCapturasCache.length}<small> de ${esperados.length}</small>`,
+  // ── Influenza
+  const capturadas = new Set(_influenzaCapturasCache.map(r => r.fecha));
+  const pendientes = esperados.filter(w => !capturadas.has(w.fecha)).length;
+  const dosis = _influenzaCapturasCache.reduce((s, r) => s + _infTotalDosis(r), 0);
+  const meta = Object.values(_influenzaMetasCache).reduce((s, v) => s + Number(v || 0), 0);
+  const avance = meta > 0 ? Math.round((dosis / meta) * 100) : null;
+  const sinMov = _influenzaCapturasCache.filter(r => r.sin_movimiento === true || r.sin_movimiento === "SI").length;
+  const ultimo = [..._influenzaCapturasCache].sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+  const tInf = [
+    tarjeta("fact_check", pendientes ? "ambar" : "verde", "Reportes de Influenza", `${_influenzaCapturasCache.length}<small> de ${esperados.length}</small>`,
       pendientes ? `${pendientes} pendiente${pendientes === 1 ? "" : "s"} a la fecha` : "Al corriente"),
-    tarjeta("vaccines", "violeta", "Dosis aplicadas", dosis.toLocaleString("es-MX"),
-      avance === null ? "Sin meta asignada" : `${avance}% de tu meta anual`),
+    tarjeta("vaccines", "violeta", "Dosis de Influenza", fmt(dosis), avance === null ? "Sin meta asignada" : `${avance}% de tu meta anual`),
     tarjeta("pause_circle", "azul", "Sin movimiento", String(sinMov), sinMov === 1 ? "semana en ceros" : "semanas en ceros"),
     tarjeta("tag", "gris", "Último folio", ultimo ? `<span class="inf-hist-folio-mini">${influenzaFolio(ultimo)}</span>` : "—",
       ultimo ? `Semana del ${influenzaRangoTexto(ultimo.fecha)}` : "Aún no hay reportes")
-  ].join("");
+  ];
+
+  // ── COVID-19 (separado por marca; son dosis aplicadas tal cual, sin redondear ni convertir)
+  const cTot = covid.reduce((a, r) => { const t = _covTotales(r); a.m += t.moderna; a.p += t.pfizer; return a; }, { m: 0, p: 0 });
+  const cCap = new Set(covid.map(r => r.fecha));
+  const cPend = esperados.filter(w => !cCap.has(w.fecha)).length;
+  const cUlt = [...covid].sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+  const tCov = [
+    tarjeta("fact_check", cPend ? "ambar" : "verde", "Reportes de COVID-19", `${covid.length}<small> de ${esperados.length}</small>`,
+      cPend ? `${cPend} pendiente${cPend === 1 ? "" : "s"} a la fecha` : "Al corriente"),
+    tarjeta("vaccines", "cian", "Dosis de COVID-19", fmt(cTot.m + cTot.p), "Moderna + Pfizer"),
+    tarjeta("medication", "cian", "Moderna / Pfizer", `${fmt(cTot.m)}<small> / ${fmt(cTot.p)}</small>`, "dosis aplicadas por marca"),
+    tarjeta("tag", "gris", "Último folio COVID-19", cUlt ? `<span class="inf-hist-folio-mini">${covidFolio(cUlt)}</span>` : "—",
+      cUlt ? `Semana del ${influenzaRangoTexto(cUlt.fecha)}` : "Aún no hay reportes")
+  ];
+
+  const encabezado = (cls, texto) => `<div class="inf-hist-grupo inf-hist-grupo--${cls}">${texto}</div>`;
+  if (_histVacuna === "INFLUENZA") box.innerHTML = tInf.join("");
+  else if (_histVacuna === "COVID") box.innerHTML = tCov.join("");
+  else box.innerHTML = encabezado("inf", "Influenza") + tInf.slice(0, 2).join("") + tInf.slice(2).join("")
+    + encabezado("cov", "COVID-19") + tCov.join("");
+}
+
+/** Filas del Excel del historial: Influenza y COVID-19 (con Moderna/Pfizer) según el selector. */
+function historialFilasExcel() {
+  const filas = [];
+  if (_histVacuna !== "COVID") _influenzaCapturasCache.forEach(c => filas.push(["Influenza", influenzaFolio(c), c.fecha, _infTotalDosis(c), "", ""]));
+  if (_histVacuna !== "INFLUENZA") (typeof _covidCapturasCache !== "undefined" ? _covidCapturasCache : []).forEach(c => { const t = _covTotales(c); filas.push(["COVID-19", covidFolio(c), c.fecha, t.total, t.moderna, t.pfizer]); });
+  return filas.sort((a, b) => b[2].localeCompare(a[2]) || a[0].localeCompare(b[0]));
+}
+window.historialFilasExcel = historialFilasExcel;
+
+/** Selector Todos | Influenza | COVID-19 del historial (solo si la unidad tiene reportes de COVID-19 o meta de COVID-19). */
+function pintarSelectorHistorialVacuna() {
+  const cont = document.getElementById("influenzaHistorialVacuna");
+  if (!cont) return;
+  const hayCovid = (typeof _covidCapturasCache !== "undefined" && (_covidCapturasCache || []).length > 0) || (typeof _covidPanelListo !== "undefined" && _covidPanelListo);
+  cont.hidden = !hayCovid;
+  if (!hayCovid) { _histVacuna = "INFLUENZA"; return; }
+  if (!cont.dataset.listo) {
+    cont.dataset.listo = "1";
+    cont.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-hv]");
+      if (!b) return;
+      _histVacuna = b.dataset.hv;
+      loadInfluenzaHistoryList();
+    });
+  }
+  const n = { TODOS: _influenzaCapturasCache.length + (_covidCapturasCache || []).length, INFLUENZA: _influenzaCapturasCache.length, COVID: (_covidCapturasCache || []).length };
+  cont.querySelectorAll("[data-hv]").forEach(b => {
+    b.setAttribute("aria-pressed", String(b.dataset.hv === _histVacuna));
+    const c = b.querySelector(".hv-n");
+    if (c) c.textContent = n[b.dataset.hv];
+  });
 }
 
 async function loadInfluenzaHistoryList() {
   const container = document.getElementById("influenzaHistorialList");
   if (!container) return;
   container.innerHTML = "";
+  pintarSelectorHistorialVacuna();
   pintarResumenHistorialInfluenza();
 
   const searchInput = document.getElementById("influenzaHistorialSearch");
@@ -1585,8 +1656,14 @@ async function loadInfluenzaHistoryList() {
     }
   }
 
-  if (!_influenzaCapturasCache.length) {
-    container.innerHTML = `<div class="text-sm text-slate-400 font-medium p-8 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">No se han registrado reportes aún.</div>`;
+  // Reportes del historial: Influenza y/o COVID-19 según el selector; cada uno se marca con su vacuna.
+  const _covLista = typeof _covidCapturasCache !== "undefined" ? (_covidCapturasCache || []) : [];
+  const _fuente = [
+    ...(_histVacuna !== "COVID" ? _influenzaCapturasCache.map(r => ({ vac: "INFLUENZA", r })) : []),
+    ...(_histVacuna !== "INFLUENZA" ? _covLista.map(r => ({ vac: "COVID", r })) : [])
+  ];
+  if (!_fuente.length) {
+    container.innerHTML = `<div class="text-sm text-slate-400 font-medium p-8 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">${_histVacuna === "COVID" ? "No se han registrado reportes de COVID-19 aún." : "No se han registrado reportes aún."}</div>`;
     if (counterEl) counterEl.textContent = "Mostrando 0 de 0 reportes";
     return;
   }
@@ -1599,13 +1676,17 @@ async function loadInfluenzaHistoryList() {
   ];
 
   // Map and calculate stats for all items
-  const processedReports = _influenzaCapturasCache.map(r => {
+  const processedReports = _fuente.map(({ vac, r }) => {
     let totalDosis = 0;
-    if (r.valores) {
+    let marcas = null;
+    if (vac === "COVID") {
+      marcas = _covTotales(r);
+      totalDosis = marcas.total;
+    } else if (r.valores) {
       Object.values(r.valores).forEach(v => totalDosis += Number(v || 0));
     }
 
-    const folio = influenzaFolio(r);
+    const folio = vac === "COVID" ? covidFolio(r) : influenzaFolio(r);
     
     // Construct friendly Spanish date representation for smart search
     let friendlyDate = "";
@@ -1623,10 +1704,12 @@ async function loadInfluenzaHistoryList() {
 
     return {
       original: r,
+      vac,
+      marcas,
       totalDosis,
       folio,
       friendlyDate,
-      searchText: `${folio} ${r.fecha} ${friendlyDate} ${(r.capturado_por || '').toLowerCase()} ${totalDosis}`.toLowerCase()
+      searchText: `${folio} ${r.fecha} ${friendlyDate} ${(r.capturado_por || '').toLowerCase()} ${totalDosis} ${vac === "COVID" ? "covid covid-19 moderna pfizer" : "influenza"}`.toLowerCase()
     };
   });
 
@@ -1639,9 +1722,9 @@ async function loadInfluenzaHistoryList() {
   // Sort based on sortVal
   filtered.sort((a, b) => {
     if (sortVal === "newest") {
-      return b.original.fecha.localeCompare(a.original.fecha);
+      return b.original.fecha.localeCompare(a.original.fecha) || a.vac.localeCompare(b.vac);
     } else if (sortVal === "oldest") {
-      return a.original.fecha.localeCompare(b.original.fecha);
+      return a.original.fecha.localeCompare(b.original.fecha) || a.vac.localeCompare(b.vac);
     } else if (sortVal === "doses-desc") {
       return b.totalDosis - a.totalDosis;
     } else if (sortVal === "doses-asc") {
@@ -1651,7 +1734,7 @@ async function loadInfluenzaHistoryList() {
   });
 
   const totalMatches = filtered.length;
-  const totalCached = _influenzaCapturasCache.length;
+  const totalCached = _fuente.length;
 
   // Apply visual limit
   let displayCount = totalMatches;
@@ -1681,10 +1764,11 @@ async function loadInfluenzaHistoryList() {
 
   itemsToDisplay.forEach(p => {
     const r = p.original;
-    const sinMov = r.sin_movimiento === true || r.sin_movimiento === "SI";
+    const esCov = p.vac === "COVID";
+    const sinMov = r.sin_movimiento === true || r.sin_movimiento === "SI" || (esCov && p.totalDosis === 0);
     const [yy, mm, dd] = r.fecha.split("-").map(Number);
     const semana = generateCampaignWeeks().find(w => w.fecha === r.fecha);
-    const pct = metaTotal > 0 ? Math.min(100, Math.round((p.totalDosis / metaTotal) * 100)) : 0;
+    const pct = !esCov && metaTotal > 0 ? Math.min(100, Math.round((p.totalDosis / metaTotal) * 100)) : 0;
     const folioFormatted = _highlightInfluenzaText(p.folio, queryWords);
     const capturadoFormatted = _highlightInfluenzaText(r.capturado_por || "Desconocido", queryWords);
     const fechaFormatted = _highlightInfluenzaText(r.fecha, queryWords);
@@ -1697,8 +1781,13 @@ async function loadInfluenzaHistoryList() {
       : `<span class="inf-chip inf-chip--verde"><span class="material-symbols-rounded">check_circle</span>Capturado</span>`;
     const tipo = corteDe(r.fecha) ? `<span class="inf-chip inf-chip--ambar"><span class="material-symbols-rounded">event_available</span>Corte de fin de mes</span>` : "";
 
+    const chipVac = esCov
+      ? `<span class="inf-chip inf-chip--vac-cov"><span class="material-symbols-rounded">coronavirus</span>COVID-19</span>`
+      : `<span class="inf-chip inf-chip--vac-inf"><span class="material-symbols-rounded">vaccines</span>Influenza</span>`;
+    const detalleMarcas = esCov
+      ? `<span class="inf-hist-marcas"><b>Moderna</b> ${p.marcas.moderna.toLocaleString("es-MX")} · <b>Pfizer</b> ${p.marcas.pfizer.toLocaleString("es-MX")}</span>` : "";
     const card = document.createElement("div");
-    card.className = "inf-hist-card";
+    card.className = `inf-hist-card inf-hist-card--${esCov ? "cov" : "inf"}`;
     card.tabIndex = 0;
     card.setAttribute("role", "button");
     card.innerHTML = `
@@ -1709,10 +1798,11 @@ async function loadInfluenzaHistoryList() {
       </div>
       <div class="inf-hist-cuerpo">
         <div class="inf-hist-top">
-          <span class="inf-hist-folio">${folioFormatted}</span>
+          ${chipVac}<span class="inf-hist-folio">${folioFormatted}</span>
           ${estado}${tipo}
         </div>
         <div class="inf-hist-titulo">${semana ? `Semana ${semana.semana}` : "Semana"} <span>· ${influenzaRangoTexto(r.fecha)} ${yy}</span></div>
+        ${detalleMarcas ? `<div class="inf-hist-meta">${detalleMarcas}</div>` : ""}
         <div class="inf-hist-meta">
           <span class="inf-hist-resp"><span class="inf-hist-avatar">${inicial}</span>${capturadoFormatted}</span>
           ${actualizado ? `<span><span class="material-symbols-rounded">schedule</span>Guardado ${actualizado}</span>` : ""}
@@ -1721,17 +1811,20 @@ async function loadInfluenzaHistoryList() {
       </div>
       <div class="inf-hist-dosis">
         <div class="inf-hist-dosis-num">${p.totalDosis.toLocaleString("es-MX")}</div>
-        <div class="inf-hist-dosis-etq">dosis</div>
-        <div class="inf-hist-barra" title="${pct}% de tu meta anual"><span style="width:${pct}%"></span></div>
+        <div class="inf-hist-dosis-etq">dosis${esCov ? " COVID-19" : ""}</div>
+        ${esCov ? "" : `<div class="inf-hist-barra" title="${pct}% de tu meta anual"><span style="width:${pct}%"></span></div>`}
       </div>
       <div class="inf-hist-accion"><span class="material-symbols-rounded">chevron_right</span></div>
     `;
     const abrir = () => {
+      // Abre la captura de LA VACUNA de ese reporte (si es COVID-19, el panel de COVID-19)
+      if (esCov && typeof elegirVacunaCaptura === "function") elegirVacunaCaptura("COVID");
+      else if (typeof elegirVacunaCaptura === "function") elegirVacunaCaptura("INFLUENZA");
       document.getElementById("influenza_semana").value = r.fecha;
       document.getElementById("influenza_semana").dispatchEvent(new Event("change"));
       // Cambiar automáticamente a la pestaña de captura
       document.getElementById("subtabUnitCaptura").click();
-      showToast(`Reporte con folio ${p.folio} cargado para edición/consulta.`, true, "info");
+      showToast(`Reporte de ${esCov ? "COVID-19" : "Influenza"} con folio ${p.folio} cargado para edición/consulta.`, true, "info");
     };
     card.onclick = abrir;
     card.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); abrir(); } };
@@ -2976,6 +3069,8 @@ function renderAvancesAndConcentrados() {
   const conReporte = unidadesConMeta.filter(f => f.ultima).length;
   const sinReporte = unidadesConMeta.length - conReporte;
   const eq = cov ? "dosis equiv. (0.5 mL)" : "dosis";
+  // COVID-19: las pediátricas (0.25 mL) cuentan media dosis, así que hay decimales; no se redondean a entero.
+  const dd = cov ? 2 : 0;
   const t = INF_TONO[tonoTot];
   const color = cov ? { c: "#0e7490", bg: "#ecfeff", d: "#0b5566" } : { c: "#9F2241", bg: "#FFEFEF", d: "#633E55" };
 
@@ -2994,13 +3089,18 @@ function renderAvancesAndConcentrados() {
       <div class="kpiCard" style="border-left-color:${t.bar} !important;background-color:${t.bg} !important;--kpi-color:${t.bar};--kpi-bg:${t.bg};">
         <div class="kpiHeader"><div class="kpiCardLabel" style="color:${t.fg};">Avance contra la meta</div><div class="kpiIcon"><span class="material-symbols-rounded">flag</span></div></div>
         <div class="kpiCardValue" style="color:${t.fg};">${metaTot > 0 ? infFmt(pctTot) + "%" : "—"}</div>
-        <div style="font-size:10px;font-weight:800;color:${t.fg};text-transform:uppercase;margin-top:6px;">${infFmt(acumTot, 0)} de ${infFmt(metaTot, 0)} ${eq}${metaTot > 0 ? " · esperado a hoy " + infFmt(esperado) + "%" : ""}</div>
+        <div style="font-size:10px;font-weight:800;color:${t.fg};text-transform:uppercase;margin-top:6px;">${infFmt(acumTot, dd)} de ${infFmt(metaTot, dd)} ${eq}${metaTot > 0 ? " · esperado a hoy " + infFmt(esperado) + "%" : ""}</div>
       </div>
-      ${kpi("vaccines", "Dosis aplicadas (rango)", infFmt(rangoTot, 0), `${infFmt(rangoTot / dosisPorFr)} frascos equiv.`, "#6366f1", "#f5f3ff", "#312e81")}
-      ${kpi("inventory_2", "Frascos entregados", infFmt(frascosTot, 0), `${infFmt(dosisFrascosTot, 0)} ${eq}`, "#a855f7", "#faf5ff", "#581c87")}
-      ${kpi(resguardoDosis < 0 ? "warning" : "hourglass_empty", "Diferencia en resguardo", infFmt(resguardoFr), `${infFmt(resguardoDosis, 0)} ${eq}${resguardoDosis < 0 ? " · aplicó más de lo entregado" : ""}`, resguardoDosis < 0 ? "#e11d48" : "#ec4899", resguardoDosis < 0 ? "#fff1f2" : "#fdf2f8", resguardoDosis < 0 ? "#9f1239" : "#831843")}
+      ${kpi("vaccines", "Dosis aplicadas (rango)", infFmt(rangoTot, dd), `${infFmt(rangoTot / dosisPorFr, 2)} frascos equiv.`, "#6366f1", "#f5f3ff", "#312e81")}
+      ${kpi("inventory_2", "Frascos entregados", infFmt(frascosTot, 0), `${infFmt(dosisFrascosTot, dd)} ${eq}`, "#a855f7", "#faf5ff", "#581c87")}
+      ${kpi(resguardoDosis < 0 ? "warning" : "hourglass_empty", "Diferencia en resguardo", infFmt(resguardoFr, 2), `${infFmt(resguardoDosis, dd)} ${eq}${resguardoDosis < 0 ? " · aplicó más de lo entregado" : ""}`, resguardoDosis < 0 ? "#e11d48" : "#ec4899", resguardoDosis < 0 ? "#fff1f2" : "#fdf2f8", resguardoDosis < 0 ? "#9f1239" : "#831843")}
       ${kpi("fact_check", "Unidades con reporte", `${conReporte}<span style="font-size:14px;font-weight:700"> / ${unidadesConMeta.length}</span>`, sinReporte > 0 ? `${sinReporte} sin ningún reporte` : "Todas ya reportaron", sinReporte > 0 ? "#d97706" : "#059669", sinReporte > 0 ? "#fffbeb" : "#ecfdf5", sinReporte > 0 ? "#92400e" : "#065f46")}
     </div>`;
+  if (cov) {
+    muniFrascosBox.insertAdjacentHTML("beforeend", covidPorMarcaHtml(amb, minFecha, maxFecha));
+    const selMes = document.getElementById("covMesSel");
+    if (selMes) selMes.onchange = () => { _covMesSel = selMes.value; renderAvancesAndConcentrados(); };
+  }
 
   // Tabla: por unidad; en Jurisdicción, agrupada por municipio con su subtotal.
   const filaHtml = (f) => {
@@ -3010,7 +3110,7 @@ function renderAvancesAndConcentrados() {
       <td class="p-3 text-xs font-semibold text-slate-700">${f.u.unidad}${f.meta > 0 && !f.ultima ? ` <span style="margin-left:6px">${infPill("bad", "Sin reportes")}</span>` : ""}</td>
       <td class="p-3 text-xs text-slate-500 font-mono">${f.u.clues}</td>
       <td class="p-3 text-center text-xs font-bold text-slate-600">${f.meta > 0 ? infFmt(f.meta, 0) : '<span style="color:#94a3b8">sin meta</span>'}</td>
-      <td class="p-3 text-center text-xs font-bold text-violet-950">${infFmt(f.acum, 0)}</td>
+      <td class="p-3 text-center text-xs font-bold text-violet-950">${infFmt(f.acum, dd)}</td>
       <td class="p-3 text-center text-xs font-bold">${f.meta > 0 ? infBarraPct(pct, tono) : "—"}</td>
       <td class="p-3 text-center text-xs font-bold text-slate-700">${f.frascos ? infFmt(f.frascos, 0) : ""}</td>
       <td class="p-3 text-center text-xs font-bold text-slate-500">${f.dosisFrascos ? infFmt(f.dosisFrascos, 0) : ""}</td>
@@ -3022,7 +3122,7 @@ function renderAvancesAndConcentrados() {
     return `<tr style="${estilo}">
       <td class="p-3 text-xs font-black" colspan="2">${txt}</td>
       <td class="p-3 text-center text-xs font-black">${infFmt(m, 0)}</td>
-      <td class="p-3 text-center text-xs font-black">${infFmt(a, 0)}</td>
+      <td class="p-3 text-center text-xs font-black">${infFmt(a, dd)}</td>
       <td class="p-3 text-center text-xs font-black">${m > 0 ? infBarraPct(pct, infTonoAvanceAmbito(m, pct, esperado)) : "—"}</td>
       <td class="p-3 text-center text-xs font-black">${fr ? infFmt(fr, 0) : ""}</td>
       <td class="p-3 text-center text-xs font-black">${df ? infFmt(df, 0) : ""}</td>
@@ -3060,6 +3160,108 @@ function renderAvancesAndConcentrados() {
       };
     });
   }
+}
+
+// ─── COVID-19 por marca (Moderna / Pfizer): aplicado del mes y acumulado de la temporada, sin redondear ────────────
+let _covMesSel = null;   // "AAAA-MM" elegido en el selector del Concentrado de Avances (null = mes de la semana fin)
+const COV_RUBRO_TXT = {
+  c1: "6 a 59 meses · 1ª dosis (0.25 mL)", c2: "6 a 59 meses · 2ª dosis (0.25 mL)",
+  c3: "5 a 59 años con factores de riesgo", c4: "60 años y más", c5: "Personas embarazadas", c6: "Personal de salud"
+};
+
+function covidPorMarcaDatos(amb, mes) {
+  const set = new Set(infUnidadesAmbito(amb).map(u => u.clues));
+  const caps = (_covidCapturasAll || []).filter(c => set.has(c.clues));
+  const frascos = (_covidFrascosAll || []).filter(d => set.has(d.clues));
+  const RUB = CovidFrascos.RUBROS.map(r => r.id);
+  const out = {};
+  ["MODERNA", "PFIZER"].forEach(m => {
+    const o = { mes: {}, acum: {}, frascos: 0 };
+    RUB.forEach(r => { o.mes[r] = 0; o.acum[r] = 0; });
+    caps.forEach(c => {
+      const v = c.valores && c.valores[m];
+      if (!v || c.fecha.slice(0, 7) > mes) return;
+      RUB.forEach(r => {
+        const n = Number(v[r] || 0);
+        o.acum[r] += n;
+        if (c.fecha.slice(0, 7) === mes) o.mes[r] += n;
+      });
+    });
+    o.frascos = frascos.filter(d => d.marca === m).reduce((s, d) => s + Number(d.cantidad_frascos || 0), 0);
+    o.dpf = CovidFrascos.dosisPorFrasco(m);
+    out[m] = o;
+  });
+  return { marcas: out, rubros: RUB };
+}
+
+function covidPorMarcaHtml(amb, minFecha, maxFecha) {
+  const meses = [...new Set(generateCampaignWeeks().map(w => w.fecha.slice(0, 7)))];
+  if (!meses.length) return "";
+  const porDefecto = meses.includes(String(maxFecha).slice(0, 7)) ? String(maxFecha).slice(0, 7) : meses[meses.length - 1];
+  const mes = meses.includes(_covMesSel) ? _covMesSel : porDefecto;
+  const nomMes = (m) => { const [y, n] = m.split("-").map(Number); return `${INF_MESES_LARGOS[n - 1]} ${y}`; };
+  const { marcas, rubros } = covidPorMarcaDatos(amb, mes);
+  const f2 = (n) => infFmt(n, 2);
+  const eqTot = (o, k) => rubros.reduce((s, r) => s + (Number(o[k][r]) || 0) * metaPesoRubro(r), 0);
+  const rawTot = (o, k) => rubros.reduce((s, r) => s + (Number(o[k][r]) || 0), 0);
+  const COL = { MODERNA: { c: "#0e7490", bg: "#ecfeff", d: "#155e75", t: "Moderna" }, PFIZER: { c: "#0f766e", bg: "#f0fdfa", d: "#115e59", t: "Pfizer" } };
+
+  const tarjeta = (m) => {
+    const o = marcas[m], k = COL[m];
+    const mesEq = eqTot(o, "mes"), acEq = eqTot(o, "acum");
+    const entregadas = o.frascos * o.dpf;
+    const resguardo = entregadas - acEq;
+    const fila = (etq, val, nota) => `<div class="cvm-fila"><span>${etq}</span><b>${val}</b>${nota ? `<small>${nota}</small>` : ""}</div>`;
+    return `<div class="cvm-card" style="--cvm-c:${k.c};--cvm-bg:${k.bg};--cvm-d:${k.d}">
+      <div class="cvm-marca"><span class="material-symbols-rounded" aria-hidden="true">vaccines</span>${k.t}</div>
+      ${fila(`Aplicadas en ${nomMes(mes)}`, `${f2(rawTot(o, "mes"))} dosis`, `${f2(mesEq)} equiv. 0.5 mL · ${f2(mesEq / o.dpf)} frascos`)}
+      ${fila("Acumulado de la temporada", `${f2(rawTot(o, "acum"))} dosis`, `${f2(acEq)} equiv. 0.5 mL · ${f2(acEq / o.dpf)} frascos`)}
+      ${fila("Frascos entregados", f2(o.frascos), `${f2(entregadas)} dosis de 0.5 mL`)}
+      ${fila("En resguardo", `${f2(resguardo)} dosis`, `${f2(resguardo / o.dpf)} frascos${resguardo < 0 ? " · aplicó más de lo entregado" : ""}`)}
+    </div>`;
+  };
+
+  const M = marcas.MODERNA, P = marcas.PFIZER;
+  const filasRubro = rubros.map(r => {
+    const pf = r === "c1" || r === "c2";
+    const t = (M.acum[r] || 0) + (P.acum[r] || 0);
+    return `<tr class="border-b border-slate-100">
+      <td class="p-2 text-xs font-semibold text-slate-700">${COV_RUBRO_TXT[r] || r}</td>
+      <td class="p-2 text-center text-xs font-bold text-cyan-900">${infFmt(M.mes[r], 0)}</td>
+      <td class="p-2 text-center text-xs font-bold text-cyan-900">${infFmt(M.acum[r], 0)}</td>
+      <td class="p-2 text-center text-xs font-bold text-teal-900">${pf ? "—" : infFmt(P.mes[r], 0)}</td>
+      <td class="p-2 text-center text-xs font-bold text-teal-900">${pf ? "—" : infFmt(P.acum[r], 0)}</td>
+      <td class="p-2 text-center text-xs font-black text-slate-700">${infFmt(t, 0)}</td>
+    </tr>`;
+  }).join("");
+  const sumR = (o, k) => rawTot(o, k);
+  const totalFila = `<tr style="background:#ecfeff;border-top:2px solid #67e8f9;color:#164e63">
+      <td class="p-2 text-xs font-black">TOTAL (dosis aplicadas)</td>
+      <td class="p-2 text-center text-xs font-black">${infFmt(sumR(M, "mes"), 0)}</td>
+      <td class="p-2 text-center text-xs font-black">${infFmt(sumR(M, "acum"), 0)}</td>
+      <td class="p-2 text-center text-xs font-black">${infFmt(sumR(P, "mes"), 0)}</td>
+      <td class="p-2 text-center text-xs font-black">${infFmt(sumR(P, "acum"), 0)}</td>
+      <td class="p-2 text-center text-xs font-black">${infFmt(sumR(M, "acum") + sumR(P, "acum"), 0)}</td>
+    </tr>`;
+
+  return `<section class="cvm" aria-label="COVID-19 por marca">
+    <div class="cvm-head">
+      <div class="cvm-titulo"><span class="material-symbols-rounded" aria-hidden="true">coronavirus</span>COVID-19 por marca · ${amb.etiqueta}</div>
+      <label class="cvm-mes">Mes
+        <select id="covMesSel" aria-label="Mes de COVID-19">${meses.map(m => `<option value="${m}" ${m === mes ? "selected" : ""}>${nomMes(m)}</option>`).join("")}</select>
+      </label>
+    </div>
+    <p class="cvm-nota">Dosis aplicadas tal como se capturan (sin redondear). Las pediátricas (6 a 59 meses, 0.25 mL) cuentan media dosis en las equivalencias de 0.5 mL, por eso puede haber decimales.</p>
+    <div class="cvm-cards">${tarjeta("MODERNA")}${tarjeta("PFIZER")}</div>
+    <div class="cvm-tabla"><table class="w-full">
+      <thead><tr class="text-[10px] uppercase text-slate-500">
+        <th class="p-2 text-left">Grupo</th>
+        <th class="p-2" colspan="2" style="color:#0e7490">Moderna</th>
+        <th class="p-2" colspan="2" style="color:#0f766e">Pfizer</th>
+        <th class="p-2">Total</th></tr>
+        <tr class="text-[10px] uppercase text-slate-400"><th></th><th>${nomMes(mes)}</th><th>Acumulado</th><th>${nomMes(mes)}</th><th>Acumulado</th><th>Acumulado</th></tr></thead>
+      <tbody>${filasRubro}${totalFila}</tbody></table></div>
+  </section>`;
 }
 
 function updateInfluenzaDashboardVisuals(amb, minFecha, maxFecha) {

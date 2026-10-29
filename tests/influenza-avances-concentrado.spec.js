@@ -27,6 +27,7 @@ const DATOS = `
   var infMuniEtiqueta = function (m) { return String(m).toUpperCase() === 'MARQUES' ? 'EL MARQUÉS' : m; };
   var INFLUENZA_RUBROS = [{ id: 'r1' }];
   var DOSIS_POR_FRASCO = 10;
+  var INF_MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   var FRASCO_DESTINOS = [{ id: 'QUERETARO' }, { id: 'HENM', label: 'HENM', clues: 'H1', hospital: true }];
   var _adminChart = null, _adminInfluenzaTrendChart = null, _adminInfluenzaBreakdownChart = null;
   var exportConcentradoSimpleExcel = function () {}, exportConcentradoDetalladoUnidadesExcel = function () {};
@@ -148,4 +149,38 @@ test('COVID-19: dosis equivalentes de 0.5 mL (la pediátrica cuenta la mitad), f
   const h1 = await celdas(page, 'H1');
   expect(h1[2]).toContain('60');                   // meta del hospital tomada del destino
   await expect(page.locator('#dropdownExportInfluenzaContainer')).toBeHidden();   // los Excel de este concentrado son de Influenza
+});
+
+test('COVID-19 por marca: aplicado del mes y acumulado de Moderna y Pfizer por separado, sin redondear', async ({ page }) => {
+  await montar(page, 'ADMIN', 'COVID');
+  // Querétaro sin el hospital: Moderna 70 dosis (40 pediátricas + 30 adultos = 50 equiv.), Pfizer 10; frascos 10 y 5
+  await page.evaluate(() => window.__render());
+  const tarjetas = page.locator('.cvm-card');
+  await expect(tarjetas).toHaveCount(2);
+  const m = await tarjetas.nth(0).innerText();
+  const f = await tarjetas.nth(1).innerText();
+  expect(m).toContain('Moderna');
+  expect(m).toContain('Aplicadas en octubre 2026');
+  expect(m).toMatch(/70 dosis/);
+  expect(m).toMatch(/50 equiv\. 0\.5 mL/);
+  expect(m).toMatch(/50 dosis de 0\.5 mL/);           // 10 frascos x 5
+  expect(f).toContain('Pfizer');
+  expect(f).toMatch(/10 dosis/);
+  expect(f).toMatch(/20 dosis/);                        // resguardo: 5 frascos x 6 = 30 entregadas - 10 aplicadas
+  // Una pediátrica suelta cuenta media dosis: ya no se redondea
+  await page.evaluate(() => { _covidCapturasAll.push({ clues: 'Q1', fecha: '2026-10-30', valores: { MODERNA: { c1: 1 }, PFIZER: {} } }); window.__render(); });
+  const m2 = await page.locator('.cvm-card').nth(0).innerText();
+  expect(m2).toMatch(/71 dosis/);
+  expect(m2).toMatch(/50\.5 equiv\. 0\.5 mL/);
+  // Tabla por grupo: Pfizer no aplica a 6-59 meses
+  const fila = await page.locator('.cvm-tabla tbody tr').first().innerText();
+  expect(fila).toContain('6 a 59 meses');
+  expect(fila).toContain('—');
+  // El selector de mes cambia lo "aplicado del mes" (noviembre: sin reportes) y conserva el acumulado
+  await page.evaluate(() => { generateCampaignWeeks = function () { return [{ semana: 43, fecha: '2026-10-23' }, { semana: 47, fecha: '2026-11-20' }]; }; window.__render(); });
+  await page.selectOption('#covMesSel', '2026-11');
+  const m3 = await page.locator('.cvm-card').nth(0).innerText();
+  expect(m3).toContain('Aplicadas en noviembre 2026');
+  expect(m3).toMatch(/Aplicadas en noviembre 2026\s*0 dosis/);
+  expect(m3).toMatch(/71 dosis/);                       // el acumulado sigue ahí
 });
