@@ -921,8 +921,8 @@ window.onunhandledrejection = function (event) {
   .modal-acciones { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
   .toast {
-    position: fixed; bottom: 96px; right: 20px; background: var(--primary); color: #fff;
-    padding: 12px 18px; border-radius: 14px; font-size: 13px; max-width: 380px;
+    position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(420px, calc(100vw - 32px)); text-align: center; background: var(--primary); color: #fff;
+    padding: 12px 18px; border-radius: 14px; font-size: 13px;
     box-shadow: var(--shadow-2); z-index: 9995; display: none; font-weight: 600;
   }
 
