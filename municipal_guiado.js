@@ -40,7 +40,6 @@
   ];
   const ETIQUETA = { VALIDADO: 'Validado', ENVIADO: 'Por validar', SIN: 'Sin enviar', OMITIDA: 'Sin envío' };
   const CLASE_EST = { VALIDADO: 'completo', ENVIADO: 'parcial', SIN: 'vacio', OMITIDA: 'omitida' };
-  const ORDEN_EST = { ENVIADO: 0, SIN: 1, VALIDADO: 2, OMITIDA: 3 };
 
   const ES_HOSPITAL = { NHG: true, HENM: true };
   const st = { activo: false, modo: 'municipal', todas: [], paso: 1, filas: [], filtro: 'todas', clues: null, muni: null, vista3: 'concentrado', hojaActual: 'btnSeccionSIS06P', tokenConc: 0, conc: null };
@@ -59,7 +58,8 @@
   function fechaCorta(iso) { return iso ? new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : ''; }
 
   function filasOrdenadas() {
-    return st.filas.slice().sort((a, b) => String(a.unidad || '').localeCompare(String(b.unidad || ''), 'es'));
+    // Siempre por CLUES (no por quién envió primero): cada unidad se queda en su lugar y es fácil de ubicar.
+    return st.filas.slice().sort((a, b) => String(a.clues || '').localeCompare(String(b.clues || ''), 'es', { numeric: true }) || String(a.unidad || '').localeCompare(String(b.unidad || ''), 'es'));
   }
   function municipios() { return [...new Set(st.filas.map((f) => f.municipio).filter(Boolean))]; }
   function filasDe(muni) { return st.filas.filter((f) => f.municipio === muni); }
@@ -323,8 +323,7 @@
     const r = resumen(st.filas);
     if (!st.filas.length) { cont.innerHTML = '<div class="mun-vacio">No hay unidades en tu alcance.</div>'; pintarRuta(); pintarDock(); return; }
     const conteos = { todas: r.total, ENVIADO: r.enviado, SIN: r.sin, VALIDADO: r.validado, OMITIDA: r.omitida };
-    const visibles = filasOrdenadas().filter((f) => st.filtro === 'todas' || estadoDe(f) === st.filtro)
-      .sort((a, b) => ORDEN_EST[estadoDe(a)] - ORDEN_EST[estadoDe(b)]);
+    const visibles = filasOrdenadas().filter((f) => st.filtro === 'todas' || estadoDe(f) === st.filtro);
     const pct = r.esperadas ? Math.round((r.validado / r.esperadas) * 100) : 0;
     const cta = r.enviado > 0
       ? `<button type="button" class="btn-primario" id="munCtaSiguiente"><span class="material-symbols-rounded">fact_check</span> Revisar la siguiente por validar (${r.enviado})</button>`
