@@ -1872,6 +1872,18 @@ function renderBloques(editable) {
   cont.innerHTML = avisoCaducidadMovimiento() + (html || '<p>Sin biológicos vigentes para este periodo.</p>');
 }
 
+// Lotes Normal que caducan este mes (o antes) y todavía tienen existencia: el servidor no deja cerrar/enviar así.
+// Lo usa «Qué falta para enviar» (sis06p_biovac_module.js).
+function lotesCaducadosConExistencia() {
+  if (!estado.movimiento) return [];
+  return (estado.renglones || [])
+    .filter((r) => r.categoria === 'NORMAL' && Number(r.existencia_final_frascos) > 0 && r.biovac_lotes && r.biovac_lotes.caducidad && loteVencido(r.biovac_lotes.caducidad))
+    .map((r) => {
+      const bio = (estado.biologicos || []).find((x) => x.id === r.biovac_lotes.biologico_id);
+      return { biologico: bio ? bio.nombre_excel.replace(/\n/g, ' ') : 'Biológico', lote: r.biovac_lotes.numero_lote, caducidad: formatMmmAa(r.biovac_lotes.caducidad), existencia: redondearFrascos(r.existencia_final_frascos) };
+    });
+}
+
 // Aviso de biológico caducado / próximo a caducar (<= DIAS_PROXIMO_A_VENCER) entre los lotes con existencia final.
 function avisoCaducidadMovimiento() {
   // Solo existencia NORMAL (la que todavía se puede usar o hay que dar de baja): lo que ya está en A.R.F. o en canje ya fue

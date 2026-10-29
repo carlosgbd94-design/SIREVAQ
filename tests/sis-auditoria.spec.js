@@ -160,14 +160,14 @@ test('Movimiento del municipio: desglose por unidad de un lote (suma, requisici�
 
 test('Aviso de biológico caducado: solo cuenta existencia NORMAL; lo que ya está en A.R.F. o canje no se vuelve a avisar', async ({ page }) => {
   await abrir(page, 'MUNICIPAL');
-  const html = await page.evaluate(() => {
+  const { aviso: html, lista } = await page.evaluate(() => {
     const hoy = new Date();
     estado.movimiento = { anio: hoy.getFullYear(), mes: hoy.getMonth() + 1, estado: 'BORRADOR' };
     const esteMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`;
     estado.biologicos = [{ id: 'b1', nombre_excel: 'BCG' }];
     const ren = (categoria, lote, cad, fin) => ({ categoria, existencia_final_frascos: fin, biovac_lotes: { numero_lote: lote, caducidad: cad, biologico_id: 'b1' } });
     estado.renglones = [ren('NORMAL', 'LOTE-NORMAL', '2025-06-01', 4), ren('CANJE', 'LOTE-CANJE', '2025-06-01', 10), ren('ARF', 'LOTE-ARF', '2023-08-01', 2), ren('NORMAL', 'LOTE-SANO', '2028-01-01', 9), ren('NORMAL', 'LOTE-MES', esteMes, 3)];
-    return avisoCaducidadMovimiento();
+    return { aviso: avisoCaducidadMovimiento(), lista: lotesCaducadosConExistencia().map((x) => x.lote) };
   });
   expect(html).toContain('LOTE-NORMAL');
   expect(html).not.toContain('LOTE-CANJE');
@@ -176,6 +176,8 @@ test('Aviso de biológico caducado: solo cuenta existencia NORMAL; lo que ya est
   // El que caduca este mismo mes sale aparte: todavía no está caducado hoy, pero no puede cerrar el mes con existencia
   expect(html).toContain('LOTE-MES');
   expect(html).toContain('caduca al terminar este mes');
+  // «Qué falta para enviar» lista lo mismo que el servidor rechazaría al cerrar: Normal con existencia que caduca este mes o antes
+  expect(lista.sort()).toEqual(['LOTE-MES', 'LOTE-NORMAL']);
 });
 
 test('Recibido de la unidad: desde octubre es solo de Requisiciones (la unidad no lo captura); antes de octubre y para los revisores no cambia', async ({ page }) => {

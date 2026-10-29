@@ -196,11 +196,12 @@
   T.enviar = {
     titulo: 'Enviar tu SINBA-SIS',
     resumen: 'Qué revisar y qué pasa cuando el botón «Enviar» está apagado.',
-    icono: 'send', color: '#16a34a', alto: 500,
+    icono: 'send', color: '#16a34a', alto: 540,
     escena: () => `<div class="tut-lienzo">${dock('2 por cuadrar antes de enviar')}
-      <div class="tut-modal" data-t="modal-chk" hidden><div class="tut-modal-caja"><h3>Qué falta para enviar</h3><p data-t="chk-sub">Te faltan 3 cosas. Mientras tanto, el botón «Enviar» se queda apagado.</p>
+      <div class="tut-modal" data-t="modal-chk" hidden><div class="tut-modal-caja"><h3>Qué falta para enviar</h3><p data-t="chk-sub">Te faltan 4 cosas. Mientras tanto, el botón «Enviar» se queda apagado.</p>
         ${item('c1', true, 'Tu concentrado está guardado')}
         ${item('c2', false, 'Tu nombre está escrito', 'Escribe tu nombre completo en «Responsable de la información», arriba.')}
+        ${item('c5', false, 'Ningún lote caducado con existencia', 'Da de baja lo que sobre con «Dar de baja» en su fila, o pásalo a A.R.F. o canje con «Mover».')}
         ${item('c3', false, 'El paloteo y el Movimiento cuadran', 'Corrige el lado que esté mal.')}
         ${item('c4', false, 'Ya es fecha de envío', 'El envío se abre del 31 de octubre al 7 de noviembre. Mientras tanto puedes seguir capturando.')}
         <div class="tut-modal-acc"><span class="btn-primario">Entendido</span></div></div></div>
@@ -212,7 +213,7 @@
       { texto: 'Abajo está la barra de tu SINBA-SIS. Ahí ves el estatus y el botón «Enviar».', detalle: 'Mientras captures, el estatus dice «Borrador».', resalta: '.tut-dock', espera: 3200 },
       { texto: 'Si «Enviar» está apagado, tócalo: te dice exactamente qué falta.', cursor: '[data-t="btn-enviar"]', clic: true,
         despues: (r) => { r.querySelector('[data-t="modal-chk"]').hidden = false; }, espera: 3600 },
-      { texto: 'Una lista con palomitas: guardado, tu nombre, que el paloteo cuadre con el Movimiento y la fecha de envío.', resalta: '[data-t="c2"], [data-t="c3"], [data-t="c4"]', espera: 4200 },
+      { texto: 'Una lista con palomitas: guardado, tu nombre, que no queden lotes caducados con frascos, que el paloteo cuadre con el Movimiento y la fecha de envío.', resalta: '[data-t="c2"], [data-t="c5"], [data-t="c3"], [data-t="c4"]', espera: 4200 },
       { texto: 'Resuelve cada pendiente. Cuando todo queda en verde y ya es fecha de envío…', cursor: '[data-t="c3"]', clic: false,
         antes: (r) => {
           r.querySelectorAll('.tut-chk').forEach((c) => { c.classList.add('ok'); c.querySelector('.material-symbols-rounded').textContent = 'check_circle'; c.querySelector('.tut-chk-falta').textContent = ''; });
