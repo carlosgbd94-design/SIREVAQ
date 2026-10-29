@@ -4690,7 +4690,11 @@ function infRangoExport() {
   const sufijo = completo || !semanas.length ? "" : `_${nom(semanas[0]).replace(/ /g, "")}_a_${nom(semanas[semanas.length - 1]).replace(/ /g, "")}`;
   return { min, max, semanas, completo, etiqueta, sufijo };
 }
-function capEnRangoExport(cap) { return !_exportRango || (cap.fecha >= _exportRango.min && cap.fecha <= _exportRango.max); }
+let _exportSoloFecha = null; // exporte por semana: solo los reportes de esa fecha
+function capEnRangoExport(cap) {
+  if (_exportSoloFecha) return cap.fecha === _exportSoloFecha;
+  return !_exportRango || (cap.fecha >= _exportRango.min && cap.fecha <= _exportRango.max);
+}
 function sufijoRangoExport() { return _exportRango ? _exportRango.sufijo : ""; }
 function textoRangoExport() { return _exportRango && !_exportRango.completo && _exportRango.etiqueta ? ` · ${_exportRango.etiqueta}` : ""; }
 
@@ -4927,126 +4931,51 @@ async function generateConcentradoPorSemanaFile(muniName, type = "municipio") {
     const rango = _exportRango || infRangoExport();
     const semanas = rango.semanas;
     if (!semanas.length) { showToast("No hay semanas en el rango elegido.", false, "warn"); return; }
-    const scopeLabel = type === "jurisdiccion" ? "JURISDICCIÓN SANITARIA" : `MUNICIPIO DE ${infMuniEtiqueta(muniName)}`;
+    const scopeLabel = type === "jurisdiccion" ? "CONSOLIDADO JURISDICCIONAL" : `MUNICIPIO: ${muniName}`;
     showToast(`Generando concentrado por semana de ${scopeLabel}...`, true, "info");
 
-    const units = (type === "municipio" ? _allUnidades.filter(u => String(u.municipio).toUpperCase() === String(muniName).toUpperCase()) : _allUnidades.slice())
-      .sort((a, b) => String(a.clues).localeCompare(String(b.clues)));
-    const cluesSet = new Set(units.map(u => u.clues));
-    const caps = _adminCapturasArray.filter(cp => cluesSet.has(cp.clues) && cp.fecha >= rango.min && cp.fecha <= rango.max);
-    const totalCap = (cp) => Object.values(cp.valores || {}).reduce((s, v) => s + Number(v || 0), 0);
-    const metaDe = (clues, rubro) => {
-      const rec = _adminMetasArray.find(m => m.clues === clues);
-      if (!rec) return 0;
-      return rubro ? Number(rec.metas?.[rubro] || 0) : Object.values(rec.metas || {}).reduce((s, v) => s + Number(v || 0), 0);
-    };
-
+    // Misma plantilla oficial que «Concentrado con Unidades»: en lugar de una unidad por grupo de columnas (Logro, Meta, %),
+    // cada grupo es una SEMANA capturada (su logro es solo lo aplicado en esa semana) y al final el total del rango.
+    const response = await fetch(encodeURI("./Formatos/PLANTILLA, CONCENTRADO DE INFLUENZA CON UNIDADES O MUNICIPIOS.xlsx"));
+    if (!response.ok) throw new Error("No se pudo cargar la plantilla detallada.");
+    const arrayBuffer = await response.arrayBuffer();
     const wb = new ExcelJS.Workbook();
-    wb.creator = "SIREVAQ";
-    const campana = campaignSeasonLabel();
-    const violeta = { type: "pattern", pattern: "solid", fgColor: { argb: "FF5B21B6" } };
-    const suave = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F3FF" } };
-    const borde = { style: "thin", color: { argb: "FFCBD5E1" } };
-    const cabecera = (cell) => {
-      cell.fill = violeta; cell.font = { name: "Montserrat", size: 9, bold: true, color: { argb: "FFFFFFFF" } };
-      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-      cell.border = { top: borde, left: borde, bottom: borde, right: borde };
-    };
-    const celda = (cell, o = {}) => {
-      cell.font = { name: "Montserrat", size: 9, bold: !!o.bold };
-      if (o.fill) cell.fill = o.fill;
-      cell.border = { top: borde, left: borde, bottom: borde, right: borde };
-      if (o.fmt) cell.numFmt = o.fmt;
-      cell.alignment = { vertical: "middle", horizontal: o.left ? "left" : "center", wrapText: !!o.left };
-    };
-    const titulo = (ws, ultimaCol, texto, sub) => {
-      ws.mergeCells(1, 1, 1, ultimaCol); ws.mergeCells(2, 1, 2, ultimaCol);
-      ws.getCell(1, 1).value = texto; ws.getCell(1, 1).font = { name: "Montserrat", size: 13, bold: true, color: { argb: "FF3B0764" } };
-      ws.getCell(2, 1).value = sub; ws.getCell(2, 1).font = { name: "Montserrat", size: 9, color: { argb: "FF475569" } };
-    };
-    const etiquetaSemana = (w) => `${w.corte ? "Corte" : "Semana"} ${w.semana}\n${influenzaRangoTexto(w.fecha)}`;
-    const sub = `${scopeLabel} · Campaña ${campana} · ${rango.etiqueta || "TODA LA TEMPORADA"} · lo aplicado en cada semana capturada`;
+    await wb.xlsx.load(arrayBuffer);
+    const ws = wb.worksheets[0];
 
-    // Hoja 1: por rubro (grupo de población)
-    const ws1 = wb.addWorksheet("Por rubro");
-    const nSem = semanas.length;
-    const cTot = 3 + nSem, cMeta = cTot + 1, cPct = cTot + 2;
-    titulo(ws1, cPct, "Concentrado de Influenza por semana", sub);
-    const h = 4;
-    ["Grupo / dosis", "Edad"].forEach((t, i) => { ws1.getCell(h, i + 1).value = t; cabecera(ws1.getCell(h, i + 1)); });
-    semanas.forEach((w, i) => { const cl = ws1.getCell(h, 3 + i); cl.value = etiquetaSemana(w); cabecera(cl); });
-    [[cTot, "TOTAL DEL RANGO"], [cMeta, "META"], [cPct, "% DE LA META"]].forEach(([col, t]) => { ws1.getCell(h, col).value = t; cabecera(ws1.getCell(h, col)); });
-    ws1.getRow(h).height = 34;
-    INFLUENZA_RUBROS.forEach((rb, idx) => {
-      const r = h + 1 + idx;
-      ws1.getCell(r, 1).value = `${rb.categoria} · ${rb.grupo}`; celda(ws1.getCell(r, 1), { left: true });
-      ws1.getCell(r, 2).value = rb.edad; celda(ws1.getCell(r, 2), { left: true });
-      semanas.forEach((w, i) => {
-        let v = 0;
-        caps.forEach(cp => { if (cp.fecha === w.fecha) v += Number(cp.valores?.[rb.id] || 0); });
-        const cl = ws1.getCell(r, 3 + i); cl.value = v; celda(cl, { fmt: "#,##0" });
-      });
-      const a = ws1.getCell(r, 3).address, z = ws1.getCell(r, 2 + nSem).address;
-      ws1.getCell(r, cTot).value = { formula: `SUM(${a}:${z})` }; celda(ws1.getCell(r, cTot), { bold: true, fmt: "#,##0", fill: suave });
-      let meta = 0; units.forEach(u => { meta += metaDe(u.clues, rb.id); });
-      ws1.getCell(r, cMeta).value = meta; celda(ws1.getCell(r, cMeta), { fmt: "#,##0" });
-      ws1.getCell(r, cPct).value = { formula: `IFERROR(${ws1.getCell(r, cTot).address}/${ws1.getCell(r, cMeta).address}," ")` }; celda(ws1.getCell(r, cPct), { fmt: "0.0%" });
-    });
-    const rt = h + 1 + INFLUENZA_RUBROS.length, r0 = h + 1;
-    ws1.getCell(rt, 1).value = "TOTAL DE DOSIS"; ws1.mergeCells(rt, 1, rt, 2); celda(ws1.getCell(rt, 1), { bold: true, left: true, fill: suave });
-    for (let col = 3; col <= cMeta; col++) {
-      const L = ws1.getColumn(col).letter;
-      ws1.getCell(rt, col).value = { formula: `SUM(${L}${r0}:${L}${rt - 1})` }; celda(ws1.getCell(rt, col), { bold: true, fmt: "#,##0", fill: suave });
-    }
-    ws1.getCell(rt, cPct).value = { formula: `IFERROR(${ws1.getCell(rt, cTot).address}/${ws1.getCell(rt, cMeta).address}," ")` }; celda(ws1.getCell(rt, cPct), { bold: true, fmt: "0.0%", fill: suave });
-    ws1.getColumn(1).width = 34; ws1.getColumn(2).width = 18;
-    for (let col = 3; col <= cPct; col++) ws1.getColumn(col).width = 13;
-    ws1.views = [{ state: "frozen", xSplit: 2, ySplit: h }];
-    ws1.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+    const cellScope = ws.getCell('B8');
+    cellScope.value = `ÁMBITO: ${scopeLabel}${textoRangoExport()} · POR SEMANA`;
+    applyPremiumStyles(cellScope, { bold: true, size: 10 });
 
-    // Hoja 2: por unidad (total de dosis de cada semana)
-    const ws2 = wb.addWorksheet("Por unidad");
-    const c2Tot = 3 + nSem, c2Meta = c2Tot + 1, c2Pct = c2Tot + 2;
-    titulo(ws2, c2Pct, "Dosis aplicadas por unidad y semana", sub);
-    ["CLUES", "Unidad"].forEach((t, i) => { ws2.getCell(h, i + 1).value = t; cabecera(ws2.getCell(h, i + 1)); });
-    semanas.forEach((w, i) => { const cl = ws2.getCell(h, 3 + i); cl.value = etiquetaSemana(w); cabecera(cl); });
-    [[c2Tot, "TOTAL DEL RANGO"], [c2Meta, "META"], [c2Pct, "% DE LA META"]].forEach(([col, t]) => { ws2.getCell(h, col).value = t; cabecera(ws2.getCell(h, col)); });
-    ws2.getRow(h).height = 34;
-    units.forEach((u, idx) => {
-      const r = h + 1 + idx;
-      ws2.getCell(r, 1).value = u.clues; celda(ws2.getCell(r, 1), { left: true });
-      ws2.getCell(r, 2).value = u.unidad; celda(ws2.getCell(r, 2), { left: true });
-      semanas.forEach((w, i) => {
-        let v = 0, hay = false;
-        caps.forEach(cp => { if (cp.clues === u.clues && cp.fecha === w.fecha) { v += totalCap(cp); hay = true; } });
-        const cl = ws2.getCell(r, 3 + i); cl.value = hay ? v : null; celda(cl, { fmt: "#,##0" });
+    const clues = (type === "municipio"
+      ? _allUnidades.filter(u => String(u.municipio).toUpperCase() === String(muniName).toUpperCase())
+      : _allUnidades).map(u => u.clues);
+
+    let col = 7; // Columna G, como la plantilla
+    try {
+      semanas.forEach(w => {
+        _exportSoloFecha = w.fecha;
+        writeUnitDataColumns(ws, col, `${w.corte ? "CORTE" : "SEMANA"} ${w.semana}`, influenzaRangoTexto(w.fecha), clues, false);
+        col += 3;
       });
-      const a = ws2.getCell(r, 3).address, z = ws2.getCell(r, 2 + nSem).address;
-      ws2.getCell(r, c2Tot).value = { formula: `SUM(${a}:${z})` }; celda(ws2.getCell(r, c2Tot), { bold: true, fmt: "#,##0", fill: suave });
-      ws2.getCell(r, c2Meta).value = metaDe(u.clues, null); celda(ws2.getCell(r, c2Meta), { fmt: "#,##0" });
-      ws2.getCell(r, c2Pct).value = { formula: `IFERROR(${ws2.getCell(r, c2Tot).address}/${ws2.getCell(r, c2Meta).address}," ")` }; celda(ws2.getCell(r, c2Pct), { fmt: "0.0%" });
-    });
-    const rt2 = h + 1 + units.length;
-    ws2.getCell(rt2, 1).value = "TOTAL"; ws2.mergeCells(rt2, 1, rt2, 2); celda(ws2.getCell(rt2, 1), { bold: true, left: true, fill: suave });
-    for (let col = 3; col <= c2Meta; col++) {
-      const L = ws2.getColumn(col).letter;
-      ws2.getCell(rt2, col).value = { formula: `SUM(${L}${h + 1}:${L}${rt2 - 1})` }; celda(ws2.getCell(rt2, col), { bold: true, fmt: "#,##0", fill: suave });
+    } finally { _exportSoloFecha = null; }
+    if (semanas.length > 1) {
+      writeUnitDataColumns(ws, col, "TOTAL DEL RANGO", rango.completo ? "TODA LA TEMPORADA" : (rango.etiqueta || "SEMANAS ELEGIDAS"), clues, true);
+      col += 3;
     }
-    ws2.getCell(rt2, c2Pct).value = { formula: `IFERROR(${ws2.getCell(rt2, c2Tot).address}/${ws2.getCell(rt2, c2Meta).address}," ")` }; celda(ws2.getCell(rt2, c2Pct), { bold: true, fmt: "0.0%", fill: suave });
-    ws2.getColumn(1).width = 16; ws2.getColumn(2).width = 40;
-    for (let col = 3; col <= c2Pct; col++) ws2.getColumn(col).width = 13;
-    ws2.views = [{ state: "frozen", xSplit: 2, ySplit: h }];
-    ws2.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+
+    centerHeadersAcrossColumns(ws, col - 1);
+    applyPremiumFooterAndPageSetup(ws, campaignSeasonLabel());
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Concentrado_Por_Semana_Influenza_${scopeLabel.replace(/ /g, "_")}${sufijoRangoExport()}.xlsx`;
+    link.download = `Concentrado_Por_Semana_Influenza_${scopeLabel.replace(/[ :]+/g, "_")}${sufijoRangoExport()}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast(`Concentrado por semana de ${scopeLabel} descargado.`, true, "good");
+    showToast(`Concentrado por semana de ${type === "municipio" ? muniName : "la Jurisdicción"} descargado.`, true, "good");
   } catch (err) {
     console.error("Error al generar concentrado por semana:", err);
     showToast("Error al generar el concentrado por semana.", false, "bad");
