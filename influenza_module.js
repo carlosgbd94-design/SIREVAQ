@@ -1511,15 +1511,8 @@ function pintarResumenHistorialInfluenza() {
   const L = window.InfluenzaReglas ? window.InfluenzaReglas.fechaLarga : (x) => x;
   const fmt = (n) => Number(n || 0).toLocaleString("es-MX");
 
-  const tarjeta = (icono, tono, etiqueta, valor, nota) => `
-    <div class="inf-hist-stat">
-      <div class="inf-hist-stat-ico inf-tono-${tono}"><span class="material-symbols-rounded">${icono}</span></div>
-      <div class="inf-hist-stat-txt">
-        <div class="inf-hist-stat-etq">${etiqueta}</div>
-        <div class="inf-hist-stat-val">${valor}</div>
-        <div class="inf-hist-stat-nota">${nota}</div>
-      </div>
-    </div>`;
+  // Una línea compacta por vacuna (antes: 8 tarjetas grandes). Cada dato es «cifra + etiqueta».
+  const dato = (valor, etq, tono) => `<span class="inf-hist-dato${tono ? " inf-hist-dato--" + tono : ""}"><b>${valor}</b> ${etq}</span>`;
 
   // ── Influenza
   const capturadas = new Set(_influenzaCapturasCache.map(r => r.fecha));
@@ -1529,44 +1522,30 @@ function pintarResumenHistorialInfluenza() {
   const avance = meta > 0 ? Math.round((dosis / meta) * 100) : null;
   const sinMov = _influenzaCapturasCache.filter(r => r.sin_movimiento === true || r.sin_movimiento === "SI").length;
   const ultimo = [..._influenzaCapturasCache].sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
-  const tInf = [
-    tarjeta("fact_check", pendientes ? "ambar" : "verde", "Reportes de Influenza", `${_influenzaCapturasCache.length}<small> de ${esperados.length}</small>`,
-      pendientes ? `${pendientes} pendiente${pendientes === 1 ? "" : "s"} a la fecha` : "Al corriente"),
-    tarjeta("vaccines", "violeta", "Dosis de Influenza", fmt(dosis), avance === null ? "Sin meta asignada" : `${avance}% de tu meta anual`),
-    tarjeta("pause_circle", "azul", "Sin movimiento", String(sinMov), sinMov === 1 ? "semana en ceros" : "semanas en ceros"),
-    tarjeta("tag", "gris", "Último folio", ultimo ? `<span class="inf-hist-folio-mini">${influenzaFolio(ultimo)}</span>` : "—",
-      ultimo ? `Semana del ${influenzaRangoTexto(ultimo.fecha)}` : "Aún no hay reportes")
-  ];
+  const lInf = [
+    dato(`${_influenzaCapturasCache.length}<small> de ${esperados.length}</small>`, "reportes de Influenza", pendientes ? "ambar" : "verde"),
+    pendientes ? dato(pendientes, pendientes === 1 ? "pendiente" : "pendientes", "ambar") : "",
+    dato(fmt(dosis), "dosis" + (avance === null ? "" : ` · ${avance}% de tu meta`)),
+    sinMov ? dato(sinMov, sinMov === 1 ? "semana sin movimiento" : "semanas sin movimiento") : ""
+  ].filter(Boolean).join("");
 
-  // ── COVID-19 (separado por marca; son dosis aplicadas tal cual, sin redondear ni convertir)
+  // ── COVID-19 (por marca; dosis tal como se aplican, sin redondear ni convertir)
   const cTot = covid.reduce((a, r) => { const t = _covTotales(r); a.m += t.moderna; a.p += t.pfizer; return a; }, { m: 0, p: 0 });
   const cCap = new Set(covid.map(r => r.fecha));
   const cPend = esperados.filter(w => !cCap.has(w.fecha)).length;
   const cUlt = [...covid].sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
-  const tCov = [
-    tarjeta("fact_check", cPend ? "ambar" : "verde", "Reportes de COVID-19", `${covid.length}<small> de ${esperados.length}</small>`,
-      cPend ? `${cPend} pendiente${cPend === 1 ? "" : "s"} a la fecha` : "Al corriente"),
-    tarjeta("vaccines", "cian", "Dosis de COVID-19", fmt(cTot.m + cTot.p), "Moderna + Pfizer"),
-    tarjeta("medication", "cian", "Moderna / Pfizer", `${fmt(cTot.m)}<small> / ${fmt(cTot.p)}</small>`, "dosis aplicadas por marca"),
-    tarjeta("tag", "gris", "Último folio COVID-19", cUlt ? `<span class="inf-hist-folio-mini">${covidFolio(cUlt)}</span>` : "—",
-      cUlt ? `Semana del ${influenzaRangoTexto(cUlt.fecha)}` : "Aún no hay reportes")
-  ];
+  const lCov = [
+    dato(`${covid.length}<small> de ${esperados.length}</small>`, "reportes de COVID-19", cPend ? "ambar" : "verde"),
+    cPend ? dato(cPend, cPend === 1 ? "pendiente" : "pendientes", "ambar") : "",
+    dato(fmt(cTot.m + cTot.p), "dosis"),
+    dato(fmt(cTot.m), "Moderna"), dato(fmt(cTot.p), "Pfizer")
+  ].filter(Boolean).join("");
 
-  const encabezado = (cls, texto) => `<div class="inf-hist-grupo inf-hist-grupo--${cls}">${texto}</div>`;
-  if (_histVacuna === "INFLUENZA") box.innerHTML = tInf.join("");
-  else if (_histVacuna === "COVID") box.innerHTML = tCov.join("");
-  else box.innerHTML = encabezado("inf", "Influenza") + tInf.slice(0, 2).join("") + tInf.slice(2).join("")
-    + encabezado("cov", "COVID-19") + tCov.join("");
+  const linea = (cls, nombre, datos) => `<div class="inf-hist-linea inf-hist-linea--${cls}"><span class="inf-hist-linea-n">${nombre}</span>${datos}</div>`;
+  if (_histVacuna === "INFLUENZA") box.innerHTML = linea("inf", "Influenza", lInf);
+  else if (_histVacuna === "COVID") box.innerHTML = linea("cov", "COVID-19", lCov);
+  else box.innerHTML = linea("inf", "Influenza", lInf) + linea("cov", "COVID-19", lCov);
 }
-
-/** Filas del Excel del historial: Influenza y COVID-19 (con Moderna/Pfizer) según el selector. */
-function historialFilasExcel() {
-  const filas = [];
-  if (_histVacuna !== "COVID") _influenzaCapturasCache.forEach(c => filas.push(["Influenza", influenzaFolio(c), c.fecha, _infTotalDosis(c), "", ""]));
-  if (_histVacuna !== "INFLUENZA") (typeof _covidCapturasCache !== "undefined" ? _covidCapturasCache : []).forEach(c => { const t = _covTotales(c); filas.push(["COVID-19", covidFolio(c), c.fecha, t.total, t.moderna, t.pfizer]); });
-  return filas.sort((a, b) => b[2].localeCompare(a[2]) || a[0].localeCompare(b[0]));
-}
-window.historialFilasExcel = historialFilasExcel;
 
 /** Selector Todos | Influenza | COVID-19 del historial (solo si la unidad tiene reportes de COVID-19 o meta de COVID-19). */
 function pintarSelectorHistorialVacuna() {
@@ -1804,8 +1783,7 @@ async function loadInfluenzaHistoryList() {
           ${estado}${tipo}
         </div>
         <div class="inf-hist-titulo">${semana ? `Semana ${semana.semana}` : "Semana"} <span>· ${influenzaRangoTexto(r.fecha)} ${yy}</span></div>
-        ${detalleMarcas ? `<div class="inf-hist-meta">${detalleMarcas}</div>` : ""}
-        <div class="inf-hist-meta">
+        <div class="inf-hist-meta">${detalleMarcas}
           <span class="inf-hist-resp"><span class="inf-hist-avatar">${inicial}</span>${capturadoFormatted}</span>
           ${actualizado ? `<span><span class="material-symbols-rounded">schedule</span>Guardado ${actualizado}</span>` : ""}
           ${ediciones ? `<span><span class="material-symbols-rounded">edit_note</span>${ediciones} edici${ediciones === 1 ? "ón" : "ones"}</span>` : ""}
@@ -3205,7 +3183,7 @@ function covidPorMarcaHtml(amb, minFecha, maxFecha) {
 
 /** Sección «COVID-19 por marca»: aplicado del mes y acumulado de Moderna y Pfizer, sin redondear. La usan el panel de
  *  administración (unidades del ámbito) y la unidad (sus propios reportes y sus frascos repartidos). */
-function covidSeccionMarcas({ caps, frascos, mesSel, finRango, etiqueta, selId }) {
+function covidSeccionMarcas({ caps, frascos, mesSel, finRango, etiqueta, selId, plano }) {
   const meses = [...new Set(generateCampaignWeeks().map(w => w.fecha.slice(0, 7)))];
   if (!meses.length) return "";
   const hoyMes = (typeof todayYmdLocal === "function" ? todayYmdLocal() : new Date().toISOString().slice(0, 10)).slice(0, 7);
@@ -3221,61 +3199,54 @@ function covidSeccionMarcas({ caps, frascos, mesSel, finRango, etiqueta, selId }
   const rawTot = (o, k) => rubros.reduce((s, r) => s + (Number(o[k][r]) || 0), 0);
   const COL = { MODERNA: { c: "#0e7490", bg: "#ecfeff", d: "#155e75", t: "Moderna" }, PFIZER: { c: "#0f766e", bg: "#f0fdfa", d: "#115e59", t: "Pfizer" } };
 
-  const tarjeta = (m) => {
+  // Una fila por marca (antes: dos tarjetas de 4 filas con sublíneas + una tabla que repetía los mismos totales).
+  const filaMarca = (m) => {
     const o = marcas[m], k = COL[m];
     const mesEq = eqTot(o, "mes"), acEq = eqTot(o, "acum");
     const entregadas = o.frascos * o.dpf;
     const resguardo = entregadas - acEq;
-    const fila = (etq, val, nota) => `<div class="cvm-fila"><span>${etq}</span><b>${val}</b>${nota ? `<small>${nota}</small>` : ""}</div>`;
-    return `<div class="cvm-card" style="--cvm-c:${k.c};--cvm-bg:${k.bg};--cvm-d:${k.d}">
-      <div class="cvm-marca"><span class="material-symbols-rounded" aria-hidden="true">vaccines</span>${k.t}</div>
-      ${fila(`Aplicadas en ${nomMes(mes)}`, `${f2(rawTot(o, "mes"))} dosis`, `${f2(mesEq)} equiv. 0.5 mL · ${f2(mesEq / o.dpf)} frascos`)}
-      ${fila("Acumulado de la temporada", `${f2(rawTot(o, "acum"))} dosis`, `${f2(acEq)} equiv. 0.5 mL · ${f2(acEq / o.dpf)} frascos`)}
-      ${fila("Frascos entregados", f2(o.frascos), `${f2(entregadas)} dosis de 0.5 mL`)}
-      ${fila("En resguardo", `${f2(resguardo)} dosis`, `${f2(resguardo / o.dpf)} frascos${resguardo < 0 ? " · aplicó más de lo entregado" : ""}`)}
-    </div>`;
+    const dato = (v, sub) => `<td class="c"><b>${v}</b>${sub ? `<small>${sub}</small>` : ""}</td>`;
+    return `<tr class="cvm-fila-marca" style="--cvm-c:${k.c}">
+      <th scope="row"><i aria-hidden="true"></i>${k.t}</th>
+      ${dato(f2(rawTot(o, "mes")), `${f2(mesEq)} eq.`)}
+      ${dato(f2(rawTot(o, "acum")), `${f2(acEq)} eq.`)}
+      ${dato(f2(o.frascos), `${f2(entregadas)} dosis`)}
+      <td class="c${resguardo < 0 ? " cvm-neg" : ""}"><b>${f2(resguardo)}</b><small>${f2(resguardo / o.dpf)} frascos${resguardo < 0 ? " · aplicó de más" : ""}</small></td>
+    </tr>`;
   };
 
   const M = marcas.MODERNA, P = marcas.PFIZER;
   const filasRubro = rubros.map(r => {
     const pf = r === "c1" || r === "c2";
     const t = (M.acum[r] || 0) + (P.acum[r] || 0);
-    return `<tr class="border-b border-slate-100">
-      <td class="p-2 text-xs font-semibold text-slate-700">${COV_RUBRO_TXT[r] || r}</td>
-      <td class="p-2 text-center text-xs font-bold text-cyan-900">${infFmt(M.mes[r], 0)}</td>
-      <td class="p-2 text-center text-xs font-bold text-cyan-900">${infFmt(M.acum[r], 0)}</td>
-      <td class="p-2 text-center text-xs font-bold text-teal-900">${pf ? "—" : infFmt(P.mes[r], 0)}</td>
-      <td class="p-2 text-center text-xs font-bold text-teal-900">${pf ? "—" : infFmt(P.acum[r], 0)}</td>
-      <td class="p-2 text-center text-xs font-black text-slate-700">${infFmt(t, 0)}</td>
+    return `<tr>
+      <td>${COV_RUBRO_TXT[r] || r}</td>
+      <td class="c">${infFmt(M.mes[r], 0)}</td><td class="c">${infFmt(M.acum[r], 0)}</td>
+      <td class="c">${pf ? "—" : infFmt(P.mes[r], 0)}</td><td class="c">${pf ? "—" : infFmt(P.acum[r], 0)}</td>
+      <td class="c"><b>${infFmt(t, 0)}</b></td>
     </tr>`;
   }).join("");
-  const sumR = (o, k) => rawTot(o, k);
-  const totalFila = `<tr style="background:#ecfeff;border-top:2px solid #67e8f9;color:#164e63">
-      <td class="p-2 text-xs font-black">TOTAL (dosis aplicadas)</td>
-      <td class="p-2 text-center text-xs font-black">${infFmt(sumR(M, "mes"), 0)}</td>
-      <td class="p-2 text-center text-xs font-black">${infFmt(sumR(M, "acum"), 0)}</td>
-      <td class="p-2 text-center text-xs font-black">${infFmt(sumR(P, "mes"), 0)}</td>
-      <td class="p-2 text-center text-xs font-black">${infFmt(sumR(P, "acum"), 0)}</td>
-      <td class="p-2 text-center text-xs font-black">${infFmt(sumR(M, "acum") + sumR(P, "acum"), 0)}</td>
-    </tr>`;
 
-  return `<section class="cvm" aria-label="COVID-19 por marca">
+  // plano = dentro de una tarjeta que ya trae su título (resumen de la unidad): sin caja ni título repetidos
+  return `<section class="cvm${plano ? " cvm--plano" : ""}" aria-label="COVID-19 por marca">
     <div class="cvm-head">
-      <div class="cvm-titulo"><span class="material-symbols-rounded" aria-hidden="true">coronavirus</span>COVID-19 por marca · ${etiqueta}</div>
+      ${plano ? "<span></span>" : `<div class="cvm-titulo"><span class="material-symbols-rounded" aria-hidden="true">coronavirus</span>COVID-19 por marca · ${etiqueta}</div>`}
       <label class="cvm-mes">Mes
         <select id="${selId}" aria-label="Mes de COVID-19">${meses.map(m => `<option value="${m}" ${m === mes ? "selected" : ""}>${nomMes(m)}</option>`).join("")}</select>
       </label>
     </div>
-    <p class="cvm-nota">Dosis aplicadas tal como se capturan (sin redondear). Las pediátricas (6 a 59 meses, 0.25 mL) cuentan media dosis en las equivalencias de 0.5 mL, por eso puede haber decimales.</p>
-    <div class="cvm-cards">${tarjeta("MODERNA")}${tarjeta("PFIZER")}</div>
-    <div class="cvm-tabla"><table class="w-full">
-      <thead><tr class="text-[10px] uppercase text-slate-500">
-        <th class="p-2 text-left">Grupo</th>
-        <th class="p-2" colspan="2" style="color:#0e7490">Moderna</th>
-        <th class="p-2" colspan="2" style="color:#0f766e">Pfizer</th>
-        <th class="p-2">Total</th></tr>
-        <tr class="text-[10px] uppercase text-slate-400"><th></th><th>${nomMes(mes)}</th><th>Acumulado</th><th>${nomMes(mes)}</th><th>Acumulado</th><th>Acumulado</th></tr></thead>
-      <tbody>${filasRubro}${totalFila}</tbody></table></div>
+    <div class="cvm-tabla"><table class="cvm-res">
+      <caption class="sr-only">Dosis de COVID-19 por marca</caption>
+      <thead><tr><th scope="col">Marca</th><th scope="col" class="c">Aplicadas en ${nomMes(mes)}</th><th scope="col" class="c">Acumulado</th><th scope="col" class="c">Frascos entregados</th><th scope="col" class="c">En resguardo (dosis)</th></tr></thead>
+      <tbody>${filaMarca("MODERNA")}${filaMarca("PFIZER")}</tbody>
+    </table></div>
+    <p class="cvm-nota">Dosis tal como se capturan; «eq.» son dosis de 0.5 mL (las pediátricas de 0.25 mL cuentan la mitad). Sin redondear.</p>
+    <details class="cvm-det"><summary>Ver por grupo de población</summary>
+      <div class="cvm-tabla"><table class="cvm-grp">
+        <thead><tr><th scope="col">Grupo</th><th scope="col" class="c" colspan="2" style="color:#0e7490">Moderna</th><th scope="col" class="c" colspan="2" style="color:#0f766e">Pfizer</th><th scope="col" class="c">Total</th></tr>
+        <tr class="sub"><th></th><th class="c">${nomMes(mes)}</th><th class="c">Acum.</th><th class="c">${nomMes(mes)}</th><th class="c">Acum.</th><th class="c">Acum.</th></tr></thead>
+        <tbody>${filasRubro}</tbody></table></div>
+    </details>
   </section>`;
 }
 
@@ -8031,7 +8002,7 @@ function pintarDetalleMensualUnidad(vac) {
     if (desc) desc.textContent = "Moderna y Pfizer separadas: lo del mes y el acumulado de la temporada.";
     cont.innerHTML = covidSeccionMarcas({
       caps: _covidCapturasCache || [], frascos: _covidDistUnidad || [], mesSel: _covMesUnidad, finRango: null,
-      etiqueta: USER?.unidad || "Tu unidad", selId: "covMesSelUnidad"
+      etiqueta: USER?.unidad || "Tu unidad", selId: "covMesSelUnidad", plano: true
     });
     const sel = document.getElementById("covMesSelUnidad");
     if (sel) sel.onchange = () => { _covMesUnidad = sel.value; pintarDetalleMensualUnidad("COVID"); };
@@ -8041,7 +8012,12 @@ function pintarDetalleMensualUnidad(vac) {
   if (desc) desc.textContent = "Lo que has aplicado cada mes y cómo va tu acumulado contra la meta.";
   const metaTot = INFLUENZA_RUBROS.reduce((a, r) => a + Number((_influenzaMetasCache || {})[r.id] || 0), 0);
   const semanas = generateCampaignWeeks();
-  const meses = [...new Set(semanas.map(w => w.fecha.slice(0, 7)))];
+  const hoyIso = (typeof todayYmdLocal === "function" ? todayYmdLocal() : new Date().toISOString().slice(0, 10));
+  const abre = typeof influenzaSemanaAbre === "function" ? influenzaSemanaAbre : (x) => x;
+  const todosMeses = [...new Set(semanas.map(w => w.fecha.slice(0, 7)))];
+  // Solo los meses que ya empezaron (una semana abierta o con reporte): los futuros en ceros eran puro ruido.
+  const meses = todosMeses.filter(m => semanas.some(w => w.fecha.slice(0, 7) === m && abre(w.fecha) <= hoyIso) || (_influenzaCapturasCache || []).some(cp => cp.fecha.slice(0, 7) === m));
+  const porVenir = todosMeses.length - meses.length;
   const f = (n) => Number(n || 0).toLocaleString("es-MX");
   const nomMes = (m) => { const [y, n] = m.split("-").map(Number); return `${INF_MESES_LARGOS[n - 1]} ${y}`; };
   let acum = 0;
@@ -8056,7 +8032,7 @@ function pintarDetalleMensualUnidad(vac) {
   cont.innerHTML = `<div class="cp-tablewrap"><table class="ip-table">
     <caption class="sr-only">Dosis de Influenza aplicadas por mes</caption>
     <thead><tr><th scope="col">Mes</th><th scope="col" class="c">Reportes</th><th scope="col" class="c">Aplicadas en el mes</th><th scope="col" class="c">Acumulado</th><th scope="col" class="c">% de tu meta</th></tr></thead>
-    <tbody>${filas.join("")}</tbody></table></div>`;
+    <tbody>${filas.join("")}</tbody></table></div>${porVenir > 0 ? `<p class="cvm-nota">Los ${porVenir} meses siguientes aparecerán cuando abran sus semanas.</p>` : ""}`;
 }
 
 function aplicarSelectorResumen() {

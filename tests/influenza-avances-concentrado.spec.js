@@ -152,35 +152,30 @@ test('COVID-19: dosis equivalentes de 0.5 mL (la pediátrica cuenta la mitad), f
 });
 
 test('COVID-19 por marca: aplicado del mes y acumulado de Moderna y Pfizer por separado, sin redondear', async ({ page }) => {
+  const datos = (loc) => loc.evaluateAll((trs) => trs.map((tr) => [tr.querySelector('th').textContent.trim(), ...[...tr.querySelectorAll('td')].map((td) => [td.querySelector('b').textContent, td.querySelector('small').textContent])]));
   await montar(page, 'ADMIN', 'COVID');
   // Querétaro sin el hospital: Moderna 70 dosis (40 pediátricas + 30 adultos = 50 equiv.), Pfizer 10; frascos 10 y 5
   await page.evaluate(() => window.__render());
-  const tarjetas = page.locator('.cvm-card');
-  await expect(tarjetas).toHaveCount(2);
-  const m = await tarjetas.nth(0).innerText();
-  const f = await tarjetas.nth(1).innerText();
-  expect(m).toContain('Moderna');
-  expect(m).toContain('Aplicadas en octubre 2026');
-  expect(m).toMatch(/70 dosis/);
-  expect(m).toMatch(/50 equiv\. 0\.5 mL/);
-  expect(m).toMatch(/50 dosis de 0\.5 mL/);           // 10 frascos x 5
-  expect(f).toContain('Pfizer');
-  expect(f).toMatch(/10 dosis/);
-  expect(f).toMatch(/20 dosis/);                        // resguardo: 5 frascos x 6 = 30 entregadas - 10 aplicadas
+  await expect(page.locator('.cvm-fila-marca')).toHaveCount(2);        // una fila por marca, no dos tarjetas grandes
+  await expect(page.locator('.cvm-res thead')).toContainText('Aplicadas en octubre 2026');
+  let [m, f] = await datos(page.locator('.cvm-fila-marca'));
+  expect(m).toEqual(['Moderna', ['70', '50 eq.'], ['70', '50 eq.'], ['10', '50 dosis'], ['0', '0 frascos']]);
+  expect(f).toEqual(['Pfizer', ['10', '10 eq.'], ['10', '10 eq.'], ['5', '30 dosis'], ['20', '3.33 frascos']]);   // resguardo 30 - 10
   // Una pediátrica suelta cuenta media dosis: ya no se redondea
   await page.evaluate(() => { _covidCapturasAll.push({ clues: 'Q1', fecha: '2026-10-30', valores: { MODERNA: { c1: 1 }, PFIZER: {} } }); window.__render(); });
-  const m2 = await page.locator('.cvm-card').nth(0).innerText();
-  expect(m2).toMatch(/71 dosis/);
-  expect(m2).toMatch(/50\.5 equiv\. 0\.5 mL/);
-  // Tabla por grupo: Pfizer no aplica a 6-59 meses
-  const fila = await page.locator('.cvm-tabla tbody tr').first().innerText();
+  [m] = await datos(page.locator('.cvm-fila-marca'));
+  expect(m[1]).toEqual(['71', '50.5 eq.']);
+  // Detalle por grupo: plegado por omisión; Pfizer no aplica a 6-59 meses
+  await expect(page.locator('.cvm-det')).not.toHaveAttribute('open', '');
+  await page.click('.cvm-det summary');
+  const fila = await page.locator('.cvm-grp tbody tr').first().innerText();
   expect(fila).toContain('6 a 59 meses');
   expect(fila).toContain('—');
   // El selector de mes cambia lo "aplicado del mes" (noviembre: sin reportes) y conserva el acumulado
   await page.evaluate(() => { generateCampaignWeeks = function () { return [{ semana: 43, fecha: '2026-10-23' }, { semana: 47, fecha: '2026-11-20' }]; }; window.__render(); });
   await page.selectOption('#covMesSel', '2026-11');
-  const m3 = await page.locator('.cvm-card').nth(0).innerText();
-  expect(m3).toContain('Aplicadas en noviembre 2026');
-  expect(m3).toMatch(/Aplicadas en noviembre 2026\s*0 dosis/);
-  expect(m3).toMatch(/71 dosis/);                       // el acumulado sigue ahí
+  await expect(page.locator('.cvm-res thead')).toContainText('Aplicadas en noviembre 2026');
+  [m] = await datos(page.locator('.cvm-fila-marca'));
+  expect(m[1]).toEqual(['0', '0 eq.']);                                // mes en 0
+  expect(m[2][0]).toBe('71');                                          // y el acumulado sigue ahí
 });

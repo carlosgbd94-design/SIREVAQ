@@ -55,14 +55,15 @@ test('Historial: cada reporte dice su vacuna, el selector los separa y las cifra
   const resumen = await page.locator('#influenzaHistorialResumen').innerText();
   expect(resumen).toMatch(/INFLUENZA/i);
   expect(resumen).toMatch(/COVID-19/i);
-  expect(resumen).toContain('Reportes de Influenza');
-  expect(resumen).toContain('Reportes de COVID-19');
+  expect(resumen).toContain('reportes de Influenza');
+  expect(resumen).toContain('reportes de COVID-19');
+  expect(await page.locator('.inf-hist-linea').count()).toBe(2);   // una línea por vacuna, no 8 tarjetas
 
   // Solo COVID-19
   await page.click('[data-hv="COVID"]');
   await expect(page.locator('.inf-hist-card')).toHaveCount(1);
   await expect(page.locator('.inf-hist-card--inf')).toHaveCount(0);
-  expect(await page.locator('#influenzaHistorialResumen').innerText()).not.toContain('Reportes de Influenza');
+  expect(await page.locator('#influenzaHistorialResumen').innerText()).not.toContain('reportes de Influenza');
   // Solo Influenza
   await page.click('[data-hv="INFLUENZA"]');
   await expect(page.locator('.inf-hist-card')).toHaveCount(2);

@@ -15,6 +15,7 @@ const rubros = modulo.slice(i0, modulo.indexOf('];', i0) + 2).replace('const INF
 const DATOS = `
   var USER = { unidad: 'UMF PRUEBA', clues: 'Q1' };
   var INF_MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var influenzaSemanaAbre = function (f) { return f; };
   var generateCampaignWeeks = function () { return [{ semana: 43, fecha: '2026-10-23' }, { semana: 44, fecha: '2026-10-30' }, { semana: 47, fecha: '2026-11-20' }]; };
   var todayYmdLocal = function () { return '2026-10-31'; };
   var infFmt = function (n, dec) { return (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: dec == null ? 1 : dec }); };
@@ -56,25 +57,19 @@ test('Resumen de la unidad · COVID-19 por marca y por mes: Moderna y Pfizer sep
   await montar(page);
   await page.evaluate(() => pintarDetalleMensualUnidad('COVID'));
   await expect(page.locator('#ipResS4')).toHaveText('COVID-19 por marca y por mes');
-  // Mes por omisión: el actual (octubre 2026)
-  const tarjetas = page.locator('.cvm-card');
-  await expect(tarjetas).toHaveCount(2);
-  const m = await tarjetas.nth(0).innerText();
-  expect(m).toContain('Aplicadas en octubre 2026');
-  expect(m).toMatch(/16 dosis/);                  // octubre: 10 + 5 + 1 pediátricas/adultos de Moderna
-  expect(m).toMatch(/10\.5 equiv\. 0\.5 mL/);     // 11 pediátricas cuentan 5.5 + 5 adultos = 10.5 (sin redondear)
-  expect(m).toMatch(/Acumulado de la temporada\s*16 dosis/);       // hasta octubre
-  expect(m).toMatch(/15 dosis de 0\.5 mL/);       // 3 frascos x 5
-  const f = await tarjetas.nth(1).innerText();
-  expect(f).toContain('Pfizer');
-  expect(f).toMatch(/4 dosis/);                   // octubre
-  expect(f).toMatch(/12 dosis de 0\.5 mL/);       // 2 frascos x 6
+  const datos = (loc) => loc.evaluateAll((trs) => trs.map((tr) => [tr.querySelector('th').textContent.trim(), ...[...tr.querySelectorAll('td')].map((td) => [td.querySelector('b').textContent, td.querySelector('small').textContent])]));
+  await expect(page.locator('.cvm-fila-marca')).toHaveCount(2);
+  await expect(page.locator('.cvm-res thead')).toContainText('Aplicadas en octubre 2026');
+  let [m, f] = await datos(page.locator('.cvm-fila-marca'));
+  // Moderna, octubre: 16 dosis (11 pediátricas + 5 adultos) = 10.5 equivalentes (sin redondear); 3 frascos = 15 dosis
+  expect(m).toEqual(['Moderna', ['16', '10.5 eq.'], ['16', '10.5 eq.'], ['3', '15 dosis'], ['4.5', '0.9 frascos']]);
+  expect(f).toEqual(['Pfizer', ['4', '4 eq.'], ['4', '4 eq.'], ['2', '12 dosis'], ['8', '1.33 frascos']]);   // 2 frascos x 6 = 12 - 4
   // Selector de mes de la unidad
   await page.selectOption('#covMesSelUnidad', '2026-11');
-  const m2 = await page.locator('.cvm-card').nth(0).innerText();
-  expect(m2).toContain('Aplicadas en noviembre 2026');
-  expect(m2).toMatch(/Aplicadas en noviembre 2026\s*2 dosis/);
-  expect(m2).toMatch(/Acumulado de la temporada\s*18 dosis/);         // 16 + 2
-  // Pfizer no aplica a 6-59 meses en la tabla por grupo
-  expect(await page.locator('.cvm-tabla tbody tr').first().innerText()).toContain('—');
+  [m] = await datos(page.locator('.cvm-fila-marca'));
+  expect(m[1]).toEqual(['2', '2 eq.']);                                // noviembre
+  expect(m[2]).toEqual(['18', '12.5 eq.']);                            // acumulado 16 + 2
+  // Detalle por grupo plegado; Pfizer no aplica a 6-59 meses
+  await page.click('.cvm-det summary');
+  expect(await page.locator('.cvm-grp tbody tr').first().innerText()).toContain('—');
 });
