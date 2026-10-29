@@ -6932,12 +6932,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
             }
             if (score > 100) score = 100;
 
-            let tier = "riesgo";
-            if (score === 100) tier = "diamante";
-            else if (score >= 85) tier = "oro";
-            else if (score >= 70) tier = "plata";
-            else if (score >= 55) tier = "bronce";
-            else if (score >= 30) tier = "acero";
+            const tier = complianceTierFromScore(score);
 
             return {
               clues: u.clues,
@@ -6962,12 +6957,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
           const muniList = Object.keys(muniGroups).map(m => {
             const score = Math.round(muniGroups[m].sum / muniGroups[m].count);
-            let tier = "riesgo";
-            if (score === 100) tier = "diamante";
-            else if (score >= 85) tier = "oro";
-            else if (score >= 70) tier = "plata";
-            else if (score >= 55) tier = "bronce";
-            else if (score >= 30) tier = "acero";
+            const tier = complianceTierFromScore(score);
             return {
               municipio: m,
               score,
@@ -7011,12 +7001,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
             const caravanSum = caravanScores.reduce((sum, item) => sum + item.score, 0);
             compliance_pct = caravanScores.length > 0 ? Math.round(caravanSum / caravanScores.length) : 0;
 
-            let tier = "riesgo";
-            if (compliance_pct === 100) tier = "diamante";
-            else if (compliance_pct >= 85) tier = "oro";
-            else if (compliance_pct >= 70) tier = "plata";
-            else if (compliance_pct >= 55) tier = "bronce";
-            else if (compliance_pct >= 30) tier = "acero";
+            const tier = complianceTierFromScore(compliance_pct);
             userTier = tier;
             userRank = undefined;
             municipal_avg = compliance_pct;
@@ -7044,6 +7029,31 @@ async function supabaseRequest(action = "", payload, options = {}) {
               userTier = undefined;
               userRank = undefined;
             }
+          }
+
+          // FUENTE ÚNICA: la medalla del mes en curso y esta chip deben ser el mismo número. Las medallas (y el historial)
+          // incluyen influenza y leen las semanas desde el RPC; aquí solo se contaba biológicos/consumibles/pedido, por eso la
+          // chip podía decir 100 % (Diamante) mientras la medalla seguía en Oro. Se pide con caché corta (45 s): al mismo
+          // tiempo deja fresca la caché que luego lee la tarjeta de «Logros del año».
+          try {
+            let medalScope = null;
+            if (role === "UNIDAD") medalScope = { clues };
+            else if (role !== "CARAVANAS" && role !== "UNIDAD") {
+              const muniSel = (payload.selectedMunicipio || "").trim().toUpperCase();
+              const muniObj = muniSel && muniSel !== "TODOS" ? muniSel : (role === "MUNICIPAL" ? (String((USER.municipiosAllowed || [])[0] || userMuniStr).split(",")[0] || "").trim().toUpperCase() : "");
+              if (muniObj) medalScope = { municipio: muniObj };
+            }
+            if (medalScope) {
+              const medals = await getYearMedals(Number(today.slice(0, 4)), medalScope, { ttl: 45000 });
+              const cur = Array.isArray(medals) ? medals.find(m => m.month === today.slice(0, 7)) : null;
+              if (cur) {
+                compliance_pct = cur.score;
+                userTier = cur.tier;
+                if (role !== "UNIDAD") municipal_avg = cur.score;
+              }
+            }
+          } catch (medErr) {
+            console.warn("[unitstatus] No se pudo alinear la chip con las medallas:", medErr);
           }
 
         } catch (e) {
@@ -20558,14 +20568,14 @@ async function getHistoryMetrics(mes, _ignored, force = false) {
 const MEDALS_CACHE_TTL = 600000;
 let _medalsRenderSeq = 0;
 
-async function getYearMedals(year, { clues = null, municipio = null } = {}) {
+async function getYearMedals(year, { clues = null, municipio = null } = {}, { ttl = MEDALS_CACHE_TTL } = {}) {
   if (!TOKEN || !window.supabase) return [];
   const y = Number(year);
   const scopeKey = clues ? `U:${String(clues).trim().toUpperCase()}` : `M:${normalizeText(municipio || "")}`;
 
   return getCachedOrFetch({
     key: buildCacheKey("YEAR_MEDALS", `${y}__${scopeKey}`),
-    ttl: MEDALS_CACHE_TTL,
+    ttl,
     shouldCache: (d) => Array.isArray(d),
     fetcher: async () => {
       // La campaña se pide en paralelo con las métricas (antes esperaba a que terminaran).
