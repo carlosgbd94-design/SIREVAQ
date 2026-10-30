@@ -16139,3 +16139,20 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 .tinv-marca-top { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; color: #475569; font-weight: 600; }
 .tinv-marca-top b { font-size: 15px; font-weight: 800; color: #0f172a; }
 .tinv-marca small { font-size: 12px; font-weight: 600; color: #64748b; }
+
+.tinv-marca[data-tono="bad"] { border-color: #fecaca; background: #fef2f2; }
+.tinv-marca b { font-weight: 800; }
+/* Control de abasto en la captura de COVID-19 (lo aplicado contra lo repartido, por marca) */
+.cvc-abasto { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.cvc-ab { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 16px; border: 1px solid #e2e8f0; background: #f8fafc; }
+.cvc-ab-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13px; color: #475569; font-weight: 700; }
+.cvc-ab-top b { font-size: 14px; font-weight: 800; color: #0f172a; }
+.cvc-ab-bar { height: 8px; border-radius: 999px; background: #e2e8f0; }
+.cvc-ab-bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: #10b981; transition: width .2s ease; }
+.cvc-ab[data-tono="warn"] .cvc-ab-bar i { background: #f59e0b; }
+.cvc-ab[data-tono="over"] { border-color: #fecaca; background: #fef2f2; }
+.cvc-ab[data-tono="over"] .cvc-ab-bar i { background: #ef4444; }
+.cvc-ab-nota { display: flex; align-items: flex-start; gap: 4px; font-size: 12px; font-weight: 600; color: #64748b; line-height: 1.4; }
+.cvc-ab[data-tono="over"] .cvc-ab-nota { color: #b91c1c; font-weight: 700; }
+.cvc-ab-nota .material-symbols-rounded { font-size: 16px; width: 16px; height: 16px; overflow: hidden; flex: none; }
+@media (prefers-reduced-motion: reduce) { .cvc-ab-bar i { transition: none; } }

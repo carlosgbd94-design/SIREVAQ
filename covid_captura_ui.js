@@ -49,6 +49,11 @@
       C.MARCAS.forEach((m) => { acumMarca[m][r] = otras.reduce((s, c) => s + (Number(c.valores?.[m]?.[r]) || 0), 0); });
     });
 
+    // Abasto: dosis repartidas por marca (frascos x dosis por frasco). null = la unidad aún no tiene reparto registrado.
+    const dpf = { MODERNA: 5, PFIZER: 6 };
+    const repartido = ctx.frascos ? { MODERNA: (Number(ctx.frascos.MODERNA) || 0) * dpf.MODERNA, PFIZER: (Number(ctx.frascos.PFIZER) || 0) * dpf.PFIZER } : null;
+    const acumMarcaEq = { MODERNA: otras.reduce((t, c2) => t + C.equivalentesMarca(c2.valores, "MODERNA"), 0), PFIZER: otras.reduce((t, c2) => t + C.equivalentesMarca(c2.valores, "PFIZER"), 0) };
+
     if (ctx.cerrada) {
       const cerrado = document.createElement("div");
       cerrado.className = "inf-aviso inf-aviso--cerrada";
@@ -108,6 +113,19 @@
         </table>
       </div>
       <p class="text-xs text-slate-500 m-0">La meta no distingue marca: Moderna y Pfizer suman contra el mismo número, aunque los frascos se hayan repartido por marca.</p>`;
+    // Control de abasto por marca: lo aplicado contra lo repartido, en vivo mientras se captura
+    if (repartido) {
+      const ab = document.createElement("section");
+      ab.className = "cvc-abasto";
+      ab.setAttribute("aria-label", "Frascos repartidos contra dosis aplicadas, por marca");
+      ab.innerHTML = ["MODERNA", "PFIZER"].map((m) => `
+        <div class="cvc-ab" id="cvc_ab_${m}" data-tono="none">
+          <div class="cvc-ab-top"><b>${MARCA_TXT[m]}</b><span class="cvc-ab-txt"></span></div>
+          <div class="cvc-ab-bar" role="progressbar" aria-label="Aplicadas de lo repartido, ${MARCA_TXT[m]}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+          <small class="cvc-ab-nota" aria-live="polite"></small>
+        </div>`).join("");
+      card.insertBefore(ab, card.querySelector(".cvc-tabla-wrap"));
+    }
     const tbody = card.querySelector(".tbody-inputs");
     rubros.forEach((r) => {
       const meta = Number(metas[r]);
@@ -161,7 +179,28 @@
       box.querySelectorAll(".inf-input[data-m]").forEach((el) => { v[el.dataset.m][el.dataset.r] = Math.max(0, parseInt(el.value, 10) || 0); });
       return C.limpiar(v);
     };
+    const pintarAbasto = (vals) => {
+      if (!repartido) return;
+      ["MODERNA", "PFIZER"].forEach((m) => {
+        const el = box.querySelector(`#cvc_ab_${m}`);
+        if (!el) return;
+        const rep = repartido[m], apl = acumMarcaEq[m] + C.equivalentesMarca(vals, m);
+        const nf = (x) => Number(x).toLocaleString("es-MX", { maximumFractionDigits: 1 });
+        const pct = rep > 0 ? apl * 100 / rep : (apl > 0 ? 101 : 0);
+        const t = apl > rep ? "over" : (pct >= 85 ? "warn" : "good");
+        el.dataset.tono = apl === 0 && rep === 0 ? "none" : t;
+        el.querySelector(".cvc-ab-txt").textContent = `${nf(apl)} de ${nf(rep)} dosis`;
+        const barra = el.querySelector(".cvc-ab-bar");
+        barra.setAttribute("aria-valuenow", String(Math.min(100, Math.round(pct))));
+        el.querySelector("i").style.width = Math.min(100, pct).toFixed(1) + "%";
+        const nota = el.querySelector(".cvc-ab-nota");
+        const frascos = rep / dpf[m];
+        if (apl > rep) nota.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">warning</span>Te pasas por ${nf(apl - rep)} dosis de lo repartido. Revisa la captura o pide que registren tu entrega de frascos; si subes lo aplicado, no se podrá guardar.`;
+        else nota.textContent = rep > 0 ? `${nf(frascos)} ${frascos === 1 ? "frasco repartido" : "frascos repartidos"} · quedan ${nf(rep - apl)} dosis` : "Sin frascos de esta marca repartidos a tu unidad.";
+      });
+    };
     const repintar = () => {
+      pintarAbasto(leer());
       const nuevo = C.porRubro(leer());
       rubros.forEach((r) => {
         const meta = Number(metas[r] || 0);
@@ -201,7 +240,7 @@
       /** Lo tecleado + su validación contra la meta (la usa el guardado del panel de captura). */
       recoger: () => {
         const v = leer();
-        const val = C.validar(v, metas, acumRubro, previo, reglas);
+        const val = C.validar(v, metas, acumRubro, previo, reglas, repartido ? { repartido, acumMarca: acumMarcaEq } : null);
         return { valores: v, error: val.error, sin_movimiento: C.totalDosis(v) === 0 };
       }
     };

@@ -8142,6 +8142,11 @@ function renderCovidCaptura() {
   _covidPanelListo = window.CovidCapturaUI.render({
     container: cont,
     metas: _covidMetaUnidadCache ? _covidMetaUnidadCache.metas : null,
+    // Frascos repartidos a la unidad por marca (null = aún sin reparto registrado: no hay contra qué comparar)
+    frascos: (_covidDistUnidad || []).length ? {
+      MODERNA: _covidDistUnidad.filter(d => d.marca === "MODERNA").reduce((t, d) => t + Number(d.cantidad_frascos || 0), 0),
+      PFIZER: _covidDistUnidad.filter(d => d.marca === "PFIZER").reduce((t, d) => t + Number(d.cantidad_frascos || 0), 0)
+    } : null,
     capturas: _covidCapturasCache,
     fecha,
     cerrada: !estado.abierta,
@@ -9140,7 +9145,7 @@ function tinvColumnas(weeks, series, rangoDe, corta, fmtN, desdeDe) {
   return `<svg viewBox="0 0 ${W} ${Ht}" class="iinf-svg" role="img" aria-label="Dosis aplicadas por semana. ${H.e(aria)}">
     <line x1="${padL}" y1="${padT + gh}" x2="${W - 8}" y2="${padT + gh}" class="iinf-eje"/>
     <line x1="${padL}" y1="${padT}" x2="${W - 8}" y2="${padT}" class="iinf-grid"/>
-    <text x="${padL - 6}" y="${padT + 4}" class="iinf-txt" text-anchor="end">${fmtN(maxV)}</text>
+    <text x="${padL - 6}" y="${padT + 4}" class="iinf-txt" text-anchor="end">${Math.round(maxV).toLocaleString("es-MX")}</text>
     <text x="${padL - 6}" y="${padT + gh + 4}" class="iinf-txt" text-anchor="end">0</text>
     ${weeks.map((f, i) => {
       const x = padL + i * paso + (paso - bw) / 2;
@@ -9153,6 +9158,26 @@ function tinvColumnas(weeks, series, rangoDe, corta, fmtN, desdeDe) {
       return `<g>${piezas}${i % cada === 0 || i === weeks.length - 1 ? `<text x="${(x + bw / 2).toFixed(1)}" y="${Ht - 8}" class="iinf-txt" text-anchor="middle">${corta(desdeDe(f))}</text>` : ""}</g>`;
     }).join("")}
   </svg>`;
+}
+
+/** Tarjeta «COVID-19 por marca»: un bloque por marca (nunca una tabla de 5 columnas: la tarjeta es angosta). */
+function tinvMarcasHtml(cov, id, sub) {
+  const { e, fmt, fmtC, f1, barra } = tinvAyudas();
+  const tot = cov.marcas.reduce((t, m) => t + m.apl, 0);
+  return `
+    <section class="iinf-card" aria-labelledby="${id}">
+      <header><h3 id="${id}">COVID-19 por marca</h3><span class="iinf-sub">${sub}</span></header>
+      ${cov.marcas.map(m => {
+        const p = m.rep ? m.apl * 100 / m.rep : 0, pasa = m.rep > 0 && m.apl > m.rep;
+        return `<div class="tinv-marca"${pasa ? ' data-tono="bad"' : ""}>
+          <div class="tinv-marca-top"><b>${m.label}</b><span>${fmtC(m.apl)} aplicadas${tot ? ` · ${f1(m.apl * 100 / tot)}% del total` : ""}</span></div>
+          ${m.frascos
+            ? `${barra(p, pasa ? "bad" : (p >= 85 ? "warn" : "good"), "Aplicadas de lo repartido de " + m.label)}
+               <small>${fmt(m.frascos)} ${m.frascos === 1 ? "frasco repartido" : "frascos repartidos"} (${fmt(m.rep)} dosis) · ${pasa ? `<b>aplicó ${fmtC(m.apl - m.rep)} dosis más de lo repartido</b>` : `existencia estimada ${fmtC(m.existencia)} dosis`}</small>`
+            : "<small>Sin frascos repartidos registrados.</small>"}
+        </div>`;
+      }).join("")}
+    </section>`;
 }
 
 // ── Pestaña «Ambas» ──
@@ -9247,7 +9272,7 @@ function tinvAmbas(D) {
         <div data-tono="${fCov.length ? "warn" : ""}"><b>${fmt(fCov.length)}</b><small>Falta COVID-19</small></div>
         <div data-tono="${fAmb.length ? "bad" : ""}"><b>${fmt(fAmb.length)}</b><small>Faltan ambas</small></div>
       </div>
-      ${faltantes.length ? `<ul class="iinf-lista">${faltantes.slice(0, 12).map(f => `<li>${e(f.unidad)}<small>${e(f.destino ? f.destino + " · " : "")}falta ${f.falta}</small></li>`).join("")}</ul>${faltantes.length > 12 ? `<p class="iinf-nota">y ${fmt(faltantes.length - 12)} más.</p>` : ""}`
+      ${faltantes.length ? `<ul class="iinf-lista">${faltantes.slice(0, 8).map(f => `<li>${e(f.unidad)}<small>${e(f.destino ? f.destino + " · " : "")}falta ${f.falta}</small></li>`).join("")}</ul>${faltantes.length > 8 ? `<p class="iinf-nota">y ${fmt(faltantes.length - 8)} más.</p>` : ""}`
         : '<p class="iinf-nota">Todas las unidades con meta reportaron sus vacunas esa semana.</p>'}
     </section>` : "";
 
@@ -9292,23 +9317,14 @@ function tinvAmbas(D) {
     </section>`;
 
   // Marcas de COVID-19
-  const totCov = cov.marcas.reduce((s, m) => s + m.apl, 0);
-  const marcas = `
-    <section class="iinf-card" aria-labelledby="tinvMarTit">
-      <header><h3 id="tinvMarTit">COVID-19 por marca</h3><span class="iinf-sub">Aplicadas, frascos repartidos y lo que queda estimado (dosis equivalentes de 0.5 mL)</span></header>
-      <div class="iinf-scroll"><table class="iinf-tabla" aria-label="COVID-19: aplicadas, frascos y existencia por marca">
-        <thead><tr><th scope="col">Marca</th><th scope="col" class="c">Aplicadas</th><th scope="col" class="c">% del total</th><th scope="col" class="c">Frascos</th><th scope="col" class="c">Existencia</th></tr></thead>
-        <tbody>${cov.marcas.map(m => `<tr><th scope="row">${m.label}<small>${CovidFrascos.dosisPorFrasco(m.id)} dosis por frasco</small></th><td class="c"><b>${fmtC(m.apl)}</b></td><td class="c">${totCov ? f1(m.apl * 100 / totCov) + "%" : "—"}</td>
-          <td class="c">${m.frascos ? fmt(m.frascos) : "—"}</td><td class="c">${m.frascos ? chip(m.apl > m.rep ? "bad" : "good", fmtC(m.existencia) + " dosis") : "—"}</td></tr>`).join("")}</tbody>
-      </table></div>
-    </section>`;
+  const marcas = tinvMarcasHtml(cov, "tinvMarTit", "Aplicadas contra lo repartido (dosis equivalentes de 0.5 mL)");
 
   // Por revisar
   if (!cov.hayMeta) alertas.push("<li><b>COVID-19 aún no tiene meta asignada</b> en este ámbito: solo se compara Influenza.</li>");
   if (!iMeta) alertas.push("<li><b>Influenza aún no tiene meta asignada</b> en este ámbito: solo se compara COVID-19.</li>");
-  if (cov.sinMetaConDosis.length) alertas.push(`<li><b>${fmt(cov.sinMetaConDosis.length)} ${cov.sinMetaConDosis.length === 1 ? "unidad aplicó" : "unidades aplicaron"} COVID-19 sin tener meta:</b> ${cov.sinMetaConDosis.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.sinMetaConDosis.length > 6 ? "…" : ""}.</li>`);
-  cov.marcas.forEach(m => { if (m.exceden.length) alertas.push(`<li><b>${fmt(m.exceden.length)} ${m.exceden.length === 1 ? "unidad ha aplicado" : "unidades han aplicado"} más ${m.label} de lo repartido:</b> ${m.exceden.slice(0, 6).map(u => e(u.unidad)).join(", ")}${m.exceden.length > 6 ? "…" : ""}.</li>`); });
-  if (cov.nunca.length && cal.vencidas.length >= 2) alertas.push(`<li><b>${fmt(cov.nunca.length)} ${cov.nunca.length === 1 ? "unidad con meta de COVID-19 no ha reportado" : "unidades con meta de COVID-19 no han reportado"} nunca:</b> ${cov.nunca.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.nunca.length > 6 ? "…" : ""}.</li>`);
+  if (cov.sinMetaConDosis.length) alertas.push(`<li><b>${fmt(cov.sinMetaConDosis.length)} ${cov.sinMetaConDosis.length === 1 ? "unidad aplicó" : "unidades aplicaron"} COVID-19 sin tener meta:</b> ${cov.sinMetaConDosis.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.sinMetaConDosis.length > 6 ? "…" : "."}</li>`);
+  cov.marcas.forEach(m => { if (m.exceden.length) alertas.push(`<li><b>${fmt(m.exceden.length)} ${m.exceden.length === 1 ? "unidad ha aplicado" : "unidades han aplicado"} más ${m.label} de lo repartido:</b> ${m.exceden.slice(0, 6).map(u => e(u.unidad)).join(", ")}${m.exceden.length > 6 ? "…" : "."}</li>`); });
+  if (cov.nunca.length && cal.vencidas.length >= 2) alertas.push(`<li><b>${fmt(cov.nunca.length)} ${cov.nunca.length === 1 ? "unidad con meta de COVID-19 no ha reportado" : "unidades con meta de COVID-19 no han reportado"} nunca:</b> ${cov.nunca.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.nunca.length > 6 ? "…" : "."}</li>`);
   const revisar = alertas.length ? `<section class="iinf-card iinf-card--alerta" aria-labelledby="tinvRevTit"><header><h3 id="tinvRevTit">Por revisar</h3></header><ul class="iinf-alertas">${alertas.join("")}</ul></section>` : "";
 
   return `
@@ -9377,21 +9393,12 @@ function tinvCovid(D) {
       <header><h3 id="tinvCCobTit">Reporte de la semana del ${semTxt}</h3>${chip(tonoCob, `${fmt(reportaron)} de ${fmt(evaluables.length)} ${evaluables.length === 1 ? "unidad" : "unidades"}`)}</header>
       ${barra(pctCob, tonoCob, "Unidades que reportaron COVID-19 la última semana")}
       ${sinRep.length ? `<p class="iinf-nota">${fmt(sinRep.length)} ${sinRep.length === 1 ? "unidad no ha reportado" : "unidades no han reportado"} esa semana${cov.nunca.length ? ` (${fmt(cov.nunca.length)} sin ningún reporte en la campaña)` : ""}:</p>
-        <ul class="iinf-lista">${sinRep.slice(0, 12).map(u => `<li>${e(u.unidad)}<small>${e(u.destino)}</small></li>`).join("")}</ul>${sinRep.length > 12 ? `<p class="iinf-nota">y ${fmt(sinRep.length - 12)} más.</p>` : ""}`
+        <ul class="iinf-lista">${sinRep.slice(0, 8).map(u => `<li>${e(u.unidad)}<small>${e(u.destino)}</small></li>`).join("")}</ul>${sinRep.length > 8 ? `<p class="iinf-nota">y ${fmt(sinRep.length - 8)} más.</p>` : ""}`
         : '<p class="iinf-nota">Todas las unidades con meta reportaron esa semana.</p>'}
     </section>` : "";
 
   // Marcas
-  const totMarca = cov.marcas.reduce((s, m) => s + m.apl, 0);
-  const marcas = `
-    <section class="iinf-card" aria-labelledby="tinvCMarTit">
-      <header><h3 id="tinvCMarTit">Moderna y Pfizer</h3><span class="iinf-sub">Aplicadas contra lo repartido (dosis equivalentes de 0.5 mL)</span></header>
-      ${cov.marcas.map(m => {
-        const p = m.rep ? m.apl * 100 / m.rep : 0;
-        return `<div class="tinv-marca"><div class="tinv-marca-top"><b>${m.label}</b><span>${fmtC(m.apl)} aplicadas${totMarca ? ` · ${f1(m.apl * 100 / totMarca)}% del total` : ""}</span></div>
-          ${m.frascos ? `${barra(p, m.apl > m.rep ? "bad" : "good", "Aplicadas de lo repartido de " + m.label)}<small>${fmt(m.frascos)} ${m.frascos === 1 ? "frasco repartido" : "frascos repartidos"} (${fmt(m.rep)} dosis) · existencia estimada ${fmtC(m.existencia)}</small>` : "<small>Sin frascos repartidos registrados.</small>"}</div>`;
-      }).join("")}
-    </section>`;
+  const marcas = tinvMarcasHtml(cov, "tinvCMarTit", "Aplicadas contra lo repartido (dosis equivalentes de 0.5 mL)");
 
   // Ranking
   const porUnidad = !!D.muniFilter;
@@ -9438,11 +9445,11 @@ function tinvCovid(D) {
 
   // Por revisar
   const alertas = [];
-  if (cov.sinMetaConDosis.length) alertas.push(`<li><b>${fmt(cov.sinMetaConDosis.length)} ${cov.sinMetaConDosis.length === 1 ? "unidad aplicó" : "unidades aplicaron"} COVID-19 sin tener meta:</b> ${cov.sinMetaConDosis.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.sinMetaConDosis.length > 6 ? "…" : ""}.</li>`);
+  if (cov.sinMetaConDosis.length) alertas.push(`<li><b>${fmt(cov.sinMetaConDosis.length)} ${cov.sinMetaConDosis.length === 1 ? "unidad aplicó" : "unidades aplicaron"} COVID-19 sin tener meta:</b> ${cov.sinMetaConDosis.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.sinMetaConDosis.length > 6 ? "…" : "."}</li>`);
   cov.marcas.forEach(m => { if (m.exceden.length) alertas.push(`<li><b>${fmt(m.exceden.length)} ${m.exceden.length === 1 ? "unidad ha aplicado" : "unidades han aplicado"} más ${m.label} de lo repartido:</b> ${m.exceden.slice(0, 6).map(u => e(u.unidad)).join(", ")}${m.exceden.length > 6 ? "…" : ""}. Revisa el reparto o la captura.</li>`); });
   const rebasan = grupos.filter(g => g.meta > 0 && g.aplicadas > g.meta);
   if (rebasan.length) alertas.push(`<li><b>${fmt(rebasan.length)} ${rebasan.length === 1 ? "grupo rebasa" : "grupos rebasan"} su meta:</b> ${rebasan.map(g => e(g.grupo)).join(", ")}.</li>`);
-  if (cov.nunca.length && cal.vencidas.length >= 2) alertas.push(`<li><b>${fmt(cov.nunca.length)} ${cov.nunca.length === 1 ? "unidad con meta no ha reportado" : "unidades con meta no han reportado"} nunca:</b> ${cov.nunca.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.nunca.length > 6 ? "…" : ""}.</li>`);
+  if (cov.nunca.length && cal.vencidas.length >= 2) alertas.push(`<li><b>${fmt(cov.nunca.length)} ${cov.nunca.length === 1 ? "unidad con meta no ha reportado" : "unidades con meta no han reportado"} nunca:</b> ${cov.nunca.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.nunca.length > 6 ? "…" : "."}</li>`);
   const revisar = alertas.length ? `<section class="iinf-card iinf-card--alerta" aria-labelledby="tinvCRevTit"><header><h3 id="tinvCRevTit">Por revisar</h3></header><ul class="iinf-alertas">${alertas.join("")}</ul></section>` : "";
 
   return `

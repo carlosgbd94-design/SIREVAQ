@@ -79,7 +79,31 @@
    * reglas = { c2: regla|null } (opcional, de reglaRubro): un rubro bloqueado por calendario no admite dosis nuevas.
    * Devuelve { error, excedidos: [{rubro, exceso}] }.
    */
-  function validar(valores, metas, acumOtras, previo, reglas) {
+  /** Dosis de 0.5 mL equivalentes que suma una marca en un reporte (las pediátricas de 0.25 mL valen media). */
+  function equivalentesMarca(valores, marca) {
+    return RUBROS.reduce((t, r) => t + n(valores && valores[marca] && valores[marca][r]) * ((r === "c1" || r === "c2") ? 0.5 : 1), 0);
+  }
+
+  /**
+   * Abasto por marca: lo aplicado (acumulado de las demás semanas + este reporte) contra lo repartido a la unidad,
+   * todo en dosis equivalentes de 0.5 mL. repartido = { MODERNA, PFIZER } en dosis (frascos x dosis por frasco), o null si
+   * la unidad aún no tiene ningún reparto registrado (entonces no hay contra qué comparar).
+   * acumMarca = { MODERNA, PFIZER } de las demás semanas. Devuelve [{ marca, repartido, aplicado, exceso }] solo de las que se pasan.
+   */
+  function excesosAbasto(valores, previo, acumMarca, repartido) {
+    if (!repartido) return [];
+    const out = [];
+    ["MODERNA", "PFIZER"].forEach((m) => {
+      const nuevo = equivalentesMarca(valores, m), antes = equivalentesMarca(previo || {}, m);
+      const total = (Number(acumMarca && acumMarca[m]) || 0) + nuevo;
+      const tope = Number(repartido[m]) || 0;
+      // Lo ya guardado antes no bloquea (igual que la meta): solo si este reporte sube lo aplicado de la marca
+      if (nuevo > antes && total > tope) out.push({ marca: m, repartido: tope, aplicado: total, exceso: Math.round((total - tope) * 10) / 10 });
+    });
+    return out;
+  }
+
+  function validar(valores, metas, acumOtras, previo, reglas, abasto) {
     const nuevo = porRubro(valores);
     const antes = porRubro(previo || {});
     const excedidos = [];
@@ -92,11 +116,16 @@
       const exceso = n(acumOtras && acumOtras[r]) + nuevo[r] - meta;
       if (exceso > 0) excedidos.push({ rubro: r, exceso });
     });
+    const pasadas = excesosAbasto(valores, previo, abasto && abasto.acumMarca, abasto && abasto.repartido);
     let error = null;
     if (bloqueado) error = `${ETIQUETA[bloqueado.r]}: ${bloqueado.regla.texto}`;
     else if (sinMeta) error = `${ETIQUETA[sinMeta]}: la unidad no tiene meta de COVID-19 asignada en este rubro.`;
     else if (excedidos.length) error = `No se puede guardar el reporte: ${ETIQUETA[excedidos[0].rubro]} supera la meta de tu unidad por ${excedidos[0].exceso} dosis (Moderna y Pfizer suman contra la misma meta).`;
-    return { error, excedidos };
+    else if (pasadas.length) {
+      const e = pasadas[0], nom = e.marca === "PFIZER" ? "Pfizer" : "Moderna";
+      error = `No se puede guardar el reporte: con él tu unidad habría aplicado ${e.aplicado} dosis de ${nom} y solo tiene ${e.repartido} repartidas (te pasas por ${e.exceso}). Revisa la captura o pide a tu municipio o Jurisdicción que registre la entrega de frascos.`;
+    }
+    return { error, excedidos, abasto: pasadas };
   }
 
   /** Paquete para el complemento CeNSIA: { idCasilla: dosis } solo con lo > 0 en casillas válidas. */
@@ -149,7 +178,7 @@
     });
   }
 
-  const api = { RUBROS, MARCAS, RUBROS_MARCA, ETIQUETA, CENSIA, SIS_CLAVE, SIS_REFUERZO_6_59,
+  const api = { equivalentesMarca, excesosAbasto, RUBROS, MARCAS, RUBROS_MARCA, ETIQUETA, CENSIA, SIS_CLAVE, SIS_REFUERZO_6_59,
     limpiar, porRubro, totalPorMarca, totalDosis, reglaRubro, validar, paqueteCensia, sisPorClave, movimientoPorMarca, delMes };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.CovidCaptura = api;
