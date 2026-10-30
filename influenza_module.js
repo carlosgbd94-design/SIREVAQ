@@ -1277,6 +1277,15 @@ function renderCaptureGrid() {
     reemplazo.innerHTML = currentReport
       ? `<span class="material-symbols-rounded" aria-hidden="true">swap_horiz</span><div><b>Esta semana ya tiene un reporte guardado${folio ? ` (folio ${folio})` : ""}.</b> Si lo vuelves a guardar, <b>el nuevo reemplaza por completo al anterior</b>: no se suma. Captura siempre el <b>total de la semana</b>, no solo lo que falta.</div>`
       : `<span class="material-symbols-rounded" aria-hidden="true">info</span><div><b>Un solo reporte por semana.</b> Si hoy guardas y mañana vuelves a guardar esta misma semana, <b>el reporte de mañana reemplaza al de hoy</b>. Por eso captura siempre el <b>total de la semana</b>, no solo lo nuevo.</div>`;
+    // Si la semana aún tiene días por delante (p. ej. se guarda el viernes y falta el sábado), recordar que el plazo es
+    // el domingo (o el último día del mes en un corte) y que hay que volver a guardar el total para incluirlos.
+    const hoyInf = influenzaHoy(), finSem = infFinPeriodo(selectedFecha);
+    if (hoyInf >= influenzaSemanaAbre(selectedFecha) && hoyInf < finSem) {
+      const aviso = document.createElement("div");
+      aviso.className = "inf-reemplazo-dias";
+      aviso.innerHTML = `<b>Aún quedan días de esta semana (hasta el ${influenzaDiaCorto(finSem)}).</b> Si vacunas después de guardar, vuelve a guardar el <b>total de la semana</b> antes de que venza el plazo para que esos días cuenten.`;
+      reemplazo.querySelector("div")?.appendChild(aviso);
+    }
     container.appendChild(reemplazo);
   }
 
@@ -8580,8 +8589,11 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   // 3. Calendario de la campaña
   const hoy = new Date().toLocaleDateString("en-CA");
   const semanas = infIndSemanas(ini, fin);
-  const vencidas = semanas.filter(f => f <= hoy);
+  // Una semana se cierra al vencer su plazo (domingo, o el último día del mes en un corte), no el viernes de su fecha:
+  // de viernes a domingo las unidades aún pueden capturar (o volver a guardar) y la semana sigue «en curso».
+  const vencidas = semanas.filter(f => infFinPeriodo(f) < hoy);
   const ultimaSemana = vencidas[vencidas.length - 1] || null;
+  const semanaEnCurso = semanas.find(f => !vencidas.includes(f) && influenzaSemanaAbre(f) <= hoy) || null;
   const restantes = semanas.filter(f => f > hoy).length;
   const t0 = Date.parse(ini + "T12:00:00"), t1 = Date.parse(fin + "T12:00:00"), tn = Date.parse(hoy + "T12:00:00");
   const esperadoPct = (t1 > t0) ? Math.max(0, Math.min(100, (tn - t0) * 100 / (t1 - t0))) : 0;
@@ -8699,7 +8711,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   const kpis = `
     <div class="iinf-kpis" role="group" aria-label="Indicadores clave de la campaña">
       ${kpi("flag", "Meta de la campaña", fmt(meta), `${fmt(evaluables.length)} ${evaluables.length === 1 ? "unidad con meta" : "unidades con meta"}`)}
-      ${kpi("vaccines", "Dosis aplicadas", fmt(apl), ultimaSemana ? `Corte: semana del ${rangoDe(ultimaSemana)}` : "Aún sin semanas vencidas")}
+      ${kpi("vaccines", "Dosis aplicadas", fmt(apl), ultimaSemana ? `Corte: semana del ${rangoDe(ultimaSemana)}${semanaEnCurso ? ` · en curso: ${rangoDe(semanaEnCurso)}` : ""}` : "Aún sin semanas vencidas")}
       ${kpi("hourglass_top", "Faltan por aplicar", fmt(faltan), `≈ ${fmt(Math.ceil(faltan / DOSIS_POR_FRASCO))} frascos`)}
       ${kpi("calendar_month", "Semana de campaña", `${fmt(semanaN)} de ${fmt(semanas.length)}`, restantes ? `Quedan ${fmt(restantes)} ${restantes === 1 ? "semana" : "semanas"}` : "La campaña ya terminó")}
       ${kpi("speed", "Ritmo reciente", `${fmt(ritmo4)} <small>dosis/sem</small>`, necesario == null ? (faltan > 0 ? "Sin semanas restantes" : "Meta cumplida") : `Necesario: ${fmt(necesario)} por semana`, tonoRitmo)}

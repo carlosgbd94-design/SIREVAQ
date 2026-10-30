@@ -15677,6 +15677,7 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 .inf-reemplazo { display:flex; gap:10px; align-items:flex-start; background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:12px 14px; color:#334155; font-size:13px; line-height:1.5; }
 .inf-reemplazo .material-symbols-rounded { font-size:20px; width:20px; height:20px; overflow:hidden; color:#475569; flex:none; margin-top:1px; }
 .inf-reemplazo b { color:#0f172a; }
+.inf-reemplazo-dias { margin-top:6px; padding-top:6px; border-top:1px dashed #cbd5e1; }
 
 /* Selector de vacuna del panel de captura (Influenza | COVID-19). Plano y neutro. */
 .cvc-seg { display:inline-flex; gap:0; padding:3px; border:1px solid #cbd5e1; border-radius:12px; background:#f8fafc; align-self:flex-start; }
