@@ -834,10 +834,23 @@ function actualizarControlMetaInfluenza() {
     ? `<div class="inf-ctl-msg is-warn"><span class="material-symbols-rounded" aria-hidden="true">history</span><div>Tienes <b>${atrasadas.length === 1 ? "1 semana anterior" : atrasadas.length + " semanas anteriores"} sin reporte</b>. <button type="button" class="inf-ctl-link" data-fecha="${atrasadas[0].fecha}">Ir a la semana del ${influenzaRangoTexto(atrasadas[0].fecha)}</button></div></div>`
     : "";
 
+  // Abasto: lo aplicado (con lo que se teclea) contra los frascos repartidos; solo si la unidad ya tiene reparto
+  let abasto = "";
+  const semanaTotal = sinMov ? 0 : INFLUENZA_RUBROS.reduce((t, rb) => t + Math.max(0, parseInt(document.getElementById(`input_inf_${rb.id}`)?.value, 10) || 0), 0);
+  const ab2 = _infGrid.cerrada ? null : influenzaAbastoSemana(_infGrid.fecha, semanaTotal);
+  if (ab2) {
+    const nf = (n) => Math.round(n).toLocaleString("es-MX");
+    if (ab2.exceso > 0) {
+      abasto = `<div class="inf-ctl-msg is-over" role="alert"><span class="material-symbols-rounded" aria-hidden="true">inventory_2</span><div><b>Te pasas por ${nf(ab2.exceso)} dosis de lo repartido:</b> llevarías ${nf(ab2.total)} aplicadas y tu unidad tiene ${nf(ab2.rep)} (${nf(ab2.frascos)} frascos). Revisa la captura o pide que registren tu entrega de frascos${ab2.sube ? "; así no se podrá guardar" : ""}.</div></div>`;
+    } else if (ab2.rep > 0 && ab2.total * 100 / ab2.rep >= 90) {
+      abasto = `<div class="inf-ctl-msg is-warn"><span class="material-symbols-rounded" aria-hidden="true">inventory_2</span><div><b>Te quedan ${nf(ab2.quedan)} dosis</b> de las ${nf(ab2.rep)} repartidas (${nf(ab2.frascos)} frascos). Pide tu siguiente entrega a tiempo.</div></div>`;
+    }
+  }
+
   // Las cifras de la campaña (meta, aplicadas, avance vs esperado) viven en «Resumen de meta»; aquí solo van
-  // los avisos que importan al capturar: si algo rebasa la meta y si falta alguna semana.
-  box.innerHTML = msg + pend;
-  box.hidden = !(msg || pend);
+  // los avisos que importan al capturar: si algo rebasa la meta, si se pasa de lo repartido y si falta alguna semana.
+  box.innerHTML = msg + abasto + pend;
+  box.hidden = !(msg || abasto || pend);
 
   box.querySelectorAll(".inf-ctl-link").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -1941,6 +1954,23 @@ window.influenzaEstadoCaptura = influenzaEstadoCaptura;
  * Solo cuenta lo NUEVO: un valor ya guardado antes de la regla (o antes de que bajara la meta) no bloquea el reporte.
  * Devuelve { error, valores, isSinMov }; error = null si se puede guardar. Lo usan el guardado normal y el offline.
  */
+/**
+ * Abasto de la unidad en Influenza: dosis repartidas (frascos x 10) contra lo aplicado en las demás semanas + `nuevo`
+ * (lo que se captura esta semana). null si la unidad aún no tiene frascos repartidos (no hay contra qué comparar).
+ * `sube` = este reporte aumenta lo aplicado respecto a lo ya guardado de la semana (solo los aumentos se bloquean).
+ */
+function influenzaAbastoSemana(fecha, nuevo) {
+  const frascos = (_influenzaDistribucionCache || []).reduce((t, d) => t + Number(d.cantidad_frascos || 0), 0);
+  if (frascos <= 0) return null;
+  const rep = frascos * DOSIS_POR_FRASCO;
+  const otras = (_influenzaCapturasCache || []).filter(r => r.fecha !== fecha).reduce((t, r) => t + frascoDosisDeCaptura(r), 0);
+  const actual = (_influenzaCapturasCache || []).find(r => r.fecha === fecha);
+  const previo = actual ? frascoDosisDeCaptura(actual) : 0;
+  const total = otras + nuevo;
+  return { frascos, rep, otras, previo, nuevo, total, exceso: total - rep, quedan: rep - total, sube: nuevo > previo };
+}
+window.influenzaAbastoSemana = influenzaAbastoSemana;
+
 function influenzaValidarCaptura(selectedFecha) {
   const isSinMov = document.getElementById("chkSinMovimientoINF")?.checked || false;
   const valores = {};
@@ -1975,6 +2005,12 @@ function influenzaValidarCaptura(selectedFecha) {
     error = "No hay dosis capturadas. Si esta semana no hubo aplicaciones, marca «Sin movimiento» para guardar el reporte en ceros.";
   }
   if (!error && excedeRubro) error = `No se puede guardar el reporte: ${excedeRubro} supera la meta asignada de tu unidad. Revisa los grupos marcados en rojo.`;
+  if (!error && !isSinMov) {
+    const ab = influenzaAbastoSemana(selectedFecha, Object.values(valores).reduce((t, v) => t + v, 0));
+    if (ab && ab.sube && ab.exceso > 0) {
+      error = `No se puede guardar el reporte: con él tu unidad habría aplicado ${ab.total.toLocaleString("es-MX")} dosis y solo tiene ${ab.rep.toLocaleString("es-MX")} repartidas (te pasas por ${ab.exceso.toLocaleString("es-MX")}). Revisa la captura o pide a tu municipio o Jurisdicción que registre la entrega de frascos.`;
+    }
+  }
   if (!error) error = influenzaVentanaError(selectedFecha);
   return { error, valores, isSinMov };
 }
@@ -8564,7 +8600,7 @@ function infIndEtiqueta(tono, pct) {
 }
 
 let _infIndRenderToken = 0;
-async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter, destino) {
+async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter, destino, alContexto) {
   const miToken = ++_infIndRenderToken;
   window._infIndicadoresDatos = null;   // hasta que termine este cálculo, el Excel/PDF no usan cifras de otro ámbito
   // `destino`: elemento donde pintar (el tablero de la temporada invernal lo pide aparte para reusar sus cifras).
@@ -8608,6 +8644,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter, destino
   }
 
   window._infIndCtx = { units, camp: activeCampaignName, ini, fin };   // lo reusa el tablero de la temporada invernal (COVID-19)
+  if (alContexto) { try { alContexto(window._infIndCtx); } catch (e) { /* solo adelanta consultas */ } }
 
   // 2. Metas, capturas y reparto de la campaña
   const [resMetas, resCapturas, resFrascos] = await Promise.all([
@@ -8990,9 +9027,21 @@ function infIndCalendario(ini, fin, hoy) {
  * meta por destino y, si el municipal la bajó, por unidad. Lo aplicado sale de los reportes semanales (por marca);
  * las dosis pediátricas (0.25 mL) cuentan media dosis para comparar con la meta en dosis equivalentes de 0.5 mL.
  */
+// Metas, reportes y reparto de COVID-19 de la campaña. Se piden en paralelo con las de Influenza (el tablero adelanta la
+// consulta en cuanto conoce la campaña) y se reusan 30 s: cambiar de pestaña o de municipio no vuelve a pedirlas.
+let _covRaw = { camp: null, t: 0, p: null };
+function covidIndPedir(camp) {
+  if (_covRaw.p && _covRaw.camp === camp && Date.now() - _covRaw.t < 30000) return _covRaw.p;
+  let fallo = false;
+  const pedir = (accion) => AppService.call(accion, { anio_campana: camp }, { silent: true }).catch(() => { fallo = true; return { data: [] }; });
+  const p = Promise.all([pedir("getcovid_metas"), pedir("getcovid_capturas"), pedir("getcovid_distribucion")]).then((r) => { if (fallo) _covRaw = { camp: null, t: 0, p: null }; return r; });
+  _covRaw = { camp, t: Date.now(), p };
+  return p;
+}
+window.covidIndInvalidar = () => { _covRaw = { camp: null, t: 0, p: null }; };
+
 async function covidIndCalcular({ units, muniFilter, uniFilter, camp, cal }) {
-  const pedir = (accion, extra) => AppService.call(accion, { anio_campana: camp, ...extra }, { silent: true }).catch(() => ({ data: [] }));
-  const [rm, rc, rd] = await Promise.all([pedir("getcovid_metas"), pedir("getcovid_capturas"), pedir("getcovid_distribucion")]);
+  const [rm, rc, rd] = await covidIndPedir(camp);
   const filasMeta = (rm && rm.data) || [];
   const claves = new Set(units.map(u => u.clues));
   const caps = ((rc && rc.data) || []).filter(c => claves.has(c.clues));
@@ -9180,6 +9229,11 @@ function tinvMarcasHtml(cov, id, sub) {
     </section>`;
 }
 
+/** Botón «Copiar lista» (solo si hay unidades pendientes): copia el texto que dejó la pestaña en D.copiar[clave]. */
+function tinvBotonCopiar(clave, n) {
+  return n ? `<button type="button" class="tinv-copiar" data-copiar="${clave}" title="Copiar la lista de las ${n} unidades pendientes para enviarla"><span class="material-symbols-rounded" aria-hidden="true">content_copy</span>Copiar lista</button>` : "";
+}
+
 // ── Pestaña «Ambas» ──
 function tinvAmbas(D) {
   const H = tinvAyudas();
@@ -9262,9 +9316,11 @@ function tinvAmbas(D) {
 
   // Reporte cruzado
   const faltantes = [...fAmb.map(f => ({ ...f, falta: "Influenza y COVID-19" })), ...fInf.map(f => ({ ...f, falta: "Influenza" })), ...fCov.map(f => ({ ...f, falta: "COVID-19" }))];
+  D.copiar = D.copiar || {};
+  D.copiar.amb = faltantes.length ? `Unidades que faltan por reportar la semana del ${semTxt} (${D.ambito}):\n` + faltantes.map(f => `- ${f.unidad}${f.destino ? " (" + f.destino + ")" : ""}: falta ${f.falta}`).join("\n") : "";
   const cobertura = cal.ultimaSemana ? `
     <section class="iinf-card" aria-labelledby="tinvCobTit">
-      <header><h3 id="tinvCobTit">Reporte de la semana del ${semTxt}</h3>${chip(tonoRep, `${fmt(alDia)} de ${fmt(totRep)} al corriente`)}</header>
+      <header><h3 id="tinvCobTit">Reporte de la semana del ${semTxt}</h3><span class="tinv-cabeza">${tinvBotonCopiar("amb", faltantes.length)}${chip(tonoRep, `${fmt(alDia)} de ${fmt(totRep)} al corriente`)}</span></header>
       ${barra(pctRep, tonoRep, "Unidades que reportaron todas sus vacunas")}
       <div class="tinv-cruce" role="group" aria-label="Reportes por vacuna">
         <div><b>${fmt(alDia)}</b><small>Al corriente</small></div>
@@ -9388,9 +9444,11 @@ function tinvCovid(D) {
   const reportaron = cal.ultimaSemana ? evaluables.length - sinRep.length : 0;
   const pctCob = evaluables.length ? reportaron * 100 / evaluables.length : 0;
   const tonoCob = pctCob >= 90 ? "good" : (pctCob >= 70 ? "warn" : "bad");
+  D.copiar = D.copiar || {};
+  D.copiar.cov = sinRep.length ? `Unidades que faltan por reportar COVID-19 la semana del ${semTxt} (${D.ambito}):\n` + sinRep.map(u => `- ${u.unidad} (${u.destino})`).join("\n") : "";
   const cobertura = cal.ultimaSemana ? `
     <section class="iinf-card" aria-labelledby="tinvCCobTit">
-      <header><h3 id="tinvCCobTit">Reporte de la semana del ${semTxt}</h3>${chip(tonoCob, `${fmt(reportaron)} de ${fmt(evaluables.length)} ${evaluables.length === 1 ? "unidad" : "unidades"}`)}</header>
+      <header><h3 id="tinvCCobTit">Reporte de la semana del ${semTxt}</h3><span class="tinv-cabeza">${tinvBotonCopiar("cov", sinRep.length)}${chip(tonoCob, `${fmt(reportaron)} de ${fmt(evaluables.length)} ${evaluables.length === 1 ? "unidad" : "unidades"}`)}</span></header>
       ${barra(pctCob, tonoCob, "Unidades que reportaron COVID-19 la última semana")}
       ${sinRep.length ? `<p class="iinf-nota">${fmt(sinRep.length)} ${sinRep.length === 1 ? "unidad no ha reportado" : "unidades no han reportado"} esa semana${cov.nunca.length ? ` (${fmt(cov.nunca.length)} sin ningún reporte en la campaña)` : ""}:</p>
         <ul class="iinf-lista">${sinRep.slice(0, 8).map(u => `<li>${e(u.unidad)}<small>${e(u.destino)}</small></li>`).join("")}</ul>${sinRep.length > 8 ? `<p class="iinf-nota">y ${fmt(sinRep.length - 8)} más.</p>` : ""}`
@@ -9469,6 +9527,7 @@ function covDatosExport() {
   const D = _tinv.datos;
   return D && D.cov && (D.cov.hayMeta || D.cov.apl > 0) ? D : null;
 }
+window.covDatosExport = covDatosExport;
 
 /** Cifras de COVID-19 que muestran la pantalla, el Excel y el PDF (una sola fórmula). */
 function tinvCovidResumen(D) {
@@ -9513,6 +9572,19 @@ function tinvPintar() {
   else if (_tinv.tab === "covid") html = `<div class="iinf">${tinvCovid(D)}</div>`;
   else html = `<div class="iinf">${tinvAmbas(D)}</div>`;
   cuerpo.innerHTML = html;
+  cuerpo.querySelectorAll(".tinv-copiar").forEach(b => b.addEventListener("click", async () => {
+    const texto = (D.copiar || {})[b.dataset.copiar] || "";
+    if (!texto) return;
+    try { await navigator.clipboard.writeText(texto); }
+    catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = texto; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (e2) { /* sin portapapeles */ }
+      ta.remove();
+    }
+    showToast("Lista copiada: pégala en el mensaje a los municipios.", true, "good");
+  }));
 }
 
 async function renderTemporadaInvernalDashboard(muniFilter, uniFilter) {
@@ -9522,7 +9594,7 @@ async function renderTemporadaInvernalDashboard(muniFilter, uniFilter) {
   _tinv.datos = null;   // hasta que termine el cálculo, las exportaciones no usan cifras de otro ámbito
   container.innerHTML = '<div class="iinf-cargando" role="status">Calculando la temporada invernal…</div>';
   const aparte = document.createElement("div");
-  await renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter, aparte);   // deja listas las cifras de Influenza (y las del Excel/PDF)
+  await renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter, aparte, (c) => covidIndPedir(c.camp));   // deja listas las cifras de Influenza (y las del Excel/PDF)
   if (token !== _tinv.token) return;
   const ctx = window._infIndCtx;
   if (!ctx) { container.innerHTML = aparte.innerHTML; return; }
@@ -9760,7 +9832,8 @@ window.exportInfluenzaIndicadoresExcel = exportInfluenzaIndicadoresExcel;
  */
 async function influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob) {
   const d = window._infIndicadoresDatos;
-  if (!d) throw new Error("Abre el tablero de influenza antes de exportar.");
+  const TC = covDatosExport();
+  if (!d && !TC) throw new Error("Abre el tablero de la temporada invernal antes de exportar.");
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   const PW = 215.9, PH = 279.4, M = 14, CW = PW - 2 * M, TOP = 16, BOT = PH - 16;
   const fmt = (n) => Math.round(n).toLocaleString("es-MX");
@@ -9806,6 +9879,8 @@ async function influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob) {
     y = doc.lastAutoTable.finalY + 8;
   };
 
+  // Influenza (si el ámbito no tiene meta de Influenza, el PDF lleva solo COVID-19)
+  if (d) {
   // ── Encabezado ──
   doc.setFillColor(15, 23, 42); doc.rect(0, 0, PW, 30, "F");
   doc.setFillColor(56, 189, 248); doc.rect(0, 30, PW, 1.2, "F");
@@ -9974,13 +10049,14 @@ async function influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob) {
     y -= 3;
   });
 
+  }
+
   // ── COVID-19 (misma estructura que Influenza; solo si el ámbito tiene meta o dosis de COVID-19) ──
-  const TC = covDatosExport();
   if (TC) {
     const cv = TC.cov, cl = TC.cal, R = tinvCovidResumen(TC);
     const fc = (n) => Number(n || 0).toLocaleString("es-MX", { maximumFractionDigits: 1 });
     const rangoDe = (ymd) => influenzaRangoTexto(ymd, cl.ini, cl.fin);
-    nueva();
+    if (d) nueva();
     doc.setFillColor(14, 116, 144); doc.rect(0, 0, PW, 22, "F");
     doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(255, 255, 255);
     doc.text(tx(`Meta-Logro de vacunación COVID-19 ${String(TC.camp).replace(/^Campa.a Influenza\s*/i, "")}`), M, 13);
@@ -10069,7 +10145,7 @@ async function influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob) {
   // ── Nota y pie de página ──
   hace(22);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(71, 85, 105);
-  const nota = doc.splitTextToSize(tx(`Cómo leerlo: el avance es dosis aplicadas / meta de la campaña (${d.campana}). "Esperado a hoy" es la proporción de la campaña que ya transcurrió; verde si va de 5 puntos de ella, ámbar hasta 15 y rojo si está más atrás. La proyección supone que se mantiene el ritmo de las últimas 4 semanas.`), CW);
+  const nota = doc.splitTextToSize(tx(`Cómo leerlo: el avance es dosis aplicadas / meta de la campaña (${d ? d.campana : TC.camp}). "Esperado a hoy" es la proporción de la campaña que ya transcurrió; verde si va de 5 puntos de ella, ámbar hasta 15 y rojo si está más atrás. La proyección supone que se mantiene el ritmo de las últimas 4 semanas.`), CW);
   doc.text(nota, M, y + 3);
   const n = doc.internal.getNumberOfPages();
   for (let i = 1; i <= n; i++) {

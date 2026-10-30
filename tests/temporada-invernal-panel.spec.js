@@ -53,13 +53,13 @@ function servidor(db) {
   };
 }
 
-async function abrir(page) {
+async function abrir(page, opts = {}) {
   const errores = [];
   page.on('pageerror', (e) => errores.push('PAGEERROR: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !RUIDO.test(m.text())) errores.push('CONSOLE: ' + m.text().slice(0, 200)); });
   const db = {
     campanas: [{ id: 'c1', nombre: CAMP, fecha_inicio: '2026-10-02', fecha_fin: '2027-04-30', activo: true }],
-    influenza_metas: infMetas, influenza_capturas: infCaps, influenza_distribucion_frascos: [], unidades,
+    influenza_metas: opts.sinInfluenza ? [] : infMetas, influenza_capturas: infCaps, influenza_distribucion_frascos: [], unidades,
     covid_metas: covMetas, covid_capturas: covCaps, covid_distribucion_frascos: covFrascos
   };
   await page.route(/\.supabase\.co\//, servidor(db));
@@ -163,6 +163,12 @@ test.describe('Temporada invernal: Influenza y COVID-19 en un tablero', () => {
     expect(v(17, colTotal) + v(18, colTotal)).toBe(covApl);   // Moderna + Pfizer
     expect(String(v(10, 6))).toContain('Primera');
     expect(ws.conditionalFormattings.length).toBeGreaterThanOrEqual(4);
+    // Estructura válida para Excel: ninguna combinación de celdas se traslapa con otra (si no, Excel «repara» el libro)
+    const rangos = (ws.model.merges || []).map((m) => { const [a1, b1] = m.split(':'); const f = (x) => { const c = x.match(/^([A-Z]+)(\d+)$/); let col = 0; for (const ch of c[1]) col = col * 26 + ch.charCodeAt(0) - 64; return [col, Number(c[2])]; }; const [c0, r0] = f(a1), [c1, r1] = f(b1 || a1); return { c0, r0, c1, r1, m }; });
+    for (let i = 0; i < rangos.length; i++) for (let j = i + 1; j < rangos.length; j++) {
+      const A = rangos[i], B = rangos[j];
+      expect(A.c1 < B.c0 || B.c1 < A.c0 || A.r1 < B.r0 || B.r1 < A.r0, `se traslapan ${A.m} y ${B.m}`).toBe(true);
+    }
 
     // Excel con las cifras: hojas de COVID-19
     const [d2] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportInfluenzaIndicadoresExcel())]);
@@ -190,6 +196,57 @@ test.describe('Temporada invernal: Influenza y COVID-19 en un tablero', () => {
     });
     const buf = Buffer.from(pdf, 'base64');
     expect(buf.slice(0, 5).toString()).toBe('%PDF-');
+    expect(errores).toEqual([]);
+  });
+
+  test('Influenza sin meta: el Excel de plantilla y el PDF salen solo con COVID-19', async ({ page }) => {
+    test.setTimeout(120000);
+    const errores = await abrir(page, { sinInfluenza: true });
+    await render(page);
+    await expect(page.locator('#tinvCuerpo .iinf-hero')).toContainText('Avance de la temporada invernal');
+    const [d1] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportInfluenzaMetaLogroPlantilla())]);
+    expect(d1.suggestedFilename()).toContain('COVID19');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(await d1.path());
+    expect(wb.worksheets.map(w => w.name)).toEqual(['META-LOGRO COVID-19']);
+    const [d2] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportInfluenzaIndicadoresExcel())]);
+    const wb2 = new ExcelJS.Workbook();
+    await wb2.xlsx.readFile(await d2.path());
+    expect(wb2.worksheets.map(w => w.name)).toContain('COVID-19 Resumen');
+    expect(wb2.worksheets.map(w => w.name)).not.toContain('Resumen');
+    const libs = await page.evaluate(async () => { try { await window.ensureLibsLoaded('html2canvas'); await window.ensureJsPdfLoaded(); return true; } catch (e) { return false; } });
+    test.skip(!libs, 'Sin acceso a jsPDF/html2canvas en este entorno');
+    const pdf = await page.evaluate(async () => {
+      _rdaCache.unidades = []; _rdaCache.registros = []; _rdaState.esquema = 'meta_logro_influenza'; document.getElementById('rdaDetailTable')?.remove();
+      const blob = await generarPDFRobusto('rdaDashboardContent', 'x.pdf', true);
+      const b = new Uint8Array(await blob.arrayBuffer());
+      let s = ''; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode.apply(null, b.subarray(i, i + 8192));
+      return btoa(s);
+    });
+    const buf = Buffer.from(pdf, 'base64');
+    expect(buf.slice(0, 5).toString()).toBe('%PDF-');
+    expect(buf.toString('latin1')).toContain('/Type /Page');
+    expect(errores).toEqual([]);
+  });
+
+  test('«Copiar lista» deja en el portapapeles las unidades que faltan por reportar', async ({ page }) => {
+    test.setTimeout(60000);
+    const errores = await abrir(page);
+    await page.addInitScript(() => { window.__copiado = null; });
+    await render(page);
+    await page.evaluate(() => { window.__copiado = null; Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t) => { window.__copiado = t; } }, configurable: true }); });
+    // Q UNIDAD 2 nunca reportó COVID-19: aparece en la lista de «Ambas» y en la de COVID-19
+    const boton = page.locator('#tinvCuerpo .tinv-copiar');
+    await expect(boton).toHaveCount(1);
+    await boton.click();
+    const t1 = await page.evaluate(() => window.__copiado);
+    expect(t1).toContain('Q UNIDAD 2');
+    expect(t1).toContain('falta COVID-19');
+    expect(t1).toContain('Jurisdicción Sanitaria 1');
+    await page.locator('.tinv-tab').nth(2).click();
+    await page.locator('#tinvCuerpo .tinv-copiar').click();
+    const t2 = await page.evaluate(() => window.__copiado);
+    expect(t2).toMatch(/Q UNIDAD 2 \(QUERETARO\)/);
     expect(errores).toEqual([]);
   });
 });

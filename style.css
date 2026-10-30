@@ -16156,3 +16156,9 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 .cvc-ab[data-tono="over"] .cvc-ab-nota { color: #b91c1c; font-weight: 700; }
 .cvc-ab-nota .material-symbols-rounded { font-size: 16px; width: 16px; height: 16px; overflow: hidden; flex: none; }
 @media (prefers-reduced-motion: reduce) { .cvc-ab-bar i { transition: none; } }
+
+.tinv-cabeza { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tinv-copiar { display: inline-flex; align-items: center; gap: 4px; border: none; background: transparent; min-height: 0; height: auto; padding: 2px 4px; border-radius: 6px; font: 800 12px 'Nunito Sans', sans-serif; color: #6d28d9; cursor: pointer; }
+.tinv-copiar .material-symbols-rounded { font-size: 16px; width: 16px; height: 16px; overflow: hidden; }
+.tinv-copiar:focus-visible { outline: 2px solid #6d28d9; outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .tinv-copiar:hover { text-decoration: underline; } }

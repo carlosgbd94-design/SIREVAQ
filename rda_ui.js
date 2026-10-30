@@ -2429,7 +2429,7 @@ async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob =
                     return resolve(true);
                 }
             }
-            if (!tablaOriginal && _rdaState.esquema === 'meta_logro_influenza' && window._infIndicadoresDatos
+            if (!tablaOriginal && _rdaState.esquema === 'meta_logro_influenza' && (window._infIndicadoresDatos || (window.covDatosExport && window.covDatosExport()))
                 && typeof window.influenzaPdfVectorial === 'function') {
                 // Meta-Logro Influenza: PDF vectorial (texto seleccionable y tablas reales) con las cifras del tablero.
                 const blobInf = await window.influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob);

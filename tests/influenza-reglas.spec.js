@@ -57,6 +57,8 @@ async function montarCaptura(page, fecha, valoresGuardados) {
     content: [
       `var _campaignConfig = { fecha_inicio: '${INI}', fecha_fin: '${FIN}' };`,
       'var _influenzaMetasCache = { r1: 100, r2: 100, r6: 100, r7: 100, r16: 100 };',
+      'var _influenzaDistribucionCache = []; var DOSIS_POR_FRASCO = 10;   // sin reparto registrado no hay tope de abasto',
+      'var frascoDosisDeCaptura = (c) => Object.values((c && c.valores) || {}).reduce((s, v) => s + Number(v || 0), 0);',
       `var _influenzaCapturasCache = ${capturas};`,
       "var USER = { clues: 'C1', unidad: 'U', municipio: 'QUERETARO' };",
       'window.__toasts = []; var showToast = (m) => window.__toasts.push(m);',

@@ -86,10 +86,27 @@ async function buildGroup(name, files) {
 
   // Escritura atomica (archivo temporal + rename): un servidor local (Live Server) que sirva el bundle mientras
   // se reconstruye ya no entrega un archivo a medias («Unexpected end of input»).
+  // En Windows el rename falla con EPERM si un servidor local (Live Server, npx serve) o el antivirus tiene el destino
+  // abierto: se reintenta, luego se copia encima y, si tampoco se puede, el build FALLA (antes quedaba el bundle viejo en
+  // dist/ y el cambio no llegaba al navegador sin ningun aviso).
   const escribirAtomico = (destino, contenido) => {
     const tmp = `${destino}.tmp`;
     fs.writeFileSync(tmp, contenido);
-    fs.renameSync(tmp, destino);
+    let ultimo = null;
+    for (let i = 0; i < 4; i++) {
+      try { fs.renameSync(tmp, destino); return; } catch (e) {
+        ultimo = e;
+        if (e.code !== 'EPERM' && e.code !== 'EBUSY') throw e;
+        const hasta = Date.now() + 250 * (i + 1);
+        while (Date.now() < hasta) { /* espera corta antes de reintentar */ }
+      }
+    }
+    try {
+      fs.copyFileSync(tmp, destino);
+      fs.unlinkSync(tmp);
+    } catch (e) {
+      throw new Error(`No se pudo actualizar ${destino} (${ultimo && ultimo.code}). Cierra el servidor local que lo tiene abierto y vuelve a correr el build: SIN esto el navegador sigue con el bundle anterior.`);
+    }
   };
   escribirAtomico(path.join(DIST_DIR, `${name}.js.map`), result.map);
   escribirAtomico(path.join(DIST_DIR, `${name}.js`), `${result.code}
