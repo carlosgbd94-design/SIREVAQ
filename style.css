@@ -16099,3 +16099,43 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 .inf-hist-card { padding-top: 10px; padding-bottom: 10px; }
 .cvm--plano { border: none; padding: 0; margin-top: 0; }
 .cvm--plano .cvm-head { margin-bottom: 4px; justify-content: flex-end; }
+
+/* ── Temporada invernal: Influenza + COVID-19 (pestañas y piezas propias; el resto reusa .iinf-*) ── */
+.tinv { display: flex; flex-direction: column; gap: 20px; }
+.tinv-tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 999px; background: #f1f5f9; align-self: flex-start; }
+.tinv-tab { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; min-height: 0; height: auto; padding: 8px 16px; border-radius: 999px; font: 800 13px 'Nunito Sans', sans-serif; color: #475569; cursor: pointer; }
+.tinv-tab .material-symbols-rounded { font-size: 18px; width: 18px; height: 18px; overflow: hidden; }
+.tinv-tab[aria-selected="true"] { background: #fff; color: #0f172a; box-shadow: 0 1px 4px rgba(15, 23, 42, .15); }
+.tinv-tab--influenza[aria-selected="true"] { color: #b4452b; }
+.tinv-tab--covid[aria-selected="true"] { color: #0e7490; }
+.tinv-tab:focus-visible { outline: 2px solid #6d28d9; outline-offset: 2px; }
+.tinv-vacs { display: flex; flex-direction: column; gap: 14px; }
+.tinv-vac-top { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 6px; }
+.tinv-vac-n { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 800; color: #0f172a; min-width: 92px; }
+.tinv-vac-n i, .tinv-pt { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.tinv-vac-top b { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; color: #0f172a; }
+.tinv-vac-top em { font-style: normal; font-size: 12px; font-weight: 600; color: #64748b; }
+.tinv-vac-bar { position: relative; height: 10px; border-radius: 999px; background: #e2e8f0; }
+.tinv-vac-bar i { display: block; height: 100%; border-radius: 999px; }
+.tinv-vac-bar span { position: absolute; top: -4px; width: 3px; height: 18px; border-radius: 2px; background: #0f172a; transform: translateX(-1px); }
+.tinv-vac--inf .tinv-vac-n i, .tinv-vac--inf .tinv-vac-bar i, .tinv-pt--inf, .tinv-col--inf { background: #d9684a; fill: #d9684a; }
+.tinv-vac--cov .tinv-vac-n i, .tinv-vac--cov .tinv-vac-bar i, .tinv-pt--cov, .tinv-col--cov { background: #0e9fbf; fill: #0e9fbf; }
+.tinv-pt--mod, .tinv-col--mod { background: #0e7490; fill: #0e7490; }
+.tinv-pt--pfz, .tinv-col--pfz { background: #7dd3fc; fill: #7dd3fc; }
+.tinv-vac-bar i { background-clip: padding-box; }
+.tinv-col { background: none; }
+.tinv-pt { background-color: currentColor; }
+.tinv-pt--inf { background: #d9684a; } .tinv-pt--cov { background: #0e9fbf; } .tinv-pt--mod { background: #0e7490; } .tinv-pt--pfz { background: #7dd3fc; }
+.tinv-leyenda { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #475569; flex-wrap: wrap; }
+.tinv-leyenda .tinv-pt { margin-left: 6px; }
+.tinv-cruce { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+.tinv-cruce > div { padding: 10px 12px; border-radius: 14px; background: #f8fafc; border: 1px solid #e2e8f0; }
+.tinv-cruce b { display: block; font-size: 22px; font-weight: 800; line-height: 1.25; color: #0f172a; font-variant-numeric: tabular-nums; }
+.tinv-cruce small { font-size: 12px; font-weight: 700; color: #64748b; }
+.tinv-cruce > div[data-tono="warn"] b { color: #b45309; }
+.tinv-cruce > div[data-tono="bad"] b { color: #b91c1c; }
+.tinv-sin { font-size: 12px; font-weight: 700; color: #94a3b8; }
+.tinv-marca { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 16px; background: #f8fafc; border: 1px solid #e2e8f0; }
+.tinv-marca-top { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; color: #475569; font-weight: 600; }
+.tinv-marca-top b { font-size: 15px; font-weight: 800; color: #0f172a; }
+.tinv-marca small { font-size: 12px; font-weight: 600; color: #64748b; }

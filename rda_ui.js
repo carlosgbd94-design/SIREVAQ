@@ -338,10 +338,9 @@ function initRDADashboard() {
             <option value="adultos">Esquemas Adolescentes y Adultos</option>
             <option value="mayores">Esquemas Adultos Mayores</option>
             <option value="embarazadas">Esquema Embarazadas (Tdpa, VSR)</option>
-            <option value="invernal">Temporada Invernal (Influenza, COVID)</option>
             <option value="adicionales">Biológicos Adicionales (Varicela, Hep A)</option>
             <option value="comparativa_multianual" id="optComparativeDynamic">Comparativa Multianual (2025 vs 2026)</option>
-            <option value="meta_logro_influenza">Evaluación Meta-Logro Influenza</option>
+            <option value="meta_logro_influenza">Temporada Invernal (Influenza, COVID-19)</option>
             <option value="abandono_esquema">Índice de Deserción de Esquema</option>
         `;
         function updateComparativeOptionLabel() {
@@ -735,6 +734,7 @@ async function renderDashboard() {
             mayores: 'Adultos Mayores',
             embarazadas: 'Embarazadas',
             invernal: 'Temporada Invernal',
+            meta_logro_influenza: 'Temporada Invernal (Influenza y COVID-19)',
             comparativa_multianual: 'Comparativa Multianual (2025 vs 2026)',
             abandono_esquema: 'Índice de Deserción de Esquema'
         };
@@ -748,8 +748,11 @@ async function renderDashboard() {
     if (optMetaLogro) optMetaLogro.style.display = (esquema === 'meta_logro_influenza') ? 'flex' : 'none';
 
     if (esquema === 'meta_logro_influenza') {
-        if (typeof renderInfluenzaIndicatorsDashboard === 'function') {
-            // Se espera: la exportación masiva (ZIP) necesita el tablero ya pintado antes de capturar cada unidad.
+        // Temporada invernal: Influenza + COVID-19 en un solo tablero (pestañas). Se espera: la exportación masiva (ZIP)
+        // necesita el tablero ya pintado antes de capturar cada unidad.
+        if (typeof renderTemporadaInvernalDashboard === 'function') {
+            await renderTemporadaInvernalDashboard(muniFilter, uniFilter);
+        } else if (typeof renderInfluenzaIndicatorsDashboard === 'function') {
             await renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter);
         }
         return;

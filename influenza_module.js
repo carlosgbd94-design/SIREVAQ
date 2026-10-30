@@ -8548,10 +8548,11 @@ function infIndEtiqueta(tono, pct) {
 }
 
 let _infIndRenderToken = 0;
-async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
+async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter, destino) {
   const miToken = ++_infIndRenderToken;
   window._infIndicadoresDatos = null;   // hasta que termine este cálculo, el Excel/PDF no usan cifras de otro ámbito
-  const container = document.getElementById("rdaDashboardContent");
+  // `destino`: elemento donde pintar (el tablero de la temporada invernal lo pide aparte para reusar sus cifras).
+  const container = destino || document.getElementById("rdaDashboardContent");
   if (!container) return;
   container.innerHTML = '<div class="iinf-cargando" role="status">Calculando indicadores de influenza…</div>';
 
@@ -8589,6 +8590,8 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
     const norm = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim().replace(/^EL\s+/, "");
     units = units.filter(u => norm(u.destino) === norm(muniFilter));
   }
+
+  window._infIndCtx = { units, camp: activeCampaignName, ini, fin };   // lo reusa el tablero de la temporada invernal (COVID-19)
 
   // 2. Metas, capturas y reparto de la campaña
   const [resMetas, resCapturas, resFrascos] = await Promise.all([
@@ -8773,7 +8776,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
   const mapa = {};
   evaluables.forEach(f => {
     const k = porUnidad ? f.clues : f.destino;
-    const o = mapa[k] || (mapa[k] = { nombre: porUnidad ? f.unidad : f.destino, n: 0, meta: 0, apl: 0, ultima: "", sinRep: 0, metasR: {}, aplR: {} });
+    const o = mapa[k] || (mapa[k] = { clave: k, nombre: porUnidad ? f.unidad : f.destino, n: 0, meta: 0, apl: 0, ultima: "", sinRep: 0, metasR: {}, aplR: {} });
     o.n++; o.meta += f.meta; o.apl += f.apl;
     INFLUENZA_RUBROS.forEach(rb => {
       o.metasR[rb.id] = (o.metasR[rb.id] || 0) + Number(f.metasR[rb.id] || 0);
@@ -8904,6 +8907,7 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
     fechaCorte: hoy, ultimaSemana, inicio: ini, fin,
     meta, apl, pct, esperadoPct, diff, estado: heroEstado, faltan, semanaN, totalSemanas: semanas.length, restantes,
     ritmo4, necesario, proyeccion: proyFiable ? proyeccion : null, pctProy: proyFiable ? pctProy : null,
+    clavesConMeta: evaluables.map(f => f.clues), clavesReportaron: evaluables.filter(f => f.reportoUltima).map(f => f.clues),
     unidadesConMeta: evaluables.length, reportaron, sinReporte: sinReporte.map(f => ({ unidad: f.unidad, destino: f.destino })),
     nuncaReportaron: nuncaReportaron.length,
     blanco: { meta: blancoM, apl: blancoA }, riesgo: { meta: riesgoM, apl: riesgoA },
@@ -8938,6 +8942,561 @@ async function renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter) {
     </div>`;
 }
 
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════
+// TEMPORADA INVERNAL · Influenza + COVID-19 en un solo tablero analítico (pestañas Ambas | Influenza | COVID-19).
+// «Influenza» es el tablero de Meta-Logro de siempre; «COVID-19» usa lo mismo (meta, reportes semanales por marca y
+// reparto de frascos) y «Ambas» las cruza: avance de cada vacuna contra lo esperado, quién se desbalancea entre una y
+// otra, reportes que faltan por vacuna, dosis por semana y mezcla de marcas. Todo sale de las tablas existentes.
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════
+const TINV_PESO = { c1: 0.5, c2: 0.5, c3: 1, c4: 1, c5: 1, c6: 1 };   // las pediátricas (0.25 mL) valen media dosis
+const TINV_MARCAS = [{ id: "MODERNA", label: "Moderna" }, { id: "PFIZER", label: "Pfizer" }];
+let _tinv = { tab: "ambas", token: 0, datos: null };
+
+function tinvNorm(t) {
+  return String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim().replace(/^EL\s+/, "");
+}
+
+/** Calendario de la campaña a `hoy`: semanas, cerradas (plazo vencido), la que corre y lo esperado a la fecha. */
+function infIndCalendario(ini, fin, hoy) {
+  const semanas = infIndSemanas(ini, fin);
+  const vencidas = semanas.filter(f => infFinPeriodo(f) < hoy);
+  const ultimaSemana = vencidas[vencidas.length - 1] || null;
+  const semanaEnCurso = semanas.find(f => !vencidas.includes(f) && influenzaSemanaAbre(f) <= hoy) || null;
+  const restantes = semanas.filter(f => f > hoy).length;
+  const t0 = Date.parse(ini + "T12:00:00"), t1 = Date.parse(fin + "T12:00:00"), tn = Date.parse(hoy + "T12:00:00");
+  const esperadoPct = (t1 > t0) ? Math.max(0, Math.min(100, (tn - t0) * 100 / (t1 - t0))) : 0;
+  return { semanas, vencidas, ultimaSemana, semanaEnCurso, restantes, esperadoPct, hoy, ini, fin };
+}
+
+/**
+ * COVID-19 del ámbito, con la misma lógica de metas que el Concentrado de Avances: un municipio u hospital tiene su
+ * meta por destino y, si el municipal la bajó, por unidad. Lo aplicado sale de los reportes semanales (por marca);
+ * las dosis pediátricas (0.25 mL) cuentan media dosis para comparar con la meta en dosis equivalentes de 0.5 mL.
+ */
+async function covidIndCalcular({ units, muniFilter, uniFilter, camp, cal }) {
+  const pedir = (accion, extra) => AppService.call(accion, { anio_campana: camp, ...extra }, { silent: true }).catch(() => ({ data: [] }));
+  const [rm, rc, rd] = await Promise.all([pedir("getcovid_metas"), pedir("getcovid_capturas"), pedir("getcovid_distribucion")]);
+  const filasMeta = (rm && rm.data) || [];
+  const claves = new Set(units.map(u => u.clues));
+  const caps = ((rc && rc.data) || []).filter(c => claves.has(c.clues));
+  const dist = ((rd && rd.data) || []).filter(d => claves.has(d.clues));
+  const R = ["c1", "c2", "c3", "c4", "c5", "c6"];
+  const sumaMetas = (lista) => { const t = {}; R.forEach(r => { t[r] = lista.reduce((s, m) => s + (Number((m || {})[r]) || 0), 0); }); return t; };
+  const eq = (m) => CovidFrascos.metaEquivalente(m || {});
+  const esHosp = (u) => u.destino === "HENM" || u.destino === "NHG";
+  const filaDestino = (dest) => filasMeta.find(m => !m.clues && tinvNorm(m.municipio) === tinvNorm(dest));
+  const metaDeUnidad = (u) => {
+    const f = filasMeta.find(m => m.clues === u.clues) || (esHosp(u) ? filaDestino(u.destino) : null);
+    return f ? (f.metas || {}) : null;
+  };
+  const metaDeDestino = (dest, us) => {
+    const f = filaDestino(dest);
+    if (f && eq(f.metas) > 0) return f.metas;
+    const propias = us.map(metaDeUnidad).filter(Boolean);
+    return propias.length ? sumaMetas(propias) : {};
+  };
+
+  // Por unidad
+  const porUnidad = units.map(u => {
+    const mis = caps.filter(c => c.clues === u.clues);
+    const aplR = {}; R.forEach(r => { aplR[r] = 0; });
+    const marca = { MODERNA: 0, PFIZER: 0 };
+    mis.forEach(c => {
+      TINV_MARCAS.forEach(mk => R.forEach(r => {
+        const v = Number(((c.valores || {})[mk.id] || {})[r]) || 0;
+        aplR[r] += v; marca[mk.id] += v * TINV_PESO[r];
+      }));
+    });
+    const apl = marca.MODERNA + marca.PFIZER;
+    const metas = metaDeUnidad(u);
+    const frascos = { MODERNA: 0, PFIZER: 0 };
+    dist.filter(d => d.clues === u.clues).forEach(d => { if (frascos[d.marca] != null) frascos[d.marca] += Number(d.cantidad_frascos || 0); });
+    return {
+      ...u, metas, meta: metas ? eq(metas) : 0, apl, aplR, marca, frascos,
+      conMeta: !!metas && eq(metas) > 0, nunca: mis.length === 0,
+      espera: (!!metas && eq(metas) > 0) || (!!filaDestino(u.destino) && eq(filaDestino(u.destino).metas) > 0),   // debe reportar: tiene meta propia o su destino la tiene
+      ultima: mis.reduce((x, c) => (c.fecha > x ? c.fecha : x), ""),
+      reporto: !!cal.ultimaSemana && mis.some(c => c.fecha === cal.ultimaSemana)
+    };
+  });
+
+  // Meta del ámbito
+  let metasAmbito;
+  if (uniFilter) metasAmbito = (porUnidad[0] && porUnidad[0].metas) || {};
+  else if (muniFilter) metasAmbito = metaDeDestino(muniFilter, units);
+  else {
+    const dests = [...new Set(units.map(u => u.destino))];
+    metasAmbito = sumaMetas(dests.map(d => metaDeDestino(d, units.filter(u => u.destino === d))));
+  }
+  const aplRubro = {}; R.forEach(r => { aplRubro[r] = porUnidad.reduce((s, u) => s + u.aplR[r], 0); });
+  const av = CovidFrascos.avanceRubros(metasAmbito, aplRubro);
+
+  // Entidades: destinos (jurisdicción) o unidades (municipio)
+  let entidades = [];
+  if (!uniFilter) {
+    if (muniFilter) {
+      entidades = porUnidad.filter(u => u.conMeta).map(u => ({ clave: u.clues, nombre: u.unidad, n: 1, meta: u.meta, apl: u.apl, ultima: u.ultima, sinRep: u.reporto ? 0 : 1 }));
+    } else {
+      [...new Set(units.map(u => u.destino))].forEach(d => {
+        const us = porUnidad.filter(u => u.destino === d);
+        const meta = eq(metaDeDestino(d, us));
+        if (meta > 0) entidades.push({ clave: d, nombre: d, n: us.filter(u => u.conMeta || u.apl > 0).length || us.length, meta, apl: us.reduce((s, u) => s + u.apl, 0),
+          ultima: us.reduce((x, u) => (u.ultima > x ? u.ultima : x), ""), sinRep: us.filter(u => u.conMeta && !u.reporto).length });
+      });
+    }
+    entidades.forEach(o => { o.p = o.meta ? o.apl * 100 / o.meta : 0; o.d = o.p - cal.esperadoPct; });
+    entidades.sort((a, b) => a.d - b.d);
+  }
+
+  // Semanas y marcas
+  const porSemana = {}, porSemanaMarca = {};
+  cal.semanas.forEach(f => { porSemana[f] = 0; porSemanaMarca[f] = { MODERNA: 0, PFIZER: 0 }; });
+  caps.forEach(c => {
+    TINV_MARCAS.forEach(mk => R.forEach(r => {
+      const v = (Number(((c.valores || {})[mk.id] || {})[r]) || 0) * TINV_PESO[r];
+      porSemana[c.fecha] = (porSemana[c.fecha] || 0) + v;
+      (porSemanaMarca[c.fecha] = porSemanaMarca[c.fecha] || { MODERNA: 0, PFIZER: 0 })[mk.id] += v;
+    }));
+  });
+  const marcas = TINV_MARCAS.map(mk => {
+    const frascos = porUnidad.reduce((s, u) => s + u.frascos[mk.id], 0);
+    const rep = frascos * CovidFrascos.dosisPorFrasco(mk.id);
+    const apl = porUnidad.reduce((s, u) => s + u.marca[mk.id], 0);
+    const exceden = porUnidad.filter(u => u.frascos[mk.id] > 0 && u.marca[mk.id] > u.frascos[mk.id] * CovidFrascos.dosisPorFrasco(mk.id));
+    return { ...mk, frascos, rep, apl, exceden, existencia: Math.max(0, rep - apl) };
+  });
+  return {
+    hayMeta: av.metaEq > 0, metas: metasAmbito, av, meta: av.metaEq, apl: av.aplEq, pct: av.pct == null ? 0 : av.pct,
+    grupos: av.rubros.map((r, i) => ({ ...r, ...CovidFrascos.RUBROS[i] })),
+    unidades: porUnidad, entidades, porSemana, porSemanaMarca, marcas,
+    conMeta: porUnidad.filter(u => u.conMeta), esperan: porUnidad.filter(u => u.espera), sinMetaConDosis: porUnidad.filter(u => !u.espera && u.apl > 0),
+    nunca: porUnidad.filter(u => u.espera && u.nunca)
+  };
+}
+
+// ── Piezas de pantalla compartidas ──
+function tinvAyudas() {
+  const e = (t) => escapeHtml(String(t == null ? "" : t));
+  const fmt = (n) => Math.round(n).toLocaleString("es-MX");
+  const fmtC = (n) => Number(n || 0).toLocaleString("es-MX", { maximumFractionDigits: 1 });   // equivalentes: 12.5 no se redondea a 13
+  const f1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
+  const chip = (t, txt) => `<span class="iinf-chip iinf-chip--${t}">${txt}</span>`;
+  const barra = (p, t, aria) => `<div class="iinf-bar" role="progressbar" aria-label="${e(aria)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, Math.round(p))}"><i data-tono="${t}" style="width:${Math.min(100, Math.max(p > 0 ? 2 : 0, p)).toFixed(1)}%;display:block"></i></div>`;
+  const kpi = (icono, etq, valor, nota, t) => `<div class="iinf-kpi"${t ? ` data-tono="${t}"` : ""}><span class="material-symbols-rounded" aria-hidden="true">${icono}</span><div><small>${etq}</small><b>${valor}</b><em>${nota}</em></div></div>`;
+  const pts = (d) => `${d >= 0 ? "+" : "−"}${f1(Math.abs(d))} pts`;
+  return { e, fmt, fmtC, f1, chip, barra, kpi, pts };
+}
+
+/** Barra de avance con la marca de «esperado a hoy» (una por vacuna en el hero). */
+function tinvFilaVacuna(clase, etiqueta, pct, esperado, tono, detalle, aria) {
+  const H = tinvAyudas();
+  return `<div class="tinv-vac tinv-vac--${clase}">
+    <div class="tinv-vac-top"><span class="tinv-vac-n"><i aria-hidden="true"></i>${etiqueta}</span><b>${H.f1(pct)}%</b>${H.chip(tono, H.pts(pct - esperado))}<em>${detalle}</em></div>
+    <div class="tinv-vac-bar" role="progressbar" aria-label="${H.e(aria)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, Math.round(pct))}" aria-valuetext="${H.f1(pct)} por ciento; esperado ${H.f1(esperado)} por ciento">
+      <i style="width:${Math.min(100, pct).toFixed(1)}%"></i><span style="left:${Math.min(100, esperado).toFixed(1)}%" title="Esperado a hoy"></span></div>
+  </div>`;
+}
+
+/** Columnas apiladas por semana. series: [{ clase, etiqueta, valores: { fecha: n } }]. */
+function tinvColumnas(weeks, series, rangoDe, corta, fmtN, desdeDe) {
+  if (!weeks.length) return "";
+  const H = tinvAyudas();
+  const tot = (f) => series.reduce((s, x) => s + (x.valores[f] || 0), 0);
+  const maxV = Math.max(1, ...weeks.map(tot));
+  const W = 720, Ht = 200, padL = 44, padB = 28, padT = 14, gw = W - padL - 8, gh = Ht - padB - padT;
+  const paso = gw / weeks.length, bw = Math.max(4, Math.min(34, paso - 4));
+  const yDe = v => padT + gh - (v / maxV) * gh;
+  const cada = Math.max(1, Math.ceil(weeks.length / 12));
+  const aria = weeks.map(f => `semana del ${rangoDe(f)}: ${series.map(x => `${x.etiqueta} ${fmtN(x.valores[f] || 0)}`).join(", ")}`).join("; ");
+  return `<svg viewBox="0 0 ${W} ${Ht}" class="iinf-svg" role="img" aria-label="Dosis aplicadas por semana. ${H.e(aria)}">
+    <line x1="${padL}" y1="${padT + gh}" x2="${W - 8}" y2="${padT + gh}" class="iinf-eje"/>
+    <line x1="${padL}" y1="${padT}" x2="${W - 8}" y2="${padT}" class="iinf-grid"/>
+    <text x="${padL - 6}" y="${padT + 4}" class="iinf-txt" text-anchor="end">${fmtN(maxV)}</text>
+    <text x="${padL - 6}" y="${padT + gh + 4}" class="iinf-txt" text-anchor="end">0</text>
+    ${weeks.map((f, i) => {
+      const x = padL + i * paso + (paso - bw) / 2;
+      let base = padT + gh;
+      const piezas = series.map(s => {
+        const v = s.valores[f] || 0, h = (v / maxV) * gh;
+        base -= h;
+        return h > 0 ? `<rect x="${x.toFixed(1)}" y="${base.toFixed(1)}" width="${bw}" height="${Math.max(1, h).toFixed(1)}" class="tinv-col tinv-col--${s.clase}"><title>Semana del ${H.e(rangoDe(f))} · ${H.e(s.etiqueta)}: ${fmtN(v)}</title></rect>` : "";
+      }).join("");
+      return `<g>${piezas}${i % cada === 0 || i === weeks.length - 1 ? `<text x="${(x + bw / 2).toFixed(1)}" y="${Ht - 8}" class="iinf-txt" text-anchor="middle">${corta(desdeDe(f))}</text>` : ""}</g>`;
+    }).join("")}
+  </svg>`;
+}
+
+// ── Pestaña «Ambas» ──
+function tinvAmbas(D) {
+  const H = tinvAyudas();
+  const { e, fmt, fmtC, f1, chip, barra, kpi, pts } = H;
+  const { inf, cov, cal } = D;
+  const rangoDe = (ymd) => influenzaRangoTexto(ymd, cal.ini, cal.fin);
+  const corta = (ymd) => (window.InfluenzaReglas ? window.InfluenzaReglas.fechaCorta(ymd) : ymd);
+  const desdeDe = (f) => window.InfluenzaReglas.rangoSemana(f, cal.ini, cal.fin).desde;
+  const esp = cal.esperadoPct;
+  const iMeta = inf ? inf.meta : 0, iApl = inf ? inf.apl : 0, iPct = iMeta ? iApl * 100 / iMeta : 0;
+  const cMeta = cov.meta, cApl = cov.apl, cPct = cov.pct;
+  const meta = iMeta + cMeta, apl = iApl + cApl;
+  if (!meta) {
+    return `<div class="iinf-vacio"><span class="material-symbols-rounded" aria-hidden="true">flag</span><div><b>Este ámbito aún no tiene meta de Influenza ni de COVID-19.</b><p>Cuando se registren en «Distribución de Metas», aquí verás el avance de las dos vacunas juntas.</p></div></div>`;
+  }
+  const pct = meta ? apl * 100 / meta : 0, diff = pct - esp, tono = infIndTono(diff);
+  const tonoDe = (m, p) => (m > 0 ? infIndTono(p - esp) : "none");
+
+  const filaInf = iMeta ? tinvFilaVacuna("inf", "Influenza", iPct, esp, tonoDe(iMeta, iPct), `${fmt(iApl)} de ${fmt(iMeta)} dosis`, "Avance de la meta de Influenza")
+    : `<div class="tinv-vac tinv-vac--inf"><div class="tinv-vac-top"><span class="tinv-vac-n"><i aria-hidden="true"></i>Influenza</span><em>Sin meta asignada</em></div></div>`;
+  const filaCov = cMeta ? tinvFilaVacuna("cov", "COVID-19", cPct, esp, tonoDe(cMeta, cPct), `${fmtC(cApl)} de ${fmtC(cMeta)} dosis equivalentes`, "Avance de la meta de COVID-19")
+    : `<div class="tinv-vac tinv-vac--cov"><div class="tinv-vac-top"><span class="tinv-vac-n"><i aria-hidden="true"></i>COVID-19</span><em>Sin meta asignada${cApl > 0 ? ` · ${fmtC(cApl)} dosis aplicadas` : ""}</em></div></div>`;
+  const hero = `
+    <section class="iinf-hero" data-tono="${tono}" aria-labelledby="tinvHeroTit">
+      <div class="iinf-hero-num">
+        <span class="iinf-eyebrow" id="tinvHeroTit">Avance de la temporada invernal</span>
+        <b>${f1(pct)}<small>%</small></b>
+        ${chip(tono, infIndEtiqueta(tono, pct))}
+      </div>
+      <div class="iinf-hero-txt">
+        <p>Entre Influenza y COVID-19 se han aplicado <b>${fmtC(apl)}</b> de <b>${fmtC(meta)}</b> dosis (COVID-19 en equivalentes de 0.5 mL). A esta fecha se debería llevar <b>${f1(esp)}%</b>:
+        ${diff >= 0 ? `van <b>${f1(diff)} puntos por delante</b>` : `faltan <b>${f1(-diff)} puntos</b> para ir en ritmo`}.</p>
+        <div class="tinv-vacs">${filaInf}${filaCov}</div>
+        <div class="iinf-prog-leyenda" aria-hidden="true"><span>0%</span><span>La línea oscura es lo esperado a hoy (${f1(esp)}%)</span><span>Meta 100%</span></div>
+      </div>
+    </section>`;
+
+  // Ritmo reciente de cada vacuna (promedio de las últimas 4 semanas cerradas)
+  const ult4 = cal.vencidas.slice(-4);
+  const ritmoCov = ult4.length ? ult4.reduce((s, f) => s + (cov.porSemana[f] || 0), 0) / ult4.length : 0;
+  const ritmoInf = inf ? inf.ritmo4 : 0;
+  const faltanI = Math.max(0, iMeta - iApl), faltanC = Math.max(0, cMeta - cApl);
+  const necI = inf && inf.necesario != null ? inf.necesario : null;
+  const necC = (cal.restantes > 0 && faltanC > 0) ? faltanC / cal.restantes : null;
+  const necTot = (necI || 0) + (necC || 0);
+  const ritmo = ritmoInf + ritmoCov;
+  const tonoRitmo = necTot ? (ritmo >= necTot ? "good" : (ritmo >= necTot * 0.7 ? "warn" : "bad")) : "good";
+  const mezclaI = apl ? iApl * 100 / apl : 0;
+  const proy = apl + ritmo * cal.restantes, pctProy = meta ? proy * 100 / meta : 0;
+  const proyFiable = cal.vencidas.length >= 4 || cal.restantes === 0;
+
+  // Reporte de la última semana cerrada, por vacuna
+  const claveMeta = new Set([...(inf ? inf.clavesConMeta : []), ...cov.esperan.map(u => u.clues)]);
+  const infConMeta = new Set(inf ? inf.clavesConMeta : []), infRep = new Set(inf ? inf.clavesReportaron : []);
+  const covConMeta = new Set(cov.esperan.map(u => u.clues)), covRep = new Set(cov.esperan.filter(u => u.reporto).map(u => u.clues));
+  const nombreDe = {}; cov.unidades.forEach(u => { nombreDe[u.clues] = { unidad: u.unidad, destino: u.destino }; });
+  let alDia = 0, fInf = [], fCov = [], fAmb = [];
+  if (cal.ultimaSemana) {
+    claveMeta.forEach(cl => {
+      const faltaI = infConMeta.has(cl) && !infRep.has(cl), faltaC = covConMeta.has(cl) && !covRep.has(cl);
+      const ficha = nombreDe[cl] || { unidad: cl, destino: "" };
+      if (faltaI && faltaC) fAmb.push(ficha); else if (faltaI) fInf.push(ficha); else if (faltaC) fCov.push(ficha); else alDia++;
+    });
+  }
+  const totRep = claveMeta.size;
+  const pctRep = totRep ? alDia * 100 / totRep : 0;
+  const tonoRep = pctRep >= 90 ? "good" : (pctRep >= 70 ? "warn" : "bad");
+  const semTxt = cal.ultimaSemana ? rangoDe(cal.ultimaSemana) : "";
+
+  const kpis = `
+    <div class="iinf-kpis" role="group" aria-label="Indicadores clave de la temporada invernal">
+      ${kpi("vaccines", "Dosis aplicadas", fmtC(apl), `Influenza ${fmt(iApl)} · COVID-19 ${fmtC(cApl)}`)}
+      ${kpi("hourglass_top", "Faltan por aplicar", fmtC(faltanI + faltanC), `Influenza ${fmt(faltanI)} · COVID-19 ${fmtC(faltanC)}`)}
+      ${kpi("calendar_month", "Semana de campaña", `${fmt(cal.vencidas.length)} de ${fmt(cal.semanas.length)}`, cal.restantes ? `Quedan ${fmt(cal.restantes)} ${cal.restantes === 1 ? "semana" : "semanas"}${cal.semanaEnCurso ? ` · en curso: ${rangoDe(cal.semanaEnCurso)}` : ""}` : "La campaña ya terminó")}
+      ${kpi("speed", "Ritmo reciente", `${fmt(ritmo)} <small>dosis/sem</small>`, necTot ? `Necesario: ${fmt(necTot)} por semana` : (faltanI + faltanC > 0 ? "Sin semanas restantes" : "Metas cumplidas"), tonoRitmo)}
+      ${proyFiable ? kpi("trending_up", "Proyección al cierre", `${f1(pctProy)}<small>%</small>`, cal.restantes ? `A este ritmo, ${fmtC(proy)} de ${fmtC(meta)} dosis` : "Resultado final", pctProy >= 100 ? "good" : (pctProy >= 85 ? "warn" : "bad"))
+        : kpi("trending_up", "Proyección al cierre", "—", "Se calcula con 4 semanas de reportes")}
+      ${kpi("donut_small", "Mezcla de dosis", `${f1(mezclaI)}<small>% Influenza</small>`, `${f1(100 - mezclaI)}% COVID-19 (equivalentes)`)}
+    </div>`;
+
+  // Reporte cruzado
+  const faltantes = [...fAmb.map(f => ({ ...f, falta: "Influenza y COVID-19" })), ...fInf.map(f => ({ ...f, falta: "Influenza" })), ...fCov.map(f => ({ ...f, falta: "COVID-19" }))];
+  const cobertura = cal.ultimaSemana ? `
+    <section class="iinf-card" aria-labelledby="tinvCobTit">
+      <header><h3 id="tinvCobTit">Reporte de la semana del ${semTxt}</h3>${chip(tonoRep, `${fmt(alDia)} de ${fmt(totRep)} al corriente`)}</header>
+      ${barra(pctRep, tonoRep, "Unidades que reportaron todas sus vacunas")}
+      <div class="tinv-cruce" role="group" aria-label="Reportes por vacuna">
+        <div><b>${fmt(alDia)}</b><small>Al corriente</small></div>
+        <div data-tono="${fInf.length ? "warn" : ""}"><b>${fmt(fInf.length)}</b><small>Falta Influenza</small></div>
+        <div data-tono="${fCov.length ? "warn" : ""}"><b>${fmt(fCov.length)}</b><small>Falta COVID-19</small></div>
+        <div data-tono="${fAmb.length ? "bad" : ""}"><b>${fmt(fAmb.length)}</b><small>Faltan ambas</small></div>
+      </div>
+      ${faltantes.length ? `<ul class="iinf-lista">${faltantes.slice(0, 12).map(f => `<li>${e(f.unidad)}<small>${e(f.destino ? f.destino + " · " : "")}falta ${f.falta}</small></li>`).join("")}</ul>${faltantes.length > 12 ? `<p class="iinf-nota">y ${fmt(faltantes.length - 12)} más.</p>` : ""}`
+        : '<p class="iinf-nota">Todas las unidades con meta reportaron sus vacunas esa semana.</p>'}
+    </section>` : "";
+
+  // Brecha entre vacunas por municipio / unidad
+  let cruce = "";
+  const alertas = [];
+  if (!D.uniFilter) {
+    const mapa = {};
+    ((inf && inf.ranking) || []).forEach(o => { mapa[tinvNorm(o.clave)] = { nombre: o.nombre, iP: o.p, iM: o.meta, iA: o.apl }; });
+    cov.entidades.forEach(o => { const k = tinvNorm(o.clave); (mapa[k] = mapa[k] || { nombre: o.nombre }); Object.assign(mapa[k], { cP: o.p, cM: o.meta, cA: o.apl }); if (!mapa[k].nombre) mapa[k].nombre = o.nombre; });
+    const filas = Object.values(mapa).map(o => ({ ...o, gap: (o.iM && o.cM) ? o.iP - o.cP : null }))
+      .sort((a, b) => (Math.abs(b.gap == null ? -1 : b.gap)) - (Math.abs(a.gap == null ? -1 : a.gap)) || String(a.nombre).localeCompare(String(b.nombre), "es"));
+    const celda = (m, p, a, esC) => m ? `<div class="iinf-avance-in">${barra(p, infIndTono(p - esp), "Avance")}<span>${f1(p)}%</span></div>` : '<span class="tinv-sin">Sin meta</span>';
+    cruce = filas.length ? `
+    <section class="iinf-card" aria-labelledby="tinvCruceTit">
+      <header><h3 id="tinvCruceTit">Influenza y COVID-19 por ${D.muniFilter ? "unidad" : "municipio"}</h3><span class="iinf-sub">Primero donde más se separan las dos vacunas</span></header>
+      <div class="iinf-scroll"><table class="iinf-tabla" aria-label="Avance de Influenza y de COVID-19 por ${D.muniFilter ? "unidad" : "municipio"}, de la mayor a la menor diferencia">
+        <thead><tr><th scope="col">${D.muniFilter ? "Unidad" : "Municipio / hospital"}</th><th scope="col">Influenza</th><th scope="col">COVID-19</th><th scope="col" class="c">Diferencia</th></tr></thead>
+        <tbody>${filas.map(o => {
+          const g = o.gap;
+          const chipG = g == null ? "—" : (Math.abs(g) < 10 ? chip("good", "Parejo") : chip(Math.abs(g) >= 20 ? "bad" : "warn", `${g > 0 ? "Influenza" : "COVID-19"} +${f1(Math.abs(g))} pts`));
+          if (g != null && Math.abs(g) >= 20) alertas.push(`<li><b>${e(o.nombre)}</b> lleva ${f1(Math.abs(g))} puntos más en ${g > 0 ? "Influenza" : "COVID-19"} que en ${g > 0 ? "COVID-19" : "Influenza"} (${f1(o.iP)}% y ${f1(o.cP)}%).</li>`);
+          return `<tr><th scope="row">${e(o.nombre)}</th><td class="iinf-avance">${celda(o.iM, o.iP)}</td><td class="iinf-avance">${celda(o.cM, o.cP)}</td><td class="c">${chipG}</td></tr>`;
+        }).join("")}</tbody></table></div>
+    </section>` : "";
+  }
+
+  // Dosis por semana
+  const serie = [
+    { clase: "inf", etiqueta: "Influenza", valores: Object.fromEntries(((inf && inf.semanas) || []).map(s => [s.fecha, s.dosis])) },
+    { clase: "cov", etiqueta: "COVID-19", valores: cov.porSemana }
+  ];
+  const svg = tinvColumnas(cal.vencidas, serie, rangoDe, corta, fmtC, desdeDe);
+  const tendencia = `
+    <section class="iinf-card" aria-labelledby="tinvTendTit">
+      <header><h3 id="tinvTendTit">Dosis aplicadas por semana</h3>
+        <span class="tinv-leyenda"><span class="tinv-pt tinv-pt--inf"></span>Influenza <span class="tinv-pt tinv-pt--cov"></span>COVID-19 (equivalentes)</span></header>
+      ${svg || '<p class="iinf-nota">La campaña aún no tiene semanas vencidas.</p>'}
+      ${cal.vencidas.length ? `<details class="iinf-det"><summary>Ver los datos por semana</summary>
+        <table class="iinf-tabla iinf-tabla--mini" aria-label="Dosis aplicadas por semana y vacuna"><thead><tr><th scope="col">Semana</th><th scope="col" class="c">Influenza</th><th scope="col" class="c">COVID-19</th></tr></thead>
+        <tbody>${cal.vencidas.slice().reverse().map(f => `<tr><th scope="row">${rangoDe(f)}</th><td class="c">${fmtC(serie[0].valores[f] || 0)}</td><td class="c">${fmtC(serie[1].valores[f] || 0)}</td></tr>`).join("")}</tbody></table></details>` : ""}
+    </section>`;
+
+  // Marcas de COVID-19
+  const totCov = cov.marcas.reduce((s, m) => s + m.apl, 0);
+  const marcas = `
+    <section class="iinf-card" aria-labelledby="tinvMarTit">
+      <header><h3 id="tinvMarTit">COVID-19 por marca</h3><span class="iinf-sub">Aplicadas, frascos repartidos y lo que queda estimado (dosis equivalentes de 0.5 mL)</span></header>
+      <div class="iinf-scroll"><table class="iinf-tabla" aria-label="COVID-19: aplicadas, frascos y existencia por marca">
+        <thead><tr><th scope="col">Marca</th><th scope="col" class="c">Aplicadas</th><th scope="col" class="c">% del total</th><th scope="col" class="c">Frascos</th><th scope="col" class="c">Existencia</th></tr></thead>
+        <tbody>${cov.marcas.map(m => `<tr><th scope="row">${m.label}<small>${CovidFrascos.dosisPorFrasco(m.id)} dosis por frasco</small></th><td class="c"><b>${fmtC(m.apl)}</b></td><td class="c">${totCov ? f1(m.apl * 100 / totCov) + "%" : "—"}</td>
+          <td class="c">${m.frascos ? fmt(m.frascos) : "—"}</td><td class="c">${m.frascos ? chip(m.apl > m.rep ? "bad" : "good", fmtC(m.existencia) + " dosis") : "—"}</td></tr>`).join("")}</tbody>
+      </table></div>
+    </section>`;
+
+  // Por revisar
+  if (!cov.hayMeta) alertas.push("<li><b>COVID-19 aún no tiene meta asignada</b> en este ámbito: solo se compara Influenza.</li>");
+  if (!iMeta) alertas.push("<li><b>Influenza aún no tiene meta asignada</b> en este ámbito: solo se compara COVID-19.</li>");
+  if (cov.sinMetaConDosis.length) alertas.push(`<li><b>${fmt(cov.sinMetaConDosis.length)} ${cov.sinMetaConDosis.length === 1 ? "unidad aplicó" : "unidades aplicaron"} COVID-19 sin tener meta:</b> ${cov.sinMetaConDosis.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.sinMetaConDosis.length > 6 ? "…" : ""}.</li>`);
+  cov.marcas.forEach(m => { if (m.exceden.length) alertas.push(`<li><b>${fmt(m.exceden.length)} ${m.exceden.length === 1 ? "unidad ha aplicado" : "unidades han aplicado"} más ${m.label} de lo repartido:</b> ${m.exceden.slice(0, 6).map(u => e(u.unidad)).join(", ")}${m.exceden.length > 6 ? "…" : ""}.</li>`); });
+  if (cov.nunca.length && cal.vencidas.length >= 2) alertas.push(`<li><b>${fmt(cov.nunca.length)} ${cov.nunca.length === 1 ? "unidad con meta de COVID-19 no ha reportado" : "unidades con meta de COVID-19 no han reportado"} nunca:</b> ${cov.nunca.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.nunca.length > 6 ? "…" : ""}.</li>`);
+  const revisar = alertas.length ? `<section class="iinf-card iinf-card--alerta" aria-labelledby="tinvRevTit"><header><h3 id="tinvRevTit">Por revisar</h3></header><ul class="iinf-alertas">${alertas.join("")}</ul></section>` : "";
+
+  return `
+    ${hero}
+    ${kpis}
+    <div class="iinf-dos">${cobertura}${marcas}</div>
+    ${revisar}
+    ${cruce}
+    ${tendencia}
+    <p class="iinf-pie" role="note"><b>Cómo leerlo:</b> cada vacuna se compara con su propia meta y con lo esperado a hoy (la proporción de la campaña que ya transcurrió); en COVID-19 las dosis pediátricas de 0.25 mL cuentan media dosis para sumar en dosis equivalentes de 0.5 mL. «Diferencia» es el avance de Influenza menos el de COVID-19: parejo si es menor a 10 puntos, ámbar hasta 20 y rojo si pasa de 20. «Al corriente» es haber reportado la última semana cerrada en cada vacuna con meta.</p>`;
+}
+
+// ── Pestaña «COVID-19» ──
+function tinvCovid(D) {
+  const H = tinvAyudas();
+  const { e, fmt, fmtC, f1, chip, barra, kpi, pts } = H;
+  const { cov, cal } = D;
+  const rangoDe = (ymd) => influenzaRangoTexto(ymd, cal.ini, cal.fin);
+  const corta = (ymd) => (window.InfluenzaReglas ? window.InfluenzaReglas.fechaCorta(ymd) : ymd);
+  const desdeDe = (f) => window.InfluenzaReglas.rangoSemana(f, cal.ini, cal.fin).desde;
+  const esp = cal.esperadoPct;
+  if (!cov.hayMeta) {
+    return `<div class="iinf-vacio"><span class="material-symbols-rounded" aria-hidden="true">flag</span><div><b>${D.uniFilter ? "Esta unidad aún no tiene meta propia de COVID-19 (la meta puede estar a nivel municipio)." : "Este ámbito aún no tiene meta de COVID-19 asignada."}</b><p>Cuando se registre en «Distribución de Metas» (selector COVID-19), aquí verás el avance, el ritmo y las marcas.${cov.apl > 0 ? ` Mientras tanto se han aplicado ${fmtC(cov.apl)} dosis equivalentes.` : ""}</p></div></div>`;
+  }
+  const pct = cov.pct, diff = pct - esp, tono = infIndTono(diff);
+  const faltan = Math.max(0, cov.meta - cov.apl);
+  const ult4 = cal.vencidas.slice(-4);
+  const ritmo = ult4.length ? ult4.reduce((s, f) => s + (cov.porSemana[f] || 0), 0) / ult4.length : 0;
+  const necesario = (cal.restantes > 0 && faltan > 0) ? faltan / cal.restantes : null;
+  const proy = cov.apl + ritmo * cal.restantes, pctProy = cov.meta ? proy * 100 / cov.meta : 0;
+  const proyFiable = cal.vencidas.length >= 4 || cal.restantes === 0;
+  const tonoRitmo = necesario == null ? "good" : (ritmo >= necesario ? "good" : (ritmo >= necesario * 0.7 ? "warn" : "bad"));
+  const tonoProy = pctProy >= 100 ? "good" : (pctProy >= 85 ? "warn" : "bad");
+  const semTxt = cal.ultimaSemana ? rangoDe(cal.ultimaSemana) : "";
+
+  const hero = `
+    <section class="iinf-hero" data-tono="${tono}" aria-labelledby="tinvCHeroTit">
+      <div class="iinf-hero-num"><span class="iinf-eyebrow" id="tinvCHeroTit">Avance de COVID-19</span><b>${f1(pct)}<small>%</small></b>${chip(tono, infIndEtiqueta(tono, pct))}</div>
+      <div class="iinf-hero-txt">
+        <p>Se han aplicado <b>${fmtC(cov.apl)}</b> de <b>${fmtC(cov.meta)}</b> dosis equivalentes de 0.5 mL (≈ ${fmt(Math.ceil(cov.meta / 5))} frascos de Moderna). A esta fecha se debería llevar <b>${f1(esp)}%</b>:
+        ${diff >= 0 ? `vas <b>${f1(diff)} puntos por delante</b>` : `faltan <b>${f1(-diff)} puntos</b> para ir en ritmo`}.</p>
+        <div class="iinf-prog" role="progressbar" aria-label="Avance de la meta de COVID-19 contra lo esperado a hoy" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, Math.round(pct))}" aria-valuetext="${f1(pct)} por ciento; esperado a hoy ${f1(esp)} por ciento">
+          <i data-tono="${tono}" style="width:${Math.min(100, pct).toFixed(1)}%"></i><span class="iinf-prog-marca" style="left:${Math.min(100, esp).toFixed(1)}%" title="Avance esperado a hoy"></span></div>
+        <div class="iinf-prog-leyenda" aria-hidden="true"><span>0%</span><span>La marca es lo esperado a hoy (${f1(esp)}%)</span><span>Meta 100%</span></div>
+      </div>
+    </section>`;
+  const kpis = `
+    <div class="iinf-kpis" role="group" aria-label="Indicadores clave de COVID-19">
+      ${kpi("flag", "Meta de COVID-19", fmtC(cov.meta), "En dosis equivalentes de 0.5 mL")}
+      ${kpi("vaccines", "Dosis aplicadas", fmtC(cov.apl), cal.ultimaSemana ? `Corte: semana del ${semTxt}${cal.semanaEnCurso ? ` · en curso: ${rangoDe(cal.semanaEnCurso)}` : ""}` : "Aún sin semanas vencidas")}
+      ${kpi("hourglass_top", "Faltan por aplicar", fmtC(faltan), `≈ ${fmt(Math.ceil(faltan / 5))} frascos de Moderna`)}
+      ${kpi("calendar_month", "Semana de campaña", `${fmt(cal.vencidas.length)} de ${fmt(cal.semanas.length)}`, cal.restantes ? `Quedan ${fmt(cal.restantes)} ${cal.restantes === 1 ? "semana" : "semanas"}` : "La campaña ya terminó")}
+      ${kpi("speed", "Ritmo reciente", `${fmt(ritmo)} <small>dosis/sem</small>`, necesario == null ? (faltan > 0 ? "Sin semanas restantes" : "Meta cumplida") : `Necesario: ${fmt(necesario)} por semana`, tonoRitmo)}
+      ${proyFiable ? kpi("trending_up", "Proyección al cierre", `${f1(pctProy)}<small>%</small>`, cal.restantes ? `A este ritmo, ${fmtC(proy)} dosis` : "Resultado final", tonoProy)
+        : kpi("trending_up", "Proyección al cierre", "—", "Se calcula con 4 semanas de reportes")}
+    </div>`;
+
+  // Cobertura de reporte
+  const evaluables = cov.esperan;
+  const sinRep = cal.ultimaSemana ? evaluables.filter(u => !u.reporto) : [];
+  const reportaron = cal.ultimaSemana ? evaluables.length - sinRep.length : 0;
+  const pctCob = evaluables.length ? reportaron * 100 / evaluables.length : 0;
+  const tonoCob = pctCob >= 90 ? "good" : (pctCob >= 70 ? "warn" : "bad");
+  const cobertura = cal.ultimaSemana ? `
+    <section class="iinf-card" aria-labelledby="tinvCCobTit">
+      <header><h3 id="tinvCCobTit">Reporte de la semana del ${semTxt}</h3>${chip(tonoCob, `${fmt(reportaron)} de ${fmt(evaluables.length)} ${evaluables.length === 1 ? "unidad" : "unidades"}`)}</header>
+      ${barra(pctCob, tonoCob, "Unidades que reportaron COVID-19 la última semana")}
+      ${sinRep.length ? `<p class="iinf-nota">${fmt(sinRep.length)} ${sinRep.length === 1 ? "unidad no ha reportado" : "unidades no han reportado"} esa semana${cov.nunca.length ? ` (${fmt(cov.nunca.length)} sin ningún reporte en la campaña)` : ""}:</p>
+        <ul class="iinf-lista">${sinRep.slice(0, 12).map(u => `<li>${e(u.unidad)}<small>${e(u.destino)}</small></li>`).join("")}</ul>${sinRep.length > 12 ? `<p class="iinf-nota">y ${fmt(sinRep.length - 12)} más.</p>` : ""}`
+        : '<p class="iinf-nota">Todas las unidades con meta reportaron esa semana.</p>'}
+    </section>` : "";
+
+  // Marcas
+  const totMarca = cov.marcas.reduce((s, m) => s + m.apl, 0);
+  const marcas = `
+    <section class="iinf-card" aria-labelledby="tinvCMarTit">
+      <header><h3 id="tinvCMarTit">Moderna y Pfizer</h3><span class="iinf-sub">Aplicadas contra lo repartido (dosis equivalentes de 0.5 mL)</span></header>
+      ${cov.marcas.map(m => {
+        const p = m.rep ? m.apl * 100 / m.rep : 0;
+        return `<div class="tinv-marca"><div class="tinv-marca-top"><b>${m.label}</b><span>${fmtC(m.apl)} aplicadas${totMarca ? ` · ${f1(m.apl * 100 / totMarca)}% del total` : ""}</span></div>
+          ${m.frascos ? `${barra(p, m.apl > m.rep ? "bad" : "good", "Aplicadas de lo repartido de " + m.label)}<small>${fmt(m.frascos)} ${m.frascos === 1 ? "frasco repartido" : "frascos repartidos"} (${fmt(m.rep)} dosis) · existencia estimada ${fmtC(m.existencia)}</small>` : "<small>Sin frascos repartidos registrados.</small>"}</div>`;
+      }).join("")}
+    </section>`;
+
+  // Ranking
+  const porUnidad = !!D.muniFilter;
+  const ranking = !D.uniFilter && cov.entidades.length ? `
+    <section class="iinf-card" aria-labelledby="tinvCRankTit">
+      <header><h3 id="tinvCRankTit">Avance por ${porUnidad ? "unidad" : "municipio"}</h3><span class="iinf-sub">Primero quienes van más atrasados contra lo esperado</span></header>
+      <div class="iinf-scroll"><table class="iinf-tabla" aria-label="Avance de COVID-19 por ${porUnidad ? "unidad" : "municipio"}, del más atrasado al más adelantado">
+        <thead><tr><th scope="col">${porUnidad ? "Unidad" : "Municipio / hospital"}</th><th scope="col" class="c">Meta</th><th scope="col" class="c">Aplicadas</th><th scope="col">Avance</th><th scope="col" class="c">Contra lo esperado</th><th scope="col" class="c">Último reporte</th></tr></thead>
+        <tbody>${cov.entidades.map(o => { const tt = infIndTono(o.d); return `<tr>
+          <th scope="row">${e(o.nombre)}${!porUnidad ? `<small>${fmt(o.n)} ${o.n === 1 ? "unidad" : "unidades"}${o.sinRep ? ` · ${fmt(o.sinRep)} sin reporte` : ""}</small>` : ""}</th>
+          <td class="c">${fmtC(o.meta)}</td><td class="c"><b>${fmtC(o.apl)}</b></td>
+          <td class="iinf-avance"><div class="iinf-avance-in">${barra(o.p, tt, "Avance de " + o.nombre)}<span>${f1(o.p)}%</span></div></td>
+          <td class="c">${chip(tt, pts(o.d))}</td><td class="c">${o.ultima ? rangoDe(o.ultima) : "Sin reporte"}</td></tr>`; }).join("")}</tbody>
+      </table></div>
+    </section>` : "";
+
+  // Semana por marca
+  const barras = cal.vencidas;
+  const serie = TINV_MARCAS.map((m, i) => ({ clase: i ? "pfz" : "mod", etiqueta: m.label, valores: Object.fromEntries(barras.map(f => [f, (cov.porSemanaMarca[f] || {})[m.id] || 0])) }));
+  const svg = tinvColumnas(barras, serie, rangoDe, corta, fmtC, desdeDe);
+  const tendencia = `
+    <section class="iinf-card" aria-labelledby="tinvCTendTit">
+      <header><h3 id="tinvCTendTit">Dosis aplicadas por semana</h3><span class="tinv-leyenda"><span class="tinv-pt tinv-pt--mod"></span>Moderna <span class="tinv-pt tinv-pt--pfz"></span>Pfizer</span></header>
+      ${svg || '<p class="iinf-nota">La campaña aún no tiene semanas vencidas.</p>'}
+      ${barras.length ? `<details class="iinf-det"><summary>Ver los datos por semana</summary>
+        <table class="iinf-tabla iinf-tabla--mini" aria-label="Dosis de COVID-19 por semana y marca"><thead><tr><th scope="col">Semana</th><th scope="col" class="c">Moderna</th><th scope="col" class="c">Pfizer</th></tr></thead>
+        <tbody>${barras.slice().reverse().map(f => `<tr><th scope="row">${rangoDe(f)}</th><td class="c">${fmtC(serie[0].valores[f])}</td><td class="c">${fmtC(serie[1].valores[f])}</td></tr>`).join("")}</tbody></table></details>` : ""}
+    </section>`;
+
+  // Por grupo (dosis tal como se capturan; el total va en equivalentes)
+  const grupos = cov.grupos.filter(g => g.meta > 0 || g.aplicadas > 0);
+  const tablaGrupos = `
+    <section class="iinf-card" aria-labelledby="tinvCGrpTit">
+      <header><h3 id="tinvCGrpTit">Avance por grupo de población</h3><span class="iinf-sub">Cada grupo contra su meta; las pediátricas son dosis de 0.25 mL</span></header>
+      <div class="iinf-scroll"><table class="iinf-tabla" aria-label="Meta y dosis aplicadas de COVID-19 por grupo">
+        <thead><tr><th scope="col">Grupo</th><th scope="col" class="c">Meta</th><th scope="col" class="c">Aplicadas</th><th scope="col">Avance</th><th scope="col" class="c">Contra lo esperado</th></tr></thead>
+        <tbody>${grupos.map(g => { const p = g.meta ? g.aplicadas * 100 / g.meta : 0, tt = g.meta ? infIndTono(p - esp) : "none";
+          return `<tr><th scope="row">${e(g.grupo)}<small>${e(g.edad)}</small></th><td class="c">${fmtC(g.meta)}</td><td class="c"><b>${fmtC(g.aplicadas)}</b></td>
+            <td class="iinf-avance"><div class="iinf-avance-in">${barra(p, g.aplicadas > g.meta && g.meta ? "bad" : tt, "Avance de " + g.grupo)}<span>${g.meta ? f1(p) + "%" : "Sin meta"}</span></div></td>
+            <td class="c">${g.meta ? chip(tt, pts(p - esp)) : "—"}</td></tr>`; }).join("")}</tbody>
+        <tfoot><tr><th scope="row">Total (dosis equivalentes de 0.5 mL)</th><td class="c">${fmtC(cov.meta)}</td><td class="c"><b>${fmtC(cov.apl)}</b></td><td class="iinf-avance"><div class="iinf-avance-in"><span>${f1(pct)}%</span></div></td><td class="c">${chip(tono, pts(diff))}</td></tr></tfoot>
+      </table></div>
+    </section>`;
+
+  // Por revisar
+  const alertas = [];
+  if (cov.sinMetaConDosis.length) alertas.push(`<li><b>${fmt(cov.sinMetaConDosis.length)} ${cov.sinMetaConDosis.length === 1 ? "unidad aplicó" : "unidades aplicaron"} COVID-19 sin tener meta:</b> ${cov.sinMetaConDosis.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.sinMetaConDosis.length > 6 ? "…" : ""}.</li>`);
+  cov.marcas.forEach(m => { if (m.exceden.length) alertas.push(`<li><b>${fmt(m.exceden.length)} ${m.exceden.length === 1 ? "unidad ha aplicado" : "unidades han aplicado"} más ${m.label} de lo repartido:</b> ${m.exceden.slice(0, 6).map(u => e(u.unidad)).join(", ")}${m.exceden.length > 6 ? "…" : ""}. Revisa el reparto o la captura.</li>`); });
+  const rebasan = grupos.filter(g => g.meta > 0 && g.aplicadas > g.meta);
+  if (rebasan.length) alertas.push(`<li><b>${fmt(rebasan.length)} ${rebasan.length === 1 ? "grupo rebasa" : "grupos rebasan"} su meta:</b> ${rebasan.map(g => e(g.grupo)).join(", ")}.</li>`);
+  if (cov.nunca.length && cal.vencidas.length >= 2) alertas.push(`<li><b>${fmt(cov.nunca.length)} ${cov.nunca.length === 1 ? "unidad con meta no ha reportado" : "unidades con meta no han reportado"} nunca:</b> ${cov.nunca.slice(0, 6).map(u => e(u.unidad)).join(", ")}${cov.nunca.length > 6 ? "…" : ""}.</li>`);
+  const revisar = alertas.length ? `<section class="iinf-card iinf-card--alerta" aria-labelledby="tinvCRevTit"><header><h3 id="tinvCRevTit">Por revisar</h3></header><ul class="iinf-alertas">${alertas.join("")}</ul></section>` : "";
+
+  return `
+    ${hero}
+    ${kpis}
+    <div class="iinf-dos">${cobertura}${marcas}</div>
+    ${revisar}
+    ${ranking}
+    ${tendencia}
+    ${tablaGrupos}
+    <p class="iinf-pie" role="note"><b>Cómo leerlo:</b> la meta de COVID-19 está en dosis equivalentes de 0.5 mL (las pediátricas de 0.25 mL valen media dosis) y Moderna y Pfizer suman contra la misma meta. El avance se compara con lo esperado a hoy: verde si vas a menos de 5 puntos, ámbar hasta 15 y rojo si estás más atrás. Los frascos rinden 5 dosis de 0.5 mL en Moderna y 6 en Pfizer.</p>`;
+}
+
+// ── Armado del tablero ──
+const TINV_TABS = [
+  { id: "ambas", etiqueta: "Ambas vacunas", icono: "compare_arrows" },
+  { id: "influenza", etiqueta: "Influenza", icono: "vaccines" },
+  { id: "covid", etiqueta: "COVID-19", icono: "coronavirus" }
+];
+
+function tinvPintar() {
+  const D = _tinv.datos;
+  const cont = document.getElementById("rdaDashboardContent");
+  const cuerpo = cont && cont.querySelector("#tinvCuerpo");
+  if (!D || !cuerpo) return;
+  cont.querySelectorAll(".tinv-tab").forEach(b => {
+    const on = b.dataset.tab === _tinv.tab;
+    b.setAttribute("aria-selected", String(on));
+    b.tabIndex = on ? 0 : -1;
+  });
+  cuerpo.setAttribute("aria-labelledby", "tinvTab_" + _tinv.tab);
+  let html;
+  if (_tinv.tab === "influenza") html = D.infHtml;
+  else if (_tinv.tab === "covid") html = `<div class="iinf">${tinvCovid(D)}</div>`;
+  else html = `<div class="iinf">${tinvAmbas(D)}</div>`;
+  cuerpo.innerHTML = html;
+}
+
+async function renderTemporadaInvernalDashboard(muniFilter, uniFilter) {
+  const container = document.getElementById("rdaDashboardContent");
+  if (!container) return;
+  const token = ++_tinv.token;
+  container.innerHTML = '<div class="iinf-cargando" role="status">Calculando la temporada invernal…</div>';
+  const aparte = document.createElement("div");
+  await renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter, aparte);   // deja listas las cifras de Influenza (y las del Excel/PDF)
+  if (token !== _tinv.token) return;
+  const ctx = window._infIndCtx;
+  if (!ctx) { container.innerHTML = aparte.innerHTML; return; }
+  const hoy = (typeof influenzaHoy === "function" ? influenzaHoy() : new Date().toLocaleDateString("en-CA"));
+  const cal = infIndCalendario(ctx.ini, ctx.fin, hoy);
+  let cov;
+  try {
+    cov = await covidIndCalcular({ units: ctx.units, muniFilter, uniFilter, camp: ctx.camp, cal });
+  } catch (err) {
+    console.error("Temporada invernal: no se pudo calcular COVID-19", err);
+    cov = null;
+  }
+  if (token !== _tinv.token) return;
+  if (!cov) { container.innerHTML = aparte.innerHTML; return; }
+  _tinv.datos = { inf: window._infIndicadoresDatos || null, infHtml: aparte.innerHTML, cov, cal, muniFilter, uniFilter };
+  if (!TINV_TABS.some(t => t.id === _tinv.tab)) _tinv.tab = "ambas";
+  container.innerHTML = `
+    <div class="tinv">
+      <div class="tinv-tabs" role="tablist" aria-label="Vacuna que quieres analizar">
+        ${TINV_TABS.map(t => `<button type="button" role="tab" class="tinv-tab tinv-tab--${t.id}" id="tinvTab_${t.id}" data-tab="${t.id}" aria-controls="tinvCuerpo"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${t.etiqueta}</button>`).join("")}
+      </div>
+      <div id="tinvCuerpo" role="tabpanel"></div>
+    </div>`;
+  const tabs = [...container.querySelectorAll(".tinv-tab")];
+  tabs.forEach((b, i) => {
+    b.addEventListener("click", () => { _tinv.tab = b.dataset.tab; tinvPintar(); });
+    b.addEventListener("keydown", (ev) => {
+      const paso = ev.key === "ArrowRight" ? 1 : (ev.key === "ArrowLeft" ? -1 : 0);
+      if (!paso) return;
+      ev.preventDefault();
+      const sig = tabs[(i + paso + tabs.length) % tabs.length];
+      _tinv.tab = sig.dataset.tab; tinvPintar(); sig.focus();
+    });
+  });
+  tinvPintar();
+}
+window.renderTemporadaInvernalDashboard = renderTemporadaInvernalDashboard;
 
 /** Excel del tablero de Indicadores de influenza (mismas cifras que se ven en pantalla). */
 async function exportInfluenzaIndicadoresExcel() {
