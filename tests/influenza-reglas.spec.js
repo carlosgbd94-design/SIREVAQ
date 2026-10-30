@@ -40,7 +40,8 @@ const reglasFn = modulo.slice(modulo.indexOf('// Regla de calendario (2ª dosis'
 const gridFn = modulo.slice(modulo.indexOf('function renderCaptureGrid() {'), modulo.indexOf('function updateFlaskCalculation() {'));
 const isoFn = modulo.slice(modulo.indexOf('function getISOWeek('), modulo.indexOf('let _campaignConfig'));
 const semanasFn = modulo.slice(modulo.indexOf('function generateCampaignWeeks()'), modulo.indexOf('function campaignSeasonLabel()'));
-const saveFn = modulo.slice(modulo.indexOf('function influenzaVentanaError('), modulo.indexOf('// --- LÓGICA DE ADMINISTRACIÓN Y MUNICIPIOS ---'));
+const saveFn = modulo.slice(modulo.indexOf('function influenzaVentanaError('), modulo.indexOf('// --- LÓGICA DE ADMINISTRACIÓN Y MUNICIPIOS ---'));
+const finPeriodoFn = modulo.slice(modulo.indexOf('function infFinPeriodo('), modulo.indexOf('/** Estado de la semana en el calendario'));
 
 async function montarCaptura(page, fecha, valoresGuardados) {
   await page.goto('/reference.html');
@@ -69,7 +70,7 @@ async function montarCaptura(page, fecha, valoresGuardados) {
       'var RealDate = Date;   // la captura ya no depende del día de la semana'
     ].join('\n')
   });
-  await page.addScriptTag({ content: rubros + isoFn + semanasFn + reglasFn + gridFn + saveFn + 'window.__grid = renderCaptureGrid; window.__save = saveInfluenzaReport;' });
+  await page.addScriptTag({ content: rubros + isoFn + semanasFn + reglasFn + finPeriodoFn + gridFn + saveFn + 'window.__grid = renderCaptureGrid; window.__save = saveInfluenzaReport;' });
   await page.evaluate(() => window.__grid());
 }
 

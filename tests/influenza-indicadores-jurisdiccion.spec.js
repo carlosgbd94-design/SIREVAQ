@@ -8,7 +8,7 @@ const ExcelJS = require('exceljs');
 
 const RUIDO = /sentry|favicon|Failed to load resource|net::ERR|ERR_BLOCKED|Manifest|preload|fonts\.g|googleapis|unpkg|gstatic|cdn|posthog|ResizeObserver|DevTools|lucide/i;
 const CAMP = 'Campaña Influenza 2026-2027';
-const HOY = '2026-12-18';   // viernes: 11 semanas de campaña vencidas (2-oct a 18-dic) + cortes de mes
+const HOY = '2026-12-21';   // lunes: la semana del viernes 18 ya venció (cierra el domingo); 2-oct a 18-dic con cortes de mes
 
 function rng(seed) { let s = seed; return () => { s = (s * 1664525 + 1013904223) % 4294967296; return s / 4294967296; }; }
 
