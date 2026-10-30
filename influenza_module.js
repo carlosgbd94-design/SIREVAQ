@@ -2570,21 +2570,32 @@ function descargarLibroXlsx(buffer, nombre) {
  */
 async function exportInfluenzaMetaLogroPlantilla() {
   const d = window._infIndicadoresDatos;
-  if (!d || !d.entidades || !d.entidades.length) { showToast("Primero abre el tablero de influenza (con meta asignada) para generar el Excel.", false, "warn"); return; }
+  const T = covDatosExport();
+  const conInf = !!(d && d.entidades && d.entidades.length);
+  if (!conInf && !T) { showToast("Primero abre el tablero de la temporada invernal (con meta asignada) para generar el Excel.", false, "warn"); return; }
   try {
     showToast("Generando Excel de Meta-Logro...", true, "info");
     await window.ensureLibsLoaded("exceljs");
     const response = await fetch(encodeURI("./Formatos/Análisis_Meta_Logro_Influenza_2026-2027_UNIDAD_DE_SALUD_Municipal_Jurisdiccional.xlsx"));
     if (!response.ok) throw new Error("No se pudo cargar la plantilla de Excel.");
     const plantilla = await response.arrayBuffer();
-    const temporada = String(d.campana || "").replace(/^Campa.a Influenza\s*/i, "") || campaignSeasonLabel();
-    const wb = await window.InfluenzaMetaLogroExport.construirLibroEntidades({
-      ExcelJS, plantilla, rubroIds: INFLUENZA_RUBROS.map(r => r.id), entidades: d.entidades,
-      titulo: `${d.ambito} · Corte al ${String(d.fechaCorte).split("-").reverse().join("/")}`, temporada,
-      nombreTotal: d.nivel === "JURIS" ? "TOTAL JURISDICCIÓN" : "TOTAL"
-    });
-    const limpio = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
-    descargarLibroXlsx(await wb.xlsx.writeBuffer(), `Meta_Logro_Influenza_${limpio(temporada)}_${limpio(d.ambito)}_${d.fechaCorte}.xlsx`);
+    const campana = d ? d.campana : T.camp;
+    const ambito = d ? d.ambito : T.ambito;
+    const nivel = d ? d.nivel : T.nivel;
+    const fechaCorte = d ? d.fechaCorte : T.cal.hoy;
+    const temporada = String(campana || "").replace(/^Campa.a Influenza\s*/i, "") || campaignSeasonLabel();
+    const titulo = `${ambito} · Corte al ${String(fechaCorte).split("-").reverse().join("/")}`;
+    const nombreTotal = nivel === "JURIS" ? "TOTAL JURISDICCIÓN" : "TOTAL";
+    // Influenza y COVID-19 van en el mismo libro, cada una en una hoja con el formato de la plantilla oficial.
+    const wb = conInf
+      ? await window.InfluenzaMetaLogroExport.construirLibroEntidades({ ExcelJS, plantilla, rubroIds: INFLUENZA_RUBROS.map(r => r.id), entidades: d.entidades, titulo, temporada, nombreTotal })
+      : new ExcelJS.Workbook();
+    if (T) {
+      await window.InfluenzaMetaLogroExport.agregarHojaCovid({ ExcelJS, wb, plantilla, rubros: CovidFrascos.RUBROS, entidades: T.cov.plantilla, titulo, temporada, nombreTotal });
+    }
+    const limpio = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    const que = conInf && T ? "Temporada_Invernal" : (conInf ? "Influenza" : "COVID19");
+    descargarLibroXlsx(await wb.xlsx.writeBuffer(), `Meta_Logro_${que}_${limpio(temporada)}_${limpio(ambito)}_${fechaCorte}.xlsx`);
     showToast("Excel de Meta-Logro descargado.", true, "good");
   } catch (err) {
     console.error("Error al exportar Meta-Logro (plantilla):", err);
@@ -9066,7 +9077,24 @@ async function covidIndCalcular({ units, muniFilter, uniFilter, camp, cal }) {
     const exceden = porUnidad.filter(u => u.frascos[mk.id] > 0 && u.marca[mk.id] > u.frascos[mk.id] * CovidFrascos.dosisPorFrasco(mk.id));
     return { ...mk, frascos, rep, apl, exceden, existencia: Math.max(0, rep - apl) };
   });
+  // Entidades para la plantilla oficial de Meta-Logro (metas y logros por rubro, tal como se capturan)
+  const ORDEN = ["QUERETARO", "CORREGIDORA", "MARQUES", "HUIMILPAN", "HENM", "NHG"];
+  const ficha = (nombre, metas, us) => ({
+    nombre, metas, logros: sumaMetas(us.map(u => u.aplR)),
+    marca: { MODERNA: us.reduce((t, u) => t + u.marca.MODERNA, 0), PFIZER: us.reduce((t, u) => t + u.marca.PFIZER, 0) }
+  });
+  let paraPlantilla;
+  if (uniFilter) paraPlantilla = porUnidad.slice(0, 1).map(u => ficha(u.unidad, metasAmbito, [u]));
+  else if (muniFilter) {
+    paraPlantilla = porUnidad.filter(u => u.conMeta || u.apl > 0).sort((a, b) => String(a.unidad).localeCompare(String(b.unidad), "es"))
+      .map(u => ficha(u.unidad, u.metas || {}, [u]));
+  } else {
+    paraPlantilla = [...new Set(units.map(u => u.destino))].map(dn => { const us = porUnidad.filter(u => u.destino === dn); return ficha(dn, metaDeDestino(dn, us), us); })
+      .filter(g => eq(g.metas) > 0 || Object.values(g.logros).some(v => v > 0))
+      .sort((a, b) => { const ia = ORDEN.indexOf(tinvNorm(a.nombre)), ib = ORDEN.indexOf(tinvNorm(b.nombre)); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
+  }
   return {
+    plantilla: paraPlantilla,
     hayMeta: av.metaEq > 0, metas: metasAmbito, av, meta: av.metaEq, apl: av.aplEq, pct: av.pct == null ? 0 : av.pct,
     grupos: av.rubros.map((r, i) => ({ ...r, ...CovidFrascos.RUBROS[i] })),
     unidades: porUnidad, entidades, porSemana, porSemanaMarca, marcas,
@@ -9428,6 +9456,33 @@ function tinvCovid(D) {
     <p class="iinf-pie" role="note"><b>Cómo leerlo:</b> la meta de COVID-19 está en dosis equivalentes de 0.5 mL (las pediátricas de 0.25 mL valen media dosis) y Moderna y Pfizer suman contra la misma meta. El avance se compara con lo esperado a hoy: verde si vas a menos de 5 puntos, ámbar hasta 15 y rojo si estás más atrás. Los frascos rinden 5 dosis de 0.5 mL en Moderna y 6 en Pfizer.</p>`;
 }
 
+
+/** Datos de COVID-19 del tablero actual para el Excel y el PDF (null si el ámbito no tiene meta ni dosis de COVID-19). */
+function covDatosExport() {
+  const D = _tinv.datos;
+  return D && D.cov && (D.cov.hayMeta || D.cov.apl > 0) ? D : null;
+}
+
+/** Cifras de COVID-19 que muestran la pantalla, el Excel y el PDF (una sola fórmula). */
+function tinvCovidResumen(D) {
+  const { cov, cal } = D;
+  const esp = cal.esperadoPct, pct = cov.pct, diff = pct - esp;
+  const faltan = Math.max(0, cov.meta - cov.apl);
+  const ult4 = cal.vencidas.slice(-4);
+  const ritmo = ult4.length ? ult4.reduce((s, f) => s + (cov.porSemana[f] || 0), 0) / ult4.length : 0;
+  const necesario = (cal.restantes > 0 && faltan > 0) ? faltan / cal.restantes : null;
+  const proy = cov.apl + ritmo * cal.restantes;
+  const proyFiable = cal.vencidas.length >= 4 || cal.restantes === 0;
+  const evaluables = cov.esperan;
+  const sinRep = cal.ultimaSemana ? evaluables.filter(u => !u.reporto) : [];
+  const semTxt = cal.ultimaSemana ? influenzaRangoTexto(cal.ultimaSemana, cal.ini, cal.fin) : "";
+  return {
+    esp, pct, diff, tono: infIndTono(diff), estado: infIndEtiqueta(infIndTono(diff), pct), faltan, ritmo, necesario, proy,
+    pctProy: cov.meta ? proy * 100 / cov.meta : 0, proyFiable, evaluables, sinRep, semTxt,
+    reportaron: cal.ultimaSemana ? evaluables.length - sinRep.length : 0
+  };
+}
+
 // ── Armado del tablero ──
 const TINV_TABS = [
   { id: "ambas", etiqueta: "Ambas vacunas", icono: "compare_arrows" },
@@ -9457,6 +9512,7 @@ async function renderTemporadaInvernalDashboard(muniFilter, uniFilter) {
   const container = document.getElementById("rdaDashboardContent");
   if (!container) return;
   const token = ++_tinv.token;
+  _tinv.datos = null;   // hasta que termine el cálculo, las exportaciones no usan cifras de otro ámbito
   container.innerHTML = '<div class="iinf-cargando" role="status">Calculando la temporada invernal…</div>';
   const aparte = document.createElement("div");
   await renderInfluenzaIndicatorsDashboard(muniFilter, uniFilter, aparte);   // deja listas las cifras de Influenza (y las del Excel/PDF)
@@ -9474,7 +9530,12 @@ async function renderTemporadaInvernalDashboard(muniFilter, uniFilter) {
   }
   if (token !== _tinv.token) return;
   if (!cov) { container.innerHTML = aparte.innerHTML; return; }
-  _tinv.datos = { inf: window._infIndicadoresDatos || null, infHtml: aparte.innerHTML, cov, cal, muniFilter, uniFilter };
+  const nombreUni = (ctx.units[0] && ctx.units[0].unidad) || uniFilter;
+  _tinv.datos = {
+    inf: window._infIndicadoresDatos || null, infHtml: aparte.innerHTML, cov, cal, muniFilter, uniFilter, camp: ctx.camp,
+    ambito: uniFilter ? `Unidad: ${nombreUni}` : (muniFilter ? `Municipio: ${muniFilter}` : "Jurisdicción Sanitaria 1"),
+    nivel: uniFilter ? "UNIDAD" : (muniFilter ? "MUNICIPIO" : "JURIS")
+  };
   if (!TINV_TABS.some(t => t.id === _tinv.tab)) _tinv.tab = "ambas";
   container.innerHTML = `
     <div class="tinv">
@@ -9501,7 +9562,9 @@ window.renderTemporadaInvernalDashboard = renderTemporadaInvernalDashboard;
 /** Excel del tablero de Indicadores de influenza (mismas cifras que se ven en pantalla). */
 async function exportInfluenzaIndicadoresExcel() {
   const d = window._infIndicadoresDatos;
-  if (!d) { showToast("Primero abre el tablero de influenza para generar el Excel.", false, "warn"); return; }
+  const T = covDatosExport();
+  if (!d && !T) { showToast("Primero abre el tablero de la temporada invernal para generar el Excel.", false, "warn"); return; }
+  const d0 = d || { campana: T.camp, ambito: T.ambito, fechaCorte: T.cal.hoy };
   try {
     await window.ensureLibsLoaded("exceljs");
     const wb = new ExcelJS.Workbook();
@@ -9517,7 +9580,7 @@ async function exportInfluenzaIndicadoresExcel() {
       ws.getCell(1, 1).value = titulo;
       ws.getCell(1, 1).font = { bold: true, size: 14, color: { argb: AZUL } };
       ws.mergeCells(2, 1, 2, columnas.length);
-      ws.getCell(2, 1).value = `${d.campana} · ${d.ambito} · Corte al ${d.fechaCorte}`;
+      ws.getCell(2, 1).value = `${d0.campana} · ${d0.ambito} · Corte al ${d0.fechaCorte}`;
       ws.getCell(2, 1).font = { size: 10, color: { argb: "FF64748B" } };
       const cab = ws.getRow(4);
       columnas.forEach((c, i) => {
@@ -9545,6 +9608,7 @@ async function exportInfluenzaIndicadoresExcel() {
     };
 
     const pctFmt = "0.0%";
+    if (d) {
     const resumen = [
       ["Meta de la campaña (dosis)", d.meta, "#,##0"],
       ["Dosis aplicadas", d.apl, "#,##0"],
@@ -9604,10 +9668,67 @@ async function exportInfluenzaIndicadoresExcel() {
     d.revisar.sinMeta.forEach(u => rev.push(["Sin meta asignada", u, ""]));
     d.abasto.exceden.forEach(u => rev.push(["Aplicó más de lo repartido", u, ""]));
     hoja("Por revisar", "Unidades por revisar", [{ t: "Motivo", w: 40 }, { t: "Unidad", w: 46 }, { t: "Municipio", w: 20 }], rev.length ? rev : [["Sin pendientes", "", ""]]);
+    }
+
+    if (T) {
+      const cv = T.cov, cl = T.cal, R = tinvCovidResumen(T);
+      const rangoDe = (ymd) => influenzaRangoTexto(ymd, cl.ini, cl.fin);
+      const dec = "#,##0.##";
+      const resCov = [
+        ["Meta de COVID-19 (dosis equivalentes de 0.5 mL)", cv.meta, dec],
+        ["Dosis aplicadas (equivalentes)", cv.apl, dec],
+        ["Avance de la meta", R.pct / 100, pctFmt],
+        ["Avance esperado a la fecha", R.esp / 100, pctFmt],
+        ["Diferencia contra lo esperado (puntos)", Math.round(R.diff * 10) / 10, "0.0"],
+        ["Estado", R.estado],
+        ["Dosis que faltan (equivalentes)", R.faltan, dec],
+        ["Semana de campaña", `${cl.vencidas.length} de ${cl.semanas.length}`],
+        ["Semanas restantes", cl.restantes],
+        ["Ritmo reciente (dosis por semana, últimas 4)", Math.round(R.ritmo), "#,##0"],
+        ["Ritmo necesario (dosis por semana)", R.necesario == null ? "—" : Math.round(R.necesario), "#,##0"],
+        ["Proyección al cierre (% de la meta)", R.proyFiable ? R.pctProy / 100 : "Se calcula con 4 semanas de reportes", pctFmt],
+        ["Unidades que deben reportar", R.evaluables.length],
+        [`Unidades que reportaron la semana del ${R.semTxt || "—"}`, R.reportaron],
+        ["Unidades que no reportaron esa semana", R.sinRep.length]
+      ];
+      hoja("COVID-19 Resumen", "Indicadores de COVID-19 · Resumen", [{ t: "Indicador", w: 52 }, { t: "Valor", w: 30 }],
+        resCov.map(r => [r[0], r[1]]),
+        (row, f, i) => { if (resCov[i][2] && typeof f[1] === "number") row.getCell(2).numFmt = resCov[i][2]; });
+
+      const totMarca = cv.marcas.reduce((t, m) => t + m.apl, 0);
+      hoja("COVID-19 Marcas", "COVID-19 por marca (dosis equivalentes de 0.5 mL)",
+        [{ t: "Marca", w: 22 }, { t: "Aplicadas", w: 14, fmt: dec }, { t: "% del total", w: 12, fmt: pctFmt }, { t: "Frascos repartidos", w: 16, fmt: "#,##0" }, { t: "Dosis repartidas", w: 16, fmt: "#,##0" }, { t: "Existencia estimada (dosis)", w: 22, fmt: dec }],
+        cv.marcas.map(m => [m.label, m.apl, totMarca ? m.apl / totMarca : 0, m.frascos, m.rep, m.frascos ? m.existencia : "—"]));
+
+      if (cv.entidades.length) {
+        hoja(T.muniFilter ? "COVID-19 Por unidad" : "COVID-19 Por municipio", `COVID-19: avance por ${T.muniFilter ? "unidad" : "municipio / hospital"} (más atrasados primero)`,
+          [{ t: T.muniFilter ? "Unidad" : "Municipio / hospital", w: 34 }, { t: "Unidades", w: 12 }, { t: "Meta", w: 12, fmt: dec }, { t: "Aplicadas", w: 12, fmt: dec },
+           { t: "Avance", w: 12, fmt: pctFmt }, { t: "Contra lo esperado (pts)", w: 16, fmt: "0.0" }, { t: "Sin reporte última semana", w: 16 }, { t: "Último reporte (semana)", w: 24 }],
+          cv.entidades.map(o => [o.nombre, o.n, o.meta, o.apl, o.p / 100, Math.round(o.d * 10) / 10, o.sinRep, o.ultima ? rangoDe(o.ultima) : "Sin reporte"]),
+          (row, f, r) => { row.getCell(6).fill = tonoFill(cv.entidades[r].d); });
+      }
+
+      let acC = 0;
+      hoja("COVID-19 Por semana", "COVID-19: dosis aplicadas por semana (equivalentes de 0.5 mL)",
+        [{ t: "Semana", w: 28 }, { t: "Moderna", w: 14, fmt: dec }, { t: "Pfizer", w: 14, fmt: dec }, { t: "Total", w: 14, fmt: dec }, { t: "Acumulado", w: 14, fmt: dec }, { t: "% de la meta", w: 14, fmt: pctFmt }],
+        cl.vencidas.map(f => { const m = (cv.porSemanaMarca[f] || {}); const t = (m.MODERNA || 0) + (m.PFIZER || 0); acC += t; return [rangoDe(f), m.MODERNA || 0, m.PFIZER || 0, t, acC, cv.meta ? acC / cv.meta : 0]; }));
+
+      hoja("COVID-19 Por grupo", "COVID-19: avance por grupo de población (dosis tal como se capturan; las pediátricas son de 0.25 mL)",
+        [{ t: "Grupo", w: 50 }, { t: "Dosis", w: 22 }, { t: "Meta", w: 12, fmt: dec }, { t: "Aplicadas", w: 12, fmt: dec }, { t: "Avance", w: 12, fmt: pctFmt }, { t: "Contra lo esperado (pts)", w: 16, fmt: "0.0" }],
+        cv.grupos.filter(g => g.meta > 0 || g.aplicadas > 0).map(g => { const p = g.meta ? g.aplicadas * 100 / g.meta : null; return [g.grupo, g.edad, g.meta, g.aplicadas, p == null ? "Sin meta" : p / 100, p == null ? "—" : Math.round((p - R.esp) * 10) / 10]; }),
+        (row, f) => { if (typeof f[5] === "number") row.getCell(6).fill = tonoFill(f[5]); });
+
+      const revC = [];
+      R.sinRep.forEach(u => revC.push(["No reportó la última semana", u.unidad, u.destino]));
+      cv.nunca.forEach(u => revC.push(["Sin ningún reporte en la campaña", u.unidad, u.destino]));
+      cv.sinMetaConDosis.forEach(u => revC.push(["Aplicó COVID-19 sin tener meta", u.unidad, u.destino]));
+      cv.marcas.forEach(m => m.exceden.forEach(u => revC.push([`Aplicó más ${m.label} de lo repartido`, u.unidad, u.destino])));
+      hoja("COVID-19 Por revisar", "COVID-19: unidades por revisar", [{ t: "Motivo", w: 40 }, { t: "Unidad", w: 46 }, { t: "Municipio", w: 20 }], revC.length ? revC : [["Sin pendientes", "", ""]]);
+    }
 
     const buf = await wb.xlsx.writeBuffer();
     const limpio = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
-    const nombre = `Indicadores_Influenza_${limpio(d.campana.replace(/^Campaña Influenza\s*/, ""))}_${limpio(d.ambito)}_${d.fechaCorte}.xlsx`;
+    const nombre = `Indicadores_${T ? "Temporada_Invernal" : "Influenza"}_${limpio(String(d0.campana).replace(/^Campaña Influenza\s*/, ""))}_${limpio(d0.ambito)}_${d0.fechaCorte}.xlsx`;
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -9616,7 +9737,7 @@ async function exportInfluenzaIndicadoresExcel() {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    showToast("Excel de indicadores de influenza descargado.", true, "good");
+    showToast(T ? "Excel de la temporada invernal descargado." : "Excel de indicadores de influenza descargado.", true, "good");
   } catch (err) {
     console.error("Error al exportar indicadores de influenza:", err);
     showToast("No se pudo generar el Excel de influenza.", false, "bad");
@@ -9845,6 +9966,98 @@ async function influenzaPdfVectorial(jsPDF, nombreArchivo, devolverBlob) {
     });
     y -= 3;
   });
+
+  // ── COVID-19 (misma estructura que Influenza; solo si el ámbito tiene meta o dosis de COVID-19) ──
+  const TC = covDatosExport();
+  if (TC) {
+    const cv = TC.cov, cl = TC.cal, R = tinvCovidResumen(TC);
+    const fc = (n) => Number(n || 0).toLocaleString("es-MX", { maximumFractionDigits: 1 });
+    const rangoDe = (ymd) => influenzaRangoTexto(ymd, cl.ini, cl.fin);
+    nueva();
+    doc.setFillColor(14, 116, 144); doc.rect(0, 0, PW, 22, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(255, 255, 255);
+    doc.text(tx(`Meta-Logro de vacunación COVID-19 ${String(TC.camp).replace(/^Campa.a Influenza\s*/i, "")}`), M, 13);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(207, 250, 254);
+    doc.text(tx(`${TC.ambito}  |  Corte al ${largaFecha(cl.hoy)}  |  Dosis equivalentes de 0.5 mL`), M, 19);
+    y = 32;
+
+    if (!cv.hayMeta) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(71, 85, 105);
+      doc.text(tx(`Este ámbito aún no tiene meta de COVID-19 asignada. Dosis aplicadas hasta hoy: ${fc(cv.apl)} (equivalentes).`), M, y + 3); y += 12;
+    } else {
+      hace(50);
+      doc.setFillColor(...FON[R.tono]); doc.roundedRect(M, y, CW, 42, 3, 3, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+      doc.text("AVANCE DE COVID-19", M + 6, y + 8);
+      doc.setFontSize(34); doc.setTextColor(...COL[R.tono]);
+      doc.text(`${f1(cv.pct)}%`, M + 6, y + 24);
+      doc.setFontSize(9); doc.text(tx(R.estado), M + 6, y + 32);
+      const par = `Se han aplicado ${fc(cv.apl)} de ${fc(cv.meta)} dosis equivalentes de 0.5 mL (aprox. ${fmt(Math.ceil(cv.meta / 5))} frascos de Moderna). `
+        + `A esta fecha se debería llevar ${f1(R.esp)}%: ` + (R.diff >= 0 ? `va ${f1(R.diff)} puntos por delante.` : `faltan ${f1(-R.diff)} puntos para ir en ritmo.`);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(51, 65, 85);
+      doc.text(doc.splitTextToSize(tx(par), CW - 62), M + 52, y + 9);
+      barra(M + 52, y + 27, CW - 62, 5, cv.pct, R.tono, R.esp);
+      doc.setFontSize(7.5); doc.setTextColor(100, 116, 139);
+      doc.text("0%", M + 52, y + 38);
+      doc.text(`La marca es lo esperado a hoy (${f1(R.esp)}%)`, M + 52 + (CW - 62) / 2, y + 38, { align: "center" });
+      doc.text("Meta 100%", M + 52 + CW - 62, y + 38, { align: "right" });
+      y += 50;
+
+      titulo("Indicadores clave de COVID-19");
+      tabla(["Indicador", "Valor"], [
+        ["Meta de COVID-19", fc(cv.meta)], ["Dosis aplicadas", fc(cv.apl)], ["Faltan por aplicar", fc(R.faltan)],
+        ["Semana de campaña", `${cl.vencidas.length} de ${cl.semanas.length}`],
+        ["Ritmo reciente (dosis por semana)", `${fmt(R.ritmo)}${R.necesario == null ? "" : ` (necesario: ${fmt(R.necesario)})`}`],
+        ["Proyección al cierre", R.proyFiable ? `${f1(R.pctProy)}%` : "Se calcula con 4 semanas de reportes"],
+        [`Unidades que reportaron la semana del ${R.semTxt || "-"}`, cl.ultimaSemana ? `${R.reportaron} de ${R.evaluables.length}` : "Sin semanas vencidas"]
+      ], { columnStyles: { 0: { halign: "left", fontStyle: "bold" }, 1: { halign: "center" } } });
+    }
+
+    const totMarca = cv.marcas.reduce((t, m) => t + m.apl, 0);
+    titulo("Moderna y Pfizer", "Aplicadas, frascos repartidos y existencia estimada (dosis equivalentes de 0.5 mL)");
+    tabla(["Marca", "Aplicadas", "% del total", "Frascos", "Existencia (dosis)"],
+      cv.marcas.map(m => [m.label, fc(m.apl), totMarca ? `${f1(m.apl * 100 / totMarca)}%` : "-", m.frascos ? fmt(m.frascos) : "-", m.frascos ? fc(m.existencia) : "-"]),
+      { columnStyles: { 0: { halign: "left", fontStyle: "bold" }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center" } } });
+
+    if (cv.entidades.length) {
+      titulo(`COVID-19: avance por ${TC.muniFilter ? "unidad" : "municipio / hospital"}`, "Primero quienes van más atrasados contra lo esperado");
+      tabla([TC.muniFilter ? "Unidad" : "Municipio / hospital", "Meta", "Aplicadas", "Avance", "Contra lo esperado", "Último reporte"],
+        cv.entidades.map(o => [o.nombre + (TC.muniFilter ? "" : `  (${o.n} ${o.n === 1 ? "unidad" : "unidades"})`), fc(o.meta), fc(o.apl), `${f1(o.p)}%`, `${o.d >= 0 ? "+" : "-"}${f1(Math.abs(o.d))} pts`, o.ultima ? rangoDe(o.ultima) : "Sin reporte"]),
+        { columnStyles: { 0: { halign: "left", fontStyle: "bold", cellWidth: 62 }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center", fontStyle: "bold" }, 5: { halign: "center" } },
+          didParseCell: (h) => { if (h.section === "body" && h.column.index === 4) { const t = tonoDe(cv.entidades[h.row.index].d); h.cell.styles.fillColor = FON[t]; h.cell.styles.textColor = COL[t]; } } });
+    }
+
+    if (cl.vencidas.length) {
+      titulo("COVID-19: dosis aplicadas por semana", "Moderna y Pfizer, en dosis equivalentes de 0.5 mL");
+      let acC = 0;
+      tabla(["Semana", "Moderna", "Pfizer", "Total", "Acumulado", "% de la meta"], cl.vencidas.map(f => {
+        const m = cv.porSemanaMarca[f] || {}, t = (m.MODERNA || 0) + (m.PFIZER || 0); acC += t;
+        return [rangoDe(f), fc(m.MODERNA), fc(m.PFIZER), fc(t), fc(acC), cv.meta ? `${f1(acC * 100 / cv.meta)}%` : "-"];
+      }), { columnStyles: { 0: { halign: "left", fontStyle: "bold" }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center" }, 5: { halign: "center" } } });
+    }
+
+    const gr = cv.grupos.filter(g => g.meta > 0 || g.aplicadas > 0);
+    if (gr.length) {
+      titulo("COVID-19: avance por grupo de población", "Dosis tal como se capturan (las pediátricas son de 0.25 mL)");
+      tabla(["Grupo", "Dosis", "Meta", "Aplicadas", "Avance"],
+        gr.map(g => [g.grupo, g.edad, fc(g.meta), fc(g.aplicadas), g.meta ? `${f1(g.aplicadas * 100 / g.meta)}%` : "Sin meta"])
+          .concat([["TOTAL (equivalentes de 0.5 mL)", "", fc(cv.meta), fc(cv.apl), cv.meta ? `${f1(cv.pct)}%` : "-"]]),
+        { columnStyles: { 0: { halign: "left", fontStyle: "bold", cellWidth: 70 }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center" } } });
+    }
+
+    const lista2 = (arr) => arr.slice(0, 8).join(", ") + (arr.length > 8 ? ` y ${arr.length - 8} más` : "");
+    const alC = [];
+    if (R.sinRep.length) alC.push(`No reportaron COVID-19 la última semana (${R.sinRep.length}): ${lista2(R.sinRep.map(u => u.unidad))}.`);
+    if (cv.nunca.length && cl.vencidas.length >= 2) alC.push(`Sin ningún reporte de COVID-19 en la campaña (${cv.nunca.length}): ${lista2(cv.nunca.map(u => u.unidad))}.`);
+    if (cv.sinMetaConDosis.length) alC.push(`Aplicaron COVID-19 sin tener meta (${cv.sinMetaConDosis.length}): ${lista2(cv.sinMetaConDosis.map(u => u.unidad))}.`);
+    cv.marcas.forEach(m => { if (m.exceden.length) alC.push(`Aplicaron más ${m.label} de lo repartido (${m.exceden.length}): ${lista2(m.exceden.map(u => u.unidad))}.`); });
+    if (alC.length) {
+      titulo("COVID-19: por revisar");
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(120, 53, 15);
+      alC.forEach(a2 => { const ls = doc.splitTextToSize("- " + tx(a2), CW - 4); hace(ls.length * 4 + 2); doc.text(ls, M + 2, y + 3); y += ls.length * 4 + 2; });
+      y += 4;
+    }
+  }
 
   // ── Nota y pie de página ──
   hace(22);

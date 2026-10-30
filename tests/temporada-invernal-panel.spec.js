@@ -1,6 +1,8 @@
 // Temporada invernal: un solo tablero (Ambas | Influenza | COVID-19) en Indicadores. Las cifras se comparan con un
 // cálculo independiente hecho aquí con los mismos datos.
 const { test, expect } = require('@playwright/test');
+const path = require('path');
+const ExcelJS = require('exceljs');
 
 const RUIDO = /sentry|favicon|Failed to load resource|net::ERR|ERR_BLOCKED|Manifest|preload|fonts\.g|googleapis|unpkg|gstatic|cdn|posthog|ResizeObserver|DevTools|lucide/i;
 const CAMP = 'Campaña Influenza 2026-2027';
@@ -61,6 +63,7 @@ async function abrir(page) {
     covid_metas: covMetas, covid_capturas: covCaps, covid_distribucion_frascos: covFrascos
   };
   await page.route(/\.supabase\.co\//, servidor(db));
+  await page.route(/exceljs\.min\.js/, (r) => r.fulfill({ contentType: 'application/javascript', path: path.join(__dirname, '..', 'node_modules', 'exceljs', 'dist', 'exceljs.min.js') }));
   await page.clock.setFixedTime(new Date(HOY + 'T12:00:00'));
   await page.goto('/index.html', { waitUntil: 'load' });
   await page.waitForFunction(() => typeof window.supabaseRequest === 'function' || typeof supabaseRequest === 'function', null, { timeout: 20000 });
@@ -134,6 +137,59 @@ test.describe('Temporada invernal: Influenza y COVID-19 en un tablero', () => {
     await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
     // Unidad 1: 10 equivalentes por semana x 5 = 50 de su meta de 150
     await expect(page.locator('#tinvCuerpo .iinf-hero-txt')).toContainText('50 de 150');
+    expect(errores).toEqual([]);
+  });
+
+  test('Excel y PDF: COVID-19 va en el mismo libro con el formato de la plantilla oficial y en el PDF', async ({ page }) => {
+    test.setTimeout(120000);
+    const errores = await abrir(page);
+    await render(page);
+    const covApl = 5 * 20 + 8, covMeta = 700;
+
+    // Excel Meta-Logro (plantilla oficial): hoja de Influenza intacta + hoja de COVID-19 con el mismo formato
+    const [d1] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportInfluenzaMetaLogroPlantilla())]);
+    expect(d1.suggestedFilename()).toContain('Temporada_Invernal');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(await d1.path());
+    expect(wb.worksheets.map(w => w.name)).toEqual(['ANÁLIS DE META-LOGRO', 'META-LOGRO COVID-19']);
+    const ws = wb.getWorksheet('META-LOGRO COVID-19');
+    const v = (r, c) => { const x = ws.getCell(r, c); const y = x.isMerged ? x.master.value : x.value; return y && y.result !== undefined ? y.result : y; };
+    expect(String(v(4, 1))).toContain('COVID-19');
+    const nombres = []; for (let c = 7; c <= 30; c += 3) { const x = ws.getCell(8, c).value; if (x) nombres.push(String(x)); }
+    expect(nombres).toEqual(['QUERETARO', 'CORREGIDORA', 'HENM', 'TOTAL JURISDICCIÓN']);
+    const colTotal = 7 + 3 * 3;
+    expect(v(16, colTotal)).toBe(covApl);          // total aplicado (equivalentes de 0.5 mL)
+    expect(v(16, colTotal + 1)).toBe(covMeta);     // meta total
+    expect(v(17, colTotal) + v(18, colTotal)).toBe(covApl);   // Moderna + Pfizer
+    expect(String(v(10, 6))).toContain('Primera');
+    expect(ws.conditionalFormattings.length).toBeGreaterThanOrEqual(4);
+
+    // Excel con las cifras: hojas de COVID-19
+    const [d2] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportInfluenzaIndicadoresExcel())]);
+    const wb2 = new ExcelJS.Workbook();
+    await wb2.xlsx.readFile(await d2.path());
+    const nom = wb2.worksheets.map(w => w.name);
+    expect(nom).toEqual(expect.arrayContaining(['Resumen', 'COVID-19 Resumen', 'COVID-19 Marcas', 'COVID-19 Por municipio', 'COVID-19 Por semana', 'COVID-19 Por grupo']));
+    const res = wb2.getWorksheet('COVID-19 Resumen');
+    let meta = null, apl = null;
+    res.eachRow((row) => { const t = String(row.getCell(1).value || ''); if (t.startsWith('Meta de COVID-19')) meta = row.getCell(2).value; if (t.startsWith('Dosis aplicadas')) apl = row.getCell(2).value; });
+    expect(meta).toBe(covMeta); expect(apl).toBe(covApl);
+    const sem = wb2.getWorksheet('COVID-19 Por semana');
+    let tot = 0; sem.eachRow((row, n) => { if (n >= 5) tot += Number(row.getCell(4).value); });
+    expect(tot).toBe(covApl);
+
+    // PDF: una página de COVID-19 con sus tablas
+    const libs = await page.evaluate(async () => { try { await window.ensureLibsLoaded('html2canvas'); await window.ensureJsPdfLoaded(); return true; } catch (e) { return false; } });
+    test.skip(!libs, 'Sin acceso a jsPDF/html2canvas en este entorno');
+    const pdf = await page.evaluate(async () => {
+      _rdaCache.unidades = []; _rdaCache.registros = []; _rdaState.esquema = 'meta_logro_influenza'; document.getElementById('rdaDetailTable')?.remove();
+      const blob = await generarPDFRobusto('rdaDashboardContent', 'x.pdf', true);
+      const b = new Uint8Array(await blob.arrayBuffer());
+      let s = ''; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode.apply(null, b.subarray(i, i + 8192));
+      return btoa(s);
+    });
+    const buf = Buffer.from(pdf, 'base64');
+    expect(buf.slice(0, 5).toString()).toBe('%PDF-');
     expect(errores).toEqual([]);
   });
 });
