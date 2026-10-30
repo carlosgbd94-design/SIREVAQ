@@ -93,3 +93,16 @@ test('Concentrado por semana sobre la plantilla oficial: un grupo (Logro, Meta, 
   expect(val(ws, 13, 7)).toBe(5);    // r2 sem 43
   expect(val(ws, 12, 13)).toBe(57);  // total del rango r1 = 27 + 30
 });
+
+test('Una sola semana: sin grupos sobrantes de la plantilla, encabezados blancos en negrita y cifras legibles', async () => {
+  const { ctx, descargas } = montar({ adminInfluenzaSemanaInicio: '2026-10-23', adminInfluenzaSemanaFin: '2026-10-23', adminInfluenzaExportScope: 'muni_selected', adminInfluenzaMuni: 'QUERETARO' });
+  await vm.runInContext('exportConcentradoPorSemanaExcel()', ctx);
+  const ws = (await hojas(descargas)).worksheets[0];
+  expect(String(val(ws, 10, 7))).toContain('SEMANA 43');
+  for (let c = 10; c <= 18; c++) for (let r = 10; r <= 59; r++) expect(val(ws, r, c) ?? null).toBeNull();
+  expect(ws.getCell(10, 7).font.bold).toBe(true);
+  expect(ws.getCell(10, 7).font.color.argb).toBe('FFFFFFFF');
+  expect(ws.getCell(11, 8).font.color.argb).toBe('FFFFFFFF');
+  expect(ws.getCell(12, 7).font.size).toBeGreaterThanOrEqual(11);
+  expect(ws.pageSetup.printArea).toBe('A1:I59');
+});

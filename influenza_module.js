@@ -4780,13 +4780,27 @@ function centerHeadersAcrossColumns(ws, lastColIndex) {
   }
 }
 
-function applyPremiumFooterAndPageSetup(ws, activeCampana) {
+// La plantilla trae dos grupos de ejemplo (G:I y J:L, con su rótulo «UNIDAD/MUNICIPIO N»). Lo que no se llenó
+// se limpia (valores, fusión, relleno y bordes) para que no salgan celdas vacías con el rótulo de ejemplo.
+function limpiarColumnasSobrantes(ws, primeraColLibre) {
+  for (let c = primeraColLibre; c <= 18; c++) {
+    for (let r = 10; r <= 59; r++) {
+      const cell = ws.getCell(r, c);
+      try { cell.unmerge(); } catch (e) {}
+      cell.value = null;
+      cell.style = {};
+    }
+  }
+}
+
+function applyPremiumFooterAndPageSetup(ws, activeCampana, ultimaCol) {
   ws.pageSetup = {
     orientation: 'landscape',
     fitToPage: true,
     fitToWidth: 1,
     fitToHeight: 0
   };
+  if (ultimaCol) ws.pageSetup.printArea = `A1:${ws.getColumn(ultimaCol).letter}59`;
   ws.headerFooter = {
     oddFooter: `&L&"Montserrat,Regular"&8Campaña: ${activeCampana} &C&"Montserrat,Regular"&8Fecha de Reporte: ${new Date().toLocaleDateString()} &R&"Montserrat,Regular"&8Página &P de &N`
   };
@@ -5161,8 +5175,9 @@ async function generateConcentradoPorSemanaFile(muniName, type = "municipio") {
       col += 3;
     }
 
+    limpiarColumnasSobrantes(ws, col);
     centerHeadersAcrossColumns(ws, col - 1);
-    applyPremiumFooterAndPageSetup(ws, campaignSeasonLabel());
+    applyPremiumFooterAndPageSetup(ws, campaignSeasonLabel(), col - 1);
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -5197,13 +5212,17 @@ function writeUnitDataColumns(ws, startCol, headerName, clues, cluesArray, isTot
   
   const headerCell = ws.getCell(`${col1Letter}10`);
   headerCell.value = `${headerName.toUpperCase()}\n(${clues})`;
-  applyPremiumStyles(headerCell, { bold: true, size: 8, align: 'center' });
+  applyPremiumStyles(headerCell, { bold: true, size: 11, color: { argb: 'FFFFFFFF' }, align: 'center' });
   headerCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-  
-  // Rellenar subencabezados fila 11
-  ws.getCell(`${col1Letter}11`).value = "LOGRO";
-  ws.getCell(`${col2Letter}11`).value = "META";
-  ws.getCell(`${col3Letter}11`).value = "%";
+  if (!ws.getRow(10).height || ws.getRow(10).height < 36) ws.getRow(10).height = 36;
+  for (let c = 0; c < 3; c++) ws.getColumn(startCol + c).width = Math.max(ws.getColumn(startCol + c).width || 0, 11);
+
+  // Rellenar subencabezados fila 11 (blanco y negrita sobre el relleno de la plantilla)
+  [["LOGRO", col1Letter], ["META", col2Letter], ["%", col3Letter]].forEach(([txt, L]) => {
+    const sc = ws.getCell(`${L}11`);
+    sc.value = txt;
+    applyPremiumStyles(sc, { bold: true, size: 11, color: { argb: 'FFFFFFFF' }, align: 'center' });
+  });
   
   // Poblar rubros (Fila 12 a 57)
   INFLUENZA_RUBROS.forEach((rb, idx) => {
@@ -5232,9 +5251,9 @@ function writeUnitDataColumns(ws, startCol, headerName, clues, cluesArray, isTot
     cellM.value = metaVal;
     cellP.value = { formula: `IFERROR(${col1Letter}${row}/${col2Letter}${row}," ")` };
     
-    applyPremiumStyles(cellL, { size: 9 });
-    applyPremiumStyles(cellM, { size: 9 });
-    applyPremiumStyles(cellP, { size: 9 });
+    applyPremiumStyles(cellL, { size: 11, align: "center" });
+    applyPremiumStyles(cellM, { size: 11, align: "center" });
+    applyPremiumStyles(cellP, { size: 11, align: "center" });
     
     cellL.numFmt = '#,##0';
     cellM.numFmt = '#,##0';
@@ -5258,9 +5277,9 @@ function writeUnitDataColumns(ws, startCol, headerName, clues, cluesArray, isTot
   cellTM.value = { formula: `SUM(${col2Letter}12:${col2Letter}57)` };
   cellTP.value = { formula: `IFERROR(${col1Letter}58/${col2Letter}58," ")` };
   
-  applyPremiumStyles(cellTL, { bold: true, size: 9 });
-  applyPremiumStyles(cellTM, { bold: true, size: 9 });
-  applyPremiumStyles(cellTP, { bold: true, size: 9 });
+  applyPremiumStyles(cellTL, { bold: true, size: 11, align: "center" });
+  applyPremiumStyles(cellTM, { bold: true, size: 11, align: "center" });
+  applyPremiumStyles(cellTP, { bold: true, size: 11, align: "center" });
   
   cellTL.numFmt = '#,##0';
   cellTM.numFmt = '#,##0';
@@ -5275,9 +5294,9 @@ function writeUnitDataColumns(ws, startCol, headerName, clues, cluesArray, isTot
   cellFM.value = { formula: `IFERROR(${col2Letter}58/10," ")` };
   cellFP.value = { formula: `IFERROR(${col2Letter}59/${col1Letter}59," ")` };
   
-  applyPremiumStyles(cellFL, { bold: true, size: 9 });
-  applyPremiumStyles(cellFM, { bold: true, size: 9 });
-  applyPremiumStyles(cellFP, { bold: true, size: 9 });
+  applyPremiumStyles(cellFL, { bold: true, size: 11, align: "center" });
+  applyPremiumStyles(cellFM, { bold: true, size: 11, align: "center" });
+  applyPremiumStyles(cellFP, { bold: true, size: 11, align: "center" });
   
   cellFL.numFmt = '#,##0';
   cellFM.numFmt = '#,##0';
