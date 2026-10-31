@@ -2297,7 +2297,12 @@
     if (_responsableManual) return;
     let recordado = null;
     try { recordado = localStorage.getItem('sis_responsable_' + estado.perfil.clues); } catch (e) { /* sin storage */ }
-    inp.value = (recordado && !esNombreTecnico(recordado)) ? recordado : (nombrePersonaDe(estado.perfil) || '');
+    if (recordado && !esNombreTecnico(recordado)) { inp.value = recordado; return; }
+    // Otro dispositivo o navegador: el nombre del último SINBA-SIS guardado de esta unidad
+    const previa = _sis06pCapturasCache
+      .filter((r) => r.capturado_por && !esNombreTecnico(r.capturado_por))
+      .sort((a, b) => (Number(b.anio) * 12 + Number(b.mes)) - (Number(a.anio) * 12 + Number(a.mes)))[0];
+    inp.value = previa ? previa.capturado_por : (nombrePersonaDe(estado.perfil) || '');
   }
 
   async function guardarResponsable() {
@@ -2586,6 +2591,8 @@
       tarjetasBio += acordeonSIS('bio:' + biologico, biologico, accent.tint, accent.hex, resumenChipSIS(dosisBio, conDatos, vars.length), cuerpo, _cehAbiertos);
     });
 
+    const corteInfCEH = influenzaCorteDelMes(mes, anio);
+    const dosisInfluenzaCEH = INFLUENZA_FILAS.reduce((t, f) => t + _sumaFila(corteInfCEH.porRubro[f.id]), 0);
     const barra = `
       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
         <button type="button" class="btn-secundario btn-mini" id="cehExpandirTodo"><span class="material-symbols-rounded">unfold_more</span> Expandir todo</button>
@@ -2593,7 +2600,7 @@
         <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--primary); cursor:pointer; margin-left:4px;">
           <input type="checkbox" id="cehSoloConDatos" ${_cehSoloConDatos ? 'checked' : ''}> Solo biológicos con captura
         </label>
-        <span style="margin-left:auto; font-size:12px; font-weight:700; color:var(--muted);">${totalDosisCEH} dosis en ${biologicosConDatos} de ${grupos.size} biológicos</span>
+        <span style="margin-left:auto; font-size:12px; font-weight:700; color:var(--muted);">${totalDosisCEH + dosisInfluenzaCEH} dosis en ${biologicosConDatos + (dosisInfluenzaCEH > 0 ? 1 : 0)} de ${grupos.size + 1} biológicos (con Influenza)</span>
         <span class="solo-angosta" style="flex-basis:100%; font-size:11.5px; font-weight:600; color:var(--muted);">Toca una fila para ver el detalle (Afromexicanos, Indígenas, Migrantes).</span>
       </div>`;
 
@@ -2695,7 +2702,7 @@
         ? 'Ya enviaste el SINBA-SIS, así que el corte no cambia desde la unidad. Si hay que corregirlo, pídelo al municipal.'
         : (n === 0
           ? 'El reporte de cada semana se captura en Meta-Logro (jueves o viernes); aquí aparece solo.'
-          : 'Las semanas se corrigen en Meta-Logro, donde se validan contra tu meta. Tu SIS-06-P se guarda solo antes de salir.');
+          : `Leemos ${n} reporte${n === 1 ? '' : 's'} semanal${n === 1 ? '' : 'es'} de ${mesNombre(mes)} y se actualizan solos. Para corregir una semana, hazlo en Meta-Logro, donde se valida contra tu meta; tu SIS-06-P se guarda antes de salir.`);
       if (btnEditar) {
         btnEditar.disabled = bloqueada;
         btnEditar.title = bloqueada
@@ -2725,28 +2732,26 @@
 
     if (aviso) {
       let msg = ''; let estilo = '';
+      // En borrador de la unidad el botón de arriba ya dice cuántas semanas hay y qué hacer: sin segundo aviso.
       if (estadoSIS !== 'BORRADOR' && esRolRevisor()) {
         msg = 'Este SINBA-SIS ya fue enviado. Como revisor puedes corregir Influenza con el botón de arriba; cada cambio queda auditado y la unidad lo ve.';
         estilo = 'background:#eef2ff; color:#3730a3;';
-      } else if (estadoSIS !== 'BORRADOR') {
-        msg = 'Corte congelado: este SINBA-SIS ya fue enviado, así que Influenza de este mes ya no cambia desde la unidad.';
-        estilo = 'background:#f1f5f9; color:#475569;';
-      } else if (n === 0) {
-        msg = `Todavía no hay reportes semanales de Influenza en ${mesNombre(mes)}. Se capturan cada jueves o viernes en Meta-Logro Influenza; aquí aparecen solos.`;
-        estilo = 'background:var(--warning-bg); color:var(--warning); border:1px solid var(--warning-border);';
-      } else {
-        msg = `Corte de ${mesNombre(mes)}: ${n} reporte(s) semanal(es) de Meta-Logro. Si un reporte cambia allá, aquí se actualiza solo — no hay nada que copiar ni capturar dos veces.`;
-        estilo = 'background:var(--success-bg); color:var(--success);';
       }
-      aviso.style.cssText = `display:block; margin-bottom:12px; padding:9px 13px; border-radius:12px; font-size:12px; font-weight:700; ${estilo}`;
-      aviso.textContent = msg;
+      if (msg) {
+        aviso.style.cssText = `display:block; margin-bottom:12px; padding:9px 13px; border-radius:12px; font-size:12px; font-weight:700; ${estilo}`;
+        aviso.textContent = msg;
+      } else {
+        aviso.style.display = 'none';
+        aviso.textContent = '';
+      }
     }
 
     // Conciliación con la baja en Movimiento de Biológico (biológico
     // Antiinfluenza): mismo cálculo del servidor que bloquea Enviar/Validar.
     if (conc) {
       const fila = Array.isArray(_conciliacionCache) ? _conciliacionCache.find((f) => f.grupo === 'INFLUENZA') : null;
-      if (!fila || (Number(fila.paloteo) === 0 && Number(fila.aplicado) === 0)) {
+      // Si no cuadra, el recuadro «Por cuadrar antes de enviar» de arriba ya lo dice y trae la acción: aquí solo se confirma lo que sí coincide.
+      if (!fila || (Number(fila.paloteo) === 0 && Number(fila.aplicado) === 0) || !fila.coincide) {
         conc.style.display = 'none';
       } else {
         const ok = Boolean(fila.coincide);
