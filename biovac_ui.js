@@ -224,10 +224,17 @@ function usuarioActual() {
 // (biovac_movimientos.responsable_elaboracion / sis06p_capturas.capturado_por).
 // Para UNIDAD es lo que se teclee en el encabezado (con la sesión como
 // respaldo si se deja vacío); para el resto de roles no cambia nada.
+// Nombre de persona completo: no es el usuario técnico y trae al menos nombre y apellido (2 palabras de 2+ letras).
+function esNombreCompleto(n) {
+  const t = String(n == null ? '' : n).trim().replace(/\s+/g, ' ');
+  return Boolean(t) && !esNombreTecnico(t) && t.split(' ').filter((w) => w.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g, '').length >= 2).length >= 2;
+}
 function responsableElaboracion() {
   if (estado.perfil && estado.perfil.rol === 'UNIDAD') {
     const v = document.getElementById('selUsuario').value.trim();
-    return (v && !esNombreTecnico(v)) ? v : nombrePersonaDe(estado.perfil);
+    if (esNombreCompleto(v)) return v;
+    const p = nombrePersonaDe(estado.perfil);
+    return esNombreCompleto(p) ? p : '';
   }
   return usuarioActual();
 }

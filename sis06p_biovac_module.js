@@ -1289,7 +1289,7 @@
       const campo = document.getElementById('selUsuario');
       await mostrarModal({
         titulo: 'Falta el nombre de quien elabora',
-        mensaje: 'El SINBA-SIS sale con el nombre de la persona que lo elaboró en todas sus hojas. Escríbelo en «Responsable de la información» (arriba) y vuelve a enviar.',
+        mensaje: 'El SINBA-SIS sale con el nombre completo (nombre y apellido) de la persona que lo elaboró en todas sus hojas. Escríbelo en «Responsable de la información» (arriba) y vuelve a enviar.',
         textoAceptar: 'Entendido', sinCancelar: true
       });
       if (campo) { campo.scrollIntoView({ block: 'center' }); campo.focus(); }
@@ -2311,6 +2311,7 @@
     let nombre = inp.value.trim();
     if (!nombre || esNombreTecnico(nombre)) { nombre = nombrePersonaDe(estado.perfil) || ''; inp.value = nombre; } // vacío o usuario técnico no se guardan
     if (!nombre) { toast('Escribe el nombre de quien elabora este SINBA-SIS.', 'error'); return; }
+    if (!esNombreCompleto(nombre)) { toast('Escribe el nombre completo (nombre y apellido) de quien elabora este SINBA-SIS.', 'error'); return; }
     _responsableManual = true;
     try { localStorage.setItem('sis_responsable_' + estado.perfil.clues, nombre); } catch (e) { /* sin storage */ }
 
@@ -3242,8 +3243,50 @@
     el.style.display = 'block';
   }
 
+  // Aviso para la UNIDAD cuando todo está listo (guardado, paloteo = Movimiento, nombre escrito, sin lotes caducados con existencia)
+  // pero NO se ha enviado: guardar no basta, el municipal solo recibe el SINBA-SIS cuando se pulsa «Enviar».
+  function estaListoSinEnviar() {
+    if (!esUnidadSesion() || !datosUnidadActiva() || enEntregaMunicipal()) return false;
+    const { captura, est, filas, difs } = estadoRuta();
+    if (est !== 'BORRADOR' || !captura || _sinGuardar || filas === null || difs.length > 0) return false;
+    if (!responsableElaboracion()) return false;
+    const caducados = typeof lotesCaducadosConExistencia === 'function' ? lotesCaducadosConExistencia() : [];
+    return caducados.length === 0;
+  }
+  function renderListoParaEnviar() {
+    let el = document.getElementById('sisListoEnviar');
+    const listo = estaListoSinEnviar();
+    if (!listo) { if (el) el.style.display = 'none'; return; }
+    const v = _ventanaCache;
+    const abierto = Boolean(v && v.dentro_envio);
+    if (!el) {
+      const ref = document.getElementById('rutaMes');
+      if (!ref) return;
+      el = document.createElement('div');
+      el.id = 'sisListoEnviar';
+      ref.insertAdjacentElement('afterend', el);
+      el.addEventListener('click', (ev) => {
+        if (!ev.target.closest('[data-enviar-ahora]')) return;
+        const b = document.getElementById('btnEnviarSIS06P');
+        if (b) b.click();
+      });
+    }
+    el.className = abierto ? 'abierto' : 'espera';
+    el.setAttribute('role', abierto ? 'alert' : 'status');
+    el.innerHTML = abierto
+      ? `<span class="material-symbols-rounded" aria-hidden="true">outbox</span>
+         <div><b>Tu SINBA-SIS está listo, pero todavía NO lo has enviado</b>
+         <p>Guardar no es enviar: tu municipal no ve nada hasta que pulses <b>Enviar</b>. Tienes hasta el ${fechaMesCorta(v.fin_envio)}.</p></div>
+         <button type="button" class="btn-primario btn-mini" data-enviar-ahora><span class="material-symbols-rounded">send</span> Enviar ahora</button>`
+      : `<span class="material-symbols-rounded" aria-hidden="true">task_alt</span>
+         <div><b>Todo cuadra y ya está guardado</b>
+         <p>Falta un paso: guardar no es enviar. ${v ? `Cuando se abra el envío (${fechaMesCorta(v.inicio_envio)}) pulsa <b>Enviar</b> para que tu municipal lo reciba.` : 'Cuando se abra el envío, pulsa <b>Enviar</b> para que tu municipal lo reciba.'}</p></div>`;
+    el.style.display = 'flex';
+  }
+
   function actualizarDock() {
     renderAlertaDiferencias();
+    renderListoParaEnviar();
     actualizarPildoras();
     // En la pestaña Movimiento de un rol revisor, Guardar/Exportar de la barra
     // pertenecen al Movimiento (ver sincronizarDockMovimiento en biovac_ui.js).
@@ -3281,6 +3324,7 @@
     else if (!captura) detalle = 'Aún sin guardar este mes';
     else if (filas !== null && difs.length) detalle = (v && !v.dentro_envio) ? `${difs.length} por cuadrar antes de enviar` : `${difs.length} biológico${difs.length === 1 ? '' : 's'} no coincide${difs.length === 1 ? '' : 'n'} — corrige antes de enviar`;
     else if (v && !v.dentro_envio) detalle = `Envío del ${fechaMesCorta(v.inicio_envio)} al ${fechaMesCorta(v.fin_envio)}`;
+    else if (v && esU && estaListoSinEnviar()) detalle = `Guardado, pero falta ENVIAR (hasta el ${fechaMesCorta(v.fin_envio)})`;
     else if (v) detalle = `Listo para enviar hasta el ${fechaMesCorta(v.fin_envio)}`;
     caja.style.display = 'flex';
     const clicable = esU && est === 'BORRADOR';
@@ -3290,6 +3334,8 @@
     document.getElementById('dockEstadoTitulo').textContent = est === 'BORRADOR' ? 'Borrador' : est === 'ENVIADO' ? 'Enviado' : 'Validado';
     document.getElementById('dockPunto').className = 'dock-punto ' + (est === 'ENVIADO' ? 'enviado' : est === 'VALIDADO' ? 'validado' : '');
     // Rojo solo cuando el envío ya abrió: antes, lo que falta por cuadrar es parte normal de la captura
+    const btnEnv = document.getElementById('btnEnviarSIS06P');
+    if (btnEnv) btnEnv.classList.toggle('dock-pulso', esU && Boolean(v && v.dentro_envio) && estaListoSinEnviar());
     const hayDif = est === 'BORRADOR' && filas !== null && difs.length > 0 && !(v && !v.dentro_envio);
     document.getElementById('dockPunto').style.background = hayDif ? '#dc2626' : '';
     const detEl = document.getElementById('dockEstadoDetalle');

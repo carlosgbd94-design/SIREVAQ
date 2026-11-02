@@ -289,10 +289,17 @@
     const mov = f.movimiento_estado ? (lotes > 0 ? `${plural(lotes, 'lote', 'lotes')} en Movimiento` : 'Movimiento sin lotes') : 'Movimiento sin iniciar';
     return `${paloteo} · ${mov}`;
   }
+  // «Enviado por»: la persona que elaboró el SINBA-SIS (responsable), no el usuario técnico con el que entró la unidad (CLUES_NOMBRE).
+  function responsableSIS(f) {
+    const esPersona = (n) => { const t = String(n == null ? '' : n).trim(); return Boolean(t) && !(/^[A-Za-z]{3,6}\d{4,}(?:[_\s-]|$)/.test(t) || (/^[A-Z0-9_]+$/.test(t) && t.indexOf('_') >= 0)); };
+    if (esPersona(f.capturado_por)) return String(f.capturado_por).trim();
+    if (esPersona(f.enviado_por)) return String(f.enviado_por).trim();
+    return 'responsable sin nombre';
+  }
   function detalleUnidad(f) {
     const e = estadoDe(f);
     if (e === 'VALIDADO') return `Validado por ${f.validado_por || '—'}${f.validado_en ? ', ' + fechaCorta(f.validado_en) : ''}`;
-    if (e === 'ENVIADO') return `Enviado por ${f.enviado_por || '—'}${f.enviado_en ? ', ' + fechaCorta(f.enviado_en) : ''}`;
+    if (e === 'ENVIADO') return `Enviado por ${responsableSIS(f)}${f.enviado_en ? ', ' + fechaCorta(f.enviado_en) : ''}`;
     if (e === 'OMITIDA') return `Se continúa sin ella: ${f.sin_envio_motivo || 'sin motivo'}`;
     return detalleAvance(f);
   }

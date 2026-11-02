@@ -45,6 +45,7 @@ const GROUP_HEAD = [
   'captura_insights_ui.js',
   'sis_csv.js',
   'sis_export_module.js',
+  'sis_aviso_envio.js',
 ];
 
 // Mismo orden exacto en el que index.html los carga hoy (final del <body>, linea ~7752-7755).

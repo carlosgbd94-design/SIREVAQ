@@ -47,7 +47,12 @@
     QUERETARO: 'Querétaro', CORREGIDORA: 'Corregidora', MARQUES: 'El Marqués', HUIMILPAN: 'Huimilpan',
     NHG: 'Nuevo Hospital General', HENM: 'Hospital del Niño y la Mujer'
   };
-  const ORDEN_MUNICIPIOS = ['QUERETARO', 'CORREGIDORA', 'MARQUES', 'HUIMILPAN', 'NHG', 'HENM'];
+  // Orden de presentación: Corregidora, Huimilpan, El Marqués, hospitales y al final Querétaro (dentro de cada uno, por CLUES).
+  const ORDEN_MUNICIPIOS = ['CORREGIDORA', 'HUIMILPAN', 'MARQUES', 'NHG', 'HENM', 'QUERETARO'];
+  function ordenarSeguimiento(filas) {
+    const pos = (m) => { const i = ORDEN_MUNICIPIOS.indexOf(String(m || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim()); return i < 0 ? ORDEN_MUNICIPIOS.length : i; };
+    return filas.slice().sort((x, y) => pos(x.municipio) - pos(y.municipio) || String(x.clues || '').localeCompare(String(y.clues || ''), 'es', { numeric: true }));
+  }
   const ES_HOSPITAL = { NHG: true, HENM: true };
 
   // Filtro por estatus de la tabla (se elige con las tarjetas de conteo; se vuelve a tocar para quitarlo).
@@ -88,7 +93,7 @@
       return;
     }
 
-    const filas = await anotarSinEnvio(data || [], mes, anio);
+    const filas = ordenarSeguimiento(await anotarSinEnvio(data || [], mes, anio));
     window.__sis06pUltimasFilas = filas;
     // MUNICIPAL con el cierre guiado: el seguimiento se pinta como el paso 1
     // (municipal_guiado.js); el resto de este archivo lo sigue usando ADMIN/JURISDICCIONAL.
@@ -257,6 +262,14 @@
     }
   }
 
+  // «Enviado por»: la persona que elaboró el SINBA-SIS (responsable), no el usuario técnico con el que entró la unidad (CLUES_NOMBRE).
+  function responsableSIS(f) {
+    const esPersona = (n) => { const t = String(n == null ? '' : n).trim(); return Boolean(t) && !(/^[A-Za-z]{3,6}\d{4,}(?:[_\s-]|$)/.test(t) || (/^[A-Z0-9_]+$/.test(t) && t.indexOf('_') >= 0)); };
+    if (esPersona(f.capturado_por)) return String(f.capturado_por).trim();
+    if (esPersona(f.enviado_por)) return String(f.enviado_por).trim();
+    return 'responsable sin nombre';
+  }
+
   // Vista ADMIN/MUNICIPAL -- tabla plana, sin cambios de fondo respecto a la
   // versión original (Fase 4): una fila por CLUES, clic salta a modo
   // revisión (solo MUNICIPAL, ver irARevisarUnidad).
@@ -271,7 +284,7 @@
       let detalle = '';
       if (f.sin_envio && f.estado !== 'ENVIADO' && f.estado !== 'VALIDADO') detalle = `Se continúa sin ella: ${f.sin_envio_motivo || 'sin motivo'}`;
       else if (f.estado === 'VALIDADO') detalle = `Validado por ${f.validado_por || '—'}, ${f.validado_en ? new Date(f.validado_en).toLocaleDateString('es-MX') : ''}`;
-      else if (f.estado === 'ENVIADO') detalle = `Enviado por ${f.enviado_por || '—'}, ${f.enviado_en ? new Date(f.enviado_en).toLocaleDateString('es-MX') : ''}`;
+      else if (f.estado === 'ENVIADO') detalle = `Enviado por ${responsableSIS(f)}, ${f.enviado_en ? new Date(f.enviado_en).toLocaleDateString('es-MX') : ''}`;
       else detalle = detalleAvance(f);
 
       return `
@@ -783,7 +796,7 @@
   async function cargarFilas(mes, anio) {
     const { data, error } = await estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio });
     if (error) { toast('No se pudo cargar el seguimiento: ' + error.message, 'error'); return null; }
-    const filas = await anotarSinEnvio(data || [], mes, anio);
+    const filas = ordenarSeguimiento(await anotarSinEnvio(data || [], mes, anio));
     window.__sis06pUltimasFilas = filas;
     return filas;
   }

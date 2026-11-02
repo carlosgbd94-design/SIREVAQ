@@ -49,12 +49,12 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.109"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.72"></script>
+<script defer src="biovac_ui.js?v=2026.110"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.74"></script>
 <script defer src="sis_csv.js?v=2"></script>
-<script defer src="sis06p_dashboard_module.js?v=2026.25"></script>
+<script defer src="sis06p_dashboard_module.js?v=2026.27"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
-<script defer src="municipal_guiado.js?v=21"></script>
+<script defer src="municipal_guiado.js?v=22"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -346,6 +346,20 @@ window.onunhandledrejection = function (event) {
   #sisAlertaDiferencias.preliminar .sis-dif-cab b { color: #1e293b; }
   #sisAlertaDiferencias.preliminar .sis-dif-chip { border-color: #cbd5e1; color: #334155; }
   #sisAlertaDiferencias.preliminar .sis-dif-chip em { color: #0369a1; }
+  #sisListoEnviar { display: none; align-items: center; gap: 12px; margin-top: 12px; padding: 14px 16px; border-radius: 14px; }
+  #sisListoEnviar > .material-symbols-rounded { font-size: 30px; flex-shrink: 0; }
+  #sisListoEnviar > div { flex: 1; min-width: 0; }
+  #sisListoEnviar b { display: block; font-size: 15px; font-weight: 800; }
+  #sisListoEnviar p { margin: 3px 0 0; font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+  #sisListoEnviar p b { display: inline; font-size: inherit; }
+  #sisListoEnviar.abierto { background: #fffbeb; border: 2px solid #f59e0b; color: #78350f; box-shadow: 0 6px 20px rgba(245, 158, 11, .2); }
+  #sisListoEnviar.abierto > .material-symbols-rounded { color: #d97706; }
+  #sisListoEnviar.espera { background: #f0fdf4; border: 1.5px solid #86efac; color: #14532d; }
+  #sisListoEnviar.espera > .material-symbols-rounded { color: #16a34a; }
+  @media (max-width: 760px) { #sisListoEnviar { flex-wrap: wrap; padding: 12px 14px; } #sisListoEnviar .btn-primario { width: 100%; justify-content: center; } }
+  @keyframes dockPulso { 0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, .55); } 55% { box-shadow: 0 0 0 9px rgba(245, 158, 11, 0); } }
+  .dock-enviar.dock-pulso { animation: dockPulso 1.8s ease-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .dock-enviar.dock-pulso { animation: none; outline: 2px solid #f59e0b; } }
   .sis-dif-cab { display: flex; gap: 12px; align-items: flex-start; }
   .sis-dif-cab > .material-symbols-rounded { font-size: 28px; color: #dc2626; flex-shrink: 0; }
   .sis-dif-cab b { display: block; font-size: 15px; font-weight: 800; color: #991b1b; }
