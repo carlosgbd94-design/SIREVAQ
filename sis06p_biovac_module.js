@@ -671,17 +671,29 @@
           style="width:88px; text-align:center; font-weight:800; font-size:13px; border:1.5px solid #cbd5e1; border-radius:9px; padding:6px 8px; ${soloLectura ? 'background:#f1f5f9;' : ''}">
       </label>`;
     const bloques = AJUSTES_DEF.map((d) => `
-      <div data-comodin-par="${d.idx}" style="padding:8px 0; border-top:1px solid rgba(0,0,0,.06);">
-        <div style="font-size:11.5px; font-weight:800;">${d.a} / ${d.b}</div>
-        <div data-comodin-diag="${d.idx}" role="status" aria-live="polite" style="margin:2px 0 6px;"></div>
-        ${campo(d.keyFwd, `Dosis de ${d.b} aplicadas y reportadas en el paloteo como ${d.a}`)}
-        ${campo(d.keyRev, `Dosis de ${d.a} aplicadas y reportadas en el paloteo como ${d.b}`)}
+      <div data-comodin-par="${d.idx}" style="padding:10px 0; border-top:1px solid rgba(0,0,0,.08);">
+        <div style="font-size:12.5px; font-weight:900;">${d.a} y ${d.b}</div>
+        <div data-comodin-diag="${d.idx}" role="status" aria-live="polite" style="margin:3px 0 8px;"></div>
+        <div style="font-size:11px; font-weight:800; color:#475569; margin-bottom:2px;">¿Cuál fue tu caso? Escribe la cantidad solo en UNA de las dos casillas:</div>
+        ${campo(d.keyFwd, `Apliqué ${d.b}, pero en el paloteo la anoté como ${d.a}`)}
+        ${campo(d.keyRev, `Apliqué ${d.a}, pero en el paloteo la anoté como ${d.b}`)}
       </div>`).join('');
+    const paso = (n, t) => `<li style="display:flex; gap:8px; align-items:flex-start; margin:3px 0;"><span aria-hidden="true" style="flex:none; width:18px; height:18px; border-radius:50%; background:#d97706; color:#fff; font-size:11px; font-weight:900; display:flex; align-items:center; justify-content:center;">${n}</span><span>${t}</span></li>`;
     return `
-      <details id="sisbComodin" open style="margin-top:10px; background:rgba(255,255,255,.65); border:1px solid rgba(0,0,0,.08); border-radius:10px;">
-        <summary style="cursor:pointer; padding:8px 12px; font-size:11.5px; font-weight:800;" title="Úsalo solo si aplicaste una vacuna y en el paloteo la reportaste como otra">Ajuste por sustitución (comodín)</summary>
-        <div style="padding:2px 12px 8px;">
-          <div style="font-size:11px; font-weight:500; opacity:.85; margin-bottom:4px;">Si se aplicó una vacuna y en el paloteo se reportó como otra (SRP por SR, TdPa por DPT o al revés), el Movimiento la da de baja como la que realmente se usó. El aviso se actualiza en vivo con lo que tecleas en el paloteo; el comodín solo se guarda con el botón Guardar.</div>
+      <details id="sisbComodin" open style="margin-top:10px; background:#fffbeb; border:2px solid #f59e0b; border-radius:12px;">
+        <summary style="cursor:pointer; padding:10px 14px; font-size:13px; font-weight:900; color:#92400e; display:flex; align-items:center; gap:8px; flex-wrap:wrap;" title="Úsalo solo si aplicaste una vacuna y en el paloteo la reportaste como otra">
+          <span class="material-symbols-rounded comodin-ico" aria-hidden="true" style="font-size:20px;">swap_horiz</span>
+          Comodín: ¿aplicaste una vacuna y la anotaste como otra?
+          <span style="font-size:10.5px; font-weight:800; background:#f59e0b; color:#fff; border-radius:999px; padding:2px 8px;">Aquí se corrige</span>
+        </summary>
+        <div style="padding:2px 14px 10px;">
+          <div style="font-size:12px; font-weight:600; color:#78350f; margin-bottom:6px;">Pasa cuando se acaba una vacuna y se usa su equivalente (SRP en lugar de SR, o TdPa en lugar de DPT). En el paloteo se anota como la que indica la norma, pero el Movimiento descuenta la que de verdad se usó. Por eso no cuadran, y el comodín le dice al sistema cuántas dosis fueron.</div>
+          <ol style="list-style:none; margin:0 0 8px; padding:0; font-size:12px; font-weight:700; color:#78350f;">
+            ${paso(1, 'Mira abajo el aviso de cada par: te dice si la diferencia se explica por una sustitución y de cuántas dosis.')}
+            ${paso(2, 'Presiona el botón <b>Aplicar N dosis</b> (o escribe tú la cantidad en la casilla que describe tu caso).')}
+            ${paso(3, 'Presiona <b>Guardar</b> arriba. Hasta que guardes, el comodín no cuenta.')}
+          </ol>
+          <div style="font-size:11.5px; font-weight:600; background:#fff; border:1px dashed #f59e0b; border-radius:10px; padding:7px 10px; color:#475569;"><b>Ejemplo:</b> aplicaste 10 SRP porque no había SR, pero las anotaste como SR. Escribe 10 en la casilla <i>«Apliqué SRP, pero en el paloteo la anoté como SR»</i> y guarda. Si no hubo sustitución, deja todo en blanco.</div>
           ${bloques}
         </div>
       </details>`;
@@ -708,7 +720,7 @@
       const dg = diagnosticoPar(d, x, aj);
       const tecleado = dg.sug && (dg.sug.dir === 'fwd' ? aj.fwd : aj.rev) === dg.sug.n;
       const btn = (!_comodinSoloLectura && dg.sug && !tecleado)
-        ? ` <button type="button" class="btn-mini btn-secundario comodin-usar" data-comodin-usar="${dg.sug.dir === 'fwd' ? d.keyFwd : d.keyRev}" data-opuesto="${dg.sug.dir === 'fwd' ? d.keyRev : d.keyFwd}" data-valor="${dg.sug.n}" title="Escribe ${dg.sug.n} en la casilla correcta; tú decides cuándo guardar" aria-label="Aplicar el ajuste sugerido de ${dg.sug.n} dosis"><span class="material-symbols-rounded" aria-hidden="true">auto_fix_high</span> Aplicar ${dg.sug.n} dosis</button>` : '';
+        ? ` <button type="button" class="btn-mini comodin-usar" style="margin-left:6px; background:#d97706; color:#fff; border:0; font-weight:800;" data-comodin-usar="${dg.sug.dir === 'fwd' ? d.keyFwd : d.keyRev}" data-opuesto="${dg.sug.dir === 'fwd' ? d.keyRev : d.keyFwd}" data-valor="${dg.sug.n}" title="Escribe ${dg.sug.n} en la casilla correcta; tú decides cuándo guardar" aria-label="Aplicar el ajuste sugerido de ${dg.sug.n} dosis"><span class="material-symbols-rounded" aria-hidden="true">auto_fix_high</span> Aplicar ${dg.sug.n} dosis</button>` : '';
       // Icono además del color: el estado no depende solo de distinguir rojo/verde/ámbar.
       const ico = dg.cuadra ? 'check_circle' : (dg.color.indexOf('error') >= 0 ? 'error' : 'lightbulb');
       const huella = dg.cuadra + '|' + dg.texto;
@@ -728,6 +740,13 @@
   }
 
   document.addEventListener('click', (ev) => {
+    const ir = ev.target && ev.target.closest ? ev.target.closest('[data-comodin-ir]') : null;
+    if (ir) {
+      ev.preventDefault();
+      const c = document.getElementById('sisbComodin');
+      if (c) { c.open = true; c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.remove('comodin-resalta'); void c.offsetWidth; c.classList.add('comodin-resalta'); }
+      return;
+    }
     const btn = ev.target && ev.target.closest ? ev.target.closest('[data-comodin-usar]') : null;
     if (!btn) return;
     const input = document.getElementById(`sisb_ajuste_${btn.getAttribute('data-comodin-usar')}`);
@@ -779,7 +798,7 @@
     const ok = dif.length === 0;
     const fila = (f) => `
       <tr style="border-bottom:1px solid rgba(0,0,0,.06);">
-        <td style="padding:5px 8px;">${f.etiqueta}${f.coincide ? '' : `<div style="font-size:10.5px; font-weight:600; opacity:.85; margin-top:1px;">${Number(f.paloteo) > Number(f.aplicado) ? `Faltan ${_num2(Number(f.paloteo) - Number(f.aplicado))} dosis en el Movimiento (o sobran en el paloteo)` : `Sobran ${_num2(Number(f.aplicado) - Number(f.paloteo))} dosis en el Movimiento (o faltan en el paloteo)`}</div>`}</td>
+        <td style="padding:5px 8px;">${f.etiqueta}${f.coincide ? '' : `<div style="font-size:10.5px; font-weight:600; opacity:.85; margin-top:1px;">${Number(f.paloteo) > Number(f.aplicado) ? `Faltan ${_num2(Number(f.paloteo) - Number(f.aplicado))} dosis en el Movimiento (o sobran en el paloteo)` : `Sobran ${_num2(Number(f.aplicado) - Number(f.paloteo))} dosis en el Movimiento (o faltan en el paloteo)`}</div>${(f.claves || []).length === 1 && AJUSTES_DEF.some((d) => d.claves.indexOf(f.claves[0]) >= 0) ? '<a href="#sisbComodin" data-comodin-ir style="display:inline-block; margin-top:3px; font-size:10.5px; font-weight:800; color:#b45309;">¿Aplicaste otra vacuna en su lugar? Usa el comodín ↓</a>' : ''}`}</td>
         <td style="padding:5px 8px; text-align:center; font-weight:800;">${Number(f.paloteo)}</td>
         <td style="padding:5px 8px; text-align:center; font-weight:800;">${Number(f.aplicado)}</td>
         <td style="padding:5px 8px; text-align:center; font-weight:800;">${f.coincide ? '✓' : _num2(Number(f.paloteo) - Number(f.aplicado)) > 0 ? `+${_num2(Number(f.paloteo) - Number(f.aplicado))}` : _num2(Number(f.paloteo) - Number(f.aplicado))}</td>
@@ -3826,6 +3845,13 @@
       const clues = _edCov.clues; const mes = _edCov.mes; const anio = _edCov.anio;
       _edCov = null;
       cerrarDetalleSIS();
+      // El servidor recalcula los totales de COVID-19 de la hoja SIS-06-P enviada: se relee y se repinta (salvo que
+      // haya cambios sin guardar en la hoja, que no se deben perder).
+      try {
+        const { data: caps } = await estado.db.from('sis06p_capturas').select('*').eq('clues', clues);
+        if (caps) _sis06pCapturasCache = caps;
+      } catch (_) { /* se queda con lo que había en pantalla */ }
+      if (!_sinGuardar) render();
       renderInfluenza();
       renderCEH();
       refrescarConciliacion();

@@ -140,7 +140,7 @@
         I('vaccines', '#C26750', 'Influenza', 'Se lee del panel de Meta-Logro (ahí se valida contra tu meta). Aquí ves el corte del mes por semana; para cambiarlo vas a Meta-Logro.'),
         T('El mes en cuatro pasos'),
         P(1, 'Captura', 'Se abre una semana antes de cerrar el mes. Guarda con el botón de la barra de abajo; lo que teclees también queda respaldado en tu dispositivo, así que un corte de internet no te hace perder el avance.'),
-        P(2, 'Concilia', 'Las dosis aplicadas del paloteo y las del Movimiento deben coincidir, biológico por biológico. Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT) usa el comodín de sustitución.'),
+        P(2, 'Concilia', 'Las dosis aplicadas del paloteo y las del Movimiento deben coincidir, biológico por biológico. Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT) baja a la tarjeta naranja «Comodín», presiona «Aplicar N dosis» y guarda.'),
         P(3, 'Envía', 'Solo del último día del mes a la semana siguiente. Al enviar, todo el archivo se bloquea, incluida Influenza.'),
         P(4, 'Validación', 'El municipal revisa; si corrige algo, tú ves cada cambio y lo aceptas. Ya validado puedes exportar el Excel oficial e imprimir.'),
         T('Dos candados, dos dueños'),
@@ -164,7 +164,7 @@
         I('groups', '#7c3aed', 'Afromexicanos, indígenas y migrantes', 'Son subconjuntos del total, nunca se suman aparte: si el total es 40 y afromexicanos 20, el total sigue siendo 40. Ninguno puede superar al total de su fila.'),
         T('Guardar y enviar'),
         P(1, 'Guarda', 'Cada biológico es un contenedor: ábrelo para capturar. El aviso "Cambios sin guardar" y el botón de la barra te dicen si falta guardar.'),
-        P(2, 'Concilia', 'La tarjeta de conciliación muestra los biológicos cuyas dosis no coinciden con Movimiento de Biológico. Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT), captura cuántas en el comodín de sustitución.'),
+        P(2, 'Concilia', 'La tarjeta de conciliación muestra los biológicos cuyas dosis no coinciden con Movimiento de Biológico. Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT), captura cuántas en la tarjeta naranja «Comodín» (el botón «Aplicar N dosis» la llena por ti) y guarda.'),
         P(3, 'Envía', 'Cuando todo cuadra y estás en la ventana de envío, el botón Enviar se enciende.'),
         N('Si se va el internet o falla el guardado, lo que tecleaste se queda respaldado en este dispositivo: al volver a abrir el mes te avisamos y lo recuperas. Después de enviar esta hoja se bloquea; si el municipal corrige algo, te aparece cada cambio para que lo aceptes.')
       ]

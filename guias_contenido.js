@@ -81,7 +81,7 @@
       { titulo: 'Concilia', bloques: [
         I('compare_arrows', '#16a34a', 'Cómo se ve', 'Bajo cada biológico ves cuántas dosis reportaste en SIS-06-P y cuántas suman tus lotes. En verde: coinciden; si no, te dice la diferencia.'),
         I('tune', '#0284c7', 'Cómo se corrige', 'La tarjeta dice cuántas dosis faltan o sobran. Corrige el lado que esté mal —las «aplicadas» por lote en Movimiento o el paloteo en SIS-06-P— hasta que sean iguales.'),
-        I('swap_horiz', '#d97706', 'Comodín de sustitución', 'Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT), anota cuántas con el comodín.'),
+        I('swap_horiz', '#d97706', 'Comodín de sustitución', 'Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT), usa la tarjeta naranja «Comodín»: presiona «Aplicar N dosis» y guarda.'),
         Tu('cuadrar', 'Míralo en un tutorial corto', 'Ver cómo se corrige cuando el paloteo y el Movimiento no coinciden.'),
         N('Si las dosis no coinciden, el sistema no deja enviar.')
       ] },

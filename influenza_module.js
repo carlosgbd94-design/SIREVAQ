@@ -4416,6 +4416,15 @@ function renderValidacionEdicionGrid(clues, fecha) {
   };
 }
 
+/** Meta anual de COVID-19 de una unidad: la de su destino si es hospital (HENM/NHG), si no la propia (igual que la captura de la unidad). */
+function covidMetasDeUnidad(clues) {
+  const X = window.CovidMetasExport;
+  const destino = X ? Object.keys(X.CLUES_HOSPITALES).find(k => X.CLUES_HOSPITALES[k] === clues) : null;
+  const delDestino = destino ? _covidMetasArray.find(r => !r.clues && String(r.municipio).toUpperCase() === destino) : null;
+  const propia = _covidMetasArray.find(r => r.clues === clues);
+  return (delDestino && delDestino.metas) || (propia && propia.metas) || {};
+}
+
 /** Acumulado por rubro (Moderna + Pfizer) de las demás semanas de la unidad, y por marca en dosis de 0.5 mL. */
 function covidAcumOtras(clues, fecha) {
   const C = window.CovidCaptura;
@@ -4444,7 +4453,7 @@ function renderValidacionEdicionGridCovid(clues, fecha) {
   limpiarErroresValidacion();
   content.classList.remove("hidden");
 
-  const metas = (_covidMetasArray.find(m => m.clues === clues) || {}).metas || {};
+  const metas = covidMetasDeUnidad(clues);
   const acum = covidAcumOtras(clues, fecha);
   const orig = report ? (valoresOriginalesUnidad(report) || report.valores) : null;
   const nombreMarca = (m) => (m === "PFIZER" ? "Pfizer" : "Moderna");
@@ -4532,7 +4541,7 @@ async function saveValidationReportCovid(clues, fecha) {
     crudo[inp.dataset.marca][inp.dataset.rubro] = parseInt(inp.value, 10) || 0;
   });
   const valores = C.limpiar(crudo);
-  const metas = (_covidMetasArray.find(m => m.clues === clues) || {}).metas || {};
+  const metas = covidMetasDeUnidad(clues);
   const reglas = {};
   C.RUBROS.forEach(r => { reglas[r] = C.reglaRubro(r, fecha, _campaignConfig.fecha_inicio, _campaignConfig.fecha_fin); });
   const v = C.validar(valores, metas, covidAcumOtras(clues, fecha), _currentValidationReport?.valores, reglas);

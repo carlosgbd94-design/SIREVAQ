@@ -91,3 +91,17 @@ test('La pestaña Reportes por semana sigue visible al elegir COVID-19 (Config d
   });
   expect(r).toEqual({ val: false, cfg: true });
 });
+
+test('La meta de COVID-19 de un hospital sale de su destino (HENM), la de una unidad de su renglón propio', async ({ page }) => {
+  await page.route(/\.supabase\.co\//, servidor({}));
+  await page.goto('/index.html', { waitUntil: 'load' });
+  await page.waitForFunction(() => typeof covidMetasDeUnidad === 'function', null, { timeout: 20000 });
+  const r = await page.evaluate(() => {
+    _covidMetasArray = [
+      { municipio: 'HENM', clues: null, metas: { c4: 100 } },
+      { municipio: 'QUERETARO', clues: 'QTSSA000001', metas: { c3: 40 } }
+    ];
+    return { hospital: covidMetasDeUnidad('QTSSA001740'), unidad: covidMetasDeUnidad('QTSSA000001'), nada: covidMetasDeUnidad('QTSSA999999') };
+  });
+  expect(r).toEqual({ hospital: { c4: 100 }, unidad: { c3: 40 }, nada: {} });
+});
