@@ -63,8 +63,8 @@ button.pt { cursor: pointer; }
 .mun-unidad.completo .mun-dot { background: #16a34a; }
 .mun-unidad.omitida .mun-dot { background: #94a3b8; }
 .mun-unidad.omitida { background: #f8fafc; border-style: dashed; }
-.mun-unidad.parcial { background: #f6fdf8; border-color: #bbf7d0; }
-/* Validada: verde franco con palomita; por validar: verde tenue (el punto ámbar y la etiqueta marcan que falta validar) */
+.mun-unidad.parcial { background: #fffdf5; }
+/* Solo las validadas van en verde, con palomita; las por validar conservan su tono ámbar */
 .mun-unidad.completo { background: #ecfdf3; border-color: #86efac; }
 .mun-unidad.completo .mun-dot { position: relative; width: 16px; height: 16px; }
 .mun-unidad.completo .mun-dot::after { content: ''; position: absolute; left: 5px; top: 2.5px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }

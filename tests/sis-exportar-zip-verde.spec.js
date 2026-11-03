@@ -83,12 +83,12 @@ test('Unidad: el PDF ya no es un botón aparte en la barra del Movimiento', asyn
   await expect(page.locator('#btnVerPdfDock')).toBeHidden();
 });
 
-test('Municipal: tarjetas verdes (validada franca, por validar tenue)', async ({ page }) => {
+test('Municipal: solo las unidades validadas van en verde; las por validar siguen ámbar', async ({ page }) => {
   await abrir(page, 'MUNICIPAL');
   await page.waitForSelector('#munEnvios .mun-unidad.completo');
   const fondo = (sel) => page.locator(sel).first().evaluate((e) => getComputedStyle(e).backgroundColor);
   expect(await fondo('#munEnvios .mun-unidad.completo')).toBe('rgb(236, 253, 243)');
-  expect(await fondo('#munEnvios .mun-unidad.parcial')).toBe('rgb(246, 253, 248)');
+  expect(await fondo('#munEnvios .mun-unidad.parcial')).toBe('rgb(255, 253, 245)');
 });
 
 test('Municipal: «Exportar SIS masiva (ZIP)» en Entrega, solo con todo validado, con las unidades validadas', async ({ page }) => {
