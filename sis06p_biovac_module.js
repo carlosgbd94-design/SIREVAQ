@@ -2772,12 +2772,15 @@
         ? 'Dosis de antiinfluenza del mes por semana, leídas de Meta-Logro. Con el SIS enviado, tú puedes corregirlas.'
         : 'Dosis de antiinfluenza del mes por semana, leídas de Meta-Logro. Solo lectura.';
     }
+    const btnCovid = document.getElementById('btnEditarCovid');
+    if (btnCovid) btnCovid.style.display = 'none';
     if (cta && esRolRevisor()) {
       const puede = Boolean(captura) && estadoSIS !== 'BORRADOR';
       cta.style.display = puede ? 'flex' : 'none';
       cta.classList.remove('bloqueada');
-      document.getElementById('infCtaTitulo').textContent = 'Corregir Influenza de esta unidad';
-      document.getElementById('infCtaTexto').textContent = 'Puedes cambiar las dosis de cada semana o agregar una semana que falte. Cada cambio queda registrado y la unidad lo verá para aceptarlo.';
+      if (btnCovid) btnCovid.style.display = puede && (anio * 12 + mes >= 2026 * 12 + 10) ? '' : 'none';
+      document.getElementById('infCtaTitulo').textContent = 'Corregir Influenza y COVID-19 de esta unidad';
+      document.getElementById('infCtaTexto').textContent = 'Puedes cambiar las dosis de cada semana o agregar una semana que falte, de Influenza o de COVID-19. Cada cambio queda registrado y la unidad lo verá para aceptarlo.';
       if (btnEditar) {
         btnEditar.disabled = false;
         btnEditar.title = 'Abrir el editor de semanas de Influenza de este mes';
@@ -3687,6 +3690,178 @@
   });
 
   // ---------------------------------------------------------------------------
+  // Editor de COVID-19 para revisores: igual que el de Influenza, pero cada semana
+  // trae dos marcas (Moderna y Pfizer; Pfizer solo adultos). Escribe en covid_capturas.
+  // ---------------------------------------------------------------------------
+  let _edCov = null;
+
+  async function recargarCovidCache(clues) {
+    const { data, error } = await estado.db.from('covid_capturas')
+      .select('id, fecha, valores, sin_movimiento, capturado_por, anio_campana, municipio, unidad').eq('clues', clues);
+    if (error) throw error;
+    _covidCapturasCache = data || [];
+    _covidCapturasOk = true;
+  }
+
+  function copiaValoresCovid(valores) {
+    const C = window.CovidCaptura;
+    return C.limpiar(valores);
+  }
+
+  function editorCovidHtml() {
+    const C = window.CovidCaptura;
+    const semanas = _edCov.semanas;
+    const fechas = semanas.map((x) => x.fecha);
+    const faltan = viernesDelMes(_edCov.mes, _edCov.anio).filter((f) => !semanas.some((w) => w.fecha === f));
+    const encabezado = semanas.map((w) => `<th style="${_TH}">${rangoSemanaTexto(w.fecha, fechas)}${w.nuevo ? '<br><span style="font-weight:600; font-size:9px; text-transform:none; color:var(--secondary);">nueva</span>' : ''}</th>`).join('');
+    let filas = '';
+    C.RUBROS.forEach((r) => {
+      filas += `<tr><td colspan="${2 + semanas.length}" style="padding:6px 8px; background:#f1f5f9; color:#334155; font-size:11px; font-weight:800;">${_esc(C.ETIQUETA[r])}</td></tr>`;
+      C.MARCAS.filter((m) => C.RUBROS_MARCA[m].indexOf(r) >= 0).forEach((m) => {
+        const celdas = semanas.map((w) => {
+          const v = Number(w.valores[m][r]) || 0;
+          const cambiado = v !== (Number(w.orig[m][r]) || 0);
+          return `<td style="padding:2px 3px; text-align:center;"><input type="number" min="0" step="1" inputmode="numeric" class="ed-cov-in" data-f="${w.fecha}" data-m="${m}" data-r="${r}" value="${v || ''}" placeholder="0" aria-label="${m === 'PFIZER' ? 'Pfizer' : 'Moderna'} · ${_esc(C.ETIQUETA[r])} · semana del ${rangoSemanaTexto(w.fecha, fechas)}"
+            style="width:58px; text-align:center; font-weight:700; font-size:12px; border:1.5px solid ${cambiado ? '#d97706' : '#e2e8f0'}; background:${cambiado ? '#fffbeb' : '#fff'}; border-radius:8px; padding:5px 4px;"></td>`;
+        }).join('');
+        filas += `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 18px; font-size:11.5px; color:#475569;">${m === 'PFIZER' ? 'Pfizer' : 'Moderna'}</td><td style="padding:2px 4px; text-align:center; font-size:10.5px; color:var(--muted);">${C.SIS_CLAVE[r]}</td>${celdas}</tr>`;
+      });
+    });
+    const agregar = faltan.length
+      ? `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          <label for="edCovNueva" style="font-size:11.5px; font-weight:700; color:var(--muted);">¿Falta una semana?</label>
+          <select id="edCovNueva" style="padding:6px 8px; border-radius:8px; border:1px solid var(--outline-variant);">${faltan.map((f) => `<option value="${f}">Semana del ${rangoSemanaTexto(f, fechas)}</option>`).join('')}</select>
+          <button type="button" class="btn-mini btn-secundario" id="edCovAgregar"><span class="material-symbols-rounded">add</span> Agregar semana</button>
+        </div>` : '';
+    const vacio = semanas.length ? '' : '<p style="font-size:12.5px; color:var(--muted); margin:0 0 10px;">Esta unidad no tiene reportes de COVID-19 en este mes.</p>';
+    return `${agregar}${vacio}
+      <div style="overflow:auto; max-height:56vh;">
+        <table class="detalle-tabla" style="min-width:340px;">
+          <thead><tr><th style="text-align:left;">Marca</th><th>Clave SIS</th>${encabezado}</tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>
+      <p style="font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0;">Se marcan en ámbar las casillas que cambiaste. Las dosis de 6 a 59 meses son de 0.25 mL y Pfizer solo se aplica a adultos. Guarda para que el cambio llegue al servidor.</p>`;
+  }
+
+  function pintarEditorCovid() {
+    const cuerpo = document.getElementById('detalleSISCuerpo');
+    if (cuerpo) cuerpo.innerHTML = editorCovidHtml();
+  }
+
+  async function abrirEditorCovid() {
+    const C = window.CovidCaptura;
+    const activa = datosUnidadActiva();
+    if (!activa) { toast('Selecciona una unidad (CLUES) específica.', 'error'); return; }
+    if (!C) { toast('El módulo de COVID-19 no cargó: recarga la página.', 'error'); return; }
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    if (anio * 12 + mes < 2026 * 12 + 10) { toast('COVID-19 se reporta por semana desde la campaña 2026-27 (octubre de 2026).', 'error'); return; }
+    const captura = capturaDelMesActual();
+    if (!captura || captura.estado === 'BORRADOR') { toast('Esta unidad todavía no envía su SIS: nada que corregir.', 'error'); return; }
+    try {
+      await recargarCovidCache(activa.clues); // siempre se parte de lo que hay en el servidor
+    } catch (err) {
+      toast(esErrorDeRedSIS(err) ? 'Sin conexión: no se pudo abrir el editor. Intenta de nuevo cuando regrese el internet.' : 'No se pudo leer COVID-19: ' + err.message, 'error');
+      return;
+    }
+    _edCov = {
+      clues: activa.clues, unidad: activa.unidad, municipio: activa.municipio, mes, anio,
+      semanas: C.delMes(_covidCapturasCache, mes, anio).slice().sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))).map((c) => ({
+        fecha: String(c.fecha).slice(0, 10), nuevo: false, anio_campana: c.anio_campana, municipio: c.municipio, unidad: c.unidad, capturado_por: c.capturado_por,
+        orig: copiaValoresCovid(c.valores), valores: copiaValoresCovid(c.valores)
+      }))
+    };
+    abrirDetalleSIS({
+      titulo: 'Corregir COVID-19 · ' + mesNombre(mes) + ' ' + anio,
+      subtitulo: (activa.unidad || activa.clues) + ' · cada semana es un reporte, con Moderna y Pfizer por separado',
+      cuerpo: editorCovidHtml(),
+      acciones: [{ texto: 'Guardar cambios', icono: 'save', clase: 'btn-primario', onClick: guardarEditorCovid }]
+    });
+  }
+
+  async function guardarEditorCovid() {
+    if (!_edCov) return;
+    const C = window.CovidCaptura;
+    const difiere = (w) => C.MARCAS.some((m) => C.RUBROS_MARCA[m].some((r) => (Number(w.valores[m][r]) || 0) !== (Number(w.orig[m][r]) || 0)));
+    const cambios = _edCov.semanas.filter((w) => w.nuevo || difiere(w));
+    if (!cambios.length) { toast('No hay cambios que guardar.', 'ok'); return; }
+    const nombre = nombreCompletoDePerfil(estado.perfil) || String(estado.perfil.usuario || '');
+    mostrarCargando('Guardando COVID-19...');
+    try {
+      let campanas = null;
+      for (const w of cambios) {
+        let anioCampana = w.anio_campana;
+        if (w.nuevo) {
+          const hermana = _covidCapturasCache.concat(_influenzaCapturasCache).find((c) => c.anio_campana);
+          if (!campanas) {
+            const { data, error } = await estado.db.from('campanas').select('nombre, fecha_inicio, fecha_fin');
+            if (error) throw error;
+            campanas = (data || []).filter((c) => c.nombre && c.nombre.indexOf('Campaña Influenza') === 0);
+          }
+          const camp = campanas.find((c) => w.fecha >= String(c.fecha_inicio).slice(0, 10) && w.fecha <= String(c.fecha_fin).slice(0, 10));
+          if (!camp && !hermana) throw new Error('La semana del ' + rangoSemanaTexto(w.fecha, cambios.map((x) => x.fecha)) + ' queda fuera de una campaña: no se puede agregar.');
+          anioCampana = camp ? camp.nombre : hermana.anio_campana;
+        }
+        const valores = C.limpiar(w.valores);
+        const suma = C.totalDosis(valores);
+        const { data: previo, error: errPrevio } = await estado.db.from('covid_capturas')
+          .select('historial_ediciones, valores').eq('clues', _edCov.clues).eq('fecha', w.fecha).maybeSingle();
+        if (errPrevio) throw errPrevio;
+        let hist = [];
+        if (previo && previo.historial_ediciones) {
+          hist = typeof previo.historial_ediciones === 'string' ? JSON.parse(previo.historial_ediciones) : previo.historial_ediciones;
+        }
+        hist.push({ fecha_edicion: new Date().toISOString(), editado_por: estado.perfil.rol, usuario: nombre, valores_anteriores: previo ? previo.valores : null });
+        const record = {
+          clues: _edCov.clues, unidad: w.unidad || _edCov.unidad, municipio: w.municipio || _edCov.municipio,
+          fecha: w.fecha, anio_campana: anioCampana, valores,
+          capturado_por: String(w.capturado_por || nombre).toUpperCase(), editado_por: estado.perfil.rol,
+          historial_ediciones: hist, sin_movimiento: suma === 0, updated_at: new Date().toISOString()
+        };
+        const { error } = await estado.db.from('covid_capturas').upsert(record, { onConflict: 'clues,fecha' });
+        if (error) throw error;
+      }
+      await recargarCovidCache(_edCov.clues);
+      const clues = _edCov.clues; const mes = _edCov.mes; const anio = _edCov.anio;
+      _edCov = null;
+      cerrarDetalleSIS();
+      renderInfluenza();
+      renderCEH();
+      refrescarConciliacion();
+      toast('✅ COVID-19 corregido. La unidad verá los cambios para aceptarlos.', 'ok');
+      document.dispatchEvent(new CustomEvent('sis06p:corregido', { detail: { clues, mes, anio, origen: 'covid' } }));
+    } catch (err) {
+      console.error('[SINBA-SIS] Error al guardar COVID-19:', err);
+      toast(esErrorDeRedSIS(err) ? 'Sin conexión: no se guardó. Lo que escribiste sigue en el editor; vuelve a tocar Guardar cuando regrese el internet.' : 'No se guardó COVID-19: ' + (err.message || err), 'error');
+    } finally {
+      ocultarCargando();
+    }
+  }
+
+  document.addEventListener('input', (ev) => {
+    const el = ev.target;
+    if (!_edCov || !el || !el.classList || !el.classList.contains('ed-cov-in')) return;
+    const w = _edCov.semanas.find((x) => x.fecha === el.dataset.f);
+    if (!w || !w.valores[el.dataset.m]) return;
+    const m = el.dataset.m; const r = el.dataset.r;
+    w.valores[m][r] = Math.max(0, parseInt(el.value, 10) || 0);
+    const cambiado = (Number(w.valores[m][r]) || 0) !== (Number(w.orig[m][r]) || 0);
+    el.style.borderColor = cambiado ? '#d97706' : '#e2e8f0';
+    el.style.background = cambiado ? '#fffbeb' : '#fff';
+  });
+  document.addEventListener('click', (ev) => {
+    const b = ev.target && ev.target.closest ? ev.target.closest('#edCovAgregar') : null;
+    if (!b || !_edCov) return;
+    const sel = document.getElementById('edCovNueva');
+    if (!sel || !sel.value) return;
+    const vacio = copiaValoresCovid({});
+    _edCov.semanas.push({ fecha: sel.value, nuevo: true, anio_campana: null, municipio: _edCov.municipio, unidad: _edCov.unidad, capturado_por: null, orig: copiaValoresCovid({}), valores: vacio });
+    _edCov.semanas.sort((a, c) => a.fecha.localeCompare(c.fecha));
+    pintarEditorCovid();
+  });
+
+  // ---------------------------------------------------------------------------
   // Historial de meses: lista de todos los SIS de la unidad con su estatus. Es
   // SOLO consulta -- los meses enviados/validados no se pueden editar (el
   // servidor lo exige), aquí se ve, se exporta a Excel o se imprime.
@@ -3794,6 +3969,8 @@
     if (btnCerrarDetalle) btnCerrarDetalle.addEventListener('click', cerrarDetalleSIS);
     document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') cerrarDetalleSIS(); });
     if (btnMeta) btnMeta.addEventListener('click', irAMetaLogroInfluenza);
+    const btnCov = document.getElementById('btnEditarCovid');
+    if (btnCov) btnCov.addEventListener('click', abrirEditorCovid);
     const btnGuardar = document.getElementById('btnGuardarSIS06P');
     if (btnGuardar) btnGuardar.addEventListener('click', save);
     const btnEnviar = document.getElementById('btnEnviarSIS06P');
@@ -3819,7 +3996,7 @@
   window.SIS06PComodin = { PARES: AJUSTES_DEF, num2: _num2, diagnosticoPar };
   window.SIS06PBiovac = {
     init, render, save, hayCambiosSinGuardar: () => _sinGuardar, fueraDeVentana: () => fueraDeVentanaDeCaptura(capturaDelMesActual()), renderCSVPreview, exportarSISOficialCompleto, exportarZipMunicipio, configurarImpresionOficial, INFLUENZA_SIS_MAPPING,
-    abrirHistorial, abrirEditorInfluenza,
+    abrirHistorial, abrirEditorInfluenza, abrirEditorCovid,
     renderCEH, renderInfluenza, aplicarResponsable, guardarResponsable, marcarResponsableManual, refrescarConciliacion, actualizarDock
   };
 })();

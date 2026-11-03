@@ -277,6 +277,44 @@ test('Revisor: corrige una semana de Influenza de una unidad con SIS enviado y s
   expect(await page.evaluate(() => window.__corregido)).toBe(1);
 });
 
+test('Revisor: corrige una semana de COVID-19 (Moderna/Pfizer) de una unidad con SIS enviado', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-11-12T12:00:00'));   // el editor de COVID-19 solo existe desde oct-2026
+  await abrir(page, 'MUNICIPAL');
+  await prepararSIS(page, { rol: 'MUNICIPAL', estadoCaptura: 'ENVIADO' });
+  await page.evaluate(async () => {
+    const F = window.__FAKE;
+    F.tables.covid_capturas = [{ id: 'cv1', clues: 'QTSSA000001', fecha: '2026-10-09', valores: { MODERNA: { c3: 4, c4: 2 }, PFIZER: { c3: 1 } }, anio_campana: 'Campaña Influenza 2026-2027', municipio: 'QUERETARO', unidad: 'C.S. Alfa', capturado_por: 'X', sin_movimiento: false }];
+    window.__upserts = [];
+    window.__corregido = 0;
+    document.addEventListener('sis06p:corregido', () => { window.__corregido++; });
+    const real = estado.db;
+    estado.db = new Proxy(real, { get(t, p) {
+      if (p === 'from') return (tabla) => {
+        const api = t.from(tabla);
+        if (tabla === 'covid_capturas') api.upsert = async (rec) => { window.__upserts.push(rec); return { error: null }; };
+        return api;
+      };
+      return t[p];
+    } });
+    await SIS06PBiovac.init();
+    await SIS06PBiovac.abrirEditorCovid();
+  });
+  await expect(page.locator('#detalleSISOverlay')).toHaveClass(/abierto/);
+  await expect(page.locator('.ed-cov-in[data-m="MODERNA"][data-r="c3"]')).toHaveValue('4');
+  await expect(page.locator('.ed-cov-in[data-m="PFIZER"][data-r="c1"]')).toHaveCount(0);   // Pfizer no aplica a niños
+  await page.locator('.ed-cov-in[data-m="PFIZER"][data-r="c3"]').fill('5');
+  await page.locator('#detalleSISPie button', { hasText: 'Guardar cambios' }).click();
+  await page.waitForTimeout(500);
+  const up = await page.evaluate(() => window.__upserts);
+  expect(up.length).toBe(1);
+  expect(up[0].valores.PFIZER.c3).toBe(5);
+  expect(up[0].valores.MODERNA.c3).toBe(4);
+  expect(up[0].sin_movimiento).toBe(false);
+  expect(up[0].editado_por).toBe('MUNICIPAL');
+  expect(up[0].historial_ediciones.length).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__corregido)).toBe(1);
+});
+
 test('Revisor: la unidad en borrador no se puede corregir (nada que corregir todavía)', async ({ page }) => {
   await abrir(page, 'MUNICIPAL');
   await prepararSIS(page, { rol: 'MUNICIPAL', estadoCaptura: 'BORRADOR' });
