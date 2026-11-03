@@ -833,8 +833,8 @@
         <button type="button" class="btn-primario" id="munDescargarZip" ${listo ? '' : 'disabled'} title="${listo ? 'Descargar un Excel oficial por unidad en un ZIP' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">folder_zip</span> Exportar SIS masiva (ZIP)</button>
       </div>
       <div class="mun-entregar">
-        <div><b>Indicadores (RDA)</b><small id="munPubEstado">${listo ? 'Consultando…' : 'Se carga sola al validar la última unidad.'}</small></div>
-        <button type="button" class="btn-secundario" id="munPublicar" ${listo ? '' : 'disabled'} title="${listo ? 'Cargar de nuevo el concentrado validado a los indicadores' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">cloud_upload</span> Cargar a indicadores</button>
+        <div><b>Indicadores (RDA)</b><small id="munPubEstado">${listo ? 'Consultando…' : 'Se carga sola al cerrar el mes (o cuando tú lo pidas).'}</small></div>
+        <button type="button" class="btn-secundario" id="munPublicar" ${listo ? '' : 'disabled'} title="${listo ? 'Cargar ahora el concentrado validado a los indicadores (si no, se carga solo al cerrar el mes)' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">cloud_upload</span> Cargar a indicadores</button>
       </div>
       <div class="mun-siguiente">
         <span>¿Algo no cuadra? Puedes regresar sin perder nada.</span>

@@ -716,7 +716,9 @@
       _publicandoAuto = false;
     }
   }
-  document.addEventListener('sis06p:validado', (ev) => { publicarSiMunicipioCompleto(ev.detail); });
+  // Ya NO se publica al validar: para cuidar el uso de disco de Supabase (plan gratuito), la carga a indicadores se hace
+  // una sola vez al CERRAR EL MES (disparador de la base de datos) o a mano con «Cargar a indicadores».
+  // document.addEventListener('sis06p:validado', (ev) => { publicarSiMunicipioCompleto(ev.detail); });
 
   // Si un revisor corrige SIS-06-P o Influenza de una unidad cuyo municipio YA se
   // publicó a indicadores, la publicación quedaría desfasada: se vuelve a publicar
@@ -744,7 +746,8 @@
       _republicando = false;
     }
   }
-  document.addEventListener('sis06p:corregido', (ev) => { republicarSiYaPublicado(ev.detail); });
+  // Tampoco se republica en cada corrección: se vuelve a cargar al volver a cerrar el mes (o con el botón manual).
+  // document.addEventListener('sis06p:corregido', (ev) => { republicarSiYaPublicado(ev.detail); });
 
   // Saltar directo a modo revisión de una unidad desde la fila del
   // dashboard -- usa #selUnidadRevision (CLUES), no #selUnidad (ese es el
