@@ -120,10 +120,19 @@
   function reglaDosis(rb, f) {
     return R().reglaDosis(rb.grupo, f, S.camp.fecha_inicio, S.camp.fecha_fin);
   }
+  // Un mes con SIS enviado o validado congela los reportes de la unidad (lo exige también la base de datos)
+  function mesCongelado(f) {
+    const est = S && S.sis && S.sis[String(f).slice(0, 7)];
+    if (!est || est === "BORRADOR") return null;
+    const [y, m] = String(f).split("-");
+    return `El SIS de ${m}/${y} ya fue enviado: los reportes de ese mes ya no se pueden editar ni eliminar. Pide al municipal que los corrija.`;
+  }
   function estadoSemana(f) {
     const r = reporteDe(f);
     const err = ventanaError(f);
-    if (r) return { id: "guardado", texto: esSinMov(r) ? "Guardado · sin movimiento" : "Guardado", editable: !err };
+    const cong = mesCongelado(f);
+    if (r) return { id: "guardado", texto: esSinMov(r) ? "Guardado · sin movimiento" : "Guardado", editable: !err && !cong, motivo: cong || undefined, congelado: !!cong };
+    if (cong) return { id: "cerrada", texto: "SIS enviado", editable: false, motivo: cong, congelado: true };
     if (err) return { id: "cerrada", texto: "Aún no abre", editable: false, motivo: err };
     return { id: "pendiente", texto: "Pendiente", editable: true };
   }
@@ -166,6 +175,16 @@
     S.metas = (m.data && m.data[0] && m.data[0].metas) || {};
     S.capturas = c.data || [];
     await cargarCovid(db, p);
+    await cargarSis(db, p);
+  }
+  // Estado del SIS por mes ("AAAA-MM" -> estado); si no se puede leer, el servidor sigue impidiendo editar un mes enviado
+  async function cargarSis(db, p) {
+    S.sis = {};
+    try {
+      const { data, error } = await db.from("sis06p_capturas").select("anio,mes,estado").eq("clues", p.clues);
+      if (error) return;
+      (data || []).forEach(c => { S.sis[`${c.anio}-${String(c.mes).padStart(2, "0")}`] = String(c.estado || "").toUpperCase(); });
+    } catch (_) { /* sin lectura del SIS */ }
   }
   // COVID-19 es opcional: si no hay meta (o la tabla no responde) la unidad solo ve Influenza
   async function cargarCovid(db, p) {
@@ -337,10 +356,13 @@
         <details class="ic-historial"${guardados.length ? "" : " hidden"}>
           <summary>Mis reportes anteriores (${guardados.length})</summary>
           <ul>
-            ${guardados.map(r => `<li><button type="button" class="ic-hist-item" data-fecha="${r.fecha}">
+            ${guardados.map(r => {
+              const cong = !!mesCongelado(r.fecha);
+              return `<li class="ic-hist-fila"><button type="button" class="ic-hist-item" data-fecha="${r.fecha}">
               <span><b>Semana ${isoWeek(r.fecha)}</b> · ${esc(rangoTexto(r.fecha))}</span>
-              <span>${esSinMov(r) ? "Sin movimiento" : totalReporte(r) + " dosis"}</span>
-            </button></li>`).join("")}
+              <span>${cong ? '<span class="material-symbols-rounded ic-hist-lock" aria-hidden="true">lock</span>SIS enviado · ' : ""}${esSinMov(r) ? "Sin movimiento" : totalReporte(r) + " dosis"}</span>
+            </button>${cong ? "" : `<button type="button" class="ic-hist-borrar" data-fecha="${r.fecha}" aria-label="Eliminar reporte de ${nombreVac()} de la semana ${isoWeek(r.fecha)}"><span class="material-symbols-rounded" aria-hidden="true">delete</span></button>`}</li>`;
+            }).join("")}
           </ul>
         </details>
         <div id="icLive" class="ic-sr" role="status" aria-live="polite"></div>
@@ -538,6 +560,36 @@
       };
     }
     rootEl.querySelectorAll(".ic-hist-item").forEach(b => { b.onclick = () => { cambiarSemana(b.dataset.fecha, true); window.scrollTo({ top: 0, behavior: "auto" }); }; });
+    rootEl.querySelectorAll(".ic-hist-borrar").forEach(b => { b.onclick = () => eliminar(b.dataset.fecha, b); });
+  }
+
+  // Elimina el reporte semanal (de la vacuna elegida) mientras el SIS de ese mes no se haya enviado
+  async function eliminar(f, btn) {
+    const r = reporteDe(f);
+    if (!r) return;
+    const cong = mesCongelado(f);
+    if (cong) { cfg.toast(esc(cong), "error"); return; }
+    const ok = root.confirm(`¿Eliminar el reporte de ${nombreVac()} de la semana ${isoWeek(f)} (${totalReporte(r)} dosis)?\n\nNo se puede deshacer; después podrás capturar la semana de nuevo.`);
+    if (!ok) return;
+    if (btn) btn.disabled = true;
+    try {
+      const db = cfg.getClient();
+      const p = cfg.getProfile();
+      const tabla = esCovid() ? "covid_capturas" : "influenza_capturas";
+      const { data, error } = await db.from(tabla).delete().eq("clues", p.clues).eq("fecha", f).select("fecha");
+      if (error) throw error;
+      if (Array.isArray(data) && !data.length) throw new Error("no existe o no tienes permiso");
+      await cargarUnidad();
+      S.edicion = null; S.sinMov = null; S.reabierto = null; S.borrador = null;
+      cfg.toast(`Reporte de ${nombreVac()} eliminado.`, "success");
+      pintar();
+      const det = rootEl.querySelector(".ic-historial");
+      if (det && !det.hidden) det.open = true;
+      anunciar(`Reporte de ${nombreVac()} eliminado.`);
+    } catch (e) {
+      if (btn) btn.disabled = false;
+      cfg.toast("No se pudo eliminar: " + esc(e.message || e), "error");
+    }
   }
 
   function cambiarSemana(f, enfocar) {
@@ -576,6 +628,8 @@
     const errores = [];
     const cierre = ventanaError(f);
     if (cierre) { mostrarError([{ msg: cierre }]); return; }
+    const congelada = mesCongelado(f);
+    if (congelada) { mostrarError([{ msg: congelada }]); return; }
     if (protegido(f)) { mostrarError([{ msg: "Este reporte ya está guardado. Toca Editar si necesitas modificarlo." }]); return; }
 
     const nombreEl = rootEl.querySelector("#icNombre");

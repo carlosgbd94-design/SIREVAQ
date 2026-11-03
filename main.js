@@ -8582,6 +8582,19 @@ async function supabaseRequest(action = "", payload, options = {}) {
         return { ok: true, folio: guardado?.folio || null };
       }
 
+      // Eliminar el reporte semanal de una unidad. La base de datos lo impide a la UNIDAD cuando su SIS del mes ya se
+      // envió (trigger influenza_trg_candado_sis_enviado); aquí solo se confirma que sí se borró una fila.
+      case "deleteinfluenza_captura":
+      case "deletecovid_captura": {
+        const tabla = actionLower === "deletecovid_captura" ? 'covid_capturas' : 'influenza_capturas';
+        const { clues, fecha } = payload;
+        if (!clues || !fecha) throw new Error("Falta la unidad o la semana del reporte.");
+        const { data, error } = await supabase.from(tabla).delete().eq('clues', clues).eq('fecha', fecha).select('fecha');
+        if (error) throw error;
+        if (!data || !data.length) throw new Error("No se pudo eliminar el reporte (no existe o no tienes permiso).");
+        return { ok: true };
+      }
+
       case "getsis_variables": {
         const { data, error } = await supabase
           .from('sis_variables')

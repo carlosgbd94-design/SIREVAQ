@@ -294,4 +294,39 @@ test.describe('Influenza: captura de la unidad en móvil', () => {
       await page.screenshot({ path: process.env.IC_SHOT.replace('.png', '2.png'), fullPage: false });
     }
   });
+  test('eliminar reporte: botón en «Mis reportes anteriores» mientras el SIS del mes no se envió', async ({ page }) => {
+    const st = estado();
+    const { errores } = await abrir(page, st);
+    await page.click('#dockItemINFC');
+    await page.locator('.ic-historial summary').click();
+    await expect(page.locator('.ic-hist-borrar')).toHaveCount(1);
+    await page.click('.ic-hist-borrar');
+    await expect(page.locator('.ic-historial')).toBeHidden();   // ya no quedan reportes
+    expect(st.db.influenza_capturas.length).toBe(0);
+    expect(errores).toEqual([]);
+  });
+
+  test('eliminar reporte de COVID-19 borra solo el de COVID-19', async ({ page }) => {
+    const st = estadoCovid();
+    await abrir(page, st);
+    await page.click('#dockItemINFC');
+    await page.click('.ic-vac-btn[data-vac="COVID"]');
+    await page.locator('.ic-historial summary').click();
+    await page.click('.ic-hist-borrar');
+    await expect.poll(() => st.db.covid_capturas.length).toBe(0);
+    expect(st.db.influenza_capturas.length).toBe(1);
+  });
+
+  test('SIS enviado del mes: sin botón de eliminar, con candado y la semana ya no se edita', async ({ page }) => {
+    const st = estado();
+    st.db.sis06p_capturas = [{ clues: 'QTSSA000001', anio: 2026, mes: 10, estado: 'ENVIADO' }];
+    await abrir(page, st);
+    await page.click('#dockItemINFC');
+    await page.locator('.ic-historial summary').click();
+    await expect(page.locator('.ic-hist-borrar')).toHaveCount(0);
+    await expect(page.locator('.ic-hist-item')).toContainText('SIS enviado');
+    await page.click('.ic-hist-item');
+    await expect(page.locator('.ic-aviso--cerrada')).toContainText('ya fue enviado');
+    await expect(page.locator('#ic_r1')).toBeDisabled();
+  });
 });

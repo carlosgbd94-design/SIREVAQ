@@ -360,6 +360,7 @@ let SIN_MOVIMIENTO_INF = false;
 // Modo edición: un reporte ya guardado de la semana se abre BLOQUEADO (no se cambia un dato por accidente) y las
 // casillas solo se habilitan al presionar «Editar» del botón flotante. Se sale al guardar, al cancelar o al cambiar de semana.
 let _capEdicion = null;   // { vac: "INFLUENZA"|"COVID", fecha }
+let _sisEstadosUnidad = {};   // "AAAA-MM" -> estado del SIS de la unidad; enviado/validado congela sus reportes
 function capVacunaActual() { return (typeof _capturaVacuna !== "undefined" && _capturaVacuna === "COVID") ? "COVID" : "INFLUENZA"; }
 function capReporteGuardado(fecha, vac) {
   const lista = vac === "COVID" ? (typeof _covidCapturasCache !== "undefined" ? _covidCapturasCache : []) : _influenzaCapturasCache;
@@ -636,6 +637,11 @@ async function loadInfluenzaUnitData() {
       const resCovid = await AppService.call("getcovid_capturas", { clues: USER.clues, anio_campana: campana }, { silent: true });
       _covidCapturasCache = (resCovid && resCovid.data) || [];
     } catch (e) { _covidCapturasCache = []; }
+    try {
+      const resSis = await AppService.call("getsis06p_capturas", { clues: USER.clues }, { silent: true });
+      _sisEstadosUnidad = {};
+      ((resSis && resSis.data) || []).forEach(c => { _sisEstadosUnidad[`${c.anio}-${String(c.mes).padStart(2, "0")}`] = String(c.estado || "").toUpperCase(); });
+    } catch (e) { /* sin lectura del SIS: el servidor sigue impidiendo editar un mes enviado */ }
     renderCovidCaptura();
 
     // 3. Distribución de frascos
@@ -1789,6 +1795,10 @@ async function loadInfluenzaHistoryList() {
       : `<span class="inf-chip inf-chip--vac-inf"><span class="material-symbols-rounded">vaccines</span>Influenza</span>`;
     const detalleMarcas = esCov
       ? `<span class="inf-hist-marcas"><b>Moderna</b> ${p.marcas.moderna.toLocaleString("es-MX")} · <b>Pfizer</b> ${p.marcas.pfizer.toLocaleString("es-MX")}</span>` : "";
+    const congelado = !!influenzaMesCongelado(r.fecha);
+    const chipSis = congelado
+      ? `<span class="inf-chip inf-chip--gris" title="El SIS de ese mes ya se envió: el reporte ya no se edita ni se elimina"><span class="material-symbols-rounded">lock</span>SIS enviado</span>` : "";
+    const btnBorrar = congelado ? "" : `<button type="button" class="inf-hist-borrar" aria-label="Eliminar reporte de ${esCov ? "COVID-19" : "Influenza"} de la semana ${semana ? semana.semana : ""}" title="Eliminar reporte"><span class="material-symbols-rounded" aria-hidden="true">delete</span></button>`;
     const card = document.createElement("div");
     card.className = `inf-hist-card inf-hist-card--${esCov ? "cov" : "inf"}`;
     card.tabIndex = 0;
@@ -1802,7 +1812,7 @@ async function loadInfluenzaHistoryList() {
       <div class="inf-hist-cuerpo">
         <div class="inf-hist-top">
           ${chipVac}<span class="inf-hist-folio">${folioFormatted}</span>
-          ${estado}${tipo}
+          ${estado}${tipo}${chipSis}
         </div>
         <div class="inf-hist-titulo">${semana ? `Semana ${semana.semana}` : "Semana"} <span>· ${influenzaRangoTexto(r.fecha)} ${yy}</span></div>
         <div class="inf-hist-meta">${detalleMarcas}
@@ -1816,6 +1826,7 @@ async function loadInfluenzaHistoryList() {
         <div class="inf-hist-dosis-etq">dosis${esCov ? " COVID-19" : ""}</div>
         ${esCov ? "" : `<div class="inf-hist-barra" title="${pct}% de tu meta anual"><span style="width:${pct}%"></span></div>`}
       </div>
+      ${btnBorrar}
       <div class="inf-hist-accion"><span class="material-symbols-rounded">chevron_right</span></div>
     `;
     const abrir = () => {
@@ -1829,9 +1840,37 @@ async function loadInfluenzaHistoryList() {
       showToast(`Reporte de ${esCov ? "COVID-19" : "Influenza"} con folio ${p.folio} cargado para edición/consulta.`, true, "info");
     };
     card.onclick = abrir;
-    card.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); abrir(); } };
+    card.onkeydown = (ev) => { if (ev.target === card && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); abrir(); } };
+    const borrar = card.querySelector(".inf-hist-borrar");
+    if (borrar) borrar.onclick = (ev) => { ev.stopPropagation(); eliminarReporteHistorial(p, borrar); };
     container.appendChild(card);
   });
+}
+
+/** Elimina un reporte semanal (Influenza o COVID-19) de la unidad mientras el SIS de ese mes no se haya enviado. */
+async function eliminarReporteHistorial(p, btn) {
+  const r = p.original;
+  const esCov = p.vac === "COVID";
+  const motivo = influenzaMesCongelado(r.fecha);
+  if (motivo) { showToast(motivo, false, "warn"); return; }
+  const semana = generateCampaignWeeks().find(w => w.fecha === r.fecha);
+  const nombre = esCov ? "COVID-19" : "Influenza";
+  const ok = confirm(`¿Eliminar el reporte de ${nombre}${semana ? ` de la semana ${semana.semana}` : ""} (${p.folio}, ${p.totalDosis.toLocaleString("es-MX")} dosis)?\n\nEsta acción no se puede deshacer; después podrás capturar la semana de nuevo.`);
+  if (!ok) return;
+  if (btn) btn.disabled = true;
+  try {
+    await AppService.call(esCov ? "deletecovid_captura" : "deleteinfluenza_captura", { clues: USER.clues, fecha: r.fecha });
+    if (_capEdicion && _capEdicion.fecha === r.fecha && _capEdicion.vac === p.vac) _capEdicion = null;
+    showToast(`Reporte de ${nombre} eliminado.`, true, "info");
+    await loadInfluenzaUnitData();
+    updateInfluenzaWeekBtnLabel(document.getElementById("influenza_semana")?.value);
+    updateInfluenzaSinMovimientoUI();
+    renderCaptureGrid();
+    loadInfluenzaHistoryList();
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    showToast(String(e?.message || e || "No se pudo eliminar el reporte."), false, "bad");
+  }
 }
 
 /**
@@ -1940,10 +1979,19 @@ window.influenzaFolio = influenzaFolio;
  * Estado de la captura de la semana elegida: abierta (se puede guardar) o cerrada con su motivo, y si ya hay
  * reporte guardado (con su folio). Lo usan el panel, los pasos y el botón flotante de Guardar.
  */
+function influenzaMesCongelado(fecha) {
+  if (!fecha || String(USER?.rol || "").toUpperCase() !== "UNIDAD" || typeof _sisEstadosUnidad === "undefined") return null;
+  const estado = _sisEstadosUnidad[String(fecha).slice(0, 7)];
+  if (!estado || estado === "BORRADOR") return null;
+  const [y, m] = String(fecha).split("-");
+  return `El SIS de ${m}/${y} ya fue enviado: los reportes de ese mes ya no se pueden editar ni eliminar. Pide al municipal que los corrija.`;
+}
+window.influenzaMesCongelado = influenzaMesCongelado;
+
 function influenzaEstadoCaptura(fecha) {
   fecha = fecha || document.getElementById("influenza_semana")?.value;
   const reporte = _influenzaCapturasCache.find(r => r.fecha === fecha) || null;
-  const motivo = influenzaVentanaError(fecha);
+  const motivo = influenzaVentanaError(fecha) || influenzaMesCongelado(fecha);
   return { abierta: !motivo, motivo, reporte, guardado: !!reporte, folio: reporte ? influenzaFolio(reporte) : "" };
 }
 window.influenzaEstadoCaptura = influenzaEstadoCaptura;

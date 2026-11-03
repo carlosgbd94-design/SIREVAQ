@@ -1634,6 +1634,14 @@ html.dark .panel-section .biologic-card.liquid-glass :is(h2, h4, p) { color: #f1
 #panelINFC .ic-historial[hidden] { display: none; }
 #panelINFC .ic-historial summary { min-height: 32px; font-weight: 800; cursor: pointer; }
 #panelINFC .ic-historial ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+#panelINFC .ic-hist-fila { display: flex; align-items: center; gap: 4px; }
+#panelINFC .ic-hist-fila .ic-hist-item { flex: 1 1 auto; width: auto; min-width: 0; }
+#panelINFC .ic-hist-lock { font-size: 14px; vertical-align: -2px; margin-right: 2px; }
+#panelINFC .ic-hist-borrar { flex: 0 0 48px; width: 48px; min-height: 48px; height: 48px; padding: 0; border: none; background: transparent; color: #64748b; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+#panelINFC .ic-hist-borrar .material-symbols-rounded { font-size: 24px; }
+#panelINFC .ic-hist-borrar:focus-visible { outline: 2px solid #dc2626; outline-offset: 2px; color: #dc2626; }
+#panelINFC .ic-hist-borrar:disabled { opacity: .4; }
+@media (hover: hover) and (pointer: fine) { #panelINFC .ic-hist-borrar:hover:not(:disabled) { color: #dc2626; } }
 #panelINFC .ic-hist-item { width: 100%; min-height: 48px; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; border: 1px solid #cbd5e1; background: #f8fafc; text-align: left; font-size: 13px; color: #0f172a; }
 #panelINFC .ic-vacio { padding: 24px 12px; text-align: center; font-weight: 700; color: #334155; margin: 0; }
 @media (prefers-reduced-motion: reduce) { #panelINFC * { transition: none !important; animation: none !important; } }

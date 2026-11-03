@@ -28,6 +28,7 @@ const DATOS = `
   var _eleccion = null;
   var elegirVacunaCaptura = function (v) { _eleccion = v; };
   var showToast = function () {};
+  var influenzaMesCongelado = function () { return null; };
 `;
 
 test('Historial: cada reporte dice su vacuna, el selector los separa y las cifras de COVID-19 van por marca', async ({ page }) => {
@@ -86,4 +87,36 @@ test('Historial: sin reportes ni meta de COVID-19 el selector no aparece y todo 
   await page.evaluate(() => window.__cargar());
   await expect(page.locator('#influenzaHistorialVacuna')).toBeHidden();
   await expect(page.locator('.inf-hist-card')).toHaveCount(2);
+});
+
+test('Historial: eliminar reporte solo mientras el SIS del mes no se haya enviado (Influenza y COVID-19)', async ({ page }) => {
+  await page.goto('about:blank');
+  await page.evaluate((h) => {
+    document.body.innerHTML = h + '<button id="subtabUnitCaptura"></button><input id="influenza_semana">';
+    window.InfluenzaReglas = { fechaLarga: (x) => x };
+  }, seccion);
+  await page.addScriptTag({ path: path.join(raiz, 'covid_captura.js') });
+  // El reporte del 30-oct es de un mes con SIS enviado; el del 23-oct (mismo mes en la vida real) se simula libre.
+  const DATOS_SIS = DATOS.replace("var influenzaMesCongelado = function () { return null; };",
+    "var influenzaMesCongelado = function (f) { return f === '2026-10-30' ? 'SIS enviado' : null; };" +
+    "var USER = { clues: 'QTIMB000001' }; window.__llamadas = [];" +
+    "var AppService = { call: async function (n, p) { window.__llamadas.push([n, p]); return { ok: true }; } };" +
+    "var loadInfluenzaUnitData = async function () {}; var updateInfluenzaWeekBtnLabel = function () {};" +
+    "var updateInfluenzaSinMovimientoUI = function () {}; var renderCaptureGrid = function () {}; var _capEdicion = null;");
+  await page.addScriptTag({ content: DATOS_SIS + resalta + bloque + '\nwindow.__cargar = loadInfluenzaHistoryList;' });
+  await page.evaluate(() => { window.confirm = () => true; return window.__cargar(); });
+
+  // Tarjetas del 23-oct (Influenza y COVID-19): con botón. Tarjeta del 30-oct (SIS enviado): candado y sin botón.
+  await expect(page.locator('.inf-hist-borrar')).toHaveCount(2);
+  await expect(page.locator('.inf-hist-card--inf').filter({ hasText: 'INF-B' }).locator('.inf-hist-borrar')).toHaveCount(0);
+  await expect(page.locator('.inf-hist-card--inf').filter({ hasText: 'INF-B' })).toContainText('SIS enviado');
+
+  await page.locator('.inf-hist-card--cov .inf-hist-borrar').click();
+  await page.locator('.inf-hist-card--inf').filter({ hasText: 'INF-A' }).locator('.inf-hist-borrar').click();
+  await expect.poll(() => page.evaluate(() => window.__llamadas.length)).toBe(2);
+  expect(await page.evaluate(() => window.__llamadas)).toEqual([
+    ['deletecovid_captura', { clues: 'QTIMB000001', fecha: '2026-10-23' }],
+    ['deleteinfluenza_captura', { clues: 'QTIMB000001', fecha: '2026-10-23' }]]);
+  // Eliminar no abre el reporte
+  expect(await page.evaluate(() => _eleccion)).toBeNull();
 });
