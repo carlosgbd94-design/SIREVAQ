@@ -1155,8 +1155,10 @@
   // importado, no desde el paloteo de una unidad). Se crea el movimiento
   // en silencio la primera vez que hay algo que reportar; si ya existe, no
   // se toca -- nunca se pisa lo que la unidad ya esté capturando ahí.
-  async function autoCrearMovimientoSiFalta(clues, mes, anio, totalReportado) {
-    if (totalReportado <= 0) return;
+  async function autoCrearMovimientoSiFalta(clues, mes, anio, totalReportado, sinMovimiento) {
+    // Una unidad «Sin movimiento» (sin lotes ni dosis) también necesita su Movimiento del mes, aunque quede vacío:
+    // el servidor lo exige para poder enviar el SINBA-SIS.
+    if (totalReportado <= 0 && !sinMovimiento) return;
     try {
       const unidadBiovac = (estado.unidades || []).find((u) => u.clues === clues);
       if (!unidadBiovac) return;
@@ -1277,7 +1279,7 @@
         _sis06pCapturasCache = capturas || [];
         await cargarConciliacion(clues);
         render();
-        if (esUnidad) await autoCrearMovimientoSiFalta(clues, mes, anio, totalReportado);
+        if (esUnidad) await autoCrearMovimientoSiFalta(clues, mes, anio, totalReportado, Boolean(record.sin_movimiento));
       } catch (errRefresco) {
         console.warn('[SIS-06-P] Se guardó, pero no se pudo refrescar la pantalla:', errRefresco);
         marcarSinGuardar(false);

@@ -49,8 +49,8 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.111"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.80"></script>
+<script defer src="biovac_ui.js?v=2026.113"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.81"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.28"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
@@ -516,8 +516,8 @@ window.onunhandledrejection = function (event) {
   table.renglones col.col-dato { width: 10%; }
   table.renglones col.col-dato-mitad { width: 5%; }
   table.renglones col.col-final { width: 9%; }
-  table.renglones col.col-obs { width: 16%; }
-  table.renglones col.col-accion { width: 8%; }
+  table.renglones col.col-obs { width: 13%; }
+  table.renglones col.col-accion { width: 11%; }
   table.renglones tfoot td {
     padding: 11px 6px; border-top: 1px solid var(--outline-variant); background: var(--surface-container);
     font-weight: 800; text-align: center;
@@ -806,7 +806,7 @@ window.onunhandledrejection = function (event) {
   .recibido-requi { position: relative; display: inline-block; width: 76px; text-align: center; font-weight: 700; color: var(--text); line-height: 1; }
   .recibido-requi .recibido-candado { position: absolute; right: 0; top: 50%; transform: translateY(-50%); font-size: 14px; line-height: 1; color: var(--muted); }
   /* Columna de acciones: mismo ancho y mismo borde derecho, con 2 íconos (editar, quitar) o con 1 (candado) */
-  table.renglones .acciones-fila { width: 64px; justify-content: flex-end; }
+  table.renglones .acciones-fila { width: 88px; justify-content: flex-end; }
   table.renglones .acciones-fila > .btn-fantasma, table.renglones .nota-lote-requi { width: 28px; height: 28px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; }
   /* Desglose por unidad dentro del Movimiento del municipio */
   .btn-resolver.unidades:hover { border-color: var(--secondary); color: var(--secondary); }

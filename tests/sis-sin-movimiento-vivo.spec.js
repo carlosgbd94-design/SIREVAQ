@@ -38,6 +38,7 @@ async function prepararUnidad(page, { valores = {}, sinMov = false } = {}) {
       };
       if (p === 'from') return (tabla) => {
         const q = t.from(tabla);
+        if (tabla === 'biovac_movimientos') return new Proxy(q, { get(qt, qp) { if (qp === 'insert') return (rec) => { (window.__insertsMov = window.__insertsMov || []).push(rec); return qt.insert(rec); }; return qt[qp]; } });
         if (tabla === 'sis06p_capturas') return new Proxy(q, { get(qt, qp) { if (qp === 'upsert') return (rec) => { window.__upserts.push(rec); return qt.upsert(rec); }; return qt[qp]; } });
         return q;
       };
@@ -81,6 +82,8 @@ test('Sin movimiento: marcarlo pide guardar y se guarda con sin_movimiento = tru
   await page.evaluate(() => SIS06PBiovac.save());
   const rec = await page.evaluate(() => window.__upserts[0]);
   expect(rec.sin_movimiento).toBe(true);
+  // Sin lotes ni dosis, el Movimiento del mes se crea vacío: el servidor lo exige para poder enviar
+  expect(await page.evaluate(() => window.__insertsMov.length)).toBe(1);
 });
 
 test('Sin movimiento: con la marca guardada el SIS ya está listo para enviar', async ({ page }) => {
