@@ -115,12 +115,15 @@ test.describe('Panel de Influenza (unidad)', () => {
     await expect(page.locator('#nombreINFLUENZA')).toBeDisabled();
     await expect(page.locator('#chkSinMovimientoINF')).toBeDisabled();
     await expect(page.locator('#hubEditBtn')).toBeVisible();
+    await expect(page.locator('#hubDeleteBtn')).toBeVisible();              // Eliminar junto a Editar, en el hub
+    await expect(page.locator('#capAccionesReporte')).toBeHidden();         // el panel no repite botones (solo avisa del candado)
     await expect(page.locator('#hubCancelBtn')).toBeHidden();
     await expect(page.locator('#hubSaveBtn')).toHaveAttribute('aria-disabled', 'true');
     await page.locator('#hubEditBtn').click();
     await expect(r1).toBeEnabled();
     await expect(page.locator('#nombreINFLUENZA')).toBeEnabled();
     await expect(page.locator('#hubEditBtn')).toBeHidden();
+    await expect(page.locator('#hubDeleteBtn')).toBeHidden();               // editando: solo Actualizar / Cancelar
     await expect(page.locator('#hubCancelBtn')).toBeVisible();
     await expect(page.locator('#hubSaveBtn')).toHaveAttribute('aria-disabled', 'false');
     await expect(page.locator('#hubStatusText')).toHaveText('Editando');
@@ -133,6 +136,28 @@ test.describe('Panel de Influenza (unidad)', () => {
     await page.locator('#hubEditBtn').click();
     await page.evaluate(() => { const sel = document.getElementById('influenza_semana'); sel.value = '2026-10-09'; sel.dispatchEvent(new Event('change', { bubbles: true })); });
     await expect(page.locator('#input_inf_r1')).toBeDisabled();
+    expect(errores).toEqual([]);
+  });
+
+  test('Eliminar del hub borra el reporte guardado de la semana; con el SIS del mes enviado no hay Eliminar ni Editar, solo el aviso', async ({ page }) => {
+    const { errores } = await abrirPanel(page, { fecha: '2026-10-22T12:00:00' });
+    await page.evaluate(() => {
+      window.__borrados = [];
+      window.confirm = () => true;
+      const orig = AppService.call.bind(AppService);
+      AppService.call = async (n, p) => { if (/^delete/.test(n)) { window.__borrados.push([n, p.fecha]); return { ok: true }; } return orig(n, p); };
+      const sel = document.getElementById('influenza_semana'); sel.value = '2026-10-16'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+      AppState.mainTab = 'CAP'; AppState.captureTab = 'INFLUENZA'; syncCommandHub();
+    });
+    await page.locator('#hubDeleteBtn').click();
+    await expect.poll(() => page.evaluate(() => window.__borrados)).toEqual([['deleteinfluenza_captura', '2026-10-16']]);
+    // SIS enviado: el mes queda congelado
+    await page.evaluate(() => {
+      influenzaMesCongelado = () => 'SIS enviado';
+      renderCaptureGrid(); syncCommandHub();
+    });
+    await expect(page.locator('#hubDeleteBtn')).toBeHidden();
+    await expect(page.locator('#hubEditBtn')).toBeHidden();
     expect(errores).toEqual([]);
   });
 

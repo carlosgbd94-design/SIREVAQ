@@ -328,24 +328,27 @@ test.describe('Influenza: captura de la unidad en móvil', () => {
     await page.click('.ic-hist-item');
     await expect(page.locator('.ic-aviso--cerrada')).toContainText('ya fue enviado');
     await expect(page.locator('#ic_r1')).toBeDisabled();
+    await expect(page.locator('#hubEditBtn')).toBeHidden();
+    await expect(page.locator('#hubDeleteBtn')).toBeHidden();
   });
-  test('reporte guardado: Editar y Eliminar a la vista (sin buscar el lápiz flotante)', async ({ page }) => {
+  test('reporte guardado: Editar y Eliminar viven solo en el hub flotante (sin botones repetidos en el panel)', async ({ page }) => {
     const st = estado();
     await abrir(page, st);
     await page.click('#dockItemINFC');
     await page.locator('#icSemana').selectOption('2026-10-09');
-    const barra = page.locator('.ic-acciones[role="group"]');
-    await expect(barra).toBeVisible();
-    await expect(barra.locator('[data-acc="editar"]')).toBeVisible();
-    await expect(barra.locator('[data-acc="eliminar"]')).toBeVisible();
+    await expect(page.locator('#panelINFC [data-acc]')).toHaveCount(0);
+    await expect(page.locator('#hubEditBtn')).toBeVisible();
+    await expect(page.locator('#hubDeleteBtn')).toBeVisible();
     await expect(page.locator('#ic_r1')).toBeDisabled();
-    await barra.locator('[data-acc="editar"]').click();
+    await page.click('#hubEditBtn');
     await expect(page.locator('#ic_r1')).toBeEnabled();                    // entró directo al modo edición
-    await expect(page.locator('.ic-acciones[role="status"]')).toContainText('Estás editando');
-    await page.locator('.ic-acciones [data-acc="cancelar"]').click();
+    await expect(page.locator('#hubDeleteBtn')).toBeHidden();              // editando: solo Guardar / Cancelar
+    await expect(page.locator('#hubCancelBtn')).toBeVisible();
+    await page.click('#hubCancelBtn');
     await expect(page.locator('#ic_r1')).toBeDisabled();
-    await page.locator('.ic-acciones [data-acc="eliminar"]').click();       // el diálogo se acepta solo
+    await page.click('#hubDeleteBtn');                                       // el diálogo se acepta solo
     await expect.poll(() => st.db.influenza_capturas.length).toBe(0);
+    await expect(page.locator('#hubDeleteBtn')).toBeHidden();
   });
 
   test('historial: el lápiz abre la semana ya en modo edición', async ({ page }) => {

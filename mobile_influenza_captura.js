@@ -329,11 +329,6 @@
           <p class="ic-res-pie" id="icEstaSemana"></p>
         </section>
 
-        ${protegida ? `<div class="ic-aviso ic-aviso--info ic-acciones" role="group" aria-label="Acciones del reporte guardado"><div><b>Reporte guardado.</b> ¿Te equivocaste? Edítalo o elimínalo aquí mismo.</div>
-          <div class="ic-acciones-btns"><button type="button" class="ic-acc ic-acc--editar" data-acc="editar"><span class="material-symbols-rounded" aria-hidden="true">edit</span>Editar</button>
-          <button type="button" class="ic-acc ic-acc--eliminar" data-acc="eliminar"><span class="material-symbols-rounded" aria-hidden="true">delete</span>Eliminar</button></div></div>` : ""}
-        ${enEdicion(f) && rep ? `<div class="ic-aviso ic-aviso--info ic-acciones" role="status"><div><b>Estás editando este reporte.</b> Cambia lo que necesites y toca Guardar (abajo a la derecha).</div>
-          <div class="ic-acciones-btns"><button type="button" class="ic-acc" data-acc="cancelar"><span class="material-symbols-rounded" aria-hidden="true">close</span>Cancelar</button></div></div>` : ""}
         ${esCovid() ? `<div class="ic-aviso ic-aviso--info"><b>Moderna y Pfizer suman contra la misma meta.</b> Captura el total de la semana de cada marca; si guardas de nuevo esta semana, el reporte nuevo reemplaza al anterior.</div>` : ""}
         ${metaTotal() === 0 ? `<div class="ic-aviso"><b>Tu unidad no tiene meta asignada.</b> Puedes registrar la semana como «sin movimiento»; para capturar dosis pide a tu jurisdicción que asigne la meta.</div>` : ""}
         ${avisos.map(r => `<div class="ic-aviso"><b>${r.tipo === "segunda" ? "2ª dosis" : "1ª dosis"} no disponible esta semana.</b> ${esc(r.texto)}</div>`).join("")}
@@ -354,7 +349,7 @@
         <div class="ic-error" id="icError" role="alert" tabindex="-1" hidden></div>
         <p class="ic-guardar-nota" id="icGuardarNota">
           <span class="material-symbols-rounded" aria-hidden="true">save</span>
-          <span>${protegida ? `Para modificar este reporte toca <b>Editar</b> (lápiz flotante).` : editable ? `Cuando termines, toca el botón <b>Guardar</b> flotante (abajo a la derecha).` : "Esta semana no se puede guardar todavía."}</span>
+          <span>${protegida ? `Para corregirlo toca <b>Editar</b>; para borrarlo, <b>Eliminar</b> (botones flotantes).` : enEdicion(f) && rep ? `Estás editando: toca <b>Guardar</b> para actualizar o <b>Cancelar</b> para dejarlo como estaba.` : editable ? `Cuando termines, toca el botón <b>Guardar</b> flotante (abajo a la derecha).` : est.congelado ? "Este reporte ya no se puede modificar." : "Esta semana no se puede guardar todavía."}</span>
         </p>
 
         <details class="ic-historial"${guardados.length ? "" : " hidden"}>
@@ -567,14 +562,6 @@
     rootEl.querySelectorAll(".ic-hist-borrar").forEach(b => { b.onclick = () => eliminar(b.dataset.fecha, b); });
     // «Editar» del historial: abre esa semana y entra directo al modo edición
     rootEl.querySelectorAll(".ic-hist-editar").forEach(b => { b.onclick = () => { cambiarSemana(b.dataset.fecha, false); window.scrollTo({ top: 0, behavior: "auto" }); editar(); }; });
-    // Acciones visibles del reporte guardado de la semana
-    rootEl.querySelectorAll("[data-acc]").forEach(b => {
-      b.onclick = () => {
-        if (b.dataset.acc === "editar") editar();
-        else if (b.dataset.acc === "cancelar") cancelarEdicion();
-        else if (b.dataset.acc === "eliminar") eliminar(S.fecha, b);
-      };
-    });
   }
 
   // Elimina el reporte semanal (de la vacuna elegida) mientras el SIS de ese mes no se haya enviado
@@ -825,7 +812,7 @@
       save.setAttribute("aria-label", label);
       save.title = label;
     }
-    const mostrar = { hubEditBtn: protegido(S.fecha), hubCancelBtn: enEdicion(S.fecha) && !!rep };
+    const mostrar = { hubEditBtn: protegido(S.fecha), hubCancelBtn: enEdicion(S.fecha) && !!rep, hubDeleteBtn: protegido(S.fecha) };
     Object.keys(mostrar).forEach(id => {
       const b = document.getElementById(id);
       if (!b) return;
@@ -907,6 +894,7 @@
     guardar() { return S && S.listo ? guardar() : Promise.resolve(); },
     editar,
     cancelarEdicion,
+    eliminarSemana(btn) { return S && S.listo ? eliminar(S.fecha, btn) : Promise.resolve(); },
     sincronizarHub
   };
 })(typeof window !== "undefined" ? window : globalThis);

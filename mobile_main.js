@@ -1599,6 +1599,7 @@
             const show = isEditing;
             cancelBtn.style.setProperty('display', show ? 'flex' : 'none', 'important');
         }
+        document.getElementById('hubDeleteBtn')?.style.setProperty('display', 'none', 'important');
 
         applyFormLocks();
     };
@@ -3978,6 +3979,10 @@
             if (activePanel === 'BIO') isEditingBIO = true;
             syncCommandHub();
             showToast("Modo edición activado", "success");
+        });
+
+        document.getElementById('hubDeleteBtn')?.addEventListener('click', async (ev) => {
+            if (activePanel === 'INFC') { await window.MobileInfluenzaCap?.eliminarSemana(ev.currentTarget); syncCommandHub(); }
         });
 
         document.getElementById('hubCancelBtn')?.addEventListener('click', async () => {

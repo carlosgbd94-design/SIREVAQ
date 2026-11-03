@@ -8472,6 +8472,29 @@ html.sirevaq-scroll-locked .btn-save-animate {
   color: white !important;
 }
 
+/* Eliminar (reporte guardado de Influenza / COVID-19): mismo círculo del hub, rojo de contorno para distinguirlo de Cancelar */
+.delete-btn-premium {
+  background: var(--md-sys-color-surface);
+  color: #b91c1c !important;
+  border-radius: 50%;
+  width: 56px; height: 56px; min-width: 56px; min-height: 56px;
+  flex-shrink: 0; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #dc2626;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: color .3s ease, background-color .3s ease, transform .3s ease, opacity .3s ease;
+}
+.delete-btn-premium span.material-symbols-rounded { font-size: 26px !important; }
+.delete-btn-premium span:not(.material-symbols-rounded) { display: none !important; }
+.delete-btn-premium:disabled { opacity: .5; cursor: progress; }
+@media (hover: hover) and (pointer: fine) {
+  .delete-btn-premium:hover:not(:disabled) { background: #dc2626; color: #fff !important; transform: scale(1.05) translateY(-2px); }
+}
+.delete-btn-premium:active { transform: scale(0.95); }
+.delete-btn-premium:focus-visible { outline: 3px solid #0f172a; outline-offset: 3px; border-radius: 50%; }
+@media (prefers-reduced-motion: reduce) { .delete-btn-premium { transition: none; } .delete-btn-premium:hover, .delete-btn-premium:active { transform: none; } }
+
 
 
 /* CONTADOR DE DOSIS (Hub de captura de Influenza): una línea, neutro, contraste AA */
@@ -14370,22 +14393,14 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 .inf-hist-accion { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #f1f5f9; color: #64748b; transition: background .2s, color .2s; }
 .inf-hist-accion .material-symbols-rounded { font-size: 20px; }
 /* Eliminar reporte: icono suelto, sin caja; el realce solo con puntero real */
-/* Barra de acciones del reporte guardado (Editar / Eliminar con texto) */
+/* Aviso del reporte guardado con el SIS del mes ya enviado (solo informa; las acciones están en el command hub) */
 .cap-acciones { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 16px; border-radius: 16px; border: 1px solid #bbf7d0; background: #f0fdf4; color: #14532d; }
 .cap-acciones[hidden] { display: none; }
 .cap-acciones > .material-symbols-rounded { font-size: 24px; flex: none; }
 .cap-acciones-txt { flex: 1 1 220px; min-width: 0; }
 .cap-acciones-txt b { display: block; font-size: 14px; font-weight: 800; }
 .cap-acciones-txt small { display: block; font-size: 12px; font-weight: 600; opacity: .85; margin-top: 2px; }
-.cap-acciones--edit { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
 .cap-acciones--lock { background: #f1f5f9; border-color: #cbd5e1; color: #334155; }
-.cap-acciones .cap-btn { min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1.5px solid currentColor; background: #fff; color: inherit; font: 800 13px 'Nunito Sans', sans-serif; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; box-shadow: none; }
-.cap-acciones .cap-btn .material-symbols-rounded { font-size: 18px; }
-.cap-acciones .cap-btn--editar { color: #1d4ed8; }
-.cap-acciones .cap-btn--eliminar { color: #b91c1c; }
-.cap-acciones .cap-btn:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-.cap-acciones .cap-btn:disabled { opacity: .5; cursor: progress; }
-@media (hover: hover) and (pointer: fine) { .cap-acciones .cap-btn:hover:not(:disabled) { background: currentColor; } .cap-acciones .cap-btn:hover:not(:disabled) { color: #fff; } .cap-acciones .cap-btn--editar:hover:not(:disabled) { background: #1d4ed8; } .cap-acciones .cap-btn--eliminar:hover:not(:disabled) { background: #b91c1c; } }
 .inf-hist-card .inf-hist-borrar { flex: 0 0 36px; width: 36px; min-height: 36px; height: 36px; padding: 0; border-radius: 50%; background: transparent; color: #94a3b8; transition: color .2s, transform .2s, filter .2s; }
 .inf-hist-card .inf-hist-borrar .material-symbols-rounded { font-size: 22px; }
 .inf-hist-card .inf-hist-borrar:focus-visible { outline: 2px solid #dc2626; outline-offset: 2px; color: #dc2626; }
