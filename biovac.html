@@ -35,7 +35,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=10">
 <link rel="stylesheet" href="ayuda.css?v=7">
-<link rel="stylesheet" href="municipal_guiado.css?v=13">
+<link rel="stylesheet" href="municipal_guiado.css?v=14">
 <script defer src="guias_contenido.js?v=6"></script>
 <script defer src="ayuda.js?v=23"></script>
 <script defer src="a11y_global.js?v=6"></script>
@@ -49,12 +49,12 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.113"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.81"></script>
+<script defer src="biovac_ui.js?v=2026.114"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.82"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.28"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
-<script defer src="municipal_guiado.js?v=25"></script>
+<script defer src="municipal_guiado.js?v=26"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -980,6 +980,22 @@ window.onunhandledrejection = function (event) {
   }
   @keyframes loading-girar { to { transform: rotate(360deg); } }
   .loading-texto { font-size: 13px; font-weight: 700; color: var(--text); }
+  .loading-caja { min-width: min(86vw, 340px); }
+  .loading-progreso { width: 100%; display: flex; align-items: center; gap: 10px; }
+  .loading-progreso[hidden], .loading-nota[hidden] { display: none; }
+  .loading-barra { flex: 1; height: 8px; border-radius: 8px; background: var(--outline-variant); overflow: hidden; }
+  .loading-barra i { display: block; height: 100%; width: 0; border-radius: 8px; background: var(--secondary); transition: width .25s ease; }
+  .loading-progreso b { font-size: 12px; font-weight: 800; color: var(--text); min-width: 38px; text-align: right; }
+  .loading-nota { font-size: 11.5px; font-weight: 600; color: var(--muted); line-height: 1.4; }
+  @media (prefers-reduced-motion: reduce) { .loading-barra i { transition: none; } }
+  /* Menú «Exportar» del dock (Excel o PDF) */
+  .menu-exportar { position: fixed; z-index: 1000; min-width: 250px; background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 16px; padding: 6px; box-shadow: var(--shadow-2); display: none; }
+  .menu-exportar.abierto { display: block; }
+  .menu-exportar button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 8px 12px; border: none; border-radius: 12px; background: transparent; text-align: left; cursor: pointer; font: 700 13px inherit; font-family: inherit; color: var(--text); box-shadow: none; }
+  .menu-exportar button .material-symbols-rounded { font-size: 24px; color: var(--secondary); flex: none; }
+  .menu-exportar button small { display: block; font-weight: 600; font-size: 11.5px; color: var(--muted); }
+  .menu-exportar button:focus-visible { outline: 2px solid var(--secondary); outline-offset: -2px; }
+  @media (hover: hover) and (pointer: fine) { .menu-exportar button:hover { background: var(--surface-container); } }
   .toast.error { background: var(--error); }
   .toast.ok { background: var(--success); }
 
@@ -1414,6 +1430,11 @@ window.onunhandledrejection = function (event) {
   <div class="loading-caja">
     <div class="loading-spinner"></div>
     <span class="loading-texto" id="loadingTexto">Cargando…</span>
+    <div class="loading-progreso" id="loadingProgreso" hidden>
+      <div class="loading-barra" role="progressbar" aria-label="Avance" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loadingBarraCaja"><i id="loadingBarra"></i></div>
+      <b id="loadingPct">0 %</b>
+    </div>
+    <small class="loading-nota" id="loadingNota" hidden></small>
   </div>
 </div>
 

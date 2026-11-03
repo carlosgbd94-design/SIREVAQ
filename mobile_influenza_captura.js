@@ -329,7 +329,11 @@
           <p class="ic-res-pie" id="icEstaSemana"></p>
         </section>
 
-        ${protegida ? `<div class="ic-aviso ic-aviso--info" role="note"><b>Reporte guardado y protegido.</b> Para cambiar una cantidad toca <b>Editar</b> (lápiz flotante, abajo a la derecha).</div>` : ""}
+        ${protegida ? `<div class="ic-aviso ic-aviso--info ic-acciones" role="group" aria-label="Acciones del reporte guardado"><div><b>Reporte guardado.</b> ¿Te equivocaste? Edítalo o elimínalo aquí mismo.</div>
+          <div class="ic-acciones-btns"><button type="button" class="ic-acc ic-acc--editar" data-acc="editar"><span class="material-symbols-rounded" aria-hidden="true">edit</span>Editar</button>
+          <button type="button" class="ic-acc ic-acc--eliminar" data-acc="eliminar"><span class="material-symbols-rounded" aria-hidden="true">delete</span>Eliminar</button></div></div>` : ""}
+        ${enEdicion(f) && rep ? `<div class="ic-aviso ic-aviso--info ic-acciones" role="status"><div><b>Estás editando este reporte.</b> Cambia lo que necesites y toca Guardar (abajo a la derecha).</div>
+          <div class="ic-acciones-btns"><button type="button" class="ic-acc" data-acc="cancelar"><span class="material-symbols-rounded" aria-hidden="true">close</span>Cancelar</button></div></div>` : ""}
         ${esCovid() ? `<div class="ic-aviso ic-aviso--info"><b>Moderna y Pfizer suman contra la misma meta.</b> Captura el total de la semana de cada marca; si guardas de nuevo esta semana, el reporte nuevo reemplaza al anterior.</div>` : ""}
         ${metaTotal() === 0 ? `<div class="ic-aviso"><b>Tu unidad no tiene meta asignada.</b> Puedes registrar la semana como «sin movimiento»; para capturar dosis pide a tu jurisdicción que asigne la meta.</div>` : ""}
         ${avisos.map(r => `<div class="ic-aviso"><b>${r.tipo === "segunda" ? "2ª dosis" : "1ª dosis"} no disponible esta semana.</b> ${esc(r.texto)}</div>`).join("")}
@@ -361,7 +365,7 @@
               return `<li class="ic-hist-fila"><button type="button" class="ic-hist-item" data-fecha="${r.fecha}">
               <span><b>Semana ${isoWeek(r.fecha)}</b> · ${esc(rangoTexto(r.fecha))}</span>
               <span>${cong ? '<span class="material-symbols-rounded ic-hist-lock" aria-hidden="true">lock</span>SIS enviado · ' : ""}${esSinMov(r) ? "Sin movimiento" : totalReporte(r) + " dosis"}</span>
-            </button>${cong ? "" : `<button type="button" class="ic-hist-borrar" data-fecha="${r.fecha}" aria-label="Eliminar reporte de ${nombreVac()} de la semana ${isoWeek(r.fecha)}"><span class="material-symbols-rounded" aria-hidden="true">delete</span></button>`}</li>`;
+            </button>${cong ? "" : `<button type="button" class="ic-hist-editar" data-fecha="${r.fecha}" aria-label="Editar reporte de ${nombreVac()} de la semana ${isoWeek(r.fecha)}"><span class="material-symbols-rounded" aria-hidden="true">edit</span></button><button type="button" class="ic-hist-borrar" data-fecha="${r.fecha}" aria-label="Eliminar reporte de ${nombreVac()} de la semana ${isoWeek(r.fecha)}"><span class="material-symbols-rounded" aria-hidden="true">delete</span></button>`}</li>`;
             }).join("")}
           </ul>
         </details>
@@ -561,6 +565,16 @@
     }
     rootEl.querySelectorAll(".ic-hist-item").forEach(b => { b.onclick = () => { cambiarSemana(b.dataset.fecha, true); window.scrollTo({ top: 0, behavior: "auto" }); }; });
     rootEl.querySelectorAll(".ic-hist-borrar").forEach(b => { b.onclick = () => eliminar(b.dataset.fecha, b); });
+    // «Editar» del historial: abre esa semana y entra directo al modo edición
+    rootEl.querySelectorAll(".ic-hist-editar").forEach(b => { b.onclick = () => { cambiarSemana(b.dataset.fecha, false); window.scrollTo({ top: 0, behavior: "auto" }); editar(); }; });
+    // Acciones visibles del reporte guardado de la semana
+    rootEl.querySelectorAll("[data-acc]").forEach(b => {
+      b.onclick = () => {
+        if (b.dataset.acc === "editar") editar();
+        else if (b.dataset.acc === "cancelar") cancelarEdicion();
+        else if (b.dataset.acc === "eliminar") eliminar(S.fecha, b);
+      };
+    });
   }
 
   // Elimina el reporte semanal (de la vacuna elegida) mientras el SIS de ese mes no se haya enviado

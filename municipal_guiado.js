@@ -829,6 +829,10 @@
         <button type="button" class="btn-primario" id="munDescargarCSV" ${listo ? '' : 'disabled'} title="${listo ? 'Descargar el CSV oficial' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">download</span> Descargar CSV oficial</button>
       </div>
       <div class="mun-entregar">
+        <div><b>SINBA-SIS de cada unidad (Excel oficial)</b><small>Un ZIP con un archivo de Excel por unidad, con la plantilla oficial completa, listo para guardar o imprimir. Es pesado: verás una barra de avance.</small></div>
+        <button type="button" class="btn-primario" id="munDescargarZip" ${listo ? '' : 'disabled'} title="${listo ? 'Descargar un Excel oficial por unidad en un ZIP' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">folder_zip</span> Exportar SIS masiva (ZIP)</button>
+      </div>
+      <div class="mun-entregar">
         <div><b>Indicadores (RDA)</b><small id="munPubEstado">${listo ? 'Consultando…' : 'Se carga sola al validar la última unidad.'}</small></div>
         <button type="button" class="btn-secundario" id="munPublicar" ${listo ? '' : 'disabled'} title="${listo ? 'Cargar de nuevo el concentrado validado a los indicadores' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">cloud_upload</span> Cargar a indicadores</button>
       </div>
@@ -852,6 +856,17 @@
       const li = $('munCheckRecibido');
       if (li) { li.className = 'info'; li.querySelector('small').textContent = 'No se pudo comparar (informativo)'; }
     }
+  }
+
+  // ZIP masivo: un Excel oficial por unidad validada del municipio (las «sin envío» no cuentan).
+  async function exportarZipMasivo(btn) {
+    const { mes, anio } = periodo();
+    const muni = st.muni;
+    const filas = filasDe(muni).filter((f) => estadoDe(f) !== 'OMITIDA');
+    if (!window.SIS06PBiovac || !window.SIS06PBiovac.exportarZipMunicipio) { toast('El módulo de exportación aún no está listo. Intenta de nuevo en un momento.', 'error'); return; }
+    if (btn) btn.disabled = true;
+    try { await window.SIS06PBiovac.exportarZipMunicipio(filas, muni, mes, anio); }
+    finally { if (btn) btn.disabled = false; }
   }
 
   // -------------------------------------------------------------- sin envío y armado
@@ -925,6 +940,7 @@
       else if (t.closest('#munVolverConcentrado') || t.closest('#munVolverConcentradoEnt')) irAPaso(3);
       else if (t.closest('#munVolverUnidades') || t.closest('#munVolverLista')) irAPaso(1);
       else if (t.closest('#munIrEntrega')) irAPaso(4);
+      else if (t.closest('#munDescargarZip')) exportarZipMasivo(t.closest('#munDescargarZip'));
       else if (t.closest('#munMovExcel')) { const { mes, anio } = periodo(); conCarga(t.closest('#munMovExcel'), () => descargarMovimientoBiovac(st.muni, mes, anio)); }
       else if (t.closest('#munIrPendientes')) { st.filtro = 'ENVIADO'; irAPaso(1); }
       else if (t.closest('#munDescargarCSV')) window.SIS06PDashboard.exportarCSVOficialMunicipio(st.muni, periodo().mes, periodo().anio);

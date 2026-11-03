@@ -120,3 +120,24 @@ test('Historial: eliminar reporte solo mientras el SIS del mes no se haya enviad
   // Eliminar no abre el reporte
   expect(await page.evaluate(() => _eleccion)).toBeNull();
 });
+
+test('Historial: «Editar» abre la semana y entra directo al modo edición; con el SIS enviado no hay Editar', async ({ page }) => {
+  await page.goto('about:blank');
+  await page.evaluate((h) => {
+    document.body.innerHTML = h + '<button id="subtabUnitCaptura"></button><input id="influenza_semana">';
+    window.InfluenzaReglas = { fechaLarga: (x) => x };
+  }, seccion);
+  await page.addScriptTag({ path: path.join(raiz, 'covid_captura.js') });
+  const DATOS_ED = DATOS.replace("var influenzaMesCongelado = function () { return null; };",
+    "var influenzaMesCongelado = function (f) { return f === '2026-10-30' ? 'SIS enviado' : null; };" +
+    "window.__entro = 0; window.capturaModoEdicion = { entrar: function () { window.__entro++; } };");
+  await page.addScriptTag({ content: DATOS_ED + resalta + bloque + '\nwindow.__cargar = loadInfluenzaHistoryList;' });
+  await page.evaluate(() => window.__cargar());
+  // 2 de Influenza (una congelada) + 1 de COVID-19 => 2 botones Editar
+  await expect(page.locator('.inf-hist-editar')).toHaveCount(2);
+  await expect(page.locator('.inf-hist-card--inf').filter({ hasText: 'INF-B' }).locator('.inf-hist-editar')).toHaveCount(0);
+  await page.locator('.inf-hist-card--inf').filter({ hasText: 'INF-A' }).locator('.inf-hist-editar').click();
+  expect(await page.evaluate(() => window.__entro)).toBe(1);
+  expect(await page.evaluate(() => _eleccion)).toBe('INFLUENZA');
+  expect(await page.evaluate(() => document.getElementById('influenza_semana').value)).toBe('2026-10-23');
+});

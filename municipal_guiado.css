@@ -63,7 +63,12 @@ button.pt { cursor: pointer; }
 .mun-unidad.completo .mun-dot { background: #16a34a; }
 .mun-unidad.omitida .mun-dot { background: #94a3b8; }
 .mun-unidad.omitida { background: #f8fafc; border-style: dashed; }
-.mun-unidad.parcial { background: #fffdf5; }
+.mun-unidad.parcial { background: #f6fdf8; border-color: #bbf7d0; }
+/* Validada: verde franco con palomita; por validar: verde tenue (el punto ámbar y la etiqueta marcan que falta validar) */
+.mun-unidad.completo { background: #ecfdf3; border-color: #86efac; }
+.mun-unidad.completo .mun-dot { position: relative; width: 16px; height: 16px; }
+.mun-unidad.completo .mun-dot::after { content: ''; position: absolute; left: 5px; top: 2.5px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.mun-unidad.completo .mun-u-txt b { color: #14532d; }
 .mun-u-txt { flex: 1; min-width: 0; }
 .mun-u-txt b { display: block; font-size: 13px; color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mun-u-txt small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

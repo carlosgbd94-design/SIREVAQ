@@ -927,7 +927,7 @@
       const puedeExportar = estadoActual === 'VALIDADO';
       btnExportar.disabled = !puedeExportar;
       btnExportar.title = puedeExportar
-        ? 'Exportar el Excel oficial del SINBA-SIS (SIS-06-P, Movimiento de Biológico, SIS-SS-CE-H e Influenza)'
+        ? 'Exportar el SINBA-SIS: Excel oficial (las 4 hojas) o PDF del Movimiento'
         : 'Disponible hasta que el municipal valide el SINBA-SIS de este mes';
     }
 
@@ -2207,7 +2207,11 @@
       return;
     }
 
-    mostrarCargando('Preparando ZIP del municipio...');
+    // Pantalla de progreso con barra: el ZIP es pesado (un libro oficial por unidad) y sin avance parecería trabado.
+    const NOTA_ZIP = 'Es un archivo pesado: puede tardar unos minutos. No cierres ni recargues esta ventana.';
+    const progreso = (pct, texto) => mostrarCargando(texto, { pct, nota: NOTA_ZIP });
+    const respirar = () => new Promise((r) => setTimeout(r, 0));   // deja que el navegador repinte la barra
+    progreso(2, 'Preparando la exportación de ' + unidades.length + ' unidades…');
     try {
       await asegurarVariablesSIS();
       const lista = unidades.map((f) => f.clues);
@@ -2242,6 +2246,7 @@
         movimientos = movs || [];
       }
 
+      progreso(6, 'Cargando la plantilla oficial…');
       const plantillaBuffer = await cargarPlantillaOficial();
       const zip = new JSZip();
       const mm = String(mes).padStart(2, '0');
@@ -2250,7 +2255,8 @@
 
       for (let i = 0; i < unidades.length; i++) {
         const f = unidades[i];
-        mostrarCargando(`Generando Excel ${i + 1} de ${unidades.length}: ${f.unidad || f.clues}...`);
+        progreso(8 + (i / unidades.length) * 82, `Generando Excel ${i + 1} de ${unidades.length}: ${f.unidad || f.clues}`);
+        await respirar();
         const captura = (capturas || []).find((c) => c.clues === f.clues);
         if (!captura || captura.estado !== 'VALIDADO') { fallos.push(`${f.clues} (sin captura validada)`); continue; }
         try {
@@ -2274,8 +2280,10 @@
       const hechos = unidades.length - fallos.length;
       if (hechos === 0) throw new Error('No se pudo generar ningún Excel.');
 
-      mostrarCargando('Comprimiendo ZIP...');
-      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      progreso(90, 'Comprimiendo el ZIP…');
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+        (meta) => progreso(90 + meta.percent * 0.09, 'Comprimiendo el ZIP…'));
+      progreso(100, 'Listo: descargando el archivo…');
       descargarBlob(blob, `SIS_${municipio}_${mm}_${anio}.zip`);
 
       if (fallos.length) {

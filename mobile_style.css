@@ -1634,6 +1634,17 @@ html.dark .panel-section .biologic-card.liquid-glass :is(h2, h4, p) { color: #f1
 #panelINFC .ic-historial[hidden] { display: none; }
 #panelINFC .ic-historial summary { min-height: 32px; font-weight: 800; cursor: pointer; }
 #panelINFC .ic-historial ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+#panelINFC .ic-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+#panelINFC .ic-acciones > div:first-child { flex: 1 1 200px; min-width: 0; }
+#panelINFC .ic-acciones-btns { display: flex; gap: 8px; }
+#panelINFC .ic-acc { min-height: 48px; padding: 0 16px; border-radius: 999px; border: 1.5px solid currentColor; background: #fff; font: 800 14px inherit; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; color: #334155; }
+#panelINFC .ic-acc .material-symbols-rounded { font-size: 20px; }
+#panelINFC .ic-acc--editar { color: #1d4ed8; }
+#panelINFC .ic-acc--eliminar { color: #b91c1c; }
+#panelINFC .ic-acc:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+#panelINFC .ic-hist-editar { flex: 0 0 48px; width: 48px; min-height: 48px; height: 48px; padding: 0; border: none; background: transparent; color: #1d4ed8; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+#panelINFC .ic-hist-editar .material-symbols-rounded { font-size: 24px; }
+#panelINFC .ic-hist-editar:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
 #panelINFC .ic-hist-fila { display: flex; align-items: center; gap: 4px; }
 #panelINFC .ic-hist-fila .ic-hist-item { flex: 1 1 auto; width: auto; min-width: 0; }
 #panelINFC .ic-hist-lock { font-size: 14px; vertical-align: -2px; margin-right: 2px; }

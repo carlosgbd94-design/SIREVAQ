@@ -329,4 +329,31 @@ test.describe('Influenza: captura de la unidad en móvil', () => {
     await expect(page.locator('.ic-aviso--cerrada')).toContainText('ya fue enviado');
     await expect(page.locator('#ic_r1')).toBeDisabled();
   });
+  test('reporte guardado: Editar y Eliminar a la vista (sin buscar el lápiz flotante)', async ({ page }) => {
+    const st = estado();
+    await abrir(page, st);
+    await page.click('#dockItemINFC');
+    await page.locator('#icSemana').selectOption('2026-10-09');
+    const barra = page.locator('.ic-acciones[role="group"]');
+    await expect(barra).toBeVisible();
+    await expect(barra.locator('[data-acc="editar"]')).toBeVisible();
+    await expect(barra.locator('[data-acc="eliminar"]')).toBeVisible();
+    await expect(page.locator('#ic_r1')).toBeDisabled();
+    await barra.locator('[data-acc="editar"]').click();
+    await expect(page.locator('#ic_r1')).toBeEnabled();                    // entró directo al modo edición
+    await expect(page.locator('.ic-acciones[role="status"]')).toContainText('Estás editando');
+    await page.locator('.ic-acciones [data-acc="cancelar"]').click();
+    await expect(page.locator('#ic_r1')).toBeDisabled();
+    await page.locator('.ic-acciones [data-acc="eliminar"]').click();       // el diálogo se acepta solo
+    await expect.poll(() => st.db.influenza_capturas.length).toBe(0);
+  });
+
+  test('historial: el lápiz abre la semana ya en modo edición', async ({ page }) => {
+    await abrir(page, estado());
+    await page.click('#dockItemINFC');
+    await page.locator('.ic-historial summary').click();
+    await page.locator('.ic-hist-editar').click();
+    await expect(page.locator('#icSemana')).toHaveValue('2026-10-09');
+    await expect(page.locator('#ic_r1')).toBeEnabled();
+  });
 });

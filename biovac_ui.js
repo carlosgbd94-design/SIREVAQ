@@ -420,12 +420,29 @@ function toast(msg, tipo) {
 // secuencia (ej. cargar recibido desde Requisiciones) donde, sin esto, la
 // pantalla no daba ninguna señal de que algo seguía corriendo entre el
 // modal de confirmación y el toast final.
-function mostrarCargando(texto) {
+// `avance` (opcional) = { pct: 0-100, nota }: pantalla de progreso con barra para procesos pesados (p. ej. el ZIP masivo).
+function mostrarCargando(texto, avance) {
   document.getElementById('loadingTexto').textContent = texto || 'Cargando…';
+  const prog = document.getElementById('loadingProgreso');
+  const nota = document.getElementById('loadingNota');
+  if (prog) {
+    prog.hidden = !avance;
+    if (avance) {
+      const pct = Math.max(0, Math.min(100, Math.round(Number(avance.pct) || 0)));
+      document.getElementById('loadingBarra').style.width = pct + '%';
+      document.getElementById('loadingPct').textContent = pct + ' %';
+      document.getElementById('loadingBarraCaja').setAttribute('aria-valuenow', String(pct));
+    }
+  }
+  if (nota) { nota.hidden = !(avance && avance.nota); nota.textContent = (avance && avance.nota) || ''; }
   document.getElementById('loadingOverlay').classList.add('abierto');
 }
 function ocultarCargando() {
   document.getElementById('loadingOverlay').classList.remove('abierto');
+  const prog = document.getElementById('loadingProgreso');
+  if (prog) prog.hidden = true;
+  const nota = document.getElementById('loadingNota');
+  if (nota) nota.hidden = true;
 }
 
 // Reemplaza confirm()/prompt() nativos del navegador por un modal propio.
@@ -798,14 +815,61 @@ function sincronizarDockMovimientoExtras() {
   const fila = document.getElementById('filaBotonesCabecera');
   const enMovimiento = Boolean(btnMov && btnMov.classList.contains('activo') && estado.movimiento
     && fila && fila.style.display !== 'none');
+  const esUnidad = Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD');
   DOCK_EXTRAS_MOVIMIENTO.forEach(([dockId, hdrId]) => {
     const d = document.getElementById(dockId);
     const h = document.getElementById(hdrId);
     if (!d || !h) return;
-    d.style.display = (enMovimiento && h.style.display !== 'none') ? 'inline-flex' : 'none';
+    // La unidad no tiene botón PDF aparte: el PDF va dentro de «Exportar» (que se habilita hasta que el municipal valida)
+    d.style.display = (enMovimiento && h.style.display !== 'none' && !(esUnidad && dockId === 'btnVerPdfDock')) ? 'inline-flex' : 'none';
     d.disabled = h.disabled;
   });
 }
+
+// «Exportar» de la UNIDAD: un solo botón (bloqueado hasta que el municipal valide) con la opción Excel o PDF.
+function cerrarMenuExportar() {
+  const m = document.getElementById('menuExportarSIS');
+  if (m) m.classList.remove('abierto');
+  const b = document.getElementById('btnExportarSISCompleto');
+  if (b) b.setAttribute('aria-expanded', 'false');
+}
+function abrirMenuExportar(btn) {
+  let m = document.getElementById('menuExportarSIS');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'menuExportarSIS';
+    m.className = 'menu-exportar';
+    m.setAttribute('role', 'menu');
+    m.innerHTML = `
+      <button type="button" role="menuitem" data-exp="excel"><span class="material-symbols-rounded" aria-hidden="true">table_view</span><span>Excel oficial<small>SINBA-SIS completo (las 4 hojas)</small></span></button>
+      <button type="button" role="menuitem" data-exp="pdf"><span class="material-symbols-rounded" aria-hidden="true">picture_as_pdf</span><span>PDF<small>Movimiento de Biológico para imprimir</small></span></button>`;
+    document.body.appendChild(m);
+    m.addEventListener('click', (ev) => {
+      const op = ev.target.closest('[data-exp]');
+      if (!op) return;
+      cerrarMenuExportar();
+      if (op.dataset.exp === 'excel') { if (window.SIS06PBiovac) window.SIS06PBiovac.exportarSISOficialCompleto(); }
+      else { const h = document.getElementById('btnVerPdf'); if (h) h.click(); }
+    });
+    document.addEventListener('click', (ev) => { if (!ev.target.closest('#menuExportarSIS, #btnExportarSISCompleto')) cerrarMenuExportar(); });
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { cerrarMenuExportar(); const b = document.getElementById('btnExportarSISCompleto'); if (b) b.focus(); } });
+  }
+  const r = btn.getBoundingClientRect();
+  m.classList.add('abierto');
+  const alto = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth)) + 'px';
+  m.style.top = Math.max(8, r.top - alto - 10) + 'px';
+  btn.setAttribute('aria-expanded', 'true');
+  const primero = m.querySelector('button'); if (primero) primero.focus();
+}
+document.addEventListener('click', (ev) => {
+  const btn = ev.target && ev.target.closest ? ev.target.closest('#btnExportarSISCompleto') : null;
+  if (!btn || btn.disabled || !estado.perfil || estado.perfil.rol !== 'UNIDAD') return;
+  ev.stopImmediatePropagation();
+  ev.preventDefault();
+  const m = document.getElementById('menuExportarSIS');
+  if (m && m.classList.contains('abierto')) cerrarMenuExportar(); else abrirMenuExportar(btn);
+}, true);
 
 // La "tinta" de la barra de hojas (resaltado tonal que se desliza a la pestaña
 // activa) la maneja dock_glass.js, compartido con requisiciones.html.

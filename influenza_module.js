@@ -1234,10 +1234,65 @@ function prellenarNombreResponsableInfluenza(reporte) {
   if (nombre && inp.value !== nombre) { inp.value = nombre; actualizarPasosInfluenza(); }
 }
 
+/**
+ * Barra de acciones del reporte ya guardado de la semana elegida (Influenza o COVID-19): Editar y Eliminar con texto,
+ * a la vista, sin tener que buscar el lápiz flotante. En edición muestra Cancelar; con el SIS del mes enviado, el candado.
+ */
+function renderAccionesReporte() {
+  const ref = document.getElementById("influenzaCaptureGroupsContainer");
+  if (!ref || !ref.parentNode) return;
+  let bar = document.getElementById("capAccionesReporte");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "capAccionesReporte";
+    bar.className = "cap-acciones";
+    bar.hidden = true;
+    ref.parentNode.insertBefore(bar, ref);
+    bar.addEventListener("click", (ev) => {
+      const b = ev.target.closest("[data-acc]");
+      if (!b) return;
+      const fecha = document.getElementById("influenza_semana")?.value;
+      const vac = capVacunaActual();
+      if (b.dataset.acc === "editar") window.capturaModoEdicion.entrar();
+      else if (b.dataset.acc === "cancelar") window.capturaModoEdicion.cancelar();
+      else if (b.dataset.acc === "eliminar") {
+        const lista = vac === "COVID" ? (typeof _covidCapturasCache !== "undefined" ? _covidCapturasCache : []) : _influenzaCapturasCache;
+        const r = (lista || []).find(x => x.fecha === fecha);
+        if (r) eliminarReporteHistorial(itemHistorialDe(r, vac), b);
+      }
+    });
+  }
+  const fecha = document.getElementById("influenza_semana")?.value;
+  const vac = capVacunaActual();
+  const lista = vac === "COVID" ? (typeof _covidCapturasCache !== "undefined" ? _covidCapturasCache : []) : _influenzaCapturasCache;
+  const r = fecha ? (lista || []).find(x => x.fecha === fecha) : null;
+  if (!r) { bar.hidden = true; bar.innerHTML = ""; return; }
+  const nombre = vac === "COVID" ? "COVID-19" : "Influenza";
+  const folio = vac === "COVID" ? covidFolio(r) : influenzaFolio(r);
+  const congelado = influenzaMesCongelado(fecha);
+  bar.hidden = false;
+  bar.classList.toggle("cap-acciones--lock", !!congelado);
+  bar.classList.toggle("cap-acciones--edit", !congelado && capEditando(fecha, vac));
+  if (congelado) {
+    bar.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">lock</span>
+      <div class="cap-acciones-txt"><b>Reporte de ${nombre} guardado · ${escapeHtml(folio)}</b><small>El SIS de ese mes ya se envió: ya no se puede editar ni eliminar. Pide la corrección al municipal.</small></div>`;
+  } else if (capEditando(fecha, vac)) {
+    bar.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">edit</span>
+      <div class="cap-acciones-txt"><b>Estás editando este reporte</b><small>Cambia lo que necesites y guarda con el botón azul de abajo a la derecha.</small></div>
+      <button type="button" class="cap-btn" data-acc="cancelar"><span class="material-symbols-rounded" aria-hidden="true">close</span>Cancelar</button>`;
+  } else {
+    bar.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">task_alt</span>
+      <div class="cap-acciones-txt"><b>Reporte de ${nombre} guardado · ${escapeHtml(folio)}</b><small>Si te equivocaste, edítalo o elimínalo aquí mismo.</small></div>
+      <button type="button" class="cap-btn cap-btn--editar" data-acc="editar"><span class="material-symbols-rounded" aria-hidden="true">edit</span>Editar</button>
+      <button type="button" class="cap-btn cap-btn--eliminar" data-acc="eliminar"><span class="material-symbols-rounded" aria-hidden="true">delete</span>Eliminar</button>`;
+  }
+}
+
 function renderCaptureGrid() {
   const container = document.getElementById("influenzaCaptureGroupsContainer");
   if (!container) return;
   container.innerHTML = "";
+  renderAccionesReporte();
 
   const selectedFecha = document.getElementById("influenza_semana").value;
   const estado = influenzaEstadoCaptura(selectedFecha);
@@ -1248,15 +1303,8 @@ function renderCaptureGrid() {
     cerrado.innerHTML = `<span class="material-symbols-rounded">lock_clock</span><div><b>Captura cerrada.</b> ${estado.motivo} Puedes revisar la tabla, pero todavía no se puede guardar información.</div>`;
     container.appendChild(cerrado);
   }
-  const bloqGuardado = capBloqueadaPorGuardado(selectedFecha, "INFLUENZA");
+  const bloqGuardado = capBloqueadaPorGuardado(selectedFecha, "INFLUENZA");   // la barra de acciones ya explica cómo editar
   capSincronizarNombre();
-  if (bloqGuardado && capVacunaActual() === "INFLUENZA") {
-    const bloq = document.createElement("div");
-    bloq.className = "inf-aviso inf-aviso--protegido";
-    bloq.setAttribute("role", "note");
-    bloq.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">lock</span><div><b>Reporte guardado y protegido.</b> Para cambiar una cantidad presiona <b>Editar</b> en el botón flotante.</div>`;
-    container.appendChild(bloq);
-  }
   const avisoHtml = avisoReglasSemana(selectedFecha);
   if (avisoHtml && !capturaCerrada) {
     const aviso = document.createElement("div");
@@ -1798,7 +1846,7 @@ async function loadInfluenzaHistoryList() {
     const congelado = !!influenzaMesCongelado(r.fecha);
     const chipSis = congelado
       ? `<span class="inf-chip inf-chip--gris" title="El SIS de ese mes ya se envió: el reporte ya no se edita ni se elimina"><span class="material-symbols-rounded">lock</span>SIS enviado</span>` : "";
-    const btnBorrar = congelado ? "" : `<button type="button" class="inf-hist-borrar" aria-label="Eliminar reporte de ${esCov ? "COVID-19" : "Influenza"} de la semana ${semana ? semana.semana : ""}" title="Eliminar reporte"><span class="material-symbols-rounded" aria-hidden="true">delete</span></button>`;
+    const btnBorrar = congelado ? "" : `<button type="button" class="inf-hist-editar" aria-label="Editar reporte de ${esCov ? "COVID-19" : "Influenza"} de la semana ${semana ? semana.semana : ""}" title="Editar este reporte"><span class="material-symbols-rounded" aria-hidden="true">edit</span><span class="inf-hist-btn-txt">Editar</span></button><button type="button" class="inf-hist-borrar" aria-label="Eliminar reporte de ${esCov ? "COVID-19" : "Influenza"} de la semana ${semana ? semana.semana : ""}" title="Eliminar este reporte"><span class="material-symbols-rounded" aria-hidden="true">delete</span><span class="inf-hist-btn-txt">Eliminar</span></button>`;
     const card = document.createElement("div");
     card.className = `inf-hist-card inf-hist-card--${esCov ? "cov" : "inf"}`;
     card.tabIndex = 0;
@@ -1829,7 +1877,7 @@ async function loadInfluenzaHistoryList() {
       ${btnBorrar}
       <div class="inf-hist-accion"><span class="material-symbols-rounded">chevron_right</span></div>
     `;
-    const abrir = () => {
+    const abrir = (editar) => {
       // Abre la captura de LA VACUNA de ese reporte (si es COVID-19, el panel de COVID-19)
       if (esCov && typeof elegirVacunaCaptura === "function") elegirVacunaCaptura("COVID");
       else if (typeof elegirVacunaCaptura === "function") elegirVacunaCaptura("INFLUENZA");
@@ -1837,14 +1885,27 @@ async function loadInfluenzaHistoryList() {
       document.getElementById("influenza_semana").dispatchEvent(new Event("change"));
       // Cambiar automáticamente a la pestaña de captura
       document.getElementById("subtabUnitCaptura").click();
-      showToast(`Reporte de ${esCov ? "COVID-19" : "Influenza"} con folio ${p.folio} cargado para edición/consulta.`, true, "info");
+      // «Editar» del historial entra directo al modo edición (antes había que abrir el reporte y luego buscar el lápiz flotante)
+      if (editar === true && !influenzaMesCongelado(r.fecha) && window.capturaModoEdicion) window.capturaModoEdicion.entrar();
+      else showToast(`Reporte de ${esCov ? "COVID-19" : "Influenza"} con folio ${p.folio} abierto para consulta.`, true, "info");
     };
-    card.onclick = abrir;
-    card.onkeydown = (ev) => { if (ev.target === card && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); abrir(); } };
+    card.onclick = () => abrir(false);
+    card.onkeydown = (ev) => { if (ev.target === card && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); abrir(false); } };
+    const editarBtn = card.querySelector(".inf-hist-editar");
+    if (editarBtn) editarBtn.onclick = (ev) => { ev.stopPropagation(); abrir(true); };
     const borrar = card.querySelector(".inf-hist-borrar");
     if (borrar) borrar.onclick = (ev) => { ev.stopPropagation(); eliminarReporteHistorial(p, borrar); };
     container.appendChild(card);
   });
+}
+
+/** Datos mínimos de un reporte para eliminarlo (mismo formato que usa el historial). */
+function itemHistorialDe(r, vac) {
+  const esCov = vac === "COVID";
+  let totalDosis = 0;
+  if (esCov) totalDosis = _covTotales(r).total;
+  else if (r.valores) Object.values(r.valores).forEach(v => totalDosis += Number(v || 0));
+  return { original: r, vac, folio: esCov ? covidFolio(r) : influenzaFolio(r), totalDosis };
 }
 
 /** Elimina un reporte semanal (Influenza o COVID-19) de la unidad mientras el SIS de ese mes no se haya enviado. */
@@ -8210,6 +8271,7 @@ function aplicarVacunaCaptura() {
   if (cov) cov.hidden = _capturaVacuna !== "COVID" || !tiene;
   actualizarContadorDosisHub();
   capSincronizarNombre();
+  renderAccionesReporte();
   if (typeof syncCommandHub === "function") syncCommandHub();
 }
 
