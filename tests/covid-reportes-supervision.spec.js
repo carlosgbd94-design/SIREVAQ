@@ -59,6 +59,9 @@ test('Reportes por semana con COVID-19: la supervisión corrige Moderna/Pfizer, 
   await expect(page.locator('#val_input_cov_PFIZER_c1')).toHaveCount(0);
   await expect(page.locator('#val_input_cov_MODERNA_c5')).toBeDisabled();
 
+  // El nombre de quien corrige viene del perfil (no hay que escribirlo); si se borra, no guarda sin firma
+  await expect(page.locator('#validationNombreResponsable')).toHaveValue('Muni');
+  await poner(page, '#validationNombreResponsable', '');
   // Pasarse de la meta (8 de otras semanas + 40) lo impide; sin firma tampoco guarda
   await poner(page, '#val_input_cov_PFIZER_c3', '40');
   await page.evaluate(() => saveValidationReportCovid('QTSSA000001', '2026-11-06'));
@@ -105,3 +108,52 @@ test('La meta de COVID-19 de un hospital sale de su destino (HENM), la de una un
   });
   expect(r).toEqual({ hospital: { c4: 100 }, unidad: { c3: 40 }, nada: {} });
 });
+
+// Perfil municipal: «Eliminar reporte» en la revisión de Reportes por semana (Influenza y COVID-19).
+for (const vac of ['COVID', 'INFLUENZA']) {
+  test(`Reportes por semana (${vac}): el municipal puede eliminar el reporte de una unidad, con confirmación`, async ({ page }) => {
+    test.setTimeout(60000);
+    const infCaps = SEMANAS.map(f => ({ anio_campana: CAMP, clues: 'QTSSA000001', unidad: 'Q UNIDAD 1', municipio: 'QUERETARO', fecha: f, valores: { c1: 3 }, capturado_por: 'UNIDAD1', editado_por: 'UNIDAD' }));
+    const db = { campanas: [{ id: 'c1', nombre: CAMP, fecha_inicio: '2026-10-02', fecha_fin: '2027-04-30', activo: true }], unidades, covid_metas: covMetas, covid_capturas: covCaps };
+    await page.route(/\.supabase\.co\//, servidor(db));
+    await page.clock.setFixedTime(new Date(HOY + 'T12:00:00'));
+    await page.goto('/index.html', { waitUntil: 'load' });
+    await page.waitForFunction(() => typeof supabaseRequest === 'function', null, { timeout: 20000 });
+    await page.evaluate(async ([vac, metas, caps, infCaps, unis]) => {
+      USER = { rol: 'MUNICIPAL', usuario: 'muni', nombre: 'Muni', municipio: 'QUERETARO', municipiosAllowed: ['QUERETARO'] };
+      TOKEN = 'token-prueba';
+      await loadCampaignConfig();
+      _vacuna = vac;
+      _covidMetasArray = metas; _covidCapturasAll = caps; _adminCapturasArray = infCaps; _allUnidades = unis;
+      window.__llamadas = []; window.__volvio = 0; window.__dialogos = [];
+      window.confirm = (t) => { window.__dialogos.push(t); return window.__acepta !== false; };
+      AppService.call = async (nombre, payload) => { window.__llamadas.push([nombre, payload]); return { ok: true, data: [] }; };
+      window.loadCovidAdminData = async () => {};
+      window.loadInfluenzaAdminData = async () => {};
+      window.volverAlListadoValidacion = () => { window.__volvio++; };
+      document.getElementById('validationReportContent').classList.remove('hidden');
+      if (vac === 'COVID') renderValidacionEdicionGridCovid('QTSSA000001', '2026-11-06');
+      else renderValidacionEdicionGrid('QTSSA000001', '2026-11-06');
+    }, [vac, covMetas, covCaps, infCaps, unidades]);
+
+    const btn = page.locator('#btnDeleteValidation');
+    await expect(btn).not.toHaveClass(/(^| )hidden( |$)/);   // el panel está tras el login: se comprueba la clase y se hace clic por evento
+
+    // Cancelar el diálogo no borra nada
+    await page.evaluate(() => { window.__acepta = false; });
+    await btn.dispatchEvent('click');
+    expect(await page.evaluate(() => window.__llamadas.length)).toBe(0);
+
+    // Aceptar elimina ese reporte (unidad + semana) y regresa al listado
+    await page.evaluate(() => { window.__acepta = true; });
+    await btn.dispatchEvent('click');
+    await expect.poll(() => page.evaluate(() => window.__volvio)).toBe(1);
+    const esperado = vac === 'COVID' ? 'deletecovid_captura' : 'deleteinfluenza_captura';
+    expect(await page.evaluate(() => window.__llamadas)).toEqual([[esperado, { clues: 'QTSSA000001', fecha: '2026-11-06' }]]);
+    expect((await page.evaluate(() => window.__dialogos))[0]).toContain('Q UNIDAD 1');
+
+    // Sin reporte esa semana no hay nada que eliminar: el botón no aparece
+    await page.evaluate((vac) => { if (vac === 'COVID') renderValidacionEdicionGridCovid('QTSSA000002', '2026-11-06'); else renderValidacionEdicionGrid('QTSSA000002', '2026-11-06'); }, vac);
+    await expect(btn).toHaveClass(/(^| )hidden( |$)/);
+  });
+}

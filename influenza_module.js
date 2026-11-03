@@ -3943,6 +3943,12 @@ function anunciarValidacion(msg) {
 }
 
 // Regresa al listado devolviendo el foco a la unidad que se estaba revisando.
+/** Nombre del perfil que revisa, para que no tenga que escribirlo en cada corrección (se puede cambiar). */
+function nombreSupervisor() {
+  const n = String((typeof USER !== "undefined" && USER && USER.nombre) || "").trim();
+  return n && !n.includes("_") ? n : "";
+}
+
 function volverAlListadoValidacion(mensaje) {
   document.getElementById("validationReportContent").classList.add("hidden");
   document.getElementById("validationDashboard").classList.remove("hidden");
@@ -4204,7 +4210,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const report = _adminCapturasArray.find(r => r.clues === clues && r.fecha === fecha);
   _currentValidationReport = report;
-  nombreInput.value = "";
+  nombreInput.value = nombreSupervisor();
   limpiarErroresValidacion();
 
   content.classList.remove("hidden");
@@ -4398,7 +4404,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
   actualizarResumenValidacion();
 
   document.getElementById("btnCancelValidation").onclick = () => {
-    const sucio = contarCambiosValidacion() > 0 || nombreInput.value.trim() !== "";
+    const sucio = contarCambiosValidacion() > 0 || nombreInput.value.trim() !== nombreSupervisor();
     if (sucio && !window.confirm("Tienes cambios sin guardar. ¿Descartarlos y volver al listado?")) return;
     volverAlListadoValidacion();
   };
@@ -4414,6 +4420,47 @@ function renderValidacionEdicionGrid(clues, fecha) {
     }
     saveValidationReport(clues, fecha);
   };
+  prepararEliminarValidacion(clues, fecha);
+}
+
+/**
+ * «Eliminar reporte» de la revisión (municipal/jurisdicción): borra el reporte semanal de la unidad para que pueda
+ * capturarlo de nuevo. Solo aparece si ya existe reporte; la base de datos (RLS) limita al municipal a sus municipios
+ * y la auditoría del SIS registra quién lo eliminó.
+ */
+function prepararEliminarValidacion(clues, fecha) {
+  const btn = document.getElementById("btnDeleteValidation");
+  if (!btn) return;
+  const hay = !!_currentValidationReport;
+  btn.classList.toggle("hidden", !hay);
+  btn.classList.toggle("flex", hay);
+  btn.disabled = false;
+  btn.onclick = () => eliminarReporteValidacion(clues, fecha, btn);
+}
+
+async function eliminarReporteValidacion(clues, fecha, btn) {
+  const r = _currentValidationReport;
+  if (!r) return;
+  const esCov = esCovid();
+  const nombre = esCov ? "COVID-19" : "Influenza";
+  const u = _allUnidades.find(x => x.clues === clues);
+  const unidad = u ? u.unidad : clues;
+  const semana = generateCampaignWeeks().find(w => w.fecha === fecha);
+  const dosis = esCov ? _covTotales(r).total : infTotalDosisReporte(r);
+  const folio = esCov ? covidFolio(r) : influenzaFolio(r);
+  const ok = confirm(`¿Eliminar el reporte de ${nombre} de ${unidad}${semana ? ` (semana ${semana.semana})` : ""}?\n\nFolio ${folio} · ${Number(dosis || 0).toLocaleString("es-MX")} dosis.\n\nEsta acción no se puede deshacer. La unidad podrá capturar esa semana de nuevo.`);
+  if (!ok) return;
+  if (btn) btn.disabled = true;
+  try {
+    await AppService.call(esCov ? "deletecovid_captura" : "deleteinfluenza_captura", { clues, fecha });
+    if (esCov) await loadCovidAdminData(document.getElementById("metaCampaignSelect").value);
+    else await loadInfluenzaAdminData();
+    showToast(`Reporte de ${nombre} de ${unidad} eliminado.`, true, "info");
+    volverAlListadoValidacion(`Reporte de ${nombre} de ${unidad} eliminado.`);
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    showToast(String(e?.message || e || "No se pudo eliminar el reporte."), false, "bad");
+  }
 }
 
 /** Meta anual de COVID-19 de una unidad: la de su destino si es hospital (HENM/NHG), si no la propia (igual que la captura de la unidad). */
@@ -4449,7 +4496,7 @@ function renderValidacionEdicionGridCovid(clues, fecha) {
   const esc = INF_ESC;
   const report = _covidCapturasAll.find(r => r.clues === clues && r.fecha === fecha);
   _currentValidationReport = report;
-  nombreInput.value = "";
+  nombreInput.value = nombreSupervisor();
   limpiarErroresValidacion();
   content.classList.remove("hidden");
 
@@ -4513,7 +4560,7 @@ function renderValidacionEdicionGridCovid(clues, fecha) {
   actualizarResumenValidacion();
 
   document.getElementById("btnCancelValidation").onclick = () => {
-    const sucio = contarCambiosValidacion() > 0 || nombreInput.value.trim() !== "";
+    const sucio = contarCambiosValidacion() > 0 || nombreInput.value.trim() !== nombreSupervisor();
     if (sucio && !window.confirm("Tienes cambios sin guardar. ¿Descartarlos y volver al listado?")) return;
     volverAlListadoValidacion();
   };
@@ -4524,6 +4571,7 @@ function renderValidacionEdicionGridCovid(clues, fecha) {
     }
     saveValidationReportCovid(clues, fecha);
   };
+  prepararEliminarValidacion(clues, fecha);
 }
 
 async function saveValidationReportCovid(clues, fecha) {

@@ -394,7 +394,7 @@
   <script defer src="guias_contenido.js?v=7"></script>
   <script defer src="ayuda.js?v=24"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.312" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.313" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -3342,8 +3342,9 @@
               <div id="validationCambiosResumen" class="vl-resumen mt-6" role="status" aria-live="polite"></div>
               <div id="validationFormError" class="vl-error hidden mt-4" role="alert" tabindex="-1"></div>
 
-              <div class="flex gap-4 mt-6">
+              <div class="flex gap-4 mt-6 flex-wrap">
                 <button type="button" class="ghostBtn flex-1 h-[48px]" id="btnCancelValidation">Cancelar y volver</button>
+                <button type="button" class="ghostBtn h-[48px] hidden items-center justify-center gap-2 px-5" id="btnDeleteValidation" style="color:#b91c1c;border-color:#fca5a5;"><span class="material-symbols-rounded" aria-hidden="true">delete</span><span>Eliminar reporte</span></button>
                 <button type="button" class="btn flex-1 h-[48px]" id="btnSaveValidation">Guardar corrección</button>
               </div>
             </div>
