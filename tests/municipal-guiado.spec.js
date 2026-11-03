@@ -16,6 +16,7 @@ async function abrir(page, rol) {
   page.on('dialog', (d) => d.accept());
   await page.route(/unpkg\.com\/@supabase\/supabase-js/, (r) => r.fulfill({ contentType: 'application/javascript', body: FAKE }));
   await page.route(/fonts\.(googleapis|gstatic)\.com|cdnjs\.cloudflare\.com|raw\.githubusercontent\.com/, (r) => r.abort());
+  await page.clock.setFixedTime(new Date('2026-10-15T12:00:00'));   // fija el periodo que se reporta (septiembre) sin importar cuándo corra la prueba
   if (rol) await page.addInitScript((r) => { window.__FAKE_ROL__ = r; }, rol);
   await page.goto('/biovac.html', { waitUntil: 'load' });
   await page.waitForSelector('#dockPasosMun', { timeout: 15000 });
@@ -110,7 +111,7 @@ test('Municipal: cierre guiado en 4 pasos', async ({ page }) => {
   await expect(page.locator('#munDescargarCSV')).toBeDisabled();             // faltan unidades por validar
   await fake(page, 'F.validarTodas()');
   await page.selectOption('#selMes', { index: 0 });
-  await page.selectOption('#selMes', { index: new Date().getMonth() });
+  await page.selectOption('#selMes', { index: 9 });
   await expect(page.locator('#munDescargarCSV')).toBeEnabled();
   await expect(page.locator('#munCheck li.ok')).toHaveCount(2);
   await expect(page.locator('#munCheck li.aviso')).toContainText('informativo');   // recibido vs requisición no bloquea

@@ -129,6 +129,7 @@ async function preparar(page, estado, { rol = 'UNIDAD' } = {}) {
   page.on('pageerror', (e) => errores.push('PAGEERROR: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !RUIDO.test(m.text())) errores.push('CONSOLE: ' + m.text().slice(0, 200)); });
   page.on('dialog', (d) => d.accept());
+  await page.clock.setFixedTime(new Date(estado.rpc.get_server_today() + 'T12:00:00'));   // el reloj del navegador coincide con la fecha simulada del servidor
   await page.route(/\.supabase\.co\//, (r) => srv.manejar(r));
   await page.route(/exceljs\.min\.js/, (r) => r.fulfill({ contentType: 'application/javascript', path: path.join(__dirname, '..', 'node_modules', 'exceljs', 'dist', 'exceljs.min.js') }));
   await page.goto('/index.html', { waitUntil: 'load' });
