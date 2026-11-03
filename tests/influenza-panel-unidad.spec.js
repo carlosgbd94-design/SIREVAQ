@@ -219,6 +219,15 @@ test.describe('Panel de Influenza (unidad)', () => {
     expect(errores).toEqual([]);
   });
 
+  test('enlace directo desde el SIS (?captura=COVID): la captura abre con COVID-19 elegido, una sola vez', async ({ page }) => {
+    await abrirPanel(page, { covid: true });
+    await expect(page.locator('#capVacunaSel [data-vac="INFLUENZA"]')).toHaveAttribute('aria-pressed', 'true');
+    await page.evaluate(() => { window.__capturaVacunaPendiente = { vac: 'COVID', hasta: Date.now() + 20000 }; renderCovidCaptura(); });
+    await expect(page.locator('#capVacunaSel [data-vac="COVID"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#covidCapturaContainer')).toBeVisible();
+    expect(await page.evaluate(() => window.__capturaVacunaPendiente)).toBeNull();
+  });
+
   test('COVID-19: el resumen tiene selector, avance por grupo, abasto por marca y el menú exporta ambas metas', async ({ page }) => {
     const { errores } = await abrirPanel(page, { covid: true });
     await page.locator('#subtabUnitResumen').click();

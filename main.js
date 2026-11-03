@@ -11467,6 +11467,10 @@ document.addEventListener("visibilitychange", () => {
 
 let _deepLinkCaptura; // undefined = todavía no leído; "" = sin enlace directo
 let _deepLinkCapturaHasta = 0;
+let _deepLinkDesdeSIS = (() => {
+  // Se lee al cargar el script: activateCapture borra la marca en cuanto se pasa por otra pestaña, y eso ocurre antes de leer el enlace directo
+  try { return /[?&]captura=/i.test(window.location.search) && sessionStorage.getItem("sirevaq_desde_sis") === "1"; } catch (_) { return false; }
+})();   // true solo si se llegó con ?captura=… desde el SINBA-SIS
 
 function activateDefaultMainForRole() {
   const role = String((USER && USER.rol) || "").trim().toUpperCase();
@@ -11492,15 +11496,14 @@ function activateDefaultMainForRole() {
         try { window.history.replaceState(null, "", window.location.pathname + window.location.hash); } catch (_) { /* cosmético */ }
       }
     }
-    if (_deepLinkCaptura === "INFLUENZA" && Date.now() < _deepLinkCapturaHasta) {
-      capturaInicial = "INFLUENZA";
+    if ((_deepLinkCaptura === "INFLUENZA" || _deepLinkCaptura === "COVID") && Date.now() < _deepLinkCapturaHasta) {
+      capturaInicial = "INFLUENZA";   // COVID-19 vive en el mismo panel: ?captura=COVID abre la captura con la vacuna COVID-19 elegida
+      if (_deepLinkCaptura === "COVID") window.__capturaVacunaPendiente = { vac: "COVID", hasta: _deepLinkCapturaHasta };
       // Si se llegó desde el SINBA-SIS, se ofrece el camino de regreso.
-      try {
-        if (sessionStorage.getItem("sirevaq_desde_sis") === "1") {
-          const volver = document.getElementById("influenzaVolverSIS");
-          if (volver) volver.style.display = "inline-flex";
-        }
-      } catch (_) { /* sin almacenamiento */ }
+      if (_deepLinkDesdeSIS) {
+        const volver = document.getElementById("influenzaVolverSIS");
+        if (volver) volver.style.display = "inline-flex";
+      }
     }
     activateCapture(capturaInicial);
   } else {

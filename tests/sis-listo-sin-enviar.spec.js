@@ -132,3 +132,50 @@ test('Responsable: una sola palabra o el usuario técnico no cuentan como nombre
   });
   expect(r).toEqual({ una: '', tecnico: '', completo: 'Maria Lopez' });
 });
+
+test('SIS-06-P: los totales de COVID-19 salen de los reportes semanales y no se pueden teclear en la hoja', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  const r = await page.evaluate(async () => {
+    const F = window.__FAKE;
+    document.getElementById('selMes').value = '10';
+    document.getElementById('selAnio').value = '2026';
+    estado.perfil = { id: 'u1', rol: 'UNIDAD', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', usuario: 'Maria Lopez Ruiz' };
+    F.tables.sis_variables.length = 0;
+    F.tables.sis_variables.push({ id: 'v1', activo: true, orden: 1, biologico: 'COVID-19', fila_excel: 105, clave_general: 'VCV38', grupo_poblacional: 'DE 6 A 59 MESES', dosis: 'PRIMERA' },
+      { id: 'v2', activo: true, orden: 2, biologico: 'COVID-19', fila_excel: 109, clave_general: 'VCV16', grupo_poblacional: 'REFUERZO', dosis: '60 AÑOS Y MÁS' });
+    F.tables.covid_capturas = [
+      { id: 'c1', clues: 'QTSSA000001', fecha: '2026-10-23', anio_campana: 2026, valores: { MODERNA: { c1: 10, c4: 30 }, PFIZER: { c4: 5 } } },
+      { id: 'c2', clues: 'QTSSA000001', fecha: '2026-10-30', anio_campana: 2026, valores: { MODERNA: { c1: 2, c4: 20 } } }
+    ];
+    F.tables.sis06p_capturas.length = 0;
+    F.tables.sis06p_capturas.push({ id: 'c1', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes: 10, anio: 2026, estado: 'BORRADOR', valores: { 105: { total: 999 } }, ajustes: {} });
+    document.getElementById('panelSIS06P').style.display = 'block';
+    await SIS06PBiovac.init();
+    const t = (f) => document.getElementById('sisb_' + f + '_total');
+    return { v105: t(105) && t(105).value, ro105: t(105) && t(105).readOnly, v109: t(109) && t(109).value, ro109: t(109) && t(109).readOnly };
+  });
+  expect(r).toEqual({ v105: '12', ro105: true, v109: '55', ro109: true });
+  // fijar las casillas no cuenta como cambio de la persona: ni chip de «cambios sin guardar» ni aviso al salir
+  await expect(page.locator('#sis06pChipSinGuardar')).toBeHidden();
+});
+
+test('SIS-06-P: la UNIDAD ve «Ir a mis reportes de COVID-19» y al pulsarlo se marca que viene del SIS', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await page.evaluate(async () => {
+    const F = window.__FAKE;
+    document.getElementById('selMes').value = '10'; document.getElementById('selAnio').value = '2026';
+    estado.perfil = { id: 'u1', rol: 'UNIDAD', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', usuario: 'Maria Lopez Ruiz' };
+    F.tables.sis_variables.length = 0;
+    F.tables.sis_variables.push({ id: 'v1', activo: true, orden: 1, biologico: 'COVID-19', fila_excel: 105, clave_general: 'VCV38', grupo_poblacional: 'DE 6 A 59 MESES', dosis: 'PRIMERA' });
+    F.tables.covid_capturas = [];
+    F.tables.sis06p_capturas.length = 0;
+    F.tables.sis06p_capturas.push({ id: 'c1', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes: 10, anio: 2026, estado: 'BORRADOR', valores: {}, ajustes: {} });
+    document.getElementById('panelSIS06P').style.display = 'block';
+    await SIS06PBiovac.init();
+  });
+  const btn = page.locator('[data-ir-covid]');
+  await expect(btn).toHaveCount(1);
+  await page.route(/index\.html\?captura=COVID/, (r) => r.fulfill({ contentType: 'text/html', body: '<html></html>' }));
+  await Promise.all([page.waitForURL(/index\.html\?captura=COVID/), btn.evaluate((b) => b.click())]);
+  expect(await page.evaluate(() => sessionStorage.getItem('sirevaq_desde_sis'))).toBe('1');
+});

@@ -8138,6 +8138,12 @@ let _covidPanelListo = false;      // el panel de COVID-19 se pintó (la unidad 
 function aplicarVacunaCaptura() {
   const tiene = _covidPanelListo;
   if (!tiene) _capturaVacuna = "INFLUENZA";
+  // Enlace directo desde el SINBA-SIS (?captura=COVID): se elige COVID-19 en cuanto el panel esté listo (una sola vez)
+  const pend = window.__capturaVacunaPendiente;
+  if (pend) {
+    if (Date.now() > pend.hasta) window.__capturaVacunaPendiente = null;
+    else if (tiene) { _capturaVacuna = pend.vac === "COVID" ? "COVID" : "INFLUENZA"; window.__capturaVacunaPendiente = null; }
+  }
   const sel = document.getElementById("capVacunaSel");
   if (sel) {
     sel.hidden = !tiene;

@@ -22,6 +22,7 @@
   let _sisVariablesCache = [];
   let _sis06pCapturasCache = [];
   let _influenzaCapturasCache = [];
+  let _covidCapturasOk = false;   // false si la consulta de covid_capturas falló: entonces no se fijan las casillas (el servidor igual aplica la regla)
   let _covidCapturasCache = [];   // capturas semanales de COVID-19 de la unidad (prellenado del SIS-06-P)
   let _ventanaCache = null;
   let _correccionesPendientesCache = [];
@@ -49,6 +50,7 @@
   document.addEventListener('input', (ev) => {
     const el = ev.target;
     const id = el && el.id;
+    if (ev.sisInterno) return;   // casillas fijadas por el sistema (p. ej. COVID-19 desde los reportes semanales): no son cambios de la persona
     if (id && id.indexOf('sisb_') === 0) {
       // Sin ceros a la izquierda: un "5" tecleado sobre un 0 no debe quedar como "05".
       if (el.type === 'number' && /^0\d/.test(el.value)) el.value = el.value.replace(/^0+(?=\d)/, '');
@@ -354,7 +356,8 @@
       try {
         const { data: capturasCov, error: eCov } = await estado.db.from('covid_capturas').select('id, fecha, valores, anio_campana').eq('clues', activa.clues);
         _covidCapturasCache = eCov ? [] : (capturasCov || []);
-      } catch (eCovx) { _covidCapturasCache = []; }
+        _covidCapturasOk = !eCov;
+      } catch (eCovx) { _covidCapturasCache = []; _covidCapturasOk = false; }
 
       const mes = Number(document.getElementById('selMes').value);
       const anio = Number(document.getElementById('selAnio').value);
@@ -489,48 +492,60 @@
 
   const _num2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
-  // COVID-19: dosis del mes capturadas por semana en el panel de la unidad (Moderna + Pfizer, el SIS-06-P no distingue
-  // marca). Solo rellena las casillas que la persona aún no ha guardado (o que están en 0); nunca guarda por sí solo.
+  // COVID-19: las dosis del mes salen de los reportes semanales de la unidad (Moderna + Pfizer sumadas; el SIS-06-P no
+  // distingue marca) y NO se capturan ni se corrigen en esta hoja: si se pudieran teclear aquí, el SIS dejaría de coincidir
+  // con los reportes semanales y con el Movimiento. Para cambiar una cifra se corrige el reporte semanal de COVID-19.
+  // El servidor aplica la misma regla (trigger trg_sis06p_06_covid), esto solo la hace visible. Los subconteos
+  // (afromexicano/indígena/migrante) sí se siguen capturando aquí.
   function covidDelMesPorClave() {
     const C = window.CovidCaptura;
-    if (!C) return null;
+    if (!C || !_covidCapturasOk) return null;
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
+    if (anio * 12 + mes < 2026 * 12 + 10) return null;   // antes de la campaña 2026-27 no hay reportes semanales: se queda como estaba
     const semanas = C.delMes(_covidCapturasCache, mes, anio);
     return { semanas, porClave: C.sisPorClave(semanas) };
   }
 
-  function prellenarCovidSis06p(body, vars, currentValores) {
+  // Devuelve la función que fija las casillas (se llama DESPUÉS de restaurar el borrador local, para que no la pise).
+  function bloquearCovidSis06p(body, vars) {
     const datos = covidDelMesPorClave();
-    if (!datos || !datos.semanas.length) return;
-    const filas = vars.filter((v) => v.clave_general && Object.prototype.hasOwnProperty.call(datos.porClave, v.clave_general));
-    const aplicar = (forzar) => {
-      let n = 0;
-      filas.forEach((v) => {
-        const total = datos.porClave[v.clave_general];
-        const el = document.getElementById('sisb_' + v.fila_excel + '_total');
-        if (!el || !(total > 0)) return;
-        const guardado = Number((currentValores[String(v.fila_excel)] || {}).total) || 0;
-        if (!forzar && guardado > 0) return;
-        if ((parseInt(el.value, 10) || 0) === total) return;
-        if (!forzar && (parseInt(el.value, 10) || 0) > 0) return;   // ya tecleado a mano
-        el.value = total;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        n++;
-      });
-      return n;
-    };
+    if (!datos) return null;
+    const claves = new Set(Object.keys(datos.porClave).concat(['VCV40']));
+    const filas = vars.filter((v) => v.clave_general && claves.has(v.clave_general));
     const aviso = document.createElement('div');
     aviso.setAttribute('role', 'note');
-    aviso.style.cssText = 'margin:8px 10px; padding:8px 12px; border:1px solid #cbd5e1; border-radius:10px; background:#f8fafc; color:#334155; font-size:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;';
-    aviso.innerHTML = '<span>Prellenado con tu captura semanal de COVID-19 (' + datos.semanas.length + ' reporte' + (datos.semanas.length === 1 ? '' : 's') + ' de este mes; Moderna y Pfizer sumadas). Revisa y guarda.</span>'
-      + '<button type="button" class="btn-mini btn-secundario" data-covid-retraer>Volver a traer de COVID-19</button>';
+    aviso.style.cssText = 'margin:8px 10px; padding:8px 12px; border:1px solid #cbd5e1; border-radius:10px; background:#f8fafc; color:#334155; font-size:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;';
+    aviso.innerHTML = '<span class="material-symbols-rounded" aria-hidden="true" style="font-size:16px;">lock</span><span>' + (datos.semanas.length
+      ? 'Los totales vienen de tus reportes semanales de COVID-19 (' + datos.semanas.length + ' de este mes; Moderna y Pfizer sumadas) y no se editan aquí. Si una cifra está mal, corrige el reporte semanal.'
+      : 'Aún no hay reportes semanales de COVID-19 en este mes, por eso los totales están en 0. Captura tus reportes semanales y aparecerán aquí.') + '</span>';
+    if (esUnidadSesion()) {
+      const ir = document.createElement('button');
+      ir.type = 'button';
+      ir.className = 'btn-mini btn-secundario';
+      ir.setAttribute('data-ir-covid', '');
+      ir.title = 'Guarda tu paloteo y abre tus reportes semanales de COVID-19';
+      ir.innerHTML = '<span class="material-symbols-rounded" aria-hidden="true" style="font-size:16px;">edit_note</span> Ir a mis reportes de COVID-19';
+      ir.addEventListener('click', irAReportesCovid);
+      aviso.appendChild(ir);
+    }
     body.insertBefore(aviso, body.firstChild);
-    aviso.querySelector('[data-covid-retraer]').addEventListener('click', () => {
-      const n = aplicar(true);
-      toast(n ? 'COVID-19: casillas actualizadas desde tu captura semanal. Revisa y guarda.' : 'COVID-19: ya coincide con tu captura semanal.', 'ok');
-    });
-    setTimeout(() => { aplicar(false); }, 0);
+    return () => {
+      filas.forEach((v) => {
+        const el = document.getElementById('sisb_' + v.fila_excel + '_total');
+        if (!el) return;
+        const total = datos.porClave[v.clave_general] || 0;
+        el.value = total > 0 ? total : '';
+        el.readOnly = true;
+        el.setAttribute('aria-readonly', 'true');
+        el.tabIndex = -1;
+        el.title = 'Viene de tus reportes semanales de COVID-19: corrígelo allá, no aquí';
+        el.style.background = '#f1f5f9';
+        const evento = new Event('input', { bubbles: true });
+        evento.sisInterno = true;   // revalida los subconteos sin marcar el SIS como «cambios sin guardar»
+        el.dispatchEvent(evento);
+      });
+    };
   }
 
   // Paloteo de un biológico SIS tal como está EN PANTALLA (lo que se está
@@ -872,6 +887,7 @@
     const esUnidad = estado.perfil.rol === 'UNIDAD';
     const fueraDeVentana = fueraDeVentanaDeCaptura(currentReport);
     const soloLectura = soloLecturaPara(currentReport);
+    const fijarCovid = [];
 
     // Badges y botones de acción
     const badge = document.getElementById('sis06pBadgeEstado');
@@ -1112,10 +1128,11 @@
       card.appendChild(header);
       card.appendChild(body);
       container.appendChild(card);
-      if (biologico === 'COVID-19' && !soloLectura) prellenarCovidSis06p(body, vars, currentValores);
+      if (biologico === 'COVID-19' && !soloLectura) { const f = bloquearCovidSis06p(body, vars); if (f) fijarCovid.push(f); }
     });
 
     draftAplicar(currentReport, soloLectura);
+    fijarCovid.forEach((f) => f());
   }
 
   // Nivel UNIDAD, guardar el paloteo SIS-06-P con dosis reales ES la señal
@@ -3626,6 +3643,20 @@
   // (Meta-Logro): es ahí donde se captura y se valida contra la meta, así que
   // no hay dos lugares para editar lo mismo. index.html abre directo en esa
   // pestaña con ?captura=INFLUENZA.
+  // Igual que Influenza: guarda lo pendiente del paloteo y abre la captura semanal, ahora con COVID-19 elegido.
+  // Marca que se llegó desde el SIS para que allá aparezca «Volver a mi SINBA-SIS» (solo en ese caso).
+  async function irAReportesCovid() {
+    if (!esUnidadSesion()) return;
+    const captura = capturaDelMesActual();
+    if (captura && captura.estado !== 'BORRADOR') { toast('El SINBA-SIS de este mes ya fue enviado: COVID-19 quedó congelada.', 'error'); return; }
+    if (_sinGuardar) {
+      const ok = await save();
+      if (!ok) return;
+    }
+    try { sessionStorage.setItem('sirevaq_desde_sis', '1'); } catch (_) { /* sin almacenamiento: solo no aparece el enlace de regreso */ }
+    window.location.href = 'index.html?captura=COVID';
+  }
+
   async function irAMetaLogroInfluenza() {
     if (esRolRevisor()) { await abrirEditorInfluenza(); return; }
     if (!esUnidadSesion()) return;
