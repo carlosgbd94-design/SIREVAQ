@@ -261,3 +261,35 @@ test('Existencia anterior encadenada: la unidad no la edita, el municipal sí (y
   await expect(page.locator('[data-action="editar-ant"]')).toHaveCount(0);        // la unidad sigue bloqueada
   await expect(page.locator('input.ant-input')).toHaveCount(0);
 });
+
+test('Cambiar lote: corrige el lote de un renglón conservando sus cantidades (pide lote correcto y motivo)', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'EN_CORRECCION' });
+  await page.evaluate(() => {
+    window.__rpc = [];
+    estado.db.rpc = async (n, p) => { window.__rpc.push([n, p]); return { data: 1, error: null }; };
+    window.obtenerLotesCatalogoCentral = async () => [{ lote: '0374MA108', caducidad: '2027-03-31' }, { lote: '0374MA109', caducidad: '2027-03-31' }, { lote: '0374MA200', caducidad: '2028-01-31' }];
+  });
+  await expect(page.locator('[data-action="cambiar-lote"]')).toHaveCount(2);
+  // con recibido (viene de Requisiciones) o en un mes encadenado no se ofrece cambiar el lote
+  await page.evaluate(() => { estado.renglones[1].recibido_frascos = 4; render(); });
+  await expect(page.locator('[data-action="cambiar-lote"]')).toHaveCount(1);
+  await page.evaluate(() => { estado.anteriorEditable = false; render(); });
+  await expect(page.locator('[data-action="cambiar-lote"]')).toHaveCount(0);
+  await page.evaluate(() => { estado.renglones[1].recibido_frascos = 0; estado.anteriorEditable = true; render(); });
+  await page.locator('table.renglones tbody tr').first().locator('[data-action="cambiar-lote"]').click();
+  const aceptar = page.locator('#modalBtnAceptar');
+  await expect(page.locator('#modalTitulo')).toHaveText('Cambiar lote');
+  await expect(aceptar).toBeDisabled();
+  const sel = page.locator('#cambiarLoteSelect');
+  await expect(sel.locator('option[value="0374MA109"]')).toBeDisabled();     // ya tiene fila: no se ofrece mezclar
+  await expect(sel.locator('option[value="0374MA108"]')).toHaveCount(0);     // el lote actual no se ofrece
+  await sel.selectOption('0374MA200');
+  await expect(aceptar).toBeEnabled();
+  await page.locator('#modalInputMotivo').fill('La unidad capturó el lote equivocado');
+  await aceptar.click();
+  await expect.poll(() => page.evaluate(() => window.__rpc.filter((x) => x[0] === 'biovac_corregir_lote_renglon').length)).toBe(1);
+  const [nombre, p] = await page.evaluate(() => window.__rpc.find((x) => x[0] === 'biovac_corregir_lote_renglon'));
+  expect(nombre).toBe('biovac_corregir_lote_renglon');
+  expect(p).toMatchObject({ p_renglon_id: '1', p_nuevo_numero_lote: '0374MA200', p_nueva_caducidad: '2028-01-31', p_motivo: 'La unidad capturó el lote equivocado' });
+});

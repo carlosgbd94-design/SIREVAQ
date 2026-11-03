@@ -2280,7 +2280,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     ${split ? `<td class="col-mov c-des col-dosis-1">${campo('desechadas_b', r.desechadas_b)}</td>` : ''}
     <td class="col-final c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}"${negativa ? ` title="${TEXTO_NEGATIVA}"` : ''} data-existencia-final="${r.id}">${dosis}</span></td>
     <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}</td>
-    <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Anotar o corregir lo que tenías de este lote del mes pasado (solo este primer mes)" aria-label="Anotar o corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<span class="nota-lote-requi" role="img" aria-label="Este lote llegó por Requisiciones: no se quita aquí" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span></div>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Quitar este lote del SINBA-SIS. Úsalo solo si lo agregaste por error."><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
+    <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Anotar o corregir lo que tenías de este lote del mes pasado (solo este primer mes)" aria-label="Anotar o corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<span class="nota-lote-requi" role="img" aria-label="Este lote llegó por Requisiciones: no se quita aquí" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span></div>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}${(porUnidades || estado.anteriorEditable === false || Number(r.recibido_frascos) > 0) ? '' : `<button class="btn-fantasma" data-action="cambiar-lote" data-renglon="${r.id}" title="Cambiar el lote de esta existencia anterior (por ejemplo, si se capturó el lote 1 y era el 2): conserva las cantidades" aria-label="Cambiar el lote ${escHtmlBV(String(lote.numero_lote || ''))} sin perder las cantidades"><span class="material-symbols-rounded">sync</span></button>`}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Quitar este lote del SINBA-SIS (se pierden sus cantidades). Si solo el lote está mal, usa «Cambiar lote»."><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
   </tr>${filaResolver}${filaMover}${porUnidades ? filaPorUnidadHtml(r, aporte, cols) : ''}`;
 }
 
@@ -3096,8 +3096,57 @@ function renderGuiaCaptura(m, editable) {
     <div class="paso fin"><b><i class="n">4</i>Final</b>Se calcula sola.${estado.anteriorEditable === false ? ' Con el bote quitas un lote que no corresponde.' : ' Con el lápiz corriges una cifra; con el bote quitas el lote.'}</div>`;
 }
 
+// Cambia el lote de un renglón SIN perder lo capturado (existencia anterior, recibido, aplicadas, desechadas, observaciones):
+// la unidad puso el lote 1 y era el 2. El lote nuevo sale del catálogo central, igual que al agregar un lote.
+async function cambiarLoteRenglon(renglonId) {
+  const usuario = usuarioActual();
+  if (!usuario) return;
+  const r = estado.renglones.find((x) => x.id === renglonId);
+  if (!r) return;
+  const bio = estado.biologicos.find((b) => b.id === r.biovac_lotes.biologico_id);
+  if (!bio) return;
+  const detalleHtml = `<label for="cambiarLoteSelect" style="font-weight:700; font-size:13px;">Lote correcto</label>
+    <select id="cambiarLoteSelect" aria-label="Lote correcto" style="width:100%; padding:8px; border-radius:8px; border:1px solid #cbd5e1;"><option value="">Cargando lotes…</option></select>
+    <span id="cambiarLoteCad" style="font-size:12px; color:#475569;"></span>`;
+  const btnAceptar = document.getElementById('modalBtnAceptar');
+  const promesa = mostrarModal({
+    titulo: 'Cambiar lote',
+    mensaje: `Hoy dice lote ${r.biovac_lotes.numero_lote}. Elige el lote correcto: se conservan todas las cantidades capturadas (existencia anterior, recibido, aplicadas y desechadas). Solo corrige la existencia anterior capturada este mes (lo recibido viene validado de Requisiciones); los meses siguientes la arrastran solos. Queda en la auditoría.`,
+    detalleHtml, pedirMotivo: true, placeholderMotivo: 'Motivo (ej. La unidad capturó el lote 1 y era el 2)', textoAceptar: 'Cambiar lote'
+  });
+  const sel = document.getElementById('cambiarLoteSelect');
+  const cad = document.getElementById('cambiarLoteCad');
+  btnAceptar.disabled = true;
+  sel.addEventListener('change', () => {
+    btnAceptar.disabled = !sel.value;
+    const c = sel.selectedOptions[0] && sel.selectedOptions[0].dataset.cad;
+    cad.textContent = c ? 'Caducidad: ' + formatMmmAa(c) : '';
+  });
+  const lista = await obtenerLotesCatalogoCentral(bio, r.categoria);
+  const actual = _normLote(r.biovac_lotes.numero_lote);
+  const opciones = lista.filter((l) => _normLote(l.lote) !== actual);
+  const yaEn = lotesYaEnMovimiento(bio.id, r.categoria);
+  sel.innerHTML = '<option value="">Selecciona el lote correcto…</option>' + opciones.map((l) => {
+    const ocupado = yaEn.has(_normLote(l.lote));
+    return `<option value="${escHtmlBV(l.lote)}" data-cad="${l.caducidad || ''}"${ocupado ? ' disabled' : ''}>${escHtmlBV(l.lote)}${l.caducidad ? ' — ' + formatMmmAa(l.caducidad) : ''}${ocupado ? ' (ya tiene fila: captura ahí y elimina la equivocada)' : ''}</option>`;
+  }).join('') + (opciones.length ? '' : '<option value="" disabled>No hay otros lotes dados de alta: regístralo en Carga de lotes por municipio</option>');
+  const motivo = await promesa;
+  btnAceptar.disabled = false;
+  if (!motivo || !sel.value) return;
+  const { data, error } = await estado.db.rpc('biovac_corregir_lote_renglon', {
+    p_renglon_id: renglonId, p_nuevo_numero_lote: sel.value, p_nueva_caducidad: sel.selectedOptions[0].dataset.cad || null,
+    p_usuario: usuario, p_rol: (estado.perfil ? estado.perfil.rol : 'MUNICIPAL'), p_motivo: motivo
+  });
+  if (error) { toast('No se pudo cambiar el lote: ' + error.message.replace(/^.*?ERROR:\s*/, ''), 'error'); return; }
+  toast(`Lote corregido a ${sel.value}${data > 1 ? ' (los ' + (data - 1) + ' mes(es) siguientes lo arrastran)' : ''}. Las cantidades se conservaron.`, 'ok');
+  await cargarRenglones();
+  render();
+  refrescarCorreccionesJurisdiccion();
+  if (window.SIS06PBiovac && window.SIS06PBiovac.refrescarConciliacion) window.SIS06PBiovac.refrescarConciliacion();
+}
+
 async function eliminarRenglon(renglonId) {
-  const ok = await mostrarModal({ titulo: 'Eliminar renglón', mensaje: '¿Eliminar este renglón (lote)? Esta acción no se puede deshacer.', textoAceptar: 'Eliminar', peligro: true });
+  const ok = await mostrarModal({ titulo: 'Eliminar renglón', mensaje: '¿Eliminar este renglón (lote) con todas sus cantidades? Esta acción no se puede deshacer. Si solo el número de lote está mal, cancela y usa «Cambiar lote» (el ícono de flechas), que conserva las cantidades.', textoAceptar: 'Eliminar', peligro: true });
   if (!ok) return;
   const { error } = await estado.db.from('biovac_renglones').delete().eq('id', renglonId);
   if (error) {
@@ -4107,6 +4156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const accion = btn.dataset.action;
 
     if (accion === 'eliminar-renglon') { eliminarRenglon(btn.dataset.renglon); return; }
+    if (accion === 'cambiar-lote') { cambiarLoteRenglon(btn.dataset.renglon); return; }
     if (accion === 'editar-ant') { alternarEdicionAnterior(btn.dataset.renglon); return; }
     if (accion === 'ver-por-unidad') {
       const fila = document.querySelector(`[data-panel-unidades="${btn.dataset.renglon}"]`);
