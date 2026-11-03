@@ -21,8 +21,8 @@ const CHECK = process.argv.includes('--check');
 const META_URL = 'https://fonts.google.com/metadata/icons?key=material_symbols&incomplete=true';
 
 // Carpetas y paginas que NO carga index.html
-const SKIP_DIRS = new Set(['node_modules', 'tests', 'dist', 'sinba_dev', 'mobile', 'playwright-report',
-  'test-results', 'supabase', '.git', 'assets', 'scripts', '73d628c9-0e23-43a9-ac8a-b98bcfaf5a37']);
+const SKIP_DIRS = new Set(['node_modules', 'tests', 'dist', 'mobile', 'playwright-report',
+  'test-results', 'supabase', '.git', 'assets', 'scripts']);
 const SKIP_FILES = /(biovac\.html|biovac_jurisdiccion\.html|biovac_print\.html|requisiciones\.html|reset\.html|mobile\.html|demo_|logo_glass|reference|toast_proposals|mobile_|concentrador|build-)/;
 
 function get(url) {
