@@ -906,6 +906,8 @@
       badge.className = 'estado-badge estado-' + estadoActual;
       badge.textContent = estadoActual === 'BORRADOR' ? 'Borrador' : estadoActual === 'ENVIADO' ? 'Enviado — pendiente de validación' : 'Información validada';
     }
+    _sinMov = Boolean(currentReport && currentReport.sin_movimiento);
+    renderSinMovimiento(currentReport, estadoActual, fueraDeVentana);
     renderBannerVentana(estadoActual);
     renderConciliacion(soloLectura, currentReport);
     renderPanelCambiosPendientes();
@@ -1256,7 +1258,9 @@
         capturado_por: esUnidad ? responsableElaboracion() : (currentReport ? currentReport.capturado_por : nombreActor),
         historial_ediciones: hist,
         ultimo_editor_usuario: nombreActor,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        // «Sin movimiento» solo lo declara la unidad y solo vale con el mes realmente en ceros (paloteo + Influenza)
+        ...(esUnidad ? { sin_movimiento: _sinMov && sumaTotales(valores) === 0 && dosisInfluenzaMes(mes, anio) === 0 } : {})
       };
 
       const { error } = await estado.db.from('sis06p_capturas').upsert(record, { onConflict: 'clues,mes,anio' });
@@ -1324,6 +1328,17 @@
       return;
     }
 
+    if (!movimientoDeclarado(currentReport)) {
+      await mostrarModal({
+        titulo: 'Tu SINBA-SIS está en ceros',
+        mensaje: 'No hay dosis capturadas este mes. Si no recibiste ni aplicaste biológico, activa «Sin movimiento este mes» (arriba, junto a la ruta del mes), guarda y vuelve a enviar. Si sí hubo aplicaciones, captúralas en el paloteo SIS-06-P.',
+        textoAceptar: 'Entendido', sinCancelar: true
+      });
+      const el = document.getElementById('sisSinMovimiento');
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+      return;
+    }
+
     // Con diferencias el servidor no deja enviar: se explica aquí, con la lista, en vez de un aviso que se pierde.
     try { await cargarConciliacion(activa.clues); } catch (_) { /* si falla, el servidor decide */ }
     if (hayDiferenciasConciliacion()) {
@@ -1344,7 +1359,7 @@
     // Se confirma explícitamente (antes un clic accidental lo mandaba directo).
     const confirmaEnvio = await mostrarModal({
       titulo: 'Enviar el SINBA-SIS para validación',
-      mensaje: 'Vas a enviar el SINBA-SIS de ' + activa.unidad + ' (' + mesNombre(mes) + ' ' + anio + '). Al enviarlo, el paloteo SIS-06-P y el Movimiento de Biológico quedan bloqueados: ya no podrás editarlos, solo el municipal podrá corregirlos. ¿Confirmas que todo está completo y revisado?',
+      mensaje: 'Vas a enviar el SINBA-SIS de ' + activa.unidad + ' (' + mesNombre(mes) + ' ' + anio + ')' + (currentReport.sin_movimiento ? ' SIN MOVIMIENTO (no recibiste ni aplicaste biológico este mes)' : '') + '. Al enviarlo, el paloteo SIS-06-P y el Movimiento de Biológico quedan bloqueados: ya no podrás editarlos, solo el municipal podrá corregirlos. ¿Confirmas que todo está completo y revisado?',
       textoAceptar: 'Sí, enviar'
     });
     if (!confirmaEnvio) return;
@@ -3190,6 +3205,7 @@
         extra: `<ul style="margin:6px 0 0 18px; padding:0; font-size:12.5px; color:#78350f; line-height:1.5; text-align:left;">${caducados.map((x) => `<li><b>${_esc(x.biologico)}</b> · lote ${_esc(x.lote)} (caduca ${_esc(x.caducidad)}): ${_esc(String(x.existencia))} frasco(s)</li>`).join('')}</ul>` },
       { ok: filas !== null && !sinCuadrar, t: 'El paloteo y el Movimiento cuadran', f: filas === null ? 'Estamos revisando tus dosis…' : `En ${difs.length === 1 ? 'este biológico' : 'estos ' + difs.length + ' biológicos'} las dosis aplicadas del paloteo (SIS-06-P) no son iguales a las del Movimiento. Corrige el lado que esté mal.`,
         extra: sinCuadrar ? `<div class="sis-dif-lista" style="flex-direction:column; align-items:stretch; margin-top:6px;">${listaDiferenciasHtml(difs)}</div>` : '' },
+      { ok: movimientoDeclarado(captura), t: 'Tu SIS dice qué pasó este mes', f: 'Está en ceros. Si este mes no recibiste ni aplicaste biológico, activa «Sin movimiento este mes» (arriba), guarda y envía. Si sí aplicaste, captura las dosis en el paloteo.' },
       { ok: Boolean(v && v.dentro_envio), t: 'Ya es fecha de envío', f: v ? `El envío se abre del ${fechaMesCorta(v.inicio_envio)} al ${fechaMesCorta(v.fin_envio)}. Mientras tanto puedes seguir capturando y guardando: no pierdes nada.` : 'El envío se abre en los últimos días del mes.' }
     ];
     const faltan = items.filter((i) => !i.ok).length;
@@ -3273,6 +3289,80 @@
     el.style.display = 'block';
   }
 
+  // ---------------------------------------------------------------------------
+  // «Sin movimiento este mes»: la unidad que no recibió ni aplicó biológico (aunque tenga existencia anterior)
+  // lo declara con un interruptor; un SIS en ceros SIN esa marca no se envía (lo exige también el servidor).
+  // El municipal ve la etiqueta «Sin movimiento» y valida de un vistazo.
+  // ---------------------------------------------------------------------------
+  let _sinMov = false;
+  const sumaTotales = (valores) => Object.values(valores || {}).reduce((t, v) => t + (v && typeof v === 'object' ? Number(v.total || 0) : 0), 0);
+  function dosisInfluenzaMes(mes, anio) {
+    const ini = `${anio}-${String(mes).padStart(2, '0')}-01`;
+    const sig = mes === 12 ? `${anio + 1}-01-01` : `${anio}-${String(mes + 1).padStart(2, '0')}-01`;
+    return (_influenzaCapturasCache || []).filter((c) => c.fecha >= ini && c.fecha < sig)
+      .reduce((t, c) => t + Object.values(c.valores || {}).reduce((a, n) => a + (Number(n) || 0), 0), 0);
+  }
+  function dosisEnPantallaPaloteo() {
+    let t = 0;
+    document.querySelectorAll('input[id^="sisb_"][id$="_total"]').forEach((i) => { t += parseInt(i.value, 10) || 0; });
+    return t;
+  }
+  function mesYAnio() { return [Number(document.getElementById('selMes').value), Number(document.getElementById('selAnio').value)]; }
+  /** ¿El SIS guardado de este mes ya dice qué pasó? (con dosis, o declarado «Sin movimiento») */
+  function movimientoDeclarado(captura) {
+    const [mes, anio] = mesYAnio();
+    if (captura && captura.sin_movimiento) return true;
+    return sumaTotales(captura && captura.valores) + dosisInfluenzaMes(mes, anio) > 0;
+  }
+  function refrescarSinMovimiento() {
+    const el = document.getElementById('sisSinMovimiento');
+    if (!el || el.style.display === 'none') return;
+    const [mes, anio] = mesYAnio();
+    const hayDosis = dosisEnPantallaPaloteo() > 0 || dosisInfluenzaMes(mes, anio) > 0;
+    const chk = el.querySelector('input[type="checkbox"]');
+    if (hayDosis && _sinMov) _sinMov = false;
+    if (chk) { chk.checked = _sinMov; chk.disabled = hayDosis; }
+    el.classList.toggle('on', _sinMov);
+    const nota = el.querySelector('[data-sinmov-nota]');
+    if (nota) nota.textContent = hayDosis
+      ? 'Ya hay dosis este mes (en el paloteo o en tus reportes de Influenza): no aplica «Sin movimiento».'
+      : _sinMov
+        ? 'Quedará marcado como SIN MOVIMIENTO: pulsa «Guardar» y luego «Enviar». Las «aplicadas» del Movimiento de Biológico deben quedar en 0.'
+        : 'Márcalo solo si este mes no recibiste ni aplicaste ninguna vacuna (puedes tener existencia anterior).';
+  }
+  function renderSinMovimiento(currentReport, estadoActual, fueraDeVentana) {
+    let el = document.getElementById('sisSinMovimiento');
+    const unidad = esUnidadSesion() && estadoActual === 'BORRADOR' && !fueraDeVentana && !enEntregaMunicipal();
+    const declarado = estadoActual !== 'BORRADOR' && currentReport && currentReport.sin_movimiento;
+    if (!unidad && !declarado) { if (el) el.style.display = 'none'; return; }
+    if (!el) {
+      const ref = document.getElementById('rutaMes');
+      if (!ref) return;
+      el = document.createElement('div');
+      el.id = 'sisSinMovimiento';
+      ref.insertAdjacentElement('afterend', el);
+      el.addEventListener('change', (ev) => {
+        const chk = ev.target.closest('input[type="checkbox"]');
+        if (!chk) return;
+        _sinMov = chk.checked;
+        marcarSinGuardar(true);
+        refrescarSinMovimiento();
+      });
+    }
+    el.style.display = 'flex';
+    if (declarado) {
+      el.className = 'declarado';
+      el.innerHTML = '<span class="material-symbols-rounded" aria-hidden="true">do_not_disturb_on</span><div><b>SINBA-SIS enviado «Sin movimiento»</b><p>La unidad declaró que este mes no recibió ni aplicó biológico.</p></div>';
+      return;
+    }
+    el.className = _sinMov ? 'on' : '';
+    el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">do_not_disturb_on</span>
+      <div><b>¿Este mes no hubo movimiento?</b><p data-sinmov-nota></p></div>
+      <label class="sis-switch"><span class="sr-only">Sin movimiento este mes</span><input type="checkbox" role="switch" aria-label="Sin movimiento este mes"${_sinMov ? ' checked' : ''}><i aria-hidden="true"></i></label>`;
+    refrescarSinMovimiento();
+  }
+  document.addEventListener('input', (ev) => { if (ev.target && ev.target.id && ev.target.id.indexOf('sisb_') === 0) refrescarSinMovimiento(); });
+
   // Aviso para la UNIDAD cuando todo está listo (guardado, paloteo = Movimiento, nombre escrito, sin lotes caducados con existencia)
   // pero NO se ha enviado: guardar no basta, el municipal solo recibe el SINBA-SIS cuando se pulsa «Enviar».
   function estaListoSinEnviar() {
@@ -3280,6 +3370,7 @@
     const { captura, est, filas, difs } = estadoRuta();
     if (est !== 'BORRADOR' || !captura || _sinGuardar || filas === null || difs.length > 0) return false;
     if (!responsableElaboracion()) return false;
+    if (!movimientoDeclarado(captura)) return false;
     const caducados = typeof lotesCaducadosConExistencia === 'function' ? lotesCaducadosConExistencia() : [];
     return caducados.length === 0;
   }

@@ -94,6 +94,7 @@
     }
 
     const filas = ordenarSeguimiento(await anotarSinEnvio(data || [], mes, anio));
+    await anotarSinMovimiento(filas, mes, anio);
     window.__sis06pUltimasFilas = filas;
     // MUNICIPAL con el cierre guiado: el seguimiento se pinta como el paso 1
     // (municipal_guiado.js); el resto de este archivo lo sigue usando ADMIN/JURISDICCIONAL.
@@ -789,6 +790,14 @@
     } catch (e) { /* sin la función en la base: todo sigue como antes */ }
     return filas;
   }
+  // Unidades que declararon «Sin movimiento» este mes (el municipal las valida de un vistazo)
+  async function anotarSinMovimiento(filas, mes, anio) {
+    try {
+      const { data: sm } = await estado.db.from('sis06p_capturas').select('clues').eq('mes', mes).eq('anio', anio).eq('sin_movimiento', true);
+      const set = new Set((sm || []).map((r) => r.clues));
+      filas.forEach((f) => { f.sin_movimiento = set.has(f.clues); });
+    } catch (e) { /* sin la columna: todo sigue como antes */ }
+  }
   function claveEstado(f) { return f.sin_envio && f.estado !== 'ENVIADO' && f.estado !== 'VALIDADO' ? 'SIN_ENVIO' : f.estado; }
 
   // Solo trae las filas del seguimiento (sin pintar nada): las usa el cierre guiado
@@ -797,6 +806,7 @@
     const { data, error } = await estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio });
     if (error) { toast('No se pudo cargar el seguimiento: ' + error.message, 'error'); return null; }
     const filas = ordenarSeguimiento(await anotarSinEnvio(data || [], mes, anio));
+    await anotarSinMovimiento(filas, mes, anio);
     window.__sis06pUltimasFilas = filas;
     return filas;
   }

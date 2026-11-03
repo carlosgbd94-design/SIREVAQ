@@ -26,7 +26,7 @@ async function prepararUnidad(page, { cuadra, envioAbierto }) {
     const anio = Number(document.getElementById('selAnio').value);
     estado.perfil = { id: 'u1', rol: 'UNIDAD', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', usuario: 'prueba' };
     F.tables.sis06p_capturas.length = 0;
-    F.tables.sis06p_capturas.push({ id: 'c1', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes, anio, estado: 'BORRADOR', valores: {}, ajustes: {}, capturado_por: 'MARIA LOPEZ RUIZ' });
+    F.tables.sis06p_capturas.push({ id: 'c1', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes, anio, estado: 'BORRADOR', valores: {}, ajustes: {}, capturado_por: 'MARIA LOPEZ RUIZ', sin_movimiento: true });
     const real = estado.db;
     estado.db = new Proxy(real, { get(t, p) {
       if (p === 'rpc') return async (n, a) => {
@@ -242,10 +242,12 @@ test('Resumen de unidades (municipal): «Copiar pendientes de enviar» copia sol
   await page.waitForSelector('#munEnvios .mun-unidad', { timeout: 15000 });
   const sin = await page.locator('#munEnvios .mun-unidad.vacio').count();
   const btn = page.locator('#munCopiarPendientes');
-  await expect(btn).toContainText(`(${sin})`);
+  await expect(btn).toHaveAttribute('aria-label', new RegExp(`${sin} unidades`));
   await btn.click();
   const texto = await page.evaluate(() => window.__copiado);
-  expect(texto).toContain('Unidades pendientes de enviar su SINBA-SIS');
+  expect(texto).toMatch(/\*SINBA-SIS de \w+ \d{4}\*/);
+  expect(texto).toContain('*unidades de salud*');
+  await expect(btn).toHaveClass(/copiado/);   // el logo de WhatsApp pasó a «copiar»
   expect(texto.split('\n').filter((l) => l.startsWith('•')).length).toBe(sin);
   const clues = await page.locator('#munEnvios .mun-unidad.vacio').evaluateAll((els) => els.map((e) => e.dataset.clues));
   clues.forEach((c) => expect(texto).toContain(c));

@@ -34,6 +34,15 @@ button.pt { cursor: pointer; }
 .mun-acciones { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .mun-espera { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .mun-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.mun-chips { align-items: center; }
+/* Copiar pendientes: icono suelto (logo de WhatsApp) que pasa a «copiar» al hacer clic; el realce solo con puntero real */
+#munEnvios button.mun-ib { min-height: 0; width: 36px; height: 36px; padding: 0; border: none; border-radius: 10px; background: transparent; box-shadow: none; color: #1fa855; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: transform .2s, filter .2s; }
+#munEnvios .mun-ib-wa { width: 24px; height: 24px; }
+#munEnvios .mun-ib-copy { display: none; font-size: 22px; color: var(--text); }
+#munEnvios button.mun-ib.copiado .mun-ib-wa { display: none; }
+#munEnvios button.mun-ib.copiado .mun-ib-copy { display: inline-block; }
+#munEnvios button.mun-ib:focus-visible { outline: 2px solid #1fa855; outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { #munEnvios button.mun-ib:hover { transform: translateY(-2px); filter: drop-shadow(0 3px 4px rgba(31, 168, 85, .35)); } }
 .mun-chip {
   display: inline-flex; align-items: center; gap: 7px; border: 1.5px solid var(--outline-variant); background: #fff; color: var(--text);
   border-radius: 999px; padding: 6px 12px; font: 700 12px inherit; font-family: inherit; cursor: pointer; box-shadow: none;
@@ -62,6 +71,7 @@ button.pt { cursor: pointer; }
 .mun-pill { font-size: 10px; font-weight: 800; padding: 2px 9px; border-radius: 20px; white-space: nowrap; background: #f1f5f9; color: #475569; }
 .mun-pill.parcial, .mun-pill.aviso { background: var(--warning-bg); color: var(--warning); }
 .mun-pill.completo, .mun-pill.ok { background: var(--success-bg); color: var(--success); }
+.mun-pill.sinmov { background: #ecfeff; color: #0e7490; }
 .mun-pill.omitida { background: #e2e8f0; color: #475569; }
 
 /* --- Paso 2: barra de revisión --- */
@@ -270,3 +280,7 @@ body.mun-guiado button.pt:focus-visible,
 
 /* Los títulos a los que el cierre guiado manda el foco al cambiar de hoja no dibujan un marco (el foco es solo para lectores de pantalla). */
 body.mun-guiado [tabindex="-1"]:focus, body.mun-guiado [tabindex="-1"]:focus-visible { outline: none !important; }
+
+.mun-cambio-remoto { display: flex; align-items: center; gap: 10px; margin: 8px 0; padding: 10px 14px; border-radius: 12px; background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; font-size: 13px; font-weight: 600; }
+.mun-cambio-remoto .material-symbols-rounded { font-size: 22px; flex: none; }
+.mun-cambio-remoto > span:nth-child(2) { flex: 1; min-width: 0; }

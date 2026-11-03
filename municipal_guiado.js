@@ -298,10 +298,14 @@
   }
   function detalleUnidad(f) {
     const e = estadoDe(f);
-    if (e === 'VALIDADO') return `Validado por ${f.validado_por || '—'}${f.validado_en ? ', ' + fechaCorta(f.validado_en) : ''}`;
-    if (e === 'ENVIADO') return `Enviado por ${responsableSIS(f)}${f.enviado_en ? ', ' + fechaCorta(f.enviado_en) : ''}`;
+    const sm = f.sin_movimiento ? ' · sin movimiento' : '';
+    if (e === 'VALIDADO') return `Validado por ${f.validado_por || '—'}${f.validado_en ? ', ' + fechaCorta(f.validado_en) : ''}${sm}`;
+    if (e === 'ENVIADO') return `Enviado por ${responsableSIS(f)}${f.enviado_en ? ', ' + fechaCorta(f.enviado_en) : ''}${sm}`;
     if (e === 'OMITIDA') return `Se continúa sin ella: ${f.sin_envio_motivo || 'sin motivo'}`;
     return detalleAvance(f);
+  }
+  function pillSinMovimiento(f) {
+    return f.sin_movimiento && (estadoDe(f) === 'ENVIADO' || estadoDe(f) === 'VALIDADO') ? '<span class="mun-pill sinmov" title="La unidad declaró que no recibió ni aplicó biológico este mes">Sin movimiento</span>' : '';
   }
   function pillConciliacion(f) {
     const dosis = Number(f.paloteo_dosis) || 0;
@@ -315,15 +319,17 @@
     return filas.map((f) => `<button type="button" class="pt ${CLASE_EST[estadoDe(f)]} ${f.clues === actual ? 'actual' : ''}" data-clues="${esc(f.clues)}" title="${esc((f.unidad || f.clues) + ' — ' + ETIQUETA[estadoDe(f)])}"></button>`).join('');
   }
 
-  // Texto de las unidades pendientes de enviar (una por línea, por CLUES) y copia al portapapeles.
+  // Mensaje para WhatsApp con las unidades pendientes de enviar (una por línea, por CLUES). Los asteriscos son la
+  // negrita de WhatsApp: el periodo del SINBA-SIS y cada unidad de salud van resaltados.
+  const negrita = (t) => String(t == null ? '' : t).replace(/\*/g, '').trim();
   function textoPendientes() {
     const { mes, anio } = periodo();
     const pend = filasOrdenadas().filter((f) => estadoDe(f) === 'SIN');
     const varios = municipios().length > 1;
-    const lineas = pend.map((f) => `• ${f.clues} · ${f.unidad || ''}${varios && f.municipio ? ` (${etiquetaMuni(f.municipio)})` : ''}`);
-    return `Unidades pendientes de enviar su SINBA-SIS de ${nombreMes(mes)} ${anio} (${pend.length}):\n${lineas.join('\n')}`;
+    const lineas = pend.map((f) => `• *${negrita(f.unidad || f.clues)}* (${f.clues})${varios && f.municipio ? ` · ${etiquetaMuni(f.municipio)}` : ''}`);
+    return `Hola, buen día. Les recordamos que aún está pendiente el envío del *SINBA-SIS de ${nombreMes(mes)} ${anio}* de las siguientes *unidades de salud* (${pend.length}):\n\n${lineas.join('\n')}\n\nLes pedimos enviarlo a la brevedad desde SIREVAQ. Si tienen algún problema para hacerlo, avísennos. ¡Gracias!`;
   }
-  async function copiarPendientes() {
+  async function copiarPendientes(btn) {
     const texto = textoPendientes();
     try { await navigator.clipboard.writeText(texto); }
     catch (e) {
@@ -333,6 +339,8 @@
       try { document.execCommand('copy'); } catch (e2) { /* sin portapapeles */ }
       ta.remove();
     }
+    // El logo de WhatsApp pasa a «copiar» un momento para confirmar que ya quedó en el portapapeles
+    if (btn) { btn.classList.add('copiado'); clearTimeout(btn._t); btn._t = setTimeout(() => btn.classList.remove('copiado'), 2200); }
     toast('Lista copiada: pégala en el mensaje a las unidades.', 'ok');
   }
 
@@ -361,8 +369,10 @@
           : `<span class="mun-espera"><span class="material-symbols-rounded">hourglass_top</span> Faltan ${plural(r.sin, 'unidad', 'unidades')} por enviar. Si alguna no va a enviar este mes (internet, etc.), ábrela y elige «Continuar sin esta unidad»: no bloquea nada.</span>`)
         : `<button type="button" class="btn-primario" id="munCtaConcentrado"><span class="material-symbols-rounded">table_chart</span> Todo validado: ir al concentrado</button>`;
     // «Copiar pendientes»: las unidades que aún no envían (sin contar las que se continúan sin envío), listas para pegar en un mensaje
+    // Logo de WhatsApp: burbuja verde con el teléfono blanco centrado en ella
+    const WA = '<svg class="mun-ib-wa" viewBox="0 0 24 24" aria-hidden="true"><path fill="#25d366" d="M12 2.2a9.8 9.8 0 0 0-8.4 14.8L2.3 21.8l4.9-1.3A9.8 9.8 0 1 0 12 2.2z"/><path fill="#fff" transform="translate(12 12) scale(.56) translate(-12 -12)" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>';
     const copiarBtn = r.sin > 0
-      ? `<button type="button" class="btn-secundario" id="munCopiarPendientes" title="Copia la lista de las ${r.sin} unidades que faltan por enviar su SINBA-SIS"><span class="material-symbols-rounded" aria-hidden="true">content_copy</span> Copiar pendientes de enviar (${r.sin})</button>`
+      ? `<button type="button" class="mun-ib" id="munCopiarPendientes" aria-label="Copiar mensaje para WhatsApp con las ${r.sin} unidades pendientes de enviar" title="Copiar mensaje para WhatsApp: ${r.sin} unidades pendientes de enviar">${WA}<span class="material-symbols-rounded mun-ib-copy" aria-hidden="true">content_copy</span></button>`
       : '';
     const chip = (k, txt) => `<button type="button" class="mun-chip ${st.filtro === k ? 'activo' : ''}" data-filtro="${k}">${txt}<b>${conteos[k]}</b></button>`;
 
@@ -383,14 +393,14 @@
         <div class="puntos">${puntosHtml(filasOrdenadas(), null)}</div>
         <div class="mun-leyenda"><span><i class="pt vacio"></i>sin enviar</span><span><i class="pt parcial"></i>por validar</span><span><i class="pt completo"></i>validada</span>${r.omitida ? '<span><i class="pt omitida"></i>sin envío</span>' : ''}</div>
       </div>
-      <div class="mun-acciones">${cta}${copiarBtn}
-        <div class="mun-chips">${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}${r.omitida ? chip('OMITIDA', 'Sin envío') : ''}</div>
+      <div class="mun-acciones">${cta}
+        <div class="mun-chips">${copiarBtn}${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}${r.omitida ? chip('OMITIDA', 'Sin envío') : ''}</div>
       </div>
       <div class="mun-grid">${visibles.map((f) => `
         <button type="button" class="mun-unidad ${CLASE_EST[estadoDe(f)]}" data-clues="${esc(f.clues)}" title="${esc((f.unidad || f.clues) + ' · ' + detalleUnidad(f))}">
           <span class="mun-dot"></span>
           <span class="mun-u-txt"><b>${esc(f.unidad || f.clues)}</b><small>${esc(f.clues)} · ${esc(detalleUnidad(f))}</small></span>
-          <span class="mun-u-pills"><span class="mun-pill ${CLASE_EST[estadoDe(f)]}">${ETIQUETA[estadoDe(f)]}</span>${pillConciliacion(f)}${Number(f.correcciones_pendientes) > 0 ? `<span class="mun-pill aviso" title="Correcciones pendientes">${f.correcciones_pendientes}</span>` : ''}</span>
+          <span class="mun-u-pills"><span class="mun-pill ${CLASE_EST[estadoDe(f)]}">${ETIQUETA[estadoDe(f)]}</span>${pillSinMovimiento(f)}${pillConciliacion(f)}${Number(f.correcciones_pendientes) > 0 ? `<span class="mun-pill aviso" title="Correcciones pendientes">${f.correcciones_pendientes}</span>` : ''}</span>
         </button>`).join('') || '<div class="mun-vacio">Ninguna unidad en este filtro.</div>'}</div>`;
     pintarRuta();
     pintarDock();
@@ -907,7 +917,7 @@
       else if (t.closest('#munNext')) moverUnidad(1);
       else if (t.closest('#munSigPend')) { const s = siguientePendiente(st.clues); if (s) cambiarUnidad(s.clues); }
       else if (t.closest('#munCtaSiguiente')) { const s = siguientePendiente(null); if (s) revisar(s.clues); }
-      else if (t.closest('#munCopiarPendientes')) copiarPendientes();
+      else if (t.closest('#munCopiarPendientes')) copiarPendientes(t.closest('#munCopiarPendientes'));
       else if (t.closest('#munCtaConcentrado')) irAPaso(3);
       else if (t.closest('#munVerMovimiento')) verMovimiento();
       else if (t.closest('#munSinEnvio')) marcarSinEnvio(st.clues);
@@ -953,6 +963,83 @@
     $('selAnio').addEventListener('change', alCambiarPeriodo);
   }
 
+  // ------------------------------------------------------------ refresco en vivo
+  // Cuando una unidad guarda, envía o corrige su SINBA-SIS, el panel se actualiza solo (antes había que dar F5):
+  //  1) Realtime sobre sis06p_capturas (cambios agrupados en ~1 s);
+  //  2) respaldo: al volver a la pestaña y cada 60 s con la pestaña visible, por si Realtime se cae.
+  // Solo se repintan los resúmenes; la hoja de la unidad que estás revisando NO se toca (no pisa lo que editas):
+  // si esa unidad cambió, aparece un aviso con «Recargar».
+  const vivo = { canal: null, conectado: false, t: null, ocupado: false, poll: null, pendiente: false };
+  const huella = (f) => [f.estado, f.enviado_en, f.validado_en, f.sin_movimiento ? 1 : 0, f.sin_envio ? 1 : 0, f.diferencias, f.correcciones_pendientes].join('|');
+
+  function avisoCambioRemoto(f) {
+    let el = $('munCambioRemoto');
+    if (!f) { if (el) el.remove(); return; }
+    if (!el) {
+      const ref = $('munBarraRevision');
+      if (!ref) return;
+      el = document.createElement('div');
+      el.id = 'munCambioRemoto';
+      el.className = 'mun-cambio-remoto';
+      el.setAttribute('role', 'status');
+      ref.insertAdjacentElement('afterend', el);
+      el.addEventListener('click', async (ev) => {
+        if (!ev.target.closest('[data-recargar]')) return;
+        if (!(await salidaSegura())) return;
+        el.remove();
+        $('selUnidadRevision').dispatchEvent(new Event('change'));
+      });
+    }
+    el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">sync_problem</span><span><b>${esc(f.unidad || f.clues)}</b> cambió su SINBA-SIS mientras lo tenías abierto.</span><button type="button" class="btn-secundario btn-mini" data-recargar>Recargar</button>`;
+  }
+
+  async function sincronizarVivo() {
+    if (!st.activo) return;
+    if (vivo.ocupado) { vivo.pendiente = true; return; }
+    vivo.ocupado = true;
+    try {
+      const antes = new Map(st.todas.map((f) => [f.clues, huella(f)]));
+      const nombres = new Map(st.todas.map((f) => [f.clues, f.estado]));
+      await refrescarFilas();
+      const cambiadas = st.todas.filter((f) => antes.get(f.clues) !== huella(f));
+      if (!cambiadas.length) return;
+      if (st.paso === 1) pintarEnvios(st.todas);
+      cambiadas.filter((f) => f.estado === 'ENVIADO' && nombres.get(f.clues) !== 'ENVIADO' && nombres.get(f.clues) !== 'VALIDADO')
+        .slice(0, 3).forEach((f) => toast(`${f.unidad || f.clues} envió su SINBA-SIS.`, 'ok'));
+      if (st.paso === 2 && st.clues) {
+        const abierta = cambiadas.find((f) => f.clues === st.clues);
+        if (abierta) avisoCambioRemoto(abierta);
+      }
+    } catch (e) {
+      console.warn('[Municipal] No se pudo actualizar en vivo:', e);
+    } finally {
+      vivo.ocupado = false;
+      if (vivo.pendiente) { vivo.pendiente = false; programarVivo(); }
+    }
+  }
+  function programarVivo(ms) {
+    clearTimeout(vivo.t);
+    vivo.t = setTimeout(sincronizarVivo, ms == null ? 900 : ms);
+  }
+  function iniciarVivo() {
+    if (vivo.canal || !estado.db || typeof estado.db.channel !== 'function') return;
+    try {
+      vivo.canal = estado.db.channel('mun-sis06p-capturas')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sis06p_capturas' }, (payload) => {
+          const r = (payload && (payload.new && payload.new.clues ? payload.new : payload.old)) || {};
+          const { mes, anio } = periodo();
+          // Solo lo del mes que se ve y de las unidades de mi alcance (Realtime trae las altas de todos)
+          if (r.clues && (Number(r.mes) !== mes || Number(r.anio) !== anio || !st.todas.some((f) => f.clues === r.clues))) return;
+          programarVivo();
+        })
+        .subscribe((status) => { vivo.conectado = status === 'SUBSCRIBED'; });
+    } catch (e) { vivo.canal = null; }
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) programarVivo(200); });
+    vivo.poll = setInterval(() => { if (!document.hidden && !vivo.conectado) sincronizarVivo(); }, 60000);
+    // Con Realtime conectado igual se revisa cada 5 min por si se perdió algún evento
+    setInterval(() => { if (!document.hidden && vivo.conectado) sincronizarVivo(); }, 300000);
+  }
+
   async function init() {
     if (st.activo) return;
     st.activo = true;
@@ -987,6 +1074,7 @@
     cablear();
     await refrescarFilas();
     await irAPaso(1, { sinScroll: true });
+    iniciarVivo();
   }
 
   window.MunicipalGuiado = { init, activo, paso: () => st.paso, pintarEnvios, revisar, irAPaso, refrescarFilas };

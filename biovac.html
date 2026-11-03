@@ -35,7 +35,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=10">
 <link rel="stylesheet" href="ayuda.css?v=7">
-<link rel="stylesheet" href="municipal_guiado.css?v=12">
+<link rel="stylesheet" href="municipal_guiado.css?v=13">
 <script defer src="guias_contenido.js?v=6"></script>
 <script defer src="ayuda.js?v=23"></script>
 <script defer src="a11y_global.js?v=6"></script>
@@ -50,11 +50,11 @@ window.onunhandledrejection = function (event) {
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
 <script defer src="biovac_ui.js?v=2026.111"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.79"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.80"></script>
 <script defer src="sis_csv.js?v=2"></script>
-<script defer src="sis06p_dashboard_module.js?v=2026.27"></script>
+<script defer src="sis06p_dashboard_module.js?v=2026.28"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
-<script defer src="municipal_guiado.js?v=24"></script>
+<script defer src="municipal_guiado.js?v=25"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -351,6 +351,24 @@ window.onunhandledrejection = function (event) {
   #sisListoEnviar > div { flex: 1; min-width: 0; }
   #sisListoEnviar b { display: block; font-size: 15px; font-weight: 800; }
   #sisListoEnviar p { margin: 3px 0 0; font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+  #sisSinMovimiento { display: none; align-items: center; gap: 12px; margin-top: 12px; padding: 12px 16px; border-radius: 14px; background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; }
+  #sisSinMovimiento > .material-symbols-rounded { font-size: 28px; flex-shrink: 0; color: #64748b; }
+  #sisSinMovimiento > div { flex: 1; min-width: 0; }
+  #sisSinMovimiento b { display: block; font-size: 14px; font-weight: 800; color: #0f172a; }
+  #sisSinMovimiento p { margin: 3px 0 0; font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+  #sisSinMovimiento.on, #sisSinMovimiento.declarado { background: #ecfeff; border-color: #a5f3fc; color: #155e75; }
+  #sisSinMovimiento.on > .material-symbols-rounded, #sisSinMovimiento.declarado > .material-symbols-rounded { color: #0e7490; }
+  #sisSinMovimiento .sis-switch { position: relative; flex: none; width: 52px; height: 32px; display: inline-block; cursor: pointer; }
+  #sisSinMovimiento .sis-switch .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  #sisSinMovimiento .sis-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 2; }
+  #sisSinMovimiento .sis-switch input:disabled { cursor: not-allowed; }
+  #sisSinMovimiento .sis-switch i { position: absolute; inset: 0; border-radius: 999px; background: #cbd5e1; transition: background .2s; }
+  #sisSinMovimiento .sis-switch i::after { content: ''; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  #sisSinMovimiento .sis-switch input:checked + i { background: #0e7490; }
+  #sisSinMovimiento .sis-switch input:checked + i::after { transform: translateX(20px); }
+  #sisSinMovimiento .sis-switch input:disabled + i { opacity: .45; }
+  #sisSinMovimiento .sis-switch input:focus-visible + i { outline: 2px solid #0e7490; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { #sisSinMovimiento .sis-switch i, #sisSinMovimiento .sis-switch i::after { transition: none; } }
   #sisListoEnviar p b { display: inline; font-size: inherit; }
   #sisListoEnviar.abierto { background: #fffbeb; border: 2px solid #f59e0b; color: #78350f; box-shadow: 0 6px 20px rgba(245, 158, 11, .2); }
   #sisListoEnviar.abierto > .material-symbols-rounded { color: #d97706; }
@@ -380,7 +398,7 @@ window.onunhandledrejection = function (event) {
   .ruta-paso:last-child::before { display: none; }
   .ruta-paso.hecho::before { background: var(--success); }
   .ruta-num {
-    position: relative; z-index: 1; flex: none; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    position: relative; z-index: 2; flex: none; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
     font-size: 12px; font-weight: 800; background: var(--surface-container); color: var(--muted); border: 2px solid var(--outline-variant);
     font-family: 'Poppins', sans-serif;
   }
