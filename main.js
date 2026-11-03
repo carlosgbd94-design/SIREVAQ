@@ -8561,6 +8561,8 @@ async function supabaseRequest(action = "", payload, options = {}) {
           fecha_edicion: new Date().toISOString(),
           editado_por: edPor,
           usuario: String(USER?.usuario || "DESCONOCIDO").toUpperCase(),
+          // Quien firma la corrección de supervisión (igual que en Influenza)
+          ...(payload.firmado_por ? { firmado_por: String(payload.firmado_por).trim().slice(0, 120) } : {}),
           valores_anteriores: prev ? prev.valores : null
         });
         const record = {
@@ -26079,6 +26081,7 @@ function syncCommandHub() {
   // 3. Sincronizar visibilidad y estados en el Hub
   const hubEdit = document.getElementById("hubEditBtn");
   const hubCancel = document.getElementById("hubCancelBtn");
+  const hubDelete = document.getElementById("hubDeleteBtn");
   const hubSave = document.getElementById("hubSaveBtn");
   const hubStatus = document.getElementById("hubStatusChip");
   const hubStatusText = document.getElementById("hubStatusText");
@@ -26205,7 +26208,9 @@ function syncCommandHub() {
     // Reporte guardado: casillas bloqueadas hasta «Editar»; en edición aparece «Cancelar» para volver a lo guardado.
     if (hubEdit) hubEdit.style.display = (infGuardado && !infEditando && isValidDate) ? "flex" : "none";
     if (hubCancel) hubCancel.style.display = infEditando ? "flex" : "none";
+    if (hubDelete) hubDelete.style.display = (cme && cme.puedeEliminar()) ? "flex" : "none";
   } else {
+    if (hubDelete) hubDelete.style.display = "none";
     if (canEdit && captureTab !== "PINOL") hubEdit.style.display = "flex";
     else hubEdit.style.display = "none";
 
@@ -26312,6 +26317,11 @@ function syncCommandHub() {
       if (captureTab === "CONS") performEditCONS();
       if (captureTab === "BIO") performEditBIO();
       if (captureTab === "INFLUENZA" && window.capturaModoEdicion) window.capturaModoEdicion.entrar();
+    };
+  }
+  if (hubDelete) {
+    hubDelete.onclick = () => {
+      if (captureTab === "INFLUENZA" && window.capturaModoEdicion) window.capturaModoEdicion.eliminar(hubDelete);
     };
   }
   if (hubCancel) {

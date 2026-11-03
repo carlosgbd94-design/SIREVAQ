@@ -405,7 +405,20 @@ window.capturaModoEdicion = {
     capRepintar();
     showToast("Edición cancelada: el reporte quedó como estaba.", true, "info");
   },
-  terminar() { _capEdicion = null; }
+  terminar() { _capEdicion = null; },
+  // «Eliminar» del command hub: solo con reporte guardado, fuera de edición y con el SIS del mes sin enviar
+  puedeEliminar: () => {
+    const f = document.getElementById("influenza_semana")?.value;
+    const vac = capVacunaActual();
+    return !!f && capReporteGuardado(f, vac) && !capEditando(f, vac) && !influenzaMesCongelado(f);
+  },
+  eliminar(btn) {
+    const fecha = document.getElementById("influenza_semana")?.value;
+    const vac = capVacunaActual();
+    const lista = vac === "COVID" ? (typeof _covidCapturasCache !== "undefined" ? _covidCapturasCache : []) : _influenzaCapturasCache;
+    const r = (lista || []).find(x => x.fecha === fecha);
+    if (r) return eliminarReporteHistorial(itemHistorialDe(r, vac), btn);
+  }
 };
 // Un reporte guardado «Sin movimiento» se puede reabrir mientras la semana siga abierta (la semana corre de lunes a
 // domingo, así que puede haber dosis después de haberlo marcado): aquí se recuerda esa decisión por semana.
@@ -1235,8 +1248,8 @@ function prellenarNombreResponsableInfluenza(reporte) {
 }
 
 /**
- * Barra de acciones del reporte ya guardado de la semana elegida (Influenza o COVID-19): Editar y Eliminar con texto,
- * a la vista, sin tener que buscar el lápiz flotante. En edición muestra Cancelar; con el SIS del mes enviado, el candado.
+ * Aviso informativo (sin botones) cuando el reporte guardado de la semana ya no se puede editar ni eliminar porque el SIS
+ * del mes se envió. Las acciones (Editar, Cancelar, Eliminar, Guardar) viven solo en el command hub flotante.
  */
 function renderAccionesReporte() {
   const ref = document.getElementById("influenzaCaptureGroupsContainer");
@@ -1245,47 +1258,21 @@ function renderAccionesReporte() {
   if (!bar) {
     bar = document.createElement("div");
     bar.id = "capAccionesReporte";
-    bar.className = "cap-acciones";
+    bar.className = "cap-acciones cap-acciones--lock";
     bar.hidden = true;
     ref.parentNode.insertBefore(bar, ref);
-    bar.addEventListener("click", (ev) => {
-      const b = ev.target.closest("[data-acc]");
-      if (!b) return;
-      const fecha = document.getElementById("influenza_semana")?.value;
-      const vac = capVacunaActual();
-      if (b.dataset.acc === "editar") window.capturaModoEdicion.entrar();
-      else if (b.dataset.acc === "cancelar") window.capturaModoEdicion.cancelar();
-      else if (b.dataset.acc === "eliminar") {
-        const lista = vac === "COVID" ? (typeof _covidCapturasCache !== "undefined" ? _covidCapturasCache : []) : _influenzaCapturasCache;
-        const r = (lista || []).find(x => x.fecha === fecha);
-        if (r) eliminarReporteHistorial(itemHistorialDe(r, vac), b);
-      }
-    });
   }
   const fecha = document.getElementById("influenza_semana")?.value;
   const vac = capVacunaActual();
   const lista = vac === "COVID" ? (typeof _covidCapturasCache !== "undefined" ? _covidCapturasCache : []) : _influenzaCapturasCache;
   const r = fecha ? (lista || []).find(x => x.fecha === fecha) : null;
-  if (!r) { bar.hidden = true; bar.innerHTML = ""; return; }
+  const congelado = r ? influenzaMesCongelado(fecha) : null;
+  if (!r || !congelado) { bar.hidden = true; bar.innerHTML = ""; return; }
   const nombre = vac === "COVID" ? "COVID-19" : "Influenza";
   const folio = vac === "COVID" ? covidFolio(r) : influenzaFolio(r);
-  const congelado = influenzaMesCongelado(fecha);
   bar.hidden = false;
-  bar.classList.toggle("cap-acciones--lock", !!congelado);
-  bar.classList.toggle("cap-acciones--edit", !congelado && capEditando(fecha, vac));
-  if (congelado) {
-    bar.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">lock</span>
-      <div class="cap-acciones-txt"><b>Reporte de ${nombre} guardado · ${escapeHtml(folio)}</b><small>El SIS de ese mes ya se envió: ya no se puede editar ni eliminar. Pide la corrección al municipal.</small></div>`;
-  } else if (capEditando(fecha, vac)) {
-    bar.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">edit</span>
-      <div class="cap-acciones-txt"><b>Estás editando este reporte</b><small>Cambia lo que necesites y guarda con el botón azul de abajo a la derecha.</small></div>
-      <button type="button" class="cap-btn" data-acc="cancelar"><span class="material-symbols-rounded" aria-hidden="true">close</span>Cancelar</button>`;
-  } else {
-    bar.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">task_alt</span>
-      <div class="cap-acciones-txt"><b>Reporte de ${nombre} guardado · ${escapeHtml(folio)}</b><small>Si te equivocaste, edítalo o elimínalo aquí mismo.</small></div>
-      <button type="button" class="cap-btn cap-btn--editar" data-acc="editar"><span class="material-symbols-rounded" aria-hidden="true">edit</span>Editar</button>
-      <button type="button" class="cap-btn cap-btn--eliminar" data-acc="eliminar"><span class="material-symbols-rounded" aria-hidden="true">delete</span>Eliminar</button>`;
-  }
+  bar.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">lock</span>
+    <div class="cap-acciones-txt"><b>Reporte de ${nombre} guardado · ${escapeHtml(folio)}</b><small>El SIS de ese mes ya se envió: ya no se puede editar ni eliminar. Pide la corrección al municipal.</small></div>`;
 }
 
 function renderCaptureGrid() {
@@ -1927,6 +1914,7 @@ async function eliminarReporteHistorial(p, btn) {
     updateInfluenzaWeekBtnLabel(document.getElementById("influenza_semana")?.value);
     updateInfluenzaSinMovimientoUI();
     renderCaptureGrid();
+    if (typeof syncCommandHub === "function") syncCommandHub();
     loadInfluenzaHistoryList();
   } catch (e) {
     if (btn) btn.disabled = false;
@@ -2525,7 +2513,7 @@ function vacunaPintarSelectores() {
 
 // Subpestañas que solo existen para Influenza (captura semanal, reportes por semana y fechas de
 // campaña). Con COVID-19 el panel muestra únicamente lo suyo: Distribución de Metas y Control de Frascos.
-const TEMPORADA_SOLO_INFLUENZA = ["subtabInfluenzaValidacion", "subtabInfluenzaConfig"];
+const TEMPORADA_SOLO_INFLUENZA = ["subtabInfluenzaConfig"];
 function temporadaAplicarVacuna() {
   TEMPORADA_SOLO_INFLUENZA.forEach(id => {
     const el = document.getElementById(id);
@@ -3996,7 +3984,7 @@ function infFilasSemana(fecha) {
     .filter(u => String(u.municipio || "").toUpperCase() === muni)
     .sort((a, b) => String(a.unidad).localeCompare(String(b.unidad), "es"))
     .map(u => {
-      const report = _adminCapturasArray.find(r => r.clues === u.clues && r.fecha === fecha) || null;
+      const report = infCapturasVista().find(r => r.clues === u.clues && r.fecha === fecha) || null;
       return { u, report, estado: estadoValidacion(report), total: infTotalDosisReporte(report) };
     });
 }
@@ -4073,7 +4061,7 @@ function renderValidationDashboard() {
       <td>${badge}</td>
       <td class="rs-num">${report ? total : "—"}</td>
       <td class="rs-quien">${report ? esc(report.capturado_por || "—") : "—"}</td>
-      <td class="rs-folio">${report ? esc(influenzaFolio(report)) : "—"}</td>
+      <td class="rs-folio">${report ? esc(esCovid() ? covidFolio(report) : influenzaFolio(report)) : "—"}</td>
       <td class="rs-acc"><button type="button" class="rs-btn-oscuro rs-btn-fila" data-clues="${esc(u.clues)}" aria-label="${esc(accion)}: ${esc(u.unidad)}, ${esc(u.clues)}"><span class="material-symbols-rounded" aria-hidden="true">${accion === "Capturar" ? "edit_square" : "find_in_page"}</span><span>${esc(accion)}</span></button></td>
     </tr>`;
   }).join("");
@@ -4095,7 +4083,7 @@ function renderValidationDashboard() {
     ? `<p class="rs-vacio">No hay unidades que coincidan con la búsqueda o el estado elegido.</p>`
     : `<div class="rs-tabla-wrap" tabindex="0" role="region" aria-label="Tabla de reportes de la semana; se desplaza horizontalmente en pantallas chicas">
         <table class="rs-tabla">
-          <caption class="vl-sr">Reportes de influenza de la semana elegida, una fila por unidad</caption>
+          <caption class="vl-sr">Reportes de ${esCovid() ? "COVID-19" : "influenza"} de la semana elegida, una fila por unidad</caption>
           <thead><tr>
             <th scope="col">Unidad</th><th scope="col">Estado</th><th scope="col" class="rs-num">Dosis</th>
             <th scope="col">Capturó</th><th scope="col">Folio</th><th scope="col"><span class="vl-sr">Acción</span></th>
@@ -4164,7 +4152,9 @@ function contarCambiosValidacion() {
   let n = 0;
   document.querySelectorAll("#validationCardsContainer input[data-rubro]:not([disabled])").forEach(inp => {
     const actual = parseInt(inp.value, 10) || 0;
-    const previo = orig ? Number(orig[inp.dataset.rubro] || 0) : 0;
+    const previo = inp.dataset.marca
+      ? Number(orig?.[inp.dataset.marca]?.[inp.dataset.rubro] || 0)   // COVID-19: valores por marca
+      : (orig ? Number(orig[inp.dataset.rubro] || 0) : 0);
     if (actual !== previo) n++;
   });
   return n;
@@ -4209,6 +4199,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
   const nombreInput = document.getElementById("validationNombreResponsable");
 
   if (!content || !cardsContainer) return;
+  if (esCovid()) { renderValidacionEdicionGridCovid(clues, fecha); return; }
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const report = _adminCapturasArray.find(r => r.clues === clues && r.fecha === fecha);
@@ -4425,7 +4416,157 @@ function renderValidacionEdicionGrid(clues, fecha) {
   };
 }
 
+/** Acumulado por rubro (Moderna + Pfizer) de las demás semanas de la unidad, y por marca en dosis de 0.5 mL. */
+function covidAcumOtras(clues, fecha) {
+  const C = window.CovidCaptura;
+  const acum = {}; C.RUBROS.forEach(r => { acum[r] = 0; });
+  _covidCapturasAll.forEach(r => {
+    if (r.clues !== clues || r.fecha === fecha) return;
+    const t = C.porRubro(r.valores);
+    C.RUBROS.forEach(rb => { acum[rb] += t[rb]; });
+  });
+  return acum;
+}
+
+/** Edición supervisada de un reporte semanal de COVID-19: una fila por grupo y marca (Pfizer solo adultos). */
+function renderValidacionEdicionGridCovid(clues, fecha) {
+  const C = window.CovidCaptura;
+  const content = document.getElementById("validationReportContent");
+  const title = document.getElementById("validationReportTitle");
+  const subtitle = document.getElementById("validationReportSubtitle");
+  const badge = document.getElementById("validationReportEditBadge");
+  const cardsContainer = document.getElementById("validationCardsContainer");
+  const nombreInput = document.getElementById("validationNombreResponsable");
+  const esc = INF_ESC;
+  const report = _covidCapturasAll.find(r => r.clues === clues && r.fecha === fecha);
+  _currentValidationReport = report;
+  nombreInput.value = "";
+  limpiarErroresValidacion();
+  content.classList.remove("hidden");
+
+  const metas = (_covidMetasArray.find(m => m.clues === clues) || {}).metas || {};
+  const acum = covidAcumOtras(clues, fecha);
+  const orig = report ? (valoresOriginalesUnidad(report) || report.valores) : null;
+  const nombreMarca = (m) => (m === "PFIZER" ? "Pfizer" : "Moderna");
+
+  if (report) {
+    title.textContent = `Reporte de COVID-19 de ${report.unidad}`;
+    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} | Capturado por: ${report.capturado_por}`;
+    if (report.editado_por !== "UNIDAD") {
+      badge.classList.remove("hidden");
+      badge.textContent = `Corregido por ${firmaDeReporte(report) || report.editado_por}`;
+    } else badge.classList.add("hidden");
+  } else {
+    const unidad = _allUnidades.find(u => u.clues === clues);
+    title.textContent = `Sin reporte de COVID-19: ${unidad ? unidad.unidad : clues}`;
+    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} | La unidad aún no envía su reporte. Si se lo pide, puedes capturarlo por ella.`;
+    badge.classList.add("hidden");
+  }
+
+  let filas = "";
+  C.RUBROS.forEach(r => {
+    const meta = Number(metas[r] || 0);
+    const regla = C.reglaRubro(r, fecha, _campaignConfig.fecha_inicio, _campaignConfig.fecha_fin);
+    const bloqueado = meta === 0 || !!regla;
+    const aviso = regla ? `<span class="inf-pill-regla">${esc(regla.etiqueta)}</span>` : (meta === 0 ? '<span class="ml-2 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-200 text-slate-800">Sin meta</span>' : "");
+    C.MARCAS.filter(m => C.RUBROS_MARCA[m].includes(r)).forEach(m => {
+      const val = report && report.valores?.[m]?.[r] !== undefined ? report.valores[m][r] : "";
+      const original = report ? Number(orig?.[m]?.[r] || 0) : "—";
+      filas += `<tr class="border-b border-slate-100 last:border-0 ${bloqueado ? "vl-bloqueada" : ""}">
+        <th scope="row" class="p-3 text-xs font-semibold text-slate-800 text-left">${esc(C.ETIQUETA[r])} · ${nombreMarca(m)}${aviso}</th>
+        <td class="p-3 text-center text-xs font-bold text-slate-700">${meta || "—"}</td>
+        <td class="p-3 text-center text-xs font-bold text-slate-700">${original}</td>
+        <td class="p-3 text-center text-xs font-bold text-violet-950">${acum[r]}</td>
+        <td class="p-3 text-center"><input type="number" min="0" step="1" inputmode="numeric" id="val_input_cov_${m}_${r}" data-rubro="${r}" data-marca="${m}"
+          aria-label="${esc(C.ETIQUETA[r])} · ${nombreMarca(m)}: valor de esta semana${bloqueado ? (regla ? " (no disponible esta semana)" : " (la unidad no tiene meta)") : ""}"
+          class="text-center font-bold bg-slate-50 border border-slate-400 rounded-lg outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-200 transition-all"
+          value="${val}" ${bloqueado ? 'disabled placeholder="—"' : 'placeholder="0"'} /></td>
+      </tr>`;
+    });
+  });
+  cardsContainer.innerHTML = `<div class="bg-white border border-slate-200 rounded-[24px] p-6 shadow-sm flex flex-col gap-4" style="background-color:#ffffff;">
+    <div class="pb-2 border-b border-slate-100 mb-2"><h4 class="text-xs font-black text-violet-950 uppercase tracking-wider m-0">COVID-19 · Moderna y Pfizer</h4></div>
+    <p class="text-xs text-slate-600 m-0">Moderna y Pfizer suman contra la misma meta del grupo. Las dosis de 6 a 59 meses son de 0.25 mL y Pfizer solo se aplica a adultos.</p>
+    <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200" tabindex="0" role="region" aria-label="Tabla de dosis de COVID-19 por grupo y marca">
+      <table class="w-full border-collapse text-left text-xs text-slate-700">
+        <caption class="vl-sr">COVID-19: dosis por grupo y marca, con meta del grupo, captura de la unidad, acumulado de otras semanas y valor de esta semana.</caption>
+        <thead><tr class="bg-slate-50 border-b border-slate-200 font-bold text-slate-700">
+          <th scope="col" class="p-3">Grupo · Marca</th><th scope="col" class="p-3 text-center">Meta anual del grupo</th>
+          <th scope="col" class="p-3 text-center">Capturado por la unidad</th><th scope="col" class="p-3 text-center">Acumulado otras semanas</th>
+          <th scope="col" class="p-3 text-center">Valor de esta semana</th>
+        </tr></thead><tbody>${filas}</tbody></table></div></div>`;
+
+  cardsContainer.oninput = (ev) => { if (ev.target?.matches?.("input[data-rubro]")) actualizarResumenValidacion(); };
+  nombreInput.oninput = () => {
+    nombreInput.removeAttribute("aria-invalid");
+    document.getElementById("validationNombreGrupo")?.classList.remove("vl-invalido");
+  };
+  actualizarResumenValidacion();
+
+  document.getElementById("btnCancelValidation").onclick = () => {
+    const sucio = contarCambiosValidacion() > 0 || nombreInput.value.trim() !== "";
+    if (sucio && !window.confirm("Tienes cambios sin guardar. ¿Descartarlos y volver al listado?")) return;
+    volverAlListadoValidacion();
+  };
+  document.getElementById("btnSaveValidation").onclick = () => {
+    if (contarCambiosValidacion() === 0) {
+      showToast(_currentValidationReport ? "No hay cambios que guardar: el reporte ya cuenta como lo capturó la unidad." : "Captura al menos una dosis para registrar el reporte.", !_currentValidationReport ? false : true, _currentValidationReport ? "info" : "warn");
+      return;
+    }
+    saveValidationReportCovid(clues, fecha);
+  };
+}
+
+async function saveValidationReportCovid(clues, fecha) {
+  const C = window.CovidCaptura;
+  const nombreInput = document.getElementById("validationNombreResponsable");
+  const nombre = nombreInput ? nombreInput.value.trim() : "";
+  limpiarErroresValidacion();
+  const errores = [];
+  if (!nombre) errores.push({ msg: "Escribe el nombre de quien realiza la corrección; queda firmado en el historial.", el: nombreInput });
+
+  const crudo = { MODERNA: {}, PFIZER: {} };
+  document.querySelectorAll("#validationCardsContainer input[data-marca]").forEach(inp => {
+    const raw = String(inp.value).trim();
+    if (!inp.disabled && raw !== "" && !/^\d+$/.test(raw)) errores.push({ msg: `${C.ETIQUETA[inp.dataset.rubro]}: escribe un número entero de 0 en adelante.`, el: inp });
+    crudo[inp.dataset.marca][inp.dataset.rubro] = parseInt(inp.value, 10) || 0;
+  });
+  const valores = C.limpiar(crudo);
+  const metas = (_covidMetasArray.find(m => m.clues === clues) || {}).metas || {};
+  const reglas = {};
+  C.RUBROS.forEach(r => { reglas[r] = C.reglaRubro(r, fecha, _campaignConfig.fecha_inicio, _campaignConfig.fecha_fin); });
+  const v = C.validar(valores, metas, covidAcumOtras(clues, fecha), _currentValidationReport?.valores, reglas);
+  if (v.error) errores.push({ msg: v.error, el: document.querySelector("#validationCardsContainer input[data-marca]:not([disabled])") });
+  if (errores.length) { mostrarErroresValidacion(errores); return; }
+
+  const unitData = _allUnidades.find(u => u.clues === clues);
+  const unidadNombre = unitData ? unitData.unidad : "Unidad Médica";
+  const payload = {
+    clues, unidad: unidadNombre, municipio: unitData ? unitData.municipio : USER.municipio, fecha, valores,
+    anio_campana: document.getElementById("metaCampaignSelect").value,
+    capturado_por: _currentValidationReport ? _currentValidationReport.capturado_por : nombre,
+    editado_por: USER.rol.toUpperCase(),
+    firmado_por: nombre,
+    sin_movimiento: C.totalDosis(valores) === 0
+  };
+  await AppService.runCapture({
+    btnId: "btnSaveValidation",
+    title: "Guardando corrección",
+    msg: "Registrando la corrección de COVID-19 firmada por supervisión...",
+    successMsg: "Corrección guardada.",
+    eventTitle: "COVID-19",
+    eventMsg: `Corrección del reporte de COVID-19 de ${unidadNombre} por ${nombre}`,
+    action: async () => {
+      const res = await AppService.call("savecovid_captura", payload);
+      await loadCovidAdminData(payload.anio_campana);
+      volverAlListadoValidacion(`Corrección de COVID-19 de ${unidadNombre} guardada.`);
+      return res;
+    }
+  });
+}
+
 async function saveValidationReport(clues, fecha) {
+  if (esCovid()) return saveValidationReportCovid(clues, fecha);
   const nombreInput = document.getElementById("validationNombreResponsable");
   const nombre = nombreInput ? nombreInput.value.trim() : "";
 

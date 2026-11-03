@@ -1177,14 +1177,14 @@ test('Temporada invernal: título, barra de vacuna a nivel de panel y un solo se
   expect(await page.locator('#influenzaAdminTabsContainer .nav-tab').count()).toBe(7);   // 6 de influenza + Avance COVID-19
 });
 
-test('Temporada invernal: COVID-19 muestra Concentrado, Cobertura, Avance, Metas y Frascos; Influenza conserva todas sus subpestañas', async ({ page }) => {
+test('Temporada invernal: COVID-19 muestra Concentrado, Reportes por semana, Cobertura, Avance, Metas y Frascos (sin Config de campaña); Influenza conserva todas sus subpestañas', async ({ page }) => {
   await montarPanel(page);
   const visibles = () => page.evaluate(() => [...document.querySelectorAll('#influenzaAdminTabsContainer .nav-tab')]
     .filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id.replace('subtabInfluenza', '').replace('subtabCovid', 'Covid')));
   expect(await visibles()).toEqual(['Avances', 'Validacion', 'Cobertura', 'Metas', 'Frascos', 'Config']);
 
   await page.click('#temporadaVacunaBar [data-vac="COVID"]');
-  await expect.poll(visibles).toEqual(['Avances', 'Cobertura', 'CovidAvance', 'Metas', 'Frascos']);
+  await expect.poll(visibles).toEqual(['Avances', 'Validacion', 'Cobertura', 'CovidAvance', 'Metas', 'Frascos']);   // «Reportes por semana» también corrige reportes de COVID-19
   expect(await page.evaluate(() => window.__llamadas.map((l) => l[0]).sort()))
     .toEqual(['getcovid_capturas', 'getcovid_distribucion', 'getcovid_lotes_entregas', 'getcovid_metas', 'getcovid_remesas']);   // carga lo de COVID, no lo de influenza
   // «Concentrado de Avances» también existe para COVID-19 (con sus reportes semanales): se queda donde estaba
