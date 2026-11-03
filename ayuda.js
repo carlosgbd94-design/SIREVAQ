@@ -137,7 +137,7 @@
         I('summarize', '#0284c7', 'SIS-06-P', 'Tu concentrado del mes: dosis aplicadas por variable (con afromexicanos, indígenas y migrantes como subconjunto del total).'),
         I('inventory_2', '#d97706', 'Movimiento de Biológico', 'Existencias, recibido, aplicadas y desechadas por lote. La existencia pasa sola al mes siguiente.'),
         I('table_view', '#16a34a', 'SIS-SS-CE-H', 'La hoja de claves: se arma sola con SIS-06-P e Influenza. Aquí no se captura nada.'),
-        I('vaccines', '#C26750', 'Influenza', 'Se lee del panel de Meta-Logro (ahí se valida contra tu meta). Aquí ves el corte del mes por semana; para cambiarlo vas a Meta-Logro.'),
+        I('vaccines', '#C26750', 'Influenza', 'Es el corte del mes por semana, el mismo de tu panel de Influenza. Si te faltó una semana de ese mes o hay que corregirla, edítala aquí mismo.'),
         T('El mes en cuatro pasos'),
         P(1, 'Captura', 'Se abre una semana antes de cerrar el mes. Guarda con el botón de la barra de abajo; lo que teclees también queda respaldado en tu dispositivo, así que un corte de internet no te hace perder el avance.'),
         P(2, 'Concilia', 'Las dosis aplicadas del paloteo y las del Movimiento deben coincidir, biológico por biológico. Si aplicaste SRP en lugar de SR (o TdPa en lugar de DPT) baja a la tarjeta naranja «Comodín», presiona «Aplicar N dosis» y guarda.'),
@@ -209,13 +209,13 @@
       subtitulo: 'El corte del mes, leído de Meta-Logro.',
       bloques: [
         T('De dónde sale'),
-        I('sync_alt', '#C26750', 'Meta-Logro', 'Cada semana reportas en Meta-Logro, donde se valida contra tu meta. Aquí aparece solo; no hay nada que copiar ni capturar dos veces.'),
+        I('sync_alt', '#C26750', 'Meta-Logro', 'Cada semana que reportas en tu panel aparece aquí sola, y lo que edites aquí se refleja allá: no hay nada que copiar ni capturar dos veces.'),
         I('calendar_view_week', '#0284c7', 'Semanas', 'Cada reporte es una semana (de lunes a domingo); el mes toma las semanas que cierran en él (hasta 5). Una semana "sin movimiento" también cuenta como reportada.'),
         I('science', '#16a34a', 'Frascos', 'El total en frascos es el total de dosis entre 10 (10 dosis por frasco).'),
         T('Cómo usarla'),
         P(1, 'Revisa', 'En pantallas angostas elige una semana arriba para verla completa; toca una fila para ver su desglose semanal.'),
         P(2, 'Concilia', 'Lo aplicado de Antiinfluenza en Movimiento debe ser igual al total de aquí. Si no, "Ir a Movimiento" te lleva y "Usar este total aquí" lo pasa al lote.'),
-        P(3, 'Corrige', '"Editar semanas en Meta-Logro" guarda tu SIS-06-P y te lleva al panel de Influenza.'),
+        P(3, 'Corrige', '"Editar semanas de Influenza" abre las semanas de este mes aquí mismo: cambia dosis o agrega la semana que falte.'),
         N('Al enviar el SINBA-SIS, Influenza de ese mes queda congelada para la unidad. Si hay que corregirla, el municipal usa «Corregir semanas» (puede cambiar cualquier semana o agregar una que falte); cada cambio queda registrado y la unidad lo ve para aceptarlo.')
       ]
     },

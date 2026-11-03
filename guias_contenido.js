@@ -87,7 +87,7 @@
       ] },
       { titulo: 'Hojas de solo lectura', bloques: [
         I('table_view', '#16a34a', 'SIS-SS-CE-H', 'Cada variable con su clave SIS (total, afromexicanos, indígenas y migrantes). Vacío significa 0. Toca una fila para ver su detalle.'),
-        I('vaccines', '#C26750', 'Influenza', 'Aquí ves el corte del mes por semana. Para cambiarlo, «Editar semanas en Meta-Logro»: ahí se valida contra tu meta.'),
+        I('vaccines', '#C26750', 'Influenza', 'Aquí ves el corte del mes por semana. Si te faltó una semana de ese mes, «Editar semanas de Influenza» la agrega aquí mismo y queda en el mes correcto.'),
         N('Lo aplicado de Antiinfluenza en Movimiento debe ser igual al total de Influenza. Si no, «Usar este total aquí» lo pasa al lote.')
       ] },
       { titulo: 'Envía y validación', bloques: [

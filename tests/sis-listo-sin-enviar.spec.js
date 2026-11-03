@@ -159,7 +159,7 @@ test('SIS-06-P: los totales de COVID-19 salen de los reportes semanales y no se 
   await expect(page.locator('#sis06pChipSinGuardar')).toBeHidden();
 });
 
-test('SIS-06-P: la UNIDAD ve «Ir a mis reportes de COVID-19» y al pulsarlo se marca que viene del SIS', async ({ page }) => {
+test('SIS-06-P: la UNIDAD ve «Editar mis semanas de COVID-19» y lo abre aquí mismo, sin salir del SIS', async ({ page }) => {
   await abrir(page, 'MUNICIPAL');
   await page.evaluate(async () => {
     const F = window.__FAKE;
@@ -175,9 +175,10 @@ test('SIS-06-P: la UNIDAD ve «Ir a mis reportes de COVID-19» y al pulsarlo se 
   });
   const btn = page.locator('[data-ir-covid]');
   await expect(btn).toHaveCount(1);
-  await page.route(/index\.html\?captura=COVID/, (r) => r.fulfill({ contentType: 'text/html', body: '<html></html>' }));
-  await Promise.all([page.waitForURL(/index\.html\?captura=COVID/), btn.evaluate((b) => b.click())]);
-  expect(await page.evaluate(() => sessionStorage.getItem('sirevaq_desde_sis'))).toBe('1');
+  await btn.evaluate((b) => b.click());
+  await expect(page.locator('#detalleSISOverlay')).toHaveClass(/abierto/);
+  await expect(page.locator('#detalleSISTitulo')).toContainText('COVID-19');
+  expect(page.url()).toContain('biovac.html');
 });
 
 test('Municipal: si una lectura lenta de la unidad anterior termina al último, no pisa la unidad nueva (botón Validar y estado correctos)', async ({ page }) => {

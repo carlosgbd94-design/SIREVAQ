@@ -410,3 +410,80 @@ test('UNIDAD: el responsable se puede cambiar aunque el mes esté fuera de su ve
   await page.evaluate(async () => { await SIS06PBiovac.init(); });
   await expect(inp).toHaveJSProperty('readOnly', true);
 });
+
+// ---------------------------------------------------------------------------
+// Unidad: edita las semanas de Influenza dentro del SIS (solo las del mes que ve)
+// ---------------------------------------------------------------------------
+
+test('Unidad: agrega la semana de Influenza que le faltó desde el SIS, solo del mes que está validando, y queda como reporte de la unidad', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-11-03T12:00:00'));
+  await abrir(page, 'UNIDAD');
+  await prepararSIS(page, { rol: 'UNIDAD', estadoCaptura: 'BORRADOR' });
+  await page.evaluate(async () => {
+    const F = window.__FAKE;
+    document.getElementById('selMes').value = '10'; document.getElementById('selAnio').value = '2026';
+    F.tables.sis06p_capturas.length = 0;
+    F.tables.sis06p_capturas.push({ id: 'c1', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes: 10, anio: 2026, estado: 'BORRADOR', valores: {}, ajustes: {} });
+    F.tables.campanas = [{ nombre: 'Campaña Influenza 2026-2027', fecha_inicio: '2026-10-02', fecha_fin: '2027-04-30' }];
+    F.tables.influenza_capturas = [{ id: 'i1', clues: 'QTSSA000001', fecha: '2026-10-23', valores: { r1: 4 }, anio_campana: 'Campaña Influenza 2026-2027', municipio: 'QUERETARO', unidad: 'C.S. Alfa', capturado_por: 'X', sin_movimiento: false }];
+    window.__upserts = [];
+    const real = estado.db;
+    estado.db = new Proxy(real, { get(t, p) {
+      if (p === 'from') return (tabla) => {
+        const api = t.from(tabla);
+        if (tabla === 'influenza_capturas') api.upsert = async (rec) => { window.__upserts.push(rec); return { error: null }; };
+        return api;
+      };
+      return t[p];
+    } });
+    await SIS06PBiovac.init();
+  });
+  await expect(page.locator('#btnEditarEnMetaLogro')).toContainText('Editar semanas de Influenza');
+  await page.evaluate(() => SIS06PBiovac.abrirEditorInfluenza());
+  await expect(page.locator('#detalleSISOverlay')).toHaveClass(/abierto/);
+  expect(page.url()).toContain('biovac.html');   // no se sale del SIS
+
+  // Solo ofrece semanas de octubre (ni noviembre), y ya abiertas
+  const opciones = await page.locator('#edInfNueva option').evaluateAll((os) => os.map((o) => o.value));
+  expect(opciones).toContain('2026-10-30');
+  expect(opciones.every((v) => v.startsWith('2026-10-'))).toBe(true);
+  expect(opciones).not.toContain('2026-10-23');   // esa ya está reportada
+
+  await page.selectOption('#edInfNueva', '2026-10-30');
+  await page.locator('#edInfAgregar').click();
+  await page.locator('.ed-inf-in[data-f="2026-10-30"][data-r="r1"]').fill('7');
+  await page.locator('#detalleSISPie button', { hasText: 'Guardar cambios' }).click();
+  await page.waitForTimeout(500);
+  const up = await page.evaluate(() => window.__upserts);
+  expect(up.length).toBe(1);
+  expect(up[0].fecha).toBe('2026-10-30');
+  expect(up[0].valores.r1).toBe(7);
+  expect(up[0].editado_por).toBe('UNIDAD');
+  expect(up[0].anio_campana).toBe('Campaña Influenza 2026-2027');
+});
+
+test('Unidad: con el SIS ya enviado el editor de semanas no abre (queda congelado) y viendo noviembre no ofrece semanas que aún no abren', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-11-03T12:00:00'));
+  await abrir(page, 'UNIDAD');
+  await prepararSIS(page, { rol: 'UNIDAD', estadoCaptura: 'ENVIADO' });
+  await page.evaluate(async () => {
+    document.getElementById('selMes').value = '10'; document.getElementById('selAnio').value = '2026';
+    window.__FAKE.tables.sis06p_capturas.length = 0;
+    window.__FAKE.tables.sis06p_capturas.push({ id: 'c1', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes: 10, anio: 2026, estado: 'ENVIADO', valores: {}, ajustes: {} });
+    window.__FAKE.tables.influenza_capturas = [];
+    await SIS06PBiovac.init();
+    await SIS06PBiovac.abrirEditorInfluenza();
+  });
+  await expect(page.locator('#detalleSISOverlay')).not.toHaveClass(/abierto/);
+
+  // Noviembre en borrador: hoy es martes 3-nov, así que la semana del 2–8 (viernes 6) ya abrió y la del 9–15 no
+  await page.evaluate(async () => {
+    document.getElementById('selMes').value = '11'; document.getElementById('selAnio').value = '2026';
+    window.__FAKE.tables.sis06p_capturas.length = 0;
+    window.__FAKE.tables.sis06p_capturas.push({ id: 'c2', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes: 11, anio: 2026, estado: 'BORRADOR', valores: {}, ajustes: {} });
+    await SIS06PBiovac.init();
+    await SIS06PBiovac.abrirEditorInfluenza();
+  });
+  const opciones = await page.locator('#edInfNueva option').evaluateAll((os) => os.map((o) => o.value));
+  expect(opciones).toEqual(['2026-11-06']);
+});

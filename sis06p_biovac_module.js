@@ -535,8 +535,8 @@
       ir.type = 'button';
       ir.className = 'btn-mini btn-secundario';
       ir.setAttribute('data-ir-covid', '');
-      ir.title = 'Guarda tu paloteo y abre tus reportes semanales de COVID-19';
-      ir.innerHTML = '<span class="material-symbols-rounded" aria-hidden="true" style="font-size:16px;">edit_note</span> Ir a mis reportes de COVID-19';
+      ir.title = 'Edita aquí las semanas de COVID-19 de este mes o agrega la que falte (se sincroniza con tu panel de COVID-19)';
+      ir.innerHTML = '<span class="material-symbols-rounded" aria-hidden="true" style="font-size:16px;">edit_note</span> Editar mis semanas de COVID-19';
       ir.addEventListener('click', irAReportesCovid);
       aviso.appendChild(ir);
     }
@@ -2775,13 +2775,13 @@
       document.getElementById('infCtaTexto').textContent = bloqueada
         ? 'Ya enviaste el SINBA-SIS, así que el corte no cambia desde la unidad. Si hay que corregirlo, pídelo al municipal.'
         : (n === 0
-          ? 'El reporte de cada semana se captura en Meta-Logro (jueves o viernes); aquí aparece solo.'
-          : `Leemos ${n} reporte${n === 1 ? '' : 's'} semanal${n === 1 ? '' : 'es'} de ${mesNombre(mes)} y se actualizan solos. Para corregir una semana, hazlo en Meta-Logro, donde se valida contra tu meta; tu SIS-06-P se guarda antes de salir.`);
+          ? 'Aquí aparece cada semana que reportes en tu panel de Influenza. Si te faltó una semana de este mes, agrégala con el botón: así queda en el mes correcto.'
+          : `Leemos ${n} reporte${n === 1 ? '' : 's'} semanal${n === 1 ? '' : 'es'} de ${mesNombre(mes)} y se actualizan solos. Edítalas o agrega la que falte con el botón de abajo; se sincronizan con tu panel de Influenza y se validan contra tu meta; puedes cambiar sus dosis o agregar una semana que falte, solo de este mes, sin salir del SIS.`);
       if (btnEditar) {
         btnEditar.disabled = bloqueada;
         btnEditar.title = bloqueada
           ? 'El SINBA-SIS de este mes ya fue enviado: Influenza quedó congelada.'
-          : 'Guarda tu SIS-06-P y abre el panel de Influenza (Meta-Logro), donde se captura y se valida contra la meta.';
+          : 'Abre las semanas de este mes para editarlas o agregar la que falte (se sincroniza con tu panel de Influenza).';
       }
     }
 
@@ -2789,7 +2789,7 @@
     if (subInf) {
       subInf.textContent = esRolRevisor()
         ? 'Dosis de antiinfluenza del mes por semana, leídas de Meta-Logro. Con el SIS enviado, tú puedes corregirlas.'
-        : 'Dosis de antiinfluenza del mes por semana, leídas de Meta-Logro. Solo lectura.';
+        : 'Dosis de antiinfluenza del mes por semana, las mismas de tu panel de Influenza. Para cambiarlas o agregar una semana que falte usa el botón de abajo.';
     }
     const btnCovid = document.getElementById('btnEditarCovid');
     if (btnCovid) btnCovid.style.display = 'none';
@@ -3544,13 +3544,34 @@
     _influenzaCapturasCache = data || [];
   }
 
+  // Semanas que pertenecen al mes estadístico: los viernes del mes y, si el mes termina de lunes a jueves, ese último
+  // día (reporte de corte). La unidad solo ve las que ya abrieron (abren el lunes de su semana); el servidor lo exige igual.
   function viernesDelMes(mes, anio) {
     const out = [];
     const dias = new Date(anio, mes, 0).getDate();
+    const iso = (d) => anio + '-' + String(mes).padStart(2, '0') + '-' + String(d).padStart(2, '0');
     for (let d = 1; d <= dias; d++) {
-      if (new Date(anio, mes - 1, d).getDay() === 5) out.push(anio + '-' + String(mes).padStart(2, '0') + '-' + String(d).padStart(2, '0'));
+      if (new Date(anio, mes - 1, d).getDay() === 5) out.push(iso(d));
     }
-    return out;
+    const dowFin = new Date(anio, mes - 1, dias).getDay();
+    if (dowFin >= 1 && dowFin <= 4) out.push(iso(dias));
+    out.sort();
+    if (!esUnidadSesion()) return out;
+    const hoy = fechaHoyIso();
+    return out.filter((f) => {
+      const d = new Date(f + 'T12:00:00');
+      d.setDate(d.getDate() - ((d.getDay() + 6) % 7));     // lunes de esa semana
+      return (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')) <= hoy;
+    });
+  }
+
+  // Quién puede abrir los editores de semanas del SIS: la unidad mientras su SINBA-SIS del mes siga en borrador;
+  // los revisores cuando la unidad ya lo envió (el servidor aplica la misma regla).
+  function motivoSinEdicionSemanas(captura) {
+    if (esUnidadSesion()) {
+      return captura && captura.estado !== 'BORRADOR' ? 'Tu SINBA-SIS de este mes ya fue enviado: las semanas quedaron congeladas. Si hay que corregirlas, pídelo al municipal.' : '';
+    }
+    return !captura || captura.estado === 'BORRADOR' ? 'Esta unidad todavía no envía su SIS: nada que corregir.' : '';
   }
 
   function editorInfluenzaHtml() {
@@ -3589,7 +3610,7 @@
           <tbody>${filas}</tbody>
         </table>
       </div>
-      <p style="font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0;">Se marcan en ámbar las casillas que cambiaste. Guarda para que el cambio llegue al servidor; la unidad verá cada corrección en su panel de cambios.</p>`;
+      <p style="font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0;">Se marcan en ámbar las casillas que cambiaste. Guarda para que el cambio llegue al servidor.${esUnidadSesion() ? ' Si te pasas de tu meta o de tus frascos, el servidor te lo dirá y no guardará esa semana.' : ' La unidad verá cada corrección en su panel de cambios.'}</p>`;
   }
 
   function pintarEditorInfluenza() {
@@ -3603,7 +3624,8 @@
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
     const captura = capturaDelMesActual();
-    if (!captura || captura.estado === 'BORRADOR') { toast('Esta unidad todavía no envía su SIS: nada que corregir.', 'error'); return; }
+    const sinPermiso = motivoSinEdicionSemanas(captura);
+    if (sinPermiso) { toast(sinPermiso, 'error'); return; }
     try {
       await recargarInfluenzaCache(activa.clues); // siempre se parte de lo que hay en el servidor
     } catch (err) {
@@ -3620,7 +3642,7 @@
     };
     abrirDetalleSIS({
       titulo: 'Corregir Influenza · ' + mesNombre(mes) + ' ' + anio,
-      subtitulo: (activa.unidad || activa.clues) + ' · cada semana es un reporte de Meta-Logro',
+      subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + ' · se sincroniza con tu panel de Influenza',
       cuerpo: editorInfluenzaHtml(),
       acciones: [{ texto: 'Guardar cambios', icono: 'save', clase: 'btn-primario', onClick: guardarEditorInfluenza }]
     });
@@ -3677,7 +3699,7 @@
       renderInfluenza();
       renderCEH();
       refrescarConciliacion();
-      toast('✅ Influenza corregida. La unidad verá los cambios para aceptarlos.', 'ok');
+      toast(esUnidadSesion() ? '✅ Influenza guardada. Tu panel de Influenza ya la muestra.' : '✅ Influenza corregida. La unidad verá los cambios para aceptarlos.', 'ok');
       document.dispatchEvent(new CustomEvent('sis06p:corregido', { detail: { clues, mes, anio, origen: 'influenza' } }));
     } catch (err) {
       console.error('[SINBA-SIS] Error al guardar Influenza:', err);
@@ -3777,7 +3799,8 @@
     const anio = Number(document.getElementById('selAnio').value);
     if (anio * 12 + mes < 2026 * 12 + 10) { toast('COVID-19 se reporta por semana desde la campaña 2026-27 (octubre de 2026).', 'error'); return; }
     const captura = capturaDelMesActual();
-    if (!captura || captura.estado === 'BORRADOR') { toast('Esta unidad todavía no envía su SIS: nada que corregir.', 'error'); return; }
+    const sinPermiso = motivoSinEdicionSemanas(captura);
+    if (sinPermiso) { toast(sinPermiso, 'error'); return; }
     try {
       await recargarCovidCache(activa.clues); // siempre se parte de lo que hay en el servidor
     } catch (err) {
@@ -3793,7 +3816,7 @@
     };
     abrirDetalleSIS({
       titulo: 'Corregir COVID-19 · ' + mesNombre(mes) + ' ' + anio,
-      subtitulo: (activa.unidad || activa.clues) + ' · cada semana es un reporte, con Moderna y Pfizer por separado',
+      subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + ' · Moderna y Pfizer por separado',
       cuerpo: editorCovidHtml(),
       acciones: [{ texto: 'Guardar cambios', icono: 'save', clase: 'btn-primario', onClick: guardarEditorCovid }]
     });
@@ -3855,7 +3878,7 @@
       renderInfluenza();
       renderCEH();
       refrescarConciliacion();
-      toast('✅ COVID-19 corregido. La unidad verá los cambios para aceptarlos.', 'ok');
+      toast(esUnidadSesion() ? '✅ COVID-19 guardado. Tu panel de COVID-19 ya lo muestra.' : '✅ COVID-19 corregido. La unidad verá los cambios para aceptarlos.', 'ok');
       document.dispatchEvent(new CustomEvent('sis06p:corregido', { detail: { clues, mes, anio, origen: 'covid' } }));
     } catch (err) {
       console.error('[SINBA-SIS] Error al guardar COVID-19:', err);
@@ -3962,27 +3985,14 @@
   // Marca que se llegó desde el SIS para que allá aparezca «Volver a mi SINBA-SIS» (solo en ese caso).
   async function irAReportesCovid() {
     if (!esUnidadSesion()) return;
-    const captura = capturaDelMesActual();
-    if (captura && captura.estado !== 'BORRADOR') { toast('El SINBA-SIS de este mes ya fue enviado: COVID-19 quedó congelada.', 'error'); return; }
-    if (_sinGuardar) {
-      const ok = await save();
-      if (!ok) return;
-    }
-    try { sessionStorage.setItem('sirevaq_desde_sis', '1'); } catch (_) { /* sin almacenamiento: solo no aparece el enlace de regreso */ }
-    window.location.href = 'index.html?captura=COVID';
+    await abrirEditorCovid();
   }
 
+  // Unidad y revisores editan las semanas del mes aquí mismo (sin salir del SIS). Se escribe en influenza_capturas, la
+  // misma tabla del panel de Influenza, así que ambos lados quedan sincronizados.
   async function irAMetaLogroInfluenza() {
-    if (esRolRevisor()) { await abrirEditorInfluenza(); return; }
-    if (!esUnidadSesion()) return;
-    const captura = capturaDelMesActual();
-    if (captura && captura.estado !== 'BORRADOR') { toast('El SINBA-SIS de este mes ya fue enviado: Influenza quedó congelada.', 'error'); return; }
-    if (_sinGuardar) {
-      const ok = await save();
-      if (!ok) return; // no se pierde nada: se queda aquí con el aviso del error
-    }
-    try { sessionStorage.setItem('sirevaq_desde_sis', '1'); } catch (_) { /* sin almacenamiento: solo no aparece el enlace de regreso */ }
-    window.location.href = 'index.html?captura=INFLUENZA';
+    if (!esRolRevisor() && !esUnidadSesion()) return;
+    await abrirEditorInfluenza();
   }
 
   document.addEventListener('DOMContentLoaded', () => {
