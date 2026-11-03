@@ -235,3 +235,20 @@ test('Chips de hojas (municipal): sin cambios no hay punto amarillo; con cambios
   await page.waitForTimeout(400);
   await expect(page.locator('#munBarraRevision .mun-hoja-pildora.punto')).toHaveCount(1);
 });
+
+test('Resumen de unidades (municipal): «Copiar pendientes de enviar» copia solo las que faltan, por CLUES', async ({ page }) => {
+  await page.addInitScript(() => { window.__copiado = null; Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t) => { window.__copiado = t; } }, configurable: true }); });
+  await abrir(page, 'MUNICIPAL');
+  await page.waitForSelector('#munEnvios .mun-unidad', { timeout: 15000 });
+  const sin = await page.locator('#munEnvios .mun-unidad.vacio').count();
+  const btn = page.locator('#munCopiarPendientes');
+  await expect(btn).toContainText(`(${sin})`);
+  await btn.click();
+  const texto = await page.evaluate(() => window.__copiado);
+  expect(texto).toContain('Unidades pendientes de enviar su SINBA-SIS');
+  expect(texto.split('\n').filter((l) => l.startsWith('•')).length).toBe(sin);
+  const clues = await page.locator('#munEnvios .mun-unidad.vacio').evaluateAll((els) => els.map((e) => e.dataset.clues));
+  clues.forEach((c) => expect(texto).toContain(c));
+  const enviadas = await page.locator('#munEnvios .mun-unidad:not(.vacio)').evaluateAll((els) => els.map((e) => e.dataset.clues));
+  enviadas.forEach((c) => expect(texto).not.toContain(c));
+});

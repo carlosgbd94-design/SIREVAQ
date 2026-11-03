@@ -315,6 +315,27 @@
     return filas.map((f) => `<button type="button" class="pt ${CLASE_EST[estadoDe(f)]} ${f.clues === actual ? 'actual' : ''}" data-clues="${esc(f.clues)}" title="${esc((f.unidad || f.clues) + ' — ' + ETIQUETA[estadoDe(f)])}"></button>`).join('');
   }
 
+  // Texto de las unidades pendientes de enviar (una por línea, por CLUES) y copia al portapapeles.
+  function textoPendientes() {
+    const { mes, anio } = periodo();
+    const pend = filasOrdenadas().filter((f) => estadoDe(f) === 'SIN');
+    const varios = municipios().length > 1;
+    const lineas = pend.map((f) => `• ${f.clues} · ${f.unidad || ''}${varios && f.municipio ? ` (${etiquetaMuni(f.municipio)})` : ''}`);
+    return `Unidades pendientes de enviar su SINBA-SIS de ${nombreMes(mes)} ${anio} (${pend.length}):\n${lineas.join('\n')}`;
+  }
+  async function copiarPendientes() {
+    const texto = textoPendientes();
+    try { await navigator.clipboard.writeText(texto); }
+    catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = texto; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e2) { /* sin portapapeles */ }
+      ta.remove();
+    }
+    toast('Lista copiada: pégala en el mensaje a las unidades.', 'ok');
+  }
+
   function pintarEnvios(filas) {
     asignarFilas(filas);
     if (!st.muni || !municipios().includes(st.muni)) st.muni = municipios()[0] || null;
@@ -339,6 +360,10 @@
           ? `<span class="mun-espera"><span class="material-symbols-rounded">hourglass_top</span> El mes sigue en curso: las unidades van prellenando y el envío se abre al cierre del mes.</span>`
           : `<span class="mun-espera"><span class="material-symbols-rounded">hourglass_top</span> Faltan ${plural(r.sin, 'unidad', 'unidades')} por enviar. Si alguna no va a enviar este mes (internet, etc.), ábrela y elige «Continuar sin esta unidad»: no bloquea nada.</span>`)
         : `<button type="button" class="btn-primario" id="munCtaConcentrado"><span class="material-symbols-rounded">table_chart</span> Todo validado: ir al concentrado</button>`;
+    // «Copiar pendientes»: las unidades que aún no envían (sin contar las que se continúan sin envío), listas para pegar en un mensaje
+    const copiarBtn = r.sin > 0
+      ? `<button type="button" class="btn-secundario" id="munCopiarPendientes" title="Copia la lista de las ${r.sin} unidades que faltan por enviar su SINBA-SIS"><span class="material-symbols-rounded" aria-hidden="true">content_copy</span> Copiar pendientes de enviar (${r.sin})</button>`
+      : '';
     const chip = (k, txt) => `<button type="button" class="mun-chip ${st.filtro === k ? 'activo' : ''}" data-filtro="${k}">${txt}<b>${conteos[k]}</b></button>`;
 
     // Jurisdicción: aquí solo se revisan los hospitales; los municipios se consultan en el concentrado.
@@ -358,7 +383,7 @@
         <div class="puntos">${puntosHtml(filasOrdenadas(), null)}</div>
         <div class="mun-leyenda"><span><i class="pt vacio"></i>sin enviar</span><span><i class="pt parcial"></i>por validar</span><span><i class="pt completo"></i>validada</span>${r.omitida ? '<span><i class="pt omitida"></i>sin envío</span>' : ''}</div>
       </div>
-      <div class="mun-acciones">${cta}
+      <div class="mun-acciones">${cta}${copiarBtn}
         <div class="mun-chips">${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}${r.omitida ? chip('OMITIDA', 'Sin envío') : ''}</div>
       </div>
       <div class="mun-grid">${visibles.map((f) => `
@@ -882,6 +907,7 @@
       else if (t.closest('#munNext')) moverUnidad(1);
       else if (t.closest('#munSigPend')) { const s = siguientePendiente(st.clues); if (s) cambiarUnidad(s.clues); }
       else if (t.closest('#munCtaSiguiente')) { const s = siguientePendiente(null); if (s) revisar(s.clues); }
+      else if (t.closest('#munCopiarPendientes')) copiarPendientes();
       else if (t.closest('#munCtaConcentrado')) irAPaso(3);
       else if (t.closest('#munVerMovimiento')) verMovimiento();
       else if (t.closest('#munSinEnvio')) marcarSinEnvio(st.clues);
