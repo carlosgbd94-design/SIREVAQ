@@ -327,7 +327,13 @@
     return { clues: u.clues, unidad: u.nombre, municipio: u.municipio };
   }
 
+  // Cada init() lee los datos de UNA unidad con varias consultas seguidas. Si el municipal cambia de unidad (o de mes) mientras
+  // una lectura sigue en curso, la lectura vieja NO debe pisar la caché ni repintar la pantalla de la unidad nueva: terminaba
+  // al último y dejaba a una unidad por validar con el estado «Validado» (y sin botón Validar) de la anterior.
+  let _initSeq = 0;
+
   async function init() {
+    const seq = ++_initSeq;
     const activa = datosUnidadActiva();
     const container = document.getElementById('sis06pCaptureGroupsContainer');
     if (!activa) {
@@ -346,15 +352,18 @@
 
       const { data: capturas, error: e2 } = await estado.db.from('sis06p_capturas').select('*').eq('clues', activa.clues);
       if (e2) throw e2;
+      if (seq !== _initSeq) return;
       _sis06pCapturasCache = capturas || [];
 
       const { data: capturasInf, error: e3 } = await estado.db.from('influenza_capturas').select('id, fecha, valores, sin_movimiento, capturado_por, anio_campana, municipio, unidad').eq('clues', activa.clues);
       if (e3) throw e3;
+      if (seq !== _initSeq) return;
       _influenzaCapturasCache = capturasInf || [];
 
       // COVID-19 (captura semanal con marca): solo prellena; si la tabla no responde, el SIS se captura a mano como siempre.
       try {
         const { data: capturasCov, error: eCov } = await estado.db.from('covid_capturas').select('id, fecha, valores, anio_campana').eq('clues', activa.clues);
+        if (seq !== _initSeq) return;
         _covidCapturasCache = eCov ? [] : (capturasCov || []);
         _covidCapturasOk = !eCov;
       } catch (eCovx) { _covidCapturasCache = []; _covidCapturasOk = false; }
@@ -362,12 +371,14 @@
       const mes = Number(document.getElementById('selMes').value);
       const anio = Number(document.getElementById('selAnio').value);
       const { data: ventana, error: e4 } = await estado.db.rpc('sis06p_ventana_envio', { p_anio: anio, p_mes: mes });
+      if (seq !== _initSeq) return;
       if (e4) { console.warn('[SIS-06-P] Error cargando ventana:', e4); _ventanaCache = null; }
       else _ventanaCache = (ventana && ventana[0]) || null;
       if (window.__biovacRefrescarPorVentana) window.__biovacRefrescarPorVentana();
 
       await cargarCorreccionesPendientes(activa.clues);
       await cargarConciliacion(activa.clues);
+      if (seq !== _initSeq) return;
 
       render();
     } catch (err) {
@@ -2281,7 +2292,8 @@
   function capturaDelMesActual() {
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
-    return _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio) || null;
+    const a = datosUnidadActiva();
+    return _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio && (!a || !r.clues || r.clues === a.clues)) || null;
   }
 
   // Refleja en el campo lo YA guardado del mes elegido (SIS-06-P primero, luego
@@ -3334,7 +3346,7 @@
     const { est, filas, difs, v } = estadoRuta();
     const esU = esUnidadSesion();
     let detalle = '';
-    if (est === 'VALIDADO') detalle = 'Ya puedes exportar el Excel oficial e imprimir';
+    if (est === 'VALIDADO') detalle = esU ? 'Ya puedes exportar el Excel oficial e imprimir' : 'Esta unidad ya está validada';
     else if (est === 'ENVIADO') detalle = esU ? 'Esperando al municipal' : 'Pendiente de tu validación';
     else if (_sinGuardar) detalle = 'Cambios sin guardar';
     else if (fueraDeVentanaDeCaptura(captura)) detalle = 'Este mes está fuera de su ventana de captura';

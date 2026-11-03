@@ -179,3 +179,47 @@ test('SIS-06-P: la UNIDAD ve «Ir a mis reportes de COVID-19» y al pulsarlo se 
   await Promise.all([page.waitForURL(/index\.html\?captura=COVID/), btn.evaluate((b) => b.click())]);
   expect(await page.evaluate(() => sessionStorage.getItem('sirevaq_desde_sis'))).toBe('1');
 });
+
+test('Municipal: si una lectura lenta de la unidad anterior termina al último, no pisa la unidad nueva (botón Validar y estado correctos)', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  const r = await page.evaluate(async () => {
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const F = window.__FAKE;
+    F.tables.sis_variables.length = 0;
+    estado.unidadesClues = [
+      { id: 'ua', clues: 'QTSSA00000A', nombre: 'Unidad A', municipio: 'QUERETARO' },
+      { id: 'ub', clues: 'QTSSA00000B', nombre: 'Unidad B', municipio: 'QUERETARO' }];
+    const sel = document.getElementById('selUnidadRevision');
+    sel.innerHTML = '<option value="ua">A</option><option value="ub">B</option>';
+    const caps = { 'QTSSA00000A': { id: 'ca', clues: 'QTSSA00000A', mes, anio, estado: 'VALIDADO', valores: {}, ajustes: {} }, 'QTSSA00000B': { id: 'cb', clues: 'QTSSA00000B', mes, anio, estado: 'ENVIADO', valores: {}, ajustes: {} } };
+    const real = estado.db;
+    estado.db = new Proxy(real, { get(t, p) {
+      if (p === 'from') return (tabla) => {
+        if (tabla !== 'sis06p_capturas') return t.from(tabla);
+        return { select() { return { eq(_c, v) { return new Promise((res) => setTimeout(() => res({ data: [caps[v]], error: null }), v === 'QTSSA00000A' ? 700 : 30)); } }; } };
+      };
+      return t[p];
+    } });
+    document.getElementById('panelSIS06P').style.display = 'block';
+    sel.value = 'ua';
+    const pA = SIS06PBiovac.init();   // lenta
+    sel.value = 'ub';
+    const pB = SIS06PBiovac.init();   // rápida: es la que manda
+    await Promise.all([pA, pB]);
+    return { badge: document.getElementById('sis06pBadgeEstado').textContent, validar: getComputedStyle(document.getElementById('btnMarcarValidado')).display };
+  });
+  expect(r.badge.toLowerCase()).toContain('enviado');
+  expect(r.validar).not.toBe('none');
+});
+
+test('Corrección de Movimiento: el resumen de cambios sale solo y en palabras sencillas', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  const frases = await page.evaluate(() => {
+    estado.biologicos = [{ id: 'b1', clave: 'BCG', nombre_excel: 'BCG' }];
+    const antes = { r1: { id: 'r1', biovac_lotes: { biologico_id: 'b1', numero_lote: 'L1' }, existencia_anterior_frascos: 1, aplicadas_a: 5 } };
+    const despues = [{ id: 'r1', biovac_lotes: { biologico_id: 'b1', numero_lote: 'L1' }, existencia_anterior_frascos: 2, aplicadas_a: 5 }];
+    return resumenCambiosCorreccion(antes, despues);
+  });
+  expect(frases).toEqual(['Se editó la existencia anterior de BCG (lote L1), de 1 a 2']);
+});

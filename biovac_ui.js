@@ -2092,9 +2092,19 @@ function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, 
       border:1px solid ${coincide ? 'rgba(16,185,129,.3)' : 'var(--warning-border)'};
       display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
       <span><span class="material-symbols-rounded" style="font-size:14px; vertical-align:middle;">${coincide ? 'check_circle' : 'compare_arrows'}</span>
-      ${fuente} ${totalSIS06P}${info.ajustePaloteo ? ` (incluye ${info.ajustePaloteo} de comodín de sustitución)` : ''} dosis aplicadas de ${info.claves.length > 1 ? `${info.etiqueta.replace(' (se concilian juntas)', '')} (juntas)` : 'este biológico'} este mes ${coincide ? '(coincide con lo capturado aquí)' : `(aquí se capturaron ${totalAplicadas}${info.ajusteAplicado ? ` (incluye ${info.ajusteAplicado} de comodín de sustitución)` : ''} aplicadas${info.claves.length > 1 ? ' entre los biológicos del grupo' : ''} — deben ser iguales: no se puede enviar el SIS mientras no coincidan)`}.</span>
+      ${textoConciliacion(bio, info, fuente, totalSIS06P, totalAplicadas, coincide)}</span>
       ${avisoPar}
     </div>`;
+}
+
+// Texto de la tarjeta «paloteo vs Movimiento» en lenguaje llano: qué dice cada lado y qué hacer.
+// (La media dosis de Hepatitis B / COVID Moderna pediátrica ya está sumada en las cifras; no se explica aquí.)
+function textoConciliacion(bio, info, fuente, totalPaloteo, totalMov, coincide) {
+  const nombre = (info.claves && info.claves.length > 1 ? String(info.etiqueta || '').replace(' (se concilian juntas)', '') : (info.etiqueta || bio.nombre_excel || 'este biológico')).replace(/\n/g, ' ');
+  const lado = bio.clave === 'ANTIINFLUENZA' ? 'En los reportes semanales de Influenza' : 'En el paloteo (SIS-06-P)';
+  const comodin = (n) => (n ? ` (incluye ${n} por sustitución)` : '');
+  if (coincide) return `Coinciden: ${totalPaloteo} dosis de ${nombre} en el paloteo y en este Movimiento.`;
+  return `No coinciden. ${lado} hay ${totalPaloteo} dosis aplicadas de ${nombre}${comodin(info.ajustePaloteo)} y aquí en el Movimiento hay ${totalMov}${comodin(info.ajusteAplicado)}. Captura las aplicadas por lote hasta que sean las mismas; mientras no coincidan no se puede enviar el SINBA-SIS.`;
 }
 
 function renderBiologico(bio, editable) {
@@ -3520,15 +3530,60 @@ async function cerrarMes() {
   await cargarMovimiento();
 }
 
+// Corregir un mes cerrado: ya no se pide escribir el motivo a mano. Al reabrir se guarda una foto de los renglones y, al guardar la
+// corrección, la página arma sola el resumen de lo que cambió («Se editó la existencia anterior de BCG, de 1 a 2») y lo anota
+// como motivo en la auditoría.
+const CAMPOS_CORRECCION = {
+  existencia_anterior_frascos: 'la existencia anterior', recibido_frascos: 'lo recibido', aplicadas_a: 'las dosis aplicadas',
+  aplicadas_b: 'las dosis aplicadas (dosis completa)', desechadas_a: 'las dosis desechadas', desechadas_b: 'las dosis desechadas (dosis completa)',
+  observaciones: 'las observaciones'
+};
+function fotoRenglones() {
+  const foto = {};
+  (estado.renglones || []).forEach((r) => { foto[r.id] = { ...r }; });
+  return foto;
+}
+function resumenCambiosCorreccion(antes, despues) {
+  const num = (v) => (v === null || v === undefined || v === '' ? 0 : Number(v));
+  const fmt = (v) => { const n = Math.round(num(v) * 100) / 100; return String(n); };
+  const frases = [];
+  (despues || []).forEach((r) => {
+    const a = antes[r.id];
+    const lote = r.biovac_lotes || {};
+    const bio = (estado.biologicos || []).find((b) => b.id === lote.biologico_id);
+    const nombreBio = String((bio && (bio.nombre_excel || bio.clave)) || 'un biológico').replace(/\n/g, ' ').trim();
+    const donde = `${nombreBio}${lote.numero_lote ? ` (lote ${lote.numero_lote})` : ''}`;
+    Object.keys(CAMPOS_CORRECCION).forEach((campo) => {
+      const antesV = a ? a[campo] : null;
+      const nuevoV = r[campo];
+      if (campo === 'observaciones') {
+        if (String(antesV || '') !== String(nuevoV || '')) frases.push(`Se editó ${CAMPOS_CORRECCION[campo]} de ${donde}`);
+      } else if (num(antesV) !== num(nuevoV)) {
+        frases.push(`Se editó ${CAMPOS_CORRECCION[campo]} de ${donde}, de ${fmt(antesV)} a ${fmt(nuevoV)}`);
+      }
+    });
+    if (!a) frases.push(`Se agregó un renglón de ${donde}`);
+  });
+  Object.keys(antes).forEach((id) => {
+    if (!(despues || []).some((r) => r.id === id)) {
+      const r = antes[id]; const lote = r.biovac_lotes || {};
+      const bio = (estado.biologicos || []).find((b) => b.id === lote.biologico_id);
+      frases.push(`Se quitó un renglón de ${String((bio && (bio.nombre_excel || bio.clave)) || 'un biológico').replace(/\n/g, ' ').trim()}${lote.numero_lote ? ` (lote ${lote.numero_lote})` : ''}`);
+    }
+  });
+  return frases;
+}
+
 async function abrirCorreccion() {
   const usuario = usuarioActual();
   if (!usuario) return;
-  const motivo = await mostrarModal({
+  const ok = await mostrarModal({
     titulo: 'Reabrir para corregir',
-    mensaje: 'Escribe el motivo de la corrección; queda registrado en la auditoría.',
-    pedirMotivo: true, placeholderMotivo: 'Ej. Se corrigió una cantidad mal capturada', textoAceptar: 'Reabrir'
+    mensaje: 'El mes se abre para editarlo. No tienes que escribir ningún motivo: al guardar la corrección, la página anota sola lo que cambiaste.',
+    textoAceptar: 'Reabrir'
   });
-  if (!motivo) return;
+  if (!ok) return;
+  const motivo = 'Reapertura para corregir (el detalle de lo editado se anota al guardar la corrección)';
   // Quien reabre desde AQUÍ (Movimiento de Biológico) sin ser la propia
   // unidad municipal está corrigiendo "desde arriba" igual que si lo
   // hiciera desde el drill-down de Concentrado Biológico -- debe generar
@@ -3544,6 +3599,7 @@ async function abrirCorreccion() {
   estado.correccionEsJurisdiccional = esJurisdiccional;
   toast('Mes reabierto para corrección. Edita lo necesario y pulsa "Guardar corrección".', 'ok');
   await cargarMovimiento();
+  estado.correccionFoto = fotoRenglones();   // lo que había al reabrir: contra esto se arma el resumen
 }
 
 async function aplicarCorreccion() {
@@ -3560,9 +3616,27 @@ async function aplicarCorreccion() {
   });
   if (error) { toast('No se pudo aplicar la corrección: ' + error.message, 'error'); return; }
   toast(`Corrección aplicada. Meses recalculados: ${data}.`, 'ok');
+  const lote = estado.correccionBatchId;
+  const foto = estado.correccionFoto;
   estado.correccionBatchId = null;
   estado.correccionEsJurisdiccional = false;
+  estado.correccionFoto = null;
   await cargarMovimiento();
+  // Resumen automático de lo que se editó (queda como motivo de esta corrección en la auditoría)
+  if (foto && lote) {
+    const frases = resumenCambiosCorreccion(foto, estado.renglones || []);
+    const texto = frases.length ? frases.join('. ') + '.' : 'Se reabrió y se guardó sin cambios en las cifras.';
+    try {
+      await estado.db.from('biovac_correcciones').update({ motivo: texto.slice(0, 900) })
+        .eq('cascade_batch_id', lote).in('tipo', ['REAPERTURA', 'CORRECCION_JURISDICCIONAL']);
+    } catch (e) { /* el resumen igual se muestra; si la auditoría no deja anotarlo, queda el motivo genérico */ }
+    await mostrarModal({
+      titulo: 'Corrección guardada',
+      mensaje: frases.length ? 'Esto es lo que cambiaste (quedó anotado en la auditoría):' : texto,
+      detalleHtml: frases.length ? `<ul style="margin:8px 0 0 18px; padding:0; text-align:left; font-size:13px; line-height:1.5;">${frases.slice(0, 40).map((f) => `<li>${String(f).replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]))}</li>`).join('')}</ul>` : '',
+      textoAceptar: 'Entendido', sinCancelar: true
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
