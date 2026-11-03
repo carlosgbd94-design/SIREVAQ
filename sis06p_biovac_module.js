@@ -3146,8 +3146,9 @@
     const filas = Array.isArray(_conciliacionCache) ? _conciliacionCache : null;
     if (filas && filas.length) {
       const nd = filas.filter((f) => !f.coincide).length;
-      if (nd) poner('pildoraMovimiento', `${nd} ≠`, 'aviso', `${nd} biológico(s) no coinciden con el paloteo`);
-      else poner('pildoraMovimiento', '✓', 'ok', 'Paloteo y Movimiento coinciden');
+      // No es una validación: solo dice si las dosis aplicadas del paloteo y del Movimiento son iguales (la validación es del SINBA-SIS completo, con el botón Validar)
+      if (nd) poner('pildoraMovimiento', `${nd} no cuadra${nd === 1 ? '' : 'n'}`, 'aviso', `${nd} biológico(s) no coinciden con el paloteo`);
+      else poner('pildoraMovimiento', 'Cuadra', 'ok', 'Las dosis aplicadas del paloteo y del Movimiento coinciden (esto no es la validación)');
     } else {
       poner('pildoraMovimiento', '', '');
     }

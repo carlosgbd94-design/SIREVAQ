@@ -223,3 +223,15 @@ test('Corrección de Movimiento: el resumen de cambios sale solo y en palabras s
   });
   expect(frases).toEqual(['Se editó la existencia anterior de BCG (lote L1), de 1 a 2']);
 });
+
+test('Chips de hojas (municipal): sin cambios no hay punto amarillo; con cambios sin guardar sí', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await page.waitForSelector('#dockPasosMun', { timeout: 15000 });
+  await page.click('#munCtaSiguiente');
+  await expect(page.locator('#munBarraRevision .mun-rev-unidad b')).toBeVisible();
+  await page.waitForTimeout(1200);
+  await expect(page.locator('#munBarraRevision .mun-hoja-pildora.punto')).toHaveCount(0);
+  await page.evaluate(() => { const el = document.querySelector('input[id^="sisb_"]'); if (el) { el.value = '3'; el.dispatchEvent(new Event('input', { bubbles: true })); } });
+  await page.waitForTimeout(400);
+  await expect(page.locator('#munBarraRevision .mun-hoja-pildora.punto')).toHaveCount(1);
+});

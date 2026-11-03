@@ -445,7 +445,7 @@
       const span = chip.querySelector('.mun-hoja-pildora');
       const txt = p ? p.textContent.replace(/​/g, '').trim() : '';
       span.textContent = txt;
-      span.className = 'mun-hoja-pildora' + (p && p.classList.contains('aviso') ? ' aviso' : p && p.classList.contains('ok') ? ' ok' : '') + (!txt && p && p.classList.contains('punto') ? ' punto' : '');
+      span.className = 'mun-hoja-pildora' + (p && p.classList.contains('aviso') ? ' aviso' : p && p.classList.contains('ok') ? ' ok' : '') + (!txt && p && p.classList.contains('punto') && p.textContent.length > 0 ? ' punto' : '')   // el punto solo si de verdad hay cambios sin guardar (la píldora de origen trae un carácter invisible); vacía no se pinta;
     });
   }
 
