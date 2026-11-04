@@ -96,11 +96,12 @@ test('Municipal: cierre guiado en 4 pasos', async ({ page }) => {
   await page.click('#munVolverConcentrado');
   await expect(page.locator('#panelMunConcentrado')).toBeVisible();
   // Teclado: los pasos de arriba responden a Enter
-  await page.locator('#rutaMes .ruta-paso[data-mpaso="1"]').focus();
-  await page.keyboard.press('Enter');
+  // locator.press = enfocar + Enter en un solo paso, y se espera a que la ruta se asiente antes de seguir: la barra de pasos
+  // se vuelve a pintar tras cada cambio de paso, y un focus() suelto podía quedar en un botón ya reemplazado (Enter perdido).
+  await page.locator('#rutaMes .ruta-paso[data-mpaso="1"]').press('Enter');
   await expect(page.locator('#munEnvios')).toBeVisible();
-  await page.locator('#rutaMes .ruta-paso[data-mpaso="3"]').focus();
-  await page.keyboard.press('Enter');
+  await expect(page.locator('#rutaMes .ruta-paso[aria-current="step"]')).toContainText('Envíos');
+  await page.locator('#rutaMes .ruta-paso[data-mpaso="3"]').press('Enter');
   await expect(page.locator('#panelMunConcentrado')).toBeVisible();
   await expect(page.locator('#panelMunConcentrado h2')).toBeFocused();
 
@@ -113,7 +114,8 @@ test('Municipal: cierre guiado en 4 pasos', async ({ page }) => {
   await page.selectOption('#selMes', { index: 0 });
   await page.selectOption('#selMes', { index: 9 });
   await expect(page.locator('#munDescargarCSV')).toBeEnabled();
-  await expect(page.locator('#munCheck li.ok')).toHaveCount(2);
+  await expect(page.locator('#munCheck li.ok')).toHaveCount(3);               // validadas, paloteo=Movimiento y Movimientos de las unidades guardados
+  await expect(page.locator('#munCheckAbiertas')).toContainText('Ninguna unidad tiene el Movimiento abierto en corrección');
   await expect(page.locator('#munCheck li.aviso')).toContainText('informativo');   // recibido vs requisición no bloquea
 
   // Ayuda contextual
