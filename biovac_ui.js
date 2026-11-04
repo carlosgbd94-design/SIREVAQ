@@ -2092,6 +2092,20 @@ function loteVencido(caducidadIso) {
 // se captura, sin esperar a "Guardar". Aquí solo avisa; el bloqueo real
 // (no enviar/validar mientras no coincida) lo aplica el servidor en
 // sis06p_enviar_para_validacion / sis06p_marcar_validado.
+// Dosis aplicadas EQUIVALENTES de un biológico leyendo lo que hay TECLEADO en pantalla (aunque no haya salido de la casilla) y,
+// si no hay casilla, lo guardado. Los avisos de los biológicos hermanos (COVID Moderna+Pfizer, SR+SRP, DPT+TdPa) dependen
+// unos de otros: con lo guardado solamente se quedaban con la cifra vieja hasta pulsar Tab.
+function aplicadasVivasDeBio(bio) {
+  return estado.renglones.filter((r) => r.biovac_lotes.biologico_id === bio.id).reduce((acc, r) => {
+    const v = (campo) => {
+      const el = document.querySelector(`[data-renglon="${r.id}"][data-campo="${campo}"]`);
+      return el ? (Number(el.value) || 0) : (Number(r[campo]) || 0);
+    };
+    const a = v('aplicadas_a'); const b = v('aplicadas_b');
+    return acc + (bio.regla_especial === 'SPLIT_DOSE' ? a / 2 + b : a + b);
+  }, 0);
+}
+
 function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, normalesLotes) {
   const info = estado.sis06pTotales ? estado.sis06pTotales[bio.clave] : undefined;
   if (info === undefined) return '';
@@ -2107,9 +2121,7 @@ function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, 
   const aplicadasHermanos = info.claves.filter((c) => c !== bio.clave).reduce((acc, clave) => {
     const bioHermano = estado.biologicos.find((b) => b.clave === clave);
     if (!bioHermano) return acc;
-    return acc + estado.renglones
-      .filter((r) => r.biovac_lotes.biologico_id === bioHermano.id)
-      .reduce((a2, r) => a2 + equivalente(bioHermano, Number(r.aplicadas_a) || 0, Number(r.aplicadas_b) || 0), 0);
+    return acc + aplicadasVivasDeBio(bioHermano);
   }, 0);
   const totalAplicadas = equivalente(bio, totalAplicadasA, 0) + totalAplicadasB + aplicadasHermanos + (info.ajusteAplicado || 0);
   const coincide = totalSIS06P === totalAplicadas;
@@ -2137,9 +2149,7 @@ function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, 
     const infoOtra = estado.sis06pTotales[claveOtra];
     const bioOtra = estado.biologicos.find((b) => b.clave === claveOtra);
     if (infoOtra && bioOtra) {
-      const aplicadaOtra = estado.renglones
-        .filter((r) => r.biovac_lotes.biologico_id === bioOtra.id)
-        .reduce((a2, r) => a2 + equivalente(bioOtra, Number(r.aplicadas_a) || 0, Number(r.aplicadas_b) || 0), 0);
+      const aplicadaOtra = aplicadasVivasDeBio(bioOtra);
       const esA = bio.clave === par.claves[0];
       const mia = { p: totalSIS06P - (info.ajustePaloteo || 0), a: totalAplicadas - (info.ajusteAplicado || 0) };
       const otra = { p: infoOtra.paloteo - (infoOtra.ajustePaloteo || 0), a: aplicadaOtra };
@@ -2158,8 +2168,12 @@ function htmlComparacionSIS06P(bio, totalAplicadasA, totalAplicadasB, editable, 
         ? { fwd: n2(info.ajusteAplicado), rev: n2(info.ajustePaloteo) }
         : { fwd: n2(info.ajustePaloteo), rev: n2(info.ajusteAplicado) };
       const dg = cmd.diagnosticoPar(par, x, aj);
-      const accion = dg.sug
-        ? ` Captura ${dg.sug.n} en el comodín de la pestaña SIS-06-P y guarda.` : '';
+      // La sustitución se registra aquí mismo, con un botón (se guarda sola): ya no hay que ir a la hoja SIS-06-P.
+      const claveAj = dg.sug ? (dg.sug.dir === 'fwd' ? par.keyFwd : par.keyRev) : '';
+      const claveOp = dg.sug ? (dg.sug.dir === 'fwd' ? par.keyRev : par.keyFwd) : '';
+      const accion = (dg.sug && editable)
+        ? ` <button type="button" class="btn-mini" data-comodin-mov="${claveAj}" data-opuesto="${claveOp}" data-valor="${dg.sug.n}" style="margin-left:6px; background:#d97706; color:#fff; border:0; font-weight:800;"><span class="material-symbols-rounded" aria-hidden="true">swap_horiz</span> Sí, fue sustitución: registrar ${dg.sug.n} dosis</button>`
+        : '';
       avisoPar = `<div style="flex-basis:100%; font-weight:600; font-size:11px; opacity:.95;">${par.a} = paloteo ${x.pA} / aplicadas ${x.aA} · ${par.b} = paloteo ${x.pB} / aplicadas ${x.aB}. ${dg.texto}${accion}</div>`;
     }
   }
@@ -2621,7 +2635,7 @@ function recalcularFilaEnVivo(renglonId) {
 // reflejar también ediciones aún no guardadas de cualquier renglón del
 // mismo bloque, y cae a los valores ya guardados cuando no hay inputs
 // (vista de solo lectura de un mes CERRADO).
-function recalcularTotalBio(bioId) {
+function recalcularTotalBio(bioId, sinPropagar) {
   const bio = estado.biologicos.find((b) => b.id === bioId);
   if (!bio) return;
   const renglonesBio = estado.renglones.filter((r) => r.biovac_lotes.biologico_id === bioId);
@@ -2672,6 +2686,37 @@ function recalcularTotalBio(bioId) {
     const nuevoHtml = htmlComparacionSIS06P(bio, totales.aplicadasA, totales.aplicadasB, editable, normalesLotes);
     if (nuevoHtml) panelExistente.outerHTML = nuevoHtml;
   }
+
+  // Los avisos de los biológicos que se concilian juntos (COVID Moderna+Pfizer, SR+SRP, DPT+TdPa) también cambian con lo
+  // que se acaba de teclear aquí: se repintan en el acto, sin esperar a salir de la casilla (Tab).
+  if (!sinPropagar) {
+    const info = estado.sis06pTotales ? estado.sis06pTotales[bio.clave] : undefined;
+    const cmd = window.SIS06PComodin;
+    const par = cmd && cmd.PARES.find((d) => d.claves.indexOf(bio.clave) >= 0);
+    const relacionadas = new Set([...(info && info.claves ? info.claves : []), ...(par ? par.claves : [])]);
+    relacionadas.delete(bio.clave);
+    relacionadas.forEach((clave) => {
+      const otra = estado.biologicos.find((b) => b.clave === clave);
+      if (otra) recalcularTotalBio(otra.id, true);
+    });
+  }
+}
+
+// Botón «registrar N dosis» del aviso de SR/SRP y DPT/TdPa en Movimiento: guarda el comodín en el SIS-06-P y vuelve a leer
+// los totales para que el aviso (y la barra de acciones) cuadren al instante.
+async function registrarComodinDesdeMovimiento(btn) {
+  if (!window.SIS06PBiovac || !window.SIS06PBiovac.guardarComodin) return;
+  btn.disabled = true;
+  const ok = await window.SIS06PBiovac.guardarComodin(btn.dataset.comodinMov, btn.dataset.opuesto, Number(btn.dataset.valor));
+  if (!ok) { btn.disabled = false; return; }
+  await cargarSIS06PTotalesParaComparar(Number(document.getElementById('selAnio').value), Number(document.getElementById('selMes').value));
+  const cmd = window.SIS06PComodin;
+  const par = cmd && cmd.PARES.find((d) => d.keyFwd === btn.dataset.comodinMov || d.keyRev === btn.dataset.comodinMov);
+  (par ? par.claves : []).forEach((clave) => {
+    const b = estado.biologicos.find((x) => x.clave === clave);
+    if (b) recalcularTotalBio(b.id, true);
+  });
+  toast('Sustitución registrada: el paloteo y el Movimiento ya cuadran.', 'ok');
 }
 
 // La caducidad ya NO bloquea el guardado de un renglón (ni en el cliente ni en la base de datos): se puede precargar la
@@ -4159,6 +4204,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('revisionImportador').addEventListener('click', onClickRevisionImportacion);
 
   const cont = document.getElementById('contenedorBloques');
+  cont.addEventListener('click', (ev) => {
+    const b = ev.target.closest && ev.target.closest('[data-comodin-mov]');
+    if (b) { ev.preventDefault(); registrarComodinDesdeMovimiento(b); }
+  });
   cont.addEventListener('input', (ev) => {
     if (ev.target.matches('[data-renglon][data-campo]')) {
       marcarCampoSinGuardar(ev.target);

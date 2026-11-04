@@ -714,18 +714,19 @@
     return `
       <details id="sisbComodin" open style="margin-top:10px; background:#fffbeb; border:2px solid #f59e0b; border-radius:12px;">
         <summary style="cursor:pointer; padding:10px 14px; font-size:13px; font-weight:900; color:#92400e; display:flex; align-items:center; gap:8px; flex-wrap:wrap;" title="Úsalo solo si aplicaste una vacuna y en el paloteo la reportaste como otra">
-          <span class="material-symbols-rounded comodin-ico" aria-hidden="true" style="font-size:20px;">swap_horiz</span>
-          Comodín: ¿aplicaste una vacuna y la anotaste como otra?
-          <span style="font-size:10.5px; font-weight:800; background:#f59e0b; color:#fff; border-radius:999px; padding:2px 8px;">Aquí se corrige</span>
+          <span class="material-symbols-rounded comodin-ico" data-comodin-ico aria-hidden="true" style="font-size:20px;">swap_horiz</span>
+          <span data-comodin-titulo>Comodín: ¿aplicaste una vacuna y la anotaste como otra?</span>
+          <span data-comodin-badge style="font-size:10.5px; font-weight:800; background:#f59e0b; color:#fff; border-radius:999px; padding:2px 8px;">Por corregir</span>
         </summary>
         <div style="padding:2px 14px 10px;">
+          <div data-comodin-ayuda>
           <div style="font-size:12px; font-weight:600; color:#78350f; margin-bottom:6px;">Pasa cuando se acaba una vacuna y se usa su equivalente (SRP en lugar de SR, o TdPa en lugar de DPT). En el paloteo se anota como la que indica la norma, pero el Movimiento descuenta la que de verdad se usó. Por eso no cuadran, y el comodín le dice al sistema cuántas dosis fueron.</div>
           <ol style="list-style:none; margin:0 0 8px; padding:0; font-size:12px; font-weight:700; color:#78350f;">
             ${paso(1, 'Mira abajo el aviso de cada par: te dice si la diferencia se explica por una sustitución y de cuántas dosis.')}
-            ${paso(2, 'Presiona el botón <b>Aplicar N dosis</b> (o escribe tú la cantidad en la casilla que describe tu caso).')}
-            ${paso(3, 'Presiona <b>Guardar</b> arriba. Hasta que guardes, el comodín no cuenta.')}
+            ${paso(2, 'Presiona el botón <b>Aplicar N dosis</b> (o escribe tú la cantidad en la casilla que describe tu caso). Se guarda solo.')}
           </ol>
-          <div style="font-size:11.5px; font-weight:600; background:#fff; border:1px dashed #f59e0b; border-radius:10px; padding:7px 10px; color:#475569;"><b>Ejemplo:</b> aplicaste 10 SRP porque no había SR, pero las anotaste como SR. Escribe 10 en la casilla <i>«Apliqué SRP, pero en el paloteo la anoté como SR»</i> y guarda. Si no hubo sustitución, deja todo en blanco.</div>
+          <div style="font-size:11.5px; font-weight:600; background:#fff; border:1px dashed #f59e0b; border-radius:10px; padding:7px 10px; color:#475569;"><b>Ejemplo:</b> aplicaste 10 SRP porque no había SR, pero las anotaste como SR. Escribe 10 en la casilla <i>«Apliqué SRP, pero en el paloteo la anoté como SR»</i> y listo. Si no hubo sustitución, deja todo en blanco.</div>
+          </div>
           ${bloques}
         </div>
       </details>`;
@@ -738,6 +739,7 @@
     const cont = document.getElementById('sisbComodin');
     if (!cont) return;
     let algunoVisible = false;
+    let pendiente = false;
     AJUSTES_DEF.forEach((d) => {
       const bloque = cont.querySelector(`[data-comodin-par="${d.idx}"]`);
       const diag = cont.querySelector(`[data-comodin-diag="${d.idx}"]`);
@@ -750,6 +752,7 @@
       if (!visible) { diag.innerHTML = ''; return; }
       algunoVisible = true;
       const dg = diagnosticoPar(d, x, aj);
+      if (!dg.cuadra) pendiente = true;
       const tecleado = dg.sug && (dg.sug.dir === 'fwd' ? aj.fwd : aj.rev) === dg.sug.n;
       const btn = (!_comodinSoloLectura && dg.sug && !tecleado)
         ? ` <button type="button" class="btn-mini comodin-usar" style="margin-left:6px; background:#d97706; color:#fff; border:0; font-weight:800;" data-comodin-usar="${dg.sug.dir === 'fwd' ? d.keyFwd : d.keyRev}" data-opuesto="${dg.sug.dir === 'fwd' ? d.keyRev : d.keyFwd}" data-valor="${dg.sug.n}" title="Escribe ${dg.sug.n} en la casilla correcta; tú decides cuándo guardar" aria-label="Aplicar el ajuste sugerido de ${dg.sug.n} dosis"><span class="material-symbols-rounded" aria-hidden="true">auto_fix_high</span> Aplicar ${dg.sug.n} dosis</button>` : '';
@@ -763,6 +766,49 @@
       if (diag.dataset.huella !== huella) { diag.dataset.huella = huella; diag.classList.remove('comodin-cambio'); void diag.offsetWidth; diag.classList.add('comodin-cambio'); }
     });
     cont.style.display = algunoVisible ? '' : 'none';
+    aplicarEstiloComodin(cont, pendiente);
+  }
+
+  // Mientras hay algo por corregir el comodín es un panel ámbar y abierto; cuando todo ya cuadra se vuelve una línea verde,
+  // cerrada, que solo confirma qué se aplicó (antes seguía en amarillo y parecía que aún había errores).
+  function aplicarEstiloComodin(cont, pendiente) {
+    const nuevo = pendiente ? 'pendiente' : 'ok';
+    const sum = cont.querySelector('summary');
+    const titulo = cont.querySelector('[data-comodin-titulo]');
+    const badge = cont.querySelector('[data-comodin-badge]');
+    const ico = cont.querySelector('[data-comodin-ico]');
+    const ayuda = cont.querySelector('[data-comodin-ayuda]');
+    cont.style.background = pendiente ? '#fffbeb' : '#f0fdf4';
+    cont.style.border = pendiente ? '2px solid #f59e0b' : '1px solid #86efac';
+    if (sum) sum.style.color = pendiente ? '#92400e' : '#166534';
+    if (titulo) titulo.textContent = pendiente ? 'Comodín: ¿aplicaste una vacuna y la anotaste como otra?' : 'Comodín aplicado: la sustitución ya cuadra';
+    if (badge) { badge.textContent = pendiente ? 'Por corregir' : 'Listo'; badge.style.background = pendiente ? '#f59e0b' : '#16a34a'; }
+    if (ico) { ico.textContent = pendiente ? 'swap_horiz' : 'check_circle'; ico.classList.toggle('comodin-ico', pendiente); }
+    if (ayuda) ayuda.style.display = pendiente ? '' : 'none';
+    if (cont.dataset.estado !== nuevo) { cont.dataset.estado = nuevo; cont.open = pendiente; }
+  }
+
+  // Registra el comodín de inmediato (sin pasar por «Guardar»): solo toca la columna `ajustes` del mes, no el paloteo que se
+  // esté tecleando. Lo usan el botón «Aplicar N dosis» de la hoja SIS-06-P y el de Movimiento.
+  async function guardarComodin(key, opuesto, n) {
+    const activa = datosUnidadActiva();
+    if (!activa) return false;
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const rep = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio && r.clues === activa.clues);
+    if (!rep) { toast('Primero guarda el SIS-06-P de este mes: ahí queda el paloteo que se compara.', 'error'); return false; }
+    if (soloLecturaPara(rep)) { toast('Este SIS ya no se puede modificar.', 'error'); return false; }
+    const aj = Object.assign({}, rep.ajustes || {});
+    if (opuesto) delete aj[opuesto];
+    if (n > 0) aj[key] = n; else delete aj[key];
+    const { error } = await estado.db.from('sis06p_capturas').update({ ajustes: aj }).eq('id', rep.id);
+    if (error) { toast('No se pudo registrar la sustitución: ' + (error.message || error), 'error'); return false; }
+    rep.ajustes = aj;
+    try { await cargarConciliacion(activa.clues); } catch (_) { /* se queda lo que había */ }
+    if (!_sinGuardar) renderConciliacion(soloLecturaPara(rep), rep); else actualizarComodin();
+    actualizarBotonEnviar(); renderRutaMes(); actualizarDock();
+    document.dispatchEvent(new CustomEvent('sis06p:comodin', { detail: { clues: activa.clues, mes, anio } }));
+    return true;
   }
 
   let _comodinRaf = 0;
@@ -787,8 +833,21 @@
     if (opuesto) opuesto.value = '';
     input.value = btn.getAttribute('data-valor');
     input.dispatchEvent(new Event('input', { bubbles: true }));
-    toast('Comodín capturado: presiona Guardar para aplicarlo.', 'ok');
-    try { input.focus(); input.select(); } catch (_) { /* no-op */ }
+    guardarComodin(btn.getAttribute('data-comodin-usar'), btn.getAttribute('data-opuesto'), Number(btn.getAttribute('data-valor')))
+      .then((ok) => { if (ok) toast('Sustitución registrada.', 'ok'); });
+  });
+  // Escribir la cantidad a mano también se registra al salir de la casilla.
+  document.addEventListener('change', (ev) => {
+    const id = ev.target && ev.target.id;
+    if (!id || id.indexOf('sisb_ajuste_') !== 0) return;
+    const key = id.slice('sisb_ajuste_'.length);
+    const d = AJUSTES_DEF.find((x) => x.keyFwd === key || x.keyRev === key);
+    if (!d) return;
+    const opuestoKey = d.keyFwd === key ? d.keyRev : d.keyFwd;
+    const n = _num2(parseFloat(ev.target.value));
+    const op = document.getElementById('sisb_ajuste_' + opuestoKey);
+    if (n > 0 && op) op.value = '';
+    guardarComodin(key, n > 0 ? opuestoKey : null, n);
   });
   // Cualquier cambio del paloteo o del comodín repinta el aviso en vivo.
   document.addEventListener('input', (ev) => {
@@ -3509,6 +3568,8 @@
       const captura = capturaDelMesActual();
       if (!_sinGuardar) {
         renderConciliacion(soloLecturaPara(captura), captura);
+      } else {
+        actualizarComodin();
       }
       actualizarBotonEnviar();
       renderInfluenza();
@@ -4366,6 +4427,6 @@
   window.SIS06PBiovac = {
     init, render, save, hayCambiosSinGuardar: () => _sinGuardar, fueraDeVentana: () => fueraDeVentanaDeCaptura(capturaDelMesActual()), renderCSVPreview, exportarSISOficialCompleto, exportarZipMunicipio, configurarImpresionOficial, INFLUENZA_SIS_MAPPING,
     abrirHistorial, abrirEditorInfluenza, abrirEditorCovid,
-    renderCEH, renderInfluenza, aplicarResponsable, guardarResponsable, marcarResponsableManual, refrescarConciliacion, actualizarDock
+    renderCEH, renderInfluenza, aplicarResponsable, guardarResponsable, marcarResponsableManual, refrescarConciliacion, actualizarDock, guardarComodin
   };
 })();
