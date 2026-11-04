@@ -61,3 +61,7 @@ create trigger covid_trg_resync_sis
 -- Reparar las hojas en borrador que ya quedaron desfasadas
 select public.sis06p_resync_covid_borrador(clues, mes, anio)
 from sis06p_capturas where estado = 'BORRADOR' and anio * 12 + mes >= 2026 * 12 + 10;
+
+-- Solo el servidor las usa (el disparador corre como dueño): nadie debe poder llamarlas por RPC.
+revoke all on function public.sis06p_resync_covid_borrador(text, integer, integer) from public, anon, authenticated;
+revoke all on function public.covid_trg_resync_sis() from public, anon, authenticated;
