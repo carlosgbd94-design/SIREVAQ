@@ -658,7 +658,39 @@
     return { d, nDifRecibido, htmlRecibido: () => htmlRecibido(d), descargar: () => descargarConAviso(d) };
   }
 
-  window.SIS06PConcentradoMunicipal = { render, ORDEN_BIOLOGICOS };
+  // ---- Unidades con el Movimiento abierto en corrección ---------------------
+  // El Movimiento del municipio solo suma a las unidades con el mes CERRADO (cierra solo al enviar el SINBA-SIS). Si el
+  // municipal reabrió el Movimiento de una unidad con «Reabrir y corregir» y no pulsó «Guardar», esa unidad NO se suma al
+  // Movimiento del municipio y éste queda por debajo del paloteo/seguimiento (que sí la cuentan). Esto lo hace visible.
+  function abiertasDeFilas(filas) {
+    const por = new Map();
+    (filas || []).forEach((f) => {
+      if (f.movimiento_estado !== 'EN_CORRECCION') return;
+      const x = por.get(f.clues) || { clues: f.clues, unidad: f.unidad, aplicado: 0, desperdicio: 0 };
+      x.aplicado += num(f.aplicado); x.desperdicio += num(f.desperdicio);
+      por.set(f.clues, x);
+    });
+    return Array.from(por.values()).sort((a, b) => String(a.unidad).localeCompare(String(b.unidad)));
+  }
+
+  async function movimientosAbiertos(municipio, mes, anio) {
+    const r = await window.rpcPorBloques(estado.db, 'sis06p_seguimiento_biologico', { p_municipio: municipio, p_mes: mes, p_anio: anio });
+    if (r.error) throw r.error;
+    return abiertasDeFilas(r.data);
+  }
+
+  function htmlMovimientosAbiertos(lista) {
+    if (!lista || lista.length === 0) return '';
+    const ap = lista.reduce((s, x) => s + x.aplicado, 0), de = lista.reduce((s, x) => s + x.desperdicio, 0);
+    const items = lista.map((x) => `<li><b>${esc(x.unidad || x.clues)}</b> (${esc(x.clues)}): ${fmt(x.aplicado)} aplicadas · ${fmt(x.desperdicio)} de desperdicio</li>`).join('');
+    return `<div role="alert" data-aviso="movimientos-abiertos" style="border:1px solid var(--warning-border, #f59e0b); background:var(--warning-bg, #fffbeb); border-radius:12px; padding:10px 14px; margin:8px 0; font-size:12.5px; color:#78350f;">
+      <div style="font-weight:800; margin-bottom:4px;">⚠ ${lista.length === 1 ? '1 unidad tiene' : lista.length + ' unidades tienen'} el Movimiento abierto en corrección: no se suma${lista.length === 1 ? '' : 'n'} al Movimiento del municipio</div>
+      <div>Por eso el Movimiento del municipio trae <b>${fmt(ap)}</b> aplicadas y <b>${fmt(de)}</b> de desperdicio menos (en todos los biológicos) que el Excel del concentrado, que sí las cuenta. Para igualarlos, abre el Movimiento de cada unidad y pulsa <b>Guardar</b> en la barra de abajo; el del municipio se actualiza solo.</div>
+      <ul style="margin:6px 0 0 18px; padding:0;">${items}</ul>
+    </div>`;
+  }
+
+  window.SIS06PConcentradoMunicipal = { render, ORDEN_BIOLOGICOS, movimientosAbiertos, htmlMovimientosAbiertos, abiertasDeFilas };
 })();
 
 // PostgREST corta cada respuesta en 1000 filas: las funciones que devuelven TABLE se piden por bloques

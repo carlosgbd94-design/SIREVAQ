@@ -831,6 +831,7 @@
       <ul class="mun-check" id="munCheck">
         <li class="${listo ? 'ok' : 'pend'}"><span class="material-symbols-rounded">${listo ? 'check_circle' : 'radio_button_unchecked'}</span><div><b>Todas las unidades validadas</b><small>${r.validado} de ${r.esperadas}${r.omitida ? ` · ${r.omitida} sin envío (no cuentan)` : ''}${listo ? '' : ` — faltan ${r.esperadas - r.validado}`}</small></div>${listo ? '' : '<button type="button" class="btn-secundario btn-mini" id="munIrPendientes">Ir a revisar</button>'}</li>
         <li class="${r.difs === 0 ? 'ok' : 'pend'}"><span class="material-symbols-rounded">${r.difs === 0 ? 'check_circle' : 'error'}</span><div><b>Paloteo y Movimiento coinciden</b><small>${r.difs === 0 ? 'Ninguna unidad con diferencia' : plural(r.difs, 'unidad con diferencia', 'unidades con diferencia')}</small></div></li>
+        <li class="cargando" id="munCheckAbiertas"><span class="material-symbols-rounded">hourglass_top</span><div><b>Movimientos de las unidades guardados</b><small>Comprobando…</small></div></li>
         <li class="cargando" id="munCheckRecibido"><span class="material-symbols-rounded">hourglass_top</span><div><b>Recibido igual a la requisición</b><small>Comparando…</small></div></li>
       </ul>
       <div class="mun-entregar">
@@ -851,6 +852,20 @@
       </div>
       <p class="mun-nota-csv">Abajo, la vista previa: se va llenando con lo que capturan las unidades. El archivo que se descarga tiene el mismo formato que la hoja CSV del Excel oficial.</p>`;
     if (listo && window.SIS06PDashboard) window.SIS06PDashboard.pintarEstadoPublicacion($('munPubEstado'), muni, mes, anio);
+    // Unidades con el Movimiento reabierto en corrección y sin guardar: no se suman al Movimiento del municipio.
+    try {
+      const abiertas = await window.SIS06PConcentradoMunicipal.movimientosAbiertos(muni, mes, anio);
+      const li = $('munCheckAbiertas');
+      if (li) {
+        li.className = abiertas.length ? 'pend' : 'ok';
+        li.innerHTML = `<span class="material-symbols-rounded">${abiertas.length ? 'error' : 'check_circle'}</span><div><b>Movimientos de las unidades guardados</b><small>${abiertas.length
+          ? `${plural(abiertas.length, 'unidad con el Movimiento abierto en corrección', 'unidades con el Movimiento abierto en corrección')}: ${abiertas.map((x) => esc(x.unidad || x.clues)).join(', ')}. No se suman al Movimiento del municipio: ábrelo en cada unidad y pulsa Guardar.`
+          : 'Ninguna unidad tiene el Movimiento abierto en corrección'}</small></div>`;
+      }
+    } catch (err) {
+      const li = $('munCheckAbiertas');
+      if (li) { li.className = 'info'; li.querySelector('small').textContent = 'No se pudo comprobar'; }
+    }
     // Recibido vs requisición: informativo, nunca bloquea.
     try {
       const { data, error } = await estado.db.rpc('sis06p_recibido_vs_requisicion', { p_mes: mes, p_anio: anio, p_municipio: muni });

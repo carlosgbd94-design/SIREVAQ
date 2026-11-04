@@ -36,7 +36,7 @@ async function pintar(page, { estadoMov, mes = 10, discrepancias = [] }) {
     window.__rpcs = [];
     estado.db = {
       from: () => new Proxy({}, { get: (t, p) => (p === 'then' ? (ok) => Promise.resolve({ error: null, data: [] }).then(ok) : (p === 'single' || p === 'maybeSingle') ? async () => ({ data: null, error: null }) : () => estado.db.from()) }),
-      rpc: async (n, a) => { window.__rpcs.push([n, a]); return { data: n === 'biovac_discrepancias_municipio' ? disc : (n === 'sis06p_resumen_seguimiento' ? (window.__seg || [{ municipio: 'QUERETARO', estado: 'ENVIADO' }]) : []), error: null }; }
+      rpc: async (n, a) => { window.__rpcs.push([n, a]); return { data: n === 'biovac_discrepancias_municipio' ? disc : (n === 'sis06p_resumen_seguimiento' ? (window.__seg || [{ municipio: 'QUERETARO', estado: 'ENVIADO' }]) : (n === 'sis06p_seguimiento_biologico' ? (window.__segBio || []) : [])), error: null }; }
     };
     document.getElementById('btnSeccionMovimiento')?.classList.add('activo');
     render();
@@ -79,6 +79,26 @@ test('Detector de discrepancias: avisa lo que no cuadra entre unidades y municip
   await pintar(page, { estadoMov: 'BORRADOR', discrepancias: [] });
   await expect(page.locator('#discrepanciasMunicipio')).toContainText('Aún ninguna unidad ha enviado');
   await expect(page.locator('#discrepanciasMunicipio')).not.toContainText('cuadran en todos los lotes');
+});
+
+test('Alerta: unidades con el Movimiento abierto en corrección no se suman al del municipio (dice cuáles y cuánto falta)', async ({ page }) => {
+  await abrir(page);
+  await page.evaluate(() => {
+    const f = (clues, unidad, est, ap, de, bio) => ({ clues, unidad, movimiento_estado: est, biovac_clave: bio, aplicado: ap, desperdicio: de });
+    window.__segBio = [f('C1', 'UNIDAD CERRADA', 'CERRADO', 42, 58, 'BCG'), f('C2', 'UNIDAD ABIERTA', 'EN_CORRECCION', 6, 4, 'BCG'), f('C2', 'UNIDAD ABIERTA', 'EN_CORRECCION', 1, 0, 'HEPB'), f('C3', 'OTRA ABIERTA', 'EN_CORRECCION', 2, 18, 'BCG')];
+  });
+  await pintar(page, { estadoMov: 'BORRADOR', discrepancias: [] });
+  const aviso = page.locator('#discrepanciasMunicipio [data-aviso="movimientos-abiertos"]');
+  await expect(aviso).toContainText('2 unidades tienen el Movimiento abierto en corrección');
+  await expect(aviso).toContainText('9 aplicadas');                 // 6 + 1 + 2
+  await expect(aviso).toContainText('22 de desperdicio');            // 4 + 0 + 18
+  await expect(aviso).toContainText('UNIDAD ABIERTA');
+  await expect(aviso).not.toContainText('UNIDAD CERRADA');
+  await expect(page.locator('#discrepanciasMunicipio')).not.toContainText('cuadran en todos los lotes');
+  // Sin unidades abiertas no hay alerta
+  await page.evaluate(() => { window.__segBio = []; });
+  await pintar(page, { estadoMov: 'BORRADOR', discrepancias: [] });
+  await expect(page.locator('[data-aviso="movimientos-abiertos"]')).toHaveCount(0);
 });
 
 test('Desde octubre el municipio NO precarga su requisición (le llega por las unidades); antes de octubre sí se ofrece', async ({ page }) => {

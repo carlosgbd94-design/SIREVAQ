@@ -790,6 +790,10 @@ function sincronizarDockMovimiento() {
   const hdrG = document.getElementById('btnGuardarCabecera');
   const hdrX = document.getElementById('btnExportarExcel');
   const hayMov = Boolean(estado.movimiento);
+  // Un Movimiento cerrado o en corrección (del propio mes, no el jurisdiccional) usa SOLO el botón de corrección
+  // («Reabrir y corregir» → «Guardar»): un segundo «Guardar» aparte dejaba la corrección abierta sin aplicar.
+  const mc = estado.movimiento;
+  const enCorreccion = Boolean(mc && mc.id && (mc.estado === 'CERRADO' || mc.estado === 'EN_CORRECCION'));
   if (g) {
     g.style.display = (hayMov && !enCorreccion) ? 'inline-flex' : 'none';
     g.disabled = Boolean(hdrG && hdrG.disabled);
@@ -3238,16 +3242,20 @@ async function pintarDiscrepanciasMunicipio(contenedor, municipio, mes, anio) {
   if (!contenedor) return;
   contenedor.innerHTML = '<p class="disc-carga">Revisando unidades contra el municipio…</p>';
   try {
-    const [{ data, error }, seg] = await Promise.all([
+    const C = window.SIS06PConcentradoMunicipal;
+    const [{ data, error }, seg, abiertas] = await Promise.all([
       estado.db.rpc('biovac_discrepancias_municipio', { p_municipio: municipio, p_mes: mes, p_anio: anio }),
-      estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio }).then((r) => r, () => ({ data: null }))
+      estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio }).then((r) => r, () => ({ data: null })),
+      (C && C.movimientosAbiertos ? C.movimientosAbiertos(municipio, mes, anio) : Promise.resolve([])).catch(() => [])
     ]);
     if (error) throw error;
     const hayEnvios = !seg || !Array.isArray(seg.data) || seg.data.some((f) => f.municipio === municipio && (f.estado === 'ENVIADO' || f.estado === 'VALIDADO'));
     if (!document.body.contains(contenedor)) return;
-    contenedor.innerHTML = (!hayEnvios && !(data || []).length)
-      ? '<p class="disc-carga"><span class="material-symbols-rounded" aria-hidden="true">hourglass_top</span> Aún ninguna unidad ha enviado: la revisión empieza cuando lleguen los primeros envíos.</p>'
-      : htmlDiscrepancias(data || []);
+    // Unidades con el Movimiento reabierto sin guardar: no se suman al del municipio (alerta arriba de todo)
+    const alertaAbiertas = C && C.htmlMovimientosAbiertos ? C.htmlMovimientosAbiertos(abiertas) : '';
+    contenedor.innerHTML = alertaAbiertas + ((alertaAbiertas && !(data || []).length) ? '' : (!hayEnvios && !(data || []).length)
+      ?'<p class="disc-carga"><span class="material-symbols-rounded" aria-hidden="true">hourglass_top</span> Aún ninguna unidad ha enviado: la revisión empieza cuando lleguen los primeros envíos.</p>'
+      : htmlDiscrepancias(data || []));
   } catch (err) {
     if (document.body.contains(contenedor)) contenedor.innerHTML = '';
   }
@@ -3704,7 +3712,7 @@ async function pasarNormalAArf(renglonId, panel) {
 // Cabecera, cierre y corrección
 // ---------------------------------------------------------------------------
 
-async function guardarCabecera() {
+async function guardarCabecera(silencioso) {
   const usuario = usuarioActual();
   if (!usuario) return;
   // UNIDAD: el responsable es el del encabezado (uno solo para todo el
@@ -3726,14 +3734,14 @@ async function guardarCabecera() {
     if (error) { toast('Error: ' + error.message, 'error'); return; }
     estado.movimiento.responsable_elaboracion = responsable;
     estado.movimiento.fecha_corte = fechaCorte;
-    toast('Datos guardados.', 'ok');
+    if (!silencioso) toast('Datos guardados.', 'ok');
     return;
   }
 
   const { error } = await estado.db.from('biovac_movimientos')
     .update({ responsable_elaboracion: responsable, fecha_corte: fechaCorte }).eq('id', estado.movimiento.id);
   if (error) { toast('Error: ' + error.message, 'error'); return; }
-  toast('Datos guardados.', 'ok');
+  if (!silencioso) toast('Datos guardados.', 'ok');
 }
 
 async function cerrarMes() {
