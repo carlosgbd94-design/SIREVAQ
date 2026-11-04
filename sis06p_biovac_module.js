@@ -2771,12 +2771,12 @@
       cta.classList.toggle('bloqueada', bloqueada);
       document.getElementById('infCtaTitulo').textContent = bloqueada
         ? 'Influenza de este mes está congelada'
-        : (n === 0 ? 'Todavía no hay semanas reportadas' : '¿Algo no cuadra con tus semanas?');
+        : (n === 0 ? 'Todavía no hay semanas reportadas' : '¿Te faltó una semana o algo no cuadra?');
       document.getElementById('infCtaTexto').textContent = bloqueada
         ? 'Ya enviaste el SINBA-SIS, así que el corte no cambia desde la unidad. Si hay que corregirlo, pídelo al municipal.'
         : (n === 0
-          ? 'Aquí aparece cada semana que reportes en tu panel de Influenza. Si te faltó una semana de este mes, agrégala con el botón: así queda en el mes correcto.'
-          : `Leemos ${n} reporte${n === 1 ? '' : 's'} semanal${n === 1 ? '' : 'es'} de ${mesNombre(mes)} y se actualizan solos. Con el botón puedes cambiar sus dosis o agregar la semana que falte, solo de este mes y sin salir del SIS; se sincroniza con tu panel de Influenza y se valida contra tu meta.`);
+          ? 'Aquí aparece cada semana que reportes en tu panel de Influenza. Si te faltó una de este mes, agrégala con el botón y queda en el mes correcto.'
+          : `Hay ${n} reporte${n === 1 ? '' : 's'} semanal${n === 1 ? '' : 'es'} de ${mesNombre(mes)}. Cambia sus dosis o agrega la semana que falte, solo de este mes: se sincroniza con tu panel de Influenza y se valida contra tu meta.`);
       if (btnEditar) {
         btnEditar.disabled = bloqueada;
         btnEditar.title = bloqueada
@@ -2789,7 +2789,7 @@
     if (subInf) {
       subInf.textContent = esRolRevisor()
         ? 'Dosis de antiinfluenza del mes por semana, leídas de Meta-Logro. Con el SIS enviado, tú puedes corregirlas.'
-        : 'Dosis de antiinfluenza del mes por semana, las mismas de tu panel de Influenza. Para cambiarlas o agregar una semana que falte usa el botón de abajo.';
+        : 'Dosis de antiinfluenza del mes por semana, las mismas de tu panel de Influenza.';
     }
     const btnCovid = document.getElementById('btnEditarCovid');
     if (btnCovid) btnCovid.style.display = 'none';
@@ -3615,13 +3615,33 @@
           <button type="button" class="btn-mini btn-secundario" id="edInfAgregar"><span class="material-symbols-rounded">add</span> Agregar semana</button>
         </div>` : '';
     return `${agregar}
-      <div style="overflow:auto; max-height:56vh;">
+      <div style="overflow-x:auto;">
         <table class="detalle-tabla" style="min-width:340px;">
           <thead><tr><th style="text-align:left;">Variable</th><th>Clave</th>${encabezado}</tr></thead>
           <tbody>${filas}</tbody>
         </table>
       </div>
       <p style="font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0;">Se marcan en ámbar las casillas que cambiaste. Guarda para que el cambio llegue al servidor.${esUnidadSesion() ? ' Si te pasas de tu meta o de tus frascos, el servidor te lo dirá y no guardará esa semana.' : ' La unidad verá cada corrección en su panel de cambios.'}</p>`;
+  }
+
+  // Error del servidor dentro del propio editor (el toast tapaba los botones). El servidor habla de «r12»: se traduce al grupo y edad.
+  function mostrarErrorEditor(msg) {
+    const cuerpo = document.getElementById('detalleSISCuerpo');
+    if (!cuerpo) { toast(msg, 'error'); return; }
+    const texto = String(msg).replace(/\brubro (r\d{1,2})\b/g, (m, id) => {
+      const f = INFLUENZA_FILAS.find((x) => x.id === id);
+      return f ? 'rubro «' + f.grupo + ' · ' + f.edad + '»' : m;
+    });
+    let box = document.getElementById('edError');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'edError';
+      box.setAttribute('role', 'alert');
+      box.style.cssText = 'margin:0 0 12px; padding:10px 12px; border-radius:10px; background:#fef2f2; border:1px solid #fca5a5; color:#991b1b; font-size:12.5px; font-weight:700; line-height:1.45;';
+      cuerpo.insertBefore(box, cuerpo.firstChild);
+    }
+    box.textContent = texto;
+    box.scrollIntoView({ block: 'nearest' });
   }
 
   function pintarEditorInfluenza() {
@@ -3653,7 +3673,7 @@
       }))
     };
     abrirDetalleSIS({
-      titulo: 'Corregir Influenza · ' + mesNombre(mes) + ' ' + anio,
+      titulo: (esUnidadSesion() ? 'Semanas de Influenza · ' : 'Corregir Influenza · ') + mesNombre(mes) + ' ' + anio,
       subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + ' · se sincroniza con tu panel de Influenza',
       cuerpo: editorInfluenzaHtml(),
       acciones: [{ texto: 'Guardar cambios', icono: 'save', clase: 'btn-primario', onClick: guardarEditorInfluenza }]
@@ -3715,7 +3735,8 @@
       document.dispatchEvent(new CustomEvent('sis06p:corregido', { detail: { clues, mes, anio, origen: 'influenza' } }));
     } catch (err) {
       console.error('[SINBA-SIS] Error al guardar Influenza:', err);
-      toast(esErrorDeRedSIS(err) ? 'Sin conexión: no se guardó. Lo que escribiste sigue en el editor; vuelve a tocar Guardar cuando regrese el internet.' : 'No se guardó Influenza: ' + (err.message || err), 'error');
+      if (esErrorDeRedSIS(err)) toast('Sin conexión: no se guardó. Lo que escribiste sigue en el editor; vuelve a tocar Guardar cuando regrese el internet.', 'error');
+      else mostrarErrorEditor('No se guardó Influenza: ' + (err.message || err));
     } finally {
       ocultarCargando();
     }
@@ -3788,7 +3809,7 @@
         </div>` : '';
     const vacio = semanas.length ? '' : '<p style="font-size:12.5px; color:var(--muted); margin:0 0 10px;">Esta unidad no tiene reportes de COVID-19 en este mes.</p>';
     return `${agregar}${vacio}
-      <div style="overflow:auto; max-height:56vh;">
+      <div style="overflow-x:auto;">
         <table class="detalle-tabla" style="min-width:340px;">
           <thead><tr><th style="text-align:left;">Marca</th><th>Clave SIS</th>${encabezado}</tr></thead>
           <tbody>${filas}</tbody>
@@ -3828,7 +3849,7 @@
       }))
     };
     abrirDetalleSIS({
-      titulo: 'Corregir COVID-19 · ' + mesNombre(mes) + ' ' + anio,
+      titulo: (esUnidadSesion() ? 'Semanas de COVID-19 · ' : 'Corregir COVID-19 · ') + mesNombre(mes) + ' ' + anio,
       subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + ' · Moderna y Pfizer por separado',
       cuerpo: editorCovidHtml(),
       acciones: [{ texto: 'Guardar cambios', icono: 'save', clase: 'btn-primario', onClick: guardarEditorCovid }]
@@ -3895,7 +3916,8 @@
       document.dispatchEvent(new CustomEvent('sis06p:corregido', { detail: { clues, mes, anio, origen: 'covid' } }));
     } catch (err) {
       console.error('[SINBA-SIS] Error al guardar COVID-19:', err);
-      toast(esErrorDeRedSIS(err) ? 'Sin conexión: no se guardó. Lo que escribiste sigue en el editor; vuelve a tocar Guardar cuando regrese el internet.' : 'No se guardó COVID-19: ' + (err.message || err), 'error');
+      if (esErrorDeRedSIS(err)) toast('Sin conexión: no se guardó. Lo que escribiste sigue en el editor; vuelve a tocar Guardar cuando regrese el internet.', 'error');
+      else mostrarErrorEditor('No se guardó COVID-19: ' + (err.message || err));
     } finally {
       ocultarCargando();
     }

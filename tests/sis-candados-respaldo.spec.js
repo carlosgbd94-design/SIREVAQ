@@ -489,3 +489,35 @@ test('Unidad: con el SIS ya enviado el editor de semanas no abre (queda congelad
   const opciones = await page.locator('#edInfNueva option').evaluateAll((os) => os.map((o) => o.value));
   expect(opciones).toEqual(['2026-11-06']);
 });
+
+test('Unidad: si el servidor rechaza una semana (meta), el error sale dentro del editor con el nombre del rubro y el editor sigue abierto', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-11-03T12:00:00'));
+  await abrir(page, 'UNIDAD');
+  await prepararSIS(page, { rol: 'UNIDAD', estadoCaptura: 'BORRADOR' });
+  await page.evaluate(async () => {
+    const F = window.__FAKE;
+    document.getElementById('selMes').value = '10'; document.getElementById('selAnio').value = '2026';
+    F.tables.sis06p_capturas.length = 0;
+    F.tables.sis06p_capturas.push({ id: 'c1', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes: 10, anio: 2026, estado: 'BORRADOR', valores: {}, ajustes: {} });
+    F.tables.influenza_capturas = [{ id: 'i1', clues: 'QTSSA000001', fecha: '2026-10-23', valores: { r1: 4 }, anio_campana: 'Campaña Influenza 2026-2027', municipio: 'QUERETARO', unidad: 'C.S. Alfa', capturado_por: 'X', sin_movimiento: false }];
+    const real = estado.db;
+    estado.db = new Proxy(real, { get(t, p) {
+      if (p === 'from') return (tabla) => {
+        const api = t.from(tabla);
+        if (tabla === 'influenza_capturas') api.upsert = async () => ({ error: { message: 'El rubro r1 rebasaría la meta de tu unidad: llevas 330 dosis en otras semanas.' } });
+        return api;
+      };
+      return t[p];
+    } });
+    await SIS06PBiovac.init();
+    await SIS06PBiovac.abrirEditorInfluenza();
+  });
+  await expect(page.locator('#detalleSISTitulo')).toContainText('Semanas de Influenza');
+  await page.locator('.ed-inf-in[data-f="2026-10-23"][data-r="r1"]').fill('99999');
+  await page.locator('#detalleSISPie button', { hasText: 'Guardar cambios' }).click();
+  await expect(page.locator('#edError')).toContainText('rubro «');
+  await expect(page.locator('#edError')).not.toContainText('r1 ');
+  await expect(page.locator('#detalleSISOverlay')).toHaveClass(/abierto/);
+  // una sola barra de desplazamiento: la tabla no tiene altura máxima propia (no es un segundo contenedor con scroll vertical)
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('#detalleSISCuerpo .detalle-tabla').parentElement).maxHeight)).toBe('none');
+});
