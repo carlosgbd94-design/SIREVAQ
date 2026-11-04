@@ -805,14 +805,14 @@ function sincronizarDockMovimiento() {
   if (x) {
     x.style.display = (hayMov && hdrX && hdrX.style.display !== 'none') ? 'inline-flex' : 'none';
     x.disabled = Boolean(hdrX && hdrX.disabled);
-    x.title = 'Exportar el Movimiento a Excel';
+    x.title = 'Exportar el Movimiento: Excel o PDF';
   }
 }
 
 // PDF y Cerrar mes de la hoja Movimiento viven en la barra flotante. Los botones
 // de la cabecera siguen existiendo (ocultos): conservan su lógica y su
 // visibilidad por rol/estado, y estos botones los espejan y los disparan.
-const DOCK_EXTRAS_MOVIMIENTO = [['btnVerPdfDock', 'btnVerPdf'], ['btnCerrarMesDock', 'btnCerrarMes']];
+const DOCK_EXTRAS_MOVIMIENTO = [['btnCerrarMesDock', 'btnCerrarMes']];
 
 // Botón de la barra de abajo para corregir un Movimiento cerrado: «Reabrir y corregir» (cerrado) → «Guardar» (en corrección) →
 // «Guardado» (unos segundos después de guardar) → vuelve a «Reabrir y corregir». Antes vivía arriba, en el aviso de la tabla.
@@ -889,20 +889,27 @@ function abrirMenuExportar(btn) {
     m.id = 'menuExportarSIS';
     m.className = 'menu-exportar';
     m.setAttribute('role', 'menu');
-    m.innerHTML = `
-      <button type="button" role="menuitem" data-exp="excel"><span class="material-symbols-rounded" aria-hidden="true">table_view</span><span>Excel oficial<small>SINBA-SIS completo (las 4 hojas)</small></span></button>
-      <button type="button" role="menuitem" data-exp="pdf"><span class="material-symbols-rounded" aria-hidden="true">picture_as_pdf</span><span>PDF<small>Movimiento de Biológico para imprimir</small></span></button>`;
     document.body.appendChild(m);
     m.addEventListener('click', (ev) => {
       const op = ev.target.closest('[data-exp]');
       if (!op) return;
       cerrarMenuExportar();
-      if (op.dataset.exp === 'excel') { if (window.SIS06PBiovac) window.SIS06PBiovac.exportarSISOficialCompleto(); }
-      else { const h = document.getElementById('btnVerPdf'); if (h) h.click(); }
+      if (op.dataset.exp === 'excel') {
+        // La unidad exporta su SINBA-SIS completo; el revisor, en la hoja Movimiento, el Excel del Movimiento que tiene a la vista
+        if (estado.perfil && estado.perfil.rol === 'UNIDAD') { if (window.SIS06PBiovac) window.SIS06PBiovac.exportarSISOficialCompleto(); }
+        else exportarExcel();
+      } else { const h = document.getElementById('btnVerPdf'); if (h) h.click(); }
     });
     document.addEventListener('click', (ev) => { if (!ev.target.closest('#menuExportarSIS, #btnExportarSISCompleto')) cerrarMenuExportar(); });
     document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { cerrarMenuExportar(); const b = document.getElementById('btnExportarSISCompleto'); if (b) b.focus(); } });
   }
+  // Opciones según quién exporta: la unidad, su SINBA-SIS completo; el revisor en Movimiento, ese Movimiento. El PDF va aquí dentro.
+  const esU = Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD');
+  const hPdf = document.getElementById('btnVerPdf');
+  const hayPdf = esU || Boolean(hPdf && hPdf.style.display !== 'none' && !hPdf.disabled);
+  m.innerHTML = `
+      <button type="button" role="menuitem" data-exp="excel"><span class="material-symbols-rounded" aria-hidden="true">table_view</span><span>Excel${esU ? ' oficial' : ''}<small>${esU ? 'SINBA-SIS completo (las 4 hojas)' : 'Movimiento de Biológico de esta unidad'}</small></span></button>
+      ${hayPdf ? '<button type="button" role="menuitem" data-exp="pdf"><span class="material-symbols-rounded" aria-hidden="true">picture_as_pdf</span><span>PDF<small>Movimiento de Biológico para imprimir</small></span></button>' : ''}`;
   const r = btn.getBoundingClientRect();
   m.classList.add('abierto');
   const alto = m.offsetHeight;
@@ -913,7 +920,9 @@ function abrirMenuExportar(btn) {
 }
 document.addEventListener('click', (ev) => {
   const btn = ev.target && ev.target.closest ? ev.target.closest('#btnExportarSISCompleto') : null;
-  if (!btn || btn.disabled || !estado.perfil || estado.perfil.rol !== 'UNIDAD') return;
+  if (!btn || btn.disabled || !estado.perfil) return;
+  // Unidad: siempre el menú. Revisor: solo en la hoja Movimiento (en las demás hojas Exportar sigue sacando el SINBA-SIS oficial)
+  if (estado.perfil.rol !== 'UNIDAD' && !dockEnModoMovimiento()) return;
   ev.stopImmediatePropagation();
   ev.preventDefault();
   const m = document.getElementById('menuExportarSIS');

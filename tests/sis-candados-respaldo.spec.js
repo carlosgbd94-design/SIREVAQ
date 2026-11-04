@@ -221,7 +221,7 @@ test('Historial: lista los meses con su estatus, es solo consulta y "Ver" abre e
   await abrir(page, 'MUNICIPAL');
   await prepararSIS(page, {
     rol: 'UNIDAD', estadoCaptura: 'ENVIADO',
-    extras: [{ mes: 3, anio: 2026, estado: 'VALIDADO', validado_por: 'Ana', validado_en: '2026-04-02T10:00:00Z', enviado_en: '2026-04-01T10:00:00Z' }]
+    extras: [{ mes: 3, anio: 2026, estado: 'VALIDADO', validado_por: 'Ana', validado_en: '2026-04-02T10:00:00Z', liberado_en: '2026-04-02T10:00:00Z', enviado_en: '2026-04-01T10:00:00Z' }]
   });
   await page.evaluate(async () => { await SIS06PBiovac.init(); await SIS06PBiovac.abrirHistorial(); });
   const filas = page.locator('#detalleSISCuerpo tbody tr');

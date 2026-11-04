@@ -1020,6 +1020,13 @@
   // mes y ESTA unidad. Vive fuera de render() para poder llamarse sola: el revisor que cambia de unidad estando en otra
   // hoja (p. ej. Movimiento) no repinta el paloteo, pero la barra tiene que seguir a la unidad nueva; si no, Validar se
   // quedaba con el estado de la unidad anterior (faltaba en una por validar, o aparecía en una ya validada).
+  // El Excel/PDF/impresión de la UNIDAD se libera cuando el municipio CIERRA el mes (liberado_en), no al validar: si después el
+  // concentrado municipal no cuadra y hay que reabrir el SIS, la unidad no pudo haberlo impreso todavía. Los revisores ven su
+  // vista previa desde que está validado.
+  function sisLiberada(cap) {
+    return Boolean(cap && cap.estado === 'VALIDADO' && (!esUnidadSesion() || cap.liberado_en));
+  }
+
   function sincronizarBotonesAccion() {
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
@@ -1038,18 +1045,18 @@
     // El Excel oficial es el documento final: se habilita cuando ESTE concentrado quedó VALIDADO (hasta entonces aún se corrige).
     const btnExportar = document.getElementById('btnExportarSISCompleto');
     if (btnExportar) {
-      const puedeExportar = estadoActual === 'VALIDADO';
+      const puedeExportar = sisLiberada(currentReport);
       btnExportar.disabled = !puedeExportar;
       btnExportar.title = puedeExportar
         ? 'Exportar el SINBA-SIS: Excel oficial (las 4 hojas) o PDF del Movimiento'
-        : 'Disponible hasta que el municipal valide el SINBA-SIS de este mes';
+        : (estadoActual === 'VALIDADO' ? 'Se habilita cuando tu municipio cierre el mes' : 'Disponible hasta que el municipal valide el SINBA-SIS de este mes');
     }
 
     if (esUnidad) {
       if (btnGuardar) btnGuardar.style.display = (estadoActual === 'BORRADOR' && !fueraDeVentana) ? 'inline-flex' : 'none';
       if (btnEnviar) btnEnviar.style.display = estadoActual === 'BORRADOR' ? 'inline-flex' : 'none';
       if (btnValidar) btnValidar.style.display = 'none';
-      if (btnImprimir) btnImprimir.style.display = estadoActual === 'VALIDADO' ? 'inline-flex' : 'none';
+      if (btnImprimir) btnImprimir.style.display = sisLiberada(currentReport) ? 'inline-flex' : 'none';
     } else {
       if (btnGuardar) btnGuardar.style.display = (currentReport && estadoActual !== 'BORRADOR') ? 'inline-flex' : 'none';
       if (btnEnviar) btnEnviar.style.display = 'none';
@@ -1640,7 +1647,7 @@
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
     const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
-    if (!currentReport || currentReport.estado !== 'VALIDADO') return;
+    if (!sisLiberada(currentReport)) return;
 
     const destino = document.getElementById('sis06pVistaImprimible');
     if (!destino) return;
@@ -2271,8 +2278,10 @@
     // Misma regla que deshabilita el botón en render() -- se repite aquí
     // porque esta función es la fuente de verdad real (el botón deshabilitado
     // ya debería impedir el clic, pero no hay que confiar solo en eso).
-    if (!captura || captura.estado !== 'VALIDADO') {
-      toast('El concentrado SIS-06-P debe estar Validado por el municipal antes de poder exportarlo.', 'error');
+    if (!sisLiberada(captura)) {
+      toast(captura && captura.estado === 'VALIDADO'
+        ? 'Tu SINBA-SIS ya está validado: podrás exportarlo e imprimirlo cuando tu municipio cierre el mes.'
+        : 'El concentrado SIS-06-P debe estar Validado por el municipal antes de poder exportarlo.', 'error');
       return;
     }
 
@@ -3249,7 +3258,7 @@
       { t: 'Captura', x: hecho1 ? (_sinGuardar ? 'Tienes cambios sin guardar' : 'Guardado en SIS-06-P') : 'Paloteo, Movimiento e Influenza', hecho: hecho1 && !(est === 'BORRADOR' && _sinGuardar) },
       { t: 'Concilia', x: hecho2 ? 'Paloteo = Movimiento' : (hecho1 && difs.length ? (v && !v.dentro_envio && !enviado ? `${difs.length} por cuadrar antes de enviar` : `${difs.length} biológico${difs.length === 1 ? '' : 's'} no coincide${difs.length === 1 ? '' : 'n'}`) : 'Las dosis aplicadas deben ser iguales'), hecho: hecho2, alerta: !hecho2 && hecho1 && difs.length > 0 && !(v && !v.dentro_envio && !enviado) },
       { t: 'Envía', x: t3, hecho: enviado },
-      { t: 'Validación', x: hecho4 ? `Validado${captura && captura.validado_en ? ' el ' + fechaMesCorta(captura.validado_en) : ''}` : (enviado ? 'Esperando al municipal' : 'El municipal revisa y valida'), hecho: hecho4 }
+      { t: 'Validación', x: hecho4 ? `Validado${captura && captura.validado_en ? ' el ' + fechaMesCorta(captura.validado_en) : ''}${captura && !captura.liberado_en ? ' · el archivo se libera al cerrar el mes' : ''}` : (enviado ? 'Esperando al municipal' : 'El municipal revisa y valida'), hecho: hecho4 }
     ];
     const actual = pasos.findIndex((p) => !p.hecho);
     cont.innerHTML = `
@@ -3561,7 +3570,7 @@
     const { est, filas, difs, v } = estadoRuta();
     const esU = esUnidadSesion();
     let detalle = '';
-    if (est === 'VALIDADO') detalle = esU ? 'Ya puedes exportar el Excel oficial e imprimir' : `Validado${captura && captura.validado_por ? ' por ' + captura.validado_por : ''}${captura && captura.validado_en ? ' el ' + fechaMesCorta(captura.validado_en) : ''} — la unidad ya fue avisada`;
+    if (est === 'VALIDADO') detalle = esU ? (captura && captura.liberado_en ? 'Ya puedes exportar el Excel oficial e imprimir' : 'Validado por tu municipal: podrás exportar e imprimir cuando el municipio cierre el mes') : `Validado${captura && captura.validado_por ? ' por ' + captura.validado_por : ''}${captura && captura.validado_en ? ' el ' + fechaMesCorta(captura.validado_en) : ''} — la unidad ya fue avisada`;
     else if (est === 'ENVIADO') detalle = esU ? 'Esperando al municipal' : (hayDifRevisor() ? 'No se puede validar: paloteo y Movimiento no coinciden' : 'Cuadra con el Movimiento — pulsa Validar para aprobarlo');
     else if (!esU) detalle = 'La unidad aún no lo envía: no hay nada que validar';
     else if (_sinGuardar) detalle = 'Cambios sin guardar';
@@ -4381,7 +4390,7 @@
             <td>${f.estado === 'VALIDADO' ? fecha(f.validado_en) + (f.validado_por ? '<br><span style="color:var(--muted); font-size:11px;">' + _esc(f.validado_por) + '</span>' : '') : '—'}</td>
             <td style="text-align:right;"><div style="display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
               <button type="button" class="btn-mini btn-secundario" data-hist-ver="${f.mes}|${f.anio}"><span class="material-symbols-rounded">visibility</span> Ver</button>
-              ${f.estado === 'VALIDADO' ? `<button type="button" class="btn-mini btn-secundario" data-hist-excel="${f.mes}|${f.anio}"><span class="material-symbols-rounded">download</span> Excel</button>` : ''}
+              ${sisLiberada(f) ? `<button type="button" class="btn-mini btn-secundario" data-hist-excel="${f.mes}|${f.anio}"><span class="material-symbols-rounded">download</span> Excel</button>` : ''}
             </div></td></tr>`).join('')}</tbody></table></div>`
       : '<p style="color:var(--muted); font-size:13px;">Todavía no hay meses guardados para esta unidad.</p>';
     abrirDetalleSIS({

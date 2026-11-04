@@ -2,8 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.0"
 import nodemailer from "npm:nodemailer@6.9.13"
 
-// Correo a la unidad cuando su SINBA-SIS queda VALIDADO.
-// Lo pide la base (sis06p_marcar_validado -> _sis06p_avisar_validacion -> pg_net) con
+// Correo a la unidad cuando su SINBA-SIS queda VALIDADO *y liberado*: el municipio ya cerró el mes (antes se mandaba al
+// validar y la unidad podía imprimir algo que luego había que reabrir).
+// Lo pide la base (_sis06p_liberar_captura -> _sis06p_avisar_validacion -> pg_net) con
 // { notificacion_id, captura_id }. Manda UN correo a cada persona activa de esa CLUES y marca
 // notificaciones.email_digest_ts para no repetirlo si la petición llegara dos veces.
 // Payload opcional { dry_run: true } -> solo dice a quién se enviaría.
@@ -69,19 +70,19 @@ serve(async (req) => {
     let enviados = 0
     for (const d of destinos as any[]) {
       const html = `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#1f2937">
-        <h2 style="color:#15803d;margin:0 0 8px">Tu SINBA-SIS de ${esc(periodo)} fue validado</h2>
-        <p>Hola${d.nombre ? ' ' + esc(d.nombre) : ''}: el municipal revisó y validó el SINBA-SIS de <b>${esc(d.unidad || cap.clues)}</b> (${esc(cap.clues)}) correspondiente a <b>${esc(periodo)}</b>.</p>
+        <h2 style="color:#15803d;margin:0 0 8px">Tu SINBA-SIS de ${esc(periodo)} ya es definitivo</h2>
+        <p>Hola${d.nombre ? ' ' + esc(d.nombre) : ''}: el municipal revisó y validó el SINBA-SIS de <b>${esc(d.unidad || cap.clues)}</b> (${esc(cap.clues)}) correspondiente a <b>${esc(periodo)}</b>, y el municipio ya cerró el mes.</p>
         <ul style="line-height:1.6">
           <li>Ya <b>no se puede editar</b> ese mes.</li>
           <li>Entra a SIREVAQ → SINBA-SIS para <b>exportar el Excel oficial</b> (las 4 hojas) y el PDF del Movimiento, o imprimirlo.</li>
-          <li>Si el municipal corrigió algún dato, verás cada cambio en «Cambios del municipal» para aceptarlo.</li>
+          <li>Si el municipal ajustó algún dato al revisar, ya quedó como la cifra definitiva (no tienes que aceptar nada).</li>
         </ul>
         ${cap.excepcion_conciliacion ? `<p style="background:#fef3c7;padding:8px 12px;border-radius:8px"><b>Se validó con una excepción de conciliación:</b> ${esc(cap.excepcion_conciliacion)}</p>` : ''}
         <p style="color:#6b7280;font-size:13px">Validado por ${esc(cap.validado_por || 'el municipal')}.</p>
         <p><a href="${esc(platformUrl)}" style="background:#15803d;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:bold">Abrir SIREVAQ</a></p>
       </div>`
       try {
-        await transporter.sendMail({ from: gmailUser, to: d.email, subject: `SINBA-SIS de ${periodo} validado — ${d.unidad || cap.clues}`, html })
+        await transporter.sendMail({ from: gmailUser, to: d.email, subject: `SINBA-SIS de ${periodo} definitivo — ${d.unidad || cap.clues}`, html })
         enviados++
       } catch (err) { console.error(`Error enviando validación a ${d.email}:`, err) }
     }

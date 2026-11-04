@@ -19,14 +19,14 @@ async function abrir(page, rol) {
 
 test.use({ viewport: { width: 1400, height: 1000 } });
 
-async function prepararUnidad(page, estadoSis) {
-  await page.evaluate(async (estadoSis) => {
+async function prepararUnidad(page, estadoSis, retenido) {
+  await page.evaluate(async ([estadoSis, retenido]) => {
     const F = window.__FAKE;
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
     estado.perfil = { id: 'u1', rol: 'UNIDAD', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', usuario: 'prueba' };
     F.tables.sis06p_capturas.length = 0;
-    F.tables.sis06p_capturas.push({ id: 'c1', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes, anio, estado: estadoSis, valores: {}, ajustes: {}, capturado_por: 'MARIA LOPEZ RUIZ', sin_movimiento: true });
+    F.tables.sis06p_capturas.push({ id: 'c1', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes, anio, estado: estadoSis, liberado_en: (estadoSis === 'VALIDADO' && !retenido) ? '2026-11-02T00:00:00Z' : null, valores: {}, ajustes: {}, capturado_por: 'MARIA LOPEZ RUIZ', sin_movimiento: true });
     const real = estado.db;
     estado.db = new Proxy(real, { get(t, p) {
       if (p === 'rpc') return async (n, a) => {
@@ -38,7 +38,7 @@ async function prepararUnidad(page, estadoSis) {
     } });
     document.getElementById('panelSIS06P').style.display = 'block';
     await SIS06PBiovac.init();
-  }, estadoSis);
+  }, [estadoSis, retenido]);
 }
 
 test('Unidad: «Exportar» bloqueado hasta que el municipal valide', async ({ page }) => {
@@ -47,6 +47,19 @@ test('Unidad: «Exportar» bloqueado hasta que el municipal valide', async ({ pa
   await expect(page.locator('#btnExportarSISCompleto')).toBeDisabled();
   await page.locator('#btnExportarSISCompleto').click({ force: true });
   await expect(page.locator('#menuExportarSIS.abierto')).toHaveCount(0);
+});
+
+test('Unidad: validado pero el municipio aún no cierra el mes: «Exportar» e «Imprimir» siguen retenidos y se le explica', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await prepararUnidad(page, 'VALIDADO', true);
+  await expect(page.locator('#btnExportarSISCompleto')).toBeDisabled();
+  await expect(page.locator('#btnExportarSISCompleto')).toHaveAttribute('title', /cierre el mes/);
+  await expect(page.locator('#btnImprimirSIS06P')).toBeHidden();
+  await expect(page.locator('#dockEstadoDetalle')).toContainText('cuando el municipio cierre el mes');
+  // al cerrar el municipio el mes (liberado_en) se habilita
+  await prepararUnidad(page, 'VALIDADO', false);
+  await expect(page.locator('#btnExportarSISCompleto')).toBeEnabled();
+  await expect(page.locator('#dockEstadoDetalle')).toContainText('Ya puedes exportar');
 });
 
 test('Unidad: con el SIS validado, «Exportar» abre un menú con Excel o PDF (un solo botón)', async ({ page }) => {

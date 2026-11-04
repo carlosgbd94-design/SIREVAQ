@@ -49,8 +49,8 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.121"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.98"></script>
+<script defer src="biovac_ui.js?v=2026.122"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.99"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.29"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.10"></script>
@@ -1354,11 +1354,10 @@ window.onunhandledrejection = function (event) {
     <button type="button" class="dock-btn dock-validar" id="btnMarcarValidado" style="display:none;" title="Marcar como Validado"><span class="material-symbols-rounded">verified</span><span class="dock-etiqueta">Validar</span></button>
     <button type="button" class="dock-btn dock-enviar" id="btnEnviarSIS06P" aria-label="Enviar el SINBA-SIS para validación" style="display:none;" title="Enviar el SINBA-SIS para validación"><span class="material-symbols-rounded">send</span><span class="dock-etiqueta">Enviar</span></button>
     <button type="button" class="dock-btn dock-guardar en-reposo" id="btnGuardarSIS06P" title="Guardar concentrado SIS-06-P"><span class="material-symbols-rounded" id="iconoGuardarSIS">check</span><span class="dock-etiqueta" id="etiquetaGuardarSIS">Guardado</span></button>
-    <button type="button" class="dock-btn" id="btnExportarSISCompleto" title="Exportar el Excel oficial del SINBA-SIS (SIS-06-P, Movimiento de Biológico, SIS-SS-CE-H e Influenza)"><span class="material-symbols-rounded">download</span><span class="dock-etiqueta">Exportar</span></button>
-    <!-- Solo en la hoja Movimiento: espejan (y disparan) los botones ocultos de la cabecera
-         btnVerPdf / btnCerrarMes, que conservan su lógica y su estado. Ver sincronizarDockMovimientoExtras. -->
-    <button type="button" class="dock-btn" id="btnVerPdfDock" style="display:none;" title="Ver / exportar PDF del Movimiento"><span class="material-symbols-rounded">picture_as_pdf</span><span class="dock-etiqueta">PDF</span></button>
     <button type="button" class="dock-btn dock-guardar" id="btnCorreccionDock" style="display:none;" title="Reabrir este Movimiento para corregirlo"><span class="material-symbols-rounded" id="iconoCorreccionDock" aria-hidden="true">edit_note</span><span class="dock-etiqueta" id="etiquetaCorreccionDock">Reabrir y corregir</span></button>
+    <button type="button" class="dock-btn" id="btnExportarSISCompleto" title="Exportar el Excel oficial del SINBA-SIS (SIS-06-P, Movimiento de Biológico, SIS-SS-CE-H e Influenza)"><span class="material-symbols-rounded">download</span><span class="dock-etiqueta">Exportar</span></button>
+    <!-- Solo en la hoja Movimiento: espejan (y disparan) el botón oculto de la cabecera btnCerrarMes, que conserva su
+         lógica y su estado. El PDF va dentro de «Exportar». Ver sincronizarDockMovimientoExtras. -->
     <button type="button" class="dock-btn dock-enviar" id="btnCerrarMesDock" aria-label="Cerrar mes" style="display:none;" title="Cerrar el Movimiento del mes (no envía ni valida el SINBA-SIS): bloquea la edición directa y pasa la existencia al mes siguiente. Se puede reabrir con «Corregir movimiento»."><span class="material-symbols-rounded">lock</span><span class="dock-etiqueta">Cerrar mes</span></button>
   </div>
 </nav>

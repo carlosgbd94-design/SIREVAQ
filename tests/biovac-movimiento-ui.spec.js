@@ -164,6 +164,25 @@ test('Municipal: un movimiento cerrado ofrece "Corregir movimiento"; en correcci
   await expect(page.locator('.banner-mov')).toHaveCount(0);
 });
 
+test('Barra del Movimiento (revisor): Guardar junto a Validar, sin botón PDF aparte y el PDF dentro de «Exportar»', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'EN_CORRECCION' });
+  await page.evaluate(() => { const b = document.getElementById('btnVerPdf'); b.style.display = 'inline-flex'; b.disabled = false; sincronizarDockMovimientoExtras(); });
+  await expect(page.locator('#btnVerPdfDock')).toHaveCount(0);
+  const orden = await page.evaluate(() => [...document.querySelectorAll('.dock-acciones .dock-btn')]
+    .filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id));
+  expect(orden.indexOf('btnCorreccionDock')).toBeGreaterThan(-1);
+  expect(orden.indexOf('btnCorreccionDock')).toBeLessThan(orden.indexOf('btnExportarSISCompleto'));   // Guardar antes que Exportar
+  expect(orden).not.toContain('btnGuardarSIS06P');                                                      // y nunca dos «Guardar»
+  await page.evaluate(() => { window.__llamadas = []; document.getElementById('btnVerPdf').addEventListener('click', () => window.__llamadas.push('pdf')); });
+  await page.locator('#btnExportarSISCompleto').click();
+  const menu = page.locator('#menuExportarSIS.abierto');
+  await expect(menu.locator('[data-exp]')).toHaveCount(2);
+  await expect(menu).toContainText('Movimiento de Biológico de esta unidad');
+  await menu.locator('[data-exp="pdf"]').click();
+  expect(await page.evaluate(() => window.__llamadas)).toEqual(['pdf']);
+});
+
 test('Corrección jurisdiccional: la existencia anterior no se edita (el servidor solo admite campos de movimiento)', async ({ page }) => {
   await abrir(page, 'JURISDICCIONAL');
   await pintar(page, { rol: 'JURISDICCIONAL', estadoMov: 'EN_CORRECCION', jurisdiccional: true });
