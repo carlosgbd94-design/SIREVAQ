@@ -2776,7 +2776,7 @@
         ? 'Ya enviaste el SINBA-SIS, así que el corte no cambia desde la unidad. Si hay que corregirlo, pídelo al municipal.'
         : (n === 0
           ? 'Aquí aparece cada semana que reportes en tu panel de Influenza. Si te faltó una semana de este mes, agrégala con el botón: así queda en el mes correcto.'
-          : `Leemos ${n} reporte${n === 1 ? '' : 's'} semanal${n === 1 ? '' : 'es'} de ${mesNombre(mes)} y se actualizan solos. Edítalas o agrega la que falte con el botón de abajo; se sincronizan con tu panel de Influenza y se validan contra tu meta; puedes cambiar sus dosis o agregar una semana que falte, solo de este mes, sin salir del SIS.`);
+          : `Leemos ${n} reporte${n === 1 ? '' : 's'} semanal${n === 1 ? '' : 'es'} de ${mesNombre(mes)} y se actualizan solos. Con el botón puedes cambiar sus dosis o agregar la semana que falte, solo de este mes y sin salir del SIS; se sincroniza con tu panel de Influenza y se valida contra tu meta.`);
       if (btnEditar) {
         btnEditar.disabled = bloqueada;
         btnEditar.title = bloqueada
@@ -3546,6 +3546,16 @@
 
   // Semanas que pertenecen al mes estadístico: los viernes del mes y, si el mes termina de lunes a jueves, ese último
   // día (reporte de corte). La unidad solo ve las que ya abrieron (abren el lunes de su semana); el servidor lo exige igual.
+  let _campanasEd = null;   // campañas de Influenza ([{ini, fin}]); las semanas fuera de ellas no se pueden reportar
+  async function cargarCampanasEditor() {
+    try {
+      const { data, error } = await estado.db.from('campanas').select('nombre, fecha_inicio, fecha_fin');
+      if (error) throw error;
+      _campanasEd = (data || []).filter((c) => c.nombre && c.nombre.indexOf('Campaña Influenza') === 0 && c.fecha_inicio && c.fecha_fin)
+        .map((c) => ({ ini: String(c.fecha_inicio).slice(0, 10), fin: String(c.fecha_fin).slice(0, 10) }));
+    } catch (_) { _campanasEd = null; }   // sin campañas conocidas no se filtra: el servidor igual lo valida al guardar
+  }
+
   function viernesDelMes(mes, anio) {
     const out = [];
     const dias = new Date(anio, mes, 0).getDate();
@@ -3556,9 +3566,10 @@
     const dowFin = new Date(anio, mes - 1, dias).getDay();
     if (dowFin >= 1 && dowFin <= 4) out.push(iso(dias));
     out.sort();
-    if (!esUnidadSesion()) return out;
+    const enCampana = (f) => !_campanasEd || !_campanasEd.length || _campanasEd.some((c) => f >= c.ini && f <= c.fin);
+    if (!esUnidadSesion()) return out.filter(enCampana);
     const hoy = fechaHoyIso();
-    return out.filter((f) => {
+    return out.filter(enCampana).filter((f) => {
       const d = new Date(f + 'T12:00:00');
       d.setDate(d.getDate() - ((d.getDay() + 6) % 7));     // lunes de esa semana
       return (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')) <= hoy;
@@ -3628,6 +3639,7 @@
     if (sinPermiso) { toast(sinPermiso, 'error'); return; }
     try {
       await recargarInfluenzaCache(activa.clues); // siempre se parte de lo que hay en el servidor
+      await cargarCampanasEditor();
     } catch (err) {
       toast(esErrorDeRedSIS(err) ? 'Sin conexión: no se pudo abrir el editor. Intenta de nuevo cuando regrese el internet.' : 'No se pudo leer Influenza: ' + err.message, 'error');
       return;
@@ -3803,6 +3815,7 @@
     if (sinPermiso) { toast(sinPermiso, 'error'); return; }
     try {
       await recargarCovidCache(activa.clues); // siempre se parte de lo que hay en el servidor
+      await cargarCampanasEditor();
     } catch (err) {
       toast(esErrorDeRedSIS(err) ? 'Sin conexión: no se pudo abrir el editor. Intenta de nuevo cuando regrese el internet.' : 'No se pudo leer COVID-19: ' + err.message, 'error');
       return;

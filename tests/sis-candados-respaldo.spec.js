@@ -424,7 +424,7 @@ test('Unidad: agrega la semana de Influenza que le faltó desde el SIS, solo del
     document.getElementById('selMes').value = '10'; document.getElementById('selAnio').value = '2026';
     F.tables.sis06p_capturas.length = 0;
     F.tables.sis06p_capturas.push({ id: 'c1', clues: 'QTSSA000001', unidad: 'C.S. Alfa', municipio: 'QUERETARO', mes: 10, anio: 2026, estado: 'BORRADOR', valores: {}, ajustes: {} });
-    F.tables.campanas = [{ nombre: 'Campaña Influenza 2026-2027', fecha_inicio: '2026-10-02', fecha_fin: '2027-04-30' }];
+    F.tables.campanas = [{ nombre: 'Campaña Influenza 2026-2027', fecha_inicio: '2026-10-12', fecha_fin: '2027-04-30' }];
     F.tables.influenza_capturas = [{ id: 'i1', clues: 'QTSSA000001', fecha: '2026-10-23', valores: { r1: 4 }, anio_campana: 'Campaña Influenza 2026-2027', municipio: 'QUERETARO', unidad: 'C.S. Alfa', capturado_por: 'X', sin_movimiento: false }];
     window.__upserts = [];
     const real = estado.db;
@@ -448,6 +448,8 @@ test('Unidad: agrega la semana de Influenza que le faltó desde el SIS, solo del
   expect(opciones).toContain('2026-10-30');
   expect(opciones.every((v) => v.startsWith('2026-10-'))).toBe(true);
   expect(opciones).not.toContain('2026-10-23');   // esa ya está reportada
+  expect(opciones).not.toContain('2026-10-02');   // antes de que empiece la campaña no se puede reportar
+  expect(opciones).not.toContain('2026-10-09');
 
   await page.selectOption('#edInfNueva', '2026-10-30');
   await page.locator('#edInfAgregar').click();
