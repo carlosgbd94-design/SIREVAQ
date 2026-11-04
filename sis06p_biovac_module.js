@@ -438,27 +438,30 @@
     return Array.from(grupos.values()).filter((g) => String(g.valor_inicial) !== String(g.valor_nuevo));
   }
 
+  // La unidad NO acepta nada: lo que el municipal acomoda al revisar es lo definitivo (la unidad no está todo el tiempo en su
+  // computadora y un «no acepto» dejaría el mes sin cuadrar). Por eso aquí solo se le INFORMA lo que se cambió, una vez, y al
+  // mostrarlo queda visto de forma automática. El revisor no ve este panel.
+  const _vistasAuto = new Set();
   function renderPanelCambiosPendientes() {
     const panel = document.getElementById('sis06pPanelCambiosPendientes');
     const lista = document.getElementById('sis06pListaCambiosPendientes');
     if (!panel || !lista) return;
 
     const esUnidad = estado.perfil.rol === 'UNIDAD';
-    const netas = correccionesNetasDelMes();
+    const netas = esUnidad ? correccionesNetasDelMes() : [];
     if (netas.length === 0) {
       panel.style.display = 'none';
       return;
     }
     panel.style.display = 'block';
-    // El revisor ve las mismas correcciones, solo para consultar (quien las acepta es la unidad)
     const titulo = panel.querySelector('strong');
     const ayuda = panel.querySelector('p');
     const btnTodos = document.getElementById('btnAceptarTodosCambios');
-    if (titulo) titulo.textContent = esUnidad ? 'El municipal corrigió información — revísala' : `Correcciones tuyas que la unidad aún no acepta (${netas.length})`;
-    if (ayuda) ayuda.textContent = esUnidad ? 'Verifica cada cambio y acéptalo para que quede como definitivo.' : 'Solo consulta: la unidad las ve al abrir su SIS y las acepta una por una. Las cifras que quedaron igual que al inicio no se cuentan.';
-    if (btnTodos) btnTodos.style.display = esUnidad ? '' : 'none';
+    if (titulo) titulo.textContent = 'Tu municipal ajustó información de tu SIS';
+    if (ayuda) ayuda.textContent = 'Solo para que lo sepas: lo que quedó ya es lo definitivo y no tienes que aceptar nada. Las cifras que quedaron igual que al inicio no se cuentan.';
+    if (btnTodos) btnTodos.style.display = 'none';
     lista.innerHTML = netas.map((c) => `
-      <div style="background:#fff; border:1px solid var(--warning-border); border-radius:10px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+      <div style="background:#fff; border:1px solid var(--warning-border); border-radius:10px; padding:8px 12px;">
         <div style="font-size:11.5px;">
           <strong>${c.fila_excel != null ? labelDeFila(c.fila_excel) : (c.detalle || 'Ajuste')}</strong>${c.subconteo ? ' — ' + (SUBCONTEO_LABEL[c.subconteo] || c.subconteo) : ''}:
           <span style="color:var(--muted); text-decoration:line-through;">${c.valor_inicial}</span>
@@ -466,13 +469,16 @@
           <strong style="color:var(--warning);">${c.valor_nuevo}</strong>
           <span style="color:var(--muted);"> — ${c.usuario}, ${new Date(c.creado_en).toLocaleDateString('es-MX')}</span>
         </div>
-        ${esUnidad ? `<button class="btn-mini btn-secundario" data-aceptar-correccion="${c.ids.join(',')}"><span class="material-symbols-rounded">check</span> Aceptar</button>` : ''}
       </div>
     `).join('');
 
-    lista.querySelectorAll('[data-aceptar-correccion]').forEach((btn) => {
-      btn.addEventListener('click', () => aceptarCambio(btn.getAttribute('data-aceptar-correccion')));
-    });
+    // Visto automático (una sola vez por captura): la próxima vez que abra su SIS ya no aparece
+    const captura = _sis06pCapturasCache.find((r) => Number(r.mes) === Number(document.getElementById('selMes').value) && Number(r.anio) === Number(document.getElementById('selAnio').value));
+    if (captura && !_vistasAuto.has(captura.id)) {
+      _vistasAuto.add(captura.id);
+      estado.db.rpc('sis06p_reconocer_todas', { p_captura_id: captura.id, p_usuario: nombreCompletoDePerfil(estado.perfil) })
+        .then((r) => { if (r && r.error) console.warn('[SIS-06-P] No se pudo marcar como vistos los ajustes del municipal:', r.error); }, () => {});
+    }
   }
 
   async function aceptarCambio(correccionIds) {

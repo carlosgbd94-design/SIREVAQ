@@ -816,6 +816,15 @@ const DOCK_EXTRAS_MOVIMIENTO = [['btnVerPdfDock', 'btnVerPdf'], ['btnCerrarMesDo
 
 // Botón de la barra de abajo para corregir un Movimiento cerrado: «Reabrir y corregir» (cerrado) → «Guardar» (en corrección) →
 // «Guardado» (unos segundos después de guardar) → vuelve a «Reabrir y corregir». Antes vivía arriba, en el aviso de la tabla.
+// ¿Se editó algo desde que se abrió la corrección? Se compara contra lo que había al reabrir (o, si la corrección ya venía abierta
+// de antes, contra lo que había al verla por primera vez en esta sesión).
+function correccionConCambios() {
+  const m = estado.movimiento;
+  if (!m || !m.id) return false;
+  if (!estado.baseCorreccionUI || estado.baseCorreccionUI.id !== m.id) estado.baseCorreccionUI = { id: m.id, foto: estado.correccionFoto || fotoRenglones() };
+  return resumenCambiosCorreccion(estado.baseCorreccionUI.foto, estado.renglones || []).length > 0;
+}
+
 function sincronizarDockCorreccion() {
   const btn = document.getElementById('btnCorreccionDock');
   if (!btn) return;
@@ -831,9 +840,13 @@ function sincronizarDockCorreccion() {
   btn.style.display = 'inline-flex';
   btn.classList.remove('en-reposo');
   if (m.estado === 'EN_CORRECCION') {
-    btn.disabled = false; btn.dataset.modo = 'guardar';
-    if (ico) ico.textContent = 'save'; if (etq) etq.textContent = 'Guardar';
-    btn.title = 'Guardar la corrección: se recalcula este mes y los siguientes ya cerrados';
+    // Un solo botón adaptable: gris «Guardado» con palomita mientras no se haya cambiado nada; azul «Guardar» en cuanto se edita algo.
+    // En ambos casos termina la edición (el Movimiento vuelve a CERRADO y se suma al del municipio).
+    const sinCambios = !correccionConCambios();
+    btn.disabled = false; btn.dataset.modo = 'guardar'; btn.dataset.sinCambios = sinCambios ? '1' : '0';
+    btn.classList.toggle('en-reposo', sinCambios);
+    if (ico) ico.textContent = sinCambios ? 'check' : 'save'; if (etq) etq.textContent = sinCambios ? 'Guardado' : 'Guardar';
+    btn.title = sinCambios ? 'Sin cambios. Toca para terminar la edición' : 'Guardar la corrección: se recalcula este mes y los siguientes ya cerrados';
   } else if (recien) {
     btn.disabled = true; btn.dataset.modo = 'guardado'; btn.classList.add('en-reposo');
     if (ico) ico.textContent = 'check'; if (etq) etq.textContent = 'Guardado';
@@ -3836,12 +3849,16 @@ async function abrirCorreccion() {
 async function aplicarCorreccion() {
   const usuario = usuarioActual();
   if (!usuario) return;
-  const ok = await mostrarModal({
-    titulo: 'Guardar corrección',
-    mensaje: 'Se recalculará este mes y se propagará en cascada a los meses siguientes ya cerrados.',
-    textoAceptar: 'Guardar corrección'
-  });
-  if (!ok) return;
+  // Sin nada editado no hay qué confirmar: se termina la edición directamente
+  const hayCambios = correccionConCambios();
+  if (hayCambios) {
+    const ok = await mostrarModal({
+      titulo: 'Guardar corrección',
+      mensaje: 'Se recalculará este mes y se propagará en cascada a los meses siguientes ya cerrados.',
+      textoAceptar: 'Guardar corrección'
+    });
+    if (!ok) return;
+  }
   const { data, error } = await estado.db.rpc('biovac_aplicar_correccion', {
     p_movimiento_id: estado.movimiento.id, p_usuario: usuario, p_cascade_batch_id: estado.correccionBatchId
   });
@@ -3854,6 +3871,7 @@ async function aplicarCorreccion() {
   estado.correccionBatchId = null;
   estado.correccionEsJurisdiccional = false;
   estado.correccionFoto = null;
+  estado.baseCorreccionUI = null;
   await cargarMovimiento();
   // Resumen automático de lo que se editó (queda como motivo de esta corrección en la auditoría)
   if (foto && lote) {
@@ -3863,7 +3881,7 @@ async function aplicarCorreccion() {
       await estado.db.from('biovac_correcciones').update({ motivo: texto.slice(0, 900) })
         .eq('cascade_batch_id', lote).in('tipo', ['REAPERTURA', 'CORRECCION_JURISDICCIONAL']);
     } catch (e) { /* el resumen igual se muestra; si la auditoría no deja anotarlo, queda el motivo genérico */ }
-    await mostrarModal({
+    if (frases.length) await mostrarModal({   // sin cambios no hay nada que mostrar
       titulo: 'Corrección guardada',
       mensaje: frases.length ? 'Esto es lo que cambiaste (quedó anotado en la auditoría):' : texto,
       detalleHtml: frases.length ? `<ul style="margin:8px 0 0 18px; padding:0; text-align:left; font-size:13px; line-height:1.5;">${frases.slice(0, 40).map((f) => `<li>${String(f).replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]))}</li>`).join('')}</ul>` : '',

@@ -363,12 +363,11 @@
 
     const r = resumen(st.filas);
     if (!st.filas.length) { cont.innerHTML = '<div class="mun-vacio">No hay unidades en tu alcance.</div>'; pintarRuta(); pintarDock(); return; }
-    // Filtros de «problemas»: unidades con diferencias entre paloteo y Movimiento, y con correcciones tuyas que la unidad aún no acepta
+    // Filtro de «problemas»: unidades con diferencias entre paloteo y Movimiento
     const conDif = (f) => estadoDe(f) !== 'OMITIDA' && tieneDiferencias(f);
-    const conCorr = (f) => estadoDe(f) !== 'OMITIDA' && Number(f.correcciones_pendientes) > 0;
-    const conteos = { todas: r.total, ENVIADO: r.enviado, SIN: r.sin, VALIDADO: r.validado, OMITIDA: r.omitida, DIF: st.filas.filter(conDif).length, CORR: st.filas.filter(conCorr).length };
-    if ((st.filtro === 'DIF' && !conteos.DIF) || (st.filtro === 'CORR' && !conteos.CORR)) st.filtro = 'todas';
-    const visibles = filasOrdenadas().filter((f) => st.filtro === 'todas' || (st.filtro === 'DIF' ? conDif(f) : st.filtro === 'CORR' ? conCorr(f) : estadoDe(f) === st.filtro));
+    const conteos = { todas: r.total, ENVIADO: r.enviado, SIN: r.sin, VALIDADO: r.validado, OMITIDA: r.omitida, DIF: st.filas.filter(conDif).length };
+    if (st.filtro === 'DIF' && !conteos.DIF) st.filtro = 'todas';
+    const visibles = filasOrdenadas().filter((f) => st.filtro === 'todas' || (st.filtro === 'DIF' ? conDif(f) : estadoDe(f) === st.filtro));
     const pct = r.esperadas ? Math.round((r.validado / r.esperadas) * 100) : 0;
     const cta = r.enviado > 0
       ? `<button type="button" class="btn-primario" id="munCtaSiguiente"><span class="material-symbols-rounded">fact_check</span> Revisar la siguiente por validar (${r.enviado})</button>`
@@ -376,7 +375,7 @@
         ? (new Date() < new Date(periodo().anio, periodo().mes, 0)
           ? `<span class="mun-espera"><span class="material-symbols-rounded">hourglass_top</span> El mes sigue en curso: las unidades van prellenando y el envío se abre al cierre del mes.</span>`
           : `<span class="mun-espera"><span class="material-symbols-rounded">hourglass_top</span> Faltan ${plural(r.sin, 'unidad', 'unidades')} por enviar. Si alguna no va a enviar este mes (internet, etc.), ábrela y elige «Continuar sin esta unidad»: no bloquea nada.</span>`)
-        : `<button type="button" class="btn-primario" id="munCtaConcentrado"><span class="material-symbols-rounded">table_chart</span> Todo validado: ir al concentrado</button>`;
+        : '';   // todo validado: sin botón aparte, la barra de abajo ya lleva al Concentrado
     // «Copiar pendientes»: las unidades que aún no envían (sin contar las que se continúan sin envío), listas para pegar en un mensaje
     // Logo de WhatsApp: burbuja verde con el teléfono blanco centrado en ella
     const WA = '<svg class="mun-ib-wa" viewBox="0 0 24 24" aria-hidden="true"><path fill="#25d366" d="M12 2.2a9.8 9.8 0 0 0-8.4 14.8L2.3 21.8l4.9-1.3A9.8 9.8 0 1 0 12 2.2z"/><path fill="#fff" transform="translate(12 12) scale(.56) translate(-12 -12)" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>';
@@ -403,13 +402,13 @@
         <div class="mun-leyenda"><span><i class="pt vacio"></i>sin enviar</span><span><i class="pt parcial"></i>por validar</span><span><i class="pt completo"></i>validada</span>${r.omitida ? '<span><i class="pt omitida"></i>sin envío</span>' : ''}</div>
       </div>
       <div class="mun-acciones">${cta}
-        <div class="mun-chips">${copiarBtn}${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}${r.omitida ? chip('OMITIDA', 'Sin envío') : ''}${conteos.DIF ? chip('DIF', 'Con diferencias') : ''}${conteos.CORR ? chip('CORR', 'Con correcciones sin aceptar') : ''}</div>
+        <div class="mun-chips">${copiarBtn}${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}${r.omitida ? chip('OMITIDA', 'Sin envío') : ''}${conteos.DIF ? chip('DIF', 'Con diferencias') : ''}</div>
       </div>
       <div class="mun-grid">${visibles.map((f) => `
         <button type="button" class="mun-unidad ${CLASE_EST[estadoDe(f)]}" data-clues="${esc(f.clues)}" title="${esc((f.unidad || f.clues) + ' · ' + detalleUnidad(f))}">
           <span class="mun-dot"></span>
           <span class="mun-u-txt"><b>${esc(f.unidad || f.clues)}</b><small>${esc(f.clues)} · ${esc(detalleUnidad(f))}</small></span>
-          <span class="mun-u-pills"><span class="mun-pill ${CLASE_EST[estadoDe(f)]}">${ETIQUETA[estadoDe(f)]}</span>${pillSinMovimiento(f)}${pillConciliacion(f)}${Number(f.correcciones_pendientes) > 0 ? `<span class="mun-pill aviso" title="Hiciste ${f.correcciones_pendientes} corrección(es) a este SIS y la unidad todavía no las acepta">${f.correcciones_pendientes} ${Number(f.correcciones_pendientes) === 1 ? 'corrección' : 'correcciones'} sin aceptar</span>` : ''}</span>
+          <span class="mun-u-pills"><span class="mun-pill ${CLASE_EST[estadoDe(f)]}">${ETIQUETA[estadoDe(f)]}</span>${pillSinMovimiento(f)}${pillConciliacion(f)}</span>
         </button>`).join('') || '<div class="mun-vacio">Ninguna unidad en este filtro.</div>'}</div>`;
     pintarRuta();
     pintarDock();
@@ -957,7 +956,6 @@
       else if (t.closest('#munSigPend')) { const s = siguientePendiente(st.clues); if (s) cambiarUnidad(s.clues); }
       else if (t.closest('#munCtaSiguiente')) { const s = siguientePendiente(null); if (s) revisar(s.clues); }
       else if (t.closest('#munCopiarPendientes')) copiarPendientes(t.closest('#munCopiarPendientes'));
-      else if (t.closest('#munCtaConcentrado')) irAPaso(3);
       else if (t.closest('#munVerMovimiento')) verMovimiento();
       else if (t.closest('#munSinEnvio')) marcarSinEnvio(st.clues);
       else if (t.closest('#munQuitarSinEnvio')) quitarSinEnvio(st.clues);

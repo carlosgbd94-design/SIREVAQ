@@ -144,7 +144,15 @@ test('Municipal: un movimiento cerrado ofrece "Corregir movimiento"; en correcci
 
   await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'EN_CORRECCION' });
   await expect(page.locator('.banner-mov.correccion')).toContainText('Modo corrección');
+  // Botón único y adaptable: sin cambios = gris «Guardado» con palomita; al editar algo pasa a azul «Guardar»
+  await expect(page.locator('#btnCorreccionDock')).toContainText('Guardado');
+  await expect(page.locator('#btnCorreccionDock')).toHaveClass(/en-reposo/);
+  await page.evaluate(() => { estado.renglones[0].aplicadas_a = 3; sincronizarDockMovimientoExtras(); });
   await expect(page.locator('#btnCorreccionDock')).toContainText('Guardar');
+  await expect(page.locator('#btnCorreccionDock')).not.toContainText('Guardado');
+  await expect(page.locator('#btnCorreccionDock')).not.toHaveClass(/en-reposo/);
+  await page.evaluate(() => { estado.renglones[0].aplicadas_a = 0; sincronizarDockMovimientoExtras(); });
+  await expect(page.locator('#btnCorreccionDock')).toContainText('Guardado');
   await expect(page.locator('#btnGuardarSIS06P')).toBeHidden();             // en corrección el único «Guardar» aplica y cierra la edición
   await expect(page.locator('[data-banner="guardar"]')).toHaveCount(0);
   await expect(page.locator('[data-action="eliminar-renglon"]')).toHaveCount(2);
@@ -307,6 +315,10 @@ test('Barra de abajo: el botón de corrección cambia Reabrir y corregir → Gua
   await expect(dock).toBeEnabled();
 
   await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'EN_CORRECCION' });
+  await expect(dock).toContainText('Guardado');          // sin cambios: gris con palomita (pulsarlo termina la edición)
+  await expect(dock).toBeEnabled();
+  await page.evaluate(() => { estado.renglones[0].recibido_frascos = 7; sincronizarDockMovimientoExtras(); });
+  await expect(dock).not.toContainText('Guardado');      // al editar: «Guardar»
   await expect(dock).toContainText('Guardar');
   await expect(dock).toBeEnabled();
 

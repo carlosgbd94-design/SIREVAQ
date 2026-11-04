@@ -1,5 +1,5 @@
-// «Correcciones sin aceptar»: si el municipal tecleó una cifra de 4 a 5 y luego de 5 a 4, la celda quedó igual y no hay nada que
-// aceptar. Solo se listan (y se cuentan) las celdas con un cambio real, y cada una se acepta con todos sus movimientos.
+// Ajustes del municipal a la unidad: si tecleó una cifra de 4 a 5 y luego de 5 a 4, la celda quedó igual y no hay nada que avisar.
+// Solo se listan las celdas con un cambio real. La unidad no acepta nada (solo se le informa); el revisor no ve el panel.
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
@@ -30,6 +30,7 @@ test('Correcciones netas: lo que quedó igual no se lista y cada celda junta sus
       if (p === 'from') return (tabla) => (tabla === 'sis06p_correcciones'
         ? { select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ order: async () => ({ data: filas, error: null }) }) }) }) }) }
         : t.from(tabla));
+      if (p === 'rpc') return (n, a) => { (window.__rpcLog = window.__rpcLog || []).push(n); return t.rpc(n, a); };
       return t[p];
     } });
     document.getElementById('panelSIS06P').style.display = 'block';
@@ -40,6 +41,9 @@ test('Correcciones netas: lo que quedó igual no se lista y cada celda junta sus
   await expect(items).toHaveCount(1);                       // la celda 12 quedó igual (4→5→4→5→4): no cuenta
   await expect(items.first()).toContainText('2');           // la 13 pasó de 2 a 6
   await expect(items.first()).toContainText('6');
-  const ids = await items.first().locator('[data-aceptar-correccion]').getAttribute('data-aceptar-correccion');
-  expect(ids).toBe('b1,b2');                                // aceptar la celda acepta todos sus movimientos
+  // La unidad NO acepta nada: solo se le informa (sin botones) y queda vista de forma automática
+  await expect(page.locator('#sis06pPanelCambiosPendientes')).toContainText('no tienes que aceptar nada');
+  await expect(page.locator('#sis06pListaCambiosPendientes button')).toHaveCount(0);
+  await expect(page.locator('#btnAceptarTodosCambios')).toBeHidden();
+  expect(await page.evaluate(() => window.__rpcLog || [])).toContain('sis06p_reconocer_todas');
 });
