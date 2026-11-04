@@ -1009,6 +1009,18 @@
     el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">sync_problem</span><span><b>${esc(f.unidad || f.clues)}</b> cambió su SINBA-SIS mientras lo tenías abierto.</span><button type="button" class="btn-secundario btn-mini" data-recargar>Recargar</button>`;
   }
 
+  // La unidad que se está revisando cambió en el servidor (p. ej. acaba de ENVIAR). Validar y el resto de la barra salen del estado
+  // que se leyó al abrirla, así que con el estado viejo faltaba Validar hasta recargar la página (Ctrl+F5). Si el revisor no tiene
+  // nada sin guardar ni está tecleando, se relee sola; si sí, se deja intacto lo que escribe y se ofrece «Recargar».
+  async function alCambiarUnidadAbierta(f, estadoAntes) {
+    const sis = window.SIS06PBiovac;
+    const tecleando = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && document.activeElement.closest('#panelSIS06P, #panelMovimiento, #panelInfluenza, #panelCEH');
+    if ((sis && sis.hayCambiosSinGuardar && sis.hayCambiosSinGuardar()) || tecleando) { avisoCambioRemoto(f); return; }
+    avisoCambioRemoto(null);
+    $('selUnidadRevision').dispatchEvent(new Event('change'));
+    if (f.estado === 'ENVIADO' && estadoAntes !== 'ENVIADO') toast(`${f.unidad || f.clues} acaba de enviar su SINBA-SIS: ya puedes validarlo.`, 'ok');
+  }
+
   async function sincronizarVivo() {
     if (!st.activo) return;
     if (vivo.ocupado) { vivo.pendiente = true; return; }
@@ -1024,7 +1036,7 @@
         .slice(0, 3).forEach((f) => toast(`${f.unidad || f.clues} envió su SINBA-SIS.`, 'ok'));
       if (st.paso === 2 && st.clues) {
         const abierta = cambiadas.find((f) => f.clues === st.clues);
-        if (abierta) avisoCambioRemoto(abierta);
+        if (abierta) await alCambiarUnidadAbierta(abierta, nombres.get(abierta.clues));
       }
     } catch (e) {
       console.warn('[Municipal] No se pudo actualizar en vivo:', e);

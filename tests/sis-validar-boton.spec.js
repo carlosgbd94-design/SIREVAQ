@@ -40,3 +40,22 @@ test('Validar visible en cada unidad por validar sin importar la hoja desde la q
     else await expect(page.locator('#btnMarcarValidado'), nombre + ' desde ' + hoja).toBeHidden();
   }
 });
+
+test('Validar aparece solo cuando la unidad abierta envía mientras se revisa (sin recargar la página)', async ({ page }) => {
+  await abrir(page);
+  await page.click('#munCtaSiguiente');
+  await page.selectOption('#munRevSelect', 'QTSSA000002');                    // Beta: aún en borrador
+  await expect(page.locator('#munBarraRevision .mun-rev-unidad b')).toHaveText('C.S. Beta');
+  await page.click('#munBarraRevision .mun-hoja[data-hoja="btnSeccionSIS06P"]');
+  await expect(page.locator('#btnMarcarValidado')).toBeHidden();
+  await expect(page.locator('#dockEstadoDetalle')).toContainText('aún no lo envía');
+  // La unidad envía desde su teléfono: cambia en el servidor
+  await page.evaluate(() => {
+    const F = window.__FAKE;
+    F.seg.find((f) => f.clues === 'QTSSA000002').estado = 'ENVIADO';
+    F.tables.sis06p_capturas.find((c) => c.clues === 'QTSSA000002').estado = 'ENVIADO';
+    document.dispatchEvent(new Event('visibilitychange'));                    // equivale a la actualización en vivo / al volver a la pestaña
+  });
+  await expect(page.locator('#btnMarcarValidado')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#dockEstadoDetalle')).toContainText('Validar');
+});
