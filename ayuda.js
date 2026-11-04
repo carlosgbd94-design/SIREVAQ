@@ -216,7 +216,7 @@
         P(1, 'Revisa', 'En pantallas angostas elige una semana arriba para verla completa; toca una fila para ver su desglose semanal.'),
         P(2, 'Concilia', 'Lo aplicado de Antiinfluenza en Movimiento debe ser igual al total de aquí. Si no, "Ir a Movimiento" te lleva y "Usar este total aquí" lo pasa al lote.'),
         P(3, 'Corrige', '"Editar semanas de Influenza" abre las semanas de este mes aquí mismo: cambia dosis o agrega la semana que falte.'),
-        N('Al enviar el SINBA-SIS, Influenza de ese mes queda congelada para la unidad. Si hay que corregirla, el municipal usa «Corregir semanas» (puede cambiar cualquier semana o agregar una que falte); cada cambio queda registrado y la unidad lo ve para aceptarlo.')
+        N('Al enviar el SINBA-SIS, Influenza de ese mes queda congelada para la unidad. Si hay que corregirla, el municipal usa «Corregir Influenza» (puede cambiar cualquier semana o agregar una que falte); cada cambio queda registrado y la unidad lo ve para aceptarlo.')
       ]
     },
 

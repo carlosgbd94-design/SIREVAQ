@@ -2788,7 +2788,7 @@
     const subInf = document.getElementById('infSubtitulo');
     if (subInf) {
       subInf.textContent = esRolRevisor()
-        ? 'Dosis de antiinfluenza del mes por semana, leídas de Meta-Logro. Con el SIS enviado, tú puedes corregirlas.'
+        ? 'Dosis de antiinfluenza del mes por semana, las mismas del panel de Influenza de la unidad.'
         : 'Dosis de antiinfluenza del mes por semana, las mismas de tu panel de Influenza.';
     }
     const btnCovid = document.getElementById('btnEditarCovid');
@@ -2803,24 +2803,14 @@
       if (btnEditar) {
         btnEditar.disabled = false;
         btnEditar.title = 'Abrir el editor de semanas de Influenza de este mes';
-        btnEditar.innerHTML = '<span class="material-symbols-rounded">edit_note</span> Corregir semanas';
+        btnEditar.innerHTML = '<span class="material-symbols-rounded">edit_note</span> Corregir Influenza';
       }
     }
 
+    // La tarjeta de arriba ya explica qué se puede corregir y quién lo ve: sin aviso adicional.
     if (aviso) {
-      let msg = ''; let estilo = '';
-      // En borrador de la unidad el botón de arriba ya dice cuántas semanas hay y qué hacer: sin segundo aviso.
-      if (estadoSIS !== 'BORRADOR' && esRolRevisor()) {
-        msg = 'Este SINBA-SIS ya fue enviado. Como revisor puedes corregir Influenza con el botón de arriba; cada cambio queda auditado y la unidad lo ve.';
-        estilo = 'background:#eef2ff; color:#3730a3;';
-      }
-      if (msg) {
-        aviso.style.cssText = `display:block; margin-bottom:12px; padding:9px 13px; border-radius:12px; font-size:12px; font-weight:700; ${estilo}`;
-        aviso.textContent = msg;
-      } else {
-        aviso.style.display = 'none';
-        aviso.textContent = '';
-      }
+      aviso.style.display = 'none';
+      aviso.textContent = '';
     }
 
     // Conciliación con la baja en Movimiento de Biológico (biológico
@@ -3674,7 +3664,7 @@
     };
     abrirDetalleSIS({
       titulo: (esUnidadSesion() ? 'Semanas de Influenza · ' : 'Corregir Influenza · ') + mesNombre(mes) + ' ' + anio,
-      subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + ' · se sincroniza con tu panel de Influenza',
+      subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + (esUnidadSesion() ? ' · se sincroniza con tu panel de Influenza' : ' · se sincroniza con el panel de Influenza de la unidad'),
       cuerpo: editorInfluenzaHtml(),
       acciones: [{ texto: 'Guardar cambios', icono: 'save', clase: 'btn-primario', onClick: guardarEditorInfluenza }]
     });
@@ -3850,7 +3840,7 @@
     };
     abrirDetalleSIS({
       titulo: (esUnidadSesion() ? 'Semanas de COVID-19 · ' : 'Corregir COVID-19 · ') + mesNombre(mes) + ' ' + anio,
-      subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + ' · Moderna y Pfizer por separado',
+      subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + ' · Moderna y Pfizer por separado' + (esUnidadSesion() ? '' : ' · se sincroniza con el panel de la unidad'),
       cuerpo: editorCovidHtml(),
       acciones: [{ texto: 'Guardar cambios', icono: 'save', clase: 'btn-primario', onClick: guardarEditorCovid }]
     });
