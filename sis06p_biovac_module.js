@@ -3614,6 +3614,8 @@
   // ---------------------------------------------------------------------------
   const DOSIS_POR_FRASCO_INF = 10;
   const DOSIS_POR_FRASCO_COVID = { MODERNA: 5, PFIZER: 6 };   // en dosis de 0.5 mL (igual que covid_frascos.js)
+  let _edpAyudaAbierta = false;   // el «¿Cómo se lee esto?» se queda como lo dejó la persona aunque el panel se repinte
+  document.addEventListener('toggle', (ev) => { if (ev.target && ev.target.matches && ev.target.matches('.edp-ayuda')) _edpAyudaAbierta = ev.target.open; }, true);
   const _fmtN = (v) => (Number(v) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
 
   function campanaDeFechaEd(fecha) {
@@ -3838,8 +3840,8 @@
         <div class="edp-mks">${t('moderna', 'Moderna · niños', '6 a 59 meses (1ª + 2ª dosis)', m.modNino)}${t('moderna', 'Moderna · adultos', '5 años y más', m.modAdulto)}${t('moderna tot', 'Moderna · total', 'niños + adultos', m.modNino + m.modAdulto)}${t('pfizer', 'Pfizer', 'solo adultos', m.pfizer)}${t('tot', 'Total COVID-19', 'Moderna + Pfizer', m.modNino + m.modAdulto + m.pfizer)}</div></div>`;
     }
 
-    const ayuda = `<p class="edp-ayuda"><span class="material-symbols-rounded" aria-hidden="true">help</span><span><b>Cómo leerlo:</b> la <b>meta</b> es de toda la campaña (${ctx.campana ? _esc(ctx.campana) : nombreVac}). A cada grupo le restamos lo ya reportado en las demás semanas y lo que hay en las casillas de este mes; lo que <b>queda</b> es lo que todavía se puede aplicar. Si sale en rojo, esa unidad no podría guardar el reporte.${cov ? ' Moderna y Pfizer suman contra la misma meta.' : ''}</span></p>`;
-    return `<section class="edp" id="edPanel" aria-label="Meta y avance de la campaña de ${nombreVac}"><div class="edp-cab"><h4>Meta y avance · ${nombreVac}</h4>${ctx.campana ? `<span class="edp-camp">${_esc(ctx.campana)}</span>` : ''}</div>${cuerpo}${abasto}${porMarca}${ayuda}</section>`;
+    const ayuda = `<details class="edp-ayuda"${_edpAyudaAbierta ? ' open' : ''}><summary><span class="material-symbols-rounded" aria-hidden="true">help</span>¿Cómo se lee esto?</summary><p> la <b>meta</b> es de toda la campaña (${ctx.campana ? _esc(ctx.campana) : nombreVac}). A cada grupo le restamos lo ya reportado en las demás semanas y lo que hay en las casillas de este mes; lo que <b>queda</b> es lo que todavía se puede aplicar. Si sale en rojo, esa unidad no podría guardar el reporte.${cov ? ' Moderna y Pfizer suman contra la misma meta.' : ''}</p></details>`;
+    return `<section class="edp" id="edPanel" aria-label="Meta y avance de la campaña de ${nombreVac}"><div class="edp-cab"><h4>Meta y avance · ${nombreVac}</h4>${ctx.campana ? `<span class="edp-camp">${_esc(ctx.campana)}</span>` : ''}</div>${cuerpo}<div class="edp-fila2">${abasto}${porMarca}</div>${ayuda}</section>`;
   }
 
   // Repinta el panel y las celdas de meta de cada fila (se llama con cada tecla).
