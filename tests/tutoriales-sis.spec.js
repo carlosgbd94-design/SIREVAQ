@@ -83,3 +83,35 @@ test('Globitos de ayuda: el title de un botón de la tabla pasa a un globito vis
   await page.keyboard.press('Escape');
   await expect(page.locator('#hintBurbuja.visible')).toHaveCount(0);
 });
+
+test('Globitos: si el title de un botón cambia después, el globito muestra el texto nuevo (y desaparece si queda vacío)', async ({ page }) => {
+  await page.route(/unpkg\.com\/@supabase\/supabase-js/, (r) => r.fulfill({ contentType: 'application/javascript', body: FAKE }));
+  await page.route(/fonts\.(googleapis|gstatic)\.com|cdnjs\.cloudflare\.com|raw\.githubusercontent\.com/, (r) => r.abort());
+  await page.goto('/biovac.html', { waitUntil: 'load' });
+  await page.waitForSelector('#campoPeriodo', { state: 'attached' });
+  await page.waitForTimeout(1200);
+  await page.evaluate(() => {
+    const b = document.createElement('button');
+    b.id = 'btnPruebaHint'; b.textContent = 'Enviar de prueba';
+    b.style.cssText = 'display:block; margin:12px; padding:12px 20px;';
+    b.title = 'No coinciden';
+    document.getElementById('rutaMes').appendChild(b);
+  });
+  const btn = page.locator('#btnPruebaHint');
+  await btn.hover();
+  await expect(page.locator('#hintBurbuja')).toHaveText('No coinciden');
+  await page.mouse.move(5, 5);
+  await expect(page.locator('#hintBurbuja')).toBeHidden();
+
+  // el código cambia la explicación (ya cuadra): el globito dice lo nuevo, no lo primero que se adoptó
+  await page.evaluate(() => { document.getElementById('btnPruebaHint').title = 'Enviar el SINBA-SIS para validación'; });
+  await btn.hover();
+  await expect(page.locator('#hintBurbuja')).toHaveText('Enviar el SINBA-SIS para validación');
+  await page.mouse.move(5, 5);
+
+  // title vacío = sin globito
+  await page.evaluate(() => { document.getElementById('btnPruebaHint').title = ''; });
+  await btn.hover();
+  await page.waitForTimeout(500);
+  await expect(page.locator('#hintBurbuja')).toBeHidden();
+});

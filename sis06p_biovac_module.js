@@ -477,9 +477,25 @@
     if (error) {
       console.warn('[SIS-06-P] Error cargando conciliación con Movimiento:', error);
       _conciliacionCache = null;
+      actualizarBotonEnviar();
       return;
     }
     _conciliacionCache = data || [];
+    actualizarBotonEnviar();
+  }
+
+  // Estado del botón Enviar (habilitado, color rojo con «≠» y su explicación) según la conciliación ACTUAL. Se llama desde
+  // todos los lugares que la releen, para que el botón, el aviso y el globito nunca digan cosas distintas.
+  function actualizarBotonEnviar() {
+    const b = document.getElementById('btnEnviarSIS06P');
+    if (!b || !esUnidadSesion() || b.style.display === 'none') return;
+    const fuera = !(_ventanaCache && _ventanaCache.dentro_envio);
+    const noConcilia = hayDiferenciasConciliacion();
+    b.disabled = fuera;
+    b.classList.toggle('con-diferencias', !fuera && noConcilia);
+    b.title = fuera
+      ? 'Fuera de la ventana de envío'
+      : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden — púlsalo para ver en qué' : 'Enviar el SINBA-SIS para validación';
   }
 
   function hayDiferenciasConciliacion() {
@@ -954,13 +970,7 @@
       if (btnGuardar) btnGuardar.style.display = (estadoActual === 'BORRADOR' && !fueraDeVentana) ? 'inline-flex' : 'none';
       if (btnEnviar) {
         btnEnviar.style.display = estadoActual === 'BORRADOR' ? 'inline-flex' : 'none';
-        const fueraDeEnvio = !(_ventanaCache && _ventanaCache.dentro_envio);
-        const noConcilia = hayDiferenciasConciliacion();
-        btnEnviar.disabled = fueraDeEnvio;
-        btnEnviar.classList.toggle('con-diferencias', !fueraDeEnvio && noConcilia);
-        btnEnviar.title = fueraDeEnvio
-          ? 'Fuera de la ventana de envío'
-          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden — púlsalo para ver en qué' : '';
+        actualizarBotonEnviar();
       }
       if (btnValidar) btnValidar.style.display = 'none';
       if (btnImprimir) btnImprimir.style.display = estadoActual === 'VALIDADO' ? 'inline-flex' : 'none';
@@ -1361,7 +1371,12 @@
     }
 
     // Con diferencias el servidor no deja enviar: se explica aquí, con la lista, en vez de un aviso que se pierde.
-    try { await cargarConciliacion(activa.clues); } catch (_) { /* si falla, el servidor decide */ }
+    try { await cargarConciliacion(activa.clues); } catch (_) { _conciliacionCache = null; }
+    if (_conciliacionCache === null) {
+      // Sin la conciliación no se sabe si cuadra: no se pide confirmar un envío que el servidor podría rechazar.
+      toast('No se pudo verificar que el paloteo y el Movimiento cuadren. Revisa tu conexión e intenta de nuevo.', 'error');
+      return;
+    }
     if (hayDiferenciasConciliacion()) {
       const dif = _conciliacionCache.filter((f) => !f.coincide);
       renderAlertaDiferencias();
@@ -3503,16 +3518,7 @@
       if (!_sinGuardar) {
         renderConciliacion(soloLecturaPara(captura), captura);
       }
-      const btnEnviar = document.getElementById('btnEnviarSIS06P');
-      if (btnEnviar && esUnidadSesion() && btnEnviar.style.display !== 'none') {
-        const fueraDeVentana = !(_ventanaCache && _ventanaCache.dentro_envio);
-        const noConcilia = hayDiferenciasConciliacion();
-        btnEnviar.disabled = fueraDeVentana;
-        btnEnviar.classList.toggle('con-diferencias', !fueraDeVentana && noConcilia);
-        btnEnviar.title = fueraDeVentana
-          ? 'Fuera de la ventana de envío'
-          : noConcilia ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden — púlsalo para ver en qué' : 'Enviar el SINBA-SIS para validación';
-      }
+      actualizarBotonEnviar();
       renderInfluenza();
       renderRutaMes();
       actualizarDock();

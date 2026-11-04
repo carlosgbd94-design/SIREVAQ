@@ -39,15 +39,21 @@
     return burbuja;
   }
 
-  // Convierte el title nativo en data-hint (una sola vez por elemento).
+  // Convierte el title nativo en data-hint. Si el código vuelve a poner un title después (p. ej. el botón Enviar cambia su
+  // explicación cuando el paloteo ya cuadra), el title NUEVO manda: antes el primer texto se quedaba pegado y el globito
+  // seguía diciendo «no coinciden» con todo ya cuadrado. Un title vacío borra el globito.
   function adoptar(el) {
-    if (!el || el.dataset.hint) return;
+    if (!el) return;
     const t = el.getAttribute('title');
-    if (!t) return;
-    el.dataset.hint = t;
+    if (t === null) return;
     el.removeAttribute('title');
+    if (!t) { delete el.dataset.hint; return; }
+    const cambio = el.dataset.hint !== t;
+    el.dataset.hint = t;
     const sinTexto = !(el.textContent || '').replace(/\b(lock|edit|delete|swap_horiz|help)\b/g, '').trim();
-    if (sinTexto && !el.getAttribute('aria-label')) el.setAttribute('aria-label', t);
+    if (cambio && sinTexto && !el.getAttribute('aria-label')) el.setAttribute('aria-label', t);
+    // Si el globito de este elemento está a la vista, se repinta con el texto nuevo.
+    if (burbuja && duenio === el && !burbuja.hidden) burbuja.textContent = t;
   }
 
   function objetivo(nodo) {
@@ -109,6 +115,21 @@
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') ocultar(); });
   document.addEventListener('click', ocultar, true);
   window.addEventListener('scroll', ocultar, { passive: true, capture: true });
+
+  // Si el código vuelve a poner un title en un elemento que YA tenía globito, se actualiza el globito al momento. Los
+  // elementos que nunca se han tocado conservan su title (es su nombre accesible hasta que se adoptan).
+  if (typeof MutationObserver === 'function') {
+    const obs = new MutationObserver((muts) => {
+      muts.forEach((m) => {
+        const el = m.target;
+        if (!el || el.nodeType !== 1 || el.getAttribute('title') === null) return;
+        if (el.dataset.hint === undefined) return;
+        adoptar(el);
+      });
+    });
+    const arrancar = () => obs.observe(document.body, { attributes: true, attributeFilter: ['title'], subtree: true });
+    if (document.body) arrancar(); else document.addEventListener('DOMContentLoaded', arrancar);
+  }
 
   window.Hints = { mostrar, ocultar };
 })();
