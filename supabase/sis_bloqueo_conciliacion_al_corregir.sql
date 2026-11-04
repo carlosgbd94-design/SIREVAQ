@@ -22,13 +22,14 @@ revoke all on function _sis06p_dif_puntaje(text, int, int) from public, anon, au
 
 -- ANTES del cambio: guarda cuánta diferencia hay hoy (la tabla aún tiene los valores viejos).
 create or replace function sis06p_trg_29_conciliacion_antes() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public as $
+declare v_k text := 'sis06p.da_' || replace(old.id::text, '-', '_');   -- una clave por fila: un UPDATE de varias filas no mezcla puntajes
 begin
-  perform set_config('sis06p.dif_antes', '', true);
+  perform set_config(v_k, '', true);
   if coalesce(current_setting('sis06p.bypass_lock', true), 'off') = 'on' then return new; end if;
   if (select auth.uid()) is null then return new; end if;
   if old.estado not in ('ENVIADO', 'VALIDADO') then return new; end if;
-  perform set_config('sis06p.dif_antes', _sis06p_dif_puntaje(old.clues, old.mes, old.anio)::text, true);
+  perform set_config(v_k, _sis06p_dif_puntaje(old.clues, old.mes, old.anio)::text, true);
   return new;
 end;
 $$;
@@ -62,7 +63,7 @@ begin
   v_dif := _sis06p_diferencias_texto(new.clues, new.mes, new.anio);
   if v_dif is null then return new; end if;
 
-  v_antes := nullif(current_setting('sis06p.dif_antes', true), '')::numeric;
+  v_antes := nullif(current_setting('sis06p.da_' || replace(old.id::text, '-', '_'), true), '')::numeric;
   v_despues := _sis06p_dif_puntaje(new.clues, new.mes, new.anio);
   if v_antes is not null and v_despues <= v_antes then return new; end if;
 
