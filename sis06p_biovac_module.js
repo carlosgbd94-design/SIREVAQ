@@ -332,14 +332,19 @@
   // al último y dejaba a una unidad por validar con el estado «Validado» (y sin botón Validar) de la anterior.
   let _initSeq = 0;
 
-  async function init() {
+  // opts.soloEstado: relee los datos de la unidad pero NO repinta el paloteo (lo usa el revisor que cambia de unidad o de
+  // mes estando en la hoja Movimiento): la barra de acciones sigue a la unidad sin el costo de dibujar 104 filas ocultas.
+  async function init(opts) {
     const seq = ++_initSeq;
     const activa = datosUnidadActiva();
+    // Mientras se leen los datos de la unidad nueva, el revisor no debe ver (ni pulsar) Validar con el estado de la anterior.
+    if (!esUnidadSesion()) { const bv = document.getElementById('btnMarcarValidado'); if (bv) bv.style.display = 'none'; }
     const container = document.getElementById('sis06pCaptureGroupsContainer');
     if (!activa) {
       if (container) container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Selecciona una unidad (CLUES) específica arriba — "Jurisdicción (suma)" no aplica a SIS-06-P.</div>';
       renderCEH();
       renderInfluenza();
+      sincronizarBotonesAccion();
       actualizarDock();
       return;
     }
@@ -380,7 +385,8 @@
       await cargarConciliacion(activa.clues);
       if (seq !== _initSeq) return;
 
-      render();
+      if (opts && opts.soloEstado) { sincronizarBotonesAccion(); renderRutaMes(); actualizarDock(); }
+      else render();
     } catch (err) {
       console.error('[SIS-06-P] Error al cargar:', err);
       toast(esErrorDeRedSIS(err)
@@ -914,6 +920,49 @@
     }
   }
 
+  // Botones de acción de la barra (Guardar / Enviar / Validar / Imprimir / Exportar) según rol, estatus y ventana de ESTE
+  // mes y ESTA unidad. Vive fuera de render() para poder llamarse sola: el revisor que cambia de unidad estando en otra
+  // hoja (p. ej. Movimiento) no repinta el paloteo, pero la barra tiene que seguir a la unidad nueva; si no, Validar se
+  // quedaba con el estado de la unidad anterior (faltaba en una por validar, o aparecía en una ya validada).
+  function sincronizarBotonesAccion() {
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const activa = datosUnidadActiva();
+    // La caché solo cuenta si es de la unidad que está a la vista: una lectura de otra unidad nunca decide los botones.
+    const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio && (!activa || r.clues === activa.clues));
+    const estadoActual = currentReport ? currentReport.estado : 'BORRADOR';
+    const esUnidad = estado.perfil.rol === 'UNIDAD';
+    const fueraDeVentana = fueraDeVentanaDeCaptura(currentReport);
+
+    const btnGuardar = document.getElementById('btnGuardarSIS06P');
+    const btnEnviar = document.getElementById('btnEnviarSIS06P');
+    const btnValidar = document.getElementById('btnMarcarValidado');
+    const btnImprimir = document.getElementById('btnImprimirSIS06P');
+
+    // El Excel oficial es el documento final: se habilita cuando ESTE concentrado quedó VALIDADO (hasta entonces aún se corrige).
+    const btnExportar = document.getElementById('btnExportarSISCompleto');
+    if (btnExportar) {
+      const puedeExportar = estadoActual === 'VALIDADO';
+      btnExportar.disabled = !puedeExportar;
+      btnExportar.title = puedeExportar
+        ? 'Exportar el SINBA-SIS: Excel oficial (las 4 hojas) o PDF del Movimiento'
+        : 'Disponible hasta que el municipal valide el SINBA-SIS de este mes';
+    }
+
+    if (esUnidad) {
+      if (btnGuardar) btnGuardar.style.display = (estadoActual === 'BORRADOR' && !fueraDeVentana) ? 'inline-flex' : 'none';
+      if (btnEnviar) btnEnviar.style.display = estadoActual === 'BORRADOR' ? 'inline-flex' : 'none';
+      if (btnValidar) btnValidar.style.display = 'none';
+      if (btnImprimir) btnImprimir.style.display = estadoActual === 'VALIDADO' ? 'inline-flex' : 'none';
+    } else {
+      if (btnGuardar) btnGuardar.style.display = (currentReport && estadoActual !== 'BORRADOR') ? 'inline-flex' : 'none';
+      if (btnEnviar) btnEnviar.style.display = 'none';
+      if (btnValidar) btnValidar.style.display = (activa && currentReport && estadoActual === 'ENVIADO') ? 'inline-flex' : 'none';
+      if (btnImprimir) btnImprimir.style.display = 'none';
+    }
+    actualizarBotonEnviar();
+  }
+
   function render() {
     const activa = datosUnidadActiva();
     const container = document.getElementById('sis06pCaptureGroupsContainer');
@@ -955,42 +1004,10 @@
     renderConciliacion(soloLectura, currentReport);
     renderPanelCambiosPendientes();
 
-    const btnGuardar = document.getElementById('btnGuardarSIS06P');
-    const btnEnviar = document.getElementById('btnEnviarSIS06P');
-    const btnValidar = document.getElementById('btnMarcarValidado');
-    const btnImprimir = document.getElementById('btnImprimirSIS06P');
-
-    // El Excel oficial es el documento final -- no tiene caso (y puede
-    // confundir) entregarlo antes de que el municipal valide el concentrado,
-    // porque hasta ese momento la información todavía puede corregirse. Se
-    // habilita para cualquier rol una vez que ESTE concentrado quedó en
-    // VALIDADO, sin importar quién lo esté mirando.
-    const btnExportar = document.getElementById('btnExportarSISCompleto');
-    if (btnExportar) {
-      const puedeExportar = estadoActual === 'VALIDADO';
-      btnExportar.disabled = !puedeExportar;
-      btnExportar.title = puedeExportar
-        ? 'Exportar el SINBA-SIS: Excel oficial (las 4 hojas) o PDF del Movimiento'
-        : 'Disponible hasta que el municipal valide el SINBA-SIS de este mes';
-    }
-
-    if (esUnidad) {
-      if (btnGuardar) btnGuardar.style.display = (estadoActual === 'BORRADOR' && !fueraDeVentana) ? 'inline-flex' : 'none';
-      if (btnEnviar) {
-        btnEnviar.style.display = estadoActual === 'BORRADOR' ? 'inline-flex' : 'none';
-        actualizarBotonEnviar();
-      }
-      if (btnValidar) btnValidar.style.display = 'none';
-      if (btnImprimir) btnImprimir.style.display = estadoActual === 'VALIDADO' ? 'inline-flex' : 'none';
-    } else {
-      if (btnGuardar) btnGuardar.style.display = (currentReport && estadoActual !== 'BORRADOR') ? 'inline-flex' : 'none';
-      if (btnEnviar) btnEnviar.style.display = 'none';
-      if (btnValidar) btnValidar.style.display = (currentReport && estadoActual === 'ENVIADO') ? 'inline-flex' : 'none';
-      if (btnImprimir) btnImprimir.style.display = 'none';
-      if (!currentReport || estadoActual === 'BORRADOR') {
-        container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Esta unidad todavía no envía su concentrado de este mes — nada que revisar todavía.</div>';
-        return;
-      }
+    sincronizarBotonesAccion();
+    if (!esUnidad && (!currentReport || estadoActual === 'BORRADOR')) {
+      container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Esta unidad todavía no envía su concentrado de este mes — nada que revisar todavía.</div>';
+      return;
     }
 
     const groups = new Map();
@@ -1445,45 +1462,8 @@
     }
   }
 
-  // Basta con insertar la notificación maestra -- verificado contra la base
-  // real: notificaciones tiene un trigger AFTER INSERT
-  // (trg_fanout_notification / fanout_notification_trigger()) que ya
-  // resuelve destinatarios por target_scope='CLUES' del lado del servidor
-  // (unidad + municipal/jurisdiccional/admin), el mismo mecanismo que usa
-  // el resto de la app -- repetir ese reparto a mano aquí (como en un
-  // intento anterior) solo duplicaba filas en notificaciones_perfil.
-  // Best-effort: si falla, se avisa por consola pero NUNCA se revierte la
-  // validación ya aplicada -- la notificación es un plus, no una condición
-  // del flujo.
-  async function notificarUnidadValidacion(activa, mes, anio) {
-    try {
-      const hoy = new Date();
-      const ymd = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
-      // type='SIS_VALIDADO' + meta_json es lo que main.js (openNotifDetailModal)
-      // usa para mostrar el botón "Ir a mi SIS" y armar el enlace directo a
-      // biovac.html con clues/mes/año ya resueltos -- sin esto la unidad
-      // tendría que volver a seleccionar mes/año a mano.
-      const { error } = await estado.db.from('notificaciones').insert({
-        id: 'NOTIF:' + btoa(activa.clues + ':' + Date.now()),
-        created_ts: hoy.toISOString(),
-        created_date: ymd,
-        from_usuario: estado.perfil.usuario,
-        from_rol: estado.perfil.rol,
-        target_scope: 'CLUES',
-        target_municipio: activa.municipio || null,
-        target_clues: activa.clues,
-        target_usuario: null,
-        type: 'SIS_VALIDADO',
-        title: 'Concentrado SIS-06-P validado',
-        message: `El concentrado SIS-06-P de ${mesNombre(mes)} ${anio} ya fue validado — ya puedes descargar, exportar e imprimir el Excel oficial.`,
-        meta_json: JSON.stringify({ source: 'SIS06P', clues: activa.clues, mes, anio }),
-        status: 'UNREAD'
-      });
-      if (error) throw error;
-    } catch (err) {
-      console.error('[SIS-06-P] No se pudo notificar a la unidad tras validar (la validación ya quedó aplicada):', err);
-    }
-  }
+  // El aviso a la unidad (notificación en la app + correo) lo crea el SERVIDOR dentro de sis06p_marcar_validado
+  // (supabase/sis06p_aviso_validacion.sql): ya no depende de que este navegador siga abierto.
 
   // Parte común de una validación exitosa (normal o con excepción).
   async function finalizarValidacion(activa, mes, anio) {
@@ -1491,8 +1471,7 @@
     _sis06pCapturasCache = capturas || [];
     await cargarConciliacion(activa.clues);
     render();
-    toast('✅ Concentrado marcado como validado.', 'ok');
-    notificarUnidadValidacion(activa, mes, anio);
+    toast('✅ SINBA-SIS validado. La unidad recibió el aviso en la app y por correo.', 'ok');
     document.dispatchEvent(new CustomEvent('sis06p:validado', { detail: { clues: activa.clues, mes, anio } }));
   }
 
@@ -1501,12 +1480,12 @@
     if (!activa) return;
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
-    const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
-    if (!currentReport) return;
+    const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio && r.clues === activa.clues);
+    if (!currentReport) { toast('Espera a que termine de cargar esta unidad y vuelve a pulsar Validar.', 'error'); return; }
 
     const confirmado = await mostrarModal({
       titulo: 'Marcar como Validado',
-      mensaje: `Vas a marcar como validado el concentrado SIS-06-P de ${activa.unidad} (${mesNombre(mes)} ${anio}). La unidad ya no podrá editarlo directamente y verá cualquier corrección que hayas hecho. ¿Confirmas?`,
+      mensaje: `Vas a validar el SINBA-SIS completo de ${activa.unidad} (${mesNombre(mes)} ${anio}): SIS-06-P, Movimiento, SIS-SS-CE-H e Influenza. El sistema ya comprobó que el paloteo y el Movimiento cuadran. Al confirmar: (1) la unidad ya no podrá editar ese mes; (2) recibe el aviso en la app y por correo, y verá cada corrección tuya para aceptarla; (3) podrá exportar el Excel oficial e imprimir; (4) cuenta para el CSV y los indicadores del municipio. ¿Confirmas?`,
       textoAceptar: 'Marcar como Validado'
     });
     if (!confirmado) return;
@@ -3451,6 +3430,8 @@
     el.style.display = 'flex';
   }
 
+  function hayDifRevisor() { return !esUnidadSesion() && hayDiferenciasConciliacion(); }
+
   function actualizarDock() {
     renderAlertaDiferencias();
     renderListoParaEnviar();
@@ -3484,8 +3465,9 @@
     const { est, filas, difs, v } = estadoRuta();
     const esU = esUnidadSesion();
     let detalle = '';
-    if (est === 'VALIDADO') detalle = esU ? 'Ya puedes exportar el Excel oficial e imprimir' : 'Esta unidad ya está validada';
-    else if (est === 'ENVIADO') detalle = esU ? 'Esperando al municipal' : 'Pendiente de tu validación';
+    if (est === 'VALIDADO') detalle = esU ? 'Ya puedes exportar el Excel oficial e imprimir' : `Validado${captura && captura.validado_por ? ' por ' + captura.validado_por : ''}${captura && captura.validado_en ? ' el ' + fechaMesCorta(captura.validado_en) : ''} — la unidad ya fue avisada`;
+    else if (est === 'ENVIADO') detalle = esU ? 'Esperando al municipal' : (hayDifRevisor() ? 'No se puede validar: paloteo y Movimiento no coinciden' : 'Cuadra con el Movimiento — pulsa Validar para aprobarlo');
+    else if (!esU) detalle = 'La unidad aún no lo envía: no hay nada que validar';
     else if (_sinGuardar) detalle = 'Cambios sin guardar';
     else if (fueraDeVentanaDeCaptura(captura)) detalle = 'Este mes está fuera de su ventana de captura';
     else if (!captura) detalle = 'Aún sin guardar este mes';
@@ -3557,7 +3539,7 @@
       const { data, error } = await estado.db.from('campanas').select('nombre, fecha_inicio, fecha_fin');
       if (error) throw error;
       _campanasEd = (data || []).filter((c) => c.nombre && c.nombre.indexOf('Campaña Influenza') === 0 && c.fecha_inicio && c.fecha_fin)
-        .map((c) => ({ ini: String(c.fecha_inicio).slice(0, 10), fin: String(c.fecha_fin).slice(0, 10) }));
+        .map((c) => ({ nombre: c.nombre, ini: String(c.fecha_inicio).slice(0, 10), fin: String(c.fecha_fin).slice(0, 10) }));
     } catch (_) { _campanasEd = null; }   // sin campañas conocidas no se filtra: el servidor igual lo valida al guardar
   }
 
@@ -3624,8 +3606,131 @@
     return { cambios, totales, mes: tipo === 'cov' ? edResumenMesCovid() : null };
   }
 
-  // Dosis aplicadas en TODO el mes por marca (lo que debe cuadrar con el Movimiento de Biológico):
-  // Moderna niños (6 a 59 meses: 1ª y 2ª dosis), Moderna adultos (5 años y más) y Pfizer (solo adultos).
+  // ---------------------------------------------------------------------------
+  // Meta y acumulado de la campaña dentro de los editores de semanas.
+  // La meta es de TODA la campaña: lo que se pueda aplicar en este mes es la meta menos lo ya reportado en las demás
+  // semanas de la campaña. Es la misma cuenta que hace el servidor cuando la UNIDAD guarda (trigger de meta), así que
+  // aquí se ve en vivo lo que el servidor va a aceptar o rechazar.
+  // ---------------------------------------------------------------------------
+  const DOSIS_POR_FRASCO_INF = 10;
+  const DOSIS_POR_FRASCO_COVID = { MODERNA: 5, PFIZER: 6 };   // en dosis de 0.5 mL (igual que covid_frascos.js)
+  const _fmtN = (v) => (Number(v) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
+
+  function campanaDeFechaEd(fecha) {
+    const c = (_campanasEd || []).find((x) => fecha >= x.ini && fecha <= x.fin);
+    return c ? c.nombre : null;
+  }
+
+  // Lee la meta de la unidad, lo ya reportado en las demás semanas de la campaña y los frascos repartidos.
+  async function edCargarContexto(ed, tipo) {
+    const cov = tipo === 'cov';
+    const C = window.CovidCaptura;
+    const ctx = { campana: null, metas: null, otras: {}, otrasEq: { MODERNA: 0, PFIZER: 0 }, frascos: null, error: false };
+    ed.ctx = ctx;
+    try {
+      const primera = ed.semanas.find((w) => w.anio_campana);
+      ctx.campana = primera ? primera.anio_campana
+        : campanaDeFechaEd(ed.semanas.length ? ed.semanas[0].fecha : viernesDelMes(ed.mes, ed.anio)[0] || '');
+      if (!ctx.campana) return ctx;
+      const fechasEd = new Set(ed.semanas.map((w) => w.fecha));
+      const cache = cov ? _covidCapturasCache : _influenzaCapturasCache;
+      (cache || []).forEach((c) => {
+        if (c.anio_campana !== ctx.campana || fechasEd.has(String(c.fecha).slice(0, 10))) return;
+        const v = c.valores || {};
+        if (cov) {
+          C.RUBROS.forEach((r) => { ctx.otras[r] = (ctx.otras[r] || 0) + (Number(v.MODERNA && v.MODERNA[r]) || 0) + (Number(v.PFIZER && v.PFIZER[r]) || 0); });
+          C.MARCAS.forEach((m) => { ctx.otrasEq[m] += C.equivalentesMarca(v, m); });
+        } else {
+          Object.keys(v).forEach((r) => { ctx.otras[r] = (ctx.otras[r] || 0) + (Number(v[r]) || 0); });
+        }
+      });
+      const lecturas = await Promise.all([
+        estado.db.from(cov ? 'covid_metas' : 'influenza_metas').select('metas, updated_at').eq('clues', ed.clues).eq('anio_campana', ctx.campana),
+        estado.db.from(cov ? 'covid_distribucion_frascos' : 'influenza_distribucion_frascos').select(cov ? 'marca, cantidad_frascos' : 'cantidad_frascos').eq('clues', ed.clues).eq('anio_campana', ctx.campana)
+      ]);
+      const [rm, rf] = lecturas;
+      if (rm.error) throw rm.error;
+      const filasMeta = (rm.data || []).slice().sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+      ctx.metas = filasMeta.length ? (filasMeta[0].metas || {}) : null;
+      if (!rf.error && rf.data && rf.data.length) {
+        if (cov) {
+          ctx.frascos = { MODERNA: 0, PFIZER: 0 };
+          rf.data.forEach((d) => { if (ctx.frascos[d.marca] != null) ctx.frascos[d.marca] += Number(d.cantidad_frascos) || 0; });
+        } else {
+          ctx.frascos = rf.data.reduce((t, d) => t + (Number(d.cantidad_frascos) || 0), 0);
+        }
+      }
+    } catch (err) {
+      console.warn('[SINBA-SIS] No se pudo leer la meta para el editor:', err);
+      ctx.error = true;
+    }
+    return ctx;
+  }
+
+  const _edRubros = (tipo) => (tipo === 'cov' ? window.CovidCaptura.RUBROS : INFLUENZA_FILAS.map((f) => f.id));
+  const _edRubroNombre = (tipo, r) => {
+    if (tipo === 'cov') return window.CovidCaptura.ETIQUETA[r];
+    const f = INFLUENZA_FILAS.find((x) => x.id === r);
+    return f ? f.grupo + ' · ' + f.edad : r;
+  };
+
+  // Una fila (rubro): meta de la campaña, lo reportado antes, lo que hay ahora en este mes y lo que queda.
+  function edMetaFila(tipo, r) {
+    const ed = tipo === 'cov' ? _edCov : _edInf;
+    const ctx = (ed && ed.ctx) || {};
+    const meta = Number((ctx.metas || {})[r]) || 0;
+    const antes = Number((ctx.otras || {})[r]) || 0;
+    let mes = 0;
+    ((ed && ed.semanas) || []).forEach((w) => {
+      mes += tipo === 'cov'
+        ? (Number(w.valores.MODERNA && w.valores.MODERNA[r]) || 0) + (Number(w.valores.PFIZER && w.valores.PFIZER[r]) || 0)
+        : (Number(w.valores[r]) || 0);
+    });
+    const total = antes + mes;
+    const quedan = meta - total;
+    const pct = meta > 0 ? total * 100 / meta : 0;
+    let est = 'ok';
+    if (!ctx.metas) est = 'sin';
+    else if (meta <= 0) est = total > 0 ? 'pasa' : 'cero';
+    else if (total > meta) est = 'pasa';
+    else if (total === meta) est = 'tope';
+    else if (pct >= 85) est = 'cerca';
+    return { r, meta, antes, mes, total, quedan, pct, est };
+  }
+
+  function edCeldaMeta(m) { return m.meta > 0 ? _fmtN(m.meta) : '<span class="ed-nada">—</span>'; }
+  function edCeldaAvance(m) {
+    if (m.meta <= 0) {
+      return m.total > 0
+        ? `<div class="ed-av"><div class="ed-av-n"><b>${_fmtN(m.total)}</b><span> sin meta</span></div><div class="ed-av-d">antes ${_fmtN(m.antes)} · mes ${_fmtN(m.mes)}</div></div>`
+        : '<span class="ed-nada">—</span>';
+    }
+    const a = Math.min(100, m.antes * 100 / m.meta);
+    const b = Math.max(0, Math.min(100 - a, m.mes * 100 / m.meta));
+    return `<div class="ed-av"><div class="ed-av-n"><b>${_fmtN(m.total)}</b><span> de ${_fmtN(m.meta)}</span></div>
+      <div class="ed-av-bar" aria-hidden="true"><i class="a" style="width:${a.toFixed(1)}%"></i><i class="b" style="width:${b.toFixed(1)}%"></i></div>
+      <div class="ed-av-d">antes ${_fmtN(m.antes)} · mes ${_fmtN(m.mes)}</div></div>`;
+  }
+  function edCeldaQuedan(m) {
+    if (m.est === 'sin') return '<span class="ed-nada">—</span>';
+    if (m.est === 'pasa') return m.meta > 0 ? `<b>+${_fmtN(-m.quedan)}</b><small>de más</small>` : '<b>Sin</b><small>meta</small>';
+    if (m.est === 'tope') return '<b>0</b><small>completa</small>';
+    if (m.est === 'cero') return '<span class="ed-nada">—</span>';
+    return `<b>${_fmtN(m.quedan)}</b><small>por aplicar</small>`;
+  }
+  // Las tres celdas de la derecha de una fila (Meta · Avance · Quedan). rowspan > 1 para que un grupo de COVID-19 las comparta.
+  function edCeldasMetaHtml(tipo, r, rowspan) {
+    const m = edMetaFila(tipo, r);
+    const rs = rowspan > 1 ? ` rowspan="${rowspan}"` : '';
+    return `<td${rs} class="ed-mc ed-mc-meta ed-est-${m.est}" id="edmc_${r}" data-rub="${r}">${edCeldaMeta(m)}</td>`
+      + `<td${rs} class="ed-mc ed-mc-av ed-est-${m.est}" id="edav_${r}">${edCeldaAvance(m)}</td>`
+      + `<td${rs} class="ed-mc ed-mc-q ed-est-${m.est}" id="edq_${r}">${edCeldaQuedan(m)}</td>`;
+  }
+  const edEncabezadoMetaHtml = () => '<th scope="col" class="ed-mc ed-mc-meta ed-th-m" title="Dosis asignadas a la unidad para toda la campaña">Meta</th>'
+    + '<th scope="col" class="ed-mc ed-mc-av ed-th-m" title="Dosis ya reportadas en la campaña: otras semanas + este mes">Avance de la campaña</th>'
+    + '<th scope="col" class="ed-mc ed-mc-q ed-th-m" title="Meta menos lo reportado">Quedan</th>';
+
+  // Dosis aplicadas en el mes por marca (para cuadrar con el Movimiento de Biológico).
   function edResumenMesCovid() {
     const t = { modNino: 0, modAdulto: 0, pfizer: 0 };
     if (!_edCov) return t;
@@ -3640,18 +3745,120 @@
     return t;
   }
 
-  function edResumenMesCovidHtml(m) {
-    const f = (v) => v.toLocaleString('es-MX');
-    const tarjeta = (id, clase, titulo, sub, v) => `<div class="ed-mes-t ${clase}"><span class="ed-mes-tit">${titulo}</span><b id="${id}">${f(v)}</b><span class="ed-mes-sub">${sub}</span></div>`;
-    return `<section class="ed-mes-res" aria-label="Dosis de COVID-19 aplicadas en el mes por marca">
-      <p class="ed-mes-cab"><b>Aplicadas en el mes</b> · es lo que debe coincidir con el Movimiento de Biológico</p>
-      <div class="ed-mes-grid">
-        ${tarjeta('edmes_modNino', 'moderna', 'Moderna · niños', '6 a 59 meses (1ª y 2ª dosis)', m.modNino)}
-        ${tarjeta('edmes_modAdulto', 'moderna', 'Moderna · adultos', '5 años y más', m.modAdulto)}
-        ${tarjeta('edmes_modTotal', 'moderna', 'Moderna · total', 'niños + adultos', m.modNino + m.modAdulto)}
-        ${tarjeta('edmes_pfizer', 'pfizer', 'Pfizer', 'solo adultos', m.pfizer)}
-        ${tarjeta('edmes_total', 'total', 'Total COVID-19', 'Moderna + Pfizer', m.modNino + m.modAdulto + m.pfizer)}
-      </div></section>`;
+  // Barra apilada: lo de antes (oscuro) + lo de este mes (color) sobre la meta; roja si se pasa.
+  function edBarraApilada(antes, mes, tope, pasa) {
+    if (!(tope > 0)) return '<div class="edp-bar"><i class="a" style="width:0"></i></div>';
+    const a = Math.min(100, antes * 100 / tope);
+    const b = Math.max(0, Math.min(100 - a, mes * 100 / tope));
+    return `<div class="edp-bar${pasa ? ' pasa' : ''}" aria-hidden="true"><i class="a" style="width:${a.toFixed(1)}%"></i><i class="b" style="width:${b.toFixed(1)}%"></i></div>`;
+  }
+
+  function edKpi(clase, titulo, valor, sub) {
+    return `<div class="edp-k ${clase}"><span class="edp-k-t">${titulo}</span><b>${valor}</b><span class="edp-k-s">${sub}</span></div>`;
+  }
+
+  // Panel de arriba: meta y avance de la campaña, lo que falta, frascos repartidos y (COVID-19) lo aplicado por marca.
+  function edPanelHtml(tipo) {
+    const cov = tipo === 'cov';
+    const ed = cov ? _edCov : _edInf;
+    const ctx = ed.ctx || {};
+    const nombreVac = cov ? 'COVID-19' : 'Influenza';
+    const filas = _edRubros(tipo).map((r) => edMetaFila(tipo, r));
+    const metaT = filas.reduce((t, f) => t + f.meta, 0);
+    const antesT = filas.reduce((t, f) => t + f.antes, 0);
+    const mesT = filas.reduce((t, f) => t + f.mes, 0);
+    const totalT = antesT + mesT;
+    const pasan = filas.filter((f) => f.est === 'pasa');
+    const cerca = filas.filter((f) => f.est === 'cerca' || f.est === 'tope');
+    let cuerpo = '';
+
+    if (ctx.error || !ctx.campana || !ctx.metas) {
+      const motivo = ctx.error ? 'No se pudo leer la meta de la unidad (revisa la conexión y vuelve a abrir el editor).'
+        : !ctx.campana ? 'Este mes no cae dentro de una campaña de ' + nombreVac + ': no hay meta contra la cual comparar.'
+          : 'La unidad no tiene meta de ' + nombreVac + ' registrada para la campaña ' + _esc(ctx.campana) + '. Sin meta, la unidad no puede reportar dosis; pídele a su municipio o a la Jurisdicción que la capture.';
+      cuerpo = `<div class="edp-sinmeta"><span class="material-symbols-rounded" aria-hidden="true">flag_circle</span><div><b>Sin meta para comparar.</b> ${motivo}</div></div>`;
+    } else {
+      const queda = metaT - totalT;
+      const pct = metaT > 0 ? totalT * 100 / metaT : 0;
+      cuerpo = `<div class="edp-kpis">
+          ${edKpi('meta', 'Meta de la campaña', _fmtN(metaT), 'dosis asignadas a la unidad')}
+          ${edKpi('antes', 'Ya reportado antes', _fmtN(antesT), 'otras semanas de la campaña')}
+          ${edKpi('mes', 'En este mes', _fmtN(mesT), 'lo que hay en las casillas')}
+          ${edKpi(queda < 0 ? 'pasa' : 'queda', queda < 0 ? 'Se pasa por' : 'Quedan por aplicar', _fmtN(Math.abs(queda)), queda < 0 ? 'dosis sobre la meta' : 'de la meta total')}
+        </div>
+        <div class="edp-prog"><div class="edp-prog-t"><span>Avance de la campaña</span><b>${pct.toFixed(1)}%</b></div>${edBarraApilada(antesT, mesT, metaT, queda < 0)}
+          <div class="edp-leyenda"><span><i class="a"></i> antes de este mes</span><span><i class="b"></i> este mes</span></div></div>`;
+      if (pasan.length) {
+        cuerpo += `<div class="edp-alerta pasa" role="alert"><span class="material-symbols-rounded" aria-hidden="true">error</span><div><b>${pasan.length === 1 ? '1 grupo rebasa' : pasan.length + ' grupos rebasan'} su meta:</b> ${pasan.slice(0, 6).map((f) => _esc(_edRubroNombre(tipo, f.r)) + (f.meta > 0 ? ' (+' + _fmtN(-f.quedan) + ')' : ' (sin meta)')).join('; ')}${pasan.length > 6 ? '…' : '.'} ${esUnidadSesion() ? 'El servidor no guardará esta semana mientras sigan así.' : 'La unidad no podría reportar esas dosis: confirma el dato con ella antes de guardar.'}</div></div>`;
+      } else if (cerca.length) {
+        cuerpo += `<div class="edp-alerta cerca"><span class="material-symbols-rounded" aria-hidden="true">info</span><div><b>${cerca.length === 1 ? '1 grupo está' : cerca.length + ' grupos están'} al límite de su meta:</b> ${cerca.slice(0, 5).map((f) => _esc(_edRubroNombre(tipo, f.r))).join('; ')}${cerca.length > 5 ? '…' : '.'}</div></div>`;
+      }
+    }
+
+    // Frascos repartidos contra lo aplicado en la campaña
+    let abasto = '';
+    if (ctx.campana && !ctx.error) {
+      if (!cov) {
+        if (ctx.frascos) {
+          const rep = ctx.frascos * DOSIS_POR_FRASCO_INF;
+          const quedan = rep - totalT;
+          abasto = `<div class="edp-abasto"><div class="edp-ab-t"><span class="material-symbols-rounded" aria-hidden="true">inventory_2</span><b>Frascos repartidos a la unidad</b></div>
+            <div class="edp-ab-n"><b>${_fmtN(totalT)}</b> dosis aplicadas de <b>${_fmtN(rep)}</b> repartidas (${_fmtN(ctx.frascos)} ${ctx.frascos === 1 ? 'frasco' : 'frascos'} × ${DOSIS_POR_FRASCO_INF})</div>
+            ${edBarraApilada(antesT, mesT, rep, quedan < 0)}
+            <div class="edp-ab-s${quedan < 0 ? ' pasa' : ''}">${quedan < 0 ? 'Se pasa por ' + _fmtN(-quedan) + ' dosis de lo repartido: la unidad no podría guardar este reporte.' : 'Quedan ' + _fmtN(quedan) + ' dosis por aplicar con lo repartido.'}</div></div>`;
+        } else {
+          abasto = '<div class="edp-abasto vacio"><span class="material-symbols-rounded" aria-hidden="true">inventory_2</span><div>Aún no hay entrega de frascos registrada para esta unidad: no se compara contra frascos.</div></div>';
+        }
+      } else {
+        const C = window.CovidCaptura;
+        const bloques = C.MARCAS.map((m) => {
+          const nombre = m === 'PFIZER' ? 'Pfizer' : 'Moderna';
+          const fr = ctx.frascos ? ctx.frascos[m] || 0 : null;
+          let eqMes = 0;
+          _edCov.semanas.forEach((w) => { eqMes += C.equivalentesMarca(w.valores, m); });
+          const eqAntes = ctx.otrasEq ? ctx.otrasEq[m] || 0 : 0;
+          if (fr == null) return `<div class="edp-marca"><b class="${m.toLowerCase()}">${nombre}</b><span class="edp-ab-s">Sin entrega de frascos registrada.</span></div>`;
+          const rep = fr * DOSIS_POR_FRASCO_COVID[m];
+          const quedan = rep - (eqAntes + eqMes);
+          return `<div class="edp-marca"><b class="${m.toLowerCase()}">${nombre}</b>
+            <span class="edp-ab-n"><b>${_fmtN(eqAntes + eqMes)}</b> de <b>${_fmtN(rep)}</b> dosis repartidas (${_fmtN(fr)} ${fr === 1 ? 'frasco' : 'frascos'} × ${DOSIS_POR_FRASCO_COVID[m]})</span>
+            ${edBarraApilada(eqAntes, eqMes, rep, quedan < 0)}
+            <span class="edp-ab-s${quedan < 0 ? ' pasa' : ''}">${quedan < 0 ? 'Se pasa por ' + _fmtN(-quedan) : 'Quedan ' + _fmtN(quedan)} dosis (de 0.5 mL equivalentes)</span></div>`;
+        }).join('');
+        abasto = `<div class="edp-abasto"><div class="edp-ab-t"><span class="material-symbols-rounded" aria-hidden="true">inventory_2</span><b>Frascos repartidos por marca</b></div><div class="edp-marcas">${bloques}</div></div>`;
+      }
+    }
+
+    // COVID-19: lo aplicado en el mes por marca, para cuadrarlo con el Movimiento de Biológico
+    let porMarca = '';
+    if (cov) {
+      const m = edResumenMesCovid();
+      const t = (clase, titulo, sub, v) => `<div class="edp-mk ${clase}"><span>${titulo}</span><b>${_fmtN(v)}</b><small>${sub}</small></div>`;
+      porMarca = `<div class="edp-movimiento"><div class="edp-ab-t"><span class="material-symbols-rounded" aria-hidden="true">balance</span><b>Aplicadas este mes por marca</b><em>deben coincidir con el Movimiento de Biológico</em></div>
+        <div class="edp-mks">${t('moderna', 'Moderna · niños', '6 a 59 meses (1ª + 2ª dosis)', m.modNino)}${t('moderna', 'Moderna · adultos', '5 años y más', m.modAdulto)}${t('moderna tot', 'Moderna · total', 'niños + adultos', m.modNino + m.modAdulto)}${t('pfizer', 'Pfizer', 'solo adultos', m.pfizer)}${t('tot', 'Total COVID-19', 'Moderna + Pfizer', m.modNino + m.modAdulto + m.pfizer)}</div></div>`;
+    }
+
+    const ayuda = `<p class="edp-ayuda"><span class="material-symbols-rounded" aria-hidden="true">help</span><span><b>Cómo leerlo:</b> la <b>meta</b> es de toda la campaña (${ctx.campana ? _esc(ctx.campana) : nombreVac}). A cada grupo le restamos lo ya reportado en las demás semanas y lo que hay en las casillas de este mes; lo que <b>queda</b> es lo que todavía se puede aplicar. Si sale en rojo, esa unidad no podría guardar el reporte.${cov ? ' Moderna y Pfizer suman contra la misma meta.' : ''}</span></p>`;
+    return `<section class="edp" id="edPanel" aria-label="Meta y avance de la campaña de ${nombreVac}"><div class="edp-cab"><h4>Meta y avance · ${nombreVac}</h4>${ctx.campana ? `<span class="edp-camp">${_esc(ctx.campana)}</span>` : ''}</div>${cuerpo}${abasto}${porMarca}${ayuda}</section>`;
+  }
+
+  // Repinta el panel y las celdas de meta de cada fila (se llama con cada tecla).
+  function edRefrescarMeta(tipo) {
+    const ed = tipo === 'cov' ? _edCov : _edInf;
+    if (!ed) return;
+    const panel = document.getElementById('edPanel');
+    if (panel) panel.outerHTML = edPanelHtml(tipo);
+    _edRubros(tipo).forEach((r) => {
+      const m = edMetaFila(tipo, r);
+      const set = (id, html) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = html;
+        el.className = el.className.replace(/\bed-est-\w+\b/g, '').trim() + ' ed-est-' + m.est;
+      };
+      set('edmc_' + r, edCeldaMeta(m)); set('edav_' + r, edCeldaAvance(m)); set('edq_' + r, edCeldaQuedan(m));
+      document.querySelectorAll('tr[data-rub="' + r + '"]').forEach((tr) => { tr.classList.toggle('ed-fila-pasa', m.est === 'pasa'); });
+    });
   }
 
   function edTextoEstado(cambios) {
@@ -3666,12 +3873,7 @@
       const t = document.getElementById('edtot_' + f);
       if (t) t.textContent = r.totales[f].toLocaleString('es-MX');
     });
-    if (r.mes) {
-      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v.toLocaleString('es-MX'); };
-      set('edmes_modNino', r.mes.modNino); set('edmes_modAdulto', r.mes.modAdulto);
-      set('edmes_modTotal', r.mes.modNino + r.mes.modAdulto); set('edmes_pfizer', r.mes.pfizer);
-      set('edmes_total', r.mes.modNino + r.mes.modAdulto + r.mes.pfizer);
-    }
+    edRefrescarMeta(tabla.dataset.tipo);
     const e = document.getElementById('edEstado');
     if (e) { e.textContent = edTextoEstado(r.cambios); e.classList.toggle('hay', r.cambios > 0); }
   }
@@ -3700,22 +3902,22 @@
     INFLUENZA_FILAS.forEach((f) => {
       if (f.categoria !== cat) {
         cat = f.categoria; grp = null;
-        filas += `<tr class="ed-cat"><td colspan="${2 + semanas.length}">${_esc(cat)}</td></tr>`;
+        filas += `<tr class="ed-cat"><td colspan="${5 + semanas.length}">${_esc(cat)}</td></tr>`;
       }
       if (f.grupo !== grp) {
         grp = f.grupo;
-        filas += `<tr class="ed-grp"><td colspan="${2 + semanas.length}">${_esc(grp)}</td></tr>`;
+        filas += `<tr class="ed-grp"><td colspan="${5 + semanas.length}">${_esc(grp)}</td></tr>`;
       }
       const celdas = semanas.map((w) => {
         const v = Number(w.valores[f.id]) || 0;
         const cambiado = v !== (Number(w.orig[f.id]) || 0);
         return `<td><input type="number" min="0" step="1" inputmode="numeric" class="ed-in ed-inf-in${cambiado ? ' cambio' : ''}" data-f="${w.fecha}" data-r="${f.id}" value="${v || ''}" placeholder="0" aria-label="${_esc(f.grupo + ' · ' + f.edad)} · semana del ${rangoSemanaTexto(w.fecha, fechas)}"></td>`;
       }).join('');
-      filas += `<tr class="ed-fila"><th scope="row" class="ed-c1">${_esc(f.edad)}</th><td class="ed-clave">${_chipClave(f.clave)}</td>${celdas}</tr>`;
+      filas += `<tr class="ed-fila${edMetaFila('inf', f.id).est === 'pasa' ? ' ed-fila-pasa' : ''}" data-rub="${f.id}"><th scope="row" class="ed-c1">${_esc(f.edad)}</th><td class="ed-clave">${_chipClave(f.clave)}</td>${celdas}${edCeldasMetaHtml('inf', f.id, 1)}</tr>`;
     });
-    return `${edBarra('edInfNueva', 'edInfAgregar', faltan, fechas, res.cambios)}
+    return `${edBarra('edInfNueva', 'edInfAgregar', faltan, fechas, res.cambios)}${edPanelHtml('inf')}
       <table class="ed-tabla" data-tipo="inf">
-        <thead><tr><th scope="col" class="ed-c1 ed-esq">Variable</th><th scope="col" class="ed-th-clave">Clave</th>${encabezado}</tr></thead>
+        <thead><tr><th scope="col" class="ed-c1 ed-esq">Variable</th><th scope="col" class="ed-th-clave">Clave</th>${encabezado}${edEncabezadoMetaHtml()}</tr></thead>
         <tbody>${filas}</tbody>
       </table>
       <p class="ed-nota"><span class="material-symbols-rounded" aria-hidden="true">info</span><span>Las casillas que cambies se marcan en ámbar. Guarda para que el cambio llegue al servidor.${esUnidadSesion() ? ' Si te pasas de tu meta o de tus frascos, el servidor te lo dirá y no guardará esa semana.' : ' La unidad verá cada corrección en su panel de cambios.'}</span></p>`;
@@ -3769,6 +3971,7 @@
         sin_movimiento: Boolean(c.sin_movimiento), orig: Object.assign({}, c.valores || {}), valores: Object.assign({}, c.valores || {})
       }))
     };
+    await edCargarContexto(_edInf, 'inf');
     abrirDetalleSIS({
       titulo: (esUnidadSesion() ? 'Semanas de Influenza · ' : 'Corregir Influenza · ') + mesNombre(mes) + ' ' + anio,
       subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + (esUnidadSesion() ? ' · se sincroniza con tu panel de Influenza' : ' · se sincroniza con el panel de Influenza de la unidad'),
@@ -3888,20 +4091,21 @@
     const encabezado = semanas.map((w) => edEncabezadoSemana(w, fechas, res.totales)).join('');
     let filas = '';
     C.RUBROS.forEach((r) => {
-      filas += `<tr class="ed-grp ed-grp-cov"><td colspan="${2 + semanas.length}">${_esc(C.ETIQUETA[r])}</td></tr>`;
-      C.MARCAS.filter((m) => C.RUBROS_MARCA[m].indexOf(r) >= 0).forEach((m) => {
+      const marcasR = C.MARCAS.filter((m) => C.RUBROS_MARCA[m].indexOf(r) >= 0);
+      filas += `<tr class="ed-grp ed-grp-cov${edMetaFila('cov', r).est === 'pasa' ? ' ed-fila-pasa' : ''}" data-rub="${r}"><td colspan="${2 + semanas.length}">${_esc(C.ETIQUETA[r])}</td>${edCeldasMetaHtml('cov', r, 1 + marcasR.length)}</tr>`;
+      marcasR.forEach((m) => {
         const celdas = semanas.map((w) => {
           const v = Number(w.valores[m][r]) || 0;
           const cambiado = v !== (Number(w.orig[m][r]) || 0);
           return `<td><input type="number" min="0" step="1" inputmode="numeric" class="ed-in ed-cov-in${cambiado ? ' cambio' : ''}" data-f="${w.fecha}" data-m="${m}" data-r="${r}" value="${v || ''}" placeholder="0" aria-label="${m === 'PFIZER' ? 'Pfizer' : 'Moderna'} · ${_esc(C.ETIQUETA[r])} · semana del ${rangoSemanaTexto(w.fecha, fechas)}"></td>`;
         }).join('');
-        filas += `<tr class="ed-fila"><th scope="row" class="ed-c1"><span class="ed-marca ed-marca-${m === 'PFIZER' ? 'pfizer' : 'moderna'}" aria-hidden="true"></span>${m === 'PFIZER' ? 'Pfizer' : 'Moderna'}</th><td class="ed-clave">${_chipClave(C.SIS_CLAVE[r])}</td>${celdas}</tr>`;
+        filas += `<tr class="ed-fila${edMetaFila('cov', r).est === 'pasa' ? ' ed-fila-pasa' : ''}" data-rub="${r}"><th scope="row" class="ed-c1"><span class="ed-marca ed-marca-${m === 'PFIZER' ? 'pfizer' : 'moderna'}" aria-hidden="true"></span>${m === 'PFIZER' ? 'Pfizer' : 'Moderna'}</th><td class="ed-clave">${_chipClave(C.SIS_CLAVE[r])}</td>${celdas}</tr>`;
       });
     });
     const vacio = semanas.length ? '' : '<p class="ed-vacio">Esta unidad no tiene reportes de COVID-19 en este mes. Agrega una semana arriba.</p>';
-    return `${edBarra('edCovNueva', 'edCovAgregar', faltan, fechas, res.cambios)}${edResumenMesCovidHtml(res.mes)}${vacio}
+    return `${edBarra('edCovNueva', 'edCovAgregar', faltan, fechas, res.cambios)}${edPanelHtml('cov')}${vacio}
       <table class="ed-tabla" data-tipo="cov">
-        <thead><tr><th scope="col" class="ed-c1 ed-esq">Marca</th><th scope="col" class="ed-th-clave">Clave SIS</th>${encabezado}</tr></thead>
+        <thead><tr><th scope="col" class="ed-c1 ed-esq">Marca</th><th scope="col" class="ed-th-clave">Clave SIS</th>${encabezado}${edEncabezadoMetaHtml()}</tr></thead>
         <tbody>${filas}</tbody>
       </table>
       <p class="ed-nota"><span class="material-symbols-rounded" aria-hidden="true">info</span><span>Las casillas que cambies se marcan en ámbar. Las dosis de 6 a 59 meses son de 0.25 mL y Pfizer solo se aplica a adultos. Guarda para que el cambio llegue al servidor.</span></p>`;
@@ -3937,6 +4141,7 @@
         orig: copiaValoresCovid(c.valores), valores: copiaValoresCovid(c.valores)
       }))
     };
+    await edCargarContexto(_edCov, 'cov');
     abrirDetalleSIS({
       titulo: (esUnidadSesion() ? 'Semanas de COVID-19 · ' : 'Corregir COVID-19 · ') + mesNombre(mes) + ' ' + anio,
       subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + ' · Moderna y Pfizer por separado' + (esUnidadSesion() ? '' : ' · se sincroniza con el panel de la unidad'),

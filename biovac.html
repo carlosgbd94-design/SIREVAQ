@@ -49,8 +49,8 @@ window.onunhandledrejection = function (event) {
 <script defer src="biovac_importer.js?v=2026.3"></script>
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
-<script defer src="biovac_ui.js?v=2026.114"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.92"></script>
+<script defer src="biovac_ui.js?v=2026.115"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.94"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.29"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
@@ -322,7 +322,7 @@ window.onunhandledrejection = function (event) {
   .detalle-tabla td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; }
   .detalle-tabla .num { text-align: right; font-weight: 800; color: var(--primary); }
   /* ===== Editores de semanas (Influenza y COVID-19): ventana ancha, cabecera con totales y variable fija ===== */
-  .detalle-hoja.amplio { max-width: 920px; max-height: min(90vh, 820px); }
+  .detalle-hoja.amplio { max-width: 1180px; max-height: min(90vh, 820px); }
   .detalle-hoja.amplio .detalle-cuerpo { padding-top: 0; }
   .ed-barra { position: sticky; top: 0; left: 0; z-index: 4; height: 52px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface); border-bottom: 1px solid var(--outline-variant); padding: 0 2px; }
   .ed-agregar { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; font-weight: 700; color: var(--muted); }
@@ -353,17 +353,96 @@ window.onunhandledrejection = function (event) {
   .ed-in::placeholder { color: #cbd5e1; font-weight: 600; }
   .ed-in:focus { outline: none; border-color: #0284c7; box-shadow: 0 0 0 3px rgba(2, 132, 199, .18); }
   .ed-in.cambio { border-color: #d97706; background: #fffbeb; }
-  .ed-mes-res { margin: 10px 0 12px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; position: sticky; left: 0; }
-  .ed-mes-cab { margin: 0 0 8px; font-size: 12px; color: #475569; }
-  .ed-mes-cab b { color: #0f172a; }
-  .ed-mes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
-  .ed-mes-t { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 10px; border-left: 4px solid #94a3b8; background: #f8fafc; }
-  .ed-mes-t.moderna { border-left-color: #7c3aed; }
-  .ed-mes-t.pfizer { border-left-color: #0284c7; }
-  .ed-mes-t.total { border-left-color: #0f172a; background: #f1f5f9; }
-  .ed-mes-tit { font-size: 11.5px; font-weight: 700; color: #334155; }
-  .ed-mes-t b { font-size: 22px; line-height: 1.15; color: #0f172a; }
-  .ed-mes-sub { font-size: 10.5px; color: #64748b; }
+  /* ----- Meta y avance de la campaña (editores de Influenza y COVID-19) ----- */
+  .edp { margin: 14px 0 16px; padding: 16px 18px 14px; border: 1px solid #e2e8f0; border-radius: 16px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); color: #0f172a; position: sticky; left: 0; }
+  .edp-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .edp-cab h4 { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: -.01em; color: #0f172a; }
+  .edp-camp { font-size: 11.5px; font-weight: 700; color: #475569; background: #eef2f7; border-radius: 999px; padding: 4px 11px; }
+  .edp-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .edp-k { display: flex; flex-direction: column; gap: 2px; padding: 11px 14px 10px; border-radius: 12px; background: #fff; border: 1px solid #e2e8f0; border-top: 3px solid #94a3b8; }
+  .edp-k.meta { border-top-color: #0f172a; }
+  .edp-k.antes { border-top-color: #64748b; }
+  .edp-k.mes { border-top-color: #d97706; background: #fffbeb; }
+  .edp-k.queda { border-top-color: #16a34a; }
+  .edp-k.pasa { border-top-color: #dc2626; background: #fef2f2; }
+  .edp-k-t { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #64748b; }
+  .edp-k b { font-size: 28px; line-height: 1.1; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .edp-k.pasa b { color: #b91c1c; }
+  .edp-k-s { font-size: 11.5px; color: #64748b; }
+  .edp-prog { margin-top: 14px; }
+  .edp-prog-t { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; font-weight: 700; color: #334155; margin-bottom: 6px; }
+  .edp-prog-t b { font-size: 15px; color: #0f172a; font-variant-numeric: tabular-nums; }
+  .edp-bar { display: flex; height: 12px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+  .edp-bar i { display: block; height: 100%; transition: width .25s ease; }
+  .edp-bar i.a { background: #475569; }
+  .edp-bar i.b { background: #f59e0b; }
+  .edp-bar.pasa { background: #fecaca; box-shadow: inset 0 0 0 1.5px #dc2626; }
+  .edp-bar.pasa i.a { background: #b91c1c; }
+  .edp-bar.pasa i.b { background: #ef4444; }
+  .edp-leyenda { display: flex; gap: 16px; margin-top: 6px; font-size: 11px; color: #64748b; font-weight: 600; }
+  .edp-leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .edp-leyenda i.a { background: #475569; }
+  .edp-leyenda i.b { background: #f59e0b; }
+  .edp-alerta { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; padding: 10px 13px; border-radius: 12px; font-size: 12.5px; line-height: 1.5; }
+  .edp-alerta .material-symbols-rounded { font-size: 20px; flex: none; margin-top: 1px; }
+  .edp-alerta.pasa { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+  .edp-alerta.cerca { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+  .edp-sinmeta { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: #f1f5f9; color: #334155; font-size: 12.5px; line-height: 1.5; }
+  .edp-sinmeta .material-symbols-rounded { font-size: 22px; color: #64748b; flex: none; }
+  .edp-abasto, .edp-movimiento { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: #fff; border: 1px solid #e2e8f0; }
+  .edp-abasto.vacio { display: flex; gap: 10px; align-items: center; font-size: 12.5px; color: #64748b; background: #f8fafc; }
+  .edp-abasto.vacio .material-symbols-rounded, .edp-ab-t .material-symbols-rounded { font-size: 19px; color: #64748b; }
+  .edp-ab-t { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; color: #0f172a; flex-wrap: wrap; }
+  .edp-ab-t em { font-style: normal; font-size: 11.5px; font-weight: 600; color: #64748b; margin-left: 2px; }
+  .edp-ab-n { display: block; font-size: 12.5px; color: #334155; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+  .edp-ab-s { display: block; margin-top: 6px; font-size: 12px; font-weight: 600; color: #64748b; }
+  .edp-ab-s.pasa { color: #b91c1c; font-weight: 800; }
+  .edp-marcas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .edp-marca b.moderna, .edp-marca b.pfizer { display: inline-block; font-size: 12px; margin-bottom: 4px; padding: 2px 10px; border-radius: 999px; color: #fff; background: #7c3aed; }
+  .edp-marca b.pfizer { background: #0284c7; }
+  .edp-mks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .edp-mk { display: flex; flex-direction: column; gap: 1px; padding: 9px 11px; border-radius: 10px; background: #f8fafc; border-left: 4px solid #94a3b8; }
+  .edp-mk.moderna { border-left-color: #7c3aed; }
+  .edp-mk.pfizer { border-left-color: #0284c7; }
+  .edp-mk.tot { border-left-color: #0f172a; background: #f1f5f9; }
+  .edp-mk span { font-size: 11.5px; font-weight: 700; color: #334155; }
+  .edp-mk b { font-size: 22px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .edp-mk small { font-size: 10.5px; color: #64748b; }
+  .edp-ayuda { display: flex; gap: 8px; align-items: flex-start; margin: 14px 0 0; padding-top: 11px; border-top: 1px dashed #cbd5e1; font-size: 11.5px; line-height: 1.55; color: #475569; }
+  .edp-ayuda .material-symbols-rounded { font-size: 17px; color: #64748b; flex: none; margin-top: 1px; }
+  /* columnas de meta a la derecha de cada fila (fijas al desplazar las semanas) */
+  .ed-tabla thead th.ed-th-m { white-space: normal; line-height: 1.2; }
+  .ed-tabla .ed-mc { position: sticky; z-index: 1; background: #fff; text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; border-bottom: 1px solid #f1f5f9; }
+  .ed-tabla thead th.ed-mc { z-index: 3; }
+  .ed-tabla .ed-mc-meta { right: 232px; min-width: 62px; width: 62px; font-weight: 800; color: #0f172a; border-left: 2px solid #e2e8f0; }
+  .ed-tabla .ed-mc-av { right: 76px; min-width: 156px; width: 156px; text-align: left; padding: 4px 10px; }
+  .ed-tabla .ed-mc-q { right: 0; min-width: 76px; width: 76px; }
+  .ed-nada { color: #cbd5e1; font-weight: 700; }
+  .ed-av-n { font-size: 12.5px; color: #64748b; white-space: nowrap; }
+  .ed-av-n b { font-size: 14px; color: #0f172a; }
+  .ed-av-bar { display: flex; height: 7px; margin: 3px 0 2px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+  .ed-av-bar i { display: block; height: 100%; }
+  .ed-av-bar i.a { background: #475569; }
+  .ed-av-bar i.b { background: #f59e0b; }
+  .ed-av-d { font-size: 10px; color: #94a3b8; white-space: nowrap; }
+  .ed-mc-q b { display: block; font-size: 14px; color: #0f172a; line-height: 1.1; }
+  .ed-mc-q small { display: block; font-size: 9.5px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .03em; }
+  .ed-est-cerca.ed-mc-q b { color: #b45309; }
+  .ed-est-tope .ed-av-bar i.b { background: #0d9488; }
+  .ed-est-tope.ed-mc-q b { color: #0f766e; }
+  .ed-est-pasa { background: #fef2f2 !important; }
+  .ed-est-pasa .ed-av-bar i { background: #dc2626 !important; }
+  .ed-est-pasa .ed-av-n b, .ed-est-pasa.ed-mc-q b, .ed-est-pasa.ed-mc-meta { color: #b91c1c; }
+  .ed-tabla .ed-fila-pasa th, .ed-tabla .ed-fila-pasa td:not(.ed-mc) { background: #fff7f7; }
+  .ed-tabla .ed-fila-pasa .ed-in { border-color: #f87171; }
+  @media (max-width: 760px) {
+    .edp { padding: 12px 12px 10px; }
+    .edp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .edp-k b { font-size: 24px; }
+    .edp-marcas { grid-template-columns: 1fr; }
+    .edp-mks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ed-tabla .ed-mc { position: static; }
+  }
   .ed-nota { display: flex; gap: 8px; align-items: flex-start; margin: 14px 0 4px; padding: 10px 12px; border-radius: 12px; background: #f8fafc; color: #475569; font-size: 11.5px; line-height: 1.5; position: sticky; left: 0; }
   .ed-nota .material-symbols-rounded { font-size: 17px; color: #64748b; flex: none; margin-top: 1px; }
   .ed-vacio { margin: 12px 0 4px; font-size: 12.5px; color: var(--muted); }

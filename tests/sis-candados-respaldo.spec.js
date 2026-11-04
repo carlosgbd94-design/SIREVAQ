@@ -246,7 +246,11 @@ test('Revisor: corrige una semana de Influenza de una unidad con SIS enviado y s
     const anio = Number(document.getElementById('selAnio').value);
     let d = 1; while (new Date(anio, mes - 1, d).getDay() !== 5) d++;
     const fecha = anio + '-' + String(mes).padStart(2, '0') + '-' + String(d).padStart(2, '0');
-    F.tables.influenza_capturas = [{ id: 'i1', clues: 'QTSSA000001', fecha, valores: { r1: 4, r2: 2 }, anio_campana: 'Campaña Influenza 2026-2027', municipio: 'QUERETARO', unidad: 'C.S. Alfa', capturado_por: 'X', sin_movimiento: false }];
+    F.tables.influenza_capturas = [
+      { id: 'i1', clues: 'QTSSA000001', fecha, valores: { r1: 4, r2: 2 }, anio_campana: 'Campaña Influenza 2026-2027', municipio: 'QUERETARO', unidad: 'C.S. Alfa', capturado_por: 'X', sin_movimiento: false },
+      { id: 'i0', clues: 'QTSSA000001', fecha: '2027-03-05', valores: { r1: 3 }, anio_campana: 'Campaña Influenza 2026-2027', municipio: 'QUERETARO', unidad: 'C.S. Alfa', capturado_por: 'X', sin_movimiento: false }];
+    F.tables.influenza_metas = [{ id: 'm1', clues: 'QTSSA000001', anio_campana: 'Campaña Influenza 2026-2027', metas: { r1: 10, r2: 5 }, updated_at: '2026-10-01T00:00:00Z' }];
+    F.tables.influenza_distribucion_frascos = [{ id: 'd1', clues: 'QTSSA000001', anio_campana: 'Campaña Influenza 2026-2027', cantidad_frascos: 2 }];
     window.__upserts = [];
     window.__corregido = 0;
     document.addEventListener('sis06p:corregido', () => { window.__corregido++; });
@@ -264,7 +268,24 @@ test('Revisor: corrige una semana de Influenza de una unidad con SIS enviado y s
   });
   await expect(page.locator('#detalleSISOverlay')).toHaveClass(/abierto/);
   await expect(page.locator('.ed-inf-in[data-r="r1"]')).toHaveValue('4');
+  // Meta y acumulado de la campaña: meta 15 (10 + 5); antes 3 (otro mes); este mes 6 (4 + 2); quedan 6; frascos 2 x 10 = 20 dosis
+  const kpi = (c) => page.locator(`#edPanel .edp-k.${c} b`);
+  await expect(kpi('meta')).toHaveText('15');
+  await expect(kpi('antes')).toHaveText('3');
+  await expect(kpi('mes')).toHaveText('6');
+  await expect(kpi('queda')).toHaveText('6');
+  await expect(page.locator('#edPanel .edp-abasto')).toContainText('9 dosis aplicadas de 20 repartidas');
+  await expect(page.locator('#edmc_r1')).toHaveText('10');
+  await expect(page.locator('#edq_r1')).toContainText('3');          // 10 - (3 + 4)
+  await expect(page.locator('#edPanel .edp-alerta.pasa')).toHaveCount(0);
+  // En vivo: r1 = 9 -> 3 + 9 = 12 sobre una meta de 10: el grupo se marca en rojo y el panel avisa
   await page.locator('.ed-inf-in[data-r="r1"]').fill('9');
+  await expect(kpi('mes')).toHaveText('11');
+  await expect(kpi('queda')).toHaveText('1');
+  await expect(page.locator('#edq_r1')).toContainText('+2');
+  await expect(page.locator('#edq_r1')).toHaveClass(/ed-est-pasa/);
+  await expect(page.locator('#edPanel .edp-alerta.pasa')).toContainText('rebasa su meta');
+  await expect(page.locator('#edPanel .edp-abasto')).toContainText('14 dosis aplicadas de 20 repartidas');
   await page.locator('#detalleSISPie button', { hasText: 'Guardar cambios' }).click();
   await page.waitForTimeout(500);
   const up = await page.evaluate(() => window.__upserts);
@@ -283,7 +304,11 @@ test('Revisor: corrige una semana de COVID-19 (Moderna/Pfizer) de una unidad con
   await prepararSIS(page, { rol: 'MUNICIPAL', estadoCaptura: 'ENVIADO' });
   await page.evaluate(async () => {
     const F = window.__FAKE;
-    F.tables.covid_capturas = [{ id: 'cv1', clues: 'QTSSA000001', fecha: '2026-10-09', valores: { MODERNA: { c3: 4, c4: 2 }, PFIZER: { c3: 1 } }, anio_campana: 'Campaña Influenza 2026-2027', municipio: 'QUERETARO', unidad: 'C.S. Alfa', capturado_por: 'X', sin_movimiento: false }];
+    F.tables.covid_capturas = [
+      { id: 'cv1', clues: 'QTSSA000001', fecha: '2026-10-09', valores: { MODERNA: { c3: 4, c4: 2 }, PFIZER: { c3: 1 } }, anio_campana: 'Campaña Influenza 2026-2027', municipio: 'QUERETARO', unidad: 'C.S. Alfa', capturado_por: 'X', sin_movimiento: false },
+      { id: 'cv0', clues: 'QTSSA000001', fecha: '2027-03-05', valores: { MODERNA: { c3: 3 } }, anio_campana: 'Campaña Influenza 2026-2027', municipio: 'QUERETARO', unidad: 'C.S. Alfa', capturado_por: 'X', sin_movimiento: false }];
+    F.tables.covid_metas = [{ id: 'cm1', clues: 'QTSSA000001', anio_campana: 'Campaña Influenza 2026-2027', metas: { c1: 0, c3: 10, c4: 5, c5: 0, c6: 0 }, updated_at: '2026-10-01T00:00:00Z' }];
+    F.tables.covid_distribucion_frascos = [{ id: 'cd1', clues: 'QTSSA000001', anio_campana: 'Campaña Influenza 2026-2027', marca: 'MODERNA', cantidad_frascos: 2 }];
     window.__upserts = [];
     window.__corregido = 0;
     document.addEventListener('sis06p:corregido', () => { window.__corregido++; });
@@ -302,18 +327,34 @@ test('Revisor: corrige una semana de COVID-19 (Moderna/Pfizer) de una unidad con
   await expect(page.locator('#detalleSISOverlay')).toHaveClass(/abierto/);
   await expect(page.locator('.ed-cov-in[data-m="MODERNA"][data-r="c3"]')).toHaveValue('4');
   await expect(page.locator('.ed-cov-in[data-m="PFIZER"][data-r="c1"]')).toHaveCount(0);   // Pfizer no aplica a niños
-  // Resumen del mes por marca (para cuadrar con el Movimiento): Moderna niños / adultos / total, Pfizer y total
-  await expect(page.locator('#edmes_modNino')).toHaveText('0');
-  await expect(page.locator('#edmes_modAdulto')).toHaveText('6');
-  await expect(page.locator('#edmes_modTotal')).toHaveText('6');
-  await expect(page.locator('#edmes_pfizer')).toHaveText('1');
-  await expect(page.locator('#edmes_total')).toHaveText('7');
+  // Meta y acumulado de la campaña: meta 15 (c3 10 + c4 5); antes 3 (otro mes); este mes 7 (c3 4+1, c4 2); quedan 5
+  const kpi = (c) => page.locator(`#edPanel .edp-k.${c} b`);
+  const marca = (i) => page.locator('#edPanel .edp-mk').nth(i).locator('b');
+  await expect(kpi('meta')).toHaveText('15');
+  await expect(kpi('antes')).toHaveText('3');
+  await expect(kpi('mes')).toHaveText('7');
+  await expect(kpi('queda')).toHaveText('5');
+  await expect(page.locator('#edmc_c3')).toHaveText('10');
+  await expect(page.locator('#edq_c3')).toContainText('2');           // 10 - (3 + 5)
+  // Moderna: 3 antes + 6 de este mes = 9 de 10 dosis repartidas (2 frascos x 5); a Pfizer no se le han repartido frascos (con reparto de Moderna, Pfizer en 0 es un tope real)
+  await expect(page.locator('#edPanel .edp-marca').first()).toContainText('9 de 10 dosis repartidas');
+  await expect(page.locator('#edPanel .edp-marca').nth(1)).toContainText('1 de 0 dosis repartidas');
+  // Lo aplicado en el mes por marca (para cuadrar con el Movimiento): niños, adultos, total Moderna, Pfizer y total
+  await expect(marca(0)).toHaveText('0');
+  await expect(marca(1)).toHaveText('6');
+  await expect(marca(2)).toHaveText('6');
+  await expect(marca(3)).toHaveText('1');
+  await expect(marca(4)).toHaveText('7');
   await page.locator('.ed-cov-in[data-m="MODERNA"][data-r="c1"]').fill('3');
   await page.locator('.ed-cov-in[data-m="PFIZER"][data-r="c3"]').fill('5');
-  await expect(page.locator('#edmes_modNino')).toHaveText('3');
-  await expect(page.locator('#edmes_modTotal')).toHaveText('9');
-  await expect(page.locator('#edmes_pfizer')).toHaveText('5');
-  await expect(page.locator('#edmes_total')).toHaveText('14');
+  await expect(marca(0)).toHaveText('3');
+  await expect(marca(2)).toHaveText('9');
+  await expect(marca(3)).toHaveText('5');
+  await expect(marca(4)).toHaveText('14');
+  // c3: 3 + (4 + 5) = 12 sobre una meta de 10, y c1 (niños) no tiene meta: los dos se marcan y el panel avisa
+  await expect(page.locator('#edq_c3')).toContainText('+2');
+  await expect(page.locator('#edq_c1')).toContainText('Sin');
+  await expect(page.locator('#edPanel .edp-alerta.pasa')).toContainText('2 grupos rebasan su meta');
   await page.locator('.ed-cov-in[data-m="MODERNA"][data-r="c1"]').fill('');
   await page.locator('#detalleSISPie button', { hasText: 'Guardar cambios' }).click();
   await page.waitForTimeout(500);
