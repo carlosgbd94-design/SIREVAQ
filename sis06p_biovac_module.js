@@ -480,6 +480,8 @@
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
     const { data, error } = await estado.db.rpc('sis06p_comparativo', { p_mes: mes, p_anio: anio, p_clues: clues });
+    // Respuesta tardía de otra unidad/mes: no debe pisar la conciliación de la que se está viendo ahora.
+    { const act = datosUnidadActiva(); if (!act || act.clues !== clues || Number(document.getElementById('selMes').value) !== mes || Number(document.getElementById('selAnio').value) !== anio) return; }
     if (error) {
       console.warn('[SIS-06-P] Error cargando conciliación con Movimiento:', error);
       _conciliacionCache = null;
@@ -3612,10 +3614,10 @@
   // semanas de la campaña. Es la misma cuenta que hace el servidor cuando la UNIDAD guarda (trigger de meta), así que
   // aquí se ve en vivo lo que el servidor va a aceptar o rechazar.
   // ---------------------------------------------------------------------------
-  const DOSIS_POR_FRASCO_INF = 10;
-  const DOSIS_POR_FRASCO_COVID = { MODERNA: 5, PFIZER: 6 };   // en dosis de 0.5 mL (igual que covid_frascos.js)
   let _edpAyudaAbierta = false;   // el «¿Cómo se lee esto?» se queda como lo dejó la persona aunque el panel se repinte
   document.addEventListener('toggle', (ev) => { if (ev.target && ev.target.matches && ev.target.matches('.edp-ayuda')) _edpAyudaAbierta = ev.target.open; }, true);
+  const DOSIS_POR_FRASCO_INF = 10;
+  const DOSIS_POR_FRASCO_COVID = { MODERNA: 5, PFIZER: 6 };   // en dosis de 0.5 mL (igual que covid_frascos.js)
   const _fmtN = (v) => (Number(v) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
 
   function campanaDeFechaEd(fecha) {

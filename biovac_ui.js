@@ -1013,6 +1013,8 @@ function inicializarToggleSIS06P() {
     // así que el botón no aplica para rol UNIDAD.
     document.getElementById('btnAbrirImportador').style.display = rolActual === 'UNIDAD' ? 'none' : 'inline-flex';
     cargarMovimiento();
+    // El estatus del SINBA-SIS (Validar/Enviar de la barra) debe estar cargado aunque se entre directo a Movimiento
+    if (!_sis06pInicializado) refrescarHojasSIS();
   });
 
   // SIS-SS-CE-H e Influenza son hojas derivadas (solo lectura): se pintan
@@ -1064,7 +1066,16 @@ function inicializarToggleSIS06P() {
   // con las del mes anterior al cambiar de mes/año.
   async function refrescarHojasSIS() {
     const hojas = [btnSis, btnCeh, btnInf, btnCsv];
-    if (!hojas.some((b) => b && b.classList.contains('activo'))) return;
+    const enHojaSIS = hojas.some((b) => b && b.classList.contains('activo'));
+    // En Movimiento no se dibuja el paloteo, pero el estatus del SINBA-SIS (y con él Validar/Enviar de la barra) es de la
+    // unidad y el mes elegidos: se relee igual, en modo ligero. Antes se salía y la barra se quedaba con la unidad anterior.
+    if (!enHojaSIS) {
+      if (!btnMov.classList.contains('activo')) return;
+      _sis06pInicializado = true;
+      await window.SIS06PBiovac.init({ soloEstado: true });
+      sincronizarDockMovimiento();
+      return;
+    }
     _sis06pInicializado = true;
     await window.SIS06PBiovac.init();
     if (btnCeh.classList.contains('activo')) window.SIS06PBiovac.renderCEH();
@@ -1082,7 +1093,7 @@ function inicializarToggleSIS06P() {
   // la CLUES recién seleccionada, no solo volver a pintar con datos viejos.
   if (selUnidadRevision) {
     selUnidadRevision.addEventListener('change', async () => {
-      if (btnMov.classList.contains('activo')) { recargarMovimientoPorFiltro(); return; }
+      if (btnMov.classList.contains('activo')) { recargarMovimientoPorFiltro(); }
       await refrescarHojasSIS();
     });
   }
@@ -1283,6 +1294,8 @@ async function cargarMovimientoInterno() {
   const { data: movimiento, error } = await estado.db.from('biovac_movimientos')
     .select('*').eq('unidad_id', unidadId).eq('anio', anio).eq('mes', mes).maybeSingle();
   if (error) { toast('Error: ' + error.message, 'error'); return; }
+  // Si mientras llegaba la lectura el usuario cambió de unidad, año o mes, esta respuesta es de otra unidad: no se pinta.
+  if (unidadIdMovimientoActivo() !== unidadId || Number(document.getElementById('selAnio').value) !== anio || Number(document.getElementById('selMes').value) !== mes) return;
 
   // Si el usuario ya cambió a otra pestaña (SIS-06-P/CSV/Seguimiento) mientras
   // esta consulta estaba en vuelo, no hay que pintar nada de Movimiento --
