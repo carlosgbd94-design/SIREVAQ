@@ -1,5 +1,5 @@
 -- ============================================================================
--- PROPUESTA (NO APLICADA) — lecturas mucho más rápidas con el mismo acceso
+-- APLICADO EN PRODUCCIÓN 2026-11-04 — lecturas mucho más rápidas con el mismo acceso
 -- ============================================================================
 -- Qué arregla: las políticas RLS llaman auth.uid(), is_admin(), get_user_role(), es_visualizador_juris() e
 -- is_jurisdiccional() SIN envolverlas en (select ...). Postgres las vuelve a ejecutar por CADA FILA (is_admin() es plpgsql

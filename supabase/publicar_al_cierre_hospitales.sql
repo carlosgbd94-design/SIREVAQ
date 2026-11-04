@@ -1,5 +1,5 @@
 -- ============================================================================
--- PROPUESTA (NO APLICADA) — que los hospitales (NHG y HENM) también se publiquen a indicadores al cerrar el mes
+-- APLICADO EN PRODUCCIÓN 2026-11-04 — que los hospitales (NHG y HENM) también se publiquen a indicadores al cerrar el mes
 -- ============================================================================
 -- Hallazgo de la auditoría (2026-11-04): el disparador trg_biovac_publicar_al_cierre (reducir_io_publicacion_al_cierre.sql)
 -- solo publica cuando se cierra una fila JS1-* (el Movimiento del MUNICIPIO). Los hospitales no tienen fila JS1 desde

@@ -25,6 +25,8 @@
 -- consultado (la misma fuente que edita el Mapeador SIS del admin).
 -- ===================================================================================
 
+-- OBSOLETO (2026-11-04): las versiones de 3 parámetros de este archivo ya no existen en producción; la vigente es la
+-- paginada de supabase/rpc_concentrado_paginado.sql. NO volver a ejecutar este archivo (recrearía la ambigüedad).
 CREATE OR REPLACE FUNCTION public.get_concentrado_aplicaciones(p_anio integer, p_mes_ini integer, p_mes_fin integer)
  RETURNS TABLE(
     clues character varying,
