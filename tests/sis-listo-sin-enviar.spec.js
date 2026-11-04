@@ -255,3 +255,33 @@ test('Resumen de unidades (municipal): «Copiar pendientes de enviar» copia sol
   const enviadas = await page.locator('#munEnvios .mun-unidad:not(.vacio)').evaluateAll((els) => els.map((e) => e.dataset.clues));
   enviadas.forEach((c) => expect(texto).not.toContain(c));
 });
+
+for (const [cuadra, clase] of [[false, true], [true, false]]) {
+  test(`Municipal: «Validar» ${cuadra ? 'no se marca' : 'se marca en rojo con ≠'} cuando el paloteo ${cuadra ? 'cuadra' : 'no cuadra'} con el Movimiento`, async ({ page }) => {
+    await abrir(page, 'MUNICIPAL');
+    await page.evaluate(async (cuadra) => {
+      const F = window.__FAKE;
+      const mes = Number(document.getElementById('selMes').value);
+      const anio = Number(document.getElementById('selAnio').value);
+      F.tables.sis_variables.length = 0;
+      estado.unidadesClues = [{ id: 'ua', clues: 'QTSSA00000A', nombre: 'Unidad A', municipio: 'QUERETARO' }];
+      const sel = document.getElementById('selUnidadRevision');
+      sel.innerHTML = '<option value="ua">A</option>';
+      F.tables.sis06p_capturas.length = 0;
+      F.tables.sis06p_capturas.push({ id: 'ca', clues: 'QTSSA00000A', unidad: 'Unidad A', municipio: 'QUERETARO', mes, anio, estado: 'ENVIADO', valores: {}, ajustes: {} });
+      const real = estado.db;
+      estado.db = new Proxy(real, { get(t, p) {
+        if (p === 'rpc') return async (n, a) => (n === 'sis06p_comparativo'
+          ? { data: [{ clues: 'QTSSA00000A', etiqueta: 'BCG', paloteo: 10, aplicado: cuadra ? 10 : 7, coincide: cuadra }], error: null }
+          : t.rpc(n, a));
+        return t[p];
+      } });
+      document.getElementById('panelSIS06P').style.display = 'block';
+      sel.value = 'ua';
+      await SIS06PBiovac.init();
+    }, cuadra);
+    const btn = page.locator('#btnMarcarValidado');
+    if (clase) await expect(btn).toHaveClass(/con-diferencias/);
+    else await expect(btn).not.toHaveClass(/con-diferencias/);
+  });
+}

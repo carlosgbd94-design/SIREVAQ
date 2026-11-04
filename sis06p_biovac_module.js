@@ -487,6 +487,14 @@
   // Estado del botón Enviar (habilitado, color rojo con «≠» y su explicación) según la conciliación ACTUAL. Se llama desde
   // todos los lugares que la releen, para que el botón, el aviso y el globito nunca digan cosas distintas.
   function actualizarBotonEnviar() {
+    // Revisores: «Marcar como Validado» muestra en rojo con «≠» cuando paloteo y Movimiento no coinciden (el servidor
+    // también lo rechaza). Sigue pulsable para ver en qué difiere y, ADMIN/JURISDICCIONAL, autorizar excepción.
+    const bv = document.getElementById('btnMarcarValidado');
+    if (bv && !esUnidadSesion()) {
+      const noCuadra = hayDiferenciasConciliacion();
+      bv.classList.toggle('con-diferencias', noCuadra);
+      bv.title = noCuadra ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden — no se puede validar hasta corregirlo' : 'Marcar como validado';
+    }
     const b = document.getElementById('btnEnviarSIS06P');
     if (!b || !esUnidadSesion() || b.style.display === 'none') return;
     const fuera = !(_ventanaCache && _ventanaCache.dentro_envio);

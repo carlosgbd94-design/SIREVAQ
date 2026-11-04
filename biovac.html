@@ -50,7 +50,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
 <script defer src="biovac_ui.js?v=2026.114"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.90"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.91"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.29"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
@@ -426,6 +426,8 @@ window.onunhandledrejection = function (event) {
   /* El botón Enviar no se apaga con diferencias: se queda a la vista, en rojo, y al pulsarlo explica en qué */
   .dock-btn.dock-enviar.con-diferencias { background: #dc2626; color: #fff; }
   .dock-btn.dock-enviar.con-diferencias::after { content: ' ≠'; font-weight: 900; }
+  .dock-btn.dock-validar.con-diferencias { background: #dc2626; color: #fff; }
+  .dock-btn.dock-validar.con-diferencias::after { content: ' ≠'; font-weight: 900; }
   .ruta-mes { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; }
   .ruta-pasos { flex: 1; display: flex; margin: 0; padding: 0; list-style: none; min-width: 0; }
   .ruta-paso { position: relative; flex: 1 1 0; min-width: 0; padding-right: 10px; display: flex; gap: 0; align-items: flex-start; }
