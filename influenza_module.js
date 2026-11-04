@@ -8526,7 +8526,28 @@ function renderCovidCaptura() {
       }
     }
   });
+  pintarAvisoSemanasCovid(cont, fecha);
   aplicarVacunaCaptura();
+}
+
+/** Igual que en Influenza: si hay semanas anteriores sin reporte de COVID-19, se avisa y se ofrece ir a esa semana (así no se captura en la semana equivocada). */
+function pintarAvisoSemanasCovid(cont, fecha) {
+  cont.querySelectorAll(".cov-pend-aviso").forEach((n) => n.remove());
+  if (!_covidPanelListo) return;
+  const hoy = influenzaHoy();
+  const atrasadas = generateCampaignWeeks().filter(w => w.fecha < hoy && w.fecha !== fecha
+    && !_covidCapturasCache.some(r => String(r.fecha).slice(0, 10) === w.fecha) && !influenzaVentanaError(w.fecha));
+  if (!atrasadas.length) return;
+  const aviso = document.createElement("div");
+  aviso.className = "inf-ctl-msg is-warn cov-pend-aviso";
+  aviso.style.marginBottom = "12px";
+  aviso.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">history</span><div>Tienes <b>${atrasadas.length === 1 ? "1 semana anterior" : atrasadas.length + " semanas anteriores"} sin reporte de COVID-19</b>. <button type="button" class="inf-ctl-link" data-fecha="${atrasadas[0].fecha}">Ir a la semana del ${influenzaRangoTexto(atrasadas[0].fecha)}</button></div>`;
+  aviso.querySelector(".inf-ctl-link").addEventListener("click", (e) => {
+    const sel = document.getElementById("influenza_semana");
+    sel.value = e.currentTarget.dataset.fecha;
+    sel.dispatchEvent(new Event("change"));
+  });
+  cont.insertBefore(aviso, cont.firstChild);
 }
 
 /** Botón azul de guardar con COVID-19 elegido: valida contra la meta y guarda el reporte de la semana. */
