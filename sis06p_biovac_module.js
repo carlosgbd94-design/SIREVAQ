@@ -2979,9 +2979,10 @@
   // móvil (CSS). Cierra con la X, tocando el fondo o con Escape, y devuelve el
   // foco a lo que lo abrió. `acciones` = botones extra [{texto, icono, clase,
   // onClick}] antes del "Cerrar".
-  function abrirDetalleSIS({ titulo, subtitulo, cuerpo, acciones }) {
+  function abrirDetalleSIS({ titulo, subtitulo, cuerpo, acciones, amplio }) {
     const ov = document.getElementById('detalleSISOverlay');
     if (!ov) return;
+    ov.querySelector('.detalle-hoja').classList.toggle('amplio', Boolean(amplio));
     document.getElementById('detalleSISTitulo').textContent = titulo || '';
     document.getElementById('detalleSISSub').textContent = subtitulo || '';
     document.getElementById('detalleSISCuerpo').innerHTML = cuerpo || '';
@@ -3575,43 +3576,99 @@
     return !captura || captura.estado === 'BORRADOR' ? 'Esta unidad todavía no envía su SIS: nada que corregir.' : '';
   }
 
+  // ---- Piezas compartidas por los editores de semanas (Influenza y COVID-19) ----
+  function semanaIso(fechaIso) {
+    const d = new Date(fechaIso + 'T12:00:00');
+    d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+    const w1 = new Date(d.getFullYear(), 0, 4);
+    return 1 + Math.round(((d.getTime() - w1.getTime()) / 86400000 - 3 + ((w1.getDay() + 6) % 7)) / 7);
+  }
+
+  // Totales de dosis por semana y cuántas casillas se han cambiado (lo que se ve en la cabecera y en la barra de arriba).
+  function edResumen(tipo) {
+    const ed = tipo === 'cov' ? _edCov : _edInf;
+    const C = window.CovidCaptura;
+    let cambios = 0;
+    const totales = {};
+    if (!ed) return { cambios, totales };
+    ed.semanas.forEach((w) => {
+      let tot = 0; let ch = 0;
+      if (tipo === 'cov') {
+        C.MARCAS.forEach((m) => C.RUBROS_MARCA[m].forEach((r) => {
+          const v = Number(w.valores[m][r]) || 0; tot += v;
+          if (v !== (Number(w.orig[m][r]) || 0)) ch++;
+        }));
+      } else {
+        INFLUENZA_FILAS.forEach((f) => {
+          const v = Number(w.valores[f.id]) || 0; tot += v;
+          if (v !== (Number(w.orig[f.id]) || 0)) ch++;
+        });
+      }
+      cambios += ch + (w.nuevo && !ch ? 1 : 0);
+      totales[w.fecha] = tot;
+    });
+    return { cambios, totales };
+  }
+
+  function edTextoEstado(cambios) {
+    return cambios ? `${cambios} ${cambios === 1 ? 'casilla cambiada' : 'casillas cambiadas'}` : 'Sin cambios';
+  }
+
+  function edActualizar() {
+    const tabla = document.querySelector('#detalleSISCuerpo .ed-tabla');
+    if (!tabla) return;
+    const r = edResumen(tabla.dataset.tipo);
+    Object.keys(r.totales).forEach((f) => {
+      const t = document.getElementById('edtot_' + f);
+      if (t) t.textContent = r.totales[f].toLocaleString('es-MX');
+    });
+    const e = document.getElementById('edEstado');
+    if (e) { e.textContent = edTextoEstado(r.cambios); e.classList.toggle('hay', r.cambios > 0); }
+  }
+
+  function edEncabezadoSemana(w, fechas, totales) {
+    return `<th scope="col" class="ed-th-sem"><span class="ed-sem-n">Sem ${semanaIso(w.fecha)}</span><span class="ed-sem-r">${rangoSemanaTexto(w.fecha, fechas)}</span>${w.nuevo ? '<span class="ed-nueva">nueva</span>' : ''}<span class="ed-sem-t"><b id="edtot_${w.fecha}">${(totales[w.fecha] || 0).toLocaleString('es-MX')}</b> dosis</span></th>`;
+  }
+
+  function edBarra(idSelect, idBoton, faltan, fechas, cambios) {
+    const agregar = faltan.length
+      ? `<div class="ed-agregar"><label for="${idSelect}">¿Falta una semana?</label>
+          <select id="${idSelect}">${faltan.map((f) => `<option value="${f}">Semana del ${rangoSemanaTexto(f, fechas)}</option>`).join('')}</select>
+          <button type="button" class="btn-mini btn-secundario" id="${idBoton}"><span class="material-symbols-rounded" aria-hidden="true">add</span> Agregar</button></div>`
+      : '<div class="ed-agregar"><span>Todas las semanas del mes ya están.</span></div>';
+    return `<div class="ed-barra">${agregar}<span class="ed-estado${cambios ? ' hay' : ''}" id="edEstado" role="status" aria-live="polite">${edTextoEstado(cambios)}</span></div>`;
+  }
+
   function editorInfluenzaHtml() {
     const semanas = _edInf.semanas;
+    const fechas = semanas.map((x) => x.fecha);
     const faltan = viernesDelMes(_edInf.mes, _edInf.anio).filter((f) => !semanas.some((w) => w.fecha === f));
-    const encabezado = semanas.map((w) => `<th style="${_TH}">${rangoSemanaTexto(w.fecha, semanas.map((x) => x.fecha))}${w.nuevo ? '<br><span style="font-weight:600; font-size:9px; text-transform:none; color:var(--secondary);">nueva</span>' : ''}</th>`).join('');
+    const res = edResumen('inf');
+    const encabezado = semanas.map((w) => edEncabezadoSemana(w, fechas, res.totales)).join('');
     let filas = '';
     let cat = null; let grp = null;
     INFLUENZA_FILAS.forEach((f) => {
       if (f.categoria !== cat) {
         cat = f.categoria; grp = null;
-        filas += `<tr><td colspan="${2 + semanas.length}" style="padding:6px 8px; background:#fdf2ee; color:#C26750; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em;">${_esc(cat)}</td></tr>`;
+        filas += `<tr class="ed-cat"><td colspan="${2 + semanas.length}">${_esc(cat)}</td></tr>`;
       }
       if (f.grupo !== grp) {
         grp = f.grupo;
-        filas += `<tr><td colspan="${2 + semanas.length}" style="padding:5px 8px 1px; font-size:11px; font-weight:700; color:#334155;">${_esc(grp)}</td></tr>`;
+        filas += `<tr class="ed-grp"><td colspan="${2 + semanas.length}">${_esc(grp)}</td></tr>`;
       }
       const celdas = semanas.map((w) => {
         const v = Number(w.valores[f.id]) || 0;
         const cambiado = v !== (Number(w.orig[f.id]) || 0);
-        return `<td style="padding:2px 3px; text-align:center;"><input type="number" min="0" step="1" inputmode="numeric" class="ed-inf-in" data-f="${w.fecha}" data-r="${f.id}" value="${v || ''}" placeholder="0"
-          style="width:58px; text-align:center; font-weight:700; font-size:12px; border:1.5px solid ${cambiado ? '#d97706' : '#e2e8f0'}; background:${cambiado ? '#fffbeb' : '#fff'}; border-radius:8px; padding:5px 4px;"></td>`;
+        return `<td><input type="number" min="0" step="1" inputmode="numeric" class="ed-in ed-inf-in${cambiado ? ' cambio' : ''}" data-f="${w.fecha}" data-r="${f.id}" value="${v || ''}" placeholder="0" aria-label="${_esc(f.grupo + ' · ' + f.edad)} · semana del ${rangoSemanaTexto(w.fecha, fechas)}"></td>`;
       }).join('');
-      filas += `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 18px; font-size:11.5px; color:#475569;">${_esc(f.edad)}</td><td style="padding:2px 4px; text-align:center;">${_chipClave(f.clave)}</td>${celdas}</tr>`;
+      filas += `<tr class="ed-fila"><th scope="row" class="ed-c1">${_esc(f.edad)}</th><td class="ed-clave">${_chipClave(f.clave)}</td>${celdas}</tr>`;
     });
-    const agregar = faltan.length
-      ? `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-          <label for="edInfNueva" style="font-size:11.5px; font-weight:700; color:var(--muted);">¿Falta una semana?</label>
-          <select id="edInfNueva" style="padding:6px 8px; border-radius:8px; border:1px solid var(--outline-variant);">${faltan.map((f) => `<option value="${f}">Semana del ${rangoSemanaTexto(f, semanas.map((x) => x.fecha))}</option>`).join('')}</select>
-          <button type="button" class="btn-mini btn-secundario" id="edInfAgregar"><span class="material-symbols-rounded">add</span> Agregar semana</button>
-        </div>` : '';
-    return `${agregar}
-      <div style="overflow-x:auto;">
-        <table class="detalle-tabla" style="min-width:340px;">
-          <thead><tr><th style="text-align:left;">Variable</th><th>Clave</th>${encabezado}</tr></thead>
-          <tbody>${filas}</tbody>
-        </table>
-      </div>
-      <p style="font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0;">Se marcan en ámbar las casillas que cambiaste. Guarda para que el cambio llegue al servidor.${esUnidadSesion() ? ' Si te pasas de tu meta o de tus frascos, el servidor te lo dirá y no guardará esa semana.' : ' La unidad verá cada corrección en su panel de cambios.'}</p>`;
+    return `${edBarra('edInfNueva', 'edInfAgregar', faltan, fechas, res.cambios)}
+      <table class="ed-tabla" data-tipo="inf">
+        <thead><tr><th scope="col" class="ed-c1 ed-esq">Variable</th><th scope="col" class="ed-th-clave">Clave</th>${encabezado}</tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+      <p class="ed-nota"><span class="material-symbols-rounded" aria-hidden="true">info</span><span>Las casillas que cambies se marcan en ámbar. Guarda para que el cambio llegue al servidor.${esUnidadSesion() ? ' Si te pasas de tu meta o de tus frascos, el servidor te lo dirá y no guardará esa semana.' : ' La unidad verá cada corrección en su panel de cambios.'}</span></p>`;
   }
 
   // Error del servidor dentro del propio editor (el toast tapaba los botones). El servidor habla de «r12»: se traduce al grupo y edad.
@@ -3666,6 +3723,7 @@
       titulo: (esUnidadSesion() ? 'Semanas de Influenza · ' : 'Corregir Influenza · ') + mesNombre(mes) + ' ' + anio,
       subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + (esUnidadSesion() ? ' · se sincroniza con tu panel de Influenza' : ' · se sincroniza con el panel de Influenza de la unidad'),
       cuerpo: editorInfluenzaHtml(),
+      amplio: true,
       acciones: [{ texto: 'Guardar cambios', icono: 'save', clase: 'btn-primario', onClick: guardarEditorInfluenza }]
     });
   }
@@ -3739,9 +3797,8 @@
     const w = _edInf.semanas.find((x) => x.fecha === el.dataset.f);
     if (!w) return;
     w.valores[el.dataset.r] = Math.max(0, parseInt(el.value, 10) || 0);
-    const cambiado = (Number(w.valores[el.dataset.r]) || 0) !== (Number(w.orig[el.dataset.r]) || 0);
-    el.style.borderColor = cambiado ? '#d97706' : '#e2e8f0';
-    el.style.background = cambiado ? '#fffbeb' : '#fff';
+    el.classList.toggle('cambio', (Number(w.valores[el.dataset.r]) || 0) !== (Number(w.orig[el.dataset.r]) || 0));
+    edActualizar();
   });
   document.addEventListener('click', (ev) => {
     const b = ev.target && ev.target.closest ? ev.target.closest('#edInfAgregar') : null;
@@ -3777,35 +3834,27 @@
     const semanas = _edCov.semanas;
     const fechas = semanas.map((x) => x.fecha);
     const faltan = viernesDelMes(_edCov.mes, _edCov.anio).filter((f) => !semanas.some((w) => w.fecha === f));
-    const encabezado = semanas.map((w) => `<th style="${_TH}">${rangoSemanaTexto(w.fecha, fechas)}${w.nuevo ? '<br><span style="font-weight:600; font-size:9px; text-transform:none; color:var(--secondary);">nueva</span>' : ''}</th>`).join('');
+    const res = edResumen('cov');
+    const encabezado = semanas.map((w) => edEncabezadoSemana(w, fechas, res.totales)).join('');
     let filas = '';
     C.RUBROS.forEach((r) => {
-      filas += `<tr><td colspan="${2 + semanas.length}" style="padding:6px 8px; background:#f1f5f9; color:#334155; font-size:11px; font-weight:800;">${_esc(C.ETIQUETA[r])}</td></tr>`;
+      filas += `<tr class="ed-grp ed-grp-cov"><td colspan="${2 + semanas.length}">${_esc(C.ETIQUETA[r])}</td></tr>`;
       C.MARCAS.filter((m) => C.RUBROS_MARCA[m].indexOf(r) >= 0).forEach((m) => {
         const celdas = semanas.map((w) => {
           const v = Number(w.valores[m][r]) || 0;
           const cambiado = v !== (Number(w.orig[m][r]) || 0);
-          return `<td style="padding:2px 3px; text-align:center;"><input type="number" min="0" step="1" inputmode="numeric" class="ed-cov-in" data-f="${w.fecha}" data-m="${m}" data-r="${r}" value="${v || ''}" placeholder="0" aria-label="${m === 'PFIZER' ? 'Pfizer' : 'Moderna'} · ${_esc(C.ETIQUETA[r])} · semana del ${rangoSemanaTexto(w.fecha, fechas)}"
-            style="width:58px; text-align:center; font-weight:700; font-size:12px; border:1.5px solid ${cambiado ? '#d97706' : '#e2e8f0'}; background:${cambiado ? '#fffbeb' : '#fff'}; border-radius:8px; padding:5px 4px;"></td>`;
+          return `<td><input type="number" min="0" step="1" inputmode="numeric" class="ed-in ed-cov-in${cambiado ? ' cambio' : ''}" data-f="${w.fecha}" data-m="${m}" data-r="${r}" value="${v || ''}" placeholder="0" aria-label="${m === 'PFIZER' ? 'Pfizer' : 'Moderna'} · ${_esc(C.ETIQUETA[r])} · semana del ${rangoSemanaTexto(w.fecha, fechas)}"></td>`;
         }).join('');
-        filas += `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 18px; font-size:11.5px; color:#475569;">${m === 'PFIZER' ? 'Pfizer' : 'Moderna'}</td><td style="padding:2px 4px; text-align:center; font-size:10.5px; color:var(--muted);">${C.SIS_CLAVE[r]}</td>${celdas}</tr>`;
+        filas += `<tr class="ed-fila"><th scope="row" class="ed-c1"><span class="ed-marca ed-marca-${m === 'PFIZER' ? 'pfizer' : 'moderna'}" aria-hidden="true"></span>${m === 'PFIZER' ? 'Pfizer' : 'Moderna'}</th><td class="ed-clave">${_chipClave(C.SIS_CLAVE[r])}</td>${celdas}</tr>`;
       });
     });
-    const agregar = faltan.length
-      ? `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-          <label for="edCovNueva" style="font-size:11.5px; font-weight:700; color:var(--muted);">¿Falta una semana?</label>
-          <select id="edCovNueva" style="padding:6px 8px; border-radius:8px; border:1px solid var(--outline-variant);">${faltan.map((f) => `<option value="${f}">Semana del ${rangoSemanaTexto(f, fechas)}</option>`).join('')}</select>
-          <button type="button" class="btn-mini btn-secundario" id="edCovAgregar"><span class="material-symbols-rounded">add</span> Agregar semana</button>
-        </div>` : '';
-    const vacio = semanas.length ? '' : '<p style="font-size:12.5px; color:var(--muted); margin:0 0 10px;">Esta unidad no tiene reportes de COVID-19 en este mes.</p>';
-    return `${agregar}${vacio}
-      <div style="overflow-x:auto;">
-        <table class="detalle-tabla" style="min-width:340px;">
-          <thead><tr><th style="text-align:left;">Marca</th><th>Clave SIS</th>${encabezado}</tr></thead>
-          <tbody>${filas}</tbody>
-        </table>
-      </div>
-      <p style="font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0;">Se marcan en ámbar las casillas que cambiaste. Las dosis de 6 a 59 meses son de 0.25 mL y Pfizer solo se aplica a adultos. Guarda para que el cambio llegue al servidor.</p>`;
+    const vacio = semanas.length ? '' : '<p class="ed-vacio">Esta unidad no tiene reportes de COVID-19 en este mes. Agrega una semana arriba.</p>';
+    return `${edBarra('edCovNueva', 'edCovAgregar', faltan, fechas, res.cambios)}${vacio}
+      <table class="ed-tabla" data-tipo="cov">
+        <thead><tr><th scope="col" class="ed-c1 ed-esq">Marca</th><th scope="col" class="ed-th-clave">Clave SIS</th>${encabezado}</tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+      <p class="ed-nota"><span class="material-symbols-rounded" aria-hidden="true">info</span><span>Las casillas que cambies se marcan en ámbar. Las dosis de 6 a 59 meses son de 0.25 mL y Pfizer solo se aplica a adultos. Guarda para que el cambio llegue al servidor.</span></p>`;
   }
 
   function pintarEditorCovid() {
@@ -3842,6 +3891,7 @@
       titulo: (esUnidadSesion() ? 'Semanas de COVID-19 · ' : 'Corregir COVID-19 · ') + mesNombre(mes) + ' ' + anio,
       subtitulo: (activa.unidad || activa.clues) + ' · solo semanas de ' + mesNombre(mes) + ' · Moderna y Pfizer por separado' + (esUnidadSesion() ? '' : ' · se sincroniza con el panel de la unidad'),
       cuerpo: editorCovidHtml(),
+      amplio: true,
       acciones: [{ texto: 'Guardar cambios', icono: 'save', clase: 'btn-primario', onClick: guardarEditorCovid }]
     });
   }
@@ -3920,9 +3970,8 @@
     if (!w || !w.valores[el.dataset.m]) return;
     const m = el.dataset.m; const r = el.dataset.r;
     w.valores[m][r] = Math.max(0, parseInt(el.value, 10) || 0);
-    const cambiado = (Number(w.valores[m][r]) || 0) !== (Number(w.orig[m][r]) || 0);
-    el.style.borderColor = cambiado ? '#d97706' : '#e2e8f0';
-    el.style.background = cambiado ? '#fffbeb' : '#fff';
+    el.classList.toggle('cambio', (Number(w.valores[m][r]) || 0) !== (Number(w.orig[m][r]) || 0));
+    edActualizar();
   });
   document.addEventListener('click', (ev) => {
     const b = ev.target && ev.target.closest ? ev.target.closest('#edCovAgregar') : null;

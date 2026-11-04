@@ -518,6 +518,6 @@ test('Unidad: si el servidor rechaza una semana (meta), el error sale dentro del
   await expect(page.locator('#edError')).toContainText('rubro «');
   await expect(page.locator('#edError')).not.toContainText('r1 ');
   await expect(page.locator('#detalleSISOverlay')).toHaveClass(/abierto/);
-  // una sola barra de desplazamiento: la tabla no tiene altura máxima propia (no es un segundo contenedor con scroll vertical)
-  expect(await page.evaluate(() => getComputedStyle(document.querySelector('#detalleSISCuerpo .detalle-tabla').parentElement).maxHeight)).toBe('none');
+  // una sola barra de desplazamiento: la tabla va directo en el cuerpo del modal (no es un segundo contenedor con scroll)
+  expect(await page.evaluate(() => document.querySelector('#detalleSISCuerpo .ed-tabla').parentElement.id)).toBe('detalleSISCuerpo');
 });

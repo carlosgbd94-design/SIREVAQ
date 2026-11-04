@@ -50,7 +50,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
 <script defer src="biovac_ui.js?v=2026.114"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.88"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.89"></script>
 <script defer src="sis_csv.js?v=2"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.29"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.7"></script>
@@ -321,6 +321,43 @@ window.onunhandledrejection = function (event) {
   .detalle-tabla th { text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--outline-variant); }
   .detalle-tabla td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; }
   .detalle-tabla .num { text-align: right; font-weight: 800; color: var(--primary); }
+  /* ===== Editores de semanas (Influenza y COVID-19): ventana ancha, cabecera con totales y variable fija ===== */
+  .detalle-hoja.amplio { max-width: 920px; max-height: min(90vh, 820px); }
+  .detalle-hoja.amplio .detalle-cuerpo { padding-top: 0; }
+  .ed-barra { position: sticky; top: 0; left: 0; z-index: 4; height: 52px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface); border-bottom: 1px solid var(--outline-variant); padding: 0 2px; }
+  .ed-agregar { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .ed-agregar select { min-width: 0; max-width: 210px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--outline-variant); background: var(--surface); font-size: 12.5px; color: var(--primary); }
+  .ed-estado { flex: none; font-size: 11.5px; font-weight: 800; padding: 6px 12px; border-radius: 999px; background: #f1f5f9; color: #64748b; transition: background .15s ease, color .15s ease; }
+  .ed-estado.hay { background: #fffbeb; color: #b45309; box-shadow: inset 0 0 0 1px #fcd34d; }
+  .ed-tabla { width: 100%; min-width: 380px; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+  .ed-tabla thead th { position: sticky; top: 52px; z-index: 3; background: var(--surface); border-bottom: 1px solid var(--outline-variant); padding: 8px 6px 7px; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 800; text-align: center; vertical-align: bottom; }
+  .ed-tabla thead th.ed-c1 { text-align: left; z-index: 5; }
+  .ed-tabla .ed-c1 { position: sticky; left: 0; z-index: 2; background: var(--surface); text-align: left; min-width: 130px; padding: 4px 8px 4px 20px; font-size: 12.5px; font-weight: 600; color: #334155; border-bottom: 1px solid #f1f5f9; }
+  .ed-tabla .ed-th-clave { width: 72px; }
+  .ed-th-sem { min-width: 92px; }
+  .ed-sem-n { display: block; font-size: 11px; color: var(--primary); letter-spacing: .02em; }
+  .ed-sem-r { display: block; margin-top: 1px; font-size: 9.5px; font-weight: 700; text-transform: none; letter-spacing: 0; }
+  .ed-sem-t { display: inline-block; margin-top: 4px; font-size: 10px; font-weight: 700; text-transform: none; letter-spacing: 0; color: #475569; background: #f1f5f9; border-radius: 999px; padding: 2px 8px; }
+  .ed-sem-t b { font-size: 11.5px; color: var(--primary); }
+  .ed-nueva { display: inline-block; margin-top: 3px; font-size: 9px; font-weight: 800; text-transform: none; letter-spacing: 0; color: #fff; background: var(--secondary, #0284c7); border-radius: 999px; padding: 1px 7px; }
+  .ed-tabla td { padding: 3px 4px; text-align: center; border-bottom: 1px solid #f1f5f9; }
+  .ed-tabla .ed-cat td { text-align: left; padding: 8px 10px; background: #fdf2ee; color: #C26750; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; border-radius: 0; }
+  .ed-tabla .ed-grp td { text-align: left; padding: 9px 10px 3px; font-size: 11.5px; font-weight: 800; color: #334155; border-bottom: 0; }
+  .ed-tabla .ed-grp-cov td { background: #f8fafc; padding: 8px 10px; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; }
+  .ed-tabla .ed-fila:hover th, .ed-tabla .ed-fila:hover td { background: #f8fafc; }
+  .ed-marca { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
+  .ed-marca-moderna { background: #7c3aed; }
+  .ed-marca-pfizer { background: #0284c7; }
+  .ed-in { width: 70px; height: 34px; box-sizing: border-box; text-align: center; font-weight: 700; font-size: 12.5px; color: var(--primary); background: #fff; border: 1.5px solid #e2e8f0; border-radius: 9px; padding: 0 4px; transition: border-color .12s ease, background .12s ease, box-shadow .12s ease; -moz-appearance: textfield; appearance: textfield; }
+  .ed-in::-webkit-outer-spin-button, .ed-in::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .ed-in::placeholder { color: #cbd5e1; font-weight: 600; }
+  .ed-in:focus { outline: none; border-color: #0284c7; box-shadow: 0 0 0 3px rgba(2, 132, 199, .18); }
+  .ed-in.cambio { border-color: #d97706; background: #fffbeb; }
+  .ed-nota { display: flex; gap: 8px; align-items: flex-start; margin: 14px 0 4px; padding: 10px 12px; border-radius: 12px; background: #f8fafc; color: #475569; font-size: 11.5px; line-height: 1.5; position: sticky; left: 0; }
+  .ed-nota .material-symbols-rounded { font-size: 17px; color: #64748b; flex: none; margin-top: 1px; }
+  .ed-vacio { margin: 12px 0 4px; font-size: 12.5px; color: var(--muted); }
+  @media (max-width: 640px) { .ed-agregar label { display: none; } .ed-agregar select { max-width: 150px; } .ed-in { width: 60px; } .ed-tabla .ed-c1 { min-width: 100px; padding-left: 14px; } .ed-tabla .ed-clave, .ed-tabla .ed-th-clave { display: none; } .ed-th-sem { min-width: 84px; } }
+  @media (prefers-reduced-motion: reduce) { .ed-in, .ed-estado { transition: none; } }
   @keyframes detalleFondo { from { opacity: 0; } to { opacity: 1; } }
   @keyframes detalleEntra { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
   @keyframes detalleSube { from { transform: translateY(100%); } to { transform: none; } }
