@@ -3621,7 +3621,37 @@
       cambios += ch + (w.nuevo && !ch ? 1 : 0);
       totales[w.fecha] = tot;
     });
-    return { cambios, totales };
+    return { cambios, totales, mes: tipo === 'cov' ? edResumenMesCovid() : null };
+  }
+
+  // Dosis aplicadas en TODO el mes por marca (lo que debe cuadrar con el Movimiento de Biológico):
+  // Moderna niños (6 a 59 meses: 1ª y 2ª dosis), Moderna adultos (5 años y más) y Pfizer (solo adultos).
+  function edResumenMesCovid() {
+    const t = { modNino: 0, modAdulto: 0, pfizer: 0 };
+    if (!_edCov) return t;
+    const n = (x) => Number(x) || 0;
+    _edCov.semanas.forEach((w) => {
+      ['c1', 'c2'].forEach((r) => { t.modNino += n(w.valores.MODERNA && w.valores.MODERNA[r]); });
+      ['c3', 'c4', 'c5', 'c6'].forEach((r) => {
+        t.modAdulto += n(w.valores.MODERNA && w.valores.MODERNA[r]);
+        t.pfizer += n(w.valores.PFIZER && w.valores.PFIZER[r]);
+      });
+    });
+    return t;
+  }
+
+  function edResumenMesCovidHtml(m) {
+    const f = (v) => v.toLocaleString('es-MX');
+    const tarjeta = (id, clase, titulo, sub, v) => `<div class="ed-mes-t ${clase}"><span class="ed-mes-tit">${titulo}</span><b id="${id}">${f(v)}</b><span class="ed-mes-sub">${sub}</span></div>`;
+    return `<section class="ed-mes-res" aria-label="Dosis de COVID-19 aplicadas en el mes por marca">
+      <p class="ed-mes-cab"><b>Aplicadas en el mes</b> · es lo que debe coincidir con el Movimiento de Biológico</p>
+      <div class="ed-mes-grid">
+        ${tarjeta('edmes_modNino', 'moderna', 'Moderna · niños', '6 a 59 meses (1ª y 2ª dosis)', m.modNino)}
+        ${tarjeta('edmes_modAdulto', 'moderna', 'Moderna · adultos', '5 años y más', m.modAdulto)}
+        ${tarjeta('edmes_modTotal', 'moderna', 'Moderna · total', 'niños + adultos', m.modNino + m.modAdulto)}
+        ${tarjeta('edmes_pfizer', 'pfizer', 'Pfizer', 'solo adultos', m.pfizer)}
+        ${tarjeta('edmes_total', 'total', 'Total COVID-19', 'Moderna + Pfizer', m.modNino + m.modAdulto + m.pfizer)}
+      </div></section>`;
   }
 
   function edTextoEstado(cambios) {
@@ -3636,6 +3666,12 @@
       const t = document.getElementById('edtot_' + f);
       if (t) t.textContent = r.totales[f].toLocaleString('es-MX');
     });
+    if (r.mes) {
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v.toLocaleString('es-MX'); };
+      set('edmes_modNino', r.mes.modNino); set('edmes_modAdulto', r.mes.modAdulto);
+      set('edmes_modTotal', r.mes.modNino + r.mes.modAdulto); set('edmes_pfizer', r.mes.pfizer);
+      set('edmes_total', r.mes.modNino + r.mes.modAdulto + r.mes.pfizer);
+    }
     const e = document.getElementById('edEstado');
     if (e) { e.textContent = edTextoEstado(r.cambios); e.classList.toggle('hay', r.cambios > 0); }
   }
@@ -3863,7 +3899,7 @@
       });
     });
     const vacio = semanas.length ? '' : '<p class="ed-vacio">Esta unidad no tiene reportes de COVID-19 en este mes. Agrega una semana arriba.</p>';
-    return `${edBarra('edCovNueva', 'edCovAgregar', faltan, fechas, res.cambios)}${vacio}
+    return `${edBarra('edCovNueva', 'edCovAgregar', faltan, fechas, res.cambios)}${edResumenMesCovidHtml(res.mes)}${vacio}
       <table class="ed-tabla" data-tipo="cov">
         <thead><tr><th scope="col" class="ed-c1 ed-esq">Marca</th><th scope="col" class="ed-th-clave">Clave SIS</th>${encabezado}</tr></thead>
         <tbody>${filas}</tbody>

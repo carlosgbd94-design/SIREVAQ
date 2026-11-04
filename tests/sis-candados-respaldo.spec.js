@@ -302,7 +302,19 @@ test('Revisor: corrige una semana de COVID-19 (Moderna/Pfizer) de una unidad con
   await expect(page.locator('#detalleSISOverlay')).toHaveClass(/abierto/);
   await expect(page.locator('.ed-cov-in[data-m="MODERNA"][data-r="c3"]')).toHaveValue('4');
   await expect(page.locator('.ed-cov-in[data-m="PFIZER"][data-r="c1"]')).toHaveCount(0);   // Pfizer no aplica a niños
+  // Resumen del mes por marca (para cuadrar con el Movimiento): Moderna niños / adultos / total, Pfizer y total
+  await expect(page.locator('#edmes_modNino')).toHaveText('0');
+  await expect(page.locator('#edmes_modAdulto')).toHaveText('6');
+  await expect(page.locator('#edmes_modTotal')).toHaveText('6');
+  await expect(page.locator('#edmes_pfizer')).toHaveText('1');
+  await expect(page.locator('#edmes_total')).toHaveText('7');
+  await page.locator('.ed-cov-in[data-m="MODERNA"][data-r="c1"]').fill('3');
   await page.locator('.ed-cov-in[data-m="PFIZER"][data-r="c3"]').fill('5');
+  await expect(page.locator('#edmes_modNino')).toHaveText('3');
+  await expect(page.locator('#edmes_modTotal')).toHaveText('9');
+  await expect(page.locator('#edmes_pfizer')).toHaveText('5');
+  await expect(page.locator('#edmes_total')).toHaveText('14');
+  await page.locator('.ed-cov-in[data-m="MODERNA"][data-r="c1"]').fill('');
   await page.locator('#detalleSISPie button', { hasText: 'Guardar cambios' }).click();
   await page.waitForTimeout(500);
   const up = await page.evaluate(() => window.__upserts);
