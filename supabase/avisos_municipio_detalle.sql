@@ -155,3 +155,89 @@ begin
   if v not like '%no se cuentan hasta que la cierren%' then raise exception 'No se pudo parchear el aviso de cambio posterior'; end if;
   execute v;
 end $$;
+
+-- 4) Existencia negativa: el aviso dice DÓNDE está (qué unidades tienen ese lote y cuánto traen/recibieron/aplicaron).
+do $$
+declare v text;
+begin
+  v := pg_get_functiondef('public.biovac_discrepancias_municipio(text,integer,integer)'::regprocedure);
+  if v like '%Unidades con este lote:%' then return; end if;
+  v := replace(v,
+    E'end\n           when ''UNIDAD_CAMBIO_POSTERIOR'' then format(',
+    E'end || coalesce((select '' Unidades con este lote: '' || string_agg(bu.nombre || '' (anterior '' || trim_scale(round(r.existencia_anterior_frascos, 2)) || '', recibió '' || trim_scale(round(r.recibido_frascos, 2)) || '', aplicó '' || trim_scale(round(r.aplicadas_a + r.aplicadas_b, 2)) || '')'', ''; '' order by bu.nombre) || ''.''\n                              from biovac_renglones r join biovac_movimientos um on um.id = r.movimiento_id join biovac_unidades bu on bu.id = um.unidad_id\n                             where r.lote_id = t.lid and r.categoria = t.cat and um.anio = p_anio and um.mes = p_mes and bu.municipio = p_municipio\n                               and bu.clues not like ''JS1-%'' and bu.activo\n                               and (r.existencia_anterior_frascos <> 0 or r.recibido_frascos <> 0 or r.aplicadas_a + r.aplicadas_b <> 0)), '''')\n           when ''UNIDAD_CAMBIO_POSTERIOR'' then format(');
+  if v not like '%Unidades con este lote:%' then raise exception 'No se pudo parchear el detalle de existencia negativa'; end if;
+  execute v;
+end $$;
+
+-- 5) «N correcciones sin aceptar» del seguimiento: cuenta CELDAS con un cambio real (primer valor ≠ último), no cada vez que el
+--    municipal tecleó (4→5→4→5→4 son 4 filas pero ningún cambio).
+do $$
+declare v text;
+begin
+  v := pg_get_functiondef('public.sis06p_resumen_seguimiento(integer,integer)'::regprocedure);
+  if v like '%group by sc.fila_excel, sc.subconteo, sc.detalle%' then return; end if;
+  v := replace(v,
+    E'select count(*)::int from sis06p_correcciones sc\n      where sc.captura_id = c.id and sc.tipo = ''EDICION_MUNICIPAL'' and sc.reconocido_por_unidad = false',
+    E'select count(*)::int from (\n        select (array_agg(sc.valor_anterior order by sc.creado_en))[1] as va, (array_agg(sc.valor_nuevo order by sc.creado_en desc))[1] as vn\n        from sis06p_correcciones sc\n        where sc.captura_id = c.id and sc.tipo = ''EDICION_MUNICIPAL'' and sc.reconocido_por_unidad = false\n        group by sc.fila_excel, sc.subconteo, sc.detalle\n      ) g where g.va is distinct from g.vn');
+  if v not like '%group by sc.fila_excel, sc.subconteo, sc.detalle%' then raise exception 'No se pudo parchear sis06p_resumen_seguimiento'; end if;
+  execute v;
+end $$;
+
+-- 6) La existencia anterior del MUNICIPIO es la correcta (sale del cierre del mes pasado): si las unidades declararon de más, la
+--    corrección es en la unidad. El aviso lo dice así y muestra con qué cerró cada unidad el mes pasado.
+do $$
+declare v text;
+begin
+  v := pg_get_functiondef('public.biovac_discrepancias_municipio(text,integer,integer)'::regprocedure);
+  if v like '%la unidad que declaró de más%' then return; end if;
+  v := replace(v,
+    'Si lo de las unidades es lo correcto, corrige la existencia anterior del municipio a %s.',
+    'La existencia anterior del municipio es la correcta (viene del cierre del mes pasado): la unidad que declaró de más debe corregir la suya (reábrela con «Reabrir y corregir» o pídeselo).');
+  v := replace(v,
+    $q$trim_scale(round(r.existencia_anterior_frascos, 2)) || ', recibió '$q$,
+    $q$trim_scale(round(r.existencia_anterior_frascos, 2)) || ' y en el mes pasado cerró con ' || trim_scale(round(coalesce((select sum(pr.existencia_final_frascos) from biovac_renglones pr join biovac_movimientos pm on pm.id = pr.movimiento_id where pm.unidad_id = um.unidad_id and pr.lote_id = r.lote_id and pr.categoria = r.categoria and pm.anio * 12 + pm.mes = p_anio * 12 + p_mes - 1), 0), 2)) || ', recibió '$q$);
+  v := replace(v, 'porque falta existencia anterior: las unidades declararon %s de este lote del mes pasado y el municipio trae %s (faltan %s).',
+                  'porque las unidades declararon más existencia anterior de la que trae el municipio: declararon %s de este lote y el municipio trae %s (%s de más).');
+  if v not like '%la unidad que declaró de más%' or v not like '%en el mes pasado cerró con%' then raise exception 'No se pudo parchear el aviso'; end if;
+  execute v;
+end $$;
+
+-- 7) Existencia negativa / anterior distinta: mensaje corto + columna `detalle` (jsonb) con CADA unidad que tiene el lote: su
+--    anterior, con qué cerró el mes pasado, lo recibido y lo aplicado, y si es posible causante (declaró más anterior de la que
+--    cerró). La pantalla lo dibuja como tabla. Cambia el tipo de retorno: se recrea la función.
+do $$
+declare v text;
+begin
+  v := pg_get_functiondef('public.biovac_discrepancias_municipio(text,integer,integer)'::regprocedure);
+  if v like '%detalle jsonb%' then return; end if;
+  -- se quita la lista de unidades pegada al texto (ahora va en `detalle`)
+  v := regexp_replace(v, 'end \|\| coalesce\(\(select '' Unidades con este lote:.*?\), ''''\)(\s+)when ''UNIDAD_CAMBIO_POSTERIOR''', E'end\1when ''UNIDAD_CAMBIO_POSTERIOR''', 's');
+  v := replace(v,
+    'La existencia final del municipio queda en %s (negativa) porque las unidades declararon más existencia anterior de la que trae el municipio: declararon %s de este lote y el municipio trae %s (%s de más). Cuenta del municipio: anterior %s + recibido %s − aplicadas %s − desechadas %s. La existencia anterior del municipio es la correcta (viene del cierre del mes pasado): la unidad que declaró de más debe corregir la suya (reábrela con «Reabrir y corregir» o pídeselo).',
+    'Quedó en %s frascos: las unidades declararon %s de existencia anterior y el municipio trae %s (%s de más). El anterior del municipio es el correcto (viene del cierre del mes pasado): el error está en la unidad que declaró de más.');
+  v := replace(v,
+    'La existencia final del municipio queda en %s (negativa): anterior %s + recibido %s − aplicadas %s − desechadas %s. Se dieron de baja más frascos de los que hay: revisa lo aplicado o lo recibido de este lote.',
+    'Quedó en %s frascos: se dieron de baja más de los que había. Revisa lo aplicado o lo recibido de este lote en las unidades de abajo.');
+  v := replace(v, 'mensaje text)', 'mensaje text, detalle jsonb)');
+  v := replace(v,
+    E'         end\n  from t\n  join biovac_lotes l on l.id = t.lid',
+    E'         end,\n         case when t.tp in (''FINAL_NEGATIVA'', ''ANTERIOR_DISTINTA'') then (\n           select jsonb_agg(jsonb_build_object(''unidad'', bu.nombre, ''clues'', bu.clues, ''anterior'', r.existencia_anterior_frascos, ''cierre_mes_pasado'', p.cp,\n                                               ''recibido'', r.recibido_frascos, ''aplicado'', r.aplicadas_a + r.aplicadas_b, ''sospechosa'', r.existencia_anterior_frascos > p.cp)\n                            order by (r.existencia_anterior_frascos > p.cp) desc, bu.nombre)\n             from biovac_renglones r\n             join biovac_movimientos um on um.id = r.movimiento_id\n             join biovac_unidades bu on bu.id = um.unidad_id\n             cross join lateral (select coalesce(sum(pr.existencia_final_frascos), 0) as cp from biovac_renglones pr join biovac_movimientos pm on pm.id = pr.movimiento_id\n                                  where pm.unidad_id = um.unidad_id and pr.lote_id = r.lote_id and pr.categoria = r.categoria and pm.anio * 12 + pm.mes = p_anio * 12 + p_mes - 1) p\n            where r.lote_id = t.lid and r.categoria = t.cat and um.anio = p_anio and um.mes = p_mes and bu.municipio = p_municipio\n              and bu.clues not like ''JS1-%'' and bu.activo\n              and (r.existencia_anterior_frascos <> 0 or r.recibido_frascos <> 0 or r.aplicadas_a + r.aplicadas_b <> 0))\n         end\n  from t\n  join biovac_lotes l on l.id = t.lid');
+  if v not like '%detalle jsonb%' or v not like '%cierre_mes_pasado%' or v like '%Unidades con este lote:%' or v not like '%Quedó en %s frascos: las unidades declararon%' then raise exception 'No se pudo parchear el detalle'; end if;
+  drop function public.biovac_discrepancias_municipio(text, integer, integer);
+  execute v;
+  revoke all on function public.biovac_discrepancias_municipio(text, integer, integer) from public;
+  revoke all on function public.biovac_discrepancias_municipio(text, integer, integer) from anon;
+  grant execute on function public.biovac_discrepancias_municipio(text, integer, integer) to authenticated;
+end $$;
+
+-- 8) «Existencia anterior distinta» es solo informativa (esperable el primer mes y con frascos multidosis: BCG, Hepatitis B, Td, DPT,
+--    Influenza, COVID): NO lleva la tabla de «posible error». El detalle de unidades queda solo para la existencia negativa.
+do $$
+declare v text;
+begin
+  v := pg_get_functiondef('public.biovac_discrepancias_municipio(text,integer,integer)'::regprocedure);
+  if v not like '%case when t.tp in (''FINAL_NEGATIVA'', ''ANTERIOR_DISTINTA'') then (%' then return; end if;
+  v := replace(v, 'case when t.tp in (''FINAL_NEGATIVA'', ''ANTERIOR_DISTINTA'') then (', 'case when t.tp = ''FINAL_NEGATIVA'' then (');
+  if v like '%''ANTERIOR_DISTINTA'') then (%' then raise exception 'No se pudo parchear'; end if;
+  execute v;
+end $$;

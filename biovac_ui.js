@@ -791,7 +791,7 @@ function sincronizarDockMovimiento() {
   const hdrX = document.getElementById('btnExportarExcel');
   const hayMov = Boolean(estado.movimiento);
   if (g) {
-    g.style.display = hayMov ? 'inline-flex' : 'none';
+    g.style.display = (hayMov && !enCorreccion) ? 'inline-flex' : 'none';
     g.disabled = Boolean(hdrG && hdrG.disabled);
     g.classList.remove('en-reposo');
     const ico = document.getElementById('iconoGuardarSIS'); if (ico) ico.textContent = 'save';
@@ -810,7 +810,39 @@ function sincronizarDockMovimiento() {
 // visibilidad por rol/estado, y estos botones los espejan y los disparan.
 const DOCK_EXTRAS_MOVIMIENTO = [['btnVerPdfDock', 'btnVerPdf'], ['btnCerrarMesDock', 'btnCerrarMes']];
 
+// Botón de la barra de abajo para corregir un Movimiento cerrado: «Reabrir y corregir» (cerrado) → «Guardar» (en corrección) →
+// «Guardado» (unos segundos después de guardar) → vuelve a «Reabrir y corregir». Antes vivía arriba, en el aviso de la tabla.
+function sincronizarDockCorreccion() {
+  const btn = document.getElementById('btnCorreccionDock');
+  if (!btn) return;
+  const m = estado.movimiento;
+  const rol = estado.perfil ? estado.perfil.rol : null;
+  const btnMov = document.getElementById('btnSeccionMovimiento');
+  const enMov = Boolean(m && m.id && rol && rol !== 'UNIDAD' && toggleSeccionesVisible() && btnMov && btnMov.classList.contains('activo'));
+  const g = estado.correccionGuardado;
+  const recien = Boolean(enMov && g && g.id === m.id && Date.now() - g.t < 4500);
+  if (!enMov || !(m.estado === 'CERRADO' || m.estado === 'EN_CORRECCION')) { btn.style.display = 'none'; return; }
+  const ico = document.getElementById('iconoCorreccionDock');
+  const etq = document.getElementById('etiquetaCorreccionDock');
+  btn.style.display = 'inline-flex';
+  btn.classList.remove('en-reposo');
+  if (m.estado === 'EN_CORRECCION') {
+    btn.disabled = false; btn.dataset.modo = 'guardar';
+    if (ico) ico.textContent = 'save'; if (etq) etq.textContent = 'Guardar';
+    btn.title = 'Guardar la corrección: se recalcula este mes y los siguientes ya cerrados';
+  } else if (recien) {
+    btn.disabled = true; btn.dataset.modo = 'guardado'; btn.classList.add('en-reposo');
+    if (ico) ico.textContent = 'check'; if (etq) etq.textContent = 'Guardado';
+    btn.title = 'La corrección ya quedó guardada';
+  } else {
+    btn.disabled = false; btn.dataset.modo = 'reabrir';
+    if (ico) ico.textContent = 'edit_note'; if (etq) etq.textContent = 'Reabrir y corregir';
+    btn.title = 'Reabrir este Movimiento para corregirlo (queda registrado y los meses siguientes se recalculan)';
+  }
+}
+
 function sincronizarDockMovimientoExtras() {
+  sincronizarDockCorreccion();
   const btnMov = document.getElementById('btnSeccionMovimiento');
   const fila = document.getElementById('filaBotonesCabecera');
   const enMovimiento = Boolean(btnMov && btnMov.classList.contains('activo') && estado.movimiento
@@ -3124,12 +3156,10 @@ function renderBannerMovimiento(m, esJurisdiccional) {
     const porEnvio = estado.sis06pEstadoActual && estado.sis06pEstadoActual !== 'BORRADOR';
     const quien = m.cerrado_por ? ` por ${String(m.cerrado_por).replace(/[<>&"]/g, '')}` : '';
     cont.innerHTML = `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock</span>
-      <div class="texto"><b>${porEnvio ? 'Movimiento cerrado con el envío del SINBA-SIS' : 'Movimiento cerrado' + quien}</b>Para corregir lotes, cantidades, la existencia anterior o eliminar renglones, ábrelo en modo corrección: queda registrado y los meses siguientes se recalculan solos (la existencia de cada mes arrastra la del anterior y tus ajustes manuales se conservan).</div>
-      <button type="button" class="btn-primario" data-banner="corregir"><span class="material-symbols-rounded">edit_note</span> Corregir movimiento</button></div>`;
+      <div class="texto"><b>${porEnvio ? 'Movimiento cerrado con el envío del SINBA-SIS' : 'Movimiento cerrado' + quien}</b>Para corregir lotes, cantidades, la existencia anterior o eliminar renglones, ábrelo en modo corrección: queda registrado y los meses siguientes se recalculan solos (la existencia de cada mes arrastra la del anterior y tus ajustes manuales se conservan). <b style="display:inline;">Usa «Reabrir y corregir» en la barra de abajo.</b></div></div>`;
   } else if (m.estado === 'EN_CORRECCION') {
     cont.innerHTML = `<div class="banner-mov correccion"><span class="material-symbols-rounded">edit_note</span>
-      <div class="texto"><b>Modo corrección</b>Puedes editar cantidades, corregir la existencia anterior (lápiz), eliminar renglones (bote) o agregar lotes. Al terminar guarda la corrección.</div>
-      <button type="button" class="btn-primario" data-banner="guardar"><span class="material-symbols-rounded">check_circle</span> Guardar corrección</button></div>`;
+      <div class="texto"><b>Modo corrección</b>Puedes editar cantidades, corregir la existencia anterior (lápiz), eliminar renglones (bote) o agregar lotes. Al terminar pulsa <b style="display:inline;">Guardar</b> en la barra de abajo.</div></div>`;
   } else if (rol === 'UNIDAD' && m.estado === 'BORRADOR') {
     // Aviso de una sola vez: la unidad lo lee, pulsa «Entendido» y ya no estorba (queda en este navegador).
     let visto = false;
@@ -3160,6 +3190,28 @@ const TITULO_DISCREPANCIA = {
 const ICONO_DISCREPANCIA = { ERROR: 'error', ADVERTENCIA: 'warning', INFO: 'info' };
 function _escD(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+// Cuenta del municipio y tabla de las unidades que tienen el lote (columna `detalle` del detector). Las que declararon más
+// existencia anterior de la que cerraron el mes pasado salen primero y marcadas como posible causa.
+function htmlDetalleDiscrepancia(f) {
+  const det = Array.isArray(f.detalle) ? f.detalle : [];
+  if (!det.length) return '';
+  const q = (v) => { const n = Math.round((Number(v) || 0) * 100) / 100; return String(n); };
+  const cuenta = f.tipo === 'FINAL_NEGATIVA'
+    ? `<div class="disc-cuenta" role="group" aria-label="Cuenta del municipio">
+        <span>Municipio</span><span><small>Anterior</small>${q(f.mun_anterior)}</span><span class="op" aria-hidden="true">+</span>
+        <span><small>Recibido</small>${q(f.mun_recibido)}</span><span class="op" aria-hidden="true">−</span>
+        <span><small>Aplicadas</small>${q(f.mun_aplicadas)}</span><span class="op" aria-hidden="true">−</span>
+        <span><small>Desechadas</small>${q(f.mun_desechadas)}</span><span class="op" aria-hidden="true">=</span>
+        <span class="res"><small>Final</small>${q(f.mun_final)}</span></div>` : '';
+  const filasU = det.map((u) => `<tr class="${u.sospechosa ? 'sosp' : ''}">
+      <th scope="row">${_escD(u.unidad)}<small>${_escD(u.clues)}</small>${u.sospechosa ? '<em>Posible error</em>' : ''}</th>
+      <td>${q(u.anterior)}</td><td>${q(u.cierre_mes_pasado)}</td><td>${q(u.recibido)}</td><td>${q(u.aplicado)}</td></tr>`).join('');
+  return `${cuenta}<div class="disc-tabla-wrap"><table class="disc-tabla">
+      <caption>Unidades que tienen este lote${det.some((u) => u.sospechosa) ? ' · «Posible error»: declaró más existencia anterior de la que cerró el mes pasado' : ''}</caption>
+      <thead><tr><th scope="col">Unidad</th><th scope="col">Anterior declarada</th><th scope="col">Cerró el mes pasado</th><th scope="col">Recibió</th><th scope="col">Aplicó</th></tr></thead>
+      <tbody>${filasU}</tbody></table></div>`;
+}
+
 function htmlDiscrepancias(filas) {
   if (!filas || !filas.length) {
     return '<p class="disc-ok"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span> Las unidades y el municipio cuadran en todos los lotes.</p>';
@@ -3174,7 +3226,7 @@ function htmlDiscrepancias(filas) {
       <span class="material-symbols-rounded" aria-hidden="true">${ICONO_DISCREPANCIA[f.severidad] || 'info'}</span>
       <div><b>${_escD(f.biologico)} · lote ${_escD(f.numero_lote)}${f.categoria && f.categoria !== 'NORMAL' ? ' (' + _escD(f.categoria) + ')' : ''}</b>
         <small>${_escD(TITULO_DISCREPANCIA[f.tipo] || f.tipo)}</small>
-        <p>${_escD(f.mensaje)}</p></div>
+        <p>${_escD(f.mensaje)}</p>${htmlDetalleDiscrepancia(f)}</div>
     </li>`).join('');
   return `<details class="disc-det"${n('ERROR') ? ' open' : ''}>
     <summary><span class="material-symbols-rounded" aria-hidden="true">fact_check</span> Revisión de unidades contra municipio: ${partes.join(' · ')}</summary>
@@ -3787,6 +3839,8 @@ async function aplicarCorreccion() {
   });
   if (error) { toast('No se pudo aplicar la corrección: ' + error.message, 'error'); return; }
   toast(`Corrección aplicada. Meses recalculados: ${data}.`, 'ok');
+  estado.correccionGuardado = { id: estado.movimiento.id, t: Date.now() };
+  setTimeout(sincronizarDockCorreccion, 4600);
   const lote = estado.correccionBatchId;
   const foto = estado.correccionFoto;
   estado.correccionBatchId = null;
@@ -4190,6 +4244,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnCerrarMes').addEventListener('click', cerrarMes);
   document.getElementById('btnAbrirCorreccion').addEventListener('click', abrirCorreccion);
   document.getElementById('btnAplicarCorreccion').addEventListener('click', aplicarCorreccion);
+  const btnCorrDock = document.getElementById('btnCorreccionDock');
+  if (btnCorrDock) btnCorrDock.addEventListener('click', async () => {
+    // Un solo «Guardar»: primero los datos de la cabecera (responsable) y luego se aplica la corrección y se cierra la edición
+    if (btnCorrDock.dataset.modo === 'guardar') { await guardarCabecera(true); await aplicarCorreccion(); }
+    else if (btnCorrDock.dataset.modo === 'reabrir') abrirCorreccion();
+  });
   document.getElementById('btnExportarExcel').addEventListener('click', exportarExcel);
   document.getElementById('btnVerPdf').addEventListener('click', verPdf);
   DOCK_EXTRAS_MOVIMIENTO.forEach(([dockId, hdrId]) => {

@@ -396,7 +396,6 @@
   }
 
   async function cargarCorreccionesPendientes(clues) {
-    if (estado.perfil.rol !== 'UNIDAD') { _correccionesPendientesCache = []; return; }
     const { data, error } = await estado.db.from('sis06p_correcciones')
       .select('*').eq('clues', clues).eq('tipo', 'EDICION_MUNICIPAL').eq('reconocido_por_unidad', false)
       .order('creado_en', { ascending: false });
@@ -420,26 +419,54 @@
     return `${v.biologico} — ${descripcion}${v.edad ? ' (' + v.edad + ')' : ''}`;
   }
 
+  // Las correcciones del mes se juntan por celda: si el municipal cambió una cifra de 4 a 5 y luego de 5 a 4, la celda quedó igual y
+  // no hay nada que revisar (antes salían como 6 «correcciones» que al abrir la unidad no se veían por ningún lado).
+  // Cada grupo conserva todos los ids para aceptarlos juntos.
+  function correccionesNetasDelMes() {
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const grupos = new Map();
+    _correccionesPendientesCache
+      .filter((c) => Number(c.mes) === mes && Number(c.anio) === anio)
+      .slice().sort((a, b) => String(a.creado_en).localeCompare(String(b.creado_en)))
+      .forEach((c) => {
+        const k = `${c.fila_excel}|${c.subconteo}|${c.detalle}`;
+        const g = grupos.get(k);
+        if (!g) grupos.set(k, { ...c, ids: [c.id], valor_inicial: c.valor_anterior });
+        else { g.ids.push(c.id); g.valor_nuevo = c.valor_nuevo; g.usuario = c.usuario; g.creado_en = c.creado_en; }
+      });
+    return Array.from(grupos.values()).filter((g) => String(g.valor_inicial) !== String(g.valor_nuevo));
+  }
+
   function renderPanelCambiosPendientes() {
     const panel = document.getElementById('sis06pPanelCambiosPendientes');
     const lista = document.getElementById('sis06pListaCambiosPendientes');
     if (!panel || !lista) return;
 
-    if (estado.perfil.rol !== 'UNIDAD' || _correccionesPendientesCache.length === 0) {
+    const esUnidad = estado.perfil.rol === 'UNIDAD';
+    const netas = correccionesNetasDelMes();
+    if (netas.length === 0) {
       panel.style.display = 'none';
       return;
     }
     panel.style.display = 'block';
-    lista.innerHTML = _correccionesPendientesCache.map((c) => `
+    // El revisor ve las mismas correcciones, solo para consultar (quien las acepta es la unidad)
+    const titulo = panel.querySelector('strong');
+    const ayuda = panel.querySelector('p');
+    const btnTodos = document.getElementById('btnAceptarTodosCambios');
+    if (titulo) titulo.textContent = esUnidad ? 'El municipal corrigió información — revísala' : `Correcciones tuyas que la unidad aún no acepta (${netas.length})`;
+    if (ayuda) ayuda.textContent = esUnidad ? 'Verifica cada cambio y acéptalo para que quede como definitivo.' : 'Solo consulta: la unidad las ve al abrir su SIS y las acepta una por una. Las cifras que quedaron igual que al inicio no se cuentan.';
+    if (btnTodos) btnTodos.style.display = esUnidad ? '' : 'none';
+    lista.innerHTML = netas.map((c) => `
       <div style="background:#fff; border:1px solid var(--warning-border); border-radius:10px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
         <div style="font-size:11.5px;">
           <strong>${c.fila_excel != null ? labelDeFila(c.fila_excel) : (c.detalle || 'Ajuste')}</strong>${c.subconteo ? ' — ' + (SUBCONTEO_LABEL[c.subconteo] || c.subconteo) : ''}:
-          <span style="color:var(--muted); text-decoration:line-through;">${c.valor_anterior}</span>
+          <span style="color:var(--muted); text-decoration:line-through;">${c.valor_inicial}</span>
           <span class="material-symbols-rounded" style="font-size:12px; vertical-align:middle;">arrow_forward</span>
           <strong style="color:var(--warning);">${c.valor_nuevo}</strong>
           <span style="color:var(--muted);"> — ${c.usuario}, ${new Date(c.creado_en).toLocaleDateString('es-MX')}</span>
         </div>
-        <button class="btn-mini btn-secundario" data-aceptar-correccion="${c.id}"><span class="material-symbols-rounded">check</span> Aceptar</button>
+        ${esUnidad ? `<button class="btn-mini btn-secundario" data-aceptar-correccion="${c.ids.join(',')}"><span class="material-symbols-rounded">check</span> Aceptar</button>` : ''}
       </div>
     `).join('');
 
@@ -448,10 +475,12 @@
     });
   }
 
-  async function aceptarCambio(correccionId) {
+  async function aceptarCambio(correccionIds) {
     try {
-      const { error } = await estado.db.rpc('sis06p_reconocer_correccion', { p_correccion_id: correccionId, p_usuario: nombreCompletoDePerfil(estado.perfil) });
-      if (error) throw error;
+      for (const id of String(correccionIds).split(',')) {
+        const { error } = await estado.db.rpc('sis06p_reconocer_correccion', { p_correccion_id: id, p_usuario: nombreCompletoDePerfil(estado.perfil) });
+        if (error) throw error;
+      }
       const activa = datosUnidadActiva();
       await cargarCorreccionesPendientes(activa.clues);
       renderPanelCambiosPendientes();

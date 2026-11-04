@@ -430,7 +430,7 @@ test('MUNICIPAL: sí cierra el Movimiento; con el SIS enviado el aviso dice que 
   expect(await page.evaluate(() => document.getElementById('btnCerrarMes').style.display)).toBe('inline-block');
   await pintarMovimiento(page, { rol: 'MUNICIPAL', estadoMov: 'CERRADO', sisEstado: 'ENVIADO' });
   await expect(page.locator('#bannerMovimiento')).toContainText('cerrado con el envío del SINBA-SIS');
-  await expect(page.locator('#bannerMovimiento [data-banner="corregir"]')).toBeVisible();
+  await expect(page.locator('#btnCorreccionDock')).toContainText('Reabrir y corregir');
 });
 
 test('UNIDAD: fuera de su ventana de captura no se invita a "Iniciar movimiento" (mismo candado que SIS-06-P)', async ({ page }) => {

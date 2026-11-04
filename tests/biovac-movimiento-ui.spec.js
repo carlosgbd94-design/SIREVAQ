@@ -135,13 +135,18 @@ test('Tipo de cantidad: tarjetas Existencia anterior / Recibido', async ({ page 
 test('Municipal: un movimiento cerrado ofrece "Corregir movimiento"; en corrección edita, quita y guarda', async ({ page }) => {
   await abrir(page, 'MUNICIPAL');
   await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'CERRADO' });
-  await expect(page.locator('.banner-mov.cerrado')).toContainText('Corregir');
-  await expect(page.locator('[data-banner="corregir"]')).toBeVisible();
+  await expect(page.locator('.banner-mov.cerrado')).toContainText('Reabrir y corregir');
+  await expect(page.locator('#btnCorreccionDock')).toBeVisible();
+  await expect(page.locator('#btnCorreccionDock')).toContainText('Reabrir y corregir');
+  await expect(page.locator('#btnGuardarSIS06P')).toBeHidden();             // un solo botón: sin un segundo «Guardar» aparte
+  await expect(page.locator('[data-banner="corregir"]')).toHaveCount(0);   // el botón vive en la barra de abajo
   await expect(page.locator('[data-action="eliminar-renglon"]')).toHaveCount(0);   // cerrado: solo lectura
 
   await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'EN_CORRECCION' });
   await expect(page.locator('.banner-mov.correccion')).toContainText('Modo corrección');
-  await expect(page.locator('[data-banner="guardar"]')).toBeVisible();
+  await expect(page.locator('#btnCorreccionDock')).toContainText('Guardar');
+  await expect(page.locator('#btnGuardarSIS06P')).toBeHidden();             // en corrección el único «Guardar» aplica y cierra la edición
+  await expect(page.locator('[data-banner="guardar"]')).toHaveCount(0);
   await expect(page.locator('[data-action="eliminar-renglon"]')).toHaveCount(2);
   await expect(page.locator('[data-action="editar-ant"]')).toHaveCount(2);
   await expect(page.locator('[data-action="toggle-agregar"]')).toHaveCount(1);
@@ -292,4 +297,30 @@ test('Cambiar lote: corrige el lote de un renglón conservando sus cantidades (p
   const [nombre, p] = await page.evaluate(() => window.__rpc.find((x) => x[0] === 'biovac_corregir_lote_renglon'));
   expect(nombre).toBe('biovac_corregir_lote_renglon');
   expect(p).toMatchObject({ p_renglon_id: '1', p_nuevo_numero_lote: '0374MA200', p_nueva_caducidad: '2028-01-31', p_motivo: 'La unidad capturó el lote equivocado' });
+});
+
+test('Barra de abajo: el botón de corrección cambia Reabrir y corregir → Guardar → Guardado', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'CERRADO' });
+  const dock = page.locator('#btnCorreccionDock');
+  await expect(dock).toContainText('Reabrir y corregir');
+  await expect(dock).toBeEnabled();
+
+  await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'EN_CORRECCION' });
+  await expect(dock).toContainText('Guardar');
+  await expect(dock).toBeEnabled();
+
+  // recién guardada la corrección el mes vuelve a CERRADO y el botón confirma «Guardado» (sin poder pulsarse)
+  await page.evaluate(() => { estado.correccionGuardado = { id: 'm1', t: Date.now() }; });
+  await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'CERRADO' });
+  await expect(dock).toContainText('Guardado');
+  await expect(dock).toBeDisabled();
+
+  // pasados unos segundos vuelve a ofrecer reabrir
+  await page.evaluate(() => { estado.correccionGuardado = { id: 'm1', t: Date.now() - 6000 }; sincronizarDockCorreccion(); });
+  await expect(dock).toContainText('Reabrir y corregir');
+
+  // la unidad nunca lo ve
+  await pintar(page, { rol: 'UNIDAD', estadoMov: 'CERRADO' });
+  await expect(dock).toBeHidden();
 });

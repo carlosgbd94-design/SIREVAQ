@@ -112,5 +112,5 @@ test('Movimiento cerrado del municipio: ya no muestra el aviso de armado y ofrec
   await abrir(page);
   await pintar(page, { estadoMov: 'CERRADO' });
   await expect(page.locator('#bannerMovimiento')).not.toContainText('se arma solo');
-  await expect(page.locator('#bannerMovimiento [data-banner="corregir"]')).toBeVisible();
+  await expect(page.locator('#btnCorreccionDock')).toContainText('Reabrir y corregir');
 });

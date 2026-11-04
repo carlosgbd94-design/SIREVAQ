@@ -307,12 +307,17 @@
   function pillSinMovimiento(f) {
     return f.sin_movimiento && (estadoDe(f) === 'ENVIADO' || estadoDe(f) === 'VALIDADO') ? '<span class="mun-pill sinmov" title="La unidad declaró que no recibió ni aplicó biológico este mes">Sin movimiento</span>' : '';
   }
+  function tieneDiferencias(f) {
+    const dosis = Number(f.paloteo_dosis) || 0;
+    const lotes = Number(f.movimiento_lotes) || 0;
+    return !(dosis === 0 && lotes === 0) && (Number(f.diferencias) || 0) > 0;
+  }
   function pillConciliacion(f) {
     const dosis = Number(f.paloteo_dosis) || 0;
     const lotes = Number(f.movimiento_lotes) || 0;
     if (dosis === 0 && lotes === 0) return '';
     const n = Number(f.diferencias) || 0;
-    return n > 0 ? `<span class="mun-pill aviso">${n} no coincide${n === 1 ? '' : 'n'}</span>` : '<span class="mun-pill ok">Coincide</span>';
+    return n > 0 ? `<span class="mun-pill aviso" title="Biológicos donde el paloteo y el Movimiento no tienen las mismas dosis aplicadas">${n} no coincide${n === 1 ? '' : 'n'}</span>` : '<span class="mun-pill ok">Coincide</span>';
   }
 
   function puntosHtml(filas, actual) {
@@ -358,8 +363,12 @@
 
     const r = resumen(st.filas);
     if (!st.filas.length) { cont.innerHTML = '<div class="mun-vacio">No hay unidades en tu alcance.</div>'; pintarRuta(); pintarDock(); return; }
-    const conteos = { todas: r.total, ENVIADO: r.enviado, SIN: r.sin, VALIDADO: r.validado, OMITIDA: r.omitida };
-    const visibles = filasOrdenadas().filter((f) => st.filtro === 'todas' || estadoDe(f) === st.filtro);
+    // Filtros de «problemas»: unidades con diferencias entre paloteo y Movimiento, y con correcciones tuyas que la unidad aún no acepta
+    const conDif = (f) => estadoDe(f) !== 'OMITIDA' && tieneDiferencias(f);
+    const conCorr = (f) => estadoDe(f) !== 'OMITIDA' && Number(f.correcciones_pendientes) > 0;
+    const conteos = { todas: r.total, ENVIADO: r.enviado, SIN: r.sin, VALIDADO: r.validado, OMITIDA: r.omitida, DIF: st.filas.filter(conDif).length, CORR: st.filas.filter(conCorr).length };
+    if ((st.filtro === 'DIF' && !conteos.DIF) || (st.filtro === 'CORR' && !conteos.CORR)) st.filtro = 'todas';
+    const visibles = filasOrdenadas().filter((f) => st.filtro === 'todas' || (st.filtro === 'DIF' ? conDif(f) : st.filtro === 'CORR' ? conCorr(f) : estadoDe(f) === st.filtro));
     const pct = r.esperadas ? Math.round((r.validado / r.esperadas) * 100) : 0;
     const cta = r.enviado > 0
       ? `<button type="button" class="btn-primario" id="munCtaSiguiente"><span class="material-symbols-rounded">fact_check</span> Revisar la siguiente por validar (${r.enviado})</button>`
@@ -394,13 +403,13 @@
         <div class="mun-leyenda"><span><i class="pt vacio"></i>sin enviar</span><span><i class="pt parcial"></i>por validar</span><span><i class="pt completo"></i>validada</span>${r.omitida ? '<span><i class="pt omitida"></i>sin envío</span>' : ''}</div>
       </div>
       <div class="mun-acciones">${cta}
-        <div class="mun-chips">${copiarBtn}${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}${r.omitida ? chip('OMITIDA', 'Sin envío') : ''}</div>
+        <div class="mun-chips">${copiarBtn}${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}${r.omitida ? chip('OMITIDA', 'Sin envío') : ''}${conteos.DIF ? chip('DIF', 'Con diferencias') : ''}${conteos.CORR ? chip('CORR', 'Con correcciones sin aceptar') : ''}</div>
       </div>
       <div class="mun-grid">${visibles.map((f) => `
         <button type="button" class="mun-unidad ${CLASE_EST[estadoDe(f)]}" data-clues="${esc(f.clues)}" title="${esc((f.unidad || f.clues) + ' · ' + detalleUnidad(f))}">
           <span class="mun-dot"></span>
           <span class="mun-u-txt"><b>${esc(f.unidad || f.clues)}</b><small>${esc(f.clues)} · ${esc(detalleUnidad(f))}</small></span>
-          <span class="mun-u-pills"><span class="mun-pill ${CLASE_EST[estadoDe(f)]}">${ETIQUETA[estadoDe(f)]}</span>${pillSinMovimiento(f)}${pillConciliacion(f)}${Number(f.correcciones_pendientes) > 0 ? `<span class="mun-pill aviso" title="Correcciones pendientes">${f.correcciones_pendientes}</span>` : ''}</span>
+          <span class="mun-u-pills"><span class="mun-pill ${CLASE_EST[estadoDe(f)]}">${ETIQUETA[estadoDe(f)]}</span>${pillSinMovimiento(f)}${pillConciliacion(f)}${Number(f.correcciones_pendientes) > 0 ? `<span class="mun-pill aviso" title="Hiciste ${f.correcciones_pendientes} corrección(es) a este SIS y la unidad todavía no las acepta">${f.correcciones_pendientes} ${Number(f.correcciones_pendientes) === 1 ? 'corrección' : 'correcciones'} sin aceptar</span>` : ''}</span>
         </button>`).join('') || '<div class="mun-vacio">Ninguna unidad en este filtro.</div>'}</div>`;
     pintarRuta();
     pintarDock();

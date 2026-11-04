@@ -42,3 +42,30 @@ test('Recibido vs requisición: cada lote que no coincide dice quién lo captur�
   expect(html).toContain('0134N117A (20)');
   expect(html).toContain('faltan 10 frascos por capturar');
 });
+
+test('Existencia negativa: muestra la cuenta del municipio y la tabla de unidades con la posible causante marcada', async ({ page }) => {
+  await page.route(/unpkg\.com\/@supabase\/supabase-js/, (r) => r.fulfill({ contentType: 'application/javascript', body: FAKE }));
+  await page.route(/fonts\.(googleapis|gstatic)\.com|cdnjs\.cloudflare\.com|raw\.githubusercontent\.com/, (r) => r.abort());
+  await page.addInitScript(() => { window.__FAKE_ROL__ = 'MUNICIPAL'; });
+  await page.goto('/biovac.html', { waitUntil: 'load' });
+  await page.waitForSelector('#campoPeriodo', { state: 'attached' });
+  await page.waitForTimeout(1500);
+
+  const html = await page.evaluate(() => htmlDiscrepancias([{
+    biologico: 'Hepatitis "A"', numero_lote: 'Y004995', categoria: 'NORMAL', tipo: 'FINAL_NEGATIVA', severidad: 'ERROR',
+    mensaje: 'Quedó en -1 frascos: las unidades declararon 13 de existencia anterior y el municipio trae 12 (1 de más).',
+    mun_anterior: 12, mun_recibido: 0, mun_aplicadas: 13, mun_desechadas: 0, mun_final: -1,
+    detalle: [
+      { unidad: 'EMILIANO ZAPATA', clues: 'QTSSA012602', anterior: 13, cierre_mes_pasado: 0, recibido: 0, aplicado: 13, sospechosa: true },
+      { unidad: 'OTRA UNIDAD', clues: 'QTSSA000002', anterior: 5, cierre_mes_pasado: 5, recibido: 0, aplicado: 2, sospechosa: false }
+    ]
+  }]));
+  await page.evaluate((h) => { const d = document.createElement('div'); d.id = 'cajaDisc'; d.innerHTML = h; document.body.appendChild(d); }, html);
+  const caja = page.locator('#cajaDisc');
+  await expect(caja.locator('.disc-cuenta')).toContainText('Anterior12');
+  await expect(caja.locator('.disc-cuenta .res')).toContainText('-1');
+  await expect(caja.locator('tr.sosp')).toHaveCount(1);
+  await expect(caja.locator('tr.sosp')).toContainText('EMILIANO ZAPATA');
+  await expect(caja.locator('tr.sosp')).toContainText('Posible error');
+  await expect(caja.locator('.disc-tabla tbody tr')).toHaveCount(2);
+});
