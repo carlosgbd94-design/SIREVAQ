@@ -111,6 +111,30 @@
 
   // ---- Recibido: requisición vs unidades -----------------------------------
 
+  // Qué pasó en un lote que no coincide: quién lo capturó y cuánto, y la causa probable en palabras.
+  function explicarRecibido(f) {
+    const req = num(f.requisicion), uni = num(f.unidades);
+    const lista = (arr) => (Array.isArray(arr) ? arr : []);
+    const otros = (arr) => lista(arr).map((o) => `${esc(o.lote)} (${fmt(o.cantidad)})`).join(', ');
+    // Unidades donde lo que la requisición le asignó no es lo que capturó (máximo 12 a la vista)
+    const dets = lista(f.detalle_unidades);
+    const quien = dets.slice(0, 12).map((u) => `<b>${esc(u.unidad || u.clues)}</b> (${esc(u.clues)}): requisición ${fmt(u.requisicion)} · capturó ${fmt(u.recibido)}`).join('<br>')
+      + (dets.length > 12 ? `<br>… y ${dets.length - 12} unidad(es) más` : '');
+    let causa;
+    if (req === 0) {
+      causa = 'La requisición no reparte este lote al municipio este mes: o la unidad lo capturó con otro número de lote, o falta repartirlo en Requisiciones.'
+        + (lista(f.requisicion_otros_lotes).length ? ` Lotes de este biológico que sí trae la requisición: ${otros(f.requisicion_otros_lotes)}.` : '');
+    } else if (uni === 0) {
+      causa = 'Ninguna unidad capturó este lote como recibido: falta capturarlo o lo capturaron con otro número de lote.'
+        + (lista(f.unidades_otros_lotes).length ? ` Lotes de este biológico que sí capturaron las unidades: ${otros(f.unidades_otros_lotes)}.` : '');
+    } else if (req !== uni) {
+      causa = `La requisición trae ${fmt(req)} y las unidades capturaron ${fmt(uni)}: ${req > uni ? 'faltan ' + fmt(req - uni) + ' frascos por capturar en las unidades' : 'sobran ' + fmt(uni - req) + ' frascos capturados'}.`;
+    } else {
+      causa = 'Las cantidades coinciden pero la caducidad es distinta entre la requisición y las unidades.';
+    }
+    return `<div style="margin-bottom:3px;">${quien ? 'Unidades que no cuadran:<br>' + quien : 'Ninguna unidad lo capturó.'}</div><div style="color:var(--warning); font-weight:700;">${causa}</div>`;
+  }
+
   function htmlRecibido(d) {
     const filas = d.requisicion;
     if (filas.length === 0) {
@@ -133,7 +157,7 @@
           <td style="${TD}">${esc(limpiar(f.biologico))}</td><td style="${TD} font-family:monospace;">${esc(f.numero_lote)}</td>
           <td style="${TD} text-align:center;">${fecha(f.caducidad_requisicion)}</td><td style="${TD} text-align:center;">${fecha(f.caducidad_unidades)}</td>
           <td style="${TD} text-align:center; font-weight:700;">${fmt(f.requisicion)}</td><td style="${TD} text-align:center; font-weight:700;">${fmt(f.unidades)}</td>
-        </tr>`).join('')}</tbody></table></div>`;
+        </tr><tr><td colspan="6" style="padding:2px 8px 10px; border-bottom:1px solid #e2e8f0; font-size:11.5px; color:#475569; white-space:normal;">${explicarRecibido(f)}</td></tr>`).join('')}</tbody></table></div>`;
     return cab + tabla;
   }
 
