@@ -730,7 +730,7 @@
             ${juris ? '' : filaArchivo(1, 'inventory_2', '#d97706', 'Excel de Movimiento de Biológico (BIOVAC)', 'El formato por lote y caducidad, con entradas, recibidos, aplicados, desechos, existencia final, ARF y canjes.',
               '<button type="button" class="btn-secundario btn-mini" data-descarga="mov" disabled aria-label="Descargar Excel de Movimiento de Biológico"><span class="material-symbols-rounded">download</span> Descargar Excel</button>')}
             ${filaArchivo(2, 'description', '#7c3aed', 'CSV oficial para estadística', listoCSV ? 'Un Excel con una pestaña por unidad (NOMBRE_CLUES, en orden de CLUES) y las columnas del CSV.' : `Se habilita cuando todas las unidades estén validadas (${resu.validado} de ${resu.esperadas}${resu.omitida ? '; ' + resu.omitida + ' sin envío no cuentan' : ''}).`,
-              `<button type="button" class="btn-secundario btn-mini" data-descarga="csv" ${listoCSV ? '' : 'disabled'} aria-label="Descargar CSV oficial"><span class="material-symbols-rounded">download</span> Descargar CSV</button>`)}
+              `<button type="button" class="btn-secundario btn-mini" data-descarga="csv" ${listoCSV ? '' : 'disabled'} aria-label="Descargar CSV oficial"><span class="material-symbols-rounded">download</span> Exportar CSV para estadística</button>`)}
           </ul>
         </li>
       </ol>
@@ -903,7 +903,7 @@
       </ul>
       <div class="mun-entregar">
         <div><b>CSV oficial</b><small>El archivo para estadística: un Excel con una pestaña por unidad (NOMBRE_CLUES, ordenadas por CLUES), con las columnas del CSV oficial.</small></div>
-        <button type="button" class="btn-primario" id="munDescargarCSV" ${listo ? '' : 'disabled'} title="${listo ? 'Descargar el CSV oficial' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">download</span> Descargar CSV oficial</button>
+        <button type="button" class="btn-primario" id="munDescargarCSV" ${listo ? '' : 'disabled'} title="${listo ? 'Descargar el CSV oficial' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">download</span> Exportar CSV para estadística</button>
       </div>
       <div class="mun-entregar">
         <div><b>SINBA-SIS de cada unidad (Excel oficial)</b><small>Un ZIP con un archivo de Excel por unidad, con la plantilla oficial completa, listo para guardar o imprimir. Es pesado: verás una barra de avance.</small></div>

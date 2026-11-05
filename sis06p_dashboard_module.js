@@ -477,7 +477,7 @@
       btn.className = completo ? 'btn-primario btn-mini' : 'btn-fantasma btn-mini';
       btn.disabled = !completo;
       if (!completo) btn.style.opacity = '0.5';
-      btn.innerHTML = '<span class="material-symbols-rounded">download</span> Descargar CSV oficial';
+      btn.innerHTML = '<span class="material-symbols-rounded">download</span> Exportar CSV para estadística (Excel por unidad)';
       btn.addEventListener('click', () => exportarCSVOficialMunicipio(municipio, mes, anio));
       const btnPub = document.createElement('button');
       btnPub.type = 'button';
