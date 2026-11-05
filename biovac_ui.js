@@ -3300,7 +3300,17 @@ async function pintarDiscrepanciasMunicipio(contenedor, municipio, mes, anio, op
     if (!document.body.contains(contenedor)) return null;
     // Unidades con el Movimiento reabierto sin guardar: no se suman al del municipio (alerta arriba de todo; el cierre guiado la muestra en su caja de pendientes)
     const alertaAbiertas = (C && C.htmlMovimientosAbiertos && !(opts && opts.sinAlertaAbiertas)) ? C.htmlMovimientosAbiertos(abiertas) : '';
-    contenedor.innerHTML = alertaAbiertas + ((alertaAbiertas && !(data || []).length) ? '' : (!hayEnvios && !(data || []).length)
+    // Asistente de revisión (diagnostico_sis.js): explica POR QUÉ no cuadra y a qué unidad preguntarle. Solo lectura; si falla, no estorba.
+    let htmlAsistente = '';
+    try {
+      const DX = window.DiagnosticoSIS;
+      const propias = (data || []).filter((f) => !esConsecuenciaDeAbiertas(f, abiertas.length > 0));
+      if (DX && propias.length) {
+        const ev = await estado.db.rpc('biovac_diagnostico_unidades', { p_municipio: municipio, p_mes: mes, p_anio: anio });
+        htmlAsistente = DX.htmlDiagnostico(DX.diagnosticar(propias, (ev && Array.isArray(ev.data)) ? ev.data : []));
+      }
+    } catch (_) { htmlAsistente = ''; }
+    contenedor.innerHTML = alertaAbiertas + htmlAsistente + ((alertaAbiertas && !(data || []).length) ? '' : (!hayEnvios && !(data || []).length)
       ?'<p class="disc-carga"><span class="material-symbols-rounded" aria-hidden="true">hourglass_top</span> Aún ninguna unidad ha enviado: la revisión empieza cuando lleguen los primeros envíos.</p>'
       : htmlDiscrepancias(data || [], { hayAbiertas: abiertas.length > 0 }));
     const filas = data || [];
