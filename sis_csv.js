@@ -114,7 +114,7 @@
 
   // Pide al servidor las filas oficiales del municipio. Lanza el error del servidor (p. ej. "Faltan por
   // validar: ...") para que quien llama lo muestre.
-  async function filasDeMunicipio(db, municipio, mes, anio) {
+  async function filasDeMunicipio(db, municipio, mes, anio, onProgreso) {
     // PostgREST corta cada respuesta en 1000 filas y un municipio son miles (unidades x ~420 claves): se pide
     // por bloques (.range) sobre el ORDER BY estable (clues, variable_sis) del RPC y se juntan. Sin esto el CSV
     // salía con solo las primeras ~3 unidades.
@@ -126,6 +126,7 @@
       if (error) throw error;
       if (!Array.isArray(data)) break;
       todo.push(...data);
+      if (typeof onProgreso === 'function') onProgreso(todo.length);
       if (!paginable || data.length < 1000) break;
     }
     return aFilas(todo, mes, anio, municipio);

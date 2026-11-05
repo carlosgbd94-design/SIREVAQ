@@ -622,20 +622,61 @@
   // Filas oficiales del municipio, armadas en el SERVIDOR con las mismas reglas con que se publica a
   // registros_sis (sis_filas_csv): solo CLUES validadas, las 4 claves de cada variable aun en 0 y Influenza
   // del mes. Falla (con el motivo) si falta validar alguna unidad: nunca sale un CSV a medias.
+  // Pantalla de "Generando CSV": un municipio grande son ~15,000 filas pedidas por bloques (unos 10 s), y sin
+  // aviso se vuelve a hacer clic y se encimaban varias descargas. Cubre la pantalla (no deja pulsar nada más),
+  // lo anuncia a lectores de pantalla y muestra cuántas filas lleva.
+  function mostrarGenerandoCSV(etiqueta) {
+    if (!document.getElementById('sisGenCsvEstilo')) {
+      const st = document.createElement('style');
+      st.id = 'sisGenCsvEstilo';
+      st.textContent = '@keyframes sisGenCsvGira{to{transform:rotate(360deg)}}'
+        + '.sis-gencsv-rueda{width:44px;height:44px;border-radius:50%;border:4px solid #e2e8f0;border-top-color:var(--primary,#1d4ed8);animation:sisGenCsvGira .9s linear infinite}'
+        + '@media (prefers-reduced-motion:reduce){.sis-gencsv-rueda{animation-duration:3s}}';
+      document.head.appendChild(st);
+    }
+    const ov = document.createElement('div');
+    ov.id = 'sisGenCsv';
+    ov.setAttribute('role', 'alertdialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.setAttribute('aria-labelledby', 'sisGenCsvTit');
+    ov.style.cssText = 'position:fixed; inset:0; z-index:100000; display:flex; align-items:center; justify-content:center; background:rgba(15,23,42,.55); padding:16px;';
+    ov.innerHTML = `<div style="background:#fff; border-radius:20px; padding:26px 30px; max-width:380px; width:100%; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,.3);">
+      <div class="sis-gencsv-rueda" style="margin:0 auto 16px;" aria-hidden="true"></div>
+      <h2 id="sisGenCsvTit" style="font-size:16px; font-weight:800; margin:0 0 6px; color:#0f172a;">Generando CSV para estadística…</h2>
+      <p style="font-size:12.5px; color:#475569; margin:0 0 4px;">${etiqueta}</p>
+      <p id="sisGenCsvAvance" role="status" aria-live="polite" style="font-size:12.5px; font-weight:700; color:#0f172a; margin:0 0 8px;">Preparando…</p>
+      <p style="font-size:11.5px; color:#64748b; margin:0;">Puede tardar unos segundos. No cierres ni vuelvas a pulsar el botón.</p>
+    </div>`;
+    document.body.appendChild(ov);
+    return {
+      avance: (n) => { const el = document.getElementById('sisGenCsvAvance'); if (el) el.textContent = `${n.toLocaleString('es-MX')} filas leídas…`; },
+      texto: (t) => { const el = document.getElementById('sisGenCsvAvance'); if (el) el.textContent = t; },
+      cerrar: () => ov.remove()
+    };
+  }
+
+  let exportandoCSV = false;
   async function exportarCSVOficialMunicipio(municipio, mes, anio) {
+    if (exportandoCSV) return;   // ya se está generando: los clics repetidos no hacen nada
+    exportandoCSV = true;
+    const pantalla = mostrarGenerandoCSV(MUNICIPIO_LABEL[municipio] || municipio);
     try {
-      const rows = await window.SIS_CSV.filasDeMunicipio(estado.db, municipio, mes, anio);
+      const rows = await window.SIS_CSV.filasDeMunicipio(estado.db, municipio, mes, anio, pantalla.avance);
       if (rows.length === 0) {
         toast('No hay concentrados validados para ese mes/año en este municipio.', 'error');
         return;
       }
       // Un libro de Excel con una pestaña por unidad (NOMBRE_CLUES), ordenadas por CLUES, con las columnas del CSV.
+      pantalla.texto('Armando el archivo de Excel…');
       const nombres = await window.SIS_CSV.nombresDeUnidades(estado.db, mes, anio);
       await window.SIS_CSV.descargarLibro(`SIS_${municipio}_${mes}_${anio}.xlsx`, rows, nombres);
       toast(`CSV oficial generado: ${new Set(rows.map((r) => r.CLUES)).size} pestañas (una por CLUES), ${rows.length} filas.`, 'ok');
     } catch (err) {
       console.error('[SIS-06-P] Error exportando CSV oficial del municipio:', err);
       toast(err.message || 'Error al exportar el CSV oficial.', 'error');
+    } finally {
+      pantalla.cerrar();
+      exportandoCSV = false;
     }
   }
 

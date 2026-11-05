@@ -236,3 +236,32 @@ test('Municipal: una unidad que no envía se deja "sin envío" (con motivo) y no
   await expect(page.locator('#munSinEnvio')).toBeVisible();
   await expect(page.locator('#pildoraMun1')).toHaveText('3/4');
 });
+
+test('CSV para estadística: muestra la pantalla "Generando CSV" con avance y los clics repetidos no lo duplican', async ({ page }) => {
+  await abrir(page);
+  await page.click('#dockPasosMun .hoja-tab[data-mpaso="4"]');
+  await fake(page, 'F.validarTodas()');
+  await page.selectOption('#selMes', { index: 0 });
+  await page.selectOption('#selMes', { index: 9 });
+  await expect(page.locator('#munDescargarCSV')).toBeEnabled();
+
+  // El servidor tarda (un municipio grande son ~15,000 filas por bloques): se simula una lectura lenta con avance.
+  await page.evaluate(() => {
+    window.__llamadasCSV = 0;
+    window.SIS_CSV.filasDeMunicipio = async (db, muni, mes, anio, onProgreso) => {
+      window.__llamadasCSV++;
+      await new Promise((r) => setTimeout(r, 600)); onProgreso(1000);
+      await new Promise((r) => setTimeout(r, 600)); onProgreso(2110);
+      return [];   // sin filas: termina con aviso y sin descargar nada
+    };
+  });
+  await page.click('#munDescargarCSV');
+  const pantalla = page.locator('#sisGenCsv');
+  await expect(pantalla).toBeVisible();
+  await expect(pantalla).toContainText('Generando CSV para estadística');
+  await expect(page.locator('#sisGenCsvAvance')).toContainText('1,000 filas', { timeout: 3000 });
+  // La pantalla cubre todo: un segundo clic directo al botón no llega, y aunque se forzara no duplica la generación
+  await page.locator('#munDescargarCSV').dispatchEvent('click');
+  await expect(pantalla).toBeHidden({ timeout: 5000 });
+  expect(await page.evaluate(() => window.__llamadasCSV)).toBe(1);
+});
