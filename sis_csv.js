@@ -115,9 +115,20 @@
   // Pide al servidor las filas oficiales del municipio. Lanza el error del servidor (p. ej. "Faltan por
   // validar: ...") para que quien llama lo muestre.
   async function filasDeMunicipio(db, municipio, mes, anio) {
-    const { data, error } = await db.rpc('sis_filas_csv', { p_mes: Number(mes), p_anio: Number(anio), p_municipio: municipio });
-    if (error) throw error;
-    return aFilas(data, mes, anio, municipio);
+    // PostgREST corta cada respuesta en 1000 filas y un municipio son miles (unidades x ~420 claves): se pide
+    // por bloques (.range) sobre el ORDER BY estable (clues, variable_sis) del RPC y se juntan. Sin esto el CSV
+    // salía con solo las primeras ~3 unidades.
+    const todo = [];
+    for (let desde = 0; ; desde += 1000) {
+      const q = db.rpc('sis_filas_csv', { p_mes: Number(mes), p_anio: Number(anio), p_municipio: municipio });
+      const paginable = q && typeof q.range === 'function';
+      const { data, error } = await (paginable ? q.range(desde, desde + 999) : q);
+      if (error) throw error;
+      if (!Array.isArray(data)) break;
+      todo.push(...data);
+      if (!paginable || data.length < 1000) break;
+    }
+    return aFilas(todo, mes, anio, municipio);
   }
 
   window.SIS_CSV = { HEADERS, aFilas, aTexto, descargar, filasDeMunicipio, nombrePestana, agruparPorClues, aLibro, descargarLibro, nombresDeUnidades };

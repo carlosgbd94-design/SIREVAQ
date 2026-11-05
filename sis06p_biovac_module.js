@@ -1785,12 +1785,38 @@
     if (!activa) return [];
     const mes = Number(document.getElementById('selMes').value);
     const anio = Number(document.getElementById('selAnio').value);
-    return buildCSVRowsMunicipioCompleto(activa.municipio, mes, anio);
+    return buildCSVRowsMunicipioCompleto(municipioCSV(activa), mes, anio);
+  }
+
+  // Quien lleva varios municipios (p. ej. Corregidora + Huimilpan) elige cuál ver y exportar: cada municipio se
+  // valida y se exporta por separado. Con uno solo no se muestra el selector.
+  function municipiosParaCSV() {
+    const lista = (estado.unidadesClues || estado.unidades || []).map((u) => u.municipio).filter(Boolean);
+    return [...new Set(lista)].sort((a, b) => String(a).localeCompare(String(b)));
+  }
+  function municipioCSV(activa) {
+    const sel = document.getElementById('selMunicipioCSV');
+    return (sel && sel.value && sel.style.display !== 'none') ? sel.value : activa.municipio;
+  }
+  function prepararSelectorMunicipioCSV(activa) {
+    const sel = document.getElementById('selMunicipioCSV');
+    const lbl = document.getElementById('lblMunicipioCSV');
+    if (!sel) return;
+    const ms = municipiosParaCSV();
+    const visible = estado.perfil && estado.perfil.rol !== 'UNIDAD' && ms.length > 1;
+    sel.style.display = lbl.style.display = visible ? '' : 'none';
+    if (!visible) return;
+    const previo = sel.value;
+    sel.innerHTML = ms.map((m) => `<option value="${m}">${(window.SIS06PDashboard && window.SIS06PDashboard.MUNICIPIO_LABEL && window.SIS06PDashboard.MUNICIPIO_LABEL[m]) || m}</option>`).join('');
+    sel.value = ms.includes(previo) ? previo : (ms.includes(activa.municipio) ? activa.municipio : ms[0]);
+    if (!sel.dataset.listo) { sel.dataset.listo = '1'; sel.addEventListener('change', () => renderCSVPreview()); }
   }
 
   async function renderCSVPreview() {
     const tbody = document.getElementById('csvUnidadTbody');
     if (!tbody) return;
+    const activaSel = datosUnidadActiva();
+    if (activaSel) prepararSelectorMunicipioCSV(activaSel);
 
     const titulo = document.getElementById('csvPanelTitulo');
     const subtitulo = document.getElementById('csvPanelSubtitulo');
@@ -1833,7 +1859,7 @@
     const anio = Number(document.getElementById('selAnio').value);
     // Mismo CSV, mismo formato y mismo origen que "Descargar CSV oficial" de Seguimiento (sis_csv.js)
     if (window.SIS06PDashboard && window.SIS06PDashboard.exportarCSVOficialMunicipio) {
-      await window.SIS06PDashboard.exportarCSVOficialMunicipio(activa.municipio, mes, anio);
+      await window.SIS06PDashboard.exportarCSVOficialMunicipio(municipioCSV(activa), mes, anio);
     }
   }
 

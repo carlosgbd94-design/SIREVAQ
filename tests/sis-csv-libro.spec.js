@@ -20,3 +20,16 @@ test('libro SIS: una pestaña por CLUES, ordenadas y con nombre válido de Excel
   expect(ws.getRow(2).values.slice(1)).toEqual(['QTSSA001793', 'BIO50', 4, 9, 2026, 'QUERÉTARO']);
   expect(ws.rowCount).toBe(3);
 });
+
+test('filasDeMunicipio pide por bloques: un municipio de varias unidades no se corta en 1000 filas', async () => {
+  global.window = {};
+  delete require.cache[require.resolve('../sis_csv.js')];
+  require('../sis_csv.js');
+  // 5 unidades x 422 claves = 2110 filas; el servidor (PostgREST) solo entrega 1000 por respuesta
+  const todas = [];
+  for (let u = 0; u < 5; u++) for (let v = 0; v < 422; v++) todas.push({ clues: 'QTSSA00' + (1000 + u), municipio: 'CORREGIDORA', variable_sis: 'V' + String(v).padStart(4, '0'), valor: 0 });
+  const db = { rpc: () => ({ range: async (a, b) => ({ data: todas.slice(a, b + 1), error: null }) }) };
+  const filas = await window.SIS_CSV.filasDeMunicipio(db, 'CORREGIDORA', 10, 2026);
+  expect(filas.length).toBe(2110);
+  expect(new Set(filas.map((f) => f.CLUES)).size).toBe(5);
+});

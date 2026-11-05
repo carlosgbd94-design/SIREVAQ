@@ -51,8 +51,8 @@ window.onunhandledrejection = function (event) {
 <script defer src="covid_captura.js?v=1"></script>
 <script defer src="diagnostico_sis.js?v=3"></script>
 <script defer src="biovac_ui.js?v=2026.125"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.100"></script>
-<script defer src="sis_csv.js?v=3"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.101"></script>
+<script defer src="sis_csv.js?v=4"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.31"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.10"></script>
 <script defer src="municipal_guiado.js?v=36"></script>
@@ -1458,6 +1458,8 @@ window.onunhandledrejection = function (event) {
       </div>
     </div>
     <div style="display:flex; align-items:center; gap:8px;"><button type="button" class="ayuda-btn" data-ayuda="csv" title="Qué contiene el CSV" aria-label="Qué contiene el CSV"><span class="material-symbols-rounded">help</span></button>
+    <label for="selMunicipioCSV" id="lblMunicipioCSV" style="display:none; font-size:12px; font-weight:700; color:var(--muted);">Municipio</label>
+    <select id="selMunicipioCSV" aria-label="Municipio a exportar" style="display:none; height:34px; border-radius:10px; border:1px solid var(--outline-variant); padding:0 10px; font-size:12.5px; font-weight:700;"></select>
     <button type="button" class="btn-primario btn-mini" id="btnDescargarCSVUnidad"><span class="material-symbols-rounded">download</span> Exportar CSV para estadística</button>
     </div>
   </div>
