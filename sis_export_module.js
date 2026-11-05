@@ -66,7 +66,8 @@ async function exportSISConcentrado({ mes, anio }) {
     }
 
     const scopeLabel = isJurisdiccional ? "JURISDICCIONAL" : municipiosAllowed.join("-");
-    downloadSISCSV(`SIS_${scopeLabel}_${mes}_${anio}.csv`, rows);
+    const nombres = await window.SIS_CSV.nombresDeUnidades(window.supabase, mes, anio);
+    await window.SIS_CSV.descargarLibro(`SIS_${scopeLabel}_${mes}_${anio}.xlsx`, rows, nombres);
 
     const nClues = new Set(rows.map(r => r.CLUES)).size;
     if (omitidos.length > 0) {

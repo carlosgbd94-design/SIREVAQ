@@ -629,8 +629,10 @@
         toast('No hay concentrados validados para ese mes/año en este municipio.', 'error');
         return;
       }
-      window.SIS_CSV.descargar(`SIS_${municipio}_${mes}_${anio}.csv`, rows);
-      toast(`CSV oficial generado: ${new Set(rows.map((r) => r.CLUES)).size} CLUES, ${rows.length} filas.`, 'ok');
+      // Un libro de Excel con una pestaña por unidad (NOMBRE_CLUES), ordenadas por CLUES, con las columnas del CSV.
+      const nombres = await window.SIS_CSV.nombresDeUnidades(estado.db, mes, anio);
+      await window.SIS_CSV.descargarLibro(`SIS_${municipio}_${mes}_${anio}.xlsx`, rows, nombres);
+      toast(`CSV oficial generado: ${new Set(rows.map((r) => r.CLUES)).size} pestañas (una por CLUES), ${rows.length} filas.`, 'ok');
     } catch (err) {
       console.error('[SIS-06-P] Error exportando CSV oficial del municipio:', err);
       toast(err.message || 'Error al exportar el CSV oficial.', 'error');

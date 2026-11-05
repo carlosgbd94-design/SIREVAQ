@@ -729,7 +729,7 @@
               '<button type="button" class="btn-secundario btn-mini" data-descarga="conc" disabled aria-label="Descargar Excel del concentrado municipal"><span class="material-symbols-rounded">download</span> Descargar Excel</button>')}
             ${juris ? '' : filaArchivo(1, 'inventory_2', '#d97706', 'Excel de Movimiento de Biológico (BIOVAC)', 'El formato por lote y caducidad, con entradas, recibidos, aplicados, desechos, existencia final, ARF y canjes.',
               '<button type="button" class="btn-secundario btn-mini" data-descarga="mov" disabled aria-label="Descargar Excel de Movimiento de Biológico"><span class="material-symbols-rounded">download</span> Descargar Excel</button>')}
-            ${filaArchivo(2, 'description', '#7c3aed', 'CSV oficial para estadística', listoCSV ? 'Una fila por clave SIS de cada unidad validada.' : `Se habilita cuando todas las unidades estén validadas (${resu.validado} de ${resu.esperadas}${resu.omitida ? '; ' + resu.omitida + ' sin envío no cuentan' : ''}).`,
+            ${filaArchivo(2, 'description', '#7c3aed', 'CSV oficial para estadística', listoCSV ? 'Un Excel con una pestaña por unidad (NOMBRE_CLUES, en orden de CLUES) y las columnas del CSV.' : `Se habilita cuando todas las unidades estén validadas (${resu.validado} de ${resu.esperadas}${resu.omitida ? '; ' + resu.omitida + ' sin envío no cuentan' : ''}).`,
               `<button type="button" class="btn-secundario btn-mini" data-descarga="csv" ${listoCSV ? '' : 'disabled'} aria-label="Descargar CSV oficial"><span class="material-symbols-rounded">download</span> Descargar CSV</button>`)}
           </ul>
         </li>
@@ -902,7 +902,7 @@
         <li class="cargando" id="munCheckRecibido"><span class="material-symbols-rounded">hourglass_top</span><div><b>Recibido igual a la requisición</b><small>Comparando…</small></div></li>
       </ul>
       <div class="mun-entregar">
-        <div><b>CSV oficial</b><small>El archivo que se sube al departamento de estadística: una fila por clave SIS de cada unidad validada.</small></div>
+        <div><b>CSV oficial</b><small>El archivo para estadística: un Excel con una pestaña por unidad (NOMBRE_CLUES, ordenadas por CLUES), con las columnas del CSV oficial.</small></div>
         <button type="button" class="btn-primario" id="munDescargarCSV" ${listo ? '' : 'disabled'} title="${listo ? 'Descargar el CSV oficial' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">download</span> Descargar CSV oficial</button>
       </div>
       <div class="mun-entregar">
@@ -913,7 +913,7 @@
         <div><b>Indicadores (RDA)</b><small id="munPubEstado">${listo ? 'Consultando…' : 'Se carga sola al cerrar el mes (o cuando tú lo pidas).'}</small></div>
         <button type="button" class="btn-secundario" id="munPublicar" ${listo ? '' : 'disabled'} title="${listo ? 'Cargar ahora el concentrado validado a los indicadores (si no, se carga solo al cerrar el mes)' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">cloud_upload</span> Cargar a indicadores</button>
       </div>
-      <p class="mun-nota-csv">Abajo, la vista previa: se va llenando con lo que capturan las unidades. El archivo que se descarga tiene el mismo formato que la hoja CSV del Excel oficial.</p>`;
+      <p class="mun-nota-csv">Abajo, la vista previa: se va llenando con lo que capturan las unidades. Cada pestaña del archivo tiene las mismas columnas que la hoja CSV del Excel oficial.</p>`;
     if (listo && window.SIS06PDashboard) window.SIS06PDashboard.pintarEstadoPublicacion($('munPubEstado'), muni, mes, anio);
     // Unidades con el Movimiento reabierto en corrección y sin guardar: no se suman al Movimiento del municipio.
     try {
