@@ -539,7 +539,16 @@
       bv.title = noCuadra ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden — no se puede validar hasta corregirlo' : 'Marcar como validado';
     }
     const b = document.getElementById('btnEnviarSIS06P');
-    if (!b || !esUnidadSesion() || b.style.display === 'none') return;
+    if (!b || b.style.display === 'none') return;
+    if (esAdminSesion()) {
+      // ADMIN envía en cualquier fecha; solo la conciliación paloteo = Movimiento se mantiene.
+      b.disabled = false;
+      const noC = hayDiferenciasConciliacion();
+      b.classList.toggle('con-diferencias', noC);
+      b.title = noC ? 'El paloteo SIS-06-P y el Movimiento de Biológico no coinciden — púlsalo para ver en qué' : 'Enviar el SINBA-SIS de esta unidad (sin límite de fechas)';
+      return;
+    }
+    if (!esUnidadSesion()) return;
     const fuera = !(_ventanaCache && _ventanaCache.dentro_envio);
     const noConcilia = hayDiferenciasConciliacion();
     b.disabled = fuera;
@@ -976,6 +985,7 @@
   function soloLecturaPara(captura) {
     const est = captura ? captura.estado : 'BORRADOR';
     if (esUnidadSesion()) return est !== 'BORRADOR' || fueraDeVentanaDeCaptura(captura);
+    if (esAdminSesion()) return false;
     return !captura || est === 'BORRADOR';
   }
   function fechaHoyIso() {
@@ -1058,8 +1068,9 @@
       if (btnValidar) btnValidar.style.display = 'none';
       if (btnImprimir) btnImprimir.style.display = sisLiberada(currentReport) ? 'inline-flex' : 'none';
     } else {
-      if (btnGuardar) btnGuardar.style.display = (currentReport && estadoActual !== 'BORRADOR') ? 'inline-flex' : 'none';
-      if (btnEnviar) btnEnviar.style.display = 'none';
+      const admin = esAdminSesion();
+      if (btnGuardar) btnGuardar.style.display = ((admin && activa) || (currentReport && estadoActual !== 'BORRADOR')) ? 'inline-flex' : 'none';
+      if (btnEnviar) btnEnviar.style.display = (admin && activa && estadoActual === 'BORRADOR') ? 'inline-flex' : 'none';
       if (btnValidar) btnValidar.style.display = (activa && currentReport && estadoActual === 'ENVIADO') ? 'inline-flex' : 'none';
       if (btnImprimir) btnImprimir.style.display = 'none';
     }
@@ -1108,7 +1119,7 @@
     renderPanelCambiosPendientes();
 
     sincronizarBotonesAccion();
-    if (!esUnidad && (!currentReport || estadoActual === 'BORRADOR')) {
+    if (!esUnidad && !esAdminSesion() && (!currentReport || estadoActual === 'BORRADOR')) {
       container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-style:italic;">Esta unidad todavía no envía su concentrado de este mes — nada que revisar todavía.</div>';
       return;
     }
@@ -1342,6 +1353,8 @@
     const esUnidad = estado.perfil.rol === 'UNIDAD';
 
     const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
+    // ADMIN capturando un SIS aún en borrador actúa como la unidad (declara «sin movimiento», crea el Movimiento)
+    const enBorradorAdmin = esAdminSesion() && (!currentReport || currentReport.estado === 'BORRADOR');
     if (esUnidad && currentReport && currentReport.estado !== 'BORRADOR') {
       toast('Este concentrado ya fue enviado — no puedes editarlo directamente.', 'error');
       return false;
@@ -1356,7 +1369,7 @@
       toast('Sin conexión: tu avance quedó protegido en este dispositivo y se guardará solo cuando regrese el internet.', 'error');
       return false;
     }
-    if (!esUnidad && (!currentReport || currentReport.estado === 'BORRADOR')) {
+    if (!esUnidad && !esAdminSesion() && (!currentReport || currentReport.estado === 'BORRADOR')) {
       toast('Esta unidad todavía no envía su concentrado — nada que corregir.', 'error');
       return false;
     }
@@ -1419,7 +1432,7 @@
         ultimo_editor_usuario: nombreActor,
         updated_at: new Date().toISOString(),
         // «Sin movimiento» solo lo declara la unidad y solo vale con el mes realmente en ceros (paloteo + Influenza)
-        ...(esUnidad ? { sin_movimiento: _sinMov && sumaTotales(valores) === 0 && dosisInfluenzaMes(mes, anio) === 0 } : {})
+        ...(esUnidad || enBorradorAdmin ? { sin_movimiento: _sinMov && sumaTotales(valores) === 0 && dosisInfluenzaMes(mes, anio) === 0 } : {})
       };
 
       const { error } = await estado.db.from('sis06p_capturas').upsert(record, { onConflict: 'clues,mes,anio' });
@@ -1436,7 +1449,7 @@
         _sis06pCapturasCache = capturas || [];
         await cargarConciliacion(clues);
         render();
-        if (esUnidad) await autoCrearMovimientoSiFalta(clues, mes, anio, totalReportado, Boolean(record.sin_movimiento));
+        if (esUnidad || enBorradorAdmin) await autoCrearMovimientoSiFalta(clues, mes, anio, totalReportado, Boolean(record.sin_movimiento));
       } catch (errRefresco) {
         console.warn('[SIS-06-P] Se guardó, pero no se pudo refrescar la pantalla:', errRefresco);
         marcarSinGuardar(false);
@@ -1476,7 +1489,8 @@
     const currentReport = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
     if (!currentReport) { toast('Guarda tu concentrado antes de enviarlo.', 'error'); return; }
     if (_sinGuardar) { toast('Tienes cambios sin guardar en el paloteo — guárdalos antes de enviar.', 'error'); return; }
-    if (!responsableElaboracion()) {
+    const admin = esAdminSesion();
+    if (!admin && !responsableElaboracion()) {
       const campo = document.getElementById('selUsuario');
       await mostrarModal({
         titulo: 'Falta el nombre de quien elabora',
@@ -1487,7 +1501,7 @@
       return;
     }
 
-    if (!movimientoDeclarado(currentReport)) {
+    if (!admin && !movimientoDeclarado(currentReport)) {
       await mostrarModal({
         titulo: 'Tu SINBA-SIS está en ceros',
         mensaje: 'No hay dosis capturadas este mes. Si no recibiste ni aplicaste biológico, activa «Sin movimiento este mes» (arriba, junto a la ruta del mes), guarda y vuelve a enviar. Si sí hubo aplicaciones, captúralas en el paloteo SIS-06-P.',
@@ -2439,6 +2453,9 @@
   function marcarResponsableManual() { _responsableManual = true; }
 
   function esUnidadSesion() { return Boolean(estado.perfil && estado.perfil.rol === 'UNIDAD'); }
+  // ADMIN no tiene candados en SIS: captura, guarda y envía por cualquier unidad en cualquier estado/ventana
+  // (la jurisdicción sigue como siempre: solo revisa/corrige lo ya enviado).
+  function esAdminSesion() { return Boolean(estado.perfil && estado.perfil.rol === 'ADMIN'); }
 
   function capturaDelMesActual() {
     const mes = Number(document.getElementById('selMes').value);
@@ -3462,7 +3479,7 @@
   }
   function renderSinMovimiento(currentReport, estadoActual, fueraDeVentana) {
     let el = document.getElementById('sisSinMovimiento');
-    const unidad = esUnidadSesion() && estadoActual === 'BORRADOR' && !fueraDeVentana && !enEntregaMunicipal();
+    const unidad = (esUnidadSesion() || esAdminSesion()) && estadoActual === 'BORRADOR' && !fueraDeVentana && !enEntregaMunicipal();
     const declarado = estadoActual !== 'BORRADOR' && currentReport && currentReport.sin_movimiento;
     if (!unidad && !declarado) { if (el) el.style.display = 'none'; return; }
     if (!el) {
@@ -3562,7 +3579,7 @@
     const btnExp = document.getElementById('btnExportarSISCompleto');
     const activaDock = datosUnidadActiva();
     if (btnExp) btnExp.style.display = (esUnidadSesion() || (activaDock && captura)) ? 'inline-flex' : 'none';
-    if (btnG && !esUnidadSesion()) btnG.style.display = (activaDock && captura && captura.estado !== 'BORRADOR') ? 'inline-flex' : 'none';
+    if (btnG && !esUnidadSesion()) btnG.style.display = (activaDock && (esAdminSesion() || (captura && captura.estado !== 'BORRADOR'))) ? 'inline-flex' : 'none';
 
     const caja = document.getElementById('dockEstado');
     if (!caja) return;
@@ -3673,6 +3690,7 @@
   // Quién puede abrir los editores de semanas del SIS: la unidad mientras su SINBA-SIS del mes siga en borrador;
   // los revisores cuando la unidad ya lo envió (el servidor aplica la misma regla).
   function motivoSinEdicionSemanas(captura) {
+    if (esAdminSesion()) return '';
     if (esUnidadSesion()) {
       return captura && captura.estado !== 'BORRADOR' ? 'Tu SINBA-SIS de este mes ya fue enviado: las semanas quedaron congeladas. Si hay que corregirlas, pídelo al municipal.' : '';
     }
