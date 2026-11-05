@@ -764,7 +764,8 @@
     // JURISDICCIONAL es el "municipal" de los hospitales (HENM, NHG): solo
     // esas CLUES bajan a detalle/validación; el resto es responsabilidad de
     // su municipio.
-    const puede = rol === 'MUNICIPAL' || (rol === 'JURISDICCIONAL' && fila && ES_HOSPITAL[fila.municipio]);
+    // ADMIN no tiene restricciones: entra al detalle de cualquier unidad.
+    const puede = rol === 'MUNICIPAL' || rol === 'ADMIN' || (rol === 'JURISDICCIONAL' && fila && ES_HOSPITAL[fila.municipio]);
     if (!puede) {
       toast('Solo el municipal (o la jurisdicción, en hospitales) puede ver el detalle de una unidad — aquí solo se ve el estatus general.', 'error');
       return;

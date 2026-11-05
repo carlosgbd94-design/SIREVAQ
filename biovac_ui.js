@@ -649,6 +649,9 @@ async function cargarCatalogo() {
     else if (rol === 'JURISDICCIONAL') {
       selUnidadRevision.innerHTML = '<option value="">— Vista jurisdiccional (sin revisar una unidad) —</option>'
         + opcionesRevision(unidadesClues.filter((x) => MUNICIPIOS_HOSPITAL.indexOf(x.municipio) >= 0));
+    } else if (rol === 'ADMIN') {
+      // ADMIN sin restricciones: puede abrir el SIS de cualquier unidad (capturar, corregir, enviar, validar).
+      selUnidadRevision.innerHTML = '<option value="">— Elige una unidad (CLUES) —</option>' + opcionesRevision(unidadesClues);
     } else selUnidadRevision.innerHTML = '';
   }
 
@@ -959,7 +962,7 @@ function inicializarToggleSIS06P() {
   const esMunicipal = rolActual === 'MUNICIPAL';
   // JURISDICCIONAL también ve el selector de revisión, pero solo con las
   // CLUES de los hospitales (ver cargarCatalogo) -- es su "municipal".
-  const veRevision = esMunicipal || rolActual === 'JURISDICCIONAL';
+  const veRevision = esMunicipal || rolActual === 'JURISDICCIONAL' || rolActual === 'ADMIN';
   if (wrapRevision) wrapRevision.style.display = veRevision ? 'flex' : 'none';
   // Para la unidad, SIS-06-P + Movimiento de Biológico + SIS-SS-CE-H +
   // Influenza son las 4 hojas de UN solo archivo (el SINBA-SIS) -- no hay
@@ -987,7 +990,6 @@ function inicializarToggleSIS06P() {
     }
   }
   if (rolActual === 'JURISDICCIONAL' || rolActual === 'ADMIN') {
-    if (rolActual === 'ADMIN') { btnSis.style.display = 'none'; btnCeh.style.display = 'none'; btnInf.style.display = 'none'; }
     btnCsv.style.display = 'none';
   }
   // La barra se ajusta a lo que cada rol puede hacer: Guardar y Exportar solo

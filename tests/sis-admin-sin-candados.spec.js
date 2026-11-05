@@ -60,3 +60,17 @@ test('JURISDICCIONAL: sigue sin captura ni Enviar mientras la unidad no envía',
   await expect(page.locator('#btnEnviarSIS06P')).toBeHidden();
   await expect(page.locator('#sis06pCaptureGroupsContainer')).toContainText('nada que revisar');
 });
+
+test('ADMIN: ve el selector de unidad y la hoja SIS-06-P; el clic en una unidad del Seguimiento no lo bloquea', async ({ page }) => {
+  await abrir(page, 'ADMIN');
+  await expect(page.locator('#btnSeccionSIS06P')).toBeVisible();
+  await page.click('#btnSeccionSIS06P');
+  await expect(page.locator('#wrapUnidadRevision')).toBeVisible();
+  expect(await page.locator('#selUnidadRevision option').count()).toBeGreaterThan(1);
+  await page.evaluate(() => {
+    const clues = estado.unidadesClues[0].clues;
+    window.__sis06pUltimasFilas = [{ clues, municipio: estado.unidadesClues[0].municipio }];
+    window.SIS06PDashboard.irARevisarUnidad && window.SIS06PDashboard.irARevisarUnidad(clues);
+  });
+  await expect(page.locator('.toast, #toast').filter({ hasText: 'Solo el municipal' })).toHaveCount(0);
+});
