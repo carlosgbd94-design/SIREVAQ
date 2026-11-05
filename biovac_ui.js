@@ -3303,18 +3303,25 @@ async function pintarDiscrepanciasMunicipio(contenedor, municipio, mes, anio, op
     // Unidades con el Movimiento reabierto sin guardar: no se suman al del municipio (alerta arriba de todo; el cierre guiado la muestra en su caja de pendientes)
     const alertaAbiertas = (C && C.htmlMovimientosAbiertos && !(opts && opts.sinAlertaAbiertas)) ? C.htmlMovimientosAbiertos(abiertas) : '';
     // Asistente de revisión (diagnostico_sis.js): explica POR QUÉ no cuadra y a qué unidad preguntarle. Solo lectura; si falla, no estorba.
-    let htmlAsistente = '';
+    // UN solo panel: el asistente agrupa por biológico y ya incluye los avisos del detector (sin repetirlos).
+    // Solo si el asistente no está disponible o falla se pinta la lista clásica del detector.
+    const hayAb = abiertas.length > 0;
+    const todas = data || [];
+    const propias = todas.filter((f) => !esConsecuenciaDeAbiertas(f, hayAb));
+    let htmlRevision = null;
     try {
       const DX = window.DiagnosticoSIS;
-      const propias = (data || []).filter((f) => !esConsecuenciaDeAbiertas(f, abiertas.length > 0));
       if (DX && propias.length) {
-        const ev = await estado.db.rpc('biovac_diagnostico_unidades', { p_municipio: municipio, p_mes: mes, p_anio: anio });
-        htmlAsistente = DX.htmlDiagnostico(DX.diagnosticar(propias, (ev && Array.isArray(ev.data)) ? ev.data : []));
+        let evidencia = [];
+        try { const ev = await estado.db.rpc('biovac_diagnostico_unidades', { p_municipio: municipio, p_mes: mes, p_anio: anio }); if (ev && Array.isArray(ev.data)) evidencia = ev.data; } catch (_) { evidencia = []; }
+        const panel = DX.htmlDiagnostico(DX.diagnosticar(propias, evidencia), { htmlAviso: htmlItemDiscrepancia, htmlDetalle: htmlDetalleDiscrepancia });
+        const consec = todas.filter((f) => esConsecuenciaDeAbiertas(f, hayAb));
+        if (panel) htmlRevision = panel + (consec.length ? htmlDiscrepancias(consec, { hayAbiertas: true }) : '');
       }
-    } catch (_) { htmlAsistente = ''; }
-    contenedor.innerHTML = alertaAbiertas + htmlAsistente + ((alertaAbiertas && !(data || []).length) ? '' : (!hayEnvios && !(data || []).length)
+    } catch (_) { htmlRevision = null; }
+    contenedor.innerHTML = alertaAbiertas + ((alertaAbiertas && !todas.length) ? '' : (!hayEnvios && !todas.length)
       ?'<p class="disc-carga"><span class="material-symbols-rounded" aria-hidden="true">hourglass_top</span> Aún ninguna unidad ha enviado: la revisión empieza cuando lleguen los primeros envíos.</p>'
-      : htmlDiscrepancias(data || [], { hayAbiertas: abiertas.length > 0 }));
+      : (htmlRevision != null ? htmlRevision : htmlDiscrepancias(todas, { hayAbiertas: hayAb })));
     const filas = data || [];
     const conseq = filas.filter((f) => esConsecuenciaDeAbiertas(f, abiertas.length > 0)).length;
     return { abiertas, errores: filas.filter((f) => f.severidad === 'ERROR').length - conseq, consecuencia: conseq };

@@ -122,18 +122,38 @@ test('En el Movimiento del municipal el asistente aparece sobre el detector y no
     } };
     await pintarDiscrepanciasMunicipio(document.getElementById('cajaDx'), 'CORREGIDORA', 10, 2026);
     const caja = document.getElementById('cajaDx');
-    const r = { asistente: !!caja.querySelector('.dx-caja'), detector: !!caja.querySelector('.disc-det'), orden: caja.firstElementChild && caja.firstElementChild.className, rpcs: window.__rpcs };
+    const r = { paneles: caja.querySelectorAll('.dx-caja').length, detector: !!caja.querySelector('.disc-det'), orden: caja.firstElementChild && caja.firstElementChild.className, rpcs: window.__rpcs };
     caja.remove();
     return r;
   }, [filas, evidenciaFalla]);
   const ok = await correr(false);
-  expect(ok.asistente).toBe(true);
-  expect(ok.detector).toBe(true);                       // el detector de siempre sigue ahí
-  expect(ok.orden).toContain('dx-caja');                // y el asistente va arriba
+  expect(ok.paneles).toBe(1);
+  expect(ok.detector).toBe(false);                      // UN solo panel: el detector ya no repite lo que el asistente explica
+  expect(ok.orden).toContain('dx-caja');
   expect(ok.rpcs).toContain('biovac_diagnostico_unidades');
   const falla = await correr(true);
-  expect(falla.asistente).toBe(false);                  // si falla, no rompe nada
-  expect(falla.detector).toBe(true);
+  expect(falla.paneles).toBe(1);                        // sin la evidencia por unidad igual se explica con lo que hay
+  expect(falla.detector).toBe(false);
+});
+
+test('Un solo panel: el aviso del detector con información propia (existencia negativa) va dentro del biológico, y el redundante no se repite', () => {
+  const H = 'Hepatitis "A"';
+  const redundante = f(H, 'L1', 10, 7);                                                   // ANTERIOR_DISTINTA ya explicada por una causa
+  const negativa = { ...f(H, 'L2', 5, 5), tipo: 'FINAL_NEGATIVA', severidad: 'ERROR', mensaje: 'Quedó en -2 frascos.' };
+  const res = diagnosticar([redundante, negativa], []);
+  const g = grupo(res, 'Hepatitis "A"');
+  expect(g.avisos.map((x) => x.numero_lote)).toEqual(['L2']);
+  expect(g.requiereDecision).toBe(true);
+  expect(g.explicado).toBe(false);
+  const html = htmlDiagnostico(res, { htmlAviso: (x) => `<li>AVISO ${x.numero_lote}: ${x.mensaje}</li>`, htmlDetalle: () => '' });
+  expect(html).toContain('AVISO L2: Quedó en -2 frascos.');
+  expect(html).not.toContain('AVISO L1');
+  expect(html).toContain('1 biológico con diferencia');
+  // un aviso sin diferencia de cifras igual crea su grupo
+  const solo = diagnosticar([{ ...f(H, 'L3', 4, 4), tipo: 'EDITADO_A_MANO', severidad: 'ADVERTENCIA', mensaje: 'Ajustado a mano.' }], []);
+  expect(solo.grupos).toHaveLength(1);
+  expect(solo.grupos[0].avisos).toHaveLength(1);
+  expect(solo.grupos[0].requiereDecision).toBe(false);
 });
 
 test('Querétaro real: el municipio trae más que sus unidades (almacén municipal) → por confirmar, no "requiere decisión"', () => {

@@ -46,7 +46,7 @@
 
   function filasDeLote(f) {
     return {
-      loteId: f.lote_id, lote: f.numero_lote, cat: f.categoria || 'NORMAL', bio: normBio(f.biologico), cad: f.caducidad || null,
+      raw: f, loteId: f.lote_id, lote: f.numero_lote, cat: f.categoria || 'NORMAL', bio: normBio(f.biologico), cad: f.caducidad || null,
       mAnt: Number(f.mun_anterior) || 0, uAnt: Number(f.uni_anterior) || 0,
       dAnt: r2((Number(f.mun_anterior) || 0) - (Number(f.uni_anterior) || 0)),
       dMov: r2(Math.abs((Number(f.mun_recibido) || 0) - (Number(f.uni_recibido) || 0))
@@ -194,8 +194,16 @@
 
     const orden = { MOVIMIENTO: 0, CONTEO: 1, LOTE_CRUZADO: 2, CATEGORIA: 3, FRACCION: 4 };
     causas.sort((a, b) => orden[a.tipo] - orden[b.tipo]);
-    const explicado = causas.length > 0 && causas.every((c) => (c.tipo === 'LOTE_CRUZADO' && c.confianza === 'alta') || c.tipo === 'CATEGORIA' || c.tipo === 'FRACCION');
-    return { biologico: bio, causas, explicado, requiereDecision: causas.some((c) => (c.tipo === 'CONTEO' && c.sentido !== 'municipio_mas') || c.tipo === 'MOVIMIENTO') };
+    // Un solo panel: lo que el detector del servidor dice de estos lotes y ya explica una causa NO se repite.
+    // Se conservan aparte los avisos con información propia (existencia negativa, ajuste a mano, no se explica…)
+    // y las filas sin diferencia de cifras. La tabla «por unidad» del detector queda como detalle de las filas explicadas.
+    const REDUNDANTES = ['ANTERIOR_DISTINTA', 'UNIDAD_CAMBIO_POSTERIOR', 'SOLO_MUNICIPIO'];
+    const cubierta = (l) => Math.abs(l.dAnt) > EPS || l.dMov > EPS;
+    const avisos = lotes.filter((l) => !(cubierta(l) && REDUNDANTES.includes(l.raw.tipo))).map((l) => l.raw);
+    const detalles = lotes.filter((l) => cubierta(l) && Array.isArray(l.raw.detalle) && l.raw.detalle.length).map((l) => l.raw);
+    const hayError = avisos.some((f) => f.severidad === 'ERROR');
+    const explicado = !avisos.length && causas.length > 0 && causas.every((c) => (c.tipo === 'LOTE_CRUZADO' && c.confianza === 'alta') || c.tipo === 'CATEGORIA' || c.tipo === 'FRACCION');
+    return { biologico: bio, causas, avisos, detalles, explicado, requiereDecision: hayError || causas.some((c) => (c.tipo === 'CONTEO' && c.sentido !== 'municipio_mas') || c.tipo === 'MOVIMIENTO') };
   }
 
   /**
@@ -219,7 +227,7 @@
     const grupos = [];
     porBio.forEach((lotes, bio) => {
       const g = diagnosticarGrupo(bio, lotes, idx);
-      if (g.causas.length) grupos.push(g);
+      if (g.causas.length || g.avisos.length) grupos.push(g);
     });
     const peso = (g) => (g.requiereDecision ? 0 : g.explicado ? 2 : 1);
     grupos.sort((a, b) => peso(a) - peso(b) || a.biologico.localeCompare(b.biologico, 'es'));
@@ -232,6 +240,7 @@
         explicados: grupos.filter((g) => g.explicado).length,
         requierenDecision: grupos.filter((g) => g.requiereDecision).length,
         porTipo: { LOTE_CRUZADO: cuenta('LOTE_CRUZADO'), CATEGORIA: cuenta('CATEGORIA'), CONTEO: cuenta('CONTEO'), FRACCION: cuenta('FRACCION'), MOVIMIENTO: cuenta('MOVIMIENTO') },
+        avisos: grupos.reduce((s, g) => s + g.avisos.length, 0),
         frascosCruzados: r2(cruzados.reduce((s, c) => s + c.cantidad, 0))
       }
     };
@@ -264,6 +273,7 @@
       .dx-tabla th,.dx-tabla td{padding:4px 8px;text-align:right;border-bottom:1px solid var(--outline-variant,#e2e8f0)}
       .dx-tabla th:first-child,.dx-tabla td:first-child{text-align:left}
       .dx-sosp{margin:6px 0 0;padding-left:18px;font-size:12px}.dx-sosp li.ex{font-weight:800}
+      .dx-avisos{list-style:none;margin:8px 0 0;padding:0}.dx-det{margin-top:8px;font-size:12px}.dx-det>summary{cursor:pointer;font-weight:700}
       .dx-ok{display:flex;gap:8px;align-items:center;padding:12px 14px;font-size:13px}`;
     document.head.appendChild(st);
   }
@@ -280,11 +290,21 @@
       ${sosp}<p class="dx-accion"><b>Qué hacer:</b> ${esc(c.accion)}</p></div>`;
   }
 
-  function htmlDiagnostico(res) {
+  // opts.htmlAviso(f): pinta un aviso del detector del servidor; opts.htmlDetalle(f): su tabla por unidad.
+  function htmlExtras(g, opts) {
+    const o = opts || {};
+    const avisos = (g.avisos && o.htmlAviso) ? `<ul class="dx-avisos disc-lista">${g.avisos.map(o.htmlAviso).join('')}</ul>` : '';
+    const det = (g.detalles && o.htmlDetalle && g.detalles.length)
+      ? `<details class="dx-det"><summary>Ver lo que declaró cada unidad en estos lotes</summary>${g.detalles.map((f) => `<p><b>Lote ${esc(f.numero_lote)}</b></p>${o.htmlDetalle(f)}`).join('')}</details>` : '';
+    return (avisos || det) ? `<div class="dx-causa">${avisos}${det}</div>` : '';
+  }
+
+  function htmlDiagnostico(res, opts) {
     injectCss();
     if (!res || !res.grupos.length) return '';
     const r = res.resumen;
     const partes = [];
+    if (r.avisos) partes.push(`${r.avisos} aviso${r.avisos === 1 ? '' : 's'} del sistema`);
     if (r.porTipo.LOTE_CRUZADO) partes.push(`${r.porTipo.LOTE_CRUZADO} por lote cruzado (${q(r.frascosCruzados)} frascos anotados en otro lote)`);
     if (r.porTipo.CATEGORIA) partes.push(`${r.porTipo.CATEGORIA} por estatus distinto`);
     if (r.porTipo.FRACCION) partes.push(`${r.porTipo.FRACCION} por fracción de frasco`);
@@ -293,11 +313,11 @@
     const items = res.grupos.map((g, i) => {
       const chip = g.requiereDecision ? '<span class="dx-chip decide">Requiere tu decisión</span>' : g.explicado ? '<span class="dx-chip ok">Causa identificada</span>' : '<span class="dx-chip rev">Por confirmar</span>';
       const tipos = g.causas.map((c) => `<span class="dx-chip">${esc(TITULO_TIPO[c.tipo])}</span>`).join('');
-      return `<li><details class="dx-bio"${g.requiereDecision && i < 3 ? ' open' : ''}><summary><span>${esc(g.biologico)}</span>${chip}${tipos}</summary>${g.causas.map(htmlCausa).join('')}</details></li>`;
+      return `<li><details class="dx-bio"${g.requiereDecision && i < 3 ? ' open' : ''}><summary><span>${esc(g.biologico)}</span>${chip}${tipos}</summary>${g.causas.map(htmlCausa).join('')}${htmlExtras(g, opts)}</details></li>`;
     }).join('');
     return `<section class="dx-caja" aria-label="Asistente de revisión">
       <div class="dx-cab"><span class="material-symbols-rounded" aria-hidden="true">psychology_alt</span>
-        <div><b>Asistente de revisión: ${r.biologicos} biológico${r.biologicos === 1 ? '' : 's'} con diferencia</b>
+        <div><b>Revisión de unidades contra municipio: ${r.biologicos} biológico${r.biologicos === 1 ? '' : 's'} con diferencia (${r.requierenDecision} por decidir · ${r.explicados} con causa identificada)</b>
         <small>${esc(partes.join(' · '))}. Solo explica y sugiere: no cambia ninguna cifra; tú decides.</small></div></div>
       <ul class="dx-lista">${items}</ul></section>`;
   }

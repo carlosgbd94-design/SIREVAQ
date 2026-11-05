@@ -62,9 +62,10 @@ test('Detector de discrepancias: avisa lo que no cuadra entre unidades y municip
   await abrir(page);
   await pintar(page, { estadoMov: 'BORRADOR', discrepancias: DISCREPANCIAS });
   const caja = page.locator('#discrepanciasMunicipio');
-  await expect(caja).toContainText('1 por corregir');
-  await expect(caja).toContainText('1 informativas');
-  await expect(caja.locator('details.disc-det')).toHaveAttribute('open', '');                   // con errores se abre sola
+  await expect(caja).toContainText('1 biológico con diferencia (1 por decidir');              // un solo panel, un solo conteo
+  await expect(caja.locator('.dx-caja')).toHaveCount(1);
+  await expect(caja.locator('details.disc-det')).toHaveCount(0);                                // sin segundo panel con los mismos avisos
+  await expect(caja.locator('details.dx-bio')).toHaveAttribute('open', '');                     // con errores se abre sola
   await expect(caja).toContainText('Una unidad cambió su Movimiento');
   await expect(caja).toContainText('pulsa Guardar');                                            // qué hacer, en palabras simples
   await expect(caja.locator('details.disc-cuenta-det')).toHaveCount(1);                         // la cuenta larga queda plegada
@@ -144,7 +145,7 @@ test('Avisos que son CONSECUENCIA de unidades abiertas se agrupan aparte ("se re
   const propio = { numero_lote: 'L-2', biologico: 'B.C.G.', categoria: 'NORMAL', tipo: 'FINAL_NEGATIVA', severidad: 'ERROR', mensaje: 'Quedó en -3 frascos.' };
   await pintar(page, { estadoMov: 'BORRADOR', discrepancias: [conCausa, propio] });
   const caja = page.locator('#discrepanciasMunicipio');
-  await expect(caja).toContainText('1 por corregir');                                    // solo el propio
+  await expect(caja).toContainText('1 biológico con diferencia (1 por decidir');          // solo el propio
   await expect(caja.locator('details.disc-consecuencia')).toContainText('1 aviso más se resuelve solo al guardar');
   await expect(caja.locator('details.disc-consecuencia')).not.toHaveAttribute('open', '');
   const r = await page.evaluate(() => pintarDiscrepanciasMunicipio(document.getElementById('discrepanciasMunicipio'), 'QUERETARO', 10, 2026, { sinAlertaAbiertas: true }));
