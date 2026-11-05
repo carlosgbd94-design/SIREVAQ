@@ -82,6 +82,12 @@ test('Municipal: cierre guiado en 4 pasos', async ({ page }) => {
   // Tres fases en orden, cada archivo con su botón de descarga en la misma pantalla
   await expect(page.locator('#panelMunConcentrado .mun-fase')).toHaveCount(3);
   await expect(page.locator('#munVerifEstado')).toContainText('por revisar');
+  // Una sola caja de pendientes: dice qué falta y cada renglón lleva directo a donde se arregla; el paso 3 de la ruta lo refleja
+  await expect(page.locator('#munPendientes')).toContainText('por resolver antes de entregar');
+  await expect(page.locator('#munPendientes [data-pend-ir="munDetConciliacion"]')).toContainText('paloteo distinto a su Movimiento');
+  await expect(page.locator('#rutaMes .ruta-paso[data-mpaso="3"]')).toHaveClass(/alerta/);
+  await page.click('#munPendientes [data-pend-ir="munDetConciliacion"]');
+  await expect(page.locator('#munDetConciliacion')).toHaveAttribute('open', '');
   await expect(page.locator('#panelMunConcentrado [data-descarga]')).toHaveCount(3);
   await expect(page.locator('#panelMunConcentrado [data-descarga="conc"]')).toBeEnabled();
   await expect(page.locator('#panelMunConcentrado [data-descarga="csv"]')).toBeDisabled();   // faltan unidades por validar
@@ -98,6 +104,7 @@ test('Municipal: cierre guiado en 4 pasos', async ({ page }) => {
   // Teclado: los pasos de arriba responden a Enter
   // locator.press = enfocar + Enter en un solo paso, y se espera a que la ruta se asiente antes de seguir: la barra de pasos
   // se vuelve a pintar tras cada cambio de paso, y un focus() suelto podía quedar en un botón ya reemplazado (Enter perdido).
+  await expect(page.locator('#munPendientes')).not.toHaveClass(/carga/);   // el concentrado ya terminó de revisar (no repinta la ruta a media prueba)
   await page.locator('#rutaMes .ruta-paso[data-mpaso="1"]').press('Enter');
   await expect(page.locator('#munEnvios')).toBeVisible();
   await expect(page.locator('#rutaMes .ruta-paso[aria-current="step"]')).toContainText('Envíos');
@@ -186,23 +193,24 @@ test('El SIS abre en el mes que se reporta (el anterior) y el selector lo explic
   if (actual !== esperado.mes) await expect(page.locator('#chipPeriodo')).toContainText('mes en curso');
 });
 
-test('Municipal: cada paso tiene su camino de regreso (unidades <- revisión, concentrado <- entrega, unidades <- concentrado)', async ({ page }) => {
+test('Municipal: la barra de abajo lleva entre pasos y no hay botones repetidos de Volver/Continuar dentro del concentrado ni la entrega', async ({ page }) => {
   await abrir(page);
   // Paso 2 -> volver a la lista de unidades (paso 1)
   await page.click('#munCtaSiguiente');
   await expect(page.locator('#munBarraRevision')).toBeVisible();
   await page.click('#munVolverLista');
   await expect(page.locator('#munEnvios .mun-unidad')).toHaveCount(4);
-  // Paso 3 -> "Volver a las unidades"
+  // La barra de abajo es el único camino entre pasos (sin botones repetidos dentro de cada paso)
   await page.click('#dockPasosMun .hoja-tab[data-mpaso="3"]');
-  await expect(page.locator('#munVolverUnidades')).toBeVisible();
-  await page.click('#munVolverUnidades');
+  await expect(page.locator('#panelMunConcentrado')).toBeVisible();
+  await expect(page.locator('#munVolverUnidades, #munIrEntrega, #munVolverConcentradoEnt')).toHaveCount(0);
+  await page.click('#dockPasosMun .hoja-tab[data-mpaso="1"]');
   await expect(page.locator('#munEnvios .mun-unidad')).toHaveCount(4);
-  // Paso 4 -> "Volver al concentrado"
   await page.click('#dockPasosMun .hoja-tab[data-mpaso="4"]');
-  await expect(page.locator('#munVolverConcentradoEnt')).toBeVisible();
-  await page.click('#munVolverConcentradoEnt');
-  await expect(page.locator('#munVolverUnidades')).toBeVisible();   // de nuevo en el concentrado (paso 3)
+  await expect(page.locator('#panelMunEntrega')).toBeVisible();
+  await expect(page.locator('#munVolverConcentradoEnt')).toHaveCount(0);
+  await page.click('#dockPasosMun .hoja-tab[data-mpaso="3"]');
+  await expect(page.locator('#panelMunConcentrado')).toBeVisible();
 });
 
 test('Municipal: una unidad que no envía se deja "sin envío" (con motivo) y no bloquea; se puede deshacer', async ({ page }) => {

@@ -42,7 +42,7 @@
   const CLASE_EST = { VALIDADO: 'completo', ENVIADO: 'parcial', SIN: 'vacio', OMITIDA: 'omitida' };
 
   const ES_HOSPITAL = { NHG: true, HENM: true };
-  const st = { activo: false, modo: 'municipal', todas: [], paso: 1, filas: [], filtro: 'todas', clues: null, muni: null, vista3: 'concentrado', hojaActual: 'btnSeccionSIS06P', tokenConc: 0, conc: null };
+  const st = { activo: false, modo: 'municipal', todas: [], paso: 1, filas: [], filtro: 'todas', clues: null, muni: null, vista3: 'concentrado', hojaActual: 'btnSeccionSIS06P', tokenConc: 0, conc: null, pend: null };
 
   function activo() { return st.activo; }
   function periodo() { return { mes: Number($('selMes').value), anio: Number($('selAnio').value) }; }
@@ -97,13 +97,21 @@
   }
 
   // ------------------------------------------------- ruta del mes (arriba)
+  // Paso 3: lo que ya sabe el Concentrado (pendientes reales) manda; si aún no se abrió, se usa el conteo de unidades con diferencia.
+  function pasoConcentrado(r, listo) {
+    const n = pendientesTotal(st.pend);
+    if (n > 0) return { hecho: false, alerta: true, texto: plural(n, 'pendiente por resolver', 'pendientes por resolver'), pill: `${n} ≠`, pillCls: 'aviso' };
+    if (st.pend && st.pend.listo && listo) return { hecho: true, texto: 'Todo cuadra', pill: '✓', pillCls: 'ok' };
+    return { hecho: listo && r.difs === 0 && !st.pend, alerta: r.difs > 0, texto: r.difs ? `${plural(r.difs, 'unidad con diferencia', 'unidades con diferencia')}` : (listo ? 'Sin diferencias' : 'Se arma con lo que validas'), pill: r.difs ? `${r.difs} ≠` : (listo ? '✓' : ''), pillCls: r.difs ? 'aviso' : (listo ? 'ok' : '') };
+  }
+
   function estadoPasos() {
     const r = resumen(st.filas);
     const listo = listoDe(r);
     return [
       { hecho: r.total > 0 && r.sin === 0, texto: r.total ? `${r.enviaron} de ${r.esperadas} enviaron${r.omitida ? ` · ${r.omitida} sin envío` : ''}` : 'Sin unidades', pill: r.total ? `${r.enviaron}/${r.esperadas}` : '', pillCls: r.total > 0 && r.sin === 0 ? 'ok' : '' },
       { hecho: listo, texto: r.total ? `${r.validado} de ${r.esperadas} validadas` : 'Sin unidades', pill: r.total ? `${r.validado}/${r.esperadas}` : '', pillCls: listo ? 'ok' : '' },
-      { hecho: listo && r.difs === 0, alerta: r.difs > 0, texto: r.difs ? `${plural(r.difs, 'unidad con diferencia', 'unidades con diferencia')}` : (listo ? 'Sin diferencias' : 'Se arma con lo que validas'), pill: r.difs ? `${r.difs} ≠` : (listo ? '✓' : ''), pillCls: r.difs ? 'aviso' : (listo ? 'ok' : '') },
+      pasoConcentrado(r, listo),
       { hecho: false, texto: listo ? 'Listo: descarga el CSV oficial' : 'Se habilita al validar todas', pill: listo ? '✓' : '', pillCls: listo ? 'ok' : '' }
     ];
   }
@@ -611,6 +619,58 @@
     </li>`;
   }
 
+  // ---- Pendientes del Concentrado: UNA lista, cada renglón dice qué falta y lleva directo a donde se arregla ----
+  function pendientesTotal(p) {
+    if (!p) return 0;
+    return ((p.abiertas || []).length) + (p.cmp || 0) + (p.rec || 0) + (p.disc || 0);
+  }
+
+  function pintarPendientes() {
+    const caja = $('munPendientes'), p = st.pend;
+    if (!caja || !p) return;
+    if (!p.listo) { caja.className = 'mun-pend carga'; caja.innerHTML = '<span class="material-symbols-rounded" aria-hidden="true">hourglass_top</span> Revisando que todo cuadre…'; return; }
+    const n = pendientesTotal(p);
+    if (n === 0) {
+      caja.className = 'mun-pend ok';
+      caja.innerHTML = '<span class="material-symbols-rounded" aria-hidden="true">check_circle</span> <b>Todo cuadra.</b> Ya puedes descargar tus archivos y continuar a la Entrega.';
+      return;
+    }
+    const fila = (icono, txt, ayuda, accion, extra) => `<li><button type="button" class="mun-pend-fila" ${accion}>
+        <span class="material-symbols-rounded" aria-hidden="true">${icono}</span>
+        <span><b>${txt}</b><small>${ayuda}</small></span><span class="material-symbols-rounded mun-pend-ir" aria-hidden="true">chevron_right</span></button>${extra || ''}</li>`;
+    const filas = [];
+    const ab = p.abiertas || [];
+    if (ab.length) {
+      const unidades = `<ul class="mun-pend-unidades">${ab.map((u) => `<li><button type="button" class="mun-pend-unidad" data-pend-unidad="${esc(u.clues)}">${esc(u.unidad || u.clues)}<span class="material-symbols-rounded" aria-hidden="true">chevron_right</span></button></li>`).join('')}</ul>`;
+      filas.push(fila('edit_note', plural(ab.length, 'unidad sin guardar su Movimiento', 'unidades sin guardar su Movimiento'),
+        'Las reabriste para corregir y no se suman al municipio. Entra a cada una y pulsa Guardar.', 'data-pend-ir="munFaseMov"', unidades));
+    }
+    if (p.cmp) filas.push(fila('compare_arrows', plural(p.cmp, 'unidad con el paloteo distinto a su Movimiento', 'unidades con el paloteo distinto a su Movimiento'), 'Lo aplicado no es igual en las dos hojas. Corrige la que esté mal.', 'data-pend-ir="munDetConciliacion"'));
+    if (p.rec) filas.push(fila('local_shipping', plural(p.rec, 'lote que no coincide con la requisición', 'lotes que no coinciden con la requisición'), 'Lo que recibieron las unidades no es lo que se les repartió. Se ve qué unidad abajo.', 'data-pend-ir="munDetRecibido"'));
+    if (p.disc) filas.push(fila('inventory_2', plural(p.disc, 'lote donde las unidades y el municipio no cuadran', 'lotes donde las unidades y el municipio no cuadran'), 'Cada aviso dice qué revisar.', 'data-pend-ir="munDiscrepancias"'));
+    caja.className = 'mun-pend aviso';
+    caja.innerHTML = `<div class="mun-pend-tit"><span class="material-symbols-rounded" aria-hidden="true">flag</span> ${plural(filas.length, 'cosa por resolver', 'cosas por resolver')} antes de entregar</div><ol class="mun-pend-lista">${filas.join('')}</ol>`;
+  }
+
+  // Cada parte del Concentrado avisa cuando termina; la caja se completa sola.
+  function setPend(token, parcial) {
+    if (!st.pend || st.pend.token !== token) return;
+    Object.assign(st.pend, parcial);
+    const p = st.pend;
+    p.listo = p.cmp !== undefined && p.rec !== undefined && p.disc !== undefined;
+    pintarPendientes();
+    // La barra de pasos se repinta solo si el resumen del paso 3 cambió (repintarla de más le quita el foco a quien navega con teclado)
+    const firma = JSON.stringify(pasoConcentrado(resumen(st.filas), listoDe(resumen(st.filas))));
+    if (firma !== p.firma) { p.firma = firma; pintarRuta(); }
+  }
+
+  function irAPendiente(id) {
+    const el = $(id);
+    if (!el) return;
+    if (el.tagName === 'DETAILS') el.open = true;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   function pintarConcentrado() {
     const panel = $('panelMunConcentrado');
     const { mes, anio } = periodo();
@@ -621,6 +681,8 @@
     const listoCSV = listoDe(resu);
     const token = ++st.tokenConc;
     st.conc = null;
+    st.pend = { token, abiertas: [], cmp: undefined, rec: undefined, disc: undefined, listo: false };
+    setTimeout(pintarPendientes, 0);
     const pseudo = pseudoDe(muni);
     const esManual = !juris && !!pseudo && !esDerivado(pseudo, mes, anio) && !eraUnidades(mes, anio);
 
@@ -633,6 +695,7 @@
         </div>
       </div>
       ${chipsMunicipio('conc')}
+      <div id="munPendientes" class="mun-pend carga" aria-live="polite"></div>
       <ol class="mun-fases">
         <li class="mun-fase" style="--i:0" id="munFaseVerif">
           <div class="mun-fase-cab">
@@ -671,17 +734,13 @@
           </ul>
         </li>
       </ol>
-      <details class="mun-det mun-det-grande"><summary>Ver el concentrado en pantalla (paloteo y seguimiento de biológico)</summary><div id="munConcTablas" class="mun-det-cuerpo"></div></details>
-      <div class="mun-siguiente">
-        <span>Cuando todo cuadre y tengas tus archivos, sigue con la entrega.</span>
-        <button type="button" class="btn-secundario" id="munVolverUnidades"><span class="material-symbols-rounded" aria-hidden="true">arrow_back</span> Volver a las unidades</button>
-        <button type="button" class="btn-primario" id="munIrEntrega">Continuar a Entrega <span class="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
-      </div>`;
+      <details class="mun-det mun-det-grande"><summary>Ver el concentrado en pantalla (paloteo y seguimiento de biológico)</summary><div id="munConcTablas" class="mun-det-cuerpo"></div></details>`;
 
     const vigente = () => token === st.tokenConc && st.activo && st.paso === 3 && st.vista3 === 'concentrado';
     const verif = { cmp: undefined, rec: undefined, recTotal: 0 };
     const cerrarVerif = () => {
       if (verif.cmp === undefined || verif.rec === undefined || !vigente()) return;
+      setPend(token, { cmp: verif.cmp ? verif.cmp.conDiferencia : 0, rec: verif.rec });
       const dif = (verif.cmp ? verif.cmp.conDiferencia : 0) + verif.rec;
       const nada = (!verif.cmp || verif.cmp.total === 0) && verif.recTotal === 0;
       const caja = $('munVerifEstado'); if (!caja) return;
@@ -717,14 +776,17 @@
       });
     } else { verif.rec = 0; }
 
-    if (!juris) pintarFaseMovimiento(muni, mes, anio, esManual, vigente);
+    if (!juris) pintarFaseMovimiento(muni, mes, anio, esManual, vigente, token);
+    else setPend(token, { disc: 0 });
   }
 
-  async function pintarFaseMovimiento(muni, mes, anio, esManual, vigente) {
+  async function pintarFaseMovimiento(muni, mes, anio, esManual, vigente, token) {
+    const sinAvisos = () => setPend(token, { abiertas: [], disc: 0 });
     let info;
     try { info = await leerMovimientoMuni(muni, mes, anio); }
     catch (err) {
       if (vigente() && $('munMovEstadoFase')) $('munMovEstadoFase').innerHTML = chipEstado('aviso', 'No se pudo consultar', 'error');
+      sinAvisos();
       return;
     }
     if (!vigente()) return;
@@ -734,19 +796,22 @@
     if (!info.u) {
       caja.innerHTML = chipEstado('info', 'Sin Movimiento propio', 'info');
       cuerpo.innerHTML = '<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">info</span><span>Este municipio no tiene Movimiento propio: lo concentra la Jurisdicción.</span></p>';
+      sinAvisos();
       return;
     }
     if (info.derivado) {
       caja.innerHTML = chipEstado('ok', 'Se arma solo', 'auto_awesome');
       cuerpo.innerHTML = '<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">auto_awesome</span><span>Desde octubre 2026 el Movimiento del municipio es la suma de sus unidades: no se captura ni se cierra aquí. Cada unidad exporta el suyo.</span></p>';
+      sinAvisos();
       return;
     }
     const eraU = eraUnidades(mes, anio);
-    const intro = eraU ? `<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">group_work</span><span><b>Se arma solo con lo que envían tus unidades</b>. Lo que reportan las unidades se corrige en la unidad (cada lote tiene su desglose «Por unidad»); aquí solo se ajustan los lotes que ninguna unidad reporta. La existencia anterior viene del mes pasado. Descárgalo e imprímelo para validarlo con la Jurisdicción; al empatar, ciérralo con <b>Cerrar mes</b>.</span></p>`
+    const intro = eraU ? `<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">group_work</span><span><b>Se arma solo con lo que envían tus unidades.</b> Si algo no cuadra, se corrige en la unidad. Cuando empate con la Jurisdicción, ciérralo con <b>Cerrar mes</b>.</span></p>`
       : esManual ? `<p class="mun-nota"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span><span><b>${nombreMes(mes)} se captura a mano en el municipio</b>, porque las unidades todavía no capturan el suyo. Desde octubre se arma con tus unidades.</span></p>` : '';
     if (!info.mov) {
       caja.innerHTML = chipEstado('pend', eraU ? 'Aparece al enviar la 1.ª unidad' : 'Sin iniciar', eraU ? 'hourglass_top' : 'radio_button_unchecked');
       cuerpo.innerHTML = `${intro}<div class="mun-fase-acciones">${eraU ? abrir('Abrir en blanco', false) : abrir('Iniciar y capturar', true)}</div>`;
+      sinAvisos();
       return;
     }
     const e = ESTADO_MOV[info.mov.estado] || ESTADO_MOV.BORRADOR;
@@ -754,12 +819,15 @@
     const cerrado = info.mov.estado === 'CERRADO';
     const ayuda = cerrado
       ? 'El mes ya está cerrado: la existencia final pasó al mes siguiente. Para cambiar algo, ábrelo y usa «Corregir movimiento» (queda registrado).'
-      : 'Lo que captures se guarda solo al salir de cada celda. Cuando todo cuadre, usa <b>Cerrar mes</b> en la barra de abajo: termina el mes, lo bloquea y pasa la existencia final al mes siguiente.';
+      : 'Cuando todo cuadre, usa <b>Cerrar mes</b> en la barra de abajo: bloquea el mes y pasa la existencia final al siguiente.';
     const armadoTxt = eraU && !cerrado
       ? `<p class="mun-ayuda-mov">${info.mov.armado_en ? `Se actualiza sola cada vez que una unidad envía. Última suma: ${fechaCorta(info.mov.armado_en)}.` : 'Se actualizará sola en cuanto una unidad envíe su SINBA-SIS.'}</p>` : '';
     const discHtml = eraU ? '<div id="munDiscrepancias" class="disc-caja" aria-live="polite"></div>' : '';
     cuerpo.innerHTML = `${intro}${armadoTxt}${discHtml}<p class="mun-ayuda-mov">${ayuda}</p><div class="mun-fase-acciones">${abrir(cerrado ? 'Ver Movimiento' : (eraU ? 'Abrir y ajustar' : 'Abrir y capturar'), !cerrado)}</div>`;
-    if (eraU && typeof pintarDiscrepanciasMunicipio === 'function') pintarDiscrepanciasMunicipio($('munDiscrepancias'), muni, mes, anio);
+    if (eraU && typeof pintarDiscrepanciasMunicipio === 'function') {
+      Promise.resolve(pintarDiscrepanciasMunicipio($('munDiscrepancias'), muni, mes, anio, { sinAlertaAbiertas: true }))
+        .then((r) => { if (vigente()) setPend(token, r ? { abiertas: r.abiertas, disc: r.errores } : { abiertas: [], disc: 0 }); }, () => setPend(token, { abiertas: [], disc: 0 }));
+    } else sinAvisos();
     const btn = document.querySelector('#panelMunConcentrado [data-descarga="mov"]');
     if (btn) btn.disabled = false;
   }
@@ -844,10 +912,6 @@
       <div class="mun-entregar">
         <div><b>Indicadores (RDA)</b><small id="munPubEstado">${listo ? 'Consultando…' : 'Se carga sola al cerrar el mes (o cuando tú lo pidas).'}</small></div>
         <button type="button" class="btn-secundario" id="munPublicar" ${listo ? '' : 'disabled'} title="${listo ? 'Cargar ahora el concentrado validado a los indicadores (si no, se carga solo al cerrar el mes)' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">cloud_upload</span> Cargar a indicadores</button>
-      </div>
-      <div class="mun-siguiente">
-        <span>¿Algo no cuadra? Puedes regresar sin perder nada.</span>
-        <button type="button" class="btn-secundario" id="munVolverConcentradoEnt"><span class="material-symbols-rounded" aria-hidden="true">arrow_back</span> Volver al concentrado</button>
       </div>
       <p class="mun-nota-csv">Abajo, la vista previa: se va llenando con lo que capturan las unidades. El archivo que se descarga tiene el mismo formato que la hoja CSV del Excel oficial.</p>`;
     if (listo && window.SIS06PDashboard) window.SIS06PDashboard.pintarEstadoPublicacion($('munPubEstado'), muni, mes, anio);
@@ -951,6 +1015,10 @@
       if (conc) { st.muni = conc.dataset.conc; pintarConcentrado(); return; }
       const ent = t.closest('[data-ent]');
       if (ent) { st.muni = ent.dataset.ent; irAPaso(4, { sinScroll: true }); return; }
+      const pu = t.closest('[data-pend-unidad]');
+      if (pu) { revisar(pu.dataset.pendUnidad, 'btnSeccionMovimiento'); return; }
+      const pi = t.closest('[data-pend-ir]');
+      if (pi) { irAPendiente(pi.dataset.pendIr); return; }
       if (t.closest('#munPrev')) moverUnidad(-1);
       else if (t.closest('#munNext')) moverUnidad(1);
       else if (t.closest('#munSigPend')) { const s = siguientePendiente(st.clues); if (s) cambiarUnidad(s.clues); }

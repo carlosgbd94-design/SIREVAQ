@@ -3210,7 +3210,7 @@ function renderBannerMovimiento(m, esJurisdiccional) {
 // Detector de discrepancias entre las unidades y el Movimiento del municipio (RPC biovac_discrepancias_municipio).
 // Lo usan la hoja Movimiento y el cierre guiado del municipal. Solo informa: nunca cambia datos.
 const TITULO_DISCREPANCIA = {
-  FINAL_NEGATIVA: 'Existencia negativa', UNIDAD_CAMBIO_POSTERIOR: 'Una unidad cambió después', INCONSISTENCIA: 'No se explica',
+  FINAL_NEGATIVA: 'Quedaron frascos en negativo', UNIDAD_CAMBIO_POSTERIOR: 'Una unidad cambió su Movimiento', INCONSISTENCIA: 'No se explica',
   EDITADO_A_MANO: 'Ajustado a mano', SOLO_MUNICIPIO: 'Solo está en el municipio', ANTERIOR_DISTINTA: 'Existencia anterior distinta'
 };
 const ICONO_DISCREPANCIA = { ERROR: 'error', ADVERTENCIA: 'warning', INFO: 'info' };
@@ -3238,30 +3238,55 @@ function htmlDetalleDiscrepancia(f) {
       <tbody>${filasU}</tbody></table></div>`;
 }
 
-function htmlDiscrepancias(filas) {
-  if (!filas || !filas.length) {
-    return '<p class="disc-ok"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span> Las unidades y el municipio cuadran en todos los lotes.</p>';
-  }
-  const n = (sev) => filas.filter((f) => f.severidad === sev).length;
-  const partes = [];
-  if (n('ERROR')) partes.push(`<b class="disc-err">${n('ERROR')} por corregir</b>`);
-  if (n('ADVERTENCIA')) partes.push(`<b class="disc-adv">${n('ADVERTENCIA')} por confirmar</b>`);
-  if (n('INFO')) partes.push(`${n('INFO')} informativas`);
-  const items = filas.slice(0, 60).map((f) => `
+// Qué hacer, en palabras sencillas, para los avisos que más confunden. La cuenta larga del servidor queda en «Ver la cuenta».
+const QUE_HACER_DISCREPANCIA = {
+  UNIDAD_CAMBIO_POSTERIOR: 'El municipio quedó con cifras distintas a las de sus unidades. Abre la unidad que cambió y pulsa Guardar para que se vuelva a sumar.',
+  FINAL_NEGATIVA: 'Se dieron de baja más frascos de los que había. Revisa en la tabla la unidad marcada «Posible error».'
+};
+// Aviso que es CONSECUENCIA de unidades con el Movimiento abierto: se resuelve solo al guardarlas.
+function esConsecuenciaDeAbiertas(f, hayAbiertas) {
+  return !!hayAbiertas && f.tipo === 'UNIDAD_CAMBIO_POSTERIOR' && /abierto en corrección/.test(String(f.mensaje || ''));
+}
+
+function htmlItemDiscrepancia(f) {
+  const simple = QUE_HACER_DISCREPANCIA[f.tipo];
+  const cuerpo = simple
+    ? `<p>${_escD(simple)}</p><details class="disc-cuenta-det"><summary>Ver la cuenta</summary><p>${_escD(f.mensaje)}</p></details>`
+    : `<p>${_escD(f.mensaje)}</p>`;
+  return `
     <li class="disc-${String(f.severidad).toLowerCase()}">
       <span class="material-symbols-rounded" aria-hidden="true">${ICONO_DISCREPANCIA[f.severidad] || 'info'}</span>
       <div><b>${_escD(f.biologico)} · lote ${_escD(f.numero_lote)}${f.categoria && f.categoria !== 'NORMAL' ? ' (' + _escD(f.categoria) + ')' : ''}</b>
         <small>${_escD(TITULO_DISCREPANCIA[f.tipo] || f.tipo)}</small>
-        <p>${_escD(f.mensaje)}</p>${htmlDetalleDiscrepancia(f)}</div>
-    </li>`).join('');
-  return `<details class="disc-det"${n('ERROR') ? ' open' : ''}>
-    <summary><span class="material-symbols-rounded" aria-hidden="true">fact_check</span> Revisión de unidades contra municipio: ${partes.join(' · ')}</summary>
-    <ul class="disc-lista">${items}</ul>${filas.length > 60 ? `<p class="disc-mas">Se muestran 60 de ${filas.length}.</p>` : ''}
-  </details>`;
+        ${cuerpo}${htmlDetalleDiscrepancia(f)}</div>
+    </li>`;
 }
 
-async function pintarDiscrepanciasMunicipio(contenedor, municipio, mes, anio) {
-  if (!contenedor) return;
+function htmlDiscrepancias(filas, opts) {
+  if (!filas || !filas.length) {
+    return '<p class="disc-ok"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span> Las unidades y el municipio cuadran en todos los lotes.</p>';
+  }
+  const hayAbiertas = !!(opts && opts.hayAbiertas);
+  const conseq = filas.filter((f) => esConsecuenciaDeAbiertas(f, hayAbiertas));
+  const propias = filas.filter((f) => !conseq.includes(f));
+  const n = (sev) => propias.filter((f) => f.severidad === sev).length;
+  const partes = [];
+  if (n('ERROR')) partes.push(`<b class="disc-err">${n('ERROR')} por corregir</b>`);
+  if (n('ADVERTENCIA')) partes.push(`<b class="disc-adv">${n('ADVERTENCIA')} por confirmar</b>`);
+  if (n('INFO')) partes.push(`${n('INFO')} informativas`);
+  const items = propias.slice(0, 60).map(htmlItemDiscrepancia).join('');
+  const grupo = conseq.length === 0 ? '' : `<details class="disc-det disc-consecuencia">
+    <summary><span class="material-symbols-rounded" aria-hidden="true">autorenew</span> ${conseq.length} aviso${conseq.length === 1 ? '' : 's'} más se resuelve${conseq.length === 1 ? '' : 'n'} solo${conseq.length === 1 ? '' : 's'} al guardar las unidades con el Movimiento abierto</summary>
+    <ul class="disc-lista">${conseq.slice(0, 60).map(htmlItemDiscrepancia).join('')}</ul></details>`;
+  const lista = propias.length === 0 ? '' : `<details class="disc-det"${n('ERROR') ? ' open' : ''}>
+    <summary><span class="material-symbols-rounded" aria-hidden="true">fact_check</span> Revisión de unidades contra municipio: ${partes.join(' · ')}</summary>
+    <ul class="disc-lista">${items}</ul>${propias.length > 60 ? `<p class="disc-mas">Se muestran 60 de ${propias.length}.</p>` : ''}
+  </details>`;
+  return lista + grupo;
+}
+
+async function pintarDiscrepanciasMunicipio(contenedor, municipio, mes, anio, opts) {
+  if (!contenedor) return null;
   contenedor.innerHTML = '<p class="disc-carga">Revisando unidades contra el municipio…</p>';
   try {
     const C = window.SIS06PConcentradoMunicipal;
@@ -3272,14 +3297,18 @@ async function pintarDiscrepanciasMunicipio(contenedor, municipio, mes, anio) {
     ]);
     if (error) throw error;
     const hayEnvios = !seg || !Array.isArray(seg.data) || seg.data.some((f) => f.municipio === municipio && (f.estado === 'ENVIADO' || f.estado === 'VALIDADO'));
-    if (!document.body.contains(contenedor)) return;
-    // Unidades con el Movimiento reabierto sin guardar: no se suman al del municipio (alerta arriba de todo)
-    const alertaAbiertas = C && C.htmlMovimientosAbiertos ? C.htmlMovimientosAbiertos(abiertas) : '';
+    if (!document.body.contains(contenedor)) return null;
+    // Unidades con el Movimiento reabierto sin guardar: no se suman al del municipio (alerta arriba de todo; el cierre guiado la muestra en su caja de pendientes)
+    const alertaAbiertas = (C && C.htmlMovimientosAbiertos && !(opts && opts.sinAlertaAbiertas)) ? C.htmlMovimientosAbiertos(abiertas) : '';
     contenedor.innerHTML = alertaAbiertas + ((alertaAbiertas && !(data || []).length) ? '' : (!hayEnvios && !(data || []).length)
       ?'<p class="disc-carga"><span class="material-symbols-rounded" aria-hidden="true">hourglass_top</span> Aún ninguna unidad ha enviado: la revisión empieza cuando lleguen los primeros envíos.</p>'
-      : htmlDiscrepancias(data || []));
+      : htmlDiscrepancias(data || [], { hayAbiertas: abiertas.length > 0 }));
+    const filas = data || [];
+    const conseq = filas.filter((f) => esConsecuenciaDeAbiertas(f, abiertas.length > 0)).length;
+    return { abiertas, errores: filas.filter((f) => f.severidad === 'ERROR').length - conseq, consecuencia: conseq };
   } catch (err) {
     if (document.body.contains(contenedor)) contenedor.innerHTML = '';
+    return null;
   }
 }
 

@@ -64,8 +64,10 @@ test('Detector de discrepancias: avisa lo que no cuadra entre unidades y municip
   const caja = page.locator('#discrepanciasMunicipio');
   await expect(caja).toContainText('1 por corregir');
   await expect(caja).toContainText('1 informativas');
-  await expect(caja.locator('details')).toHaveAttribute('open', '');                            // con errores se abre sola
-  await expect(caja).toContainText('Una unidad cambió después');
+  await expect(caja.locator('details.disc-det')).toHaveAttribute('open', '');                   // con errores se abre sola
+  await expect(caja).toContainText('Una unidad cambió su Movimiento');
+  await expect(caja).toContainText('pulsa Guardar');                                            // qué hacer, en palabras simples
+  await expect(caja.locator('details.disc-cuenta-det')).toHaveCount(1);                         // la cuenta larga queda plegada
   await expect(caja).toContainText('lote L-ANT');
   const llamada = await page.evaluate(() => window.__rpcs.find((r) => r[0] === 'biovac_discrepancias_municipio'));
   expect(llamada[1]).toEqual({ p_municipio: 'QUERETARO', p_mes: 10, p_anio: 2026 });
@@ -133,4 +135,21 @@ test('Movimiento cerrado del municipio: ya no muestra el aviso de armado y ofrec
   await pintar(page, { estadoMov: 'CERRADO' });
   await expect(page.locator('#bannerMovimiento')).not.toContainText('se arma solo');
   await expect(page.locator('#btnCorreccionDock')).toContainText('Reabrir y corregir');
+});
+
+test('Avisos que son CONSECUENCIA de unidades abiertas se agrupan aparte ("se resuelven solos") y no cuentan como por corregir', async ({ page }) => {
+  await abrir(page);
+  await page.evaluate(() => { window.__segBio = [{ clues: 'C2', unidad: 'UNIDAD ABIERTA', movimiento_estado: 'EN_CORRECCION', biovac_clave: 'BCG', aplicado: 6, desperdicio: 4 }]; });
+  const conCausa = { numero_lote: 'L-1', biologico: 'B.C.G.', categoria: 'NORMAL', tipo: 'UNIDAD_CAMBIO_POSTERIOR', severidad: 'ERROR', mensaje: 'Las unidades suman 1 pero el municipio tomó 2. Causa probable: estas unidades tienen el mes abierto en corrección y no se cuentan hasta que la cierren de nuevo: UNIDAD ABIERTA.' };
+  const propio = { numero_lote: 'L-2', biologico: 'B.C.G.', categoria: 'NORMAL', tipo: 'FINAL_NEGATIVA', severidad: 'ERROR', mensaje: 'Quedó en -3 frascos.' };
+  await pintar(page, { estadoMov: 'BORRADOR', discrepancias: [conCausa, propio] });
+  const caja = page.locator('#discrepanciasMunicipio');
+  await expect(caja).toContainText('1 por corregir');                                    // solo el propio
+  await expect(caja.locator('details.disc-consecuencia')).toContainText('1 aviso más se resuelve solo al guardar');
+  await expect(caja.locator('details.disc-consecuencia')).not.toHaveAttribute('open', '');
+  const r = await page.evaluate(() => pintarDiscrepanciasMunicipio(document.getElementById('discrepanciasMunicipio'), 'QUERETARO', 10, 2026, { sinAlertaAbiertas: true }));
+  expect(r.errores).toBe(1);
+  expect(r.consecuencia).toBe(1);
+  expect(r.abiertas.length).toBe(1);
+  await expect(page.locator('[data-aviso="movimientos-abiertos"]')).toHaveCount(0);       // el cierre guiado lo muestra en su caja de pendientes
 });
