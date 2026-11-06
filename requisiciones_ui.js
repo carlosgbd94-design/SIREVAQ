@@ -1602,10 +1602,16 @@ async function guardarEdicionItem(itemId) {
 }
 
 async function quitarItemSurtido(itemId) {
-  if (!(await confirmar({ titulo: '¿Quitar este lote?', tono: 'peligro', aceptar: 'Quitar lote', mensaje: 'Se quita de lo surtido. Si ya tiene reparto asignado, no se podrá quitar hasta liberar ese reparto.' }))) return;
+  if (!(await confirmar({ titulo: '¿Quitar este lote?', tono: 'peligro', aceptar: 'Quitar lote', mensaje: 'Se quita de lo surtido y también se retira su reparto a municipios, hospitales y unidades.' }))) return;
   const { error } = await estado.db.from('requi_items_jurisdiccion').delete().eq('id', itemId);
   if (error) { toast('No se pudo quitar: ' + error.message, true); return; }
+  // El servidor (trigger) también retira el reparto de ese lote; aquí se refleja en memoria.
+  const quitado = estado.items.find((i) => i.id === itemId);
   estado.items = estado.items.filter((i) => i.id !== itemId);
+  if (quitado && !estado.items.some((i) => i.lote_id === quitado.lote_id)) {
+    estado.distMunicipio = estado.distMunicipio.filter((d) => d.lote_id !== quitado.lote_id);
+    estado.distUnidad = estado.distUnidad.filter((d) => d.lote_id !== quitado.lote_id);
+  }
   toast('Lote quitado.');
   renderPaso1();
   renderAvance();
