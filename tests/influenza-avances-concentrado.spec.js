@@ -75,6 +75,10 @@ async function montar(page, rol, vac) {
     window.__ROL__ = r; window.__VAC__ = v;
     document.body.innerHTML = h;
     document.getElementById('adminInfluenzaMuni').innerHTML = '<option value="QUERETARO">Q</option><option value="CORREGIDORA">C</option>';
+    // Admin/Jurisdicción: populateInfluenzaAdminFilters agrega «Todos los municipios y hospitales» como primera opción
+    if (r === 'ADMIN' || r === 'JURISDICCIONAL') document.getElementById('adminInfluenzaMuni').insertAdjacentHTML('afterbegin', '<option value="__JURIS__">Todos los municipios y hospitales</option>');
+    if (r === 'ADMIN' || r === 'JURISDICCIONAL') document.getElementById('adminInfluenzaMuni').insertAdjacentHTML('beforeend', '<option value="__HOSP__HENM">HENM (hospital)</option>');
+    document.getElementById('adminInfluenzaMuni').value = 'QUERETARO';
     // Semanas de la campaña: del primer viernes al último
     const semanas = '<option value="2026-10-16">Sem 42</option><option value="2026-10-23">Sem 43</option><option value="2026-10-30">Sem 44</option>';
     document.getElementById('adminInfluenzaSemanaInicio').innerHTML = semanas;
@@ -112,8 +116,9 @@ test('Municipio de Querétaro (Influenza): suma sus unidades y deja fuera al hos
 test('Jurisdicción: el botón suma los municipios con subtotales y total; solo lo ven Admin y Jurisdicción', async ({ page }) => {
   await montar(page, 'ADMIN', 'INFLUENZA');
   await page.evaluate(() => window.__render());
-  await expect(page.locator('#avancesAmbitoJuris')).toBeVisible();
-  await page.click('#avancesAmbitoJuris button');
+  await expect(page.locator('#adminInfluenzaMuni option[value="__JURIS__"]')).toHaveText('Todos los municipios y hospitales');
+  await page.selectOption('#adminInfluenzaMuni', '__JURIS__');
+  await page.evaluate(() => window.__render());
   const k = await kpis(page);
   expect(k[0]).toContain('20.5%');                 // 390 de 1,900
   expect(k[0]).toMatch(/390 de 1,900/i);
@@ -124,11 +129,23 @@ test('Jurisdicción: el botón suma los municipios con subtotales y total; solo 
   const filas = await page.locator('#adminInfluenzaMunicipalTbody tr').allInnerTexts();
   expect(filas.filter((t) => t.includes('subtotal')).length).toBe(2);   // Querétaro y Corregidora
   expect(filas.filter((t) => /HENM · hospital/i.test(t)).length).toBe(1);   // el hospital va aparte, con su subtotal
-  await expect(page.locator('#adminInfluenzaMuni')).toBeDisabled();
+  await page.evaluate(() => infSoltarTodos());   // al salir de Avances «Todos» vuelve al municipio real
+  expect(await page.locator('#adminInfluenzaMuni').inputValue()).toBe('QUERETARO');
 
   await montar(page, 'MUNICIPAL', 'INFLUENZA');
   await page.evaluate(() => window.__render());
-  await expect(page.locator('#avancesAmbitoJuris')).toBeHidden();
+  await expect(page.locator('#adminInfluenzaMuni option[value="__JURIS__"]')).toHaveCount(0);   // el municipal no la tiene
+});
+
+test('Hospital: el filtro Municipio lo ofrece aparte y suma solo sus dosis; al salir de Avances vuelve al municipio', async ({ page }) => {
+  await montar(page, 'ADMIN', 'INFLUENZA');
+  await page.selectOption('#adminInfluenzaMuni', '__HOSP__HENM');
+  await page.evaluate(() => window.__render());
+  const k = await kpis(page);
+  expect(k[0]).toMatch(/50 de 500/i);              // HENM: aplicó 50 de una meta de 500
+  expect(await page.locator('#muniFrascosAnalisisBox').innerText()).toContain('HENM (hospital)');
+  await page.evaluate(() => infSoltarTodos());
+  expect(await page.locator('#adminInfluenzaMuni').inputValue()).toBe('QUERETARO');
 });
 
 test('COVID-19: dosis equivalentes de 0.5 mL (la pediátrica cuenta la mitad), frascos por marca y meta del hospital en su destino', async ({ page }) => {
@@ -139,7 +156,8 @@ test('COVID-19: dosis equivalentes de 0.5 mL (la pediátrica cuenta la mitad), f
   expect(k[0]).toContain('40%');
   expect(k[0]).toMatch(/60 de 150/i);
   // Jurisdicción: el hospital (meta en el destino = 60) va aparte; aplicó 20 → 80 de 210
-  await page.click('#avancesAmbitoJuris button');
+  await page.selectOption('#adminInfluenzaMuni', '__JURIS__');
+  await page.evaluate(() => window.__render());
   k = await kpis(page);
   expect(k[0]).toContain('38.1%');
   expect(k[0]).toMatch(/80 de 210/i);

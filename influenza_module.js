@@ -2319,6 +2319,7 @@ function initInfluenzaSubtabs() {
           syncTabGroupIndicator('#influenzaAdminTabsContainer');
         }
 
+        if (t !== "subtabInfluenzaAvances") infSoltarTodos();
         renderActiveAdminSection();
       };
     }
@@ -2560,6 +2561,13 @@ async function populateInfluenzaAdminFilters() {
   }
 
   muniSelect.innerHTML = munis.map(m => `<option value="${m}">${m === "MARQUES" ? "EL MARQUÉS" : m}</option>`).join("");
+  if (INF_ROLES_JURIS.includes(role)) {
+    // Jurisdicción/Admin: primera opción del filtro para ver el avance de toda la jurisdicción (4 municipios + hospitales)
+    muniSelect.insertAdjacentHTML("afterbegin", `<option value="${INF_TODOS}">Todos los municipios y hospitales</option>`);
+    // Los hospitales van al final, como destinos propios (no son parte de ningún municipio)
+    muniSelect.insertAdjacentHTML("beforeend", FRASCO_DESTINOS.filter(d => d.hospital).map(d => `<option value="${INF_HOSP}${d.id}">${d.label} (hospital)</option>`).join(""));
+    muniSelect.value = munis[0];
+  }
   muniSelect.removeEventListener("change", updateCluesFilterAndRender);
   muniSelect.addEventListener("change", updateCluesFilterAndRender);
 
@@ -3001,7 +3009,10 @@ let _currentEditingReport = null;
 // jurisdicción. Así los hospitales (HENM y NHGQ, cuyos frascos se registran como destino propio) entran en las
 // cuentas de Querétaro, y las dosis, la meta y los frascos siempre hablan de las mismas unidades.
 const INF_ROLES_JURIS = ["ADMIN", "JURISDICCIONAL", "VISUALIZADOR_JURISDICCIONAL"];
-let _avancesJuris = false;
+// Opción «Todos los municipios y hospitales» del selector de Municipio (solo Admin/Jurisdicción, solo en Avances).
+const INF_TODOS = "__JURIS__";
+const INF_HOSP = "__HOSP__";   // prefijo de las opciones de hospital (HENM, NHGQ) del mismo selector
+let _muniReal = "";   // último municipio real elegido: a él se vuelve al salir de Avances
 // Tonos del avance: se compara contra lo esperado a la fecha (tiempo transcurrido de la campaña), no contra 95 %.
 const INF_TONO = {
   ok:   { fg: "#065f46", bg: "#d1fae5", bd: "#6ee7b7", bar: "#10b981", txt: "Al corriente" },
@@ -3010,9 +3021,18 @@ const INF_TONO = {
   none: { fg: "#475569", bg: "#f1f5f9", bd: "#cbd5e1", bar: "#94a3b8", txt: "Sin meta" }
 };
 
+/** Opciones que solo existen en Avances (Todos y los hospitales): el resto del panel las lee como un municipio y no las entiende. */
+function infEsSoloAvances(v) { return v === INF_TODOS || String(v || "").startsWith(INF_HOSP); }
+
 function infAmbito() {
-  const muni = String(document.getElementById("adminInfluenzaMuni")?.value || "").toUpperCase();
-  const juris = _avancesJuris && INF_ROLES_JURIS.includes(String(USER?.rol || "").toUpperCase());
+  const raw = String(document.getElementById("adminInfluenzaMuni")?.value || "");
+  const muni = raw.toUpperCase();
+  const esJurisRol = INF_ROLES_JURIS.includes(String(USER?.rol || "").toUpperCase());
+  if (esJurisRol && raw.startsWith(INF_HOSP)) {
+    const h = FRASCO_DESTINOS.find(d => d.hospital && d.id === raw.slice(INF_HOSP.length));
+    if (h) return { juris: false, hospital: h, muni: raw, etiqueta: `${h.label} (hospital)` };
+  }
+  const juris = raw === INF_TODOS && esJurisRol;
   return juris
     ? { juris: true, muni: "JURISDICCION", etiqueta: "Jurisdicción (municipios y hospitales)" }
     : { juris: false, muni, etiqueta: infMuniEtiqueta(muni) };
@@ -3022,6 +3042,7 @@ function infAmbito() {
 function infEsHospital(u) { return FRASCO_DESTINOS.some(d => d.hospital && d.clues === u.clues); }
 
 function infUnidadesAmbito(amb) {
+  if (amb.hospital) return _allUnidades.filter(u => u.clues === amb.hospital.clues);
   return amb.juris
     ? _allUnidades.slice()
     : _allUnidades.filter(u => String(u.municipio).toUpperCase() === amb.muni && !infEsHospital(u));
@@ -3108,25 +3129,18 @@ function infBarraPct(pct, tono) {
   return `<div style="display:flex;align-items:center;gap:8px;justify-content:center"><div style="width:70px;height:8px;border-radius:99px;background:#e2e8f0;overflow:hidden"><div style="height:100%;width:${w}%;background:${t.bar};border-radius:99px"></div></div><b style="min-width:44px;text-align:right;color:${t.fg};font-variant-numeric:tabular-nums">${infFmt(pct)}%</b></div>`;
 }
 
-/** Botón «Toda la jurisdicción» del filtro: solo para Admin y Jurisdicción; deja sin efecto el selector de municipio. */
+/** Recuerda el último municipio real del selector (la opción «Todos» no cuenta como municipio). */
 function infBindAmbito() {
-  const wrap = document.getElementById("avancesAmbitoJuris");
-  if (!wrap) return;
-  const puede = INF_ROLES_JURIS.includes(String(USER?.rol || "").toUpperCase());
-  wrap.style.display = puede ? "" : "none";
-  if (!puede) _avancesJuris = false;
-  const btn = wrap.querySelector("button");
-  if (btn) {
-    btn.setAttribute("aria-pressed", String(_avancesJuris));
-    if (!btn.dataset.bound) {
-      btn.dataset.bound = "1";
-      btn.addEventListener("click", () => { _avancesJuris = !_avancesJuris; renderAvancesAndConcentrados(); });
-    }
-  }
-  const muniBox = document.getElementById("adminInfluenzaMuniBox");
-  if (muniBox) muniBox.style.opacity = _avancesJuris ? "0.45" : "";
   const sel = document.getElementById("adminInfluenzaMuni");
-  if (sel) sel.disabled = _avancesJuris;
+  if (sel && sel.value && !infEsSoloAvances(sel.value)) _muniReal = sel.value;
+}
+
+/** Las demás pestañas leen el selector como un municipio: al salir de Avances «Todos» vuelve al último municipio real. */
+function infSoltarTodos() {
+  const sel = document.getElementById("adminInfluenzaMuni");
+  if (!sel || !infEsSoloAvances(sel.value)) return;
+  const real = [...sel.options].find(o => !infEsSoloAvances(o.value) && o.value === _muniReal) || [...sel.options].find(o => !infEsSoloAvances(o.value));
+  if (real) sel.value = real.value;
 }
 
 function renderAvancesAndConcentrados() {
@@ -3865,7 +3879,7 @@ function infSincronizarMuniLocal(selId, alCambiar) {
   const general = document.getElementById("adminInfluenzaMuni");
   const sel = document.getElementById(selId);
   if (!general || !sel) return;
-  sel.innerHTML = general.innerHTML;
+  sel.innerHTML = general.innerHTML.replace(/<option value="__[^"]*"[^>]*>[^<]*<\/option>/g, "");   // sin «Todos» ni hospitales (solo de Avances)
   sel.value = general.value;
   const caja = sel.closest("[data-muni-box]");
   if (caja) caja.style.display = general.options.length > 1 ? "" : "none";
@@ -5271,6 +5285,7 @@ async function exportConcentradoSimpleExcel() {
   _exportRango = infRangoExport();
   const scope = document.getElementById("adminInfluenzaExportScope")?.value || "single";
   const selectMuni = document.getElementById("adminInfluenzaMuni")?.value || USER.municipio;
+  if (String(selectMuni).startsWith("__") && scope === "muni_selected") { showToast("Elige un municipio en el filtro para exportar «Municipio seleccionado».", false, "warn"); return; }
   const role = USER.rol.toUpperCase();
   
   if (role === "ADMIN" || role === "JURISDICCIONAL") {
@@ -5375,6 +5390,7 @@ async function exportConcentradoDetalladoUnidadesExcel() {
   _exportRango = infRangoExport();
   const scope = document.getElementById("adminInfluenzaExportScope")?.value || "single";
   const selectMuni = document.getElementById("adminInfluenzaMuni")?.value || USER.municipio;
+  if (String(selectMuni).startsWith("__") && scope === "muni_selected") { showToast("Elige un municipio en el filtro para exportar «Municipio seleccionado».", false, "warn"); return; }
   const role = USER.rol.toUpperCase();
   
   if (role === "ADMIN" || role === "JURISDICCIONAL") {
@@ -5483,6 +5499,7 @@ async function exportConcentradoPorSemanaExcel() {
   _exportRango = infRangoExport();
   const scope = document.getElementById("adminInfluenzaExportScope")?.value || "single";
   const selectMuni = document.getElementById("adminInfluenzaMuni")?.value || USER.municipio;
+  if (String(selectMuni).startsWith("__") && scope === "muni_selected") { showToast("Elige un municipio en el filtro para exportar «Municipio seleccionado».", false, "warn"); return; }
   const role = USER.rol.toUpperCase();
   if (role === "ADMIN" || role === "JURISDICCIONAL") {
     if (scope === "muni_4") {
@@ -5767,7 +5784,7 @@ function metaSincronizarSelectorMuni() {
   const mostrar = USER.rol === "MUNICIPAL" && general.options.length > 1;
   sel.style.display = lbl.style.display = mostrar ? "" : "none";
   if (!mostrar) return;
-  sel.innerHTML = general.innerHTML;
+  sel.innerHTML = general.innerHTML.replace(/<option value="__[^"]*"[^>]*>[^<]*<\/option>/g, "");   // sin «Todos» ni hospitales (solo de Avances)
   sel.value = general.value;
   sel.onchange = () => {
     general.value = sel.value;
@@ -7004,7 +7021,7 @@ function frascoSincronizarSelectorMuni() {
   const mostrar = USER.rol === "MUNICIPAL" && general.options.length > 1;
   col.style.display = mostrar ? "" : "none";
   if (!mostrar) return;
-  sel.innerHTML = general.innerHTML;
+  sel.innerHTML = general.innerHTML.replace(/<option value="__[^"]*"[^>]*>[^<]*<\/option>/g, "");   // sin «Todos» ni hospitales (solo de Avances)
   sel.value = general.value;
   sel.onchange = () => {
     general.value = sel.value;
