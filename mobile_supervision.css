@@ -297,7 +297,8 @@ html.dark .lv-item .sv-pill--reg { color: #fcd34d; }
 html.dark .sv-wa { background: #0b7a6c; }
 
 /* Resumen con 4 tipos de captura (Influenza vigente): letra un poco menor para que quepan */
-.sv-seg--4 .sv-seg-b { font-size: 12px; padding-left: 2px; padding-right: 2px; }
+.sv-seg--4 .sv-seg-b { font-size: 12px; padding-left: 2px; padding-right: 2px; overflow-wrap: normal; word-break: normal; min-width: 0; }
+.sv-seg--4 { grid-auto-columns: minmax(max-content, 1fr); }
 .lv-sub { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .lv-sub li { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; font-weight: 600; color: #475569; }
 .lv-sub b { color: #0f172a; font-variant-numeric: tabular-nums; }

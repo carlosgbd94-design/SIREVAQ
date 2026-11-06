@@ -70,19 +70,52 @@ function sourceFiles() {
   const url = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1&icon_names=' +
     names.join(',') + '&display=block';
 
-  const indexPath = path.join(ROOT, 'index.html');
-  let html = fs.readFileSync(indexPath, 'utf8');
   const re = /<link href="https:\/\/fonts\.googleapis\.com\/css2\?family=Material\+Symbols\+Rounded[^"]*" rel="stylesheet">/;
-  const m = html.match(re);
-  if (!m) { console.error('No se encontro el <link> de Material Symbols en index.html'); process.exit(1); }
-
-  const current = new Set((m[0].match(/icon_names=([^&"]*)/) || [, ''])[1].split(',').filter(Boolean));
-  const missing = names.filter((n) => !current.has(n));
-  console.log(`iconos usados: ${names.length} | en index.html: ${current.size} | faltan: ${missing.length}`);
-  if (missing.length) console.log('faltan:', missing.join(', '));
-
-  if (CHECK) process.exit(missing.length ? 1 : 0);
-  html = html.replace(re, `<link href="${url.replace(/&/g, '&amp;')}" rel="stylesheet">`);
-  fs.writeFileSync(indexPath, html);
-  console.log('index.html actualizado.');
+  let anyMissing = false;
+  const targets = [
+    { file: 'index.html', names },
+    // mobile.html pedia la fuente COMPLETA (~540 KB) por datos moviles. Se le da solo lo que
+    // usan mobile.html, los mobile_* y los scripts/estilos locales que mobile.html carga.
+    { file: 'mobile.html', names: [...mobileNames(official)].sort() },
+  ];
+  for (const t of targets) {
+    const p = path.join(ROOT, t.file);
+    let html = fs.readFileSync(p, 'utf8');
+    const m = html.match(re);
+    if (!m) { console.error(`No se encontro el <link> de Material Symbols en ${t.file}`); process.exit(1); }
+    const current = new Set((m[0].match(/icon_names=([^&"]*)/) || [, ''])[1].split(',').filter(Boolean));
+    const missing = t.names.filter((n) => !current.has(n));
+    console.log(`${t.file}: iconos usados: ${t.names.length} | en el enlace: ${current.size} | faltan: ${missing.length}`);
+    if (missing.length) { console.log('faltan:', missing.join(', ')); anyMissing = true; }
+    // Google Fonts devuelve la fuente COMPLETA (~540 KB) si icon_names pasa de ~4096 caracteres.
+    const largo = t.names.join(',').length;
+    if (largo > 4000) { console.log(`AVISO ${t.file}: icon_names mide ${largo} caracteres (>4000): Google devolveria la fuente completa.`); if (t.file === 'mobile.html') anyMissing = true; }
+    if (CHECK) continue;
+    const u ='https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1&icon_names=' +
+      t.names.join(',') + '&display=block';
+    html = html.replace(re, `<link href="${u.replace(/&/g, '&amp;')}" rel="stylesheet">`);
+    fs.writeFileSync(p, html);
+    console.log(`${t.file} actualizado.`);
+  }
+  if (CHECK) process.exit(anyMissing ? 1 : 0);
 })();
+
+// Iconos escritos en mobile.html y en los archivos mobile_* (solo la parte movil).
+function mobileNames(official) {
+  const out = new Set();
+  const html = fs.readFileSync(path.join(ROOT, 'mobile.html'), 'utf8');
+  const set = new Set(['mobile.html']);
+  for (const m of html.matchAll(/(?:src|href)="([^"?#]+\.(?:js|css))/g)) {
+    if (!/^(https?:|\/\/)/.test(m[1]) && !m[1].startsWith('vendor/')) set.add(m[1]);
+  }
+  for (const f of fs.readdirSync(ROOT)) if (/^mobile_.*\.(js|css)$/.test(f)) set.add(f);
+  const files = [...set].map((f) => path.join(ROOT, f)).filter((f) => fs.existsSync(f));
+  for (const f of files) {
+    const s = fs.readFileSync(f, 'utf8');
+    // Solo palabras que son un literal completo ('x', "x", `x`) o el texto de una etiqueta (>x<):
+    // asi no entran palabras sueltas de comentarios/CSS que casualmente son nombre de icono.
+    for (const m of s.matchAll(/(?<=["'`>])\s*([a-z][a-z0-9_]{1,40})\s*(?=["'`<])/g)) if (official.has(m[1])) out.add(m[1]);
+    for (const m of s.matchAll(/material-symbols-rounded[^>]*>\s*([a-z][a-z0-9_]{1,40})\s*</g)) out.add(m[1]);
+  }
+  return out;
+}
