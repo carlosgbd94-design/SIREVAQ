@@ -3313,7 +3313,17 @@ async function pintarDiscrepanciasMunicipio(contenedor, municipio, mes, anio, op
       const DX = window.DiagnosticoSIS;
       if (DX && propias.length) {
         let evidencia = [];
-        try { const ev = await estado.db.rpc('biovac_diagnostico_unidades', { p_municipio: municipio, p_mes: mes, p_anio: anio }); if (ev && Array.isArray(ev.data)) evidencia = ev.data; } catch (_) { evidencia = []; }
+        // PostgREST corta en 1000 filas por respuesta: se pide por páginas para que la evidencia nunca quede truncada
+        try {
+          for (let pag = 0; pag < 30; pag++) {
+            const b = estado.db.rpc('biovac_diagnostico_unidades', { p_municipio: municipio, p_mes: mes, p_anio: anio });
+            const pagina = typeof b.range === 'function';
+            const ev = await (pagina ? b.range(pag * 1000, pag * 1000 + 999) : b);
+            if (!ev || !Array.isArray(ev.data)) break;
+            evidencia.push(...ev.data);
+            if (!pagina || ev.data.length < 1000) break;
+          }
+        } catch (_) { evidencia = []; }
         const diag = DX.diagnosticar(propias, evidencia);
         const panel = DX.htmlDiagnostico(diag, { htmlAviso: htmlItemDiscrepancia, htmlDetalle: htmlDetalleDiscrepancia });
         const consec = todas.filter((f) => esConsecuenciaDeAbiertas(f, hayAb));

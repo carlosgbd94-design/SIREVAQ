@@ -88,6 +88,27 @@ test('SRP real: el A.R.F. del lote se netea y el cruce con otro lote muestra el 
   expect(htmlDiagnostico(res)).toContain('dx-coment');
 });
 
+test('TDPa real (Querétaro): cruce parcial 5 de 7 con desglose, y la lista trae TODAS las unidades y suma lo mismo que la tabla', () => {
+  const lote = 'AC37B543AD';
+  const unidades = [['SAN PEDRITO PEÑUELAS', 16], ['LOMA BONITA', 14], ['LOMAS DE CASA BLANCA', 13], ['MONTENEGRO', 10], ['SAN JOSÉ EL ALTO', 10], ['SAN MIGUELITO', 10], ['SAN ANTONIO DE LA PUNTA', 7], ['LA SOLANA', 3], ['MENCHACA NORTE', 3], ['SAN PABLO', 2], ['TINAJA DE LA ESTANCIA', 2], ['UMME SAN PEDRITO', 2]];
+  const res = diagnosticar([f(TDPA, lote, 85, 92), f(TDPA, 'AC37B542BD', 305, 300)], unidades.map(([n, a]) => u(TDPA, lote, n, a)));
+  const g = grupo(res, 'TDPa frasco unidosis');
+  expect(g.causas.map((c) => c.tipo)).toEqual(['LOTE_CRUZADO', 'CONTEO']);       // primero lo explicado, luego lo que queda
+  const cruce = g.causas[0]; const conteo = g.causas[1];
+  expect(cruce.cantidad).toBe(5);
+  expect(cruce.lotes[0]).toMatchObject({ lote, dif: -7, explicado: -5, queda: -2 });
+  expect(cruce.lotes[1]).toMatchObject({ lote: 'AC37B542BD', dif: 5, explicado: 5, queda: 0 });
+  expect(cruce.texto).toContain('quedan 2 sin explicar');
+  expect(conteo.cantidad).toBe(2);
+  expect(conteo.texto).toContain('QUEDA después de restar');
+  // todas las unidades (no solo 8) y su suma cuadra con la columna "Anterior unidades"
+  expect(cruce.sospechas).toHaveLength(12);
+  expect(cruce.sospechas.reduce((t, x) => t + x.cantidad, 0)).toBe(92);
+  const html = htmlDiagnostico(res);
+  expect(html).toContain('12 unidades, suman 92');
+  expect(html).toContain('Sin explicar');
+});
+
 test('Diferencia que NO se cancela → conteo distinto, requiere decisión humana (no se inventa un lote)', () => {
   const H = 'Hexavalente frasco unidosis';
   const res = diagnosticar([f(H, 'Y3A532V', 322, 324), f(TDPA, '3CA38C5', 53, 48)], []);   // unidades declararon 2 de MÁS
@@ -176,7 +197,7 @@ test('Un solo panel: el aviso del detector con información propia (existencia n
   const html = htmlDiagnostico(res, { htmlAviso: (x) => `<li>AVISO ${x.numero_lote}: ${x.mensaje}</li>`, htmlDetalle: () => '' });
   expect(html).toContain('AVISO L2: Quedó en -2 frascos.');
   expect(html).not.toContain('AVISO L1');
-  expect(html).toContain('1 biológico con diferencia');
+  expect(html).toContain('<b>1</b> <span>biológico con diferencia');
   // un aviso sin diferencia de cifras igual crea su grupo
   const solo = diagnosticar([{ ...f(H, 'L3', 4, 4), tipo: 'EDITADO_A_MANO', severidad: 'ADVERTENCIA', mensaje: 'Ajustado a mano.' }], []);
   expect(solo.grupos).toHaveLength(1);

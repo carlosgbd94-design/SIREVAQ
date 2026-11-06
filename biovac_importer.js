@@ -57,7 +57,7 @@
     ['NEUMO_23V', (n) => n.includes('neumococica') && n.includes('23')],
     ['NEUMO_20V', (n) => n.includes('neumococica') && n.includes('20')],
     ['ANTIINFLUENZA', (n) => n.includes('antiinfluenza') || n.includes('influenza')],
-    ['VPH', (n) => n.includes('vph') || n.includes('v p h') || (n.includes('bivalente') && n.includes('tetravalente'))],
+    ['VPH', (n) => n.includes('vph') || n.includes('v p h') || n.includes('nonavalente') || (n.includes('bivalente') && n.includes('tetravalente'))],
     ['COVID_MODERNA', (n) => n.includes('covid') && n.includes('moderna')],
     ['COVID_PFIZER', (n) => n.includes('covid') && n.includes('pfizer')],
     ['VARICELA', (n) => n.includes('varicela')],

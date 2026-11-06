@@ -81,7 +81,7 @@ join (values
   ('ANVERSO', 8, 'SRP',            E'SRP \nTriple Viral frasco unidosis',               1, 'UNIDOSIS',    1, null,         '2000-01-01', null),
   ('REVERSO', 1, 'ANTIINFLUENZA',  E'Antiinfluenza Estacional frasco   10 dosis',       1, 'MULTIDOSIS', 10, null,         '2000-01-01', null),
   ('REVERSO', 2, 'SR',             E'SR\nfrasco multidosis',                            1, 'MULTIDOSIS', 10, null,         '2000-01-01', null),
-  ('REVERSO', 3, 'VPH',            E'V.P.H.\nBivalente / Tetravalente',                 1, 'UNIDOSIS',    1, null,         '2000-01-01', null),
+  ('REVERSO', 3, 'VPH',            E'V.P.H.\nNonavalente',                 1, 'UNIDOSIS',    1, null,         '2000-01-01', null),
   ('REVERSO', 4, 'TD',             E'Td                   frasco                  multidosis', 1, 'MULTIDOSIS', 10, null, '2000-01-01', null),
   ('REVERSO', 5, 'TDPA',           E'TDPa\nfrasco unidosis',                            1, 'UNIDOSIS',    1, null,         '2000-01-01', null),
   ('REVERSO', 6, 'COVID_MODERNA',  E'COVID-19\nMODERNA',                                1, 'MULTIDOSIS',  5, 'SPLIT_DOSE', '2000-01-01', null),

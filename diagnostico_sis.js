@@ -81,6 +81,8 @@
   function tablaLotes(lotes) {
     return lotes.map((l) => ({ lote: l.lote, cat: l.cat, municipio: r2(l.mAnt), unidades: r2(l.uAnt), dif: r2(l.dAnt) }));
   }
+  // Fila con el desglose: de la diferencia total, cuánto explica ESTA tarjeta y cuánto queda sin explicar.
+  const filaConDesglose = (l, dif, explicado) => ({ lote: l.lote, cat: l.cat, municipio: r2(l.mAnt), unidades: r2(l.uAnt), dif: r2(dif), explicado: r2(explicado), queda: r2(dif - explicado) });
 
   function diagnosticarGrupo(bio, lotes, idx) {
     const causas = [];
@@ -160,14 +162,22 @@
       const total = r2(partes.reduce((s, x) => s + x.cant, 0));
       const quien = partes.map((x) => `${q(x.cant)} del lote ${x.p.lote.lote}${x.dist <= 2 ? ' (lote casi igual)' : ''}${x.p.lote.cad && x.p.lote.cad === n.lote.cad ? ' (misma caducidad)' : ''}`);
       const alta = grupoCancela || partes.every((x) => x.dist <= 2);
+      // Desglose por lote: de cada diferencia, lo que explica este cruce y lo que queda para la tarjeta de Conteo
+      const explicadoPor = new Map();
+      partes.forEach((x) => { const k = key(x.p.lote.loteId, x.p.lote.cat); explicadoPor.set(k, r2((explicadoPor.get(k) || 0) + x.cant)); });
+      const filasCruce = [filaConDesglose(n.lote, n.res, -total)];
+      const vistos = new Set();
+      partes.forEach((x) => { const k = key(x.p.lote.loteId, x.p.lote.cat); if (vistos.has(k)) return; vistos.add(k); filasCruce.push(filaConDesglose(x.p.lote, x.p.res, explicadoPor.get(k))); });
+      const quedan = filasCruce.filter((l) => Math.abs(l.queda) > EPS);
+      const aviso = quedan.length ? ` Ojo: no todo queda explicado con este cruce. ${quedan.map((l) => `En el lote ${l.lote} la diferencia es de ${q(Math.abs(l.dif))} y aquí se explican ${q(Math.abs(l.explicado))}, quedan ${q(Math.abs(l.queda))} sin explicar (van en la tarjeta «Conteo distinto»)`).join('; ')}.` : '';
       const sosp = filasPara(n.lote).flatMap((l) => sospechasDe(idx, l, l.cat, null)).map((s) => ({ ...s, exacto: partes.some((x) => Math.abs(s.cantidad - x.cant) < EPS) || Math.abs(s.cantidad - total) < EPS }))
         .sort((a, b) => (b.exacto - a.exacto) || (b.cantidad - a.cantidad));
       causas.push({
         tipo: 'LOTE_CRUZADO', confianza: alta ? 'alta' : 'media', cantidad: total,
         titulo: `Lote ${n.lote.lote}: ${q(total)} frasco${total === 1 ? '' : 's'} declarados en el lote equivocado`,
-        texto: `Las unidades declararon ${q(total)} frasco${total === 1 ? '' : 's'} de más en el lote ${n.lote.lote} y, al mismo tiempo, esa misma cantidad de menos en ${partes.map((x) => `el lote ${x.p.lote.lote}`).join(' y ')}. Como se cancelan, no falta ningún frasco: lo más probable es que una unidad anotó la existencia con el número de lote equivocado (${quien.join('; ')}).`,
+        texto: `Las unidades declararon ${q(total)} frasco${total === 1 ? '' : 's'} de más en el lote ${n.lote.lote} y, al mismo tiempo, esa misma cantidad de menos en ${partes.map((x) => `el lote ${x.p.lote.lote}`).join(' y ')}. Como se cancelan, no falta ningún frasco: lo más probable es que una unidad anotó la existencia con el número de lote equivocado (${quien.join('; ')}).${aviso}`,
         accion: 'Revisa la etiqueta del frasco en el refrigerador de la unidad señalada. Si es del otro lote, corrígelo en «Por unidad» con «Cambiar lote» (conserva las cantidades); si esa unidad ya tiene fila del lote correcto, suma ahí la cantidad y elimina la equivocada. También puede ser un error del cierre manual de septiembre: la etiqueta decide.',
-        lotes: tablaLotes([n.lote, ...partes.map((x) => x.p.lote)]),
+        lotes: filasCruce,
         comentarios: comentariosEstatus([n.lote, ...partes.map((x) => x.p.lote)]),
         sospechas: sosp
       });
@@ -197,13 +207,13 @@
         causas.push({
           tipo: 'CONTEO', confianza: 'media', cantidad: r2(sobras.reduce((s, x) => s + Math.abs(x.res), 0)), sentido: soloMunMas ? 'municipio_mas' : 'unidades_mas',
           titulo: soloMunMas ? 'El municipio tiene más existencia que la suma de sus unidades' : 'El conteo de las unidades no coincide con el cierre del mes pasado',
-          texto: `Esta diferencia NO se compensa con otro lote: ${partes.join('; y ')}.${solo.length ? ` ${solo.length === 1 ? 'El lote' : 'Los lotes'} ${lotesTxt(solo)} no ${solo.length === 1 ? 'lo reporta' : 'los reportan'} ninguna unidad.` : ''}`,
+          texto: `${sobras.some((x) => Math.abs(x.lote.dAnt - x.res) > EPS) ? 'Esto es lo que QUEDA después de restar lo que explica el cruce de lotes (ver la tarjeta de arriba). ' : ''}Esta diferencia NO se compensa con otro lote: ${partes.join('; y ')}.${solo.length ? ` ${solo.length === 1 ? 'El lote' : 'Los lotes'} ${lotesTxt(solo)} no ${solo.length === 1 ? 'lo reporta' : 'los reportan'} ninguna unidad.` : ''}`,
           accion: soloMunMas
             ? 'Cuenta lo que hay en el almacén municipal de estos lotes. Si coincide con la diferencia, no hay nada que corregir; si esos frascos no existen, ajusta la existencia anterior del municipio (queda con motivo y auditoría).'
             : 'Pide a la unidad el conteo físico. Si el de la unidad es el correcto, ajusta la existencia anterior del municipio (queda con motivo y auditoría); si el cierre de septiembre es el correcto, la unidad debe corregir su declaración.',
-          lotes: tablaLotes(sobras.map((x) => x.lote)),
+          lotes: sobras.map((x) => filaConDesglose(x.lote, x.lote.dAnt, r2(x.lote.dAnt - x.res))),
           comentarios: comentariosEstatus(sobras.map((x) => x.lote)),
-          sospechas: unidadesDeMas.flatMap((x) => filasPara(x.lote).flatMap((l) => sospechasDe(idx, l, l.cat, null))).slice(0, 8)
+          sospechas: unidadesDeMas.flatMap((x) => filasPara(x.lote).flatMap((l) => sospechasDe(idx, l, l.cat, null)))
         });
       }
     }
@@ -212,7 +222,7 @@
     // ya como A.R.F. y el cierre del mes pasado lo traía como Normal. No se lista como diferencia; solo se cuenta.
     const cambiosEstatus = causas.filter((c) => c.tipo === 'CATEGORIA');
     for (let i = causas.length - 1; i >= 0; i--) if (causas[i].tipo === 'CATEGORIA') causas.splice(i, 1);
-    const orden = { MOVIMIENTO: 0, CONTEO: 1, LOTE_CRUZADO: 2, FRACCION: 4 };
+    const orden = { MOVIMIENTO: 0, LOTE_CRUZADO: 1, CONTEO: 2, FRACCION: 4 };
     causas.sort((a, b) => orden[a.tipo] - orden[b.tipo]);
     // Un solo panel: lo que el detector del servidor dice de estos lotes y ya explica una causa NO se repite.
     // Se conservan aparte los avisos con información propia (existencia negativa, ajuste a mano, no se explica…)
@@ -223,7 +233,12 @@
     const detalles = lotes.filter((l) => cubierta(l) && Array.isArray(l.raw.detalle) && l.raw.detalle.length).map((l) => l.raw);
     const hayError = avisos.some((f) => f.severidad === 'ERROR');
     const explicado = !avisos.length && causas.length > 0 && causas.every((c) => (c.tipo === 'LOTE_CRUZADO' && c.confianza === 'alta') || c.tipo === 'FRACCION');
-    return { biologico: bio, causas, cambiosEstatus, avisos, detalles, explicado, requiereDecision: hayError || causas.some((c) => (c.tipo === 'CONTEO' && c.sentido !== 'municipio_mas') || c.tipo === 'MOVIMIENTO') };
+    // Nombre y presentación del biológico para el título (la 1ª línea es el nombre; el resto, la presentación)
+    const partesNombre = String(lotes[0].raw.biologico == null ? bio : lotes[0].raw.biologico).split('\n').map((x) => x.trim()).filter(Boolean);
+    const nombre = partesNombre[0] || bio; const presentacion = partesNombre.slice(1).join(' ');
+    const lotesN = new Set(lotes.map((l) => l.loteId || l.lote)).size;
+    const unidadesN = new Set(causas.flatMap((c) => c.sospechas.map((x) => x.unidad))).size;
+    return { biologico: bio, nombre, presentacion, lotesN, unidadesN, causas, cambiosEstatus, avisos, detalles, explicado, requiereDecision: hayError || causas.some((c) => (c.tipo === 'CONTEO' && c.sentido !== 'municipio_mas') || c.tipo === 'MOVIMIENTO') };
   }
 
   /**
@@ -273,44 +288,83 @@
   const ICONO_TIPO = { MOVIMIENTO: 'sync_problem', CONTEO: 'calculate', LOTE_CRUZADO: 'swap_horiz', CATEGORIA: 'label', FRACCION: 'science' };
 
   function injectCss() {
-    if (typeof document === 'undefined' || document.getElementById('dxEstilos')) return;
+    if (typeof document === 'undefined') return;
+    const previo = document.getElementById('dxEstilos');
+    if (previo) previo.remove();
     const st = document.createElement('style');
     st.id = 'dxEstilos';
     st.textContent = `
-      .dx-caja{margin:0 0 12px;border:1px solid var(--outline-variant,#cbd5e1);border-radius:14px;background:var(--surface,#fff);overflow:hidden}
-      .dx-cab{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;background:var(--surface-container,#f1f5f9)}
-      .dx-cab .material-symbols-rounded{font-size:22px;color:var(--primary,#1d4ed8);flex:none}
-      .dx-cab b{display:block;font-size:14px}.dx-cab small{display:block;font-size:12px;opacity:.8;margin-top:2px}
+      .dx-caja{margin:0 0 14px;border:1px solid var(--outline-variant,#cbd5e1);border-radius:16px;background:var(--surface,#fff);overflow:hidden}
+      .dx-cab{padding:16px 18px 14px;background:var(--surface-container,#f1f5f9);border-bottom:1px solid var(--outline-variant,#e2e8f0)}
+      .dx-cab-t{display:flex;gap:10px;align-items:center}
+      .dx-cab-t .material-symbols-rounded{font-size:24px;color:var(--primary,#1d4ed8);flex:none}
+      .dx-cab-t b{display:block;font-size:16px;line-height:1.25}
+      .dx-cab small{display:block;font-size:12px;opacity:.8;margin-top:2px}
+      .dx-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:12px}
+      .dx-tile{border-radius:12px;padding:8px 12px;background:var(--surface,#fff);border:1px solid var(--outline-variant,#e2e8f0)}
+      .dx-tile b{display:block;font-size:22px;line-height:1.1}.dx-tile span{font-size:12px;font-weight:600}
+      .dx-tile.decide{border-left:4px solid #dc2626}.dx-tile.rev{border-left:4px solid #d97706}.dx-tile.ok{border-left:4px solid #16a34a}.dx-tile.tot{border-left:4px solid var(--primary,#1d4ed8)}
       .dx-lista{list-style:none;margin:0;padding:0}
-      .dx-bio{border-top:1px solid var(--outline-variant,#e2e8f0)}
-      .dx-bio>summary{cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;font-size:13px;font-weight:700;list-style:none}
+      .dx-bio{border-top:1px solid var(--outline-variant,#e2e8f0);border-left:5px solid #94a3b8}
+      .dx-bio.decide{border-left-color:#dc2626}.dx-bio.rev{border-left-color:#d97706}.dx-bio.ok{border-left-color:#16a34a}
+      .dx-lista>li:first-child>.dx-bio{border-top:0}
+      .dx-bio>summary{cursor:pointer;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 16px;list-style:none}
       .dx-bio>summary::-webkit-details-marker{display:none}
-      .dx-chip{font-size:11px;font-weight:700;border-radius:999px;padding:2px 9px;background:var(--surface-container,#e2e8f0)}
+      .dx-bio>summary:hover{background:var(--surface-container,#f8fafc)}
+      .dx-bio>summary:focus-visible{outline:2px solid var(--primary,#1d4ed8);outline-offset:-2px}
+      .dx-bio-nom{flex:1 1 220px;min-width:0}
+      .dx-bio-nom strong{display:block;font-size:17px;font-weight:800;line-height:1.2;overflow-wrap:anywhere}
+      .dx-bio-nom small{display:block;font-size:12px;opacity:.75;margin-top:2px}
+      .dx-bio-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+      .dx-chev{font-size:22px;transition:transform .15s;flex:none}
+      .dx-bio[open] .dx-chev{transform:rotate(180deg)}
+      .dx-chip{font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px;background:var(--surface-container,#e2e8f0);white-space:nowrap}
       .dx-chip.ok{background:#dcfce7;color:#166534}.dx-chip.decide{background:#fee2e2;color:#991b1b}.dx-chip.rev{background:#fef3c7;color:#92400e}
-      .dx-causa{padding:2px 14px 12px 14px;font-size:13px;line-height:1.45}
-      .dx-causa h4{display:flex;gap:6px;align-items:center;margin:10px 0 4px;font-size:13px}
-      .dx-causa h4 .material-symbols-rounded{font-size:18px}
+      .dx-cuerpo{padding:0 16px 14px 16px}
+      .dx-causa{padding:12px 14px;margin-top:10px;font-size:13px;line-height:1.5;border:1px solid var(--outline-variant,#e2e8f0);border-radius:12px}
+      .dx-causa h4{display:flex;gap:8px;align-items:center;margin:0 0 6px;font-size:14px}
+      .dx-causa h4 .material-symbols-rounded{font-size:20px;color:var(--primary,#1d4ed8)}
       .dx-causa p{margin:4px 0}.dx-accion{background:var(--surface-container,#f1f5f9);border-radius:10px;padding:8px 10px}
-      .dx-tabla{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0}
-      .dx-tabla th,.dx-tabla td{padding:4px 8px;text-align:right;border-bottom:1px solid var(--outline-variant,#e2e8f0)}
-      .dx-tabla th:first-child,.dx-tabla td:first-child{text-align:left}
-      .dx-sosp{margin:6px 0 0;padding-left:18px;font-size:12px}.dx-sosp li.ex{font-weight:800}
-      .dx-avisos{list-style:none;margin:8px 0 0;padding:0}.dx-det{margin-top:8px;font-size:12px}.dx-det>summary{cursor:pointer;font-weight:700}
+      .dx-tabla-wrap{overflow-x:auto;max-width:100%}
+      .dx-tabla{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
+      .dx-tabla th,.dx-tabla td{padding:5px 8px;text-align:right;border-bottom:1px solid var(--outline-variant,#e2e8f0)}
+      .dx-tabla th:first-child,.dx-tabla td:first-child{text-align:left;font-weight:700}
+      .dx-lote-t{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin:10px 0 6px;font-size:13px}
+      .dx-lote-t b{font-size:14px}.dx-lote-t span{opacity:.8;font-size:12px}
+      .dx-unis{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px}
+      .dx-uni{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:6px 10px;border-radius:10px;background:var(--surface-container,#f1f5f9);font-size:12.5px}
+      .dx-uni span{min-width:0;overflow-wrap:anywhere}.dx-uni b{font-size:14px;flex:none}
+      .dx-uni.ex{background:#fef3c7;outline:1px solid #d97706}
+      .dx-avisos{list-style:none;margin:10px 0 0;padding:0}.dx-det{margin-top:10px;font-size:12px}.dx-det>summary{cursor:pointer;font-weight:700}
       .dx-coment{display:flex;gap:6px;align-items:flex-start;font-size:12px;opacity:.85}.dx-coment .material-symbols-rounded{font-size:16px}
-      .dx-nota{display:flex;gap:6px;align-items:center;margin:0;padding:8px 14px;font-size:12px;border-top:1px solid var(--outline-variant,#e2e8f0);opacity:.85}.dx-nota .material-symbols-rounded{font-size:16px}
-      .dx-ok{display:flex;gap:8px;align-items:center;padding:12px 14px;font-size:13px}`;
+      .dx-nota{display:flex;gap:6px;align-items:center;margin:0;padding:10px 16px;font-size:12px;border-top:1px solid var(--outline-variant,#e2e8f0);opacity:.85}.dx-nota .material-symbols-rounded{font-size:16px}
+      .dx-ok{display:flex;gap:8px;align-items:center;padding:12px 14px;font-size:13px}
+      @media (max-width:520px){.dx-cab{padding:14px}.dx-bio>summary{padding:12px}.dx-cuerpo{padding:0 10px 12px}.dx-unis{grid-template-columns:1fr}.dx-tabla{font-size:11px}.dx-tabla th,.dx-tabla td{padding:4px 5px}}`;
     document.head.appendChild(st);
   }
 
-  function htmlCausa(c) {
-    const filas = c.lotes.map((l) => `<tr><td>${esc(l.lote)}${l.cat !== 'NORMAL' ? ` <small>(${esc(etiquetaCat(l.cat))})</small>` : ''}</td><td>${q(l.municipio)}</td><td>${q(l.unidades)}</td><td>${l.dif > 0 ? '+' : ''}${q(l.dif)}</td></tr>`).join('');
+  function htmlCausa(c, vistos) {
+    vistos = vistos || new Set();
+    const desglose = c.lotes.some((l) => l.explicado !== undefined);
+    const sg = (n) => (n > 0 ? '+' : '') + q(n);
+    const filas = c.lotes.map((l) => `<tr><td>${esc(l.lote)}${l.cat !== 'NORMAL' ? ` <small>(${esc(etiquetaCat(l.cat))})</small>` : ''}</td><td>${q(l.municipio)}</td><td>${q(l.unidades)}</td><td>${sg(l.dif)}</td>${desglose ? `<td>${sg(l.explicado)}</td><td>${sg(l.queda)}</td>` : ''}</tr>`).join('');
     const nota = c.lotes.find((l) => l.nota);
-    const sosp = c.sospechas.length
-      ? `<p><b>Unidades que declararon ese lote:</b></p><ul class="dx-sosp">${c.sospechas.slice(0, 8).map((s) => `<li class="${s.exacto ? 'ex' : ''}">${esc(s.unidad)} · lote ${esc(s.lote)}${s.cat !== 'NORMAL' ? ' (' + esc(etiquetaCat(s.cat)) + ')' : ''}: declaró ${q(s.cantidad)}${s.exacto ? ' — coincide justo con la diferencia' : ''}</li>`).join('')}</ul>` : '';
+    // Todas las unidades, agrupadas por lote y con su suma (para poder cuadrarla con la tabla)
+    const grupos = new Map();
+    c.sospechas.forEach((s) => { const k = s.lote + '|' + s.cat; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(s); });
+    const sosp = [...grupos.entries()].map(([k, arr]) => {
+      const suma = r2(arr.reduce((t, s) => t + s.cantidad, 0));
+      const s0 = arr[0];
+      // Las mismas unidades no se listan dos veces en el mismo biológico: la 2ª tarjeta remite a la 1ª
+      if (vistos.has(k)) return `<div class="dx-lote-t"><b>Lote ${esc(s0.lote)}${s0.cat !== 'NORMAL' ? ' (' + esc(etiquetaCat(s0.cat)) + ')' : ''}</b><span>mismas ${arr.length} unidades de la tarjeta de arriba (suman ${q(suma)})</span></div>`;
+      vistos.add(k);
+      return `<div class="dx-lote-t"><b>Lote ${esc(s0.lote)}${s0.cat !== 'NORMAL' ? ' (' + esc(etiquetaCat(s0.cat)) + ')' : ''}</b><span>${arr.length} unidad${arr.length === 1 ? '' : 'es'}, suman ${q(suma)}</span></div>
+        <div class="dx-unis">${arr.slice(0, 60).map((s) => `<div class="dx-uni${s.exacto ? ' ex' : ''}"><span>${esc(s.unidad)}${s.exacto ? ' · coincide justo con la diferencia' : ''}</span><b>${q(s.cantidad)}</b></div>`).join('')}</div>`;
+    }).join('');
     return `<div class="dx-causa">
-      <h4><span class="material-symbols-rounded" aria-hidden="true">${ICONO_TIPO[c.tipo]}</span>${esc(TITULO_TIPO[c.tipo])} · <span style="font-weight:600">confianza ${esc(c.confianza)}</span></h4>
+      <h4><span class="material-symbols-rounded" aria-hidden="true">${ICONO_TIPO[c.tipo]}</span><span>${esc(TITULO_TIPO[c.tipo])} · <span style="font-weight:600">confianza ${esc(c.confianza)}</span></span></h4>
       <p><b>${esc(c.titulo)}</b></p><p>${esc(c.texto)}</p>${(c.comentarios || []).map((t) => `<p class="dx-coment"><span class="material-symbols-rounded" aria-hidden="true">info</span> ${esc(t)}</p>`).join('')}
-      <table class="dx-tabla"><caption class="sr-only" style="position:absolute;left:-9999px">Lotes involucrados</caption><thead><tr><th scope="col">Lote</th><th scope="col">${nota ? 'Municipio' : 'Anterior municipio'}</th><th scope="col">${nota ? 'Unidades' : 'Anterior unidades'}</th><th scope="col">Diferencia</th></tr></thead><tbody>${filas}</tbody></table>
+      <div class="dx-tabla-wrap"><table class="dx-tabla"><caption class="sr-only" style="position:absolute;left:-9999px">Lotes involucrados</caption><thead><tr><th scope="col">Lote</th><th scope="col">${nota ? 'Municipio' : 'Anterior municipio'}</th><th scope="col">${nota ? 'Unidades' : 'Anterior unidades'}</th><th scope="col">Diferencia</th>${desglose ? '<th scope="col">Explica este cruce</th><th scope="col">Sin explicar</th>' : ''}</tr></thead><tbody>${filas}</tbody></table></div>
       ${sosp}<p class="dx-accion"><b>Qué hacer:</b> ${esc(c.accion)}</p></div>`;
   }
 
@@ -335,21 +389,22 @@
     injectCss();
     if (!res || !res.grupos.length) return '';
     const r = res.resumen;
-    const partes = [];
-    if (r.avisos) partes.push(`${r.avisos} aviso${r.avisos === 1 ? '' : 's'} del sistema`);
-    if (r.porTipo.LOTE_CRUZADO) partes.push(`${r.porTipo.LOTE_CRUZADO} por lote cruzado (${q(r.frascosCruzados)} frascos anotados en otro lote)`);
-    if (r.porTipo.FRACCION) partes.push(`${r.porTipo.FRACCION} por fracción de frasco`);
-    if (r.porTipo.CONTEO) partes.push(`${r.porTipo.CONTEO} por conteo distinto`);
-    if (r.porTipo.MOVIMIENTO) partes.push(`${r.porTipo.MOVIMIENTO} por movimiento cambiado`);
+    const porConfirmar = r.biologicos - r.requierenDecision - r.explicados;
+    const tile = (cls, n, txt) => `<div class="dx-tile ${cls}"><b>${n}</b> <span>${txt}</span></div>`;
     const items = res.grupos.map((g, i) => {
-      const chip = g.requiereDecision ? '<span class="dx-chip decide">Requiere tu decisión</span>' : g.explicado ? '<span class="dx-chip ok">Causa identificada</span>' : '<span class="dx-chip rev">Por confirmar</span>';
-      const tipos = g.causas.map((c) => `<span class="dx-chip">${esc(TITULO_TIPO[c.tipo])}</span>`).join('');
-      return `<li><details class="dx-bio"${g.requiereDecision && i < 3 ? ' open' : ''}><summary><span>${esc(g.biologico)}</span>${chip}${tipos}</summary>${g.causas.map(htmlCausa).join('')}${htmlExtras(g, opts)}</details></li>`;
+      const est = g.requiereDecision ? 'decide' : g.explicado ? 'ok' : 'rev';
+      const chip = est === 'decide' ? '<span class="dx-chip decide">Requiere tu decisión</span>' : est === 'ok' ? '<span class="dx-chip ok">Causa identificada</span>' : '<span class="dx-chip rev">Por confirmar</span>';
+      const tipos = g.causas.map((c) => `<span class="dx-chip">${esc(TITULO_TIPO[c.tipo])}</span>`).join('') + (g.avisos.length ? `<span class="dx-chip">${g.avisos.length} aviso${g.avisos.length === 1 ? '' : 's'}</span>` : '');
+      const meta = `${g.lotesN} lote${g.lotesN === 1 ? '' : 's'}${g.unidadesN ? ` · ${g.unidadesN} unidad${g.unidadesN === 1 ? '' : 'es'}` : ''}`;
+      return `<li><details class="dx-bio ${est}"${g.requiereDecision && i < 3 ? ' open' : ''}><summary>
+        <span class="dx-bio-nom"><strong>${esc(g.nombre)}</strong><small>${esc(g.presentacion ? g.presentacion + ' · ' : '')}${esc(meta)}</small></span>
+        <span class="dx-bio-meta">${chip}${tipos}</span><span class="material-symbols-rounded dx-chev" aria-hidden="true">expand_more</span></summary>
+        <div class="dx-cuerpo">${(() => { const vistos = new Set(); return g.causas.map((c) => htmlCausa(c, vistos)).join(''); })()}${htmlExtras(g, opts)}</div></details></li>`;
     }).join('');
     return `<section class="dx-caja" aria-label="Asistente de revisión">
-      <div class="dx-cab"><span class="material-symbols-rounded" aria-hidden="true">psychology_alt</span>
-        <div><b>Revisión de unidades contra municipio: ${r.biologicos} biológico${r.biologicos === 1 ? '' : 's'} con diferencia (${r.requierenDecision} por decidir · ${r.explicados} con causa identificada)</b>
-        <small>${esc(partes.join(' · '))}. Solo explica y sugiere: no cambia ninguna cifra; tú decides.</small></div></div>
+      <div class="dx-cab"><div class="dx-cab-t"><span class="material-symbols-rounded" aria-hidden="true">psychology_alt</span>
+        <div><b>Revisión de unidades contra municipio</b><small>Solo explica y sugiere: no cambia ninguna cifra; tú decides.</small></div></div>
+        <div class="dx-tiles">${tile('tot', r.biologicos, `biológico${r.biologicos === 1 ? '' : 's'} con diferencia`)}${tile('decide', r.requierenDecision, 'por decidir')}${tile('rev', porConfirmar, 'por confirmar')}${tile('ok', r.explicados, 'con causa identificada')}</div></div>
       <ul class="dx-lista">${items}</ul>${htmlNotaEstatus(res)}</section>`;
   }
 
