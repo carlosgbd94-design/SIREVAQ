@@ -238,7 +238,10 @@
     const nombre = partesNombre[0] || bio; const presentacion = partesNombre.slice(1).join(' ');
     const lotesN = new Set(lotes.map((l) => l.loteId || l.lote)).size;
     const unidadesN = new Set(causas.flatMap((c) => c.sospechas.map((x) => x.unidad))).size;
-    return { biologico: bio, nombre, presentacion, lotesN, unidadesN, causas, cambiosEstatus, avisos, detalles, explicado, requiereDecision: hayError || causas.some((c) => (c.tipo === 'CONTEO' && c.sentido !== 'municipio_mas') || c.tipo === 'MOVIMIENTO') };
+    // Frascos en juego: lo que sobra de un lado (o del otro) en la existencia anterior de este biológico
+    const sumPos = lotes.filter((l) => l.dAnt > 0).reduce((t, l) => t + l.dAnt, 0); const sumNeg = lotes.filter((l) => l.dAnt < 0).reduce((t, l) => t - l.dAnt, 0);
+    const frascos = r2(Math.max(sumPos, sumNeg));
+    return { biologico: bio, nombre, presentacion, lotesN, unidadesN, frascos, causas, cambiosEstatus, avisos, detalles, explicado, requiereDecision: hayError || causas.some((c) => (c.tipo === 'CONTEO' && c.sentido !== 'municipio_mas') || c.tipo === 'MOVIMIENTO') };
   }
 
   /**
@@ -284,8 +287,10 @@
   }
 
   // ----------------------------------------------------------------------- presentación
+  // Lenguaje visual propio: "libro de cuentas". Sin tarjetas con borde de color ni chips: tipografía grande para el biológico,
+  // el número de frascos en juego a la derecha, estado con un punto + palabra, barras de datos para las unidades y un
+  // diagrama de flujo para el lote cruzado.
   const TITULO_TIPO = { MOVIMIENTO: 'Movimiento distinto', CONTEO: 'Conteo distinto', LOTE_CRUZADO: 'Lote cruzado', CATEGORIA: 'Estatus distinto', FRACCION: 'Fracción de frasco' };
-  const ICONO_TIPO = { MOVIMIENTO: 'sync_problem', CONTEO: 'calculate', LOTE_CRUZADO: 'swap_horiz', CATEGORIA: 'label', FRACCION: 'science' };
 
   function injectCss() {
     if (typeof document === 'undefined') return;
@@ -294,53 +299,103 @@
     const st = document.createElement('style');
     st.id = 'dxEstilos';
     st.textContent = `
-      .dx-caja{margin:0 0 14px;border:1px solid var(--outline-variant,#cbd5e1);border-radius:16px;background:var(--surface,#fff);overflow:hidden}
-      .dx-cab{padding:16px 18px 14px;background:var(--surface-container,#f1f5f9);border-bottom:1px solid var(--outline-variant,#e2e8f0)}
-      .dx-cab-t{display:flex;gap:10px;align-items:center}
-      .dx-cab-t .material-symbols-rounded{font-size:24px;color:var(--primary,#1d4ed8);flex:none}
-      .dx-cab-t b{display:block;font-size:16px;line-height:1.25}
-      .dx-cab small{display:block;font-size:12px;opacity:.8;margin-top:2px}
-      .dx-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:12px}
-      .dx-tile{border-radius:12px;padding:8px 12px;background:var(--surface,#fff);border:1px solid var(--outline-variant,#e2e8f0)}
-      .dx-tile b{display:block;font-size:22px;line-height:1.1}.dx-tile span{font-size:12px;font-weight:600}
-      .dx-tile.decide{border-left:4px solid #dc2626}.dx-tile.rev{border-left:4px solid #d97706}.dx-tile.ok{border-left:4px solid #16a34a}.dx-tile.tot{border-left:4px solid var(--primary,#1d4ed8)}
-      .dx-lista{list-style:none;margin:0;padding:0}
-      .dx-bio{border-top:1px solid var(--outline-variant,#e2e8f0);border-left:5px solid #94a3b8}
-      .dx-bio.decide{border-left-color:#dc2626}.dx-bio.rev{border-left-color:#d97706}.dx-bio.ok{border-left-color:#16a34a}
+      .dx-caja{--dx-tinta:var(--on-surface,#0f172a);--dx-suave:var(--on-surface-variant,#64748b);--dx-linea:var(--outline-variant,#dbe2ea);--dx-acento:var(--primary,#4f46e5);--dx-fondo:var(--surface-container,#f1f5f9);
+        --dx-decide:#e11d48;--dx-conf:#d97706;--dx-ok:#059669;margin:0 0 16px;border-radius:20px;background:var(--surface,#fff);color:var(--dx-tinta);border:1px solid var(--dx-linea);overflow:hidden}
+      .dx-cab{padding:22px 24px 18px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px 32px;align-items:end}
+      .dx-cab-t>b{display:block;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--dx-suave);font-weight:700}
+      .dx-total{display:flex;align-items:baseline;gap:10px;margin-top:6px}
+      .dx-total .dx-num{display:inline;text-transform:none;letter-spacing:-.04em;color:var(--dx-tinta);font-size:54px;line-height:.95;font-weight:800;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+      .dx-total span{font-size:15px;font-weight:600;max-width:15ch;line-height:1.2}
+      .dx-cab small{display:block;margin-top:8px;font-size:12px;color:var(--dx-suave)}
+      .dx-prop{display:flex;height:10px;border-radius:99px;overflow:hidden;gap:3px;background:transparent}
+      .dx-prop i{display:block;border-radius:99px;min-width:10px}
+      .dx-prop .decide{background:var(--dx-decide)}.dx-prop .rev{background:var(--dx-conf)}.dx-prop .ok{background:var(--dx-ok)}
+      .dx-leyenda{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px;font-size:13px;font-weight:600}
+      .dx-leyenda span{display:inline-flex;align-items:center;gap:7px}
+      .dx-leyenda b{font-size:15px;font-variant-numeric:tabular-nums}
+      .dx-pt{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none}
+      .decide>.dx-pt,.dx-pt.decide{background:var(--dx-decide)}.rev>.dx-pt,.dx-pt.rev{background:var(--dx-conf)}.ok>.dx-pt,.dx-pt.ok{background:var(--dx-ok)}
+      .dx-lista{list-style:none;margin:0;padding:0 10px 6px;counter-reset:dxb}
+      .dx-bio{border-top:1px solid var(--dx-linea);counter-increment:dxb}
       .dx-lista>li:first-child>.dx-bio{border-top:0}
-      .dx-bio>summary{cursor:pointer;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 16px;list-style:none}
+      .dx-bio>summary{cursor:pointer;display:grid;grid-template-columns:34px minmax(0,1fr) auto auto 26px;gap:4px 18px;align-items:center;padding:18px 14px;list-style:none;border-radius:14px}
       .dx-bio>summary::-webkit-details-marker{display:none}
-      .dx-bio>summary:hover{background:var(--surface-container,#f8fafc)}
-      .dx-bio>summary:focus-visible{outline:2px solid var(--primary,#1d4ed8);outline-offset:-2px}
-      .dx-bio-nom{flex:1 1 220px;min-width:0}
-      .dx-bio-nom strong{display:block;font-size:17px;font-weight:800;line-height:1.2;overflow-wrap:anywhere}
-      .dx-bio-nom small{display:block;font-size:12px;opacity:.75;margin-top:2px}
-      .dx-bio-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-      .dx-chev{font-size:22px;transition:transform .15s;flex:none}
+      .dx-bio>summary::before{content:counter(dxb,decimal-leading-zero);font-size:13px;font-weight:700;color:var(--dx-suave);font-variant-numeric:tabular-nums;align-self:start;padding-top:5px}
+      .dx-bio>summary:hover{background:var(--dx-fondo)}
+      .dx-bio>summary:focus-visible{outline:2px solid var(--dx-acento);outline-offset:-2px}
+      .dx-bio-nom{min-width:0}
+      .dx-bio-nom strong{display:block;font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.1;overflow-wrap:anywhere}
+      .dx-bio-nom small{display:block;font-size:13px;color:var(--dx-suave);margin-top:4px}
+      .dx-bio-nom em{display:block;font-style:normal;font-size:12px;font-weight:700;margin-top:6px;color:var(--dx-acento)}
+      .dx-frascos{text-align:right;line-height:1}
+      .dx-frascos b{display:block;font-size:30px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+      .dx-frascos small{font-size:11px;color:var(--dx-suave);font-weight:600}
+      .dx-est{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;white-space:nowrap;min-width:122px}
+      .dx-chev{font-size:24px;color:var(--dx-suave);transition:transform .18s}
       .dx-bio[open] .dx-chev{transform:rotate(180deg)}
-      .dx-chip{font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px;background:var(--surface-container,#e2e8f0);white-space:nowrap}
-      .dx-chip.ok{background:#dcfce7;color:#166534}.dx-chip.decide{background:#fee2e2;color:#991b1b}.dx-chip.rev{background:#fef3c7;color:#92400e}
-      .dx-cuerpo{padding:0 16px 14px 16px}
-      .dx-causa{padding:12px 14px;margin-top:10px;font-size:13px;line-height:1.5;border:1px solid var(--outline-variant,#e2e8f0);border-radius:12px}
-      .dx-causa h4{display:flex;gap:8px;align-items:center;margin:0 0 6px;font-size:14px}
-      .dx-causa h4 .material-symbols-rounded{font-size:20px;color:var(--primary,#1d4ed8)}
-      .dx-causa p{margin:4px 0}.dx-accion{background:var(--surface-container,#f1f5f9);border-radius:10px;padding:8px 10px}
+      .dx-cuerpo{padding:2px 14px 22px 66px}
+      .dx-causa{padding:18px 0 4px;margin-top:6px;border-top:1px dashed var(--dx-linea);font-size:14px;line-height:1.55}
+      .dx-causa:first-child{border-top:0;margin-top:0}
+      .dx-kick{display:flex;gap:10px;align-items:baseline;font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:800;color:var(--dx-acento)}
+      .dx-kick span{color:var(--dx-suave);font-weight:600;letter-spacing:.04em}
+      .dx-causa h4{margin:4px 0 6px;font-size:17px;font-weight:700;letter-spacing:-.01em}
+      .dx-causa p{margin:4px 0;max-width:92ch}
+      .dx-flujo{display:grid;gap:14px;margin:16px 0 8px}
+      .dx-flujo-f{display:grid;grid-template-columns:minmax(0,1fr) minmax(90px,.55fr) minmax(0,1fr);align-items:center;gap:6px}
+      .dx-nodo b{display:block;font-size:19px;font-weight:800;letter-spacing:-.01em;overflow-wrap:anywhere}
+      .dx-nodo small{display:block;font-size:12px;color:var(--dx-suave);margin-top:2px}
+      .dx-nodo .q{color:var(--dx-conf);font-weight:700}
+      .dx-nodo .cap{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dx-suave);font-weight:700;margin-bottom:3px}
+      .dx-flecha{position:relative;text-align:center;font-size:13px;font-weight:800;padding-bottom:11px}
+      .dx-flecha::after{content:'';position:absolute;left:0;right:5px;bottom:4px;border-bottom:2px solid var(--dx-acento)}
+      .dx-flecha::before{content:'';position:absolute;right:0;bottom:0;width:8px;height:8px;border-top:2px solid var(--dx-acento);border-right:2px solid var(--dx-acento);transform:translateY(-1px) rotate(45deg);transform-origin:center}
+      .dx-cuenta{margin:12px 0 4px;font-size:12px}.dx-cuenta>summary{cursor:pointer;font-weight:700;color:var(--dx-suave)}
       .dx-tabla-wrap{overflow-x:auto;max-width:100%}
-      .dx-tabla{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
-      .dx-tabla th,.dx-tabla td{padding:5px 8px;text-align:right;border-bottom:1px solid var(--outline-variant,#e2e8f0)}
+      .dx-tabla{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0;font-variant-numeric:tabular-nums}
+      .dx-tabla th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dx-suave);font-weight:700}
+      .dx-tabla th,.dx-tabla td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--dx-linea)}
       .dx-tabla th:first-child,.dx-tabla td:first-child{text-align:left;font-weight:700}
-      .dx-lote-t{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin:10px 0 6px;font-size:13px}
-      .dx-lote-t b{font-size:14px}.dx-lote-t span{opacity:.8;font-size:12px}
-      .dx-unis{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px}
-      .dx-uni{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:6px 10px;border-radius:10px;background:var(--surface-container,#f1f5f9);font-size:12.5px}
-      .dx-uni span{min-width:0;overflow-wrap:anywhere}.dx-uni b{font-size:14px;flex:none}
-      .dx-uni.ex{background:#fef3c7;outline:1px solid #d97706}
-      .dx-avisos{list-style:none;margin:10px 0 0;padding:0}.dx-det{margin-top:10px;font-size:12px}.dx-det>summary{cursor:pointer;font-weight:700}
-      .dx-coment{display:flex;gap:6px;align-items:flex-start;font-size:12px;opacity:.85}.dx-coment .material-symbols-rounded{font-size:16px}
-      .dx-nota{display:flex;gap:6px;align-items:center;margin:0;padding:10px 16px;font-size:12px;border-top:1px solid var(--outline-variant,#e2e8f0);opacity:.85}.dx-nota .material-symbols-rounded{font-size:16px}
+      .dx-lote-t{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin:18px 0 8px}
+      .dx-lote-t b{font-size:14px}.dx-lote-t span{font-size:12px;color:var(--dx-suave)}
+      .dx-barras{display:grid;gap:3px}
+      .dx-barra{display:grid;grid-template-columns:minmax(120px,230px) minmax(60px,1fr) 38px;align-items:center;gap:12px;font-size:12.5px;padding:3px 0}
+      .dx-barra>span{min-width:0;overflow-wrap:anywhere}
+      .dx-barra>i{display:block;height:8px;border-radius:99px;background:linear-gradient(90deg,var(--dx-tinta) var(--w),transparent var(--w));opacity:.22}
+      .dx-barra.ex>i{background:linear-gradient(90deg,var(--dx-acento) var(--w),transparent var(--w));opacity:1}
+      .dx-barra.ex>span{font-weight:800}
+      .dx-barra>b{text-align:right;font-size:14px;font-variant-numeric:tabular-nums}
+      .dx-coment{display:flex;gap:6px;align-items:flex-start;font-size:12px;color:var(--dx-suave)}.dx-coment .material-symbols-rounded{font-size:16px}
+      .dx-accion{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:16px 0 6px;padding-top:12px;border-top:1px solid var(--dx-linea)}
+      .dx-accion b{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--dx-acento);padding-top:2px;white-space:nowrap}
+      .dx-avisos{list-style:none;margin:10px 0 0;padding:0}.dx-det{margin-top:12px;font-size:12px}.dx-det>summary{cursor:pointer;font-weight:700}
+      .dx-nota{display:flex;gap:8px;align-items:center;margin:0;padding:12px 24px 16px;font-size:12px;color:var(--dx-suave)}.dx-nota .material-symbols-rounded{font-size:16px}
       .dx-ok{display:flex;gap:8px;align-items:center;padding:12px 14px;font-size:13px}
-      @media (max-width:520px){.dx-cab{padding:14px}.dx-bio>summary{padding:12px}.dx-cuerpo{padding:0 10px 12px}.dx-unis{grid-template-columns:1fr}.dx-tabla{font-size:11px}.dx-tabla th,.dx-tabla td{padding:4px 5px}}`;
+      @media (max-width:760px){
+        .dx-cab{grid-template-columns:1fr;padding:18px 16px 14px}.dx-num{font-size:44px}
+        .dx-lista{padding:0 4px 4px}
+        .dx-bio>summary{grid-template-columns:minmax(0,1fr) 26px;padding:16px 10px}
+        .dx-bio>summary::before{display:none}
+        .dx-bio-nom{grid-column:1}.dx-chev{grid-column:2;grid-row:1}
+        .dx-frascos{grid-column:1;text-align:left;display:flex;align-items:baseline;gap:8px}.dx-frascos b{font-size:24px}
+        .dx-est{grid-column:1}
+        .dx-cuerpo{padding:0 10px 18px}
+        .dx-flujo-f{grid-template-columns:1fr;gap:8px}.dx-flecha{text-align:left;padding-left:2px}
+        .dx-barra{grid-template-columns:minmax(0,1fr) 36px}.dx-barra>i{grid-column:1 / -1;grid-row:2}
+        .dx-accion{grid-template-columns:1fr}
+      }`;
     document.head.appendChild(st);
+  }
+
+  // Diagrama de flujo del lote cruzado: dónde lo anotaron las unidades → dónde probablemente estaba.
+  function htmlFlujo(c) {
+    const destino = c.lotes.find((l) => l.explicado !== undefined && l.dif < 0);
+    const origenes = c.lotes.filter((l) => l.explicado !== undefined && l.dif > 0 && l.explicado > 0);
+    if (!destino || !origenes.length) return '';
+    const dq = Math.abs(destino.queda);
+    return `<div class="dx-flujo" role="group" aria-label="Cómo se cruzan los lotes">${origenes.map((o, i) => `<div class="dx-flujo-f">
+        <div class="dx-nodo"><div class="cap">Las unidades lo anotaron en</div><b>${esc(destino.lote)}</b><small>declararon ${q(Math.abs(destino.dif))} de más${i === 0 && dq > EPS ? ` · <span class="q">quedan ${q(dq)} sin explicar</span>` : ''}</small></div>
+        <div class="dx-flecha">${q(o.explicado)} frasco${o.explicado === 1 ? '' : 's'}</div>
+        <div class="dx-nodo"><div class="cap">¿Será en realidad?</div><b>${esc(o.lote)}</b><small>el municipio tiene ${q(o.dif)} de más</small></div></div>`).join('')}</div>`;
   }
 
   function htmlCausa(c, vistos) {
@@ -349,23 +404,26 @@
     const sg = (n) => (n > 0 ? '+' : '') + q(n);
     const filas = c.lotes.map((l) => `<tr><td>${esc(l.lote)}${l.cat !== 'NORMAL' ? ` <small>(${esc(etiquetaCat(l.cat))})</small>` : ''}</td><td>${q(l.municipio)}</td><td>${q(l.unidades)}</td><td>${sg(l.dif)}</td>${desglose ? `<td>${sg(l.explicado)}</td><td>${sg(l.queda)}</td>` : ''}</tr>`).join('');
     const nota = c.lotes.find((l) => l.nota);
-    // Todas las unidades, agrupadas por lote y con su suma (para poder cuadrarla con la tabla)
+    // Todas las unidades, agrupadas por lote, como barras proporcionales y con su suma (para cuadrarla con la tabla)
     const grupos = new Map();
     c.sospechas.forEach((s) => { const k = s.lote + '|' + s.cat; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(s); });
     const sosp = [...grupos.entries()].map(([k, arr]) => {
       const suma = r2(arr.reduce((t, s) => t + s.cantidad, 0));
       const s0 = arr[0];
+      const titulo = `Lote ${esc(s0.lote)}${s0.cat !== 'NORMAL' ? ' (' + esc(etiquetaCat(s0.cat)) + ')' : ''}`;
       // Las mismas unidades no se listan dos veces en el mismo biológico: la 2ª tarjeta remite a la 1ª
-      if (vistos.has(k)) return `<div class="dx-lote-t"><b>Lote ${esc(s0.lote)}${s0.cat !== 'NORMAL' ? ' (' + esc(etiquetaCat(s0.cat)) + ')' : ''}</b><span>mismas ${arr.length} unidades de la tarjeta de arriba (suman ${q(suma)})</span></div>`;
+      if (vistos.has(k)) return `<div class="dx-lote-t"><b>${titulo}</b><span>mismas ${arr.length} unidades del apartado de arriba (suman ${q(suma)})</span></div>`;
       vistos.add(k);
-      return `<div class="dx-lote-t"><b>Lote ${esc(s0.lote)}${s0.cat !== 'NORMAL' ? ' (' + esc(etiquetaCat(s0.cat)) + ')' : ''}</b><span>${arr.length} unidad${arr.length === 1 ? '' : 'es'}, suman ${q(suma)}</span></div>
-        <div class="dx-unis">${arr.slice(0, 60).map((s) => `<div class="dx-uni${s.exacto ? ' ex' : ''}"><span>${esc(s.unidad)}${s.exacto ? ' · coincide justo con la diferencia' : ''}</span><b>${q(s.cantidad)}</b></div>`).join('')}</div>`;
+      const max = Math.max(...arr.map((s) => s.cantidad), 1);
+      const orden = arr.slice(0, 60).slice().sort((a, b) => b.cantidad - a.cantidad);
+      return `<div class="dx-lote-t"><b>${titulo}</b><span>${arr.length} unidad${arr.length === 1 ? '' : 'es'}, suman ${q(suma)}</span></div>
+        <div class="dx-barras">${orden.map((s) => `<div class="dx-barra${s.exacto ? ' ex' : ''}"><span>${esc(s.unidad)}${s.exacto ? ' · coincide justo con la diferencia' : ''}</span><i style="--w:${Math.max(4, Math.round(s.cantidad / max * 100))}%"></i><b>${q(s.cantidad)}</b></div>`).join('')}</div>`;
     }).join('');
+    const cuenta = `<details class="dx-cuenta"${desglose ? ' open' : ''}><summary>Cuenta por lote</summary><div class="dx-tabla-wrap"><table class="dx-tabla"><caption class="sr-only" style="position:absolute;left:-9999px">Lotes involucrados</caption><thead><tr><th scope="col">Lote</th><th scope="col">${nota ? 'Municipio' : 'Anterior municipio'}</th><th scope="col">${nota ? 'Unidades' : 'Anterior unidades'}</th><th scope="col">Diferencia</th>${desglose ? '<th scope="col">Explica este cruce</th><th scope="col">Sin explicar</th>' : ''}</tr></thead><tbody>${filas}</tbody></table></div></details>`;
     return `<div class="dx-causa">
-      <h4><span class="material-symbols-rounded" aria-hidden="true">${ICONO_TIPO[c.tipo]}</span><span>${esc(TITULO_TIPO[c.tipo])} · <span style="font-weight:600">confianza ${esc(c.confianza)}</span></span></h4>
-      <p><b>${esc(c.titulo)}</b></p><p>${esc(c.texto)}</p>${(c.comentarios || []).map((t) => `<p class="dx-coment"><span class="material-symbols-rounded" aria-hidden="true">info</span> ${esc(t)}</p>`).join('')}
-      <div class="dx-tabla-wrap"><table class="dx-tabla"><caption class="sr-only" style="position:absolute;left:-9999px">Lotes involucrados</caption><thead><tr><th scope="col">Lote</th><th scope="col">${nota ? 'Municipio' : 'Anterior municipio'}</th><th scope="col">${nota ? 'Unidades' : 'Anterior unidades'}</th><th scope="col">Diferencia</th>${desglose ? '<th scope="col">Explica este cruce</th><th scope="col">Sin explicar</th>' : ''}</tr></thead><tbody>${filas}</tbody></table></div>
-      ${sosp}<p class="dx-accion"><b>Qué hacer:</b> ${esc(c.accion)}</p></div>`;
+      <div class="dx-kick">${esc(TITULO_TIPO[c.tipo])} <span>confianza ${esc(c.confianza)}</span></div>
+      <h4>${esc(c.titulo)}</h4>${c.tipo === 'LOTE_CRUZADO' ? htmlFlujo(c) : ''}<p>${esc(c.texto)}</p>${(c.comentarios || []).map((t) => `<p class="dx-coment"><span class="material-symbols-rounded" aria-hidden="true">info</span> ${esc(t)}</p>`).join('')}
+      ${cuenta}${sosp}<div class="dx-accion"><b>Qué hacer</b><span>${esc(c.accion)}</span></div></div>`;
   }
 
   // opts.htmlAviso(f): pinta un aviso del detector del servidor; opts.htmlDetalle(f): su tabla por unidad.
@@ -390,21 +448,25 @@
     if (!res || !res.grupos.length) return '';
     const r = res.resumen;
     const porConfirmar = r.biologicos - r.requierenDecision - r.explicados;
-    const tile = (cls, n, txt) => `<div class="dx-tile ${cls}"><b>${n}</b> <span>${txt}</span></div>`;
+    const seg = (cls, n) => (n > 0 ? `<i class="${cls}" style="flex:${n}"></i>` : '');
+    const ley = (cls, n, txt) => `<span class="${cls}"><i class="dx-pt ${cls}"></i><b>${n}</b> ${txt}</span>`;
     const items = res.grupos.map((g, i) => {
       const est = g.requiereDecision ? 'decide' : g.explicado ? 'ok' : 'rev';
-      const chip = est === 'decide' ? '<span class="dx-chip decide">Requiere tu decisión</span>' : est === 'ok' ? '<span class="dx-chip ok">Causa identificada</span>' : '<span class="dx-chip rev">Por confirmar</span>';
-      const tipos = g.causas.map((c) => `<span class="dx-chip">${esc(TITULO_TIPO[c.tipo])}</span>`).join('') + (g.avisos.length ? `<span class="dx-chip">${g.avisos.length} aviso${g.avisos.length === 1 ? '' : 's'}</span>` : '');
+      const txtEst = est === 'decide' ? 'Requiere tu decisión' : est === 'ok' ? 'Causa identificada' : 'Por confirmar';
+      const tipos = g.causas.map((c) => TITULO_TIPO[c.tipo]).concat(g.avisos.length ? [`${g.avisos.length} aviso${g.avisos.length === 1 ? '' : 's'}`] : []).join(' · ');
       const meta = `${g.lotesN} lote${g.lotesN === 1 ? '' : 's'}${g.unidadesN ? ` · ${g.unidadesN} unidad${g.unidadesN === 1 ? '' : 'es'}` : ''}`;
+      const fr = g.frascos > EPS ? `<span class="dx-frascos"><b>${q(g.frascos)}</b><small>frasco${g.frascos === 1 ? '' : 's'} en juego</small></span>` : '<span class="dx-frascos"></span>';
       return `<li><details class="dx-bio ${est}"${g.requiereDecision && i < 3 ? ' open' : ''}><summary>
-        <span class="dx-bio-nom"><strong>${esc(g.nombre)}</strong><small>${esc(g.presentacion ? g.presentacion + ' · ' : '')}${esc(meta)}</small></span>
-        <span class="dx-bio-meta">${chip}${tipos}</span><span class="material-symbols-rounded dx-chev" aria-hidden="true">expand_more</span></summary>
+        <span class="dx-bio-nom"><strong>${esc(g.nombre)}</strong><small>${esc(g.presentacion ? g.presentacion + ' · ' : '')}${esc(meta)}</small><em>${esc(tipos)}</em></span>
+        ${fr}<span class="dx-est ${est}"><i class="dx-pt"></i>${txtEst}</span><span class="material-symbols-rounded dx-chev" aria-hidden="true">expand_more</span></summary>
         <div class="dx-cuerpo">${(() => { const vistos = new Set(); return g.causas.map((c) => htmlCausa(c, vistos)).join(''); })()}${htmlExtras(g, opts)}</div></details></li>`;
     }).join('');
     return `<section class="dx-caja" aria-label="Asistente de revisión">
-      <div class="dx-cab"><div class="dx-cab-t"><span class="material-symbols-rounded" aria-hidden="true">psychology_alt</span>
-        <div><b>Revisión de unidades contra municipio</b><small>Solo explica y sugiere: no cambia ninguna cifra; tú decides.</small></div></div>
-        <div class="dx-tiles">${tile('tot', r.biologicos, `biológico${r.biologicos === 1 ? '' : 's'} con diferencia`)}${tile('decide', r.requierenDecision, 'por decidir')}${tile('rev', porConfirmar, 'por confirmar')}${tile('ok', r.explicados, 'con causa identificada')}</div></div>
+      <div class="dx-cab"><div class="dx-cab-t"><b>Revisión de unidades contra municipio</b>
+        <div class="dx-total"><b class="dx-num">${r.biologicos}</b> <span>biológico${r.biologicos === 1 ? '' : 's'} con diferencia</span></div>
+        <small>Solo explica y sugiere: no cambia ninguna cifra; tú decides.</small></div>
+        <div><div class="dx-prop" role="img" aria-label="${r.requierenDecision} por decidir, ${porConfirmar} por confirmar, ${r.explicados} con causa identificada">${seg('decide', r.requierenDecision)}${seg('rev', porConfirmar)}${seg('ok', r.explicados)}</div>
+        <div class="dx-leyenda">${ley('decide', r.requierenDecision, 'por decidir')}${ley('rev', porConfirmar, 'por confirmar')}${ley('ok', r.explicados, 'con causa identificada')}</div></div></div>
       <ul class="dx-lista">${items}</ul>${htmlNotaEstatus(res)}</section>`;
   }
 

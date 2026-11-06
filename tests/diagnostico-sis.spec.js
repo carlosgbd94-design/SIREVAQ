@@ -197,7 +197,7 @@ test('Un solo panel: el aviso del detector con información propia (existencia n
   const html = htmlDiagnostico(res, { htmlAviso: (x) => `<li>AVISO ${x.numero_lote}: ${x.mensaje}</li>`, htmlDetalle: () => '' });
   expect(html).toContain('AVISO L2: Quedó en -2 frascos.');
   expect(html).not.toContain('AVISO L1');
-  expect(html).toContain('<b>1</b> <span>biológico con diferencia');
+  expect(html).toContain('<b class="dx-num">1</b> <span>biológico con diferencia');
   // un aviso sin diferencia de cifras igual crea su grupo
   const solo = diagnosticar([{ ...f(H, 'L3', 4, 4), tipo: 'EDITADO_A_MANO', severidad: 'ADVERTENCIA', mensaje: 'Ajustado a mano.' }], []);
   expect(solo.grupos).toHaveLength(1);
