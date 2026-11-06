@@ -67,6 +67,12 @@
       .sort((a, b) => (b.exacto - a.exacto) || (b.cantidad - a.cantidad));
   }
 
+  function juntarEstatus(filas, res) {
+    const s = (k) => filas.reduce((t, l) => t + l[k], 0);
+    return { ...filas[0], cat: 'NORMAL', agregadas: filas, dAnt: res, mAnt: s('mAnt'), uAnt: s('uAnt'), mRec: s('mRec'), uRec: s('uRec'), mApl: s('mApl'), uApl: s('uApl'), mDes: s('mDes'), uDes: s('uDes') };
+  }
+  const filasPara = (l) => l.agregadas || [l];
+
   function tablaLotes(lotes) {
     return lotes.map((l) => ({ lote: l.lote, cat: l.cat, municipio: r2(l.mAnt), unidades: r2(l.uAnt), dif: r2(l.dAnt) }));
   }
@@ -112,7 +118,9 @@
         });
       }
       const res = r2(filas.reduce((s, l) => s + l.dAnt, 0));
-      if (Math.abs(res) > EPS) residual.push({ lote: filas[0], res });
+      // El lote se cruza con otros ya con el estatus neteado: Normal + A.R.F. + Canje del mismo lote cuentan como UN lote
+      // (lo que pasó a A.R.F. en el mes no se cuenta como diferencia ni se muestra como fila aparte).
+      if (Math.abs(res) > EPS) residual.push({ lote: filas.length > 1 ? juntarEstatus(filas, res) : filas[0], res });
     });
 
     // 3) Lotes cruzados: lo que sobra en un lote aparece de menos en otro del mismo biológico.
@@ -147,7 +155,7 @@
       const total = r2(partes.reduce((s, x) => s + x.cant, 0));
       const quien = partes.map((x) => `${q(x.cant)} del lote ${x.p.lote.lote}${x.dist <= 2 ? ' (lote casi igual)' : ''}${x.p.lote.cad && x.p.lote.cad === n.lote.cad ? ' (misma caducidad)' : ''}`);
       const alta = grupoCancela || partes.every((x) => x.dist <= 2);
-      const sosp = sospechasDe(idx, n.lote, n.lote.cat, null).map((s) => ({ ...s, exacto: partes.some((x) => Math.abs(s.cantidad - x.cant) < EPS) || Math.abs(s.cantidad - total) < EPS }))
+      const sosp = filasPara(n.lote).flatMap((l) => sospechasDe(idx, l, l.cat, null)).map((s) => ({ ...s, exacto: partes.some((x) => Math.abs(s.cantidad - x.cant) < EPS) || Math.abs(s.cantidad - total) < EPS }))
         .sort((a, b) => (b.exacto - a.exacto) || (b.cantidad - a.cantidad));
       causas.push({
         tipo: 'LOTE_CRUZADO', confianza: alta ? 'alta' : 'media', cantidad: total,
@@ -188,7 +196,7 @@
             ? 'Cuenta lo que hay en el almacén municipal de estos lotes. Si coincide con la diferencia, no hay nada que corregir; si esos frascos no existen, ajusta la existencia anterior del municipio (queda con motivo y auditoría).'
             : 'Pide a la unidad el conteo físico. Si el de la unidad es el correcto, ajusta la existencia anterior del municipio (queda con motivo y auditoría); si el cierre de septiembre es el correcto, la unidad debe corregir su declaración.',
           lotes: tablaLotes(sobras.map((x) => x.lote)),
-          sospechas: unidadesDeMas.flatMap((x) => sospechasDe(idx, x.lote, x.lote.cat, null)).slice(0, 8)
+          sospechas: unidadesDeMas.flatMap((x) => filasPara(x.lote).flatMap((l) => sospechasDe(idx, l, l.cat, null))).slice(0, 8)
         });
       }
     }

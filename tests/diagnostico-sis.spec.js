@@ -68,6 +68,22 @@ test('Lote que pasó a A.R.F. en el mes (Normal en el cierre, A.R.F. en la unida
   expect(mixto.grupos[0].causas.map((c) => c.tipo)).not.toContain('CATEGORIA');
 });
 
+test('SRP real: el A.R.F. del lote se netea y el cruce con otro lote muestra el lote completo, sin fila A.R.F. aparte', () => {
+  const S = 'SRP Triple Viral frasco unidosis';
+  // 0134N117B: Normal +139 y A.R.F. -35 → neto +104; 0135N027B: −104 → se cancelan
+  const disc = [f(S, '0134N117B', 500, 361), { ...f(S, '0134N117B', 0, 35), categoria: 'ARF' }, f(S, '0135N027B', 776, 880)];
+  const res = diagnosticar(disc, [u(S, '0135N027B', 'SATELITE', 218)]);
+  const g = grupo(res, 'SRP Triple Viral frasco unidosis');
+  const c = causa(g, 'LOTE_CRUZADO');
+  expect(c).toHaveLength(1);
+  expect(c[0].cantidad).toBe(104);
+  expect(c[0].lotes.some((l) => l.cat === 'ARF')).toBe(false);           // el A.R.F. no sale como fila
+  const l1 = c[0].lotes.find((l) => l.lote === '0134N117B');
+  expect(l1).toMatchObject({ municipio: 500, unidades: 396, dif: 104 }); // Normal + A.R.F. juntos
+  expect(causa(g, 'CATEGORIA')).toHaveLength(0);
+  expect(res.resumen.cambiosEstatus).toBe(1);
+});
+
 test('Diferencia que NO se cancela → conteo distinto, requiere decisión humana (no se inventa un lote)', () => {
   const H = 'Hexavalente frasco unidosis';
   const res = diagnosticar([f(H, 'Y3A532V', 322, 324), f(TDPA, '3CA38C5', 53, 48)], []);   // unidades declararon 2 de MÁS
