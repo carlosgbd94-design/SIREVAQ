@@ -2384,7 +2384,9 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   const campo = (campo, valor, clase) => (campo === 'recibido_frascos' && recibidoDeRequisicion)
     ? `<span class="recibido-requi" title="Lo recibido viene de Requisiciones: no se captura aquí. Si no coincide con lo que llegó, avisa al municipal."><span class="recibido-num">${valor || 0}</span><span class="material-symbols-rounded recibido-candado" role="img" aria-label="bloqueado, viene de Requisiciones">lock</span></span>`
     : (subcategoria && (campo === 'aplicadas_a' || campo === 'aplicadas_b') && !Number(valor))
-    ? `<span class="sin-aplicar" title="Un lote en A.R.F. o Canje no se aplica: primero pásalo a Normal (Dictamen) o dalo de baja.">0</span>`
+    ? `<span class="sin-aplicar" title="Un lote en A.R.F. o Canje no se aplica: primero pásalo a Normal (Dictamen o Canje).">0</span>`
+    : (subcategoria && (campo === 'desechadas_a' || campo === 'desechadas_b') && !Number(valor))
+    ? `<span class="sin-aplicar" title="${subcategoria === 'canje' ? 'Un lote en Canje no se desecha: resuélvelo con el canje (lote nuevo y caducidad).' : 'Un lote en A.R.F. se desecha con «Dictamen» (o «Desechar por caducidad»), no aquí.'}">0</span>`
     : (editable && !porUnidades)
     ? `<input type="number" step="any" inputmode="decimal" class="${clase || ''}" data-renglon="${r.id}" data-campo="${campo}" value="${valor ? valor : ''}" placeholder="0" aria-label="${etiquetaDe(campo)}">`
     : `<span>${valor || 0}</span>`;
