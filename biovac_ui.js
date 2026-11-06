@@ -1901,6 +1901,7 @@ async function crearMovimiento() {
 window.__biovacRefrescarPorVentana = () => { if (estado.movimiento && estado.perfil && estado.perfil.rol === 'UNIDAD') render(); };
 
 function render() {
+  deshacerActualizarBoton();
   // Mismo resguardo que cargarMovimiento(): si para cuando esto corre el
   // usuario ya no está en la pestaña Movimiento (la cambió mientras algo
   // async estaba en vuelo -- guardar cabecera, cerrar mes, etc.), no hay que
@@ -2825,6 +2826,7 @@ async function guardarCampoRenglon(input) {
   const valor = campo === 'observaciones' ? (input.value.trim() || null) : (Number(input.value) || 0);
 
   const r = estado.renglones.find((x) => x.id === renglonId);
+  const valorAnterior = r ? r[campo] : undefined;
   if (movimientoBloqueadoParaUnidad()) {
     pendQuitar(renglonId, campo);
     camposSinGuardar.delete(input);
@@ -2898,6 +2900,10 @@ async function guardarCampoRenglon(input) {
   pendQuitar(renglonId, campo);
   camposSinGuardar.delete(input);
   destellarGuardado(input);
+  if (r && !estado.deshaciendo && String(valorAnterior == null ? '' : valorAnterior) !== String(valor == null ? '' : valor)) {
+    deshacerRegistrar({ tipo: 'campo', movimientoId: estado.movimiento && estado.movimiento.id, renglonId, campo, anterior: valorAnterior,
+      etiqueta: (campo === 'existencia_anterior_frascos' ? 'Existencia anterior' : (FIELD_LABEL[campo] || campo)).toLowerCase() + ' de ' + ((r.biovac_lotes && r.biovac_lotes.numero_lote) || 'el renglón') });
+  }
   if (r) {
     r[campo] = valor;
     r.existencia_final_frascos = final;
@@ -3413,18 +3419,117 @@ async function cambiarLoteRenglon(renglonId) {
   if (window.SIS06PBiovac && window.SIS06PBiovac.refrescarConciliacion) window.SIS06PBiovac.refrescarConciliacion();
 }
 
+// ---------------------------------------------------------------------------
+// Deshacer: Ctrl+Z / botón «Deshacer» revierte las últimas ediciones de celdas y la eliminación de renglones del
+// Movimiento abierto. Lo eliminado se guarda completo en el servidor (biovac_eliminar_renglon): «Eliminados» lo lista
+// y lo restaura aunque se haya recargado la página.
+// ---------------------------------------------------------------------------
+const pilaDeshacer = [];
+
+function deshacerDelMovimiento() {
+  const id = estado.movimiento && estado.movimiento.id;
+  return pilaDeshacer.filter((x) => x.movimientoId === id);
+}
+
+function deshacerRegistrar(item) {
+  pilaDeshacer.push(item);
+  if (pilaDeshacer.length > 40) pilaDeshacer.shift();
+  deshacerActualizarBoton();
+}
+
+function deshacerActualizarBoton() {
+  const btn = document.getElementById('btnDeshacer');
+  const btnElim = document.getElementById('btnEliminados');
+  if (!btn) return;
+  const ult = deshacerDelMovimiento().slice(-1)[0];
+  const mov = estado.movimiento;
+  const panel = document.getElementById('panelMovimiento');
+  const enPantalla = Boolean(mov && mov.id && panel && panel.offsetParent !== null);
+  const editable = Boolean(mov && (mov.estado === 'BORRADOR' || mov.estado === 'EN_CORRECCION'));
+  btn.style.display = enPantalla && (editable || ult) ? 'inline-flex' : 'none';
+  if (btnElim) btnElim.style.display = enPantalla && editable ? 'inline-flex' : 'none';
+  btn.disabled = !ult;
+  btn.title = ult ? 'Deshacer: ' + (ult.tipo === 'borrado' ? 'restaurar el renglón eliminado de ' : 'devolver ') + ult.etiqueta + ' (Ctrl+Z)' : 'Nada que deshacer (Ctrl+Z)';
+}
+
+async function deshacerUltimo() {
+  if (estado.deshaciendo) return;
+  const lista = deshacerDelMovimiento();
+  const ult = lista[lista.length - 1];
+  if (!ult) { toast('No hay nada que deshacer en este movimiento.', 'ok'); return; }
+  estado.deshaciendo = true;
+  try {
+    if (ult.tipo === 'borrado') {
+      const { error } = await estado.db.rpc('biovac_restaurar_renglon', { p_borrado_id: ult.borradoId });
+      if (error) { toast('No se pudo restaurar: ' + error.message.replace(/^.*?ERROR:\s*/, ''), 'error'); return; }
+      pilaDeshacer.splice(pilaDeshacer.lastIndexOf(ult), 1);
+      await cargarRenglones();
+      render();
+      refrescarCorreccionesJurisdiccion();
+      toast('Renglón restaurado: ' + ult.etiqueta + '.', 'ok');
+    } else {
+      const input = document.querySelector(`[data-renglon="${ult.renglonId}"][data-campo="${ult.campo}"]`);
+      if (!input) { toast('Ese renglón ya no está en pantalla: no se puede deshacer ese cambio.', 'error'); pilaDeshacer.splice(pilaDeshacer.lastIndexOf(ult), 1); return; }
+      pilaDeshacer.splice(pilaDeshacer.lastIndexOf(ult), 1);
+      input.value = ult.anterior ? ult.anterior : '';
+      await guardarCampoRenglon(input);
+      toast('Deshecho: ' + ult.etiqueta + '.', 'ok');
+    }
+  } finally {
+    estado.deshaciendo = false;
+    deshacerActualizarBoton();
+  }
+}
+
+async function abrirEliminados() {
+  const movId = estado.movimiento && estado.movimiento.id;
+  if (!movId) return;
+  const { data, error } = await estado.db.rpc('biovac_renglones_eliminados', { p_movimiento_id: movId });
+  if (error) { toast('No se pudo consultar: ' + error.message.replace(/^.*?ERROR:\s*/, ''), 'error'); return; }
+  const filas = data || [];
+  const nf = (v) => { const n = Number(v) || 0; return String(Math.round(n * 100) / 100); };
+  const cat = (c) => (c === 'ARF' ? ' (A.R.F.)' : c === 'CANJE' ? ' (Canje)' : '');
+  const detalle = filas.length ? filas.map((f) => `<div class="elim-fila">
+      <div><b>${escHtmlBV(f.numero_lote || 'Lote')}${cat(f.categoria)}</b> · ${escHtmlBV(String(f.biologico || '').replace(/\n/g, ' '))}<br>
+      <small>Anterior ${nf(f.existencia_anterior)} · recibido ${nf(f.recibido)} · aplicadas ${nf(f.aplicadas)} · desechadas ${nf(f.desechadas)} — eliminado ${new Date(f.borrado_en).toLocaleString('es-MX')}${f.usuario ? ' por ' + escHtmlBV(f.usuario) : ''}</small></div>
+      <button type="button" class="btn-primario btn-mini" data-restaurar-borrado="${f.id}">Restaurar</button></div>`).join('')
+    : '<p>No hay renglones eliminados en este movimiento.</p>';
+  const detalleEl = document.getElementById('modalDetalle');
+  const alClic = async (ev) => {
+    const b = ev.target.closest('[data-restaurar-borrado]');
+    if (!b) return;
+    b.disabled = true;
+    const { error: e2 } = await estado.db.rpc('biovac_restaurar_renglon', { p_borrado_id: b.dataset.restaurarBorrado });
+    if (e2) { toast('No se pudo restaurar: ' + e2.message.replace(/^.*?ERROR:\s*/, ''), 'error'); b.disabled = false; return; }
+    const i = pilaDeshacer.findIndex((x) => x.tipo === 'borrado' && x.borradoId === b.dataset.restaurarBorrado);
+    if (i >= 0) pilaDeshacer.splice(i, 1);
+    toast('Renglón restaurado.', 'ok');
+    document.getElementById('modalBtnAceptar').click();
+  };
+  detalleEl.addEventListener('click', alClic);
+  await mostrarModal({ titulo: 'Renglones eliminados', mensaje: 'Estos renglones se eliminaron de este movimiento. Restaurar los devuelve con todas sus cantidades.', detalleHtml: detalle, textoAceptar: 'Cerrar', sinCancelar: true });
+  detalleEl.removeEventListener('click', alClic);
+  await cargarRenglones();
+  render();
+  refrescarCorreccionesJurisdiccion();
+  deshacerActualizarBoton();
+}
+
 async function eliminarRenglon(renglonId) {
-  const ok = await mostrarModal({ titulo: 'Eliminar renglón', mensaje: '¿Eliminar este renglón (lote) con todas sus cantidades? Esta acción no se puede deshacer. Si solo el número de lote está mal, cancela y usa «Cambiar lote» (el ícono de flechas), que conserva las cantidades.', textoAceptar: 'Eliminar', peligro: true });
+  const r = estado.renglones.find((x) => x.id === renglonId);
+  const ok = await mostrarModal({ titulo: 'Eliminar renglón', mensaje: '¿Eliminar este renglón (lote) con todas sus cantidades? Puedes recuperarlo con «Deshacer» (Ctrl+Z) o desde «Eliminados». Si solo el número de lote está mal, cancela y usa «Cambiar lote» (el ícono de flechas), que conserva las cantidades.', textoAceptar: 'Eliminar', peligro: true });
   if (!ok) return;
-  const { error } = await estado.db.from('biovac_renglones').delete().eq('id', renglonId);
+  const { data, error } = await estado.db.rpc('biovac_eliminar_renglon', { p_renglon_id: renglonId, p_usuario: usuarioActual() || '' });
   if (error) {
-    if (error.code === '23503') {
+    if (error.code === '23503' || /foreign key|23503/.test(error.message || '')) {
       toast('No se pudo eliminar: este renglón tiene historial de auditoría vinculado. Intenta de nuevo — si persiste, avísale al desarrollador.', 'error');
     } else {
-      toast('Error al eliminar: ' + error.message, 'error');
+      toast('Error al eliminar: ' + error.message.replace(/^.*?ERROR:\s*/, ''), 'error');
     }
     return;
   }
+  deshacerRegistrar({ tipo: 'borrado', movimientoId: estado.movimiento && estado.movimiento.id, borradoId: data,
+    etiqueta: ((r && r.biovac_lotes && r.biovac_lotes.numero_lote) || 'el renglón') });
   await cargarRenglones();
   render();
   refrescarCorreccionesJurisdiccion();
@@ -4350,6 +4455,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     else if (btnCorrDock.dataset.modo === 'reabrir') abrirCorreccion();
   });
   document.getElementById('btnExportarExcel').addEventListener('click', exportarExcel);
+  document.getElementById('btnDeshacer').addEventListener('click', deshacerUltimo);
+  document.getElementById('btnEliminados').addEventListener('click', abrirEliminados);
+  document.addEventListener('keydown', (ev) => {
+    if (!(ev.ctrlKey || ev.metaKey) || ev.shiftKey || ev.altKey || String(ev.key).toLowerCase() !== 'z') return;
+    const btn = document.getElementById('btnDeshacer');
+    if (!btn || btn.offsetParent === null || btn.disabled) return;
+    if (document.getElementById('modalOverlay') && document.getElementById('modalOverlay').classList.contains('abierto')) return;
+    const el = document.activeElement;
+    // en un campo con texto sin guardar, Ctrl+Z deshace el texto (comportamiento normal del navegador)
+    if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
+      if (!el.matches('[data-renglon][data-campo]') || el.dataset.campo === 'observaciones' || camposSinGuardar.has(el)) return;
+    }
+    ev.preventDefault();
+    deshacerUltimo();
+  });
   document.getElementById('btnVerPdf').addEventListener('click', verPdf);
   DOCK_EXTRAS_MOVIMIENTO.forEach(([dockId, hdrId]) => {
     const d = document.getElementById(dockId);

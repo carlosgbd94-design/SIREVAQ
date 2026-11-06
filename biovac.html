@@ -50,7 +50,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
 <script defer src="diagnostico_sis.js?v=12"></script>
-<script defer src="biovac_ui.js?v=2026.130"></script>
+<script defer src="biovac_ui.js?v=2026.131"></script>
 <script defer src="sis06p_biovac_module.js?v=2026.101"></script>
 <script defer src="sis_csv.js?v=5"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.33"></script>
@@ -205,6 +205,9 @@ window.onunhandledrejection = function (event) {
   }
   .btn-icono:hover { background: #fff; color: var(--secondary); box-shadow: var(--shadow-1); }
   .btn-icono .material-symbols-rounded { font-size: 19px; }
+  .btn-icono:disabled { opacity: .38; cursor: default; pointer-events: none; }
+  .elim-fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border, #e2e8f0); text-align: left; }
+  .elim-fila small { color: var(--text-muted, #64748b); }
   .btn-icono.azul { color: var(--secondary); }
   .btn-icono.azul:hover { background: rgba(14,165,233,.12); color: var(--secondary); }
 
@@ -1356,6 +1359,8 @@ window.onunhandledrejection = function (event) {
     <button type="button" class="dock-btn dock-enviar" id="btnEnviarSIS06P" aria-label="Enviar el SINBA-SIS para validación" style="display:none;" title="Enviar el SINBA-SIS para validación"><span class="material-symbols-rounded">send</span><span class="dock-etiqueta">Enviar</span></button>
     <button type="button" class="dock-btn dock-guardar en-reposo" id="btnGuardarSIS06P" title="Guardar concentrado SIS-06-P"><span class="material-symbols-rounded" id="iconoGuardarSIS">check</span><span class="dock-etiqueta" id="etiquetaGuardarSIS">Guardado</span></button>
     <button type="button" class="dock-btn dock-guardar" id="btnCorreccionDock" style="display:none;" title="Reabrir este Movimiento para corregirlo"><span class="material-symbols-rounded" id="iconoCorreccionDock" aria-hidden="true">edit_note</span><span class="dock-etiqueta" id="etiquetaCorreccionDock">Reabrir y corregir</span></button>
+    <button type="button" class="dock-btn" id="btnDeshacer" style="display:none;" disabled title="Nada que deshacer (Ctrl+Z)"><span class="material-symbols-rounded">undo</span><span class="dock-etiqueta">Deshacer</span></button>
+    <button type="button" class="dock-btn" id="btnEliminados" style="display:none;" title="Renglones eliminados de este Movimiento: ver y restaurar"><span class="material-symbols-rounded">history</span><span class="dock-etiqueta">Eliminados</span></button>
     <button type="button" class="dock-btn" id="btnExportarSISCompleto" title="Exportar el Excel oficial del SINBA-SIS (SIS-06-P, Movimiento de Biológico, SIS-SS-CE-H e Influenza)"><span class="material-symbols-rounded">download</span><span class="dock-etiqueta">Exportar</span></button>
     <!-- Solo en la hoja Movimiento: espejan (y disparan) el botón oculto de la cabecera btnCerrarMes, que conserva su
          lógica y su estado. El PDF va dentro de «Exportar». Ver sincronizarDockMovimientoExtras. -->

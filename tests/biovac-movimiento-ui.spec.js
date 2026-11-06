@@ -326,6 +326,56 @@ test('Cambiar lote: corrige el lote de un renglón conservando sus cantidades (p
   expect(p).toMatchObject({ p_renglon_id: '1', p_nuevo_numero_lote: '0374MA200', p_nueva_caducidad: '2028-01-31', p_motivo: 'La unidad capturó el lote equivocado' });
 });
 
+test('Deshacer (botón y Ctrl+Z): eliminar un renglón lo guarda en el servidor y se puede restaurar; también lista los eliminados', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'EN_CORRECCION' });
+  await page.evaluate(() => {
+    window.__rpc = [];
+    estado.db.rpc = async (n, p) => {
+      window.__rpc.push([n, p]);
+      if (n === 'biovac_renglones_eliminados') return { data: [{ id: 'b1', categoria: 'NORMAL', numero_lote: '0374MA108', biologico: 'BCG', existencia_anterior: 9, recibido: 0, aplicadas: 6, desechadas: 0, borrado_en: '2026-11-06T18:00:00Z', usuario: 'Ana' }], error: null };
+      return { data: n === 'biovac_eliminar_renglon' ? 'b1' : '1', error: null };
+    };
+  });
+  const btn = page.locator('#btnDeshacer');
+  await expect(btn).toBeDisabled();
+  await page.locator('[data-action="eliminar-renglon"]').first().click();
+  await expect(page.locator('#modalMensaje')).toContainText('Deshacer');
+  await page.locator('#modalBtnAceptar').click();
+  await expect.poll(() => page.evaluate(() => window.__rpc.filter((x) => x[0] === 'biovac_eliminar_renglon').length)).toBe(1);
+  await expect(btn).toBeEnabled();
+  await expect(btn).toHaveAttribute('title', /restaurar el renglón eliminado/);
+  // la lista de eliminados muestra lo que había (incluidas las aplicadas) y restaura
+  await page.locator('#btnEliminados').click();
+  await expect(page.locator('#modalTitulo')).toHaveText('Renglones eliminados');
+  await expect(page.locator('.elim-fila')).toContainText('aplicadas 6');
+  await page.locator('#modalBtnAceptar').click();
+  await expect(page.locator('#modalOverlay')).not.toHaveClass(/abierto/);
+  // Ctrl+Z restaura el último renglón eliminado
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => window.__rpc.filter((x) => x[0] === 'biovac_restaurar_renglon').length)).toBe(1);
+  expect(await page.evaluate(() => window.__rpc.find((x) => x[0] === 'biovac_restaurar_renglon')[1])).toEqual({ p_borrado_id: 'b1' });
+  await expect(btn).toBeDisabled();
+});
+
+test('Deshacer (Ctrl+Z): una celda editada vuelve a su valor anterior; con texto sin guardar, Ctrl+Z es el del navegador', async ({ page }) => {
+  await abrir(page, 'MUNICIPAL');
+  await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'EN_CORRECCION' });
+  const celda = page.locator('table.renglones tbody tr').first().locator('input[data-campo="aplicadas_a"]');
+  await celda.fill('7');
+  await celda.press('Tab');
+  await expect.poll(() => page.evaluate(() => window.__updates.length)).toBe(1);
+  expect(await page.evaluate(() => window.__updates[0])).toEqual({ aplicadas_a: 7 });
+  await expect(page.locator('#btnDeshacer')).toBeEnabled();
+  await expect(page.locator('#btnDeshacer')).toHaveAttribute('title', /aplicadas de 0374MA108/i);
+  await page.locator('#btnDeshacer').click();
+  await expect.poll(() => page.evaluate(() => window.__updates.length)).toBe(2);
+  expect(await page.evaluate(() => window.__updates[1])).toEqual({ aplicadas_a: 0 });
+  await expect(celda).toHaveValue('');
+  await expect(page.locator('#btnDeshacer')).toBeDisabled();
+});
+
 test('Barra de abajo: el botón de corrección cambia Reabrir y corregir → Guardar → Guardado', async ({ page }) => {
   await abrir(page, 'MUNICIPAL');
   await pintar(page, { rol: 'MUNICIPAL', estadoMov: 'CERRADO' });
