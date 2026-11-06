@@ -72,6 +72,11 @@
     return { ...filas[0], cat: 'NORMAL', agregadas: filas, dAnt: res, mAnt: s('mAnt'), uAnt: s('uAnt'), mRec: s('mRec'), uRec: s('uRec'), mApl: s('mApl'), uApl: s('uApl'), mDes: s('mDes'), uDes: s('uDes') };
   }
   const filasPara = (l) => l.agregadas || [l];
+  // Comentario (no error): frascos de estos lotes que cambiaron de estatus a A.R.F./Canje en el mes y ya van descontados.
+  function comentariosEstatus(lotes) {
+    return lotes.flatMap((l) => (l.agregadas || []).filter((x) => x.cat !== 'NORMAL' && Math.abs(x.dAnt) > EPS)
+      .map((x) => `Lote ${l.lote}: ${q(Math.abs(x.dAnt))} frasco${Math.abs(x.dAnt) === 1 ? '' : 's'} pasaron a ${etiquetaCat(x.cat)} durante el mes. Es normal y ya está descontado de esta cuenta.`));
+  }
 
   function tablaLotes(lotes) {
     return lotes.map((l) => ({ lote: l.lote, cat: l.cat, municipio: r2(l.mAnt), unidades: r2(l.uAnt), dif: r2(l.dAnt) }));
@@ -163,6 +168,7 @@
         texto: `Las unidades declararon ${q(total)} frasco${total === 1 ? '' : 's'} de más en el lote ${n.lote.lote} y, al mismo tiempo, esa misma cantidad de menos en ${partes.map((x) => `el lote ${x.p.lote.lote}`).join(' y ')}. Como se cancelan, no falta ningún frasco: lo más probable es que una unidad anotó la existencia con el número de lote equivocado (${quien.join('; ')}).`,
         accion: 'Revisa la etiqueta del frasco en el refrigerador de la unidad señalada. Si es del otro lote, corrígelo en «Por unidad» con «Cambiar lote» (conserva las cantidades); si esa unidad ya tiene fila del lote correcto, suma ahí la cantidad y elimina la equivocada. También puede ser un error del cierre manual de septiembre: la etiqueta decide.',
         lotes: tablaLotes([n.lote, ...partes.map((x) => x.p.lote)]),
+        comentarios: comentariosEstatus([n.lote, ...partes.map((x) => x.p.lote)]),
         sospechas: sosp
       });
     });
@@ -196,6 +202,7 @@
             ? 'Cuenta lo que hay en el almacén municipal de estos lotes. Si coincide con la diferencia, no hay nada que corregir; si esos frascos no existen, ajusta la existencia anterior del municipio (queda con motivo y auditoría).'
             : 'Pide a la unidad el conteo físico. Si el de la unidad es el correcto, ajusta la existencia anterior del municipio (queda con motivo y auditoría); si el cierre de septiembre es el correcto, la unidad debe corregir su declaración.',
           lotes: tablaLotes(sobras.map((x) => x.lote)),
+          comentarios: comentariosEstatus(sobras.map((x) => x.lote)),
           sospechas: unidadesDeMas.flatMap((x) => filasPara(x.lote).flatMap((l) => sospechasDe(idx, l, l.cat, null))).slice(0, 8)
         });
       }
@@ -289,6 +296,7 @@
       .dx-tabla th:first-child,.dx-tabla td:first-child{text-align:left}
       .dx-sosp{margin:6px 0 0;padding-left:18px;font-size:12px}.dx-sosp li.ex{font-weight:800}
       .dx-avisos{list-style:none;margin:8px 0 0;padding:0}.dx-det{margin-top:8px;font-size:12px}.dx-det>summary{cursor:pointer;font-weight:700}
+      .dx-coment{display:flex;gap:6px;align-items:flex-start;font-size:12px;opacity:.85}.dx-coment .material-symbols-rounded{font-size:16px}
       .dx-nota{display:flex;gap:6px;align-items:center;margin:0;padding:8px 14px;font-size:12px;border-top:1px solid var(--outline-variant,#e2e8f0);opacity:.85}.dx-nota .material-symbols-rounded{font-size:16px}
       .dx-ok{display:flex;gap:8px;align-items:center;padding:12px 14px;font-size:13px}`;
     document.head.appendChild(st);
@@ -301,7 +309,7 @@
       ? `<p><b>Unidades que declararon ese lote:</b></p><ul class="dx-sosp">${c.sospechas.slice(0, 8).map((s) => `<li class="${s.exacto ? 'ex' : ''}">${esc(s.unidad)} · lote ${esc(s.lote)}${s.cat !== 'NORMAL' ? ' (' + esc(etiquetaCat(s.cat)) + ')' : ''}: declaró ${q(s.cantidad)}${s.exacto ? ' — coincide justo con la diferencia' : ''}</li>`).join('')}</ul>` : '';
     return `<div class="dx-causa">
       <h4><span class="material-symbols-rounded" aria-hidden="true">${ICONO_TIPO[c.tipo]}</span>${esc(TITULO_TIPO[c.tipo])} · <span style="font-weight:600">confianza ${esc(c.confianza)}</span></h4>
-      <p><b>${esc(c.titulo)}</b></p><p>${esc(c.texto)}</p>
+      <p><b>${esc(c.titulo)}</b></p><p>${esc(c.texto)}</p>${(c.comentarios || []).map((t) => `<p class="dx-coment"><span class="material-symbols-rounded" aria-hidden="true">info</span> ${esc(t)}</p>`).join('')}
       <table class="dx-tabla"><caption class="sr-only" style="position:absolute;left:-9999px">Lotes involucrados</caption><thead><tr><th scope="col">Lote</th><th scope="col">${nota ? 'Municipio' : 'Anterior municipio'}</th><th scope="col">${nota ? 'Unidades' : 'Anterior unidades'}</th><th scope="col">Diferencia</th></tr></thead><tbody>${filas}</tbody></table>
       ${sosp}<p class="dx-accion"><b>Qué hacer:</b> ${esc(c.accion)}</p></div>`;
   }

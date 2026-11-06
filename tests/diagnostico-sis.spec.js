@@ -82,6 +82,10 @@ test('SRP real: el A.R.F. del lote se netea y el cruce con otro lote muestra el 
   expect(l1).toMatchObject({ municipio: 500, unidades: 396, dif: 104 }); // Normal + A.R.F. juntos
   expect(causa(g, 'CATEGORIA')).toHaveLength(0);
   expect(res.resumen.cambiosEstatus).toBe(1);
+  expect(c[0].comentarios).toHaveLength(1);                              // el A.R.F. va como comentario, no como error
+  expect(c[0].comentarios[0]).toContain('35 frascos pasaron a A.R.F.');
+  expect(c[0].comentarios[0]).toContain('Es normal');
+  expect(htmlDiagnostico(res)).toContain('dx-coment');
 });
 
 test('Diferencia que NO se cancela → conteo distinto, requiere decisión humana (no se inventa un lote)', () => {
