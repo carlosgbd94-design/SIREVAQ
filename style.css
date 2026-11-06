@@ -6475,8 +6475,9 @@ html.dark button.notifDigestOpenBtn { color: #fb7185; }
    HEADER GLASS (blur simple, sin displacement/turbulencia SVG)
    ========================================================================== */
 .header-liquid-glass {
-    backdrop-filter: blur(10px) !important;
-    -webkit-backdrop-filter: blur(10px) !important;
+    /* blur fuerte (sin tinte blanco, regla 16): el contenido que pasa por debajo al hacer scroll ya no estorba la lectura de la cabecera */
+    backdrop-filter: blur(26px) saturate(1.15) !important;
+    -webkit-backdrop-filter: blur(26px) saturate(1.15) !important;
     background: rgba(255, 255, 255, 0.05) !important;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1) !important;
     border: 1px solid rgba(255, 255, 255, 0.04) !important;

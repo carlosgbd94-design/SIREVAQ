@@ -15942,9 +15942,7 @@ window.activateOpsTab = function (tab) {
   }
   if (tab === "HISTORY") {
     if (typeof reloadHistorySilent === 'function') reloadHistorySilent(true);
-    if (typeof triggerConfetti === "function") {
-      setTimeout(() => triggerConfetti(false), 400);
-    }
+    // El confetti ya no salta cada vez que se abre Métricas: solo festeja cuando hay unidades en Liga Diamante (ver abajo).
   }
   if (tab === "PINOL") {
     if (typeof refreshPinol === 'function') refreshPinol();
@@ -21089,7 +21087,7 @@ function renderHistoryMetrics(data) {
             <td class="text-center">
               <span class="font-black text-[16px] text-slate-700">${r.score}%</span>
             </td>
-            <td>
+            <td style="min-width:${r.isInfluenzaActive ? 360 : 270}px">
               <div class="flex items-center gap-3 text-[10px] font-bold text-slate-500 w-full ${r.isInfluenzaActive ? 'max-w-[340px]' : 'max-w-[250px]'}">
                   <div class="flex-1">
                       BIO (${r.bio_semanas_ok}/${r.eBio})
@@ -21150,7 +21148,7 @@ function renderHistoryMetrics(data) {
           <td class="text-center">
             <span class="font-black text-[16px] text-slate-700">${r.score}%</span>
           </td>
-          <td>
+          <td style="min-width:${r.isInfluenzaActive ? 360 : 270}px">
             <div class="flex items-center gap-3 text-[10px] font-bold text-slate-500 w-full ${r.isInfluenzaActive ? 'max-w-[340px]' : 'max-w-[250px]'}">
                 <div class="flex-1">
                     BIO (${r.bio_semanas_ok}/${r.eBio})
@@ -21242,7 +21240,9 @@ function renderHistoryMetrics(data) {
     animate();
   }
 
-  if (activeRows.length > 0) {
+  // Festejo solo si hay algo que festejar (unidades al 100 %) y una vez por carga de página: antes saltaba en cada apertura.
+  if (diamantes > 0 && !window.__histConfettiHecho) {
+    window.__histConfettiHecho = true;
     setTimeout(() => {
       triggerConfettiFallback();
     }, 300);

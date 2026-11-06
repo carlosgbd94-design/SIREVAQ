@@ -1410,7 +1410,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                         type: 'bar',
                         label: 'Aplicadas (equiv.)',
                         data: [appBCG, appHepB, appRota, appHexaM1, appHexa1A, appNeumoM1, appNeumo1A, appSRP, appDPT],
-                        backgroundColor: '#e2e8f0',
+                        backgroundColor: '#5eead4',
                         borderRadius: 4,
                         barPercentage: 0.7,
                         categoryPercentage: 0.8,
@@ -1469,7 +1469,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                         type: 'bar',
                         label: 'Aplicadas (equiv.)',
                         data: [Math.round(dosisM1/4.0), Math.round(dosisUno/3.0), dosisCuatro],
-                        backgroundColor: '#e2e8f0',
+                        backgroundColor: '#5eead4',
                         borderRadius: 4,
                         barPercentage: 0.7,
                         categoryPercentage: 0.8,
@@ -1770,7 +1770,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                     }
 
                     tDatasets = [
-                        { type: 'bar', label: 'Aplicadas (equiv.)', data: appData, backgroundColor: '#e2e8f0', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
+                        { type: 'bar', label: 'Aplicadas (equiv.)', data: appData, backgroundColor: '#5eead4', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
                         { type: 'bar', label: 'Meta al corte', data: metaData, backgroundColor: '#0f172a', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
                         { type: 'line', label: 'Avance', data: avanceData, borderColor: '#3b82f6', borderWidth: 4, tension: 0.4, fill: false, pointBackgroundColor: '#ffffff', pointBorderColor: '#3b82f6', pointBorderWidth: 2, pointRadius: 6, pointHoverRadius: 8, yAxisID: 'y1', order: 0 }
                     ];
@@ -1804,7 +1804,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
                     }
 
                     tDatasets = [
-                        { type: 'bar', label: 'Aplicadas (equiv.)', data: appData, backgroundColor: '#e2e8f0', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
+                        { type: 'bar', label: 'Aplicadas (equiv.)', data: appData, backgroundColor: '#5eead4', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
                         { type: 'bar', label: 'Meta al corte', data: metaData, backgroundColor: '#0f172a', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.8, yAxisID: 'y', order: 1 },
                         { type: 'line', label: 'Avance', data: avanceData, borderColor: '#3b82f6', borderWidth: 4, tension: 0.4, fill: false, pointBackgroundColor: '#ffffff', pointBorderColor: '#3b82f6', pointBorderWidth: 2, pointRadius: 6, pointHoverRadius: 8, yAxisID: 'y1', order: 0 }
                     ];
