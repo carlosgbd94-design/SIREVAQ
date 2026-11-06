@@ -121,7 +121,8 @@ test('Municipal: cierre guiado en 4 pasos', async ({ page }) => {
   await page.selectOption('#selMes', { index: 0 });
   await page.selectOption('#selMes', { index: 9 });
   await expect(page.locator('#munDescargarCSV')).toBeEnabled();
-  await expect(page.locator('#munCheck li.ok')).toHaveCount(3);               // validadas, paloteo=Movimiento y Movimientos de las unidades guardados
+  await expect(page.locator('#munPublicar')).toHaveCount(0);                  // «Cargar a indicadores» es solo de Jurisdicción/Admin
+  await expect(page.locator('#munCheck li.ok')).toHaveCount(3);              // validadas, paloteo=Movimiento y Movimientos de las unidades guardados
   await expect(page.locator('#munCheckAbiertas')).toContainText('Ninguna unidad tiene el Movimiento abierto en corrección');
   await expect(page.locator('#munCheck li.aviso')).toContainText('informativo');   // recibido vs requisición no bloquea
 
@@ -174,6 +175,7 @@ test('Jurisdicción en Movimiento: el cierre guiado trabaja con los hospitales',
   await page.click('#dockPasosMun .hoja-tab[data-mpaso="4"]');
   await expect(page.locator('#munCheck li').first()).toContainText('0 de 1');
   await expect(page.locator('#munDescargarCSV')).toBeDisabled();
+  await expect(page.locator('#munPublicar')).toBeVisible();                       // Jurisdicción sí puede cargar a indicadores a mano
   expect(errores).toEqual([]);
 });
 

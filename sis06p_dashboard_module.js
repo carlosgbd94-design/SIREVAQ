@@ -509,7 +509,9 @@
       acciones.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap;';
       acciones.appendChild(btnZip);
       acciones.appendChild(btn);
-      acciones.appendChild(btnPub);
+      // La carga manual a indicadores es solo de Jurisdicción/Admin (el municipal solo cierra el mes y ahí se carga sola).
+      const rolPub = estado.perfil && estado.perfil.rol;
+      if (rolPub === 'ADMIN' || rolPub === 'JURISDICCIONAL') acciones.appendChild(btnPub);
       barra.appendChild(acciones);
       barra.appendChild(estadoPub);
       if (completo) pintarEstadoPublicacion(estadoPub, municipio, mes, anio);
@@ -723,10 +725,10 @@
     try {
       const { data } = await estado.db.rpc('sis_estado_publicacion', { p_mes: mes, p_anio: anio, p_municipio: municipio });
       const p = Array.isArray(data) ? data[0] : null;
-      if (!p) { cont.textContent = 'Aún no publicado a indicadores: se publica sola cuando todas las unidades estén validadas (y se vuelve a publicar si algo cambia).'; cont.style.color = 'var(--muted)'; return; }
+      if (!p) { cont.textContent = 'Aún no publicado a indicadores: se publica sola cuando el municipal cierra el mes (y se vuelve a publicar si algo cambia).'; cont.style.color = 'var(--muted)'; return; }
       const cuando = new Date(p.publicado_en).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
       if (p.desactualizada) {
-        cont.textContent = `⚠ Publicado el ${cuando}${p.publicado_por ? ' por ' + p.publicado_por : ''}, pero hubo cambios después. Se vuelve a publicar sola al validar; si no, usa «Forzar publicación».`;
+        cont.textContent = `⚠ Publicado el ${cuando}${p.publicado_por ? ' por ' + p.publicado_por : ''}, pero hubo cambios después. Se vuelve a publicar sola al cerrar el mes; si no, Jurisdicción puede usar «Forzar publicación».`;
         cont.style.color = 'var(--warning)';
       } else {
         cont.textContent = `Publicado el ${cuando}${p.publicado_por ? ' por ' + p.publicado_por : ''} (${p.filas} filas).`;

@@ -1322,7 +1322,10 @@ async function montarAvance(page, rol, filasSis) {
   await page.addScriptTag({ content: DATOS.replace(/var _adminMetasArray = [\s\S]*?\];/, 'var _adminMetasArray = [];') });
   await page.addScriptTag({ content: `
     var _campaignConfig = { fecha_inicio: '2026-10-03', fecha_fin: '2027-03-31' };
-    AppService.call = async function (a, p) { window.__llamadas.push([a, p]); return { ok: true, data: ${JSON.stringify(filasSis)} }; };` });
+    var __INV = { VCV38: 'c1', VCV39: 'c2', VCV28: 'c3', VCV16: 'c4', VCV20: 'c5', VCV21: 'c6' };
+    var __CAPS = ${JSON.stringify(filasSis)}.map(function (f) { var v = { MODERNA: {} }; v.MODERNA[__INV[f.variable_sis]] = f.dosis; return { clues: f.clues, fecha: '2026-10-20', valores: v }; });
+    AppService.call = async function (a, p) { window.__llamadas.push([a, p]); return { ok: true, data: __CAPS }; };` });
+  await page.addScriptTag({ path: path.join(raiz, 'covid_captura.js') });
   await page.evaluate((r) => { window.USER.rol = r; }, rol);
   await page.addScriptTag({ content: vacuna + vacunaFns });
   await page.addScriptTag({ content: bloque });
@@ -1347,8 +1350,8 @@ test('COVID Avance (Jurisdicción): meta vs aplicadas por municipio/hospital con
   await montarAvance(page, 'JURISDICCIONAL', sis);
   await page.evaluate(() => { document.getElementById('cavCorte').innerHTML = ''; return renderCovidAvance(); });
   // el corte por omisión existe y se pide el SIS desde el inicio de la campaña
-  const llamada = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'getcovid_avance'));
-  expect(llamada[1].desde).toBe('2026-10-03');
+  const llamada = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'getcovid_capturas'));
+  expect(llamada).toBeTruthy();   // los reportes semanales se piden al servidor (ya filtra por rol)
   await expect(page.locator('#cavTituloAmbito')).toContainText('municipio y hospital');
   // Querétaro: aplicadas equiv = (60+40)/2 + 75 + 25 = 150; meta = 200 + 450 = 650
   const filaQ = page.locator('#cavTbody tr', { hasText: 'Querétaro' }).first();
@@ -1358,13 +1361,13 @@ test('COVID Avance (Jurisdicción): meta vs aplicadas por municipio/hospital con
   // HENM (hospital): 50 de 160 = 31.3 %
   await expect(page.locator('#cavTbody tr', { hasText: 'HENM' })).toContainText('31.3 %');
   await expect(page.locator('#cavKpis')).toContainText('Avance');
-  await expect(page.locator('#cavFuente')).toContainText('último mes con datos');
+  await expect(page.locator('#cavFuente')).toContainText('último reporte con dosis');
 });
 
 test('COVID Avance: por unidad al elegir un municipio y aviso cuando el SIS aún no publica', async ({ page }) => {
   await montarAvance(page, 'ADMIN', []);
   await page.evaluate(() => { _allUnidades.push({ clues: 'Q9', unidad: 'SIN META', municipio: 'QUERETARO' }); return renderCovidAvance(); });
-  await expect(page.locator('#cavFuente')).toContainText('Aún no hay dosis de COVID-19 publicadas');
+  await expect(page.locator('#cavFuente')).toContainText('Aún no hay dosis de COVID-19 reportadas');
   await page.selectOption('#cavAmbito', 'QUERETARO');
   await expect(page.locator('#cavTituloAmbito')).toContainText('unidad');
   await expect(page.locator('#cavTbody tr', { hasText: 'UMQ UNO' })).toContainText('0.0 %');
@@ -1397,8 +1400,8 @@ test('COVID Avance (municipal): un solo municipio sin selector de ámbito, solo 
   await expect(total).toContainText('95');
   expect(await page.locator('#cavRubros tr').count()).toBe(6);
   // el SIS se pide con el mismo rango y el servidor ya filtra por municipio
-  const llamada = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'getcovid_avance'));
-  expect(llamada[1].desde).toBe('2026-10-03');
+  const llamada = await page.evaluate(() => window.__llamadas.find((l) => l[0] === 'getcovid_capturas'));
+  expect(llamada).toBeTruthy();   // los reportes semanales se piden al servidor (ya filtra por rol)
 });
 
 // ─── COVID-19 · Control de Frascos en modo MUNICIPAL ───

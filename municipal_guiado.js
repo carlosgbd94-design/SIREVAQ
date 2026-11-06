@@ -25,6 +25,8 @@
   const $ = (id) => document.getElementById(id);
   const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+  // La carga manual a indicadores solo la hace Jurisdicción/Admin; el municipal solo cierra el mes (y ahí se carga sola).
+  const puedePublicarManual = () => { const r = estado && estado.perfil && estado.perfil.rol; return r === 'ADMIN' || r === 'JURISDICCIONAL'; };
 
   const PASOS = [
     { n: 1, t: 'Envíos', icono: 'mark_email_read', color: '#0284c7', titulo: '1. Quién ya envió' },
@@ -911,7 +913,7 @@
       </div>
       <div class="mun-entregar">
         <div><b>Indicadores (RDA)</b><small id="munPubEstado">${listo ? 'Consultando…' : 'Se carga sola al cerrar el mes (o cuando tú lo pidas).'}</small></div>
-        <button type="button" class="btn-secundario" id="munPublicar" ${listo ? '' : 'disabled'} title="${listo ? 'Cargar ahora el concentrado validado a los indicadores (si no, se carga solo al cerrar el mes)' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">cloud_upload</span> Cargar a indicadores</button>
+        ${puedePublicarManual() ? `<button type="button" class="btn-secundario" id="munPublicar" ${listo ? '' : 'disabled'} title="${listo ? 'Cargar ahora el concentrado validado a los indicadores (si no, se carga solo al cerrar el mes)' : 'Se habilita cuando todas las unidades estén validadas'}"><span class="material-symbols-rounded">cloud_upload</span> Cargar a indicadores</button>` : ''}
       </div>
       <p class="mun-nota-csv">Abajo, la vista previa: se va llenando con lo que capturan las unidades. Cada pestaña del archivo tiene las mismas columnas que la hoja CSV del Excel oficial.</p>`;
     if (listo && window.SIS06PDashboard) window.SIS06PDashboard.pintarEstadoPublicacion($('munPubEstado'), muni, mes, anio);
@@ -1034,7 +1036,7 @@
       else if (t.closest('#munMovExcel')) { const { mes, anio } = periodo(); conCarga(t.closest('#munMovExcel'), () => descargarMovimientoBiovac(st.muni, mes, anio)); }
       else if (t.closest('#munIrPendientes')) { st.filtro = 'ENVIADO'; irAPaso(1); }
       else if (t.closest('#munDescargarCSV')) window.SIS06PDashboard.exportarCSVOficialMunicipio(st.muni, periodo().mes, periodo().anio);
-      else if (t.closest('#munPublicar')) {
+      else if (t.closest('#munPublicar') && puedePublicarManual()) {
         const { mes, anio } = periodo();
         window.SIS06PDashboard.publicarMunicipio(st.muni, mes, anio, etiquetaMuni(st.muni) || st.muni)
           .then((hecho) => { if (hecho) window.SIS06PDashboard.pintarEstadoPublicacion($('munPubEstado'), st.muni, mes, anio); });

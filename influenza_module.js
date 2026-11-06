@@ -6253,7 +6253,7 @@ function covidRazonDeGrid(tbody, esMunicipal) {
 }
 
 // ─── Avance de COVID-19: dosis aplicadas (SIS, validadas) contra la meta ────────────────────────────────
-// Las dosis salen de registros_sis (mensuales) mediante covid_avance; la meta, de covid_metas. Jurisdicción ve
+// Las dosis salen de los reportes semanales (covid_capturas), como Influenza; la meta, de covid_metas. Jurisdicción ve
 // la Jurisdicción, cada municipio/hospital y sus unidades; el municipal, sus municipios y sus unidades.
 let _covidAvance = { filas: [], ult: null, hasta: null, cargado: false };
 
@@ -6291,10 +6291,29 @@ async function covidAvanceCargar() {
   if (!ini || !mes) { _covidAvance = { filas: [], ult: null, hasta: mes, cargado: true }; return; }
   const [y, m] = mes.split("-").map(Number);
   const hasta = `${y}-${String(m).padStart(2, "0")}-01`;
+  const finMes = `${y}-${String(m).padStart(2, "0")}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
   try {
-    const res = await AppService.call("getcovid_avance", { desde: ini, hasta }, { silent: true });
-    const filas = res.data || [];
-    const ult = filas.reduce((mx, f) => (f.ult && (!mx || f.ult > mx) ? f.ult : mx), null);
+    // Igual que Influenza: el avance sale de los reportes SEMANALES que capturan las unidades (no espera al
+    // cierre del mes ni a la validación del SIS). El servidor ya limita por rol (municipal/unidad).
+    const camp = document.getElementById("metaCampaignSelect")?.value || "";
+    const res = await AppService.call("getcovid_capturas", camp ? { anio_campana: camp } : {}, { silent: true });
+    const acum = {};   // clues -> { variable_sis -> dosis }
+    let ult = null;
+    ((res && res.data) || []).forEach(c => {
+      if (!c.fecha || c.fecha > finMes) return;
+      const t = window.CovidCaptura.porRubro(c.valores);
+      let hay = false;
+      Object.keys(t).forEach(r => {
+        const v = Number(t[r]) || 0;
+        if (!v) return;
+        hay = true;
+        const vs = CovidFrascos.VARIABLE_SIS[r];
+        (acum[c.clues] = acum[c.clues] || {})[vs] = ((acum[c.clues] || {})[vs] || 0) + v;
+      });
+      if (hay && (!ult || c.fecha > ult)) ult = c.fecha;
+    });
+    const filas = [];
+    Object.keys(acum).forEach(cl => Object.keys(acum[cl]).forEach(vs => filas.push({ clues: cl, variable_sis: vs, dosis: acum[cl][vs], ult })));
     _covidAvance = { filas, ult, hasta, cargado: true };
   } catch (err) {
     console.error("Error al cargar el avance de COVID-19:", err);
@@ -6422,14 +6441,14 @@ async function renderCovidAvance() {
   const T = r.total.calc;
   const hayDatos = _covidAvance.filas.length > 0;
   const fuente = document.getElementById("cavFuente");
-  if (_covidAvance.error) fuente.textContent = "No se pudo leer el SIS; intenta con Actualizar.";
-  else if (!hayDatos) fuente.textContent = "Aún no hay dosis de COVID-19 publicadas del SIS en este periodo.";
-  else fuente.textContent = `Fuente: SIS (dosis validadas) · último mes con datos: ${_covidAvance.ult ? COVID_MESES_NOMBRE[Number(String(_covidAvance.ult).slice(5, 7)) - 1] + " " + String(_covidAvance.ult).slice(0, 4) : "—"}`;
+  if (_covidAvance.error) fuente.textContent = "No se pudieron leer los reportes; intenta con Actualizar.";
+  else if (!hayDatos) fuente.textContent = "Aún no hay dosis de COVID-19 reportadas por las unidades en este periodo.";
+  else fuente.textContent = `Fuente: reportes semanales de las unidades · último reporte con dosis: ${_covidAvance.ult ? Number(String(_covidAvance.ult).slice(8, 10)) + " " + COVID_MESES_NOMBRE[Number(String(_covidAvance.ult).slice(5, 7)) - 1].slice(0, 3).toLowerCase() + " " + String(_covidAvance.ult).slice(0, 4) : "—"}`;
 
   document.getElementById("cavKpis").innerHTML = `
     <div class="cav-kpi cav-kpi--main"><span class="cav-kpi-lbl">Avance</span><b>${T.pct === null ? "—" : T.pct.toFixed(1) + " %"}</b><small>${covidAvanceFmt(T.aplEq)} de ${covidAvanceFmt(T.metaEq)} dosis (0.5 mL)</small></div>
     <div class="cav-kpi"><span class="cav-kpi-lbl">Meta</span><b>${covidAvanceFmt(T.metaEq)}</b><small>dosis equivalentes de 0.5 mL</small></div>
-    <div class="cav-kpi"><span class="cav-kpi-lbl">Aplicadas</span><b>${covidAvanceFmt(T.aplEq)}</b><small>según SIS validado</small></div>
+    <div class="cav-kpi"><span class="cav-kpi-lbl">Aplicadas</span><b>${covidAvanceFmt(T.aplEq)}</b><small>según reportes semanales</small></div>
     <div class="cav-kpi"><span class="cav-kpi-lbl">Por aplicar</span><b>${covidAvanceFmt(T.pendienteEq)}</b><small>para cubrir la meta</small></div>`;
 
   const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
