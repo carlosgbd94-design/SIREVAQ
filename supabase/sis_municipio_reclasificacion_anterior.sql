@@ -6,12 +6,12 @@
 -- anterior, así que cuando una unidad pasaba, p. ej., 6 frascos de BCG de Normal a ARF (su anterior queda Normal -6 /
 -- ARF +6 contra el cierre de su mes previo) el municipio no se enteraba. Solo se reflejaba el ARF "recibido".
 --
--- Regla: por cada unidad y lote que SÍ tenía renglón el mes previo, diferencia por categoría = anterior de este mes -
--- final del mes previo. Solo cuenta si es una reclasificación pura (la suma de las diferencias entre categorías del
--- lote da cero: lo que sale de Normal entra a ARF/Canje). Un ajuste de conteo (neto distinto de cero) no se mueve
--- solo: lo sigue avisando el detector («Existencia anterior distinta»). Se aplica por diferencias (columna
--- base_anterior_frascos), igual que recibido/aplicadas/desechadas: lo que el municipal ajustó a mano se conserva y
--- repetirla es inofensivo.
+-- Regla (a nivel de municipio y lote, cuando todas las unidades ya cerraron): diferencia por categoría = suma de las
+-- existencias anteriores de las unidades - existencia anterior que trae el municipio (sin lo ya aplicado). Si esas
+-- diferencias suman cero entre categorías del lote es una reclasificación pura (lo que sale de Normal entra a ARF/Canje)
+-- y se aplica. Una diferencia de conteo (neto distinto de cero) no se mueve sola: la sigue avisando el detector
+-- («Existencia anterior distinta»). Se aplica por diferencias (columna base_anterior_frascos), igual que
+-- recibido/aplicadas/desechadas: lo que el municipal ajustó a mano se conserva y repetirla es inofensivo.
 -- ADITIVA e idempotente.
 -- ===========================================================================
 alter table biovac_renglones add column if not exists base_anterior_frascos numeric not null default 0;
@@ -67,25 +67,21 @@ begin
       join biovac_movimientos um on um.id = rn.movimiento_id
       join biovac_unidades bu on bu.id = um.unidad_id
       where bu.clues = any (v_incl) and um.anio = p_anio and um.mes = p_mes
-    ), prv as (
-      select mp.unidad_id uid, rp.lote_id, rp.categoria, rp.existencia_final_frascos pf
-      from biovac_movimientos mp
-      join biovac_renglones rp on rp.movimiento_id = mp.id
-      where (mp.anio * 12 + mp.mes) = (p_anio * 12 + p_mes - 1)
-        and mp.unidad_id in (select uid from cur)
-    ), pares as (
-      select coalesce(c.uid, p.uid) uid, coalesce(c.lote_id, p.lote_id) lote_id, coalesce(c.categoria, p.categoria) categoria,
-             coalesce(c.ant, 0) - coalesce(p.pf, 0) delta
-      from cur c full join prv p on p.uid = c.uid and p.lote_id = c.lote_id and p.categoria = c.categoria
-    ), pares2 as (
-      select pa.*, sum(pa.delta) over (partition by pa.uid, pa.lote_id) neto,
-             exists (select 1 from prv pv where pv.uid = pa.uid and pv.lote_id = pa.lote_id) tenia_previo
-      from pares pa
+    ), usum as (
+      select lote_id, categoria, sum(ant) ua from cur group by lote_id, categoria
+    ), msum as (
+      select lote_id, categoria, existencia_anterior_frascos - base_anterior_frascos ma
+      from biovac_renglones where movimiento_id = v_mov
+    ), dd as (
+      select coalesce(u.lote_id, m.lote_id) lote_id, coalesce(u.categoria, m.categoria) categoria,
+             coalesce(u.ua, 0) - coalesce(m.ma, 0) d
+      from usum u full join msum m on m.lote_id = u.lote_id and m.categoria = u.categoria
+    ), dd2 as (
+      select dd.*, sum(dd.d) over (partition by dd.lote_id) neto from dd
     ), recl as (
-      select lote_id, categoria, sum(delta) ant
-      from pares2
-      where tenia_previo and abs(neto) < 0.0001 and delta <> 0
-      group by lote_id, categoria
+      select lote_id, categoria, d ant
+      from dd2
+      where cardinality(v_pend) = 0 and abs(neto) < 0.0001 and abs(d) > 0.0001
     ), viejo as (
       select lote_id, categoria from biovac_renglones
       where movimiento_id = v_mov and (base_recibido_frascos <> 0 or base_aplicadas_a <> 0 or base_aplicadas_b <> 0
