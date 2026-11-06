@@ -9,7 +9,8 @@
  *  - LOTE_CRUZADO : las diferencias de existencia anterior entre lotes del mismo biológico se CANCELAN (+12 en un lote,
  *                   −5 y −7 en otros): nadie perdió frascos, una unidad declaró la existencia en otro lote (casi siempre un
  *                   error de dedo: 0374MA108 vs 0374MA109). Señala qué unidad declaró esa cantidad.
- *  - CATEGORIA    : el mismo lote aparece como Normal en un lado y A.R.F./Canje en el otro.
+ *  - CATEGORIA    : el mismo lote aparece como Normal en un lado y A.R.F./Canje en el otro. Es lo esperado (el lote
+ *                   sufrió un A.R.F. en el mes): NO se lista como diferencia, solo se cuenta en resumen.cambiosEstatus.
  *  - CONTEO       : la diferencia no se cancela: las unidades contaron más/menos de lo que dejó el cierre del mes pasado.
  *  - FRACCION     : menos de un frasco de diferencia (multidosis abierto, redondeo).
  *  - MOVIMIENTO   : difieren recibido/aplicadas/desechadas (una unidad cambió después de sincronizar o se ajustó a mano).
@@ -192,7 +193,11 @@
       }
     }
 
-    const orden = { MOVIMIENTO: 0, CONTEO: 1, LOTE_CRUZADO: 2, CATEGORIA: 3, FRACCION: 4 };
+    // Un lote que cambió de estatus (Normal → A.R.F./Canje) en el mes es lo ESPERADO, no un error: la unidad lo declara
+    // ya como A.R.F. y el cierre del mes pasado lo traía como Normal. No se lista como diferencia; solo se cuenta.
+    const cambiosEstatus = causas.filter((c) => c.tipo === 'CATEGORIA');
+    for (let i = causas.length - 1; i >= 0; i--) if (causas[i].tipo === 'CATEGORIA') causas.splice(i, 1);
+    const orden = { MOVIMIENTO: 0, CONTEO: 1, LOTE_CRUZADO: 2, FRACCION: 4 };
     causas.sort((a, b) => orden[a.tipo] - orden[b.tipo]);
     // Un solo panel: lo que el detector del servidor dice de estos lotes y ya explica una causa NO se repite.
     // Se conservan aparte los avisos con información propia (existencia negativa, ajuste a mano, no se explica…)
@@ -202,8 +207,8 @@
     const avisos = lotes.filter((l) => !(cubierta(l) && REDUNDANTES.includes(l.raw.tipo))).map((l) => l.raw);
     const detalles = lotes.filter((l) => cubierta(l) && Array.isArray(l.raw.detalle) && l.raw.detalle.length).map((l) => l.raw);
     const hayError = avisos.some((f) => f.severidad === 'ERROR');
-    const explicado = !avisos.length && causas.length > 0 && causas.every((c) => (c.tipo === 'LOTE_CRUZADO' && c.confianza === 'alta') || c.tipo === 'CATEGORIA' || c.tipo === 'FRACCION');
-    return { biologico: bio, causas, avisos, detalles, explicado, requiereDecision: hayError || causas.some((c) => (c.tipo === 'CONTEO' && c.sentido !== 'municipio_mas') || c.tipo === 'MOVIMIENTO') };
+    const explicado = !avisos.length && causas.length > 0 && causas.every((c) => (c.tipo === 'LOTE_CRUZADO' && c.confianza === 'alta') || c.tipo === 'FRACCION');
+    return { biologico: bio, causas, cambiosEstatus, avisos, detalles, explicado, requiereDecision: hayError || causas.some((c) => (c.tipo === 'CONTEO' && c.sentido !== 'municipio_mas') || c.tipo === 'MOVIMIENTO') };
   }
 
   /**
@@ -224,9 +229,10 @@
       if (!porBio.has(l.bio)) porBio.set(l.bio, []);
       porBio.get(l.bio).push(l);
     });
-    const grupos = [];
+    const grupos = []; const cambios = [];
     porBio.forEach((lotes, bio) => {
       const g = diagnosticarGrupo(bio, lotes, idx);
+      cambios.push(...g.cambiosEstatus);
       if (g.causas.length || g.avisos.length) grupos.push(g);
     });
     const peso = (g) => (g.requiereDecision ? 0 : g.explicado ? 2 : 1);
@@ -239,7 +245,8 @@
         biologicos: grupos.length,
         explicados: grupos.filter((g) => g.explicado).length,
         requierenDecision: grupos.filter((g) => g.requiereDecision).length,
-        porTipo: { LOTE_CRUZADO: cuenta('LOTE_CRUZADO'), CATEGORIA: cuenta('CATEGORIA'), CONTEO: cuenta('CONTEO'), FRACCION: cuenta('FRACCION'), MOVIMIENTO: cuenta('MOVIMIENTO') },
+        porTipo: { LOTE_CRUZADO: cuenta('LOTE_CRUZADO'), CONTEO: cuenta('CONTEO'), FRACCION: cuenta('FRACCION'), MOVIMIENTO: cuenta('MOVIMIENTO') },
+        cambiosEstatus: cambios.length, frascosCambioEstatus: r2(cambios.reduce((t, c) => t + c.cantidad, 0)),
         avisos: grupos.reduce((s, g) => s + g.avisos.length, 0),
         frascosCruzados: r2(cruzados.reduce((s, c) => s + c.cantidad, 0))
       }
@@ -274,6 +281,7 @@
       .dx-tabla th:first-child,.dx-tabla td:first-child{text-align:left}
       .dx-sosp{margin:6px 0 0;padding-left:18px;font-size:12px}.dx-sosp li.ex{font-weight:800}
       .dx-avisos{list-style:none;margin:8px 0 0;padding:0}.dx-det{margin-top:8px;font-size:12px}.dx-det>summary{cursor:pointer;font-weight:700}
+      .dx-nota{display:flex;gap:6px;align-items:center;margin:0;padding:8px 14px;font-size:12px;border-top:1px solid var(--outline-variant,#e2e8f0);opacity:.85}.dx-nota .material-symbols-rounded{font-size:16px}
       .dx-ok{display:flex;gap:8px;align-items:center;padding:12px 14px;font-size:13px}`;
     document.head.appendChild(st);
   }
@@ -299,6 +307,14 @@
     return (avisos || det) ? `<div class="dx-causa">${avisos}${det}</div>` : '';
   }
 
+  // Nota (no es un aviso): lotes que pasaron a A.R.F./Canje en el mes. Es lo esperado, por eso no se lista como diferencia.
+  function htmlNotaEstatus(res) {
+    const r = res && res.resumen;
+    if (!r || !r.cambiosEstatus) return '';
+    const n = r.cambiosEstatus;
+    return `<p class="dx-nota"><span class="material-symbols-rounded" aria-hidden="true">info</span> ${n} lote${n === 1 ? '' : 's'} cambió${n === 1 ? '' : ' '}de estatus a A.R.F. o Canje durante el mes (${q(r.frascosCambioEstatus)} frascos): es lo esperado y no se cuenta como diferencia.</p>`;
+  }
+
   function htmlDiagnostico(res, opts) {
     injectCss();
     if (!res || !res.grupos.length) return '';
@@ -306,7 +322,6 @@
     const partes = [];
     if (r.avisos) partes.push(`${r.avisos} aviso${r.avisos === 1 ? '' : 's'} del sistema`);
     if (r.porTipo.LOTE_CRUZADO) partes.push(`${r.porTipo.LOTE_CRUZADO} por lote cruzado (${q(r.frascosCruzados)} frascos anotados en otro lote)`);
-    if (r.porTipo.CATEGORIA) partes.push(`${r.porTipo.CATEGORIA} por estatus distinto`);
     if (r.porTipo.FRACCION) partes.push(`${r.porTipo.FRACCION} por fracción de frasco`);
     if (r.porTipo.CONTEO) partes.push(`${r.porTipo.CONTEO} por conteo distinto`);
     if (r.porTipo.MOVIMIENTO) partes.push(`${r.porTipo.MOVIMIENTO} por movimiento cambiado`);
@@ -319,10 +334,10 @@
       <div class="dx-cab"><span class="material-symbols-rounded" aria-hidden="true">psychology_alt</span>
         <div><b>Revisión de unidades contra municipio: ${r.biologicos} biológico${r.biologicos === 1 ? '' : 's'} con diferencia (${r.requierenDecision} por decidir · ${r.explicados} con causa identificada)</b>
         <small>${esc(partes.join(' · '))}. Solo explica y sugiere: no cambia ninguna cifra; tú decides.</small></div></div>
-      <ul class="dx-lista">${items}</ul></section>`;
+      <ul class="dx-lista">${items}</ul>${htmlNotaEstatus(res)}</section>`;
   }
 
-  const api = { diagnosticar, htmlDiagnostico, distancia };
+  const api = { diagnosticar, htmlDiagnostico, htmlNotaEstatus, distancia };
   root.DiagnosticoSIS = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

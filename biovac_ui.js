@@ -3314,9 +3314,11 @@ async function pintarDiscrepanciasMunicipio(contenedor, municipio, mes, anio, op
       if (DX && propias.length) {
         let evidencia = [];
         try { const ev = await estado.db.rpc('biovac_diagnostico_unidades', { p_municipio: municipio, p_mes: mes, p_anio: anio }); if (ev && Array.isArray(ev.data)) evidencia = ev.data; } catch (_) { evidencia = []; }
-        const panel = DX.htmlDiagnostico(DX.diagnosticar(propias, evidencia), { htmlAviso: htmlItemDiscrepancia, htmlDetalle: htmlDetalleDiscrepancia });
+        const diag = DX.diagnosticar(propias, evidencia);
+        const panel = DX.htmlDiagnostico(diag, { htmlAviso: htmlItemDiscrepancia, htmlDetalle: htmlDetalleDiscrepancia });
         const consec = todas.filter((f) => esConsecuenciaDeAbiertas(f, hayAb));
-        if (panel) htmlRevision = panel + (consec.length ? htmlDiscrepancias(consec, { hayAbiertas: true }) : '');
+        // Sin diferencias reales (p. ej. solo lotes que pasaron a A.R.F. en el mes): cuadra, con la nota de lo esperado
+        htmlRevision = (panel || (htmlDiscrepancias([]) + DX.htmlNotaEstatus(diag))) + (consec.length ? htmlDiscrepancias(consec, { hayAbiertas: true }) : '');
       }
     } catch (_) { htmlRevision = null; }
     contenedor.innerHTML = alertaAbiertas + ((alertaAbiertas && !todas.length) ? '' : (!hayEnvios && !todas.length)

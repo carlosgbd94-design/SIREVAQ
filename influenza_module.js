@@ -4780,14 +4780,17 @@ function renderCobertura() {
   _cobDatos = datos;
   const buscar = (document.getElementById("cobBuscar")?.value || "").toLowerCase().trim();
   const soloAtraso = !!document.getElementById("cobSoloAtraso")?.checked;
-  const orden = document.getElementById("cobOrden")?.value || "atraso";
+  const orden = document.getElementById("cobOrden")?.value || "clues";
 
   let filas = datos.filas.slice();
   if (buscar) filas = filas.filter(f => String(f.u.unidad).toLowerCase().includes(buscar) || String(f.u.clues).toLowerCase().includes(buscar));
   if (soloAtraso) filas = filas.filter(f => f.atrasos.length);
-  filas.sort((a, b) => orden === "atraso" && b.atrasos.length !== a.atrasos.length
-    ? b.atrasos.length - a.atrasos.length
-    : String(a.u.unidad).localeCompare(String(b.u.unidad), "es"));
+  const porClues = (a, b) => String(a.u.clues).localeCompare(String(b.u.clues));
+  filas.sort((a, b) => {
+    if (orden === "nombre") return String(a.u.unidad).localeCompare(String(b.u.unidad), "es") || porClues(a, b);
+    if (orden === "atraso" && b.atrasos.length !== a.atrasos.length) return b.atrasos.length - a.atrasos.length;
+    return porClues(a, b);
+  });
 
   // Resumen del municipio completo (no depende de la búsqueda)
   const todas = datos.filas;

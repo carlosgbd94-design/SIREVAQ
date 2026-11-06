@@ -49,15 +49,23 @@ test('Huimilpan: dos pares exactos en el mismo biológico, cada uno por separado
   expect(res.resumen.frascosCruzados).toBe(8);
 });
 
-test('Misma diferencia en Normal y A.R.F. del mismo lote → estatus distinto, no faltante', () => {
+test('Lote que pasó a A.R.F. en el mes (Normal en el cierre, A.R.F. en la unidad) NO es un error: no se lista, solo se anota', () => {
   const H = 'Hepatitis "B" frasco multidosis';
   const res = diagnosticar([f(H, '2526250606', 22.75, 21.95), { ...f(H, '2526250606', 0, 0.8), categoria: 'ARF' }], [u(H, '2526250606', 'SANTA BARBARA', 0.8, 'ARF')]);
-  const g = grupo(res, 'Hepatitis "B" frasco multidosis');
-  const c = causa(g, 'CATEGORIA');
-  expect(c).toHaveLength(1);
-  expect(c[0].cantidad).toBe(0.8);
-  expect(c[0].sospechas[0].unidad).toBe('SANTA BARBARA');
-  expect(g.explicado).toBe(true);
+  expect(res.grupos).toHaveLength(0);                       // sin diferencias que revisar
+  expect(res.resumen.cambiosEstatus).toBe(1);
+  expect(res.resumen.frascosCambioEstatus).toBe(0.8);
+  expect(htmlDiagnostico(res)).toBe('');
+  expect(require('../diagnostico_sis.js').htmlNotaEstatus(res)).toContain('es lo esperado');
+  // el caso real: DPT 2825Q001A, 7.5 frascos pasaron a A.R.F. en la unidad
+  const D = 'DPT frasco multidosis';
+  const real = diagnosticar([f(D, '2825Q001A', 63.4, 55.9), { ...f(D, '2825Q001A', 0, 7.5), categoria: 'ARF' }], [u(D, '2825Q001A', 'PEDRO ESCOBEDO', 7.5, 'ARF')]);
+  expect(real.grupos).toHaveLength(0);
+  expect(real.resumen.cambiosEstatus).toBe(1);
+  // pero si además queda diferencia real en el mismo biológico, esa SÍ se lista
+  const mixto = diagnosticar([f(D, '2825Q001A', 63.4, 55.9), { ...f(D, '2825Q001A', 0, 7.5), categoria: 'ARF' }, f(D, 'OTRO1', 10, 4)], []);
+  expect(mixto.grupos).toHaveLength(1);
+  expect(mixto.grupos[0].causas.map((c) => c.tipo)).not.toContain('CATEGORIA');
 });
 
 test('Diferencia que NO se cancela → conteo distinto, requiere decisión humana (no se inventa un lote)', () => {
