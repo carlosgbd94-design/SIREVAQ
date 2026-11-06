@@ -3161,14 +3161,13 @@ function renderAvancesAndConcentrados() {
 
   if (unitDetailContainer) unitDetailContainer.classList.add("hidden");
 
-  // Las exportaciones de este concentrado son las plantillas de Influenza: con COVID-19 no aplican aquí
-  // (su Excel de metas y de frascos vive en Distribución de Metas y Control de Frascos).
+  // COVID-19 exporta lo mismo que Influenza (simple, con unidades/municipios y por semana), sobre el formato oficial de Meta-Logro.
   const exportBox = document.getElementById("dropdownExportInfluenzaContainer");
-  if (exportBox) exportBox.style.display = cov ? "none" : "";
+  if (exportBox) exportBox.style.display = "";
   const scopeBox = document.getElementById("adminInfluenzaExportScopeBox");
   if (scopeBox) {
     const r = String(USER?.rol || "").toUpperCase();
-    scopeBox.style.setProperty("display", (!cov && (r === "ADMIN" || r === "JURISDICCIONAL")) ? "block" : "none", "important");
+    scopeBox.style.setProperty("display", (r === "ADMIN" || r === "JURISDICCIONAL") ? "block" : "none", "important");
   }
 
   const exportBtn = document.getElementById("btnExportInfluenzaConcentrado");
@@ -5256,6 +5255,110 @@ async function exportWeeklyMonthlyUnitExcel(clues, unidadNombre, mesAnio) {
   }
 }
 
+// ─── COVID-19: los mismos tres exportes del Concentrado de Avances (simple, con unidades/municipios y por semana) ───
+// Van sobre el formato oficial de Meta-Logro (Municipal/Jurisdiccional): un grupo LOGRO | META | % por entidad, con el
+// mismo semáforo, y el total en dosis equivalentes de 0.5 mL (las pediátricas de 0.25 mL cuentan media dosis).
+const COVID_PLANTILLA_URL = "./Formatos/Análisis_Meta_Logro_Influenza_2026-2027_UNIDAD_DE_SALUD_Municipal_Jurisdiccional.xlsx";
+
+/** Meta COVID-19 de una unidad por rubro: la suya o, si es hospital, la de su destino (así la guarda Distribución de Metas). */
+function covExportMetasUnidad(u) {
+  const arr = _covidMetasArray;
+  const rec = arr.find(m => m.clues === u.clues);
+  if (rec) return rec.metas || {};
+  const h = FRASCO_DESTINOS.find(d => d.hospital && d.clues === u.clues);
+  const r = h ? arr.find(m => !m.clues && String(m.municipio).toUpperCase() === h.id) : null;
+  return r ? (r.metas || {}) : {};
+}
+
+/** Una entidad del libro: metas y logros por rubro (c1..c6) y dosis equivalentes por marca, de las unidades y reportes dados. */
+function covExportEntidad(nombre, units, enRango) {
+  const ids = CovidFrascos.RUBROS.map(r => r.id);
+  const metas = {}, logros = {}, marca = { MODERNA: 0, PFIZER: 0 };
+  const marcaR = { MODERNA: {}, PFIZER: {} };   // dosis por marca y rubro tal como se aplicaron (niños c1/c2, adultos c3..c6)
+  ids.forEach(r => { metas[r] = 0; logros[r] = 0; marcaR.MODERNA[r] = 0; marcaR.PFIZER[r] = 0; });
+  const claves = new Set(units.map(u => u.clues));
+  units.forEach(u => { const m = covExportMetasUnidad(u); ids.forEach(r => { metas[r] += Number(m[r] || 0); }); });
+  _covidCapturasAll.forEach(c => {
+    if (!claves.has(c.clues) || !enRango(c)) return;
+    Object.keys(marca).forEach(mk => ids.forEach(r => {
+      const v = Number(((c.valores || {})[mk] || {})[r] || 0);
+      logros[r] += v; marca[mk] += v * metaPesoRubro(r); marcaR[mk][r] += v;
+    }));
+  });
+  return { nombre, metas, logros, marca, marcaR };
+}
+
+/** Ámbitos a exportar según «Ámbito de concentrado» y el filtro Municipio (igual que en Influenza). null = falta elegir. */
+function covExportAmbitos() {
+  const rol = String(USER.rol || "").toUpperCase();
+  const scope = (rol === "ADMIN" || rol === "JURISDICCIONAL") ? (document.getElementById("adminInfluenzaExportScope")?.value || "single") : "muni_selected";
+  const sel = document.getElementById("adminInfluenzaMuni")?.value || USER.municipio;
+  const delMuni = (m) => _allUnidades.filter(u => String(u.municipio).toUpperCase() === m && !infEsHospital(u));
+  const nombreMuni = (m) => String(infMuniEtiqueta(m)).toUpperCase();
+  if (scope === "single") return [{ nombre: "JURISDICCIÓN SANITARIA", juris: true, units: _allUnidades.slice() }];
+  if (scope === "muni_4") return ["QUERETARO", "CORREGIDORA", "MARQUES", "HUIMILPAN"].map(m => ({ nombre: nombreMuni(m), units: delMuni(m) }));
+  const v = String(sel);
+  if (v === "__JURIS__") return null;
+  if (v.startsWith("__HOSP__")) {
+    const h = FRASCO_DESTINOS.find(d => d.hospital && d.id === v.slice(8));
+    return h ? [{ nombre: h.label + " (hospital)", units: _allUnidades.filter(u => u.clues === h.clues) }] : null;
+  }
+  return [{ nombre: nombreMuni(v.toUpperCase()), units: delMuni(v.toUpperCase()) }];
+}
+
+/** Entidades (columnas del libro) de un ámbito según el exporte. */
+function covExportEntidades(tipo, amb, rango) {
+  const enRango = (c) => c.fecha >= rango.min && c.fecha <= rango.max;
+  if (tipo === "simple") return { entidades: [covExportEntidad(amb.nombre, amb.units, enRango)] };
+  if (tipo === "unidades") {
+    if (amb.juris) {
+      return { entidades: FRASCO_DESTINOS.map(d => covExportEntidad(d.hospital ? d.label : String(d.label).toUpperCase(),
+        d.hospital ? _allUnidades.filter(u => u.clues === d.clues) : _allUnidades.filter(u => String(u.municipio).toUpperCase() === d.id && !infEsHospital(u)), enRango)) };
+    }
+    const filas = amb.units.map(u => covExportEntidad(u.unidad, [u], enRango))
+      .filter(e => Object.values(e.metas).some(v => v > 0) || Object.values(e.logros).some(v => v > 0))
+      .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es"));
+    return { entidades: filas };
+  }
+  // por semana: una columna por semana del rango y el total del rango (la meta no se suma semana tras semana)
+  const etq = (w) => (w.corte ? "Corte " : "Sem ") + w.semana;
+  return {
+    entidades: rango.semanas.map(w => covExportEntidad(etq(w), amb.units, (c) => c.fecha === w.fecha)),
+    totalExplicito: covExportEntidad("TOTAL DEL RANGO", amb.units, enRango)
+  };
+}
+
+async function exportConcentradoCovid(tipo) {
+  const ambitos = covExportAmbitos();
+  if (!ambitos) { showToast("Elige un municipio u hospital en el filtro para exportar «Municipio seleccionado».", false, "warn"); return; }
+  const rango = infRangoExport();
+  _exportRango = rango;
+  try {
+    showToast("Generando Excel de COVID-19...", true, "info");
+    await window.ensureLibsLoaded("exceljs");
+    const response = await fetch(encodeURI(COVID_PLANTILLA_URL));
+    if (!response.ok) throw new Error("No se pudo cargar la plantilla de Excel.");
+    const plantilla = await response.arrayBuffer();
+    const temporada = campaignSeasonLabel();
+    const limpio = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    const que = { simple: "Concentrado_Totales", unidades: "Concentrado_con_Unidades", semana: "Concentrado_por_Semana" }[tipo];
+    for (const amb of ambitos) {
+      const { entidades, totalExplicito } = covExportEntidades(tipo, amb, rango);
+      const wb = await window.InfluenzaMetaLogroExport.construirLibroCovid({
+        ExcelJS, plantilla, rubros: CovidFrascos.RUBROS, entidades, totalExplicito,
+        titulo: amb.nombre + textoRangoExport(), temporada,
+        nombreTotal: amb.juris ? "TOTAL JURISDICCIÓN" : "TOTAL", nombreHoja: "META-LOGRO COVID-19"
+      });
+      descargarLibroXlsx(await wb.xlsx.writeBuffer(), `${que}_COVID19_${limpio(amb.nombre)}${sufijoRangoExport()}.xlsx`);
+    }
+    showToast("Excel de COVID-19 descargado.", true, "good");
+  } catch (err) {
+    console.error("Error al exportar el concentrado de COVID-19:", err);
+    showToast("No se pudo generar el Excel de COVID-19.", false, "bad");
+  }
+}
+window.exportConcentradoCovid = exportConcentradoCovid;
+
 // Rango de semanas que el usuario eligió en el panel (Semana inicio / Semana fin). Antes los exportes sumaban TODA la
 // temporada sin mirar esos filtros; ahora el «Logro» solo cuenta los reportes de las semanas elegidas.
 let _exportRango = null;
@@ -5282,6 +5385,7 @@ function textoRangoExport() { return _exportRango && !_exportRango.completo && _
 
 // 2. PLANTILLA 2: Concentrado de totales (Simple)
 async function exportConcentradoSimpleExcel() {
+  if (esCovid()) return exportConcentradoCovid("simple");
   _exportRango = infRangoExport();
   const scope = document.getElementById("adminInfluenzaExportScope")?.value || "single";
   const selectMuni = document.getElementById("adminInfluenzaMuni")?.value || USER.municipio;
@@ -5387,6 +5491,7 @@ async function generateConcentradoSimpleFile(muniName, type = "municipio") {
 
 // 3. PLANTILLA 3: Concentrado Detallado con Unidades/Municipios
 async function exportConcentradoDetalladoUnidadesExcel() {
+  if (esCovid()) return exportConcentradoCovid("unidades");
   _exportRango = infRangoExport();
   const scope = document.getElementById("adminInfluenzaExportScope")?.value || "single";
   const selectMuni = document.getElementById("adminInfluenzaMuni")?.value || USER.municipio;
@@ -5496,6 +5601,7 @@ async function generateConcentradoDetalladoFile(muniName, type = "municipio") {
 
 // 4. CONCENTRADO POR SEMANA CAPTURADA: una columna por semana del rango elegido (lo aplicado en ESA semana, no el acumulado).
 async function exportConcentradoPorSemanaExcel() {
+  if (esCovid()) return exportConcentradoCovid("semana");
   _exportRango = infRangoExport();
   const scope = document.getElementById("adminInfluenzaExportScope")?.value || "single";
   const selectMuni = document.getElementById("adminInfluenzaMuni")?.value || USER.municipio;
@@ -9441,10 +9547,12 @@ async function covidIndCalcular({ units, muniFilter, uniFilter, camp, cal }) {
     const mis = caps.filter(c => c.clues === u.clues);
     const aplR = {}; R.forEach(r => { aplR[r] = 0; });
     const marca = { MODERNA: 0, PFIZER: 0 };
+    const marcaR = { MODERNA: {}, PFIZER: {} };   // dosis aplicadas por marca y rubro, sin pesar (niños c1/c2, adultos c3..c6)
+    R.forEach(r => { marcaR.MODERNA[r] = 0; marcaR.PFIZER[r] = 0; });
     mis.forEach(c => {
       TINV_MARCAS.forEach(mk => R.forEach(r => {
         const v = Number(((c.valores || {})[mk.id] || {})[r]) || 0;
-        aplR[r] += v; marca[mk.id] += v * TINV_PESO[r];
+        aplR[r] += v; marca[mk.id] += v * TINV_PESO[r]; marcaR[mk.id][r] += v;
       }));
     });
     const apl = marca.MODERNA + marca.PFIZER;
@@ -9452,7 +9560,7 @@ async function covidIndCalcular({ units, muniFilter, uniFilter, camp, cal }) {
     const frascos = { MODERNA: 0, PFIZER: 0 };
     dist.filter(d => d.clues === u.clues).forEach(d => { if (frascos[d.marca] != null) frascos[d.marca] += Number(d.cantidad_frascos || 0); });
     return {
-      ...u, metas, meta: metas ? eq(metas) : 0, apl, aplR, marca, frascos,
+      ...u, metas, meta: metas ? eq(metas) : 0, apl, aplR, marca, marcaR, frascos,
       conMeta: !!metas && eq(metas) > 0, nunca: mis.length === 0,
       espera: (!!metas && eq(metas) > 0) || (!!filaDestino(u.destino) && eq(filaDestino(u.destino).metas) > 0),   // debe reportar: tiene meta propia o su destino la tiene
       ultima: mis.reduce((x, c) => (c.fecha > x ? c.fecha : x), ""),
@@ -9509,7 +9617,8 @@ async function covidIndCalcular({ units, muniFilter, uniFilter, camp, cal }) {
   const ORDEN = ["QUERETARO", "CORREGIDORA", "MARQUES", "HUIMILPAN", "HENM", "NHG"];
   const ficha = (nombre, metas, us) => ({
     nombre, metas, logros: sumaMetas(us.map(u => u.aplR)),
-    marca: { MODERNA: us.reduce((t, u) => t + u.marca.MODERNA, 0), PFIZER: us.reduce((t, u) => t + u.marca.PFIZER, 0) }
+    marca: { MODERNA: us.reduce((t, u) => t + u.marca.MODERNA, 0), PFIZER: us.reduce((t, u) => t + u.marca.PFIZER, 0) },
+    marcaR: { MODERNA: sumaMetas(us.map(u => u.marcaR.MODERNA)), PFIZER: sumaMetas(us.map(u => u.marcaR.PFIZER)) }
   });
   let paraPlantilla;
   if (uniFilter) paraPlantilla = porUnidad.slice(0, 1).map(u => ficha(u.unidad, metasAmbito, [u]));

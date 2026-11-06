@@ -151,7 +151,7 @@ test.describe('Temporada invernal: Influenza y COVID-19 en un tablero', () => {
     expect(d1.suggestedFilename()).toContain('Temporada_Invernal');
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(await d1.path());
-    expect(wb.worksheets.map(w => w.name)).toEqual(['ANÁLIS DE META-LOGRO', 'META-LOGRO COVID-19']);
+    expect(wb.worksheets.map(w => w.name)).toEqual(['ANÁLIS DE META-LOGRO', 'META-LOGRO COVID-19', 'DOSIS POR MARCA']);
     const ws = wb.getWorksheet('META-LOGRO COVID-19');
     const v = (r, c) => { const x = ws.getCell(r, c); const y = x.isMerged ? x.master.value : x.value; return y && y.result !== undefined ? y.result : y; };
     expect(String(v(4, 1))).toContain('COVID-19');
@@ -208,7 +208,7 @@ test.describe('Temporada invernal: Influenza y COVID-19 en un tablero', () => {
     expect(d1.suggestedFilename()).toContain('COVID19');
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(await d1.path());
-    expect(wb.worksheets.map(w => w.name)).toEqual(['META-LOGRO COVID-19']);
+    expect(wb.worksheets.map(w => w.name)).toEqual(['META-LOGRO COVID-19', 'DOSIS POR MARCA']);
     const [d2] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportInfluenzaIndicadoresExcel())]);
     const wb2 = new ExcelJS.Workbook();
     await wb2.xlsx.readFile(await d2.path());

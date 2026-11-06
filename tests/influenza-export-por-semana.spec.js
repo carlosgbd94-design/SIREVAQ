@@ -29,6 +29,7 @@ function montar(valores) {
     },
     USER: { rol: 'ADMIN', municipio: 'QUERETARO' },
     showToast() {},
+    esCovid: () => false,   // el exporte de COVID-19 tiene su propio camino (se prueba en influenza-meta-logro-export)
     generateCampaignWeeks: () => [
       { semana: 42, fecha: '2026-10-16', label: 'Semana 42 (12 al 18 oct)' },
       { semana: 43, fecha: '2026-10-23', label: 'Semana 43 (19 al 25 oct)' },

@@ -145,9 +145,10 @@
    * LOGRO | META | % por entidad (con el mismo semáforo) y renglón de total. Los renglones son los 6 rubros de COVID-19
    * (los pediátricos son dosis de 0.25 mL, como en la meta); el total va en dosis equivalentes de 0.5 mL y debajo
    * se separa lo aplicado con Moderna y con Pfizer.
-   * rubros: [{ id, grupo, edad }]; entidades: [{ nombre, metas:{c1..c6}, logros:{c1..c6}, marca:{MODERNA, PFIZER} }].
+   * rubros: [{ id, grupo, edad }]; entidades: [{ nombre, metas:{c1..c6}, logros:{c1..c6}, marca:{MODERNA, PFIZER}, marcaR:{MODERNA:{c1..c6}, PFIZER:{c1..c6}} }].
+   * marcaR son las dosis aplicadas de cada marca por rubro (tal como se aplican, sin pesar): de ahí sale la hoja «DOSIS POR MARCA».
    */
-  async function agregarHojaCovid({ ExcelJS, wb, plantilla, rubros, entidades, titulo, temporada, nombreTotal, nombreHoja }) {
+  async function agregarHojaCovid({ ExcelJS, wb, plantilla, rubros, entidades, titulo, temporada, nombreTotal, nombreHoja, totalExplicito }) {
     const tpl = new ExcelJS.Workbook();
     await tpl.xlsx.load(plantilla);
     const src = tpl.getWorksheet(HOJA_RESUMEN) || tpl.worksheets[0];
@@ -155,13 +156,17 @@
     const n = rubros.length, F0 = 10, F1 = F0 + n - 1, FT = F1 + 1, FM = FT + 1, FP = FT + 2, C0 = 7;
     const peso = (id) => (id === "c1" || id === "c2" ? 0.5 : 1);
 
-    const grupos = (entidades || []).map((e) => ({ nombre: e.nombre, metas: e.metas || {}, logros: e.logros || {}, marca: e.marca || {} }));
-    if (grupos.length > 1) {
+    const grupos = (entidades || []).map((e) => ({ nombre: e.nombre, metas: e.metas || {}, logros: e.logros || {}, marca: e.marca || {}, marcaR: e.marcaR || {} }));
+    if (totalExplicito) {
+      // Total que no es la suma de las columnas (p. ej. por semana: la meta es una sola y no se suma semana tras semana)
+      grupos.push({ nombre: totalExplicito.nombre || nombreTotal || "TOTAL", metas: totalExplicito.metas || {}, logros: totalExplicito.logros || {}, marca: totalExplicito.marca || {}, marcaR: totalExplicito.marcaR || {} });
+    } else if (grupos.length > 1) {
       const suma = (k) => Object.fromEntries(rubros.map((r) => [r.id, grupos.reduce((t, g) => t + num(g[k][r.id]), 0)]));
       grupos.push({ nombre: nombreTotal || "TOTAL", metas: suma("metas"), logros: suma("logros"),
-        marca: { MODERNA: grupos.reduce((t, g) => t + num(g.marca.MODERNA), 0), PFIZER: grupos.reduce((t, g) => t + num(g.marca.PFIZER), 0) } });
+        marca: { MODERNA: grupos.reduce((t, g) => t + num(g.marca.MODERNA), 0), PFIZER: grupos.reduce((t, g) => t + num(g.marca.PFIZER), 0) },
+        marcaR: Object.fromEntries(["MODERNA", "PFIZER"].map((mk) => [mk, Object.fromEntries(rubros.map((r) => [r.id, grupos.reduce((t, g) => t + num(((g.marcaR || {})[mk] || {})[r.id]), 0)]))])) });
     }
-    if (!grupos.length) grupos.push({ nombre: "Sin datos", metas: {}, logros: {}, marca: {} });
+    if (!grupos.length) grupos.push({ nombre: "Sin datos", metas: {}, logros: {}, marca: {}, marcaR: {} });
 
     // Columnas y renglones de encabezado tal cual la plantilla
     for (let c = 1; c <= 6; c++) ws.getColumn(c).width = src.getColumn(c).width;
@@ -252,8 +257,85 @@
       ws.addConditionalFormatting(reglasSemaforo(P, F0, FT));
     });
 
+    // Hoja aparte «DOSIS POR MARCA»: la tabla de COVID-19 por marca (Moderna con 1.ª y 2.ª dosis, Pfizer y Otra) y grupo de
+    // población, un bloque por entidad. Son dosis tal como se aplicaron (las pediátricas de 0.25 mL cuentan una dosis).
+    const wm = wb.addWorksheet("DOSIS POR MARCA", { views: [{ showGridLines: false }] });
+    [32, 30, 15, 15, 15, 15].forEach((w, i) => { wm.getColumn(i + 1).width = w; });
+    const borde = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+    const celda = (r, c, v, op) => {
+      const o = op || {};
+      const x = wm.getCell(r, c);
+      x.value = v; x.border = borde;
+      x.alignment = { horizontal: o.izq ? "left" : "center", vertical: "middle", wrapText: true };
+      x.font = { name: "Arial", size: 10, bold: !!o.neg };
+      if (o.relleno) x.fill = { type: "pattern", pattern: "solid", fgColor: { argb: o.relleno } };
+      if (typeof v === "number") x.numFmt = "#,##0";
+      return x;
+    };
+    const unir = (r, c0, c1) => { if (c1 > c0) wm.mergeCells(r, c0, r, c1); for (let c = c0; c <= c1; c++) wm.getCell(r, c).border = borde; };
+    let r0 = 1;
+    grupos.forEach((g) => {
+      const D = (mk, id) => num(((g.marcaR || {})[mk] || {})[id]);
+      // Encabezado: nombre de la entidad, «COVID-19» y las marcas con sus dosis
+      unir(r0, 1, 6); celda(r0, 1, g.nombre, { neg: true, relleno: "FFEDE7F6" });
+      const h = r0 + 1;
+      unir(h, 1, 2); celda(h, 1, "COVID-19", { neg: true });
+      unir(h, 3, 4); celda(h, 3, "MODERNA", { neg: true });
+      celda(h, 5, "PFIZER", { neg: true }); celda(h, 6, "OTRA", { neg: true });
+      unir(h + 1, 1, 2); celda(h + 1, 1, "");
+      celda(h + 1, 3, "1er Dosis"); celda(h + 1, 4, "2a Dosis"); celda(h + 1, 5, ""); celda(h + 1, 6, "");
+      let f = h + 2;
+      const sumaTot = { M: 0, P: 0, O: 0 };
+      // Niños de 6 a 59 meses: Moderna separa 1.ª y 2.ª dosis; Pfizer y Otra van en una sola columna
+      celda(f, 1, ""); celda(f, 2, "NIÑOS DE 6 A 59 MESES", { izq: true });
+      celda(f, 3, D("MODERNA", "c1")); celda(f, 4, D("MODERNA", "c2"));
+      celda(f, 5, D("PFIZER", "c1") + D("PFIZER", "c2")); celda(f, 6, D("OTRA", "c1") + D("OTRA", "c2"));
+      sumaTot.M += D("MODERNA", "c1") + D("MODERNA", "c2"); sumaTot.P += D("PFIZER", "c1") + D("PFIZER", "c2"); sumaTot.O += D("OTRA", "c1") + D("OTRA", "c2");
+      f++;
+      // Grupos de una sola dosis por marca (la columna de Moderna ocupa las dos dosis)
+      [["EMBARAZADAS", "c5"], ["60 AÑOS Y MAS", "c4"], ["PERSONAL DE SALUD", "c6"]].forEach(([etq, id]) => {
+        celda(f, 1, ""); celda(f, 2, etq, { izq: true });
+        unir(f, 3, 4); celda(f, 3, D("MODERNA", id)); celda(f, 5, D("PFIZER", id)); celda(f, 6, D("OTRA", id));
+        sumaTot.M += D("MODERNA", id); sumaTot.P += D("PFIZER", id); sumaTot.O += D("OTRA", id);
+        f++;
+      });
+      // Comorbilidades y Otros, cada uno en 5 a 11 y 12 a 59 años. SIREVAQ captura las comorbilidades de 5 a 59 años en un solo
+      // rubro (c3) y, por decisión del usuario, todo va a la fila de 12 a 59 años; «Otros» y la marca «Otra» no se capturan.
+      // Pfizer no se aplica de 5 a 11 años (celda gris).
+      const GRIS = "FFBFBFBF";
+      const sub = (etq, mo, pf, ot, gris) => {
+        celda(f, 2, etq, { izq: true });
+        unir(f, 3, 4); celda(f, 3, mo);
+        celda(f, 5, pf, gris ? { relleno: GRIS } : undefined); celda(f, 6, ot);
+        sumaTot.M += mo; sumaTot.P += pf; sumaTot.O += ot;
+        f++;
+      };
+      const f0 = f;
+      sub("5 A 11 AÑOS", 0, 0, 0, true);
+      sub("12 A 59 AÑOS", D("MODERNA", "c3"), D("PFIZER", "c3"), D("OTRA", "c3"), false);
+      wm.mergeCells(f0, 1, f0 + 1, 1); celda(f0, 1, "PERSONAS DE 5 A 59 AÑOS CON COMORBILIDADES", { izq: true }); wm.getCell(f0 + 1, 1).border = borde;
+      const f1 = f;
+      sub("5 A 11 AÑOS", 0, 0, 0, true);
+      sub("12 A 59 AÑOS", 0, 0, 0, false);
+      wm.mergeCells(f1, 1, f1 + 1, 1); celda(f1, 1, "OTROS", { izq: true }); wm.getCell(f1 + 1, 1).border = borde;
+      // Total de dosis de cada marca
+      unir(f, 1, 2); celda(f, 1, "TOTAL", { neg: true });
+      unir(f, 3, 4); celda(f, 3, sumaTot.M, { neg: true }); celda(f, 5, sumaTot.P, { neg: true }); celda(f, 6, sumaTot.O, { neg: true });
+      r0 = f + 2;
+    });
+    wm.getCell(r0, 1).value = "Dosis tal como se aplicaron (las pediátricas de 0.25 mL cuentan una dosis). SIREVAQ captura las comorbilidades de 5 a 59 años en un solo grupo (van en la fila de 12 a 59 años); «Otros» y la marca «Otra» no se capturan.";
+    wm.getCell(r0, 1).font = { name: "Arial", size: 9, italic: true, color: { argb: "FF475569" } };
+    wm.pageSetup = { orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true };
+
     ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true };
     wb.calcProperties = Object.assign({}, wb.calcProperties, { fullCalcOnLoad: true });
+    return wb;
+  }
+
+  /** Libro nuevo solo con la hoja de COVID-19 (Concentrado de Avances de COVID-19: simple, con unidades y por semana). */
+  async function construirLibroCovid(op) {
+    const wb = new op.ExcelJS.Workbook();
+    await agregarHojaCovid(Object.assign({}, op, { wb }));
     return wb;
   }
 
@@ -317,7 +399,7 @@
     return { wb, omitidas };
   }
 
-  const api = { construirLibroEntidades, agregarHojaCovid, construirLibroUnidad, mesYSemana, SEMAFORO, HOJA_RESUMEN, N_RUBROS };
+  const api = { construirLibroEntidades, agregarHojaCovid, construirLibroCovid, construirLibroUnidad, mesYSemana, SEMAFORO, HOJA_RESUMEN, N_RUBROS };
   root.InfluenzaMetaLogroExport = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

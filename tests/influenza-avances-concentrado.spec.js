@@ -166,7 +166,7 @@ test('COVID-19: dosis equivalentes de 0.5 mL (la pediátrica cuenta la mitad), f
   expect(k[2]).toContain('80');
   const h1 = await celdas(page, 'H1');
   expect(h1[2]).toContain('60');                   // meta del hospital tomada del destino
-  await expect(page.locator('#dropdownExportInfluenzaContainer')).toBeHidden();   // los Excel de este concentrado son de Influenza
+  await expect(page.locator('#dropdownExportInfluenzaContainer')).toBeVisible();   // COVID-19 exporta lo mismo que Influenza
 });
 
 test('COVID-19 por marca: aplicado del mes y acumulado de Moderna y Pfizer por separado, sin redondear', async ({ page }) => {
