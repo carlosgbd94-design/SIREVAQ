@@ -1201,12 +1201,26 @@ const FIELD_LABEL = {
 const CATEGORIA_LABEL_CORTA = { NORMAL: 'Normal', ARF: 'A.R.F.', CANJE: 'Canje' };
 
 async function cargarCorreccionesPendientes() {
-  const listas = await Promise.all(estado.unidades.map(async (u) => {
-    const { data, error } = await estado.db.rpc('biovac_correcciones_pendientes', { p_unidad_id: u.id });
-    if (error) { console.error('[BioVac] Error consultando correcciones pendientes:', error); return []; }
-    return (data || []).map((c) => ({ ...c, unidad_nombre: u.nombre }));
-  }));
-  estado.correccionesPendientes = listas.flat().sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en));
+  // Una sola llamada para todas las unidades (antes: una RPC por unidad, 37 mil llamadas en total).
+  // Si la función por lote no existiera aún en la BD, se cae al camino anterior para no perder el aviso.
+  const nombrePorId = new Map(estado.unidades.map((u) => [u.id, u.nombre]));
+  let filas = null;
+  if (estado.unidades.length) {
+    const { data, error } = await estado.db.rpc('biovac_correcciones_pendientes_lote', { p_unidad_ids: estado.unidades.map((u) => u.id) });
+    if (!error) filas = (data || []).map((c) => ({ ...c, unidad_nombre: nombrePorId.get(c.unidad_id) }));
+    else console.warn('[BioVac] RPC por lote no disponible, se consulta unidad por unidad:', error);
+  } else {
+    filas = [];
+  }
+  if (filas === null) {
+    const listas = await Promise.all(estado.unidades.map(async (u) => {
+      const { data, error } = await estado.db.rpc('biovac_correcciones_pendientes', { p_unidad_id: u.id });
+      if (error) { console.error('[BioVac] Error consultando correcciones pendientes:', error); return []; }
+      return (data || []).map((c) => ({ ...c, unidad_nombre: u.nombre }));
+    }));
+    filas = listas.flat();
+  }
+  estado.correccionesPendientes = filas.sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en));
   renderCorreccionesPendientes();
 }
 

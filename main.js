@@ -113,30 +113,47 @@ if (!window.supabase || typeof window.supabase.createClient !== 'function') {
   const _bootDedupeCache = new Map();
   const _BOOT_DEDUPE_RPC_LECTURA = /\/rest\/v1\/rpc\/(get_[a-z0-9_]+|influenza_capture_hits_rpc)(\?|$)/;
   const _BOOT_DEDUPE_TABLAS = /\/rest\/v1\/(notificaciones|notificaciones_perfil|calendario_pedidos|calendario_capacitaciones|biologicos_catalogo|biologicos_params|biologicos_pedido|biologicos_existencia|existencia_detalle|consumibles|unidades)\?/;
+  // Sin tope de tiempo, una petición que el servidor (instancia gratuita compartida) deja colgada mantenía la
+  // pantalla en "Cargando…" indefinidamente hasta que el navegador la soltaba. Ahora las LECTURAS (GET) cortan a
+  // los 25 s y el resto a los 90 s. No se agrega reintento propio: supabase-js >= 2.102 ya reintenta con espera
+  // creciente ante 408/409/503/504 y fallos de red (más reintentos podrían agotar el pool de conexiones).
+  // El temporizador se apaga al llegar las cabeceras: no limita la descarga del cuerpo.
+  const _fetchSeguro = (input, init) => {
+    const metodo = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+    const tope = (metodo === "GET" || metodo === "HEAD") ? 25000 : 90000;
+    const externa = init && init.signal;
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), tope);
+    if (externa) { if (externa.aborted) ctl.abort(); else externa.addEventListener("abort", () => ctl.abort(), { once: true }); }
+    return fetch(input, Object.assign({}, init, { signal: ctl.signal })).then(
+      (r) => { clearTimeout(t); return r; },
+      (e) => { clearTimeout(t); throw e; }
+    );
+  };
   const _bootDedupeFetch = (input, init) => {
     try {
       const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
       const url = typeof input === "string" ? input : (input && input.url) || "";
       // Las RPC de solo lectura (get_*, influenza_capture_hits_rpc) no cambian datos: no vacían la caché.
-      if (method !== "GET" && !(method === "POST" && _BOOT_DEDUPE_RPC_LECTURA.test(url))) { _bootDedupeCache.clear(); return fetch(input, init); }
-      if (method !== "GET") return fetch(input, init);
+      if (method !== "GET" && !(method === "POST" && _BOOT_DEDUPE_RPC_LECTURA.test(url))) { _bootDedupeCache.clear(); return _fetchSeguro(input, init); }
+      if (method !== "GET") return _fetchSeguro(input, init);
       const now = Date.now();
-      if (now - _bootDedupeAt > _BOOT_DEDUPE_MS) { _bootDedupeCache.clear(); return fetch(input, init); }
-      if ((init && init.signal) || !_BOOT_DEDUPE_TABLAS.test(url)) return fetch(input, init);
+      if (now - _bootDedupeAt > _BOOT_DEDUPE_MS) { _bootDedupeCache.clear(); return _fetchSeguro(input, init); }
+      if ((init && init.signal) || !_BOOT_DEDUPE_TABLAS.test(url)) return _fetchSeguro(input, init);
       const h = init && init.headers;
       const hv = (n) => !h ? "" : (typeof h.get === "function" ? h.get(n) : (h[n] || h[n.toLowerCase()])) || "";
       // Accept distingue "lista" de "un solo objeto" (maybeSingle/single): misma URL, distinta respuesta.
       const key = `${url}|${hv("Authorization")}|${hv("Accept")}|${hv("Prefer")}|${hv("Range")}`;
       const hit = _bootDedupeCache.get(key);
       if (hit && now - hit.t < _BOOT_DEDUPE_TTL_MS) return hit.p.then((r) => r.clone());
-      const p = fetch(input, init).then(
+      const p = _fetchSeguro(input, init).then(
         (r) => { if (!r.ok) _bootDedupeCache.delete(key); return r; },
         (e) => { _bootDedupeCache.delete(key); throw e; }
       );
       _bootDedupeCache.set(key, { t: now, p });
       return p.then((r) => r.clone());
     } catch (_) {
-      return fetch(input, init);
+      return _fetchSeguro(input, init);
     }
   };
   window.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -9931,8 +9948,23 @@ function stopRealtimeUX() {
   stopPublicClockTimer();
 }
 
+// Los sondeos solo corren con la persona presente: pestaña visible Y alguna interacción en los últimos 10 min.
+// Un equipo con la pantalla encendida toda la noche generaba ~290 peticiones/hora sin que nadie las viera.
+// Al volver a interactuar tras la pausa se refresca la bandeja de inmediato (no se espera al siguiente ciclo).
+const IDLE_MAX_MS = 10 * 60 * 1000;
+let LAST_ACTIVITY_AT = Date.now();
+function markActivity() {
+  const eraInactivo = Date.now() - LAST_ACTIVITY_AT > IDLE_MAX_MS;
+  LAST_ACTIVITY_AT = Date.now();
+  if (eraInactivo && canRunRealtime() && typeof loadNotifications === "function") {
+    loadNotifications({ silent: true }).catch(() => { });
+  }
+}
+["pointerdown", "pointermove", "keydown", "wheel", "touchstart"].forEach((ev) =>
+  window.addEventListener(ev, markActivity, { passive: true, capture: true })
+);
 function canRunRealtime() {
-  return !!TOKEN && !!USER && !document.hidden;
+  return !!TOKEN && !!USER && !document.hidden && (Date.now() - LAST_ACTIVITY_AT) < IDLE_MAX_MS;
 }
 
 function deferPostLoginTask(task, delay = 0) {
