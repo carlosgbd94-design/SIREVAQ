@@ -57,7 +57,11 @@ function sourceFiles() {
   const unknown = new Set();
   for (const f of sourceFiles()) {
     const s = fs.readFileSync(f, 'utf8');
-    for (const m of s.matchAll(/\b[a-z][a-z0-9_]{1,40}\b/g)) if (official.has(m[0])) found.add(m[0]);
+    // Solo literales completos ('x', "x", `x`) o el texto de una etiqueta (>x<): asi no entran palabras sueltas de
+    // comentarios, clases CSS o identificadores que casualmente son nombre de icono (157 falsos positivos medidos:
+    // 'pool' por un comentario, 'podium' por una clase...). Con la busqueda por palabra suelta icon_names rebasaba los
+    // 4000 caracteres y Google devolvia la fuente completa (~540 KB); con literales queda en ~3500.
+    for (const m of s.matchAll(/(?<=["'`>])\s*([a-z][a-z0-9_]{1,40})\s*(?=["'`<])/g)) if (official.has(m[1])) found.add(m[1]);
     // Por contexto: texto de un elemento con la clase de iconos. Si el catalogo no lo conoce se
     // incluye igual (y se avisa) para no perder un icono por una lista incompleta.
     for (const m of s.matchAll(/material-symbols-rounded[^>]*>\s*([a-z][a-z0-9_]{1,40})\s*</g)) {
