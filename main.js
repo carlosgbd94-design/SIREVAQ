@@ -9953,9 +9953,23 @@ function stopRealtimeUX() {
 // Al volver a interactuar tras la pausa se refresca la bandeja de inmediato (no se espera al siguiente ciclo).
 const IDLE_MAX_MS = 10 * 60 * 1000;
 let LAST_ACTIVITY_AT = Date.now();
+// Presencia ("usuarios en línea"): cada cliente conectado recibe un mensaje por cada alta/baja de los demás, así que el
+// consumo de Realtime crece con el cuadrado de pestañas abiertas. Solo permanece en el canal quien está presente
+// (pestaña visible y con actividad reciente); al quedar inactivo se sale y al volver a interactuar se reincorpora.
+setInterval(() => {
+  try {
+    if (PRESENCE_CHANNEL && !!USER && (document.hidden || Date.now() - LAST_ACTIVITY_AT >= IDLE_MAX_MS)) {
+      window.supabase.removeChannel(PRESENCE_CHANNEL);
+      PRESENCE_CHANNEL = null;
+    }
+  } catch (e) { /* el canal ya estaba cerrado */ }
+}, 60000);
 function markActivity() {
   const eraInactivo = Date.now() - LAST_ACTIVITY_AT > IDLE_MAX_MS;
   LAST_ACTIVITY_AT = Date.now();
+  try {
+    if (!PRESENCE_CHANNEL && TOKEN && USER && !document.hidden && typeof initPresenceRealtime === "function") initPresenceRealtime();
+  } catch (e) { /* aún sin sesión */ }
   if (eraInactivo && canRunRealtime() && typeof loadNotifications === "function") {
     loadNotifications({ silent: true }).catch(() => { });
   }
@@ -9963,6 +9977,7 @@ function markActivity() {
 ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"].forEach((ev) =>
   window.addEventListener(ev, markActivity, { passive: true, capture: true })
 );
+document.addEventListener("visibilitychange", () => { if (!document.hidden) markActivity(); });
 function canRunRealtime() {
   return !!TOKEN && !!USER && !document.hidden && (Date.now() - LAST_ACTIVITY_AT) < IDLE_MAX_MS;
 }

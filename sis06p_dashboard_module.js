@@ -85,7 +85,7 @@
     tbody.innerHTML = '<tr><td colspan="7" style="padding:14px; text-align:center; color:var(--muted);">Cargando…</td></tr>';
     if (vistaGrupos) vistaGrupos.innerHTML = '<div style="padding:14px; text-align:center; color:var(--muted);">Cargando…</div>';
 
-    const { data, error } = await estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio });
+    const { data, error } = await unaVez('seg:' + mes + ':' + anio, () => estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio }));
     if (error) {
       const msg = `Error: ${error.message}`;
       tbody.innerHTML = `<tr><td colspan="7" style="padding:14px; text-align:center; color:var(--error);">${msg}</td></tr>`;
@@ -824,11 +824,20 @@
     selUnidadRevision.dispatchEvent(new Event('change'));
   }
 
+  // Al abrir la pantalla, render() y el cierre guiado piden EXACTAMENTE las mismas consultas a la vez (se veían duplicadas).
+  // Mientras una consulta idéntica siga en vuelo se comparte su respuesta (copia profunda para que nadie modifique la del otro);
+  // en cuanto termina se olvida, así que una lectura posterior a una escritura (marcar, validar) siempre va fresca al servidor.
+  const _enVuelo = new Map();
+  function unaVez(clave, fn) {
+    let p = _enVuelo.get(clave);
+    if (!p) { p = Promise.resolve().then(fn).finally(() => _enVuelo.delete(clave)); _enVuelo.set(clave, p); }
+    return p.then((r) => (r && r.data != null && typeof structuredClone === 'function') ? { ...r, data: structuredClone(r.data) } : r);
+  }
   // "Sin envío": el municipal (o la jurisdicción en hospitales) decidió continuar sin una unidad que no envió. Las marcas
   // viven aparte; aquí se sobreponen a las filas del seguimiento (f.sin_envio, f.sin_envio_motivo, f.sin_envio_por).
   async function anotarSinEnvio(filas, mes, anio) {
     try {
-      const { data: marcas } = await estado.db.rpc('sis06p_sin_envio_lista', { p_mes: mes, p_anio: anio });
+      const { data: marcas } = await unaVez('sinenvio:' + mes + ':' + anio, () => estado.db.rpc('sis06p_sin_envio_lista', { p_mes: mes, p_anio: anio }));
       const porClues = new Map((marcas || []).filter((m) => m.vigente).map((m) => [m.clues, m]));
       filas.forEach((f) => {
         const m = porClues.get(f.clues);
@@ -842,7 +851,7 @@
   // Unidades que declararon «Sin movimiento» este mes (el municipal las valida de un vistazo)
   async function anotarSinMovimiento(filas, mes, anio) {
     try {
-      const { data: sm } = await estado.db.from('sis06p_capturas').select('clues').eq('mes', mes).eq('anio', anio).eq('sin_movimiento', true);
+      const { data: sm } = await unaVez('sinmov:' + mes + ':' + anio, () => estado.db.from('sis06p_capturas').select('clues').eq('mes', mes).eq('anio', anio).eq('sin_movimiento', true));
       const set = new Set((sm || []).map((r) => r.clues));
       filas.forEach((f) => { f.sin_movimiento = set.has(f.clues); });
     } catch (e) { /* sin la columna: todo sigue como antes */ }
@@ -852,7 +861,7 @@
   // Solo trae las filas del seguimiento (sin pintar nada): las usa el cierre guiado
   // del municipal para su ruta, sus puntos de avance y la navegación entre unidades.
   async function cargarFilas(mes, anio) {
-    const { data, error } = await estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio });
+    const { data, error } = await unaVez('seg:' + mes + ':' + anio, () => estado.db.rpc('sis06p_resumen_seguimiento', { p_mes: mes, p_anio: anio }));
     if (error) { toast('No se pudo cargar el seguimiento: ' + error.message, 'error'); return null; }
     const filas = ordenarSeguimiento(await anotarSinEnvio(data || [], mes, anio));
     await anotarSinMovimiento(filas, mes, anio);
