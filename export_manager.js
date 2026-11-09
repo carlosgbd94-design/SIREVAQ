@@ -194,9 +194,8 @@
     loadExportLibraries
   };
 
-  // Precargar librerías en segundo plano
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(loadExportLibraries, 3000);
-  });
+  // Ya NO se precargan: exportToExcel/exportToPDF/exportToPNG esperan loadExportLibraries() al usarse. La precarga bajaba
+  // xlsx + html2pdf + html2canvas (~420 KB, ~520 ms de CPU con un equipo lento) en CADA visita, incluso en el login y
+  // en cuentas que nunca exportan, y además se duplicaba con la carga diferida de main.js.
 
 })(window);

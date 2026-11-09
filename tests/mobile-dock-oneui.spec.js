@@ -237,6 +237,8 @@ test.describe('Sin movimiento y fechas (móvil)', () => {
     await expect(page.locator('.sr-qty-input').first()).toHaveValue('4');
     await page.evaluate(() => document.getElementById('hubSaveBtn').click());
     await expect.poll(() => idx(srv.reqs, 'existencia_detalle', 'POST').length).toBeGreaterThan(0);
+    // El guardado manda dos peticiones seguidas: con la máquina cargada la segunda tarda, así que se espera también
+    await expect.poll(() => idx(srv.reqs, 'biologicos_existencia', 'POST').length).toBeGreaterThan(0);
     const det = idx(srv.reqs, 'existencia_detalle', 'POST')[0].body;
     expect(det[0].cantidad).toBe(4);
     const resumen = idx(srv.reqs, 'biologicos_existencia', 'POST')[0].body;

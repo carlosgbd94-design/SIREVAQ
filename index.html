@@ -81,7 +81,7 @@
     content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://fastly.jsdelivr.net https://cdnjs.cloudflare.com https://js.sentry-cdn.com https://browser.sentry-cdn.com https://us-assets.i.posthog.com https://us.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://images.unsplash.com https://api.qrserver.com; connect-src 'self' https: wss:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
 
   <!-- Sentry Error Monitoring -->
-  <script src="https://js.sentry-cdn.com/ad5eb763bc0b321edddbb0ce59e2c0f0.min.js" crossorigin="anonymous"></script>
+  <script src="https://js.sentry-cdn.com/ad5eb763bc0b321edddbb0ce59e2c0f0.min.js" crossorigin="anonymous" async></script>
 
   <!-- Dexie.js (IndexedDB Wrapper) & Lucide Icons -->
   <!-- defer: no bloquean el parseo/primer render; siguen ejecutando en este
@@ -99,11 +99,15 @@
 
   <!-- PostHog Analytics -->
   <script>
+    // Analítica: se inicia cuando la página ya cargó y el navegador está libre (antes ejecutaba ~260 ms de CPU con un equipo lento
+    // en pleno arranque). Nada del código llama a posthog.* salvo este init, así que el retraso no afecta a otros scripts.
+    window.addEventListener('load', function () { (window.requestIdleCallback ? function (f) { window.requestIdleCallback(f, { timeout: 6000 }); } : function (f) { setTimeout(f, 2500); })(function () {
     !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]), t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host.replace(".i.posthog.com", "-assets.i.posthog.com") + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group reset groups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags resetActiveView Exception clear_session_tracking group reset groups set_config session_recording_started".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
     posthog.init('phc_usAQVRLvwXqvKzvsUXRQyA5jjyak8nEAwqfKNGmxoUd5', {
       api_host: 'https://us.i.posthog.com',
       person_profiles: 'identified_only' // or 'always' to create profiles for anonymous users as well
     })
+    }); });
   </script>
 
   <!-- PWA Manifest -->
@@ -394,7 +398,7 @@
   <script defer src="guias_contenido.js?v=8"></script>
   <script defer src="ayuda.js?v=26"></script>
   <script defer src="a11y_global.js?v=6"></script>
-  <script src="dist/bundle-head.js?v=2026.320" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.321" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
