@@ -142,7 +142,14 @@ test.describe('Barra de paneles (móvil, One UI)', () => {
 
   test('un error en el panel Pedido (toast + sacudida) no mueve la barra', async ({ page }) => {
     const { errores } = await abrirMovil(page, estadoMovil(), '2026-10-22T12:00:00');
-    const antes = await cajaDock(page);
+    // La barra termina su animación de entrada al abrir (con la máquina cargada tarda más): se mide hasta que quede quieta
+    let antes = await cajaDock(page);
+    for (let k = 0; k < 30; k++) {
+      await page.waitForTimeout(100);
+      const n = await cajaDock(page);
+      if (JSON.stringify(n) === JSON.stringify(antes)) break;
+      antes = n;
+    }
     // Pedido que viola el múltiplo/promedio => toast de error + sacudida
     await page.evaluate(() => {
       document.getElementById('nombreBIO').value = 'Ana';

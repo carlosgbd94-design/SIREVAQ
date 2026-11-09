@@ -54,11 +54,15 @@
     for (var i = 0; i < l.length; i++) l[i].setAttribute('aria-hidden', 'true');
   }
 
+  // Los controles que ya muestran texto se revisan UNA sola vez: antes cada cambio del DOM (y la página cambia todo el
+  // tiempo con los refrescos) volvía a clonar cada botón y enlace con texto solo para comprobar que seguían teniendo nombre.
+  var conNombreVisible = typeof WeakSet === 'function' ? new WeakSet() : null;
   function arreglarNombres(raiz) {
     var l = raiz.querySelectorAll('button:not([aria-label]), a[href]:not([aria-label]), [role="button"]:not([aria-label])');
     for (var i = 0; i < l.length; i++) {
       var el = l[i];
-      if (nombreVisible(el)) continue;
+      if (conNombreVisible && conNombreVisible.has(el)) continue;
+      if (nombreVisible(el)) { if (conNombreVisible) conNombreVisible.add(el); continue; }
       var nombre = (el.getAttribute('title') || '').trim();
       if (!nombre) {
         var ic = el.querySelector('.material-symbols-rounded');

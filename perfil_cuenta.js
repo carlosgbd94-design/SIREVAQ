@@ -377,12 +377,28 @@
     el.toggleAttribute('data-fade-top', arriba);
     el.toggleAttribute('data-fade-bottom', abajo);
   }
+  // Varios paneles: primero se LEEN todas las medidas y luego se ESCRIBEN los atributos. Leer-escribir-leer por panel
+  // obligaba al navegador a recalcular el diseño de toda la página una vez por panel (el mayor costo del arranque con un
+  // equipo lento: ~290 ms con CPU 4x), y se repetía con cada cambio de clase/estilo dentro del menú.
+  function marcarTodos(paneles) {
+    const medidas = paneles.map((el) => [el, el.scrollTop > 4, el.scrollHeight - el.clientHeight - el.scrollTop > 4]);
+    medidas.forEach(([el, arriba, abajo]) => {
+      el.toggleAttribute('data-fade-top', arriba);
+      el.toggleAttribute('data-fade-bottom', abajo);
+    });
+  }
   function instalar() {
     const raiz = document.getElementById('profileDropdown');
     if (!raiz || raiz.dataset.fadeScroll === '1') return;
     raiz.dataset.fadeScroll = '1';
     const paneles = Array.from(raiz.querySelectorAll(':scope > [id^="profileTabContent_"]'));
-    const act = () => paneles.forEach(marcar);
+    // Los disparos seguidos (redimensionar, mutaciones) se juntan en un solo cuadro de animación
+    let pendiente = false;
+    const act = () => {
+      if (pendiente) return;
+      pendiente = true;
+      requestAnimationFrame(() => { pendiente = false; marcarTodos(paneles); });
+    };
     paneles.forEach((p) => p.addEventListener('scroll', () => marcar(p), { passive: true }));
     window.addEventListener('resize', act);
     if (typeof ResizeObserver === 'function') {

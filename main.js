@@ -11665,13 +11665,18 @@ function escapeHtml(s) {
 }
 function escapeAttr(s) { return escapeHtml(s); }
 
+// Crear un Intl.DateTimeFormat cuesta (inicializa datos de idioma): se crea una vez y se reutiliza.
+let _FMT_FECHA_MX = null;
 function formatDateMx(d = new Date()) {
-  return new Intl.DateTimeFormat("es-MX", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric"
-  }).format(d);
+  if (!_FMT_FECHA_MX) {
+    _FMT_FECHA_MX = new Intl.DateTimeFormat("es-MX", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+  }
+  return _FMT_FECHA_MX.format(d);
 }
 
 
@@ -11698,16 +11703,14 @@ function normalizeText(text = "") {
   return s;
 }
 
+let _FMT_DIA_MX = null, _FMT_MES_MX = null;
 function formatDayBadgeMx(ymd = "") {
   const d = ymd ? new Date(`${ymd}T00:00:00`) : new Date();
 
-  const weekday = capitalizeFirstLetter(
-    new Intl.DateTimeFormat("es-MX", { weekday: "long" }).format(d)
-  );
-
-  const month = capitalizeFirstLetter(
-    new Intl.DateTimeFormat("es-MX", { month: "long" }).format(d)
-  );
+  if (!_FMT_DIA_MX) _FMT_DIA_MX = new Intl.DateTimeFormat("es-MX", { weekday: "long" });
+  if (!_FMT_MES_MX) _FMT_MES_MX = new Intl.DateTimeFormat("es-MX", { month: "long" });
+  const weekday = capitalizeFirstLetter(_FMT_DIA_MX.format(d));
+  const month = capitalizeFirstLetter(_FMT_MES_MX.format(d));
 
   return `Hoy es ${weekday} ${d.getDate()} de ${month}`;
 }
