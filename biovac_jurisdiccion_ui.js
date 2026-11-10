@@ -542,6 +542,7 @@ function renderTodoJur() {
   renderChipsBioJur();
   pintarConcentrado();
   renderInforme();
+  if (window.SIS06PParalelos) window.SIS06PParalelos.pintar();   // PARALELOS (paso 4; solo JURISDICCIONAL/ADMIN)
   pintarRutaJur();
 }
 

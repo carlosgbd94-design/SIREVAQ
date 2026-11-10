@@ -323,7 +323,7 @@
     URL.revokeObjectURL(url);
   }
 
-  // ---- interfaz (tarjeta dentro de Seguimiento SIS-06-P; solo JURISDICCIONAL y ADMIN) --------------------------
+  // ---- interfaz (tarjeta del Concentrado Jurisdiccional, paso 4; solo JURISDICCIONAL y ADMIN) --------------------------
   const est = () => (typeof estado !== 'undefined' ? estado : (window.estado || null));
   const puede = () => { const e = est(); const r = e && e.perfil && e.perfil.rol; return r === 'ADMIN' || r === 'JURISDICCIONAL'; };
   const msg = (t, tipo) => { if (typeof window.toast === 'function') window.toast(t, tipo); else console.log('[Paralelos]', t); };
@@ -392,7 +392,7 @@
     const cont = document.getElementById('paralelosSIS');
     if (!cont) return;
     if (!puede()) { cont.style.display = 'none'; return; }
-    cont.style.display = 'block';
+    cont.style.display = 'flex';
     const { mes, anio } = periodoActual();
     const valido = anio === ANIO_PLANTILLA && mes >= MES_INICIO_SIS;
     const nota = cont.querySelector('#paralelosNota');
@@ -404,31 +404,28 @@
       : `Disponible desde octubre de ${ANIO_PLANTILLA} (elige el mes y el año arriba): antes de eso la plantilla ya trae los datos.`;
   }
 
-  // Crea la tarjeta (una sola vez) dentro del panel de Seguimiento y la deja al día con el periodo elegido.
+  // Crea la tarjeta (una sola vez) en el Concentrado Jurisdiccional (biovac_jurisdiccion.html), paso 4 «Informe»,
+  // junto al Excel oficial y el PDF, y la deja al día con el periodo elegido. Solo JURISDICCIONAL y ADMIN.
   function pintar() {
-    const panel = document.getElementById('panelSeguimiento');
-    if (!panel) return;
+    const lista = document.querySelector('#panelPaso4 .jur-entregables');
+    if (!lista) return;
     let cont = document.getElementById('paralelosSIS');
     if (!puede()) { if (cont) cont.style.display = 'none'; return; }
     if (!cont) {
       cont = document.createElement('div');
       cont.id = 'paralelosSIS';
+      cont.className = 'jur-entregable';
       cont.setAttribute('role', 'region');
       cont.setAttribute('aria-labelledby', 'paralelosTitulo');
-      cont.style.cssText = 'margin-bottom:18px; padding:14px 16px; border:1px solid var(--outline-variant); border-radius:14px; background:#fff;';
       cont.innerHTML = `
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-          <span class="material-symbols-rounded" aria-hidden="true" style="color:var(--secondary);">table_view</span>
-          <h3 id="paralelosTitulo" style="margin:0; font-size:14px; font-weight:800;">PARALELOS ${ANIO_PLANTILLA} (informe jurisdiccional SINBA-SIS)</h3>
-        </div>
-        <p id="paralelosNota" style="margin:0 0 10px; font-size:12px; color:var(--muted);"></p>
+        <b id="paralelosTitulo">PARALELOS ${ANIO_PLANTILLA}</b>
+        <small id="paralelosNota"></small>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button type="button" class="btn-primario btn-mini" data-paralelos="mes"></button>
+          <button type="button" class="btn-secundario btn-mini" data-paralelos="mes"></button>
           <button type="button" class="btn-secundario btn-mini" data-paralelos="acumulado"></button>
         </div>
-        <div id="paralelosEstado" role="status" aria-live="polite" style="margin-top:8px; font-size:12px; font-weight:600; color:var(--muted);"></div>`;
-      const ref = document.getElementById('seguimientoVentana');
-      if (ref && ref.parentNode) ref.parentNode.insertBefore(cont, ref.nextSibling); else panel.appendChild(cont);
+        <div id="paralelosEstado" role="status" aria-live="polite" style="font-size:12px; font-weight:600; color:var(--muted);"></div>`;
+      lista.appendChild(cont);
       cont.addEventListener('click', (e) => { const b = e.target.closest('[data-paralelos]'); if (b && !b.disabled) descargar(b.dataset.paralelos); });
     }
     refrescar();

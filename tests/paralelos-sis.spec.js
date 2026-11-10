@@ -117,26 +117,29 @@ test('PARALELOS: rechaza meses sin SIS por unidad, otro año, y avisa de claves 
   expect(val(ws.getCell('I12')) || 0).toBe(0);
 });
 
-// ---- Interfaz real (biovac.html con el Supabase simulado): la tarjeta solo existe para JURISDICCIONAL y ADMIN ----
+// ---- Interfaz real (biovac_jurisdiccion.html, paso 4 «Informe», con el Supabase simulado de Jurisdicción) ----
 const fs = require('fs');
-const FAKE = fs.readFileSync(path.join(__dirname, 'fixtures', 'fake-biovac.js'), 'utf8');
+const FAKE = fs.readFileSync(path.join(__dirname, 'fixtures', 'fake-juris.js'), 'utf8');
 const EXCELJS_MIN = fs.readFileSync(path.join(__dirname, '..', 'node_modules', 'exceljs', 'dist', 'exceljs.min.js'), 'utf8');
 
-async function abrirBiovac(page) {
-  await page.route(/cdnjs\.cloudflare\.com|fonts\.(googleapis|gstatic)\.com|raw\.githubusercontent\.com/, (r) => r.abort());
+async function abrirJuris(page, rol) {
+  await page.route(/fonts\.(googleapis|gstatic)\.com|raw\.githubusercontent\.com/, (r) => r.abort());
   await page.route(/unpkg\.com\/@supabase\/supabase-js/, (r) => r.fulfill({ contentType: 'application/javascript', body: FAKE }));
   await page.route(/cdnjs\.cloudflare\.com\/ajax\/libs\/exceljs/, (r) => r.fulfill({ contentType: 'application/javascript', body: EXCELJS_MIN }));
-  await page.goto('/biovac.html', { waitUntil: 'load' });
-  await page.waitForSelector('#campoPeriodo', { state: 'attached' });
-  await page.waitForTimeout(1000);
+  await page.addInitScript((r) => { window.__FAKE_ROL__ = r; }, rol);
+  await page.goto('/biovac_jurisdiccion.html', { waitUntil: 'load' });
+  await page.waitForSelector('#dockJuris', { state: 'visible', timeout: 15000 });
+  await page.selectOption('#selAnio', '2026');
+  await page.selectOption('#selMes', '10');
 }
 
-test('PARALELOS (UI): visible solo para JURISDICCIONAL/ADMIN y descarga el libro del mes con lo validado', async ({ page }) => {
+test('PARALELOS (UI): en el paso 4 del Concentrado Jurisdiccional, solo JURISDICCIONAL/ADMIN, y descarga el libro del mes con lo validado', async ({ page }) => {
   test.setTimeout(90000);
-  await abrirBiovac(page);
+  await abrirJuris(page, 'JURISDICCIONAL');
+  await page.locator('#dockJTabs [data-jpaso="4"]').click();
+  await expect(page.locator('#panelPaso4 #paralelosSIS')).toBeVisible();
   const visible = (rol) => page.evaluate((r) => {
     estado.perfil = Object.assign({}, estado.perfil, { rol: r });
-    document.getElementById('selAnio').value = '2026'; document.getElementById('selMes').value = '10';
     window.SIS06PParalelos.pintar();
     const c = document.getElementById('paralelosSIS');
     return !!c && c.style.display !== 'none';

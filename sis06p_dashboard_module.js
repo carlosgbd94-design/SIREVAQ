@@ -69,8 +69,6 @@
     const anio = Number(document.getElementById('selAnio').value);
     const rolActual = estado.perfil ? estado.perfil.rol : null;
     const esJurisdiccional = rolActual === 'JURISDICCIONAL';
-    // PARALELOS 2026 (solo JURISDICCIONAL/ADMIN): tarjeta propia, se pinta aun con el cierre guiado
-    if (window.SIS06PParalelos) window.SIS06PParalelos.pintar();
 
     const titulo = document.getElementById('seguimientoTitulo');
     const subtitulo = document.getElementById('seguimientoSubtitulo');
