@@ -33,8 +33,8 @@ test('PARALELOS octubre: cada clave cae en su fila y cada municipio/hospital en 
   const wb = await abrirPlantilla();
   const oct = wb.getWorksheet('OCTUBRE');
   const { mapa, corregidas } = P.filasPorClave(oct);
-  // Tdpa Afro/Indígena: la plantilla traía VPD52..55 (de DPT); la clave SIS real es VDP52..55
-  expect(corregidas.map((c) => `${c.de}>${c.a}`)).toEqual(['VPD52>VDP52', 'VPD53>VDP53', 'VPD54>VDP54', 'VPD55>VDP55']);
+  // Tdpa Afro/Indígena: la plantilla ya trae la clave SIS real VDP52..55 (antes repetía VPD52..55 de DPT)
+  expect(corregidas).toEqual([]);
   expect(P.columnasDestino(oct)).toEqual(COL);
 
   const claves = [...mapa.keys()];
@@ -62,6 +62,8 @@ test('PARALELOS octubre: cada clave cae en su fila y cada municipio/hospital en 
   expect(revisadas).toBeGreaterThan(1000);
   // claves de Tdpa corregidas en la hoja
   expect(ws.getCell(365, 2).value).toBe('VDP52');
+  // VS001 (VSR en embarazadas) lleva 3 dígitos: también debe tener fila
+  expect(mapa.get('VS001')).toBe(370);
   expect(ws.getCell(368, 2).value).toBe('VDP55');
   // TOTAL BCG: L/O con el mismo rango que H (antes sumaban hasta la fila 18, con migrantes)
   expect(ws.getCell('L32').value.formula).toBe('SUM(L12:L16)');

@@ -65,7 +65,7 @@
     const mapa = new Map(), corregidas = [];
     for (let r = FILA_INI; r <= ws.rowCount; r++) {
       let k = sinAcentos(textoCelda(ws.getCell(r, 2).value));
-      if (!/^[A-Z]{3}\d\d$/.test(k)) continue;
+      if (!/^[A-Z]{2,3}\d{2,3}$/.test(k)) continue;
       if (mapa.has(k)) {
         const alias = k.replace(/^VPD/, 'VDP');
         if (alias !== k && !mapa.has(alias)) { corregidas.push({ fila: r, de: k, a: alias }); k = alias; } else continue;
