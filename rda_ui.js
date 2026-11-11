@@ -506,6 +506,21 @@ function showSkeletons() {
 }
 
 // Supabase fetching con Server-Side RPC
+// Los hospitales (HENM y NHGQ) están dados de alta bajo QUERÉTARO en el catálogo, pero en Indicadores cuentan APARTE:
+// Querétaro se limita a sus centros de salud y los hospitales salen como su propio grupo («HOSPITALES»), que sí suma
+// en la vista jurisdiccional (Todos los municipios). Solo cambia el nombre del grupo en pantalla; la base no se toca.
+const RDA_CLUES_HOSPITALES = ['QTSSA001740', 'QTSSA002901'];
+function rdaAparteHospitales_(filas) {
+    filas = filas || [];
+    filas.forEach(u => { if (u && RDA_CLUES_HOSPITALES.includes(u.clues)) u.municipio = 'HOSPITALES'; });
+    return filas;
+}
+// Un municipal que hace de municipal de los hospitales (lo tiene configurado como HENM / NHG) sí ve ese grupo.
+function rdaMunicipalVeHospitales_(muni, allowed) {
+    return String(muni || '').toUpperCase().trim() === 'HOSPITALES'
+        && (allowed || []).some(a => /^(HENM|NHG|HOSPITAL)/i.test(String(a || '').trim()));
+}
+
 async function fetchRDAData() {
     if (_rdaCache.unidades) return _rdaCache;
 
@@ -549,7 +564,7 @@ async function fetchRDAData() {
 
     console.log(`[RDA] Loaded ${yearInt} pre-aggregated indicators: ${indicators.length} records. Max Mes: ${maxMes}`);
 
-    let filteredIndicators = (indicators || []).map(u => {
+    let filteredIndicators = rdaAparteHospitales_(indicators || []).map(u => {
         if (u.nombre) {
             const upper = u.nombre.toUpperCase().trim();
             if (upper.includes("FELIPE NUÑEZ LARA") || upper.includes("NIÑO Y LA MUJER") || upper === "HENM") {
@@ -613,7 +628,7 @@ function populateFilters() {
         municipios = municipios.filter(m => {
             // Strip accents for safe comparison with allowed array
             const mNorm = m.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-            return allowed.some(a => mNorm.includes(a) || a.includes(mNorm));
+            return allowed.some(a => mNorm.includes(a) || a.includes(mNorm)) || rdaMunicipalVeHospitales_(m, allowed);
         });
         
         muniSel.innerHTML = municipios.map(m => `<option value="${m}">${m}</option>`).join('');
@@ -3644,7 +3659,7 @@ function populateMobileFilters() {
     } else if (role === 'MUNICIPAL') {
         municipios = municipios.filter(m => {
             const mNorm = m.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-            return allowed.some(a => mNorm.includes(a) || a.includes(mNorm));
+            return allowed.some(a => mNorm.includes(a) || a.includes(mNorm)) || rdaMunicipalVeHospitales_(m, allowed);
         });
         if (muniSel.options.length <= 1) {
             muniSel.innerHTML = municipios.map(m => `<option value="${m}">${m}</option>`).join('');
@@ -5415,8 +5430,8 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
         if (err2025) throw err2025;
         if (err2026) throw err2026;
 
-        let raw2025 = ind2025 || [];
-        let raw2026 = ind2026 || [];
+        let raw2025 = rdaAparteHospitales_(ind2025 || []);
+        let raw2026 = rdaAparteHospitales_(ind2026 || []);
 
         // Fallback de rescate directo con catálogo completo de claves SIS 2025 históricas
         if (raw2025.length > 0) {
@@ -5576,7 +5591,7 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
         const t26 = calcTotals(u2026, maxMes2026);
 
         // Agrupación de Municipios de la JS1 con comparación segura
-        const munisJS1 = ['CORREGIDORA', 'HUIMILPAN', 'EL MARQUÉS', 'QUERÉTARO'];
+        const munisJS1 = ['CORREGIDORA', 'HUIMILPAN', 'EL MARQUÉS', 'QUERÉTARO', 'HOSPITALES'];
         const compMunis = munisJS1.map(m => {
             const arr25 = raw2025.filter(u => matchMuni(u.municipio, m));
             const arr26 = raw2026.filter(u => matchMuni(u.municipio, m));

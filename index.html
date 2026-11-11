@@ -81,6 +81,19 @@
     content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://fastly.jsdelivr.net https://cdnjs.cloudflare.com https://js.sentry-cdn.com https://browser.sentry-cdn.com https://us-assets.i.posthog.com https://us.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://images.unsplash.com https://api.qrserver.com; connect-src 'self' https: wss:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
 
   <!-- Sentry Error Monitoring -->
+  <script>
+    // "ResizeObserver loop completed with undelivered notifications" es un aviso inofensivo del
+    // navegador (un observador cambió el tamaño de algo durante su propio ciclo; no se pierde nada
+    // ni rompe ninguna función). Solo ensuciaba Sentry, así que se ignora.
+    window.sentryOnLoad = function () {
+      Sentry.init({
+        ignoreErrors: [
+          /ResizeObserver loop completed with undelivered notifications/i,
+          /ResizeObserver loop limit exceeded/i
+        ]
+      });
+    };
+  </script>
   <script src="https://js.sentry-cdn.com/ad5eb763bc0b321edddbb0ce59e2c0f0.min.js" crossorigin="anonymous" async></script>
 
   <!-- Dexie.js (IndexedDB Wrapper) & Lucide Icons -->
@@ -8767,7 +8780,7 @@
 
   <!-- Empaquetado: bundle-body.js = rda_calculator + rda_parser + param_calculator
        + rda_ui, en ese mismo orden. Generado por build-bundle.js. -->
-  <script src="dist/bundle-body.js?v=2026.77" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
+  <script src="dist/bundle-body.js?v=2026.78" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
 
   <!-- FEEDBACK FAB & MODAL -->
   <style>
