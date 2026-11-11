@@ -1000,7 +1000,7 @@ function _rdaEtiquetaAmbito() {
         const u = (_rdaCache.unidades || []).find(x => x.clues === uni);
         return String(u?.nombre || uni).toUpperCase();
     }
-    if (muni) return `MUNICIPIO DE ${muni.toUpperCase()}`;
+    if (muni) return muni.toUpperCase() === 'HOSPITALES' ? 'ACUMULADO DE HOSPITALES' : `MUNICIPIO DE ${muni.toUpperCase()}`;
     return 'JURISDICCIÓN SANITARIA NO. 1';
 }
 
@@ -2239,7 +2239,7 @@ function renderTable(fUnits, esquema, agg) {
     if ((canSeeJurisdictionTotal || canSeeMunicipalTotal || canSeeCaravanasTotal) && rows.length > 1 && fUnits.length > 1) {
         let totalRowLabel;
         if (canSeeMunicipalTotal) {
-            totalRowLabel = `TOTAL MUNICIPAL (${(rows[0]?.municipio || '').toUpperCase()})`;
+            totalRowLabel = (rows[0]?.municipio || '').toUpperCase() === 'HOSPITALES' ? 'ACUMULADO DE HOSPITALES' : `TOTAL MUNICIPAL (${(rows[0]?.municipio || '').toUpperCase()})`;
         } else if (canSeeCaravanasTotal) {
             const caravanasMunicipios = [...new Set(rows.map(r => (r.municipio || '').toUpperCase()))];
             totalRowLabel = caravanasMunicipios.length === 1
@@ -2265,9 +2265,9 @@ function renderTable(fUnits, esquema, agg) {
 
         const muniFiltro = document.getElementById('rdaFilterMunicipio')?.value || '';
         const textoAmbito = (!canSeeMunicipalTotal && !canSeeCaravanasTotal && muniFiltro)
-            ? `MUNICIPAL · ${muniFiltro.toUpperCase()}`
+            ? `${muniFiltro.toUpperCase() === 'HOSPITALES' ? 'ACUMULADO' : 'MUNICIPAL'} · ${muniFiltro.toUpperCase()}`
             : canSeeMunicipalTotal
-            ? `MUNICIPAL · ${(rows[0]?.municipio || '').toUpperCase()}`
+            ? `${(rows[0]?.municipio || '').toUpperCase() === 'HOSPITALES' ? 'ACUMULADO' : 'MUNICIPAL'} · ${(rows[0]?.municipio || '').toUpperCase()}`
             : (canSeeCaravanasTotal ? totalRowLabel.replace('TOTAL ', '').replace(/\s*\(JURISDICCIÓN SANITARIA 1\)/, '') : 'JURISDICCIONAL · JS 1');
         html += `
             <tr data-rda-total="1" class="rda-fila-total">
@@ -2488,7 +2488,7 @@ async function generarPDFRobusto(elementoOrigenId, nombreArchivo, devolverBlob =
                 titleChart2 = `AVANCE ${currentYear} (ENE–${(MONTH_NAMES[(_rdaCache.maxMes || 12) - 1] || '').slice(0, 3).toUpperCase()})`;
             } else {
                 imgChart1Base64 = _rdaCharts.total ? _rdaCharts.total.getDataURL({ type: 'png', backgroundColor: '#fff', pixelRatio: 2 }) : '';
-                titleChart1 = isMuniFilter ? "AVANCE MUNICIPAL TOTAL" : "AVANCE JURISDICCIONAL TOTAL";
+                titleChart1 = isMuniFilter ? (String(document.getElementById('rdaFilterMunicipio')?.value || '').toUpperCase() === 'HOSPITALES' ? "AVANCE ACUMULADO DE HOSPITALES" : "AVANCE MUNICIPAL TOTAL") : "AVANCE JURISDICCIONAL TOTAL";
                 titleChart2 = isMuniFilter ? "TOP UNIDADES DEL MUNICIPIO" : "TOP 10 UNIDADES";
             }
             const imgTopBase64 = _rdaCharts.b ? _rdaCharts.b.getDataURL({ type: 'png', backgroundColor: '#fff', pixelRatio: 2 }) : '';

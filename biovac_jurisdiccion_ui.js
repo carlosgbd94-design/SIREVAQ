@@ -543,6 +543,8 @@ function renderTodoJur() {
   pintarConcentrado();
   renderInforme();
   if (window.SIS06PParalelos) window.SIS06PParalelos.pintar();   // PARALELOS (paso 4; solo JURISDICCIONAL/ADMIN)
+  if (window.ConciliacionBiologico) window.ConciliacionBiologico.pintar();   // Conciliación de biológico (paso 4)
+  if (window.SIS06PCsvJurisdiccional) window.SIS06PCsvJurisdiccional.pintar();   // CSV jurisdiccional (paso 4; solo JURISDICCIONAL/ADMIN)
   pintarRutaJur();
 }
 
