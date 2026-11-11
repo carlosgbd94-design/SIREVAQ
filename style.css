@@ -14170,6 +14170,13 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaFrascos .frs-lotesestado .material-symbols-rounded { font-size: 18px; flex: none; }
 #secInfluenzaFrascos .frs-lotesestado--good { background: #ecfdf5; border-color: #a7f3d0; color: #064e3b; }
 #secInfluenzaFrascos .frs-lotesestado--warn { background: #fffbeb; border-color: #fde68a; color: #78350f; }
+/* Existencia semanal por unidad (solo municipal): nota resumen y etiqueta bajo el nombre. */
+#secInfluenzaFrascos .frs-exinota { flex: 1 1 100%; padding: 10px 14px; border-radius: 12px; border: 1px solid #fde68a; background: #fffbeb; color: #78350f; font-size: 12px; font-weight: 600; line-height: 1.5; }
+#secInfluenzaFrascos .frs-exinota b { font-weight: 800; }
+#secInfluenzaFrascos .frs-exi { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 800; white-space: nowrap; background: #f1f5f9; color: #475569; }
+#secInfluenzaFrascos .frs-exi--sin { background: #fee2e2; color: #991b1b; }
+#secInfluenzaFrascos .frs-exi--poca { background: #fef3c7; color: #92400e; }
+#secInfluenzaFrascos .frs-exi--mucha { background: #dcfce7; color: #166534; }
 #secInfluenzaFrascos .frs-lote { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #ede9fe; color: #4c1d95; font-weight: 800; font-size: 11px; white-space: nowrap; }
 #secInfluenzaFrascos .frs-lote small { font-weight: 700; opacity: .75; margin-left: 4px; }
 #secInfluenzaFrascos .frs-lote--pend { background: #fef3c7; color: #92400e; }

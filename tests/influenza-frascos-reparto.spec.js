@@ -172,6 +172,41 @@ test('Municipal: reparte lo que asignó Jurisdicción entre sus unidades (sin ho
   expect(g.rows.map((r) => r.cantidad_frascos)).toEqual([127, 85, 100]);
 });
 
+test('Municipal: avisa qué unidades ya no tienen vacuna (existencia semanal) y «Priorizar» reparte más a quien no tiene', async ({ page }) => {
+  await montar(page, 'MUNICIPAL');
+  await page.evaluate(() => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    // Última captura semanal de cada unidad (la más reciente va primero, como la pide la consulta).
+    const filas = [
+      { clues: 'Q1', fecha: hoy, influenza: '0' },
+      { clues: 'Q2', fecha: hoy, influenza: '8' },
+      { clues: 'Q2', fecha: '2020-01-01', influenza: '99' },
+      { clues: 'Q3', fecha: hoy, influenza: '30' }
+    ];
+    const cadena = { select: () => cadena, in: () => cadena, gte: () => cadena, order: () => cadena, limit: () => cadena,
+      then: (ok) => ok({ data: filas, error: null }) };
+    window.supabase = { from: () => cadena };
+    _adminRemesasArray = [{ numero_entrega: 1, fecha: '2026-10-05', total_frascos: 458, asignacion: { QUERETARO: 312 }, manual: [] }];
+    renderFrascosDistribution();
+  });
+  await expect(page.locator('#frascosExistenciaNota')).toContainText('Sin vacuna de influenza: UMQ UNO');
+  await expect(page.locator('#mr_exi_Q1')).toContainText('Sin vacuna');
+  await expect(page.locator('#mr_exi_Q2')).toContainText('Tiene 8 fr.');   // toma la captura más reciente, no la vieja
+  await expect(page.locator('#mr_exi_Q3')).toContainText('Mucha');
+  await expect(page.locator('#btnMuniPriorizar')).toBeVisible();
+  await page.click('#btnMuniPriorizar');
+  const v = await page.evaluate(() => ['Q1', 'Q2', 'Q3'].map((c) => document.getElementById(`batch_frascos_${c}`).value));
+  expect(v).toEqual(['226', '75', '11']);   // por meta serían 156 / 104 / 52
+  await expect(page.locator('#mr_inp_T')).toHaveText('312 de 312');
+});
+
+test('Jurisdicción: no ve existencia ni el botón de priorizar', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate(() => { renderFrascosDistribution(); });
+  await expect(page.locator('#btnMuniPriorizar')).toBeHidden();
+  await expect(page.locator('#frascosExistenciaNota')).toBeHidden();
+});
+
 test('Municipal: lo guardado fuera de la meta se marca como editado y lo demás sigue por meta', async ({ page }) => {
   await montar(page, 'MUNICIPAL');
   await page.evaluate(() => {

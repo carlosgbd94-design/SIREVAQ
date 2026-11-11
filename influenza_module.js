@@ -7713,7 +7713,7 @@ function renderFrascosMunicipal(muni) {
     const tr = document.createElement("tr");
     tr.className = "frs-row";
     tr.innerHTML = `
-      <td><b>${u.unidad}</b><br><span class="frs-sub">${u.clues}</span></td>
+      <td><b>${u.unidad}</b><br><span class="frs-sub">${u.clues}</span><br><span id="mr_exi_${u.clues}"></span></td>
       <td class="c" id="mr_meta_${u.clues}"></td>
       <td class="c frs-muted col-pct" id="mr_pct_${u.clues}"></td>
       <td class="c frs-muted">${frascoFmt(otras)}${frascoOtraMarcaHtml(u.clues)}</td>
@@ -7760,7 +7760,111 @@ function renderFrascosMunicipal(muni) {
       refreshRepartoMunicipal(document.getElementById("adminInfluenzaMuni").value);
     });
   }
+  const btnPri = document.getElementById("btnMuniPriorizar");
+  if (btnPri && !btnPri.dataset.bound) {
+    btnPri.dataset.bound = "1";
+    btnPri.addEventListener("click", () => frascoPriorizarSinVacuna(document.getElementById("adminInfluenzaMuni").value));
+  }
   refreshRepartoMunicipal(muni);
+  frascoActualizarExistencia(units);
+}
+
+// ─── Existencia semanal de la unidad (solo reparto municipal) ───────────────
+// Fuente: la última captura semanal de existencia de biológico (biologicos_existencia, columnas influenza / covid_19,
+// en frascos). Es más reciente y completa que el Movimiento BIOVAC (que solo cubre el mes). En COVID la captura
+// semanal no distingue marca: es el total de frascos de COVID-19.
+let _frascoExistencia = {};          // clues -> { fecha, frascos }
+let _frascoExistenciaLlave = "";
+const FRASCO_EXI_POCA = 5;           // frascos o menos = «poca»
+const FRASCO_EXI_MUCHA = 20;         // frascos o más = «mucha»
+// Peso del reparto según su existencia: quien no tiene recibe su parte completa; quien tiene mucha, poco.
+const FRASCO_EXI_PESO = { sin: 1, poca: 0.75, normal: 0.5, mucha: 0.15, nodato: 0.75 };
+
+function frascoExistenciaNivel(clues) {
+  const e = _frascoExistencia[clues];
+  if (!e) return "nodato";
+  if (e.frascos <= 0) return "sin";
+  if (e.frascos <= FRASCO_EXI_POCA) return "poca";
+  if (e.frascos >= FRASCO_EXI_MUCHA) return "mucha";
+  return "normal";
+}
+
+async function frascoCargarExistencia(units) {
+  const claves = units.map(u => u.clues).sort();
+  const llave = `${claves.join(",")}|${esCovid() ? "c" : "i"}`;
+  if (llave === _frascoExistenciaLlave) return;
+  const col = esCovid() ? "covid_19" : "influenza";
+  const desde = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
+  const { data, error } = await window.supabase.from("biologicos_existencia")
+    .select(`clues, fecha, ${col}`).in("clues", claves).gte("fecha", desde)
+    .order("fecha", { ascending: false }).order("timestamp", { ascending: false, nullsFirst: false }).limit(3000);
+  if (error) throw error;
+  const out = {};
+  (data || []).forEach(r => {
+    if (out[r.clues]) return;   // la primera es la más reciente
+    const v = parseFloat(String(r[col] ?? "").replace(",", "."));
+    if (Number.isFinite(v)) out[r.clues] = { fecha: r.fecha, frascos: v };
+  });
+  _frascoExistencia = out;
+  _frascoExistenciaLlave = llave;
+}
+
+function frascoPintarExistencia(units) {
+  const rol = String(USER.rol || "").toUpperCase();
+  const btn = document.getElementById("btnMuniPriorizar");
+  const nota = document.getElementById("frascosExistenciaNota");
+  const grupos = { sin: [], poca: [], nodato: [] };
+  units.forEach(u => {
+    const el = document.getElementById(`mr_exi_${u.clues}`);
+    const nivel = frascoExistenciaNivel(u.clues);
+    const e = _frascoExistencia[u.clues];
+    if (grupos[nivel]) grupos[nivel].push(u.unidad);
+    if (!el) return;
+    const txt = {
+      sin: "Sin vacuna", poca: `Poca: ${frascoFmt(e && e.frascos)} fr.`, normal: `Tiene ${frascoFmt(e && e.frascos)} fr.`,
+      mucha: `Mucha: ${frascoFmt(e && e.frascos)} fr.`, nodato: "Sin captura reciente"
+    }[nivel];
+    el.className = `frs-exi frs-exi--${nivel}`;
+    el.title = e ? `Existencia según su captura semanal del ${frascoFechaCorta(e.fecha)}` : "No hay captura semanal de existencia en los últimos 45 días";
+    el.textContent = e ? `${txt} · ${frascoFechaCorta(e.fecha)}` : txt;
+  });
+  if (btn) btn.style.display = rol === "MUNICIPAL" ? "" : "none";
+  if (!nota) return;
+  const vac = esCovid() ? "COVID-19" : "influenza";
+  const partes = [];
+  if (grupos.sin.length) partes.push(`<b>Sin vacuna de ${vac}:</b> ${grupos.sin.join(", ")}`);
+  if (grupos.poca.length) partes.push(`<b>Con muy poca (${FRASCO_EXI_POCA} frascos o menos):</b> ${grupos.poca.join(", ")}`);
+  if (grupos.nodato.length) partes.push(`<b>Sin captura semanal reciente:</b> ${grupos.nodato.join(", ")}`);
+  nota.style.display = partes.length && rol === "MUNICIPAL" ? "" : "none";
+  nota.innerHTML = partes.join("<br>") + (partes.length ? `<br><span class="frs-sub">Existencia de su última captura semanal.${esCovid() ? " En COVID-19 es el total de las dos marcas." : ""} Usa «Priorizar a quien no tiene» para repartir más a estas unidades.</span>` : "");
+}
+
+async function frascoActualizarExistencia(units) {
+  if (String(USER.rol || "").toUpperCase() !== "MUNICIPAL") return;
+  try {
+    await frascoCargarExistencia(units);
+  } catch (err) {
+    console.warn("No se pudo leer la existencia semanal:", err);
+    _frascoExistencia = {};
+  }
+  frascoPintarExistencia(units);
+}
+
+function frascoPriorizarSinVacuna(muni) {
+  const total = frascosRecibidosMunicipio(muni, _muniRepartoState.numero);
+  const items = frascoItemsMunicipal(muni);
+  const pesados = items.map(it => ({ ...it, meta: Math.round(it.meta * FRASCO_EXI_PESO[frascoExistenciaNivel(it.id)]) }));
+  if (!pesados.some(i => i.meta > 0)) {
+    showToast("Las unidades no tienen meta capturada: no hay con qué priorizar.", false, "bad");
+    return;
+  }
+  const r = InfluenzaReparto.repartirFrascos(total, pesados, {});
+  _muniRepartoState.fijos = {};
+  _muniRepartoState.editados = new Set();
+  _muniRepartoState.tocados = new Set();
+  items.forEach(it => { _muniRepartoState.fijos[it.id] = r.frascos[it.id] || 0; _muniRepartoState.editados.add(it.id); });
+  refreshRepartoMunicipal(muni);
+  showToast(r.porAsignar ? `Priorizado; ${frascoFmt(r.porAsignar)} frascos no caben por el tope de las unidades.` : "Reparto priorizado por existencia. Revísalo y guarda.", !r.porAsignar, r.porAsignar ? "bad" : "good");
 }
 
 function refreshRepartoMunicipal(muni, enfocado) {
