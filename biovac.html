@@ -51,7 +51,7 @@ window.onunhandledrejection = function (event) {
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
 <script defer src="diagnostico_sis.js?v=12"></script>
-<script defer src="biovac_ui.js?v=2026.134"></script>
+<script defer src="biovac_ui.js?v=2026.136"></script>
 <script defer src="sis06p_biovac_module.js?v=2026.101"></script>
 <script defer src="sis_csv.js?v=6"></script>
 <script defer src="sis06p_dashboard_module.js?v=2026.38"></script>
@@ -982,7 +982,22 @@ window.onunhandledrejection = function (event) {
   .tabla-por-unidad tfoot th, .tabla-por-unidad tfoot td { font-weight: 800; border-bottom: 0; }
   .mini-estado { font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: #e2e8f0; color: #475569; white-space: nowrap; }
   .mini-estado.ok { background: var(--success-bg); color: var(--success); }
-  .nota-unidades-arf { margin-top: 4px; font-size: 12px; line-height: 1.35; color: #334155; font-weight: 600; }
+  .btn-unidades-arf { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font: 600 12px/1.2 inherit; cursor: pointer; }
+  .btn-unidades-arf .material-symbols-rounded { font-size: 16px; }
+  .btn-unidades-arf.arf { border-color: #fca5a5; color: #991b1b; }
+  .btn-unidades-arf.canje { border-color: #c4b5fd; color: #5b21b6; }
+  .btn-unidades-arf:focus-visible, .tua-cerrar:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+  .tarjeta-unidades-arf { position: fixed; z-index: 3000; width: min(340px, calc(100vw - 16px)); max-height: min(60vh, 420px); display: flex; flex-direction: column; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 12px 32px rgba(15, 23, 42, .18); color: #0f172a; font-size: 13px; }
+  .tarjeta-unidades-arf .tua-cab { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; padding: 12px 12px 8px 14px; border-bottom: 1px solid #f1f5f9; }
+  .tarjeta-unidades-arf .tua-cab > div { display: flex; flex-direction: column; gap: 2px; }
+  .tarjeta-unidades-arf.arf .tua-cab b { color: #991b1b; }
+  .tarjeta-unidades-arf.canje .tua-cab b { color: #5b21b6; }
+  .tarjeta-unidades-arf .tua-cab span { color: #475569; font-size: 12px; }
+  .tua-cerrar { border: 0; background: none; cursor: pointer; color: #475569; padding: 2px; border-radius: 8px; line-height: 0; }
+  .tarjeta-unidades-arf ul { list-style: none; margin: 0; padding: 4px 0; overflow-y: auto; }
+  .tarjeta-unidades-arf li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 14px; }
+  .tarjeta-unidades-arf li:nth-child(even) { background: #f8fafc; }
+  .tarjeta-unidades-arf li b { font-variant-numeric: tabular-nums; }
   .por-unidad-nota { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0 0; font-size: 12.5px; line-height: 1.45; }
   .por-unidad-nota .material-symbols-rounded { font-size: 18px; flex: none; }
   .por-unidad-nota.ok { color: var(--success); }

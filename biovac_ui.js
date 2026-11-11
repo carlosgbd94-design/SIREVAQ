@@ -2390,9 +2390,11 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   const porUnidades = Boolean(editable && aporte && aporte.length);
   const recibidoDeRequisicion = recibidoSoloDeRequisicion();
   // A.R.F./Canje del municipio: de qué unidades es y cuánto (misma nota que sale en el Excel).
-  const textoNotaUnidades = (aporte && aporte.length && (r.categoria === 'ARF' || r.categoria === 'CANJE') && window.BiovacExportExcel)
-    ? BiovacExportExcel.notaUnidadesArfCanje(r.categoria, aporte) : '';
-  const notaUnidadesHtml = textoNotaUnidades ? `<div class="nota-unidades-arf">${escHtmlBV(textoNotaUnidades)}</div>` : '';
+  // En pantalla va como botón con tarjeta flotante (la lista larga estiraba la fila); el texto completo sale en el Excel.
+  const unidadesArfCanje = (aporte && (r.categoria === 'ARF' || r.categoria === 'CANJE')) ? aporte.filter((a) => Number(a.fin) > 0.0001) : [];
+  const notaUnidadesHtml = unidadesArfCanje.length
+    ? `<button type="button" class="btn-unidades-arf ${r.categoria === 'CANJE' ? 'canje' : 'arf'}" data-action="detalle-unidades-arf" data-renglon="${r.id}" aria-haspopup="dialog" aria-expanded="false" title="De qué unidades es este lote y cuánto tiene cada una"><span class="material-symbols-rounded" aria-hidden="true">groups</span> ${unidadesArfCanje.length === 1 ? '1 unidad' : unidadesArfCanje.length + ' unidades'}</button>`
+    : '';
   // Nombre accesible de cada casilla: «lote — columna» (sin esto se armaba con el texto de la celda del lote y salía «Mover»).
   const [mlFraccionada, mlCompleta] = ML_DOSIS_FRACCIONADA[bio.clave] || ['dosis fraccionada', 'dosis completa'];
   const ETIQUETA_CAMPO = {
@@ -2458,6 +2460,58 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Anotar o corregir lo que tenías de este lote del mes pasado (solo este primer mes)" aria-label="Anotar o corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<span class="nota-lote-requi" role="img" aria-label="Este lote llegó por Requisiciones: no se quita aquí" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span></div>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}${(porUnidades || estado.anteriorEditable === false || Number(r.recibido_frascos) > 0) ? '' : `<button class="btn-fantasma" data-action="cambiar-lote" data-renglon="${r.id}" title="Cambiar el lote de esta existencia anterior (por ejemplo, si se capturó el lote 1 y era el 2): conserva las cantidades" aria-label="Cambiar el lote ${escHtmlBV(String(lote.numero_lote || ''))} sin perder las cantidades"><span class="material-symbols-rounded">sync</span></button>`}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Quitar este lote del SINBA-SIS (se pierden sus cantidades). Si solo el lote está mal, usa «Cambiar lote»."><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
   </tr>${filaResolver}${filaMover}${porUnidades ? filaPorUnidadHtml(r, aporte, cols) : ''}`;
 }
+
+// Tarjeta flotante con las unidades que tienen un lote en A.R.F./Canje y cuánto cada una. Un solo elemento reutilizado;
+// se cierra con Esc, al hacer clic fuera, al desplazar o cambiar el tamaño de la ventana (devuelve el foco al botón).
+function cerrarTarjetaUnidadesArf() {
+  const t = document.getElementById('tarjetaUnidadesArf');
+  if (!t) return;
+  const disparador = t._disparador;
+  t.remove();
+  if (disparador) { disparador.setAttribute('aria-expanded', 'false'); if (document.contains(disparador)) disparador.focus({ preventScroll: true }); }
+}
+function alternarTarjetaUnidadesArf(btn) {
+  const abierta = document.getElementById('tarjetaUnidadesArf');
+  const eraEste = abierta && abierta._disparador === btn;
+  cerrarTarjetaUnidadesArf();
+  if (eraEste) return;
+  const r = (estado.renglones || []).find((x) => x.id === btn.dataset.renglon);
+  const aporte = r && estado.aporteUnidades && estado.aporteUnidades.get(`${r.lote_id}|${r.categoria}`);
+  if (!aporte) return;
+  const lista = aporte.filter((a) => Number(a.fin) > 0.0001).sort((x, y) => String(x.unidad).localeCompare(String(y.unidad), 'es'));
+  const total = lista.reduce((t, a) => t + a.fin, 0);
+  const num = (v) => redondearFrascos(v) || 0;
+  const esCanje = r.categoria === 'CANJE';
+  const t = document.createElement('div');
+  t.id = 'tarjetaUnidadesArf';
+  t.className = 'tarjeta-unidades-arf ' + (esCanje ? 'canje' : 'arf');
+  t.setAttribute('role', 'dialog');
+  t.setAttribute('aria-label', `Unidades con el lote ${r.biovac_lotes.numero_lote} en ${esCanje ? 'canje' : 'A.R.F.'}`);
+  t.innerHTML = `<div class="tua-cab"><div><b>${esCanje ? 'Canje' : 'A.R.F.'} · lote ${escHtmlBV(r.biovac_lotes.numero_lote)}</b><span>${num(total)} frasco(s) en ${lista.length} ${lista.length === 1 ? 'unidad' : 'unidades'}</span></div><button type="button" class="tua-cerrar" aria-label="Cerrar"><span class="material-symbols-rounded" aria-hidden="true">close</span></button></div>
+    <ul>${lista.map((a) => `<li><span>${escHtmlBV(a.unidad)}</span><b>${num(a.fin)}</b></li>`).join('')}</ul>`;
+  t._disparador = btn;
+  document.body.appendChild(t);
+  btn.setAttribute('aria-expanded', 'true');
+  const caja = btn.getBoundingClientRect();
+  const ancho = t.offsetWidth, alto = t.offsetHeight;
+  const izq = Math.max(8, Math.min(caja.right - ancho, window.innerWidth - ancho - 8));
+  const abajo = caja.bottom + 6 + alto <= window.innerHeight - 8;
+  t.style.left = izq + 'px';
+  t.style.top = Math.max(8, abajo ? caja.bottom + 6 : caja.top - alto - 6) + 'px';
+  t.querySelector('.tua-cerrar').addEventListener('click', cerrarTarjetaUnidadesArf);
+  t.querySelector('.tua-cerrar').focus({ preventScroll: true });
+}
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') cerrarTarjetaUnidadesArf(); });
+document.addEventListener('click', (ev) => {
+  const t = document.getElementById('tarjetaUnidadesArf');
+  if (t && !t.contains(ev.target) && !ev.target.closest('[data-action="detalle-unidades-arf"]')) cerrarTarjetaUnidadesArf();
+});
+window.addEventListener('resize', cerrarTarjetaUnidadesArf);
+// El desplazamiento DENTRO de la tarjeta (rueda o arrastrar su barra) no la cierra; solo el de la página.
+window.addEventListener('scroll', (ev) => {
+  const t = document.getElementById('tarjetaUnidadesArf');
+  if (t && !(ev.target instanceof Node && t.contains(ev.target))) cerrarTarjetaUnidadesArf();
+}, true);
 
 // Detalle por unidad de un lote del municipio: suma de lo que reportó cada unidad y, si el municipio trae algo distinto,
 // de dónde sale la diferencia. «Abrir en la unidad» lleva a su Movimiento en modo corrección (queda en la auditoría).
@@ -4582,6 +4636,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (accion === 'eliminar-renglon') { eliminarRenglon(btn.dataset.renglon); return; }
     if (accion === 'cambiar-lote') { cambiarLoteRenglon(btn.dataset.renglon); return; }
     if (accion === 'editar-ant') { alternarEdicionAnterior(btn.dataset.renglon); return; }
+    if (accion === 'detalle-unidades-arf') { alternarTarjetaUnidadesArf(btn); return; }
     if (accion === 'ver-por-unidad') {
       const fila = document.querySelector(`[data-panel-unidades="${btn.dataset.renglon}"]`);
       if (!fila) return;
