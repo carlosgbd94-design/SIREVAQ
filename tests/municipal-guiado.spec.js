@@ -88,7 +88,14 @@ test('Municipal: cierre guiado en 4 pasos', async ({ page }) => {
   await expect(page.locator('#rutaMes .ruta-paso[data-mpaso="3"]')).toHaveClass(/alerta/);
   await page.click('#munPendientes [data-pend-ir="munDetConciliacion"]');
   await expect(page.locator('#munDetConciliacion')).toHaveAttribute('open', '');
-  await expect(page.locator('#panelMunConcentrado [data-descarga]')).toHaveCount(3);
+  await expect(page.locator('#panelMunConcentrado [data-descarga]')).toHaveCount(4);
+  // La conciliación de biológico vive aquí con los demás archivos: abre su ventana con el municipio ya elegido
+  await page.click('#panelMunConcentrado [data-descarga="conciliacion"]');
+  const dlgConc = page.getByRole('dialog', { name: /Conciliación de biológico 2026/ });
+  await expect(dlgConc).toBeVisible();
+  await expect(dlgConc.locator('#concMun')).toHaveValue('QUERETARO');
+  await page.keyboard.press('Escape');
+  await expect(dlgConc).toHaveCount(0);
   await expect(page.locator('#panelMunConcentrado [data-descarga="conc"]')).toBeEnabled();
   await expect(page.locator('#panelMunConcentrado [data-descarga="csv"]')).toBeDisabled();   // faltan unidades por validar
   await expect(page.locator('#munMovEstadoFase')).toContainText('Sin iniciar');

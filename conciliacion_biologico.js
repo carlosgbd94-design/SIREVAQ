@@ -545,7 +545,7 @@
   }
 
   // ---------------------------------------------------------------------------------------------------------------
-  // 5) INTERFAZ: botón en el dock del Movimiento (biovac.html) y tarjeta en el Concentrado Jurisdiccional (paso 4) + ventana
+  // 5) INTERFAZ: botón en el paso 3 «Descarga tus archivos» del Concentrado (municipal_guiado.js), tarjeta en el Concentrado Jurisdiccional (paso 4) + ventana
   // ---------------------------------------------------------------------------------------------------------------
   const interfaz = (function () {
     const hayDom = typeof document !== 'undefined';
@@ -614,7 +614,8 @@
       return filas;
     }
 
-    async function abrirVentana(origen) {
+    async function abrirVentana(origen, opciones) {
+      opciones = opciones || {};
       if (abierta || !hayDom) return;
       const e = est();
       const db = e && e.db;
@@ -629,7 +630,7 @@
       const municipios = [...porMunicipio.keys()].sort((a, b) => nombreMunicipio(a).localeCompare(nombreMunicipio(b), 'es'));
       if (!reales.length) { aviso('No hay unidades con Movimiento para exportar.', 'warn'); return; }
       const soloUnidad = rol === 'UNIDAD' || reales.length === 1;
-      const mes0 = mesPorDefecto();
+      const mes0 = opciones.mes >= MES_INICIO ? Number(opciones.mes) : mesPorDefecto();
 
       const fondo = document.createElement('div');
       fondo.className = 'conc-fondo';
@@ -676,6 +677,10 @@
         $('concCampoUni').style.display = a === 'unidad' ? '' : 'none';
       };
       if (!soloUnidad) {
+        if (opciones.municipio && porMunicipio.has(opciones.municipio)) {
+          $('concMun').value = opciones.municipio;
+          const rm = fondo.querySelector('input[name="concAmbito"][value="municipio"]'); if (rm) rm.checked = true;
+        }
         llenarUnidades(); refrescar();
         $('concMun').addEventListener('change', llenarUnidades);
         fondo.querySelectorAll('input[name="concAmbito"]').forEach((r) => r.addEventListener('change', refrescar));
@@ -722,26 +727,28 @@
             etiqueta = a === 'municipio' ? `MUNICIPIO DE ${nombreMunicipio(mun).toUpperCase()}` : nombreMunicipio(mun);
           }
           const base = { db, abrirPlantilla, catalogo, unidades, etiqueta, anio: ANIO_PLANTILLA, mesHasta, supervisor: sup };
-          let avisos = [];
+          let avisos = [], exito = '';
           if (a === 'masivo') {
             const JSZipLib = await cargarJSZip();
             const r = await exportarMasivo({ ...base, JSZipLib, alProgreso: (i, n, nombre) => poner(`Armando ${i} de ${n}: ${nombre}…`) });
             descargarBlob(r.blob, r.nombreArchivo);
             avisos = [...r.avisosMeses, ...r.avisos];
             poner('');
-            aviso(`✅ ${r.nombreArchivo} listo (${r.unidades.length} unidades${r.sinDatos.length ? `; ${r.sinDatos.length} sin Movimiento` : ''}).${avisos.length ? ' Revisa los avisos.' : ''}`, avisos.length ? 'warn' : 'ok');
+            exito = `Conciliación lista: ${r.unidades.length} unidades en el ZIP${r.sinDatos.length ? ` (${r.sinDatos.length} sin Movimiento)` : ''}.`;
           } else {
             poner('Armando el Excel sobre el formato oficial…');
             const r = await exportarLibro(base);
             descargarBlob(new Blob([r.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), r.nombreArchivo);
             avisos = [...r.avisosMeses, ...r.resumen.avisos];
             poner('');
-            aviso(`✅ ${r.nombreArchivo} listo.${avisos.length ? ' Revisa los avisos.' : ''}`, avisos.length ? 'warn' : 'ok');
+            exito = 'Conciliación lista: el Excel se descargó.';
           }
-          if (avisos.length) {
-            poner('Avisos: ' + avisos.slice(0, 4).join(' | ') + (avisos.length > 4 ? ` … (+${avisos.length - 4})` : ''));
-            console.warn('[Conciliación] Avisos:', avisos);
-          }
+          if (avisos.length) console.warn('[Conciliación] Avisos:', avisos);
+          // la ventana se cierra al terminar; lo que haya que revisar queda en el aviso (corto) y en la consola
+          ocupado = false;
+          cerrar();
+          if (avisos.length) aviso(`${exito} Hay ${avisos.length} aviso(s) por revisar: ${avisos[0].slice(0, 110)}${avisos[0].length > 110 ? '…' : ''}`, 'warn');
+          else aviso(exito, 'ok');
         } catch (err) {
           console.error('[Conciliación] Error al exportar:', err);
           poner(err.message || 'No se pudo generar la conciliación.');
@@ -750,21 +757,6 @@
           ocupado = false; btn.disabled = false; $('concCerrar').disabled = false;
         }
       });
-    }
-
-    // Botón del dock (biovac.html): se pone cuando ya hay sesión y dock.
-    function pintarDock() {
-      const dock = document.querySelector('.dock-acciones');
-      if (!dock || !puede()) return false;
-      if (document.getElementById('btnConciliacionDock')) return true;
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'dock-btn'; b.id = 'btnConciliacionDock';
-      b.title = 'Conciliación de biológico (formato trimestral por lote, en dosis, acumulado del año)';
-      b.innerHTML = '<span class="material-symbols-rounded" aria-hidden="true">inventory_2</span><span class="dock-etiqueta">Conciliación</span>';
-      b.addEventListener('click', () => abrirVentana(b));
-      const ref = document.getElementById('btnExportarSISCompleto');
-      if (ref && ref.parentNode === dock) dock.insertBefore(b, ref); else dock.appendChild(b);
-      return true;
     }
 
     // Tarjeta del Concentrado Jurisdiccional (paso 4, junto al Excel oficial y PARALELOS).
@@ -784,14 +776,9 @@
 
     function pintar() {
       if (!hayDom) return;
-      pintarDock(); pintarTarjeta();
+      pintarTarjeta();
     }
 
-    // El dock y la sesión aparecen después de cargar la página: se reintenta unos segundos hasta que estén.
-    if (hayDom) {
-      let intentos = 0;
-      const t = setInterval(() => { intentos++; pintar(); if ((document.getElementById('btnConciliacionDock') || intentos > 120) && intentos > 2) clearInterval(t); }, 1000);
-    }
     return { pintar, abrirVentana };
   })();
 
@@ -799,6 +786,6 @@
     ANIO_PLANTILLA, MES_INICIO, MESES, HOJA_DE, SPLIT, PLANTILLA_URL,
     normalizarRenglonDb, consolidarMes, armarDatos, columnasDe, detectarBloques, llenarHoja, llenarEncabezado,
     construirLibro, cargarCatalogo, cargarMeses, cargarPlantilla, unidadesDelMunicipio, exportarLibro, exportarMasivo, armarLibroDesde,
-    avisosDeMeses, nombreArchivoDe, sinAcentos, pintar: () => interfaz.pintar(), interfaz
+    avisosDeMeses, nombreArchivoDe, sinAcentos, pintar: () => interfaz.pintar(), abrirVentana: (origen, opciones) => interfaz.abrirVentana(origen, opciones), interfaz
   };
 });

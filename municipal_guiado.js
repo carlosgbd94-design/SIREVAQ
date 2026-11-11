@@ -731,7 +731,9 @@
               '<button type="button" class="btn-secundario btn-mini" data-descarga="conc" disabled aria-label="Descargar Excel del concentrado municipal"><span class="material-symbols-rounded">download</span> Descargar Excel</button>')}
             ${juris ? '' : filaArchivo(1, 'inventory_2', '#d97706', 'Excel de Movimiento de Biológico (BIOVAC)', 'El formato por lote y caducidad, con entradas, recibidos, aplicados, desechos, existencia final, ARF y canjes.',
               '<button type="button" class="btn-secundario btn-mini" data-descarga="mov" disabled aria-label="Descargar Excel de Movimiento de Biológico"><span class="material-symbols-rounded">download</span> Descargar Excel</button>')}
-            ${filaArchivo(2, 'description', '#7c3aed', 'CSV oficial para estadística', listoCSV ? 'Un Excel con una pestaña por unidad (NOMBRE_CLUES, en orden de CLUES) y las columnas del CSV.' : `Se habilita cuando todas las unidades estén validadas (${resu.validado} de ${resu.esperadas}${resu.omitida ? '; ' + resu.omitida + ' sin envío no cuentan' : ''}).`,
+            ${filaArchivo(2, 'fact_check', '#0ea5e9', 'Conciliación de biológico 2026', 'Formato trimestral por lote y en dosis, acumulado del año (desde octubre): una unidad, el municipio completo o un ZIP con un libro por unidad.',
+              '<button type="button" class="btn-secundario btn-mini" data-descarga="conciliacion" aria-label="Descargar la conciliación de biológico"><span class="material-symbols-rounded">download</span> Descargar Excel</button>')}
+            ${filaArchivo(3, 'description', '#7c3aed', 'CSV oficial para estadística', listoCSV ? 'Un Excel con una pestaña por unidad (NOMBRE_CLUES, en orden de CLUES) y las columnas del CSV.' : `Se habilita cuando todas las unidades estén validadas (${resu.validado} de ${resu.esperadas}${resu.omitida ? '; ' + resu.omitida + ' sin envío no cuentan' : ''}).`,
               `<button type="button" class="btn-secundario btn-mini" data-descarga="csv" ${listoCSV ? '' : 'disabled'} aria-label="Exportar CSV para estadística"><span class="material-symbols-rounded">download</span> Exportar CSV para estadística</button>`)}
           </ul>
         </li>
@@ -988,6 +990,7 @@
     const tipo = btn.dataset.descarga;
     if (tipo === 'conc') return conCarga(btn, () => (st.conc ? st.conc.descargar() : null));
     if (tipo === 'mov') return conCarga(btn, () => descargarMovimientoBiovac(st.muni, mes, anio));
+    if (tipo === 'conciliacion') { if (window.ConciliacionBiologico) window.ConciliacionBiologico.abrirVentana(btn, { municipio: st.muni, mes }); else toast('No se pudo cargar la conciliación de biológico.', 'error'); return; }
     if (tipo === 'csv') return conCarga(btn, async () => window.SIS06PDashboard.exportarCSVOficialMunicipio(st.muni, mes, anio));
   }
 

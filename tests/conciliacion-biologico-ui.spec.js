@@ -23,15 +23,12 @@ async function abrir(page, rol) {
   await page.waitForTimeout(1500);
 }
 
-test('MUNICIPAL: el dock trae «Conciliación», la ventana es un diálogo y descarga el libro de una unidad', async ({ page }) => {
+test('MUNICIPAL: la ventana es un diálogo, se abre con el municipio elegido y se cierra sola al descargar', async ({ page }) => {
   await abrir(page, 'MUNICIPAL');
   await page.evaluate(() => {
     estado.perfil = { rol: 'MUNICIPAL', usuario: 'muni', nombre: 'Laura', apellido_paterno: 'Soto', apellido_materno: 'Ruiz', municipios_allowed: ['QUERETARO'] };
-    window.ConciliacionBiologico.pintar();
   });
-  const boton = page.locator('#btnConciliacionDock');
-  await expect(boton).toBeAttached();
-  await page.evaluate(() => document.getElementById('btnConciliacionDock').click());
+  await page.evaluate(() => window.ConciliacionBiologico.abrirVentana(null, { municipio: 'QUERETARO' }));
 
   const dialogo = page.getByRole('dialog', { name: /Conciliación de biológico 2026/ });
   await expect(dialogo).toBeVisible();
@@ -49,9 +46,10 @@ test('MUNICIPAL: el dock trae «Conciliación», la ventana es un diálogo y des
   await expect(dialogo).toHaveCount(0);
 
   // descarga de una unidad
-  await page.evaluate(() => document.getElementById('btnConciliacionDock').click());
+  await page.evaluate(() => window.ConciliacionBiologico.abrirVentana(null, { municipio: 'QUERETARO' }));
   await expect(dialogo).toBeVisible();
   const [descarga] = await Promise.all([page.waitForEvent('download', { timeout: 90000 }), dialogo.locator('#concDescargar').click()]);
+  await expect(dialogo).toHaveCount(0);        // al terminar la ventana se cierra sola
   expect(descarga.suggestedFilename()).toMatch(/^CONCILIACION_BIOLOGICO_2026_.*_hasta_.*\.xlsx$/);
   const ruta = await descarga.path();
   const wb = new ExcelJS.Workbook(); await wb.xlsx.readFile(ruta);
@@ -61,15 +59,14 @@ test('MUNICIPAL: el dock trae «Conciliación», la ventana es un diálogo y des
   expect(nombres.length).toBe(19);
   const o6 = wb.getWorksheet('SR').getCell('O6').value;
   expect(String(o6)).toMatch(/\(1\)$/);
-  expect(String(o6)).toContain('C.S. Alfa');
+  expect(String(o6)).toContain('MUNICIPIO DE QUERÉTARO');   // abrió con el municipio elegido (suma de sus unidades)
 });
 
 test('MUNICIPAL sin Movimiento en el periodo: el ZIP masivo avisa en vez de descargar un archivo vacío', async ({ page }) => {
   await abrir(page, 'MUNICIPAL');
   await page.evaluate(() => {
     estado.perfil = { rol: 'MUNICIPAL', usuario: 'muni', nombre: 'Laura', apellido_paterno: 'Soto', municipios_allowed: ['QUERETARO'] };
-    window.ConciliacionBiologico.pintar();
-    document.getElementById('btnConciliacionDock').click();
+    window.ConciliacionBiologico.abrirVentana(null, { municipio: 'QUERETARO' });
   });
   const dialogo = page.getByRole('dialog', { name: /Conciliación de biológico 2026/ });
   await expect(dialogo).toBeVisible();
@@ -84,8 +81,7 @@ test('UNIDAD: solo ve su unidad (sin elegir municipio) y no aparece el selector 
   await abrir(page, 'UNIDAD');
   await page.evaluate(() => {
     estado.perfil = { rol: 'UNIDAD', usuario: 'alfa', nombre: 'Ana', apellido_paterno: 'Lopez', clues: 'QTSSA000001' };
-    window.ConciliacionBiologico.pintar();
-    document.getElementById('btnConciliacionDock').click();
+    window.ConciliacionBiologico.abrirVentana(null, { municipio: 'QUERETARO' });
   });
   const dialogo = page.getByRole('dialog', { name: /Conciliación de biológico 2026/ });
   await expect(dialogo).toBeVisible();
