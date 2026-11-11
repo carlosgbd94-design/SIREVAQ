@@ -671,8 +671,8 @@
       // Un libro de Excel con una pestaña por unidad (NOMBRE_CLUES), ordenadas por CLUES, con las columnas del CSV.
       pantalla.texto('Armando el archivo de Excel…');
       const nombres = await window.SIS_CSV.nombresDeUnidades(estado.db, mes, anio);
-      await window.SIS_CSV.descargarLibro(`SIS_${municipio}_${mes}_${anio}.xlsx`, rows, nombres);
-      toast(`CSV oficial generado: ${new Set(rows.map((r) => r.CLUES)).size} pestañas (una por CLUES), ${rows.length} filas.`, 'ok');
+      const r = await window.SIS_CSV.descargarLibros(`SIS_${municipio}_${mes}_${anio}`, rows, nombres);
+      toast(`CSV oficial generado en 2 archivos (${r.unidades} pestañas, una por CLUES, en cada uno): general sin influenza ${r.general} filas e Influenza ${r.influenza} filas.`, 'ok');
     } catch (err) {
       console.error('[SIS-06-P] Error exportando CSV oficial del municipio:', err);
       toast(err.message || 'Error al exportar el CSV oficial.', 'error');

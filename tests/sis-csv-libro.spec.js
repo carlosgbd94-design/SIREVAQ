@@ -21,6 +21,22 @@ test('libro SIS: una pestaña por CLUES, ordenadas y con nombre válido de Excel
   expect(ws.rowCount).toBe(3);
 });
 
+test('partirInfluenza: BIE* y BIO96/BIO97 van al libro de influenza; el resto al general; ambos con todas las unidades', async () => {
+  global.window = {};
+  delete require.cache[require.resolve('../sis_csv.js')];
+  require('../sis_csv.js');
+  window.ExcelJS = require('exceljs');
+  const S = window.SIS_CSV;
+  const f = (c, v) => ({ CLUES: c, VARIABLE: v, VALOR: 1, MES: 10, 'AÑO': 2026, MUNICIPIO: 'CORREGIDORA' });
+  const filas = [f('A1', 'BIE01'), f('A1', 'BIO96'), f('A1', 'BIO97'), f('A1', 'BIO50'), f('A2', 'VBC01'), f('A1', 'BIE61')];
+  const { general, influenza } = S.partirInfluenza(filas);
+  expect(influenza.map((r) => r.VARIABLE).sort()).toEqual(['BIE01', 'BIE61', 'BIO96', 'BIO97']);
+  expect(general.map((r) => r.VARIABLE).sort()).toEqual(['BIO50', 'VBC01']);
+  const wb = await S.aLibro(influenza, {}, ['A1', 'A2']);
+  expect(wb.worksheets.map((w) => w.name)).toEqual(['A1', 'A2']);
+  expect(wb.worksheets[1].rowCount).toBe(1); // A2 sin influenza: solo encabezado
+});
+
 test('filasDeMunicipio pide por bloques: un municipio de varias unidades no se corta en 1000 filas', async () => {
   global.window = {};
   delete require.cache[require.resolve('../sis_csv.js')];

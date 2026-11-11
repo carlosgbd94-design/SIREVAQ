@@ -69,14 +69,29 @@
     return [...mapa.keys()].sort((a, b) => String(a).localeCompare(String(b))).map((clues) => ({ clues, filas: mapa.get(clues) }));
   }
 
-  async function aLibro(filas, nombres) {
+  // Influenza = variables BIE* (BIE01...BIE61) + BIO96 y BIO97 (embarazadas y personal de salud). Todo lo demás es "general".
+  const esVariableInfluenza = (v) => /^BIE\d+/i.test(String(v || '').trim()) || /^BIO9[67]$/i.test(String(v || '').trim());
+  function partirInfluenza(filas) {
+    const general = [], influenza = [];
+    (filas || []).forEach((r) => (esVariableInfluenza(r.VARIABLE) ? influenza : general).push(r));
+    return { general, influenza };
+  }
+
+  // `todasClues`: si se pasa, cada una tiene su pestaña aunque no tenga filas (así los dos libros traen las mismas unidades).
+  async function aLibro(filas, nombres, todasClues) {
     if (!window.ExcelJS && typeof window.ensureLibsLoaded === 'function') {
       try { await window.ensureLibsLoaded('exceljs'); } catch (e) { console.warn('[SIS_CSV] exceljs no cargó:', e); }
     }
     if (!window.ExcelJS) throw new Error('No cargó la librería de Excel. Revisa tu conexión e inténtalo de nuevo.');
     const wb = new window.ExcelJS.Workbook();
     const usados = new Set();
-    agruparPorClues(filas).forEach(({ clues, filas: fs }) => {
+    const grupos = agruparPorClues(filas);
+    if (Array.isArray(todasClues)) {
+      const tiene = new Set(grupos.map((g) => g.clues));
+      todasClues.forEach((c) => { if (!tiene.has(c)) grupos.push({ clues: c, filas: [] }); });
+      grupos.sort((a, b) => String(a.clues).localeCompare(String(b.clues)));
+    }
+    grupos.forEach(({ clues, filas: fs }) => {
       const ws = wb.addWorksheet(nombrePestana((nombres || {})[clues], clues, usados));
       ws.columns = HEADERS.map((h) => ({ header: h, key: h, width: h === 'MUNICIPIO' ? 18 : (h === 'CLUES' ? 16 : 11) }));
       ws.getRow(1).font = { bold: true };
@@ -87,8 +102,20 @@
     return wb;
   }
 
-  async function descargarLibro(nombreArchivo, filas, nombres) {
-    const wb = await aLibro(filas, nombres);
+  // Estadística recibe DOS libros (una pestaña por unidad en cada uno): el general (sin influenza) y el de influenza.
+  // `base` = nombre sin extensión, p. ej. SIS_CORREGIDORA_10_2026 -> SIS_CORREGIDORA_10_2026.xlsx y SIS_CORREGIDORA_10_2026_INFLUENZA.xlsx
+  async function descargarLibros(base, filas, nombres) {
+    const { general, influenza } = partirInfluenza(filas);
+    const clues = [...new Set((filas || []).map((r) => r.CLUES))];
+    await descargarLibro(`${base}.xlsx`, general, nombres, clues);
+    // los navegadores piden permiso/bloquean dos descargas pegadas: se separan un poco
+    await new Promise((r) => setTimeout(r, 400));
+    await descargarLibro(`${base}_INFLUENZA.xlsx`, influenza, nombres, clues);
+    return { general: general.length, influenza: influenza.length, unidades: clues.length };
+  }
+
+  async function descargarLibro(nombreArchivo, filas, nombres, todasClues) {
+    const wb = await aLibro(filas, nombres, todasClues);
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
@@ -132,5 +159,5 @@
     return aFilas(todo, mes, anio, municipio);
   }
 
-  window.SIS_CSV = { HEADERS, aFilas, aTexto, descargar, filasDeMunicipio, nombrePestana, agruparPorClues, aLibro, descargarLibro, nombresDeUnidades };
+  window.SIS_CSV = { HEADERS, aFilas, aTexto, descargar, filasDeMunicipio, nombrePestana, agruparPorClues, aLibro, descargarLibro, descargarLibros, esVariableInfluenza, partirInfluenza, nombresDeUnidades };
 })();
