@@ -277,7 +277,7 @@ async function cargarAporteUnidades(m) {
     const ids = [...porMov.keys()];
     for (let i = 0; i < ids.length; i += 40) {
       const { data: rens, error: e2 } = await estado.db.from('biovac_renglones')
-        .select('lote_id, categoria, movimiento_id, recibido_frascos, aplicadas_a, aplicadas_b, desechadas_a, desechadas_b')
+        .select('lote_id, categoria, movimiento_id, recibido_frascos, aplicadas_a, aplicadas_b, desechadas_a, desechadas_b, existencia_final_frascos')
         .in('movimiento_id', ids.slice(i, i + 40));
       if (e2) throw e2;
       (rens || []).forEach((r) => {
@@ -285,6 +285,7 @@ async function cargarAporteUnidades(m) {
         const k = `${r.lote_id}|${r.categoria}`;
         if (!aporte.has(k)) aporte.set(k, []);
         aporte.get(k).push({ clues: u.clues, unidad: u.nombre, estado: mv.estado,
+          fin: Number(r.existencia_final_frascos) || 0,
           rec: Number(r.recibido_frascos) || 0, apl: (Number(r.aplicadas_a) || 0) + (Number(r.aplicadas_b) || 0), des: (Number(r.desechadas_a) || 0) + (Number(r.desechadas_b) || 0) });
       });
     }
@@ -1882,7 +1883,7 @@ async function ofrecerCargaDesdeRequisicionesUnidad(unidadClues) {
 async function cargarRenglones() {
   const [{ data, error }, { data: ediciones }] = await Promise.all([
     estado.db.from('biovac_renglones')
-      .select(`id, categoria, existencia_anterior_frascos, ajuste_anterior_frascos, recibido_frascos, aplicadas_a, aplicadas_b, desechadas_a, desechadas_b, existencia_final_frascos, observaciones,
+      .select(`id, lote_id, categoria, existencia_anterior_frascos, ajuste_anterior_frascos, recibido_frascos, aplicadas_a, aplicadas_b, desechadas_a, desechadas_b, existencia_final_frascos, observaciones,
         biovac_lotes ( id, numero_lote, caducidad, dosis_por_frasco_override, biologico_id,
           biovac_catalogo_biologicos ( id, clave, nombre_excel, bloque_id, presentacion, dosis_por_frasco, regla_especial ) )`)
       .eq('movimiento_id', estado.movimiento.id),
@@ -2388,6 +2389,10 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
   const aporte = estado.aporteUnidades && estado.aporteUnidades.get(`${r.lote_id}|${r.categoria}`);
   const porUnidades = Boolean(editable && aporte && aporte.length);
   const recibidoDeRequisicion = recibidoSoloDeRequisicion();
+  // A.R.F./Canje del municipio: de qué unidades es y cuánto (misma nota que sale en el Excel).
+  const textoNotaUnidades = (aporte && aporte.length && (r.categoria === 'ARF' || r.categoria === 'CANJE') && window.BiovacExportExcel)
+    ? BiovacExportExcel.notaUnidadesArfCanje(r.categoria, aporte) : '';
+  const notaUnidadesHtml = textoNotaUnidades ? `<div class="nota-unidades-arf">${escHtmlBV(textoNotaUnidades)}</div>` : '';
   // Nombre accesible de cada casilla: «lote — columna» (sin esto se armaba con el texto de la celda del lote y salía «Mover»).
   const [mlFraccionada, mlCompleta] = ML_DOSIS_FRACCIONADA[bio.clave] || ['dosis fraccionada', 'dosis completa'];
   const ETIQUETA_CAMPO = {
@@ -2449,7 +2454,7 @@ function renderRenglonFila(r, bio, editable, split, subcategoria) {
     <td class="col-mov c-des${split ? ' col-dosis-05' : ''}">${campo('desechadas_a', r.desechadas_a)}</td>
     ${split ? `<td class="col-mov c-des col-dosis-1">${campo('desechadas_b', r.desechadas_b)}</td>` : ''}
     <td class="col-final c-fin"><span class="valor-final ${negativa ? 'existencia-negativa' : ''}"${negativa ? ` title="${TEXTO_NEGATIVA}"` : ''} data-existencia-final="${r.id}">${dosis}</span></td>
-    <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}</td>
+    <td>${editable ? `<input type="text" data-renglon="${r.id}" data-campo="observaciones" value="${(r.observaciones || '').replace(/"/g, '&quot;')}">` : (r.observaciones || '')}${notaUnidadesHtml}</td>
     <td>${editable && recibidoDeRequisicion && Number(r.recibido_frascos) > 0 ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Anotar o corregir lo que tenías de este lote del mes pasado (solo este primer mes)" aria-label="Anotar o corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}<span class="nota-lote-requi" role="img" aria-label="Este lote llegó por Requisiciones: no se quita aquí" title="Este lote llegó por Requisiciones: no se quita aquí."><span class="material-symbols-rounded" aria-hidden="true">lock</span></span></div>` : editable ? `<div class="acciones-fila">${puedeEditarAnt ? `<button class="btn-fantasma" data-action="editar-ant" data-renglon="${r.id}" title="Corregir la existencia anterior de este lote"><span class="material-symbols-rounded">edit</span></button>` : ''}${(porUnidades || estado.anteriorEditable === false || Number(r.recibido_frascos) > 0) ? '' : `<button class="btn-fantasma" data-action="cambiar-lote" data-renglon="${r.id}" title="Cambiar el lote de esta existencia anterior (por ejemplo, si se capturó el lote 1 y era el 2): conserva las cantidades" aria-label="Cambiar el lote ${escHtmlBV(String(lote.numero_lote || ''))} sin perder las cantidades"><span class="material-symbols-rounded">sync</span></button>`}<button class="btn-fantasma" data-action="eliminar-renglon" data-renglon="${r.id}" title="Quitar este lote del SINBA-SIS (se pierden sus cantidades). Si solo el lote está mal, usa «Cambiar lote»."><span class="material-symbols-rounded">delete</span></button></div>` : ''}</td>
   </tr>${filaResolver}${filaMover}${porUnidades ? filaPorUnidadHtml(r, aporte, cols) : ''}`;
 }

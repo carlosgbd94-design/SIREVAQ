@@ -53,3 +53,10 @@ for (const [nombre, archivo, hoja] of [['municipio', 'biovac_plantilla.xlsx', 'S
     expect(ws.rowBreaks[0].id).toBe(filaReverso - 1);
   });
 }
+
+test('nota de A.R.F./Canje: cantidad y de qué unidades, ordenadas y sin ceros', () => {
+  expect(E.notaUnidadesArfCanje('ARF', [{ unidad: 'San Pedrito', fin: 5 }, { unidad: 'Alameda', fin: 3.5 }, { unidad: 'Otra', fin: 0 }]))
+    .toBe('A.R.F.: 3.5 de Alameda · 5 de San Pedrito');
+  expect(E.notaUnidadesArfCanje('CANJE', [{ unidad: 'Alameda', fin: 2 }])).toBe('Canje: 2 de Alameda');
+  expect(E.notaUnidadesArfCanje('ARF', [{ unidad: 'X', fin: 0 }])).toBe('');
+});

@@ -370,9 +370,22 @@
     ws.mergeCells(`A${inicioArf}:A${finArf}`);
     ws.mergeCells(`Q${inicioBloque}:Q${finArf}`);
 
+    // Observaciones del bloque: las capturadas (sin repetir) y, en A.R.F./Canje del municipio, de qué unidades es cada lote.
     const todasLasFilas = biosConRenglones.flatMap((b) => [...b.normales, ...b.arf]);
-    const observaciones = todasLasFilas.map((r) => r.observaciones).find((o) => o);
-    if (observaciones) ws.getCell(`Q${inicioBloque}`).value = observaciones;
+    const observaciones = [...new Set(todasLasFilas.map((r) => r.observaciones).filter((o) => o))].join('\n');
+    if (observaciones) {
+      const celdaObs = ws.getCell(`Q${inicioBloque}`);
+      celdaObs.value = observaciones;
+      if (observaciones.indexOf('\n') >= 0) celdaObs.alignment = Object.assign({}, celdaObs.alignment, { wrapText: true });
+      // La columna es angosta y el bloque tiene alto fijo: la letra se achica hasta que la nota quepa completa (mínimo 5 pt).
+      let altoBloque = 0;
+      for (let rr = inicioBloque; rr <= finArf; rr++) altoBloque += ws.getRow(rr).height || 15;
+      const anchoCol = ws.getColumn('Q').width || 14.7;
+      const lineasNecesarias = (pt) => observaciones.split('\n').reduce((t, p) => t + Math.max(1, Math.ceil(p.length / Math.max(1, Math.floor(anchoCol * 11 / pt * 0.95)))), 0);
+      let pt = 11;
+      while (pt > 5 && lineasNecesarias(pt) * pt * 1.2 > altoBloque) pt -= 0.5;
+      if (pt < 11) celdaObs.font = Object.assign({}, celdaObs.font, { size: pt });
+    }
 
     // Fusionar ANTES de aplicar el estilo capturado (no después): ExcelJS
     // homogeniza el borde de las celdas no-ancla de un rango recién
@@ -675,6 +688,67 @@
   // la hoja a construirWorkbookDesdeDatos.
   // ---------------------------------------------------------------------
 
+  // «A.R.F. 5 de Unidad A · 3 de Unidad B»: de qué unidades es lo que el municipio tiene en dictamen o canje, y cuánto.
+  // entradas: [{ unidad, fin }] (fin = existencia final en frascos de esa unidad en ese estatus).
+  function notaUnidadesArfCanje(categoria, entradas) {
+    const num = (v) => String(Math.round((Number(v) || 0) * 100) / 100);
+    const partes = (entradas || []).filter((e) => Number(e.fin) > 0.0001)
+      .sort((a, b) => String(a.unidad).localeCompare(String(b.unidad), 'es'))
+      .map((e) => `${num(e.fin)} de ${e.unidad}`);
+    if (!partes.length) return '';
+    return `${categoria === 'CANJE' ? 'Canje' : 'A.R.F.'}: ${partes.join(' · ')}`;
+  }
+
+  // Desde octubre-2026 el Movimiento del municipio (no hospitales) se arma con sus unidades: se anota en cada renglón A.R.F./Canje
+  // quiénes lo tienen. Si algo falla o no aplica, el Excel sale igual, sin la nota.
+  async function agregarNotasUnidades({ db, unidad, movimiento, renglonesDb, biologicos }) {
+    const detalle = [];
+    try {
+      if (!unidad || !unidad.clues || !unidad.clues.startsWith('JS1-') || unidad.municipio === 'NHG' || unidad.municipio === 'HENM') return detalle;
+      if (`${movimiento.anio}-${String(movimiento.mes).padStart(2, '0')}-01` < '2026-10-01') return detalle;
+      if (!renglonesDb.some((r) => r.categoria === 'ARF' || r.categoria === 'CANJE')) return detalle;
+      const { data: us } = await db.from('biovac_unidades').select('id, nombre, clues, municipio, activo').eq('municipio', unidad.municipio);
+      const porId = new Map((us || []).filter((u) => u.clues && !u.clues.startsWith('JS1-') && u.activo !== false).map((u) => [u.id, u]));
+      if (!porId.size) return detalle;
+      const { data: movs } = await db.from('biovac_movimientos').select('id, unidad_id').in('unidad_id', [...porId.keys()]).eq('anio', movimiento.anio).eq('mes', movimiento.mes);
+      const unidadDeMov = new Map((movs || []).map((m) => [m.id, porId.get(m.unidad_id)]));
+      const ids = [...unidadDeMov.keys()];
+      const porLote = new Map();
+      for (let i = 0; i < ids.length; i += 40) {
+        const { data: rens } = await db.from('biovac_renglones')
+          .select('categoria, movimiento_id, existencia_final_frascos, biovac_lotes ( numero_lote, biologico_id )')
+          .in('movimiento_id', ids.slice(i, i + 40)).in('categoria', ['ARF', 'CANJE']);
+        (rens || []).forEach((r) => {
+          const u = unidadDeMov.get(r.movimiento_id);
+          if (!u || !r.biovac_lotes) return;
+          const k = `${r.biovac_lotes.biologico_id}|${r.biovac_lotes.numero_lote}|${r.categoria}`;
+          if (!porLote.has(k)) porLote.set(k, []);
+          porLote.get(k).push({ unidad: u.nombre, fin: r.existencia_final_frascos });
+        });
+      }
+      renglonesDb.forEach((r) => {
+        if (r.categoria !== 'ARF' && r.categoria !== 'CANJE') return;
+        const nota = notaUnidadesArfCanje(r.categoria, porLote.get(`${r.biovac_lotes.biologico_id}|${r.biovac_lotes.numero_lote}|${r.categoria}`));
+        if (!nota) return;
+        r.observaciones = [r.observaciones, `${r.biovac_lotes.numero_lote} — ${nota}`].filter(Boolean).join(' · ');
+        const bio = (biologicos || []).find((b) => b.id === r.biovac_lotes.biologico_id);
+        (porLote.get(`${r.biovac_lotes.biologico_id}|${r.biovac_lotes.numero_lote}|${r.categoria}`) || [])
+          .filter((e) => Number(e.fin) > 0.0001).sort((a, b) => String(a.unidad).localeCompare(String(b.unidad), 'es'))
+          .forEach((e) => detalle.push([bio ? String(bio.nombre_excel || '').replace(/\s+/g, ' ').trim() : '', r.biovac_lotes.numero_lote, r.categoria === 'CANJE' ? 'Canje' : 'A.R.F.', e.unidad, Math.round(Number(e.fin) * 100) / 100]));
+      });
+    } catch (e) { console.warn('[BioVac] Nota de unidades A.R.F./Canje no disponible:', e); }
+    return detalle;
+  }
+
+  // Hoja aparte con el detalle completo (la columna Observaciones es angosta y un lote en muchas unidades no cabe).
+  function agregarHojaDetalleUnidades(wb, detalle) {
+    if (!detalle || !detalle.length) return;
+    const h = wb.addWorksheet('ARF-Canje por unidad');
+    h.addRow(['Biológico', 'Lote', 'Estatus', 'Unidad', 'Frascos']).font = { bold: true };
+    detalle.forEach((f) => h.addRow(f));
+    [38, 16, 10, 36, 10].forEach((w, i) => { h.getColumn(i + 1).width = w; });
+  }
+
   async function construirWorkbook({ db, unidad, movimiento, plantillaBuffer }) {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(plantillaBuffer);
@@ -696,10 +770,12 @@
       anio: movimiento.anio, municipio: unidad.municipio, responsable: movimiento.responsable_elaboracion || ''
     };
 
+    const detalleUnidades = await agregarNotasUnidades({ db, unidad, movimiento, renglonesDb: renglonesDb || [], biologicos });
     await construirWorkbookDesdeDatos({ ws, bloques, biologicos, renglonesDb, anio: movimiento.anio, mes: movimiento.mes, datosHeader });
 
     wb.eachSheet((hoja) => { if (hoja.name !== hojaOrigen) wb.removeWorksheet(hoja.id); });
     ws.name = `${MESES_ABREV[movimiento.mes]} ${unidad.nombre}`.slice(0, 31);
+    agregarHojaDetalleUnidades(wb, detalleUnidades);
 
     return wb;
   }
@@ -759,7 +835,7 @@
     return wb.xlsx.writeBuffer();
   }
 
-  return { exportarExcel, construirWorkbook, exportarExcelJurisdiccional, construirWorkbookJurisdiccional, construirWorkbookDesdeDatos };
+  return { notaUnidadesArfCanje, exportarExcel, construirWorkbook, exportarExcelJurisdiccional, construirWorkbookJurisdiccional, construirWorkbookDesdeDatos };
 });
 
 // PostgREST corta cada respuesta en 1000 filas: las funciones que devuelven TABLE se piden por bloques
