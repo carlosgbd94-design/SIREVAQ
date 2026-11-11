@@ -725,7 +725,19 @@
     try {
       const { data } = await estado.db.rpc('sis_estado_publicacion', { p_mes: mes, p_anio: anio, p_municipio: municipio });
       const p = Array.isArray(data) ? data[0] : null;
-      if (!p) { cont.textContent = 'Aún no publicado a indicadores: se publica sola cuando el municipal cierra el mes (y se vuelve a publicar si algo cambia).'; cont.style.color = 'var(--muted)'; return; }
+      // Último intento automático (al cerrar el mes): si NO se pudo cargar, se dice por qué en vez de quedarse callado.
+      let ult = null;
+      try {
+        const r = await estado.db.rpc('sis_ultimo_intento_publicacion', { p_mes: mes, p_anio: anio, p_municipio: municipio });
+        ult = Array.isArray(r && r.data) ? r.data[0] : null;
+      } catch (e) { ult = null; }
+      if (ult && ult.resultado !== 'PUBLICADO' && (!p || new Date(ult.creado_en) > new Date(p.publicado_en))) {
+        const cuandoUlt = new Date(ult.creado_en).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+        cont.textContent = `⚠ Al cerrar el mes (${cuandoUlt}) NO se pudo cargar a indicadores: ${ult.detalle || 'sin detalle'} Corrígelo; se vuelve a intentar al cerrar el mes de nuevo, o Jurisdicción puede cargarlo a mano.`;
+        cont.style.color = 'var(--warning)';
+        return;
+      }
+      if (!p) { cont.textContent = 'Aún no publicado a indicadores: se carga sola cuando se cierra el mes (solo si todo está validado y cuadra), y se vuelve a cargar si algo cambia.'; cont.style.color = 'var(--muted)'; return; }
       const cuando = new Date(p.publicado_en).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
       if (p.desactualizada) {
         cont.textContent = `⚠ Publicado el ${cuando}${p.publicado_por ? ' por ' + p.publicado_por : ''}, pero hubo cambios después. Se vuelve a publicar sola al cerrar el mes; si no, Jurisdicción puede usar «Forzar publicación».`;
