@@ -4,7 +4,7 @@
  * Versión: 2026.4
  */
 
-const CACHE_NAME = 'js1-reportes-v2026-327';
+const CACHE_NAME = 'js1-reportes-v2026-328';
 
 // IMPORTANTE: index.html YA NO carga main.js/rda_ui.js/etc. sueltos -- desde que existe
 // build-bundle.js carga dist/bundle-head.js y dist/bundle-body.js (empaquetados). Antes
@@ -25,6 +25,7 @@ const STATIC_ASSETS = [
   './dist/bundle-body.js',
   './mobile.html',
   './mobile_style.css',
+  './vendor/material-symbols-rounded-mobile.woff2',
   './mobile_main.js',
   './mobile_supervision.js',
   './mobile_live_view.js',

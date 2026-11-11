@@ -37,10 +37,31 @@
   <!-- Fuente de texto: no bloquea el primer pintado (display=swap; el texto sale con la del sistema y cambia al llegar). Los iconos sí bloquean abajo para no mostrar su nombre como texto. -->
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"></noscript>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1&amp;icon_names=ac_unit,account_tree,add,add_a_photo,add_alert,add_business,add_circle,admin_panel_settings,ads_click,apps,arrow_back,assignment,auto_awesome,auto_fix_high,badge,block,calculate,calendar_month,calendar_view_week,call_split,campaign,chat,check,check_circle,checklist,chevron_left,chevron_right,child_care,class,clean_hands,clinical_notes,close,cloud_sync,code,compare_arrows,content_paste,contrast,coronavirus,dark_mode,dashboard,date_range,delete,description,domain,done,download,edit,edit_calendar,edit_document,edit_note,edit_off,email,error,event,event_available,event_busy,event_upcoming,exposure_zero,face,fact_check,fiber_new,fingerprint,flag,folder_open,format_list_numbered,function,functions,group,groups,help,history,hourglass_bottom,hourglass_top,html,image,info,input,insights,inventory,inventory_2,lab_profile,label,layers,leaderboard,light,light_mode,lightbulb,local_shipping,location_on,lock,lock_clock,lock_open,lock_reset,mail,medication_liquid,monitoring,navigation,near_me,new_releases,note,notifications,notifications_active,open_in_new,outbox,palette,password,pause_circle,pending,percent,person,pin,play_circle,post_add,print,public,query_stats,radio,radio_button_unchecked,refresh,remove_circle,resize,rule,sanitizer,save,schedule,school,science,search,sell,send,share,skip_next,stacked_bar_chart,start,step,style,summarize,swap_horiz,switch,sync,sync_alt,table,table_chart,table_view,tag,task_alt,timelapse,title,today,touch_app,traffic,tune,vaccines,visibility,warning,water_drop,weekend,wifi_off&amp;display=block" rel="stylesheet">
+  <!-- Iconos: fuente Material Symbols alojada en vendor/ (subconjunto de los iconos del móvil, 24 KB): funciona sin red y sin esperar a Google. El @font-face está en mobile_style.css. -->
+  <link rel="preload" href="vendor/material-symbols-rounded-mobile.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- Si la fuente de iconos aun no llega (red lenta o sin senal), el nombre del icono (p. ej. "notifications") se veria como texto encimado: se oculta hasta que cargue y se reintenta. -->
+  <script>
+  (function () {
+    var d = document, root = d.documentElement, intentos = 0;
+    root.classList.add("icons-pending");
+    function listo() { root.classList.remove("icons-pending"); }
+    function probar() {
+      if (!d.fonts || !d.fonts.load) { listo(); return; }
+      d.fonts.load('24px "Material Symbols Rounded"', "home").then(function (f) {
+        if (f && f.length) { listo(); return; }
+        reintentar();
+      }, reintentar);
+    }
+    function reintentar() {
+      if (++intentos > 40) return;
+      setTimeout(probar, 1500);
+    }
+    d.addEventListener("DOMContentLoaded", probar);
+  })();
+  </script>
 
   <link rel="stylesheet" href="tailwind_compiled.css">
-  <link rel="stylesheet" href="mobile_style.css?v=2026.69">
+  <link rel="stylesheet" href="mobile_style.css?v=2026.71">
   <link rel="stylesheet" href="ayuda.css?v=1">
   <link rel="stylesheet" href="mobile_supervision.css?v=17">
 </head>

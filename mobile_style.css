@@ -1,3 +1,12 @@
+/* Material Symbols Rounded alojada en vendor/ (subconjunto con los iconos usados por mobile.html; FILL 0..1). */
+@font-face {
+  font-family: 'Material Symbols Rounded';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('vendor/material-symbols-rounded-mobile.woff2') format('woff2');
+}
+
 /* 📱 SIREVAQ - Mobile Premium Stylesheet (iOS 27 Liquid Glass & OLED Edition) */
 
 :root {
@@ -63,6 +72,15 @@ body, html, input, select, textarea, button, p, label, div, span:not(.material-s
 
 .material-symbols-rounded {
   font-family: 'Material Symbols Rounded' !important;
+}
+
+/* Fuente de iconos sin cargar: no mostrar el nombre del icono como texto (ver script en mobile.html). */
+html.icons-pending .material-symbols-rounded {
+  color: transparent !important;
+  overflow: hidden !important;
+  max-width: 1.25em !important;
+  white-space: nowrap !important;
+  user-select: none;
 }
 
 h1, h2, h3, h4, h5, h6 {
