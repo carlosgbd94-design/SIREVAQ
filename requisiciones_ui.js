@@ -62,7 +62,7 @@ const COLOR_POR_CODIGO_ARTICULO = {
   '146': '#3D405B', '148': '#3D405B', '150': '#264653', '6135': '#9ACD32', '2526': '#C43D3D',
   '3825': '#4b5563', '3800': '#7B5EA7', '3801': '#3A86B7', '3802': '#0f172a', '3805': '#E9C46A',
   '3808': '#E76F51', '3810': '#5C5C5C', '6056': '#059669', '3820': '#B23A48', '3821': '#B23A48',
-  '6317': '#C26750', '3832': '#0f172a', '6501': '#2A9D8F', '2': '#0f172a', '6509': '#A66B50',
+  '6317': '#C26750', '6515': '#C26750', '3832': '#0f172a', '6501': '#2A9D8F', '2': '#0f172a', '6509': '#A66B50',
   '6502': '#6D28D9', '6506': '#1D4ED8', '6508': '#3D405B', '6187': '#4b5563'
 };
 
@@ -1936,9 +1936,9 @@ async function guardarCantidades() {
 // "Asignar lotes". La base valida todo (rol, requisición abierta, sin pisar lotes reales).
 // ---------------------------------------------------------------------------
 
-const INFLUENZA_CODIGO = '6317';
 
-function bioInfluenza() { return estado.catalogo.find((b) => String(b.codigo_articulo) === INFLUENZA_CODIGO) || null; }
+// Se identifica por el NOMBRE del catálogo (no por la clave): la clave cambia con cada licitación/temporada.
+function bioInfluenza() { return estado.catalogo.find((b) => /INFLUENZA/i.test(String(b.nombre || ''))) || null; }
 
 function ordinalEntrega(n) { return `${n}ª entrega`; }
 // «Campaña Influenza 2026-2027» es el nombre interno de la temporada; para COVID-19 se muestra solo «Temporada 2026-2027».

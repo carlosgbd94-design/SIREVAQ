@@ -23,7 +23,7 @@
     ['6508', 'NEU20'], ['148', 'NEU13'], ['150', 'ROTA'], ['6135', 'HEXA'], ['2526', 'HB M'], ['6187', 'HA U'],
     ['3800', 'SR'], ['3801', 'BCG'], ['3805', 'DPT'], ['3808', 'TDPA'], ['3810', 'TD'], ['6056', 'VAR'], ['3820', 'SRP']
   ];
-  const CODIGO_INFLUENZA = '6317';
+  const CODIGO_INFLUENZA = 'INFLUENZA';   // marcador interno: la influenza se reconoce por nombre, no por clave
   const DESPUES_INFLUENZA = [['6501', 'VPH'], ['6502', 'COVID\nMOD'], ['6506', 'COVID\nPFI'], ['6509', 'VSR']];
 
   // Rutas por CLUES, en el orden en que se recorren (orden del formato original).
@@ -44,7 +44,7 @@
     const idPorCodigo = {};
     catalogo.forEach((b) => { idPorCodigo[String(b.codigo_articulo)] = b.id; });
     const codigoPorId = {};
-    catalogo.forEach((b) => { codigoPorId[b.id] = String(b.codigo_articulo); });
+    catalogo.forEach((b) => { codigoPorId[b.id] = /INFLUENZA/i.test(String(b.nombre || '')) ? CODIGO_INFLUENZA : String(b.codigo_articulo); });
 
     const lista = unidades.slice().sort(cmpClues);
     const orden = entregas.slice().sort((a, b) => a.entrega - b.entrega);

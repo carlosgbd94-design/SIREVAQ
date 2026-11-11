@@ -37,7 +37,7 @@
   // Influenza (opcional): vacuna 6317 en el catálogo y una entrega repartida de 100 frascos
   // (Querétaro 60, ya repartido entre dos unidades; Corregidora 40, aún sin reparto interno).
   if (window.__FAKE_INFLUENZA__) {
-    db.requi_catalogo_biologicos.push(bio('bio-flu', '6317', 'VACUNA ANTIINFLUENZA 10/D', 'MULTIDOSIS', 4));
+    db.requi_catalogo_biologicos.push(bio('bio-flu', '6515', 'VACUNA ANTIINFLUENZA 10/D', 'MULTIDOSIS', 4));
     db.influenza_remesas.push({ anio_campana: 'Campaña Influenza 2026-2027', numero_entrega: 1, fecha: '2026-10-05', total_frascos: 100, asignacion: { QUERETARO: 60, CORREGIDORA: 40 } });
   }
   // COVID-19 (opcional): vacunas 6502 Moderna y 6506 Pfizer y una entrega repartida de cada marca
@@ -274,7 +274,7 @@
     if (!req || req.estado !== 'BORRADOR') return { data: null, error: { message: 'ERROR: La requisición está cerrada; no se puede traer el reparto' } };
     const rem = db.influenza_remesas.find((r) => r.anio_campana === p_campana && r.numero_entrega === p_numero);
     if (!rem) return { data: null, error: { message: 'ERROR: La Jurisdicción todavía no registra la entrega' } };
-    const bio = db.requi_catalogo_biologicos.find((b) => b.codigo_articulo === '6317');
+    const bio = db.requi_catalogo_biologicos.find((b) => /influenza/i.test(b.nombre));
     if (db.requi_requisiciones.some((r) => r.id !== p_requisicion && r.influenza_campana === p_campana && r.influenza_entrega === p_numero)) {
       return { data: null, error: { message: 'ERROR: La entrega ya está vinculada a otra requisición' } };
     }

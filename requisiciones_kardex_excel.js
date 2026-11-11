@@ -30,13 +30,13 @@
   const DESTINO_IMPRESO = { CORREGIDORA: 'CORREGIDORA', HUIMILPAN: 'HUIMILPAN', MARQUES: 'MARQUES', QUERETARO: 'QUERETARO', NHG: 'QUERETARO', HENM: 'QUERETARO' };
 
   // Dosis por frasco de los multidosis (todo lo demás es unidosis = 1). Moderna/Pfizer: ver covid_frascos.js.
-  const DOSIS_POR_FRASCO = { '2526': 10, '3800': 10, '3801': 10, '3805': 10, '3810': 10, '3821': 10, '6317': 10, '6502': 5, '6506': 6 };
+  const DOSIS_POR_FRASCO = { '2526': 10, '3800': 10, '3801': 10, '3805': 10, '3810': 10, '3821': 10, '6317': 10, '6515': 10, '6502': 5, '6506': 6 };
 
   // Nombre de la hoja y del biológico en la tarjeta (los que ya usan los kardex de la jurisdicción).
   const NOMBRES = {
     '6508': 'NEUMO 20', '148': 'NEUMO 13', '150': 'ROTAVIRUS MONOVALENTE', '6135': 'HEXAVALENTE', '2526': 'HEPATITIS B',
     '6187': 'HEPATITIS A', '3800': 'SR', '3801': 'BCG', '3805': 'DPT', '3808': 'TDPA', '3810': 'TD', '6056': 'ANTIVARICELA',
-    '3820': 'SRP', '3821': 'SRP MULTIDOSIS', '6317': 'INFLUENZA', '3832': 'GAMAGLOBULINA', '6501': 'VPH', '2': 'ANTIAMARILICA',
+    '3820': 'SRP', '3821': 'SRP MULTIDOSIS', '6317': 'INFLUENZA', '6515': 'INFLUENZA', '3832': 'GAMAGLOBULINA', '6501': 'VPH', '2': 'ANTIAMARILICA',
     '6502': 'COVID-19 MODERNA', '6506': 'COVID-19 PFIZER', '6509': 'VRS', '146': 'NEUMO 23', '3802': 'SABIN'
   };
 
@@ -44,7 +44,10 @@
     const n = NOMBRES[String(bio.codigo_articulo)];
     return n || String(bio.nombre || '').replace(/^VACUNA\s+/i, '').trim() || String(bio.codigo_articulo);
   }
-  function dosisPorFrasco(bio) { return DOSIS_POR_FRASCO[String(bio.codigo_articulo)] || 1; }
+  function dosisPorFrasco(bio) {
+    if (/INFLUENZA/i.test(String(bio.nombre || ''))) return 10;   // por nombre: la clave cambia
+    return DOSIS_POR_FRASCO[String(bio.codigo_articulo)] || 1;
+  }
 
   function fechaValida(f) {
     const a = Number(String(f || '').slice(0, 4));

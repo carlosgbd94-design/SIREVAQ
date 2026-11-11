@@ -4,8 +4,8 @@ const { test, expect } = require('@playwright/test');
 const ExcelJS = require('exceljs');
 const { armarModelo, generar, RUTAS } = require('../requisiciones_rutas_excel.js');
 
-const CODIGOS = ['6508', '148', '150', '6135', '2526', '6187', '3800', '3801', '3805', '3808', '3810', '6056', '3820', '3821', '6317', '3832', '6501', '2', '6502', '6506', '6509'];
-const catalogo = CODIGOS.map((c) => ({ id: 'b' + c, codigo_articulo: c, nombre: 'V' + c }));
+const CODIGOS = ['6508', '148', '150', '6135', '2526', '6187', '3800', '3801', '3805', '3808', '3810', '6056', '3820', '3821', '6515', '3832', '6501', '2', '6502', '6506', '6509'];
+const catalogo = CODIGOS.map((c) => ({ id: 'b' + c, codigo_articulo: c, nombre: c === '6515' ? 'VACUNA ANTIINFLUENZA 10/D' : 'V' + c }));
 const todas = [].concat(...RUTAS.map((r) => r.clues)).concat(['QTSSA001863']);
 // CLUES en desorden a propósito: el modelo debe ordenarlas por CLUES.
 const unidades = todas.slice().reverse().map((c, i) => ({ id: 'u' + c, clues: c, nombre: 'UNIDAD ' + c.slice(-6) }));
@@ -13,7 +13,7 @@ const E1 = { id: 'r1', entrega: 1, etiqueta: null }, E2 = { id: 'r2', entrega: 2
 const f = (r, c, u, n) => ({ requisicion_id: r, unidad_id: 'u' + u, requi_biologico_id: 'b' + c, cantidad: n });
 const filas = [
   f('r1', '6508', 'QTSSA001810', 10), f('r1', '6502', 'QTSSA001810', 4), f('r1', '6506', 'QTSSA001863', 6), f('r1', '3821', 'QTSSA001810', 99),
-  f('r2', '6317', 'QTSSA001810', 100), f('r2', '6317', 'QTSSA012923', 50), f('r3', '6317', 'QTSSA001810', 25)
+  f('r2', '6515', 'QTSSA001810', 100), f('r2', '6515', 'QTSSA012923', 50), f('r3', '6515', 'QTSSA001810', 25)
 ];
 
 async function abrir(buffer) { const wb = new ExcelJS.Workbook(); await wb.xlsx.load(buffer); return wb; }
