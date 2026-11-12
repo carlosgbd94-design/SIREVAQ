@@ -398,7 +398,7 @@
     const nota = cont.querySelector('#paralelosNota');
     const bM = cont.querySelector('[data-paralelos="mes"]'), bA = cont.querySelector('[data-paralelos="acumulado"]');
     if (bM) { bM.disabled = !valido || ocupado; bM.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">download</span> Solo ${valido ? nombreMes(mes).toLowerCase() : 'este mes'}`; }
-    if (bA) { bA.disabled = !valido || ocupado; bA.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">download</span> Acumulado${valido ? ' (enero a ' + nombreMes(mes).toLowerCase() + ')' : ''}`; }
+    if (bA) { bA.disabled = !valido || ocupado; bA.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">download</span> ${valido ? 'Enero a ' + nombreMes(mes).toLowerCase() : 'Acumulado del año'}`; }
     if (nota) nota.textContent = valido
       ? `Periodo elegido arriba: ${nombreMes(mes)} ${anio}. Toma el SINBA-SIS validado de los 4 municipios y los 2 hospitales.`
       : `Disponible desde octubre de ${ANIO_PLANTILLA} (elige el mes y el año arriba): antes de eso la plantilla ya trae los datos.`;
@@ -420,11 +420,11 @@
       cont.innerHTML = `
         <b id="paralelosTitulo">PARALELOS ${ANIO_PLANTILLA}</b>
         <small id="paralelosNota"></small>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <div class="jur-ent-acciones">
           <button type="button" class="btn-secundario btn-mini" data-paralelos="mes"></button>
           <button type="button" class="btn-secundario btn-mini" data-paralelos="acumulado"></button>
         </div>
-        <div id="paralelosEstado" role="status" aria-live="polite" style="font-size:12px; font-weight:600; color:var(--muted);"></div>`;
+        <div id="paralelosEstado" class="jur-ent-estado" role="status" aria-live="polite"></div>`;
       lista.appendChild(cont);
       cont.addEventListener('click', (e) => { const b = e.target.closest('[data-paralelos]'); if (b && !b.disabled) descargar(b.dataset.paralelos); });
     }

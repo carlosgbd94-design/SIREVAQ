@@ -12,17 +12,17 @@
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=10">
 <link rel="stylesheet" href="ayuda.css?v=1">
-<script defer src="ayuda.js?v=15"></script>
+<script defer src="ayuda.js?v=27"></script>
 <script defer src="a11y_global.js?v=7"></script>
 <script defer src="dock_glass.js?v=6"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script defer src="biovac_export_excel.js?v=2026.12"></script>
 <script defer src="sis_csv.js?v=6"></script>
-<script defer src="paralelos_sis.js?v=3"></script>
-<script defer src="conciliacion_biologico.js?v=2"></script>
-<script defer src="csv_jurisdiccional.js?v=1"></script>
-<script defer src="biovac_jurisdiccion_ui.js?v=2026.21"></script>
+<script defer src="paralelos_sis.js?v=4"></script>
+<script defer src="conciliacion_biologico.js?v=3"></script>
+<script defer src="csv_jurisdiccional.js?v=2"></script>
+<script defer src="biovac_jurisdiccion_ui.js?v=2026.23"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -395,10 +395,36 @@
 .jur-check li.ok > .material-symbols-rounded { color: var(--success); }
 .jur-check li.pend, .jur-check li.aviso { background: var(--warning-bg); }
 .jur-check li.pend > .material-symbols-rounded, .jur-check li.aviso > .material-symbols-rounded { color: var(--warning); }
-.jur-entregables { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
-.jur-entregable { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px 16px; border-radius: 16px; background: #f8fafc; border: 1px solid var(--outline-variant); }
+.jur-entregables { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: stretch; }
+.jur-entregable { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 14px 16px; border-radius: 16px; background: #f8fafc; border: 1px solid var(--outline-variant); }
 .jur-entregable b { font-size: 13.5px; color: var(--primary); }
-.jur-entregable small { font-size: 11.5px; color: var(--muted); line-height: 1.45; font-weight: 600; }
+.jur-entregable small { font-size: 11.5px; color: var(--muted); line-height: 1.45; font-weight: 600; flex: 1 1 auto; }
+/* Todas las tarjetas: título y texto arriba, botones siempre al fondo, del mismo ancho y tamaño */
+.jur-ent-acciones { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+.jur-ent-acciones .btn-mini, .jur-entregable > .btn-mini { width: 100%; justify-content: center; text-align: center; font-size: 12.5px; min-height: 36px; }
+.jur-ent-estado { font-size: 12px; font-weight: 600; color: var(--muted); }
+.jur-ent-estado:empty { display: none; }
+.jur-constancia { border: 1px solid var(--outline-variant); background: #f8fafc; border-radius: 16px; padding: 14px 16px; }
+.jur-constancia-cab { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.jur-constancia-cab > .material-symbols-rounded { font-size: 26px; color: #7c3aed; flex: none; }
+.jur-constancia-cab > div { flex: 1 1 260px; min-width: 0; }
+.jur-constancia-cab b { display: block; font-size: 13.5px; color: var(--primary); }
+.jur-constancia-cab small { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.45; font-weight: 600; margin-top: 2px; }
+.jur-constancia #listaInformes:not(:empty) { margin-top: 8px; border-top: 1px solid var(--outline-variant); padding-top: 4px; }
+/* Avisos preventivos: informativos, sin tono de alarma */
+.aviso-prev-tit { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 0 6px; }
+.aviso-prev-tit .material-symbols-rounded { font-size: 18px; color: #0284c7; }
+.aviso-prev { border: 1px solid var(--outline-variant); background: #f8fafc; border-radius: 14px; margin-bottom: 8px; padding: 0; }
+.aviso-prev > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+.aviso-prev > summary::-webkit-details-marker { display: none; }
+.aviso-prev > summary > .material-symbols-rounded { font-size: 22px; color: #0284c7; flex: none; }
+.aviso-prev-txt { flex: 1; min-width: 0; }
+.aviso-prev-txt b { display: block; font-size: 13px; color: var(--primary); }
+.aviso-prev-txt small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.45; font-weight: 600; }
+.aviso-prev-mas { font-size: 11.5px; font-weight: 700; color: #0284c7; white-space: nowrap; }
+.aviso-prev[open] .aviso-prev-mas { display: none; }
+.aviso-prev-cuerpo { padding: 0 14px 12px 48px; font-size: 12.5px; line-height: 1.5; color: var(--text); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.aviso-prev-cuerpo p { margin: 0; }
 .jur-entregable > span { font-size: 11.5px; color: var(--muted); }
 
 @media (max-width: 760px) {
@@ -558,8 +584,8 @@
     <div class="tarjeta">
       <div class="seccion-titulo">
         <div class="jur-cab"><span class="jur-cab-icono" style="background:#fffbeb; border-color:#fde68a;"><span class="material-symbols-rounded" style="color:#d97706;">rule</span></span>
-          <div><h2>Por revisar<button type="button" class="ayuda-btn" data-ayuda="jur_validaciones" title="Cómo leer los avisos" aria-label="Cómo leer los avisos"><span class="material-symbols-rounded">help</span></button></h2>
-            <p class="subtitulo">Lo que el concentrado detecta al sumar. Cada aviso dice qué pasa, quién lo resuelve y qué hacer.</p></div></div>
+          <div><h2>Avisos del concentrado<button type="button" class="ayuda-btn" data-ayuda="jur_validaciones" title="Cómo leer los avisos" aria-label="Cómo leer los avisos"><span class="material-symbols-rounded">help</span></button></h2>
+            <p class="subtitulo">Lo que el concentrado nota al sumar. Los errores sí hay que atenderlos; los avisos informativos son solo para que los tengas presentes.</p></div></div>
       </div>
       <div id="listaValidaciones"></div>
     </div>
@@ -587,13 +613,19 @@
             <p class="subtitulo">Antes de generarlo, esta lista te dice si algo quedó pendiente.</p></div></div>
       </div>
       <ul class="jur-check" id="checkInforme"></ul>
-      <div class="jur-entregables">
-        <div class="jur-entregable"><b>Constancia del mes</b><small>Deja registrado quién revisó el concentrado y cuándo. No descarga nada: el Excel y el PDF se bajan aparte y siempre salen con los datos de hoy. Si después se corrige algún municipio, la constancia se marca como desactualizada y puedes generar otra.</small><button type="button" class="btn-secundario btn-mini" id="btnGenerarInformeCuerpo"><span class="material-symbols-rounded">summarize</span> Generar informe</button></div>
-        <div class="jur-entregable"><b>Excel oficial</b><small>El formato de Movimiento de Biológico con la suma de la jurisdicción.</small><button class="btn-secundario btn-mini" id="btnExportarExcelJurisdiccional"><span class="material-symbols-rounded">download</span> Descargar Excel</button></div>
-        <div class="jur-entregable"><b>PDF</b><small>Para imprimir o archivar el concentrado del mes.</small><button class="btn-secundario btn-mini" id="btnVerPdfJurisdiccional"><span class="material-symbols-rounded">picture_as_pdf</span> Ver PDF</button></div>
+      <div class="jur-constancia">
+        <div class="jur-constancia-cab">
+          <span class="material-symbols-rounded" aria-hidden="true">verified</span>
+          <div><b>Registro de revisión</b><small>Deja anotado quién revisó el concentrado de este mes y cuándo. Es solo un registro de respaldo: no descarga ningún archivo. Si después se corrige un municipio, el registro queda como «con cambios posteriores» y puedes anotar una nueva revisión.</small></div>
+          <button type="button" class="btn-secundario btn-mini" id="btnGenerarInformeCuerpo"><span class="material-symbols-rounded" aria-hidden="true">task_alt</span> Registrar revisión</button>
+        </div>
+        <div id="listaInformes"></div>
       </div>
-      <div class="seccion-titulo" style="margin-top:18px;"><h2 style="font-size:13.5px;">Informes generados</h2></div>
-      <div id="listaInformes"></div>
+      <div class="seccion-titulo" style="margin-top:18px;"><h2 style="font-size:13.5px;">Descarga tus archivos</h2></div>
+      <div class="jur-entregables">
+        <div class="jur-entregable"><b>Excel oficial</b><small>El formato de Movimiento de Biológico con la suma de la jurisdicción.</small><div class="jur-ent-acciones"><button class="btn-secundario btn-mini" id="btnExportarExcelJurisdiccional"><span class="material-symbols-rounded">download</span> Descargar Excel</button></div></div>
+        <div class="jur-entregable"><b>PDF</b><small>Para imprimir o archivar el concentrado del mes.</small><div class="jur-ent-acciones"><button class="btn-secundario btn-mini" id="btnVerPdfJurisdiccional"><span class="material-symbols-rounded">picture_as_pdf</span> Ver PDF</button></div></div>
+      </div>
     </div>
   </div>
 </div>
@@ -603,7 +635,7 @@
   <div class="dock-hojas" id="dockJTabs" role="tablist">
     <span class="hoja-tinta" aria-hidden="true"></span>
     <button type="button" class="hoja-tab activo" data-jpaso="1" role="tab" style="--hoja:#0284c7;" title="1. ¿Ya cerró cada municipio y hospital?"><span class="material-symbols-rounded">location_city</span><span class="hoja-nombre">1 · Municipios</span><span class="hoja-pildora" id="pildoraJ1"></span></button>
-    <button type="button" class="hoja-tab" data-jpaso="2" role="tab" style="--hoja:#d97706;" title="2. Lo que el concentrado detecta"><span class="material-symbols-rounded">rule</span><span class="hoja-nombre">2 · Por revisar</span><span class="hoja-pildora" id="pildoraJ2"></span></button>
+    <button type="button" class="hoja-tab" data-jpaso="2" role="tab" style="--hoja:#d97706;" title="2. Lo que el concentrado detecta"><span class="material-symbols-rounded">rule</span><span class="hoja-nombre">2 · Avisos</span><span class="hoja-pildora" id="pildoraJ2"></span></button>
     <button type="button" class="hoja-tab" data-jpaso="3" role="tab" style="--hoja:#16a34a;" title="3. Concentrado"><span class="material-symbols-rounded">table_chart</span><span class="hoja-nombre">3 · Concentrado</span><span class="hoja-pildora" id="pildoraJ3"></span></button>
     <button type="button" class="hoja-tab" data-jpaso="4" role="tab" style="--hoja:#7c3aed;" title="4. Informe"><span class="material-symbols-rounded">summarize</span><span class="hoja-nombre">4 · Informe</span><span class="hoja-pildora" id="pildoraJ4"></span></button>
   </div>
@@ -613,7 +645,7 @@
   </div>
   <div class="dock-acciones">
     <button type="button" class="dock-btn dock-guardar" id="btnSiguiente" title="Ir al siguiente paso"><span class="dock-etiqueta">Siguiente</span><span class="material-symbols-rounded">arrow_forward</span></button>
-    <button type="button" class="dock-btn dock-enviar" id="btnGenerarInforme" style="display:none;" title="Generar el informe de este mes"><span class="material-symbols-rounded">summarize</span><span class="dock-etiqueta">Generar informe</span></button>
+    <button type="button" class="dock-btn dock-enviar" id="btnGenerarInforme" style="display:none;" title="Anotar que revisaste el concentrado de este mes"><span class="material-symbols-rounded">task_alt</span><span class="dock-etiqueta">Registrar revisión</span></button>
   </div>
 </nav>
 

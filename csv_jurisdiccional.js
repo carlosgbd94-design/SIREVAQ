@@ -120,10 +120,10 @@
       cont.innerHTML = `
         <b id="csvJurisdiccionalTitulo">CSV jurisdiccional</b>
         <small id="csvJurisdiccionalNota"></small>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <div class="jur-ent-acciones">
           <button type="button" class="btn-secundario btn-mini" data-csvjur="1"></button>
         </div>
-        <div id="csvJurisdiccionalEstado" role="status" aria-live="polite" style="font-size:12px; font-weight:600; color:var(--muted);"></div>`;
+        <div id="csvJurisdiccionalEstado" class="jur-ent-estado" role="status" aria-live="polite"></div>`;
       lista.appendChild(cont);
       cont.addEventListener('click', (e) => { const b = e.target.closest('[data-csvjur]'); if (b && !b.disabled) descargar(); });
     }

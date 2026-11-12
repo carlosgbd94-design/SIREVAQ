@@ -254,7 +254,7 @@ function seleccion() {
 
 const PASOS_JUR = [
   { n: 1, t: 'Municipios', icono: 'location_city', color: '#0284c7', titulo: '1. ¿Ya cerró cada municipio y hospital?' },
-  { n: 2, t: 'Por revisar', icono: 'rule', color: '#d97706', titulo: '2. Lo que el concentrado detecta' },
+  { n: 2, t: 'Avisos', icono: 'rule', color: '#d97706', titulo: '2. Lo que el concentrado detecta' },
   { n: 3, t: 'Concentrado', icono: 'table_chart', color: '#16a34a', titulo: '3. Concentrado por biológico y lote' },
   { n: 4, t: 'Informe', icono: 'summarize', color: '#7c3aed', titulo: '4. Informe del mes' }
 ];
@@ -491,9 +491,9 @@ function estadoPasosJur() {
   const revisado = cierreHecho && r.avisos === 0;
   return [
     { hecho: cierreHecho, texto: r.munis ? `${r.munisCerrados} de ${r.munis} municipios y hospitales cerrados` : 'Sin unidades', pill: r.munis ? `${r.munisCerrados}/${r.munis}` : '', pillCls: cierreHecho ? 'ok' : '' },
-    { hecho: revisado, alerta: r.errores > 0, texto: r.avisos ? plural(r.avisos, 'aviso por revisar', 'avisos por revisar') : (cierreHecho ? 'Nada por revisar' : 'Se completa cuando todos cierren'), pill: r.avisos ? String(r.avisos) : (revisado ? '✓' : ''), pillCls: r.avisos ? 'aviso' : (revisado ? 'ok' : '') },
+    { hecho: revisado, alerta: r.errores > 0, texto: r.errores ? plural(r.errores, 'error por atender', 'errores por atender') : (r.avisos ? plural(r.avisos, 'aviso informativo', 'avisos informativos') : (cierreHecho ? 'Sin avisos' : 'Se completa cuando todos cierren')), pill: r.avisos ? String(r.avisos) : (revisado ? '✓' : ''), pillCls: r.avisos ? 'aviso' : (revisado ? 'ok' : '') },
     { hecho: revisado, texto: r.lotes ? `${plural(r.lotes, 'lote', 'lotes')} sumados` : 'Sin movimientos este mes', pill: r.lotes ? String(r.lotes) : '', pillCls: '' },
-    { hecho: r.informes > 0, texto: r.informes ? `${plural(r.informes, 'informe generado', 'informes generados')}` : 'Aún sin generar', pill: r.informes ? '✓' : '', pillCls: r.informes ? 'ok' : '' }
+    { hecho: r.informes > 0, texto: r.informes ? `${plural(r.informes, 'revisión registrada', 'revisiones registradas')}` : 'Revisión sin registrar', pill: r.informes ? '✓' : '', pillCls: r.informes ? 'ok' : '' }
   ];
 }
 
@@ -624,12 +624,32 @@ function renderValidaciones(validaciones) {
 
   let cabecera;
   if (!lista.length) {
-    cabecera = '<p class="sin-validaciones"><span class="material-symbols-rounded">check_circle</span> No hay nada por revisar: las cifras cuadran.</p>';
+    cabecera = '<p class="sin-validaciones"><span class="material-symbols-rounded">check_circle</span> Sin avisos: las cifras cuadran.</p>';
+  } else if (errores) {
+    const info = lista.length - errores;
+    cabecera = `<p class="jur-val-resumen">Hay <b class="err">${plural(errores, 'error por atender', 'errores por atender')}</b>${info ? ` y ${plural(info, 'aviso informativo', 'avisos informativos')}` : ''}. Cada error dice qué pasa, quién lo resuelve y qué hacer.</p>`;
   } else {
-    cabecera = `<p class="jur-val-resumen">Hay <b class="${errores ? 'err' : 'adv'}">${plural(lista.length, 'aviso', 'avisos')}</b>${errores ? ` (${plural(errores, 'error', 'errores')})` : ''}. Cada uno dice qué pasa, quién lo resuelve y qué hacer.</p>`;
+    cabecera = `<p class="sin-validaciones"><span class="material-symbols-rounded">check_circle</span> No hay errores. Abajo ${lista.length === 1 ? 'hay 1 aviso informativo' : `hay ${lista.length} avisos informativos`}: son para tenerlos presentes, no hace falta corregir nada aquí.</p>`;
   }
 
-  const tarjetas = lista.map((v) => {
+  // Los avisos informativos (caducidades próximas, dictámenes, diferencias que el municipal ya sigue) van aparte
+  // y en tono neutro: no son errores, así que no se muestran como algo que corregir.
+  const soloInfo = lista.filter((v) => v.severidad !== 'ERROR');
+  const infoHtml = soloInfo.length ? `<div class="aviso-prev-tit"><span class="material-symbols-rounded">info</span>Para tener presente (${soloInfo.length})</div>` + soloInfo.map((v) => {
+    const info = INFO_VALIDACION[v.codigo] || { titulo: v.codigo, icono: 'info' };
+    const e = explicarValidacion(v);
+    const munis = municipiosDeNombres(v.unidad).map(etiquetaMuniJ);
+    return `<details class="aviso-prev">
+      <summary><span class="material-symbols-rounded">${info.icono}</span>
+        <span class="aviso-prev-txt"><b>${escJ(sinSaltos(v.biologico))} · lote ${escJ(v.lote)}</b><small>${escJ(e.que)}</small></span>
+        <span class="aviso-prev-mas">Ver detalle</span></summary>
+      <div class="aviso-prev-cuerpo">
+        <p><b>${escJ(info.titulo)}${munis.length ? ' · ' + escJ(munis.join(', ')) : ''}.</b> ${escJ(e.quien)}: ${escJ(e.hacer)}</p>
+        <button type="button" class="btn-secundario btn-mini" data-action="ir-lote" data-biologico="${escJ(v.biologico)}" data-lote="${escJ(v.lote)}"><span class="material-symbols-rounded">manage_search</span> Ver el lote</button>
+      </div></details>`;
+  }).join('') : '';
+
+  const tarjetas = lista.filter((v) => v.severidad === 'ERROR').map((v) => {
     const info = INFO_VALIDACION[v.codigo] || { titulo: v.codigo, icono: 'info' };
     const e = explicarValidacion(v);
     const munis = municipiosDeNombres(v.unidad).map(etiquetaMuniJ);
@@ -667,7 +687,7 @@ function renderValidaciones(validaciones) {
       ${[...porMuni.entries()].map(([m, l]) => `<div class="jur-pend-muni"><b>${escJ(etiquetaMuniJ(m))}</b><span>${l.map(escJ).join(' · ')}</span></div>`).join('')}
     </details>`;
   }
-  cont.innerHTML = cabecera + tarjetas + pendientes;
+  cont.innerHTML = cabecera + tarjetas + infoHtml + pendientes;
 }
 
 // ------------------------------------------------------------------ paso 3
@@ -750,7 +770,7 @@ function renderInforme() {
   document.getElementById('checkInforme').innerHTML =
     fila(cerrado, false, 'Todos los municipios y hospitales cerrados', `${r.munisCerrados} de ${r.munis}${cerrado ? '' : ' — el informe solo suma lo que ya cerró'}`)
     + fila(r.errores === 0, false, 'Sin errores por atender', r.errores ? plural(r.errores, 'error por atender', 'errores por atender') : 'Nada que corregir')
-    + fila(r.advertencias === 0, r.advertencias > 0, 'Sin otros avisos', r.advertencias ? `${plural(r.advertencias, 'aviso', 'avisos')} (no bloquean)` : 'Nada por revisar')
+    + fila(true, false, 'Avisos informativos', r.advertencias ? `${plural(r.advertencias, 'aviso', 'avisos')}: solo para tenerlos presentes, no bloquean` : 'Ninguno')
     + ((estado.correccionesPend || []).length
       ? fila(false, true, 'Correcciones pedidas a municipios', `${plural(estado.correccionesPend.length, 'pendiente', 'pendientes')}: los municipios aún no ajustan sus unidades (la cifra del informe sigue siendo la de hoy)`)
       : '');
@@ -758,11 +778,16 @@ function renderInforme() {
 
   const cont = document.getElementById('listaInformes');
   const informes = estado.informes || [];
-  cont.innerHTML = informes.length ? informes.map((i) => `
+  const filaRev = (i) => `
     <div class="informe-fila">
-      <span class="estado-badge estado-${i.estado}">${i.estado === 'GENERADO' ? 'Vigente' : 'Desactualizado: hubo correcciones'}</span>
-      generado por <b>${escJ(i.generado_por || '—')}</b> el ${new Date(i.generado_en).toLocaleString('es-MX')}
-    </div>`).join('') : '<p style="color:var(--muted); font-size:12.5px; margin:0">Aún no se ha generado un informe de este mes.</p>';
+      <span class="estado-badge estado-${i.estado}">${i.estado === 'GENERADO' ? 'Al día' : 'Con cambios posteriores'}</span>
+      Revisó <b>${escJ(i.generado_por || '—')}</b> · ${new Date(i.generado_en).toLocaleString('es-MX')}
+    </div>`;
+  // Lo más reciente a la vista; el historial se pliega para que no crezca la pantalla.
+  const [ultimo, ...antes] = informes;
+  cont.innerHTML = informes.length
+    ? filaRev(ultimo) + (antes.length ? `<details class="jur-pendientes" style="margin-top:6px"><summary><b>Revisiones anteriores (${antes.length})</b></summary>${antes.map(filaRev).join('')}</details>` : '')
+    : '';
 }
 
 async function generarInforme() {
@@ -774,8 +799,8 @@ async function generarInforme() {
   if (r.munis > 0 && r.munisCerrados < r.munis) {
     const seguir = await mostrarModal({
       titulo: 'Hay municipios sin cerrar',
-      mensaje: `Faltan ${plural(r.munis - r.munisCerrados, 'municipio u hospital por cerrar', 'municipios u hospitales por cerrar')}. El informe es una foto del mes y solo suma los movimientos cerrados: lo que cierre después no entrará en él. ¿Generarlo de todos modos?`,
-      textoAceptar: 'Generar de todos modos'
+      mensaje: `Faltan ${plural(r.munis - r.munisCerrados, 'municipio u hospital por cerrar', 'municipios u hospitales por cerrar')}. El registro de revisión anota lo que ya estaba cerrado hoy; lo que cierre después no entrará en él. ¿Registrarlo de todos modos?`,
+      textoAceptar: 'Registrar de todos modos'
     });
     if (!seguir) return;
   }
@@ -783,7 +808,7 @@ async function generarInforme() {
     p_jurisdiccion_id: jurisdiccionId, p_anio: anio, p_mes: mes, p_usuario: usuario
   });
   if (error) { toast('No se pudo generar: ' + error.message, 'error'); return; }
-  toast('Informe generado.', 'ok');
+  toast('Revisión registrada.', 'ok');
   await cargarConcentrado({ mantenerPaso: true });
   pintarRutaJur();
 }

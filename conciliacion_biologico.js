@@ -768,7 +768,7 @@
       c.id = 'conciliacionBiologicoCard'; c.className = 'jur-entregable';
       c.innerHTML = `<b>Conciliación de biológico ${ANIO_PLANTILLA}</b>
         <small>Formato trimestral por lote y en dosis, acumulado del año: por unidad, por municipio (suma de sus unidades) o un ZIP con un libro por unidad.</small>
-        <button type="button" class="btn-secundario btn-mini" id="btnConciliacionCard"><span class="material-symbols-rounded" aria-hidden="true">inventory_2</span> Descargar conciliación</button>`;
+        <div class="jur-ent-acciones"><button type="button" class="btn-secundario btn-mini" id="btnConciliacionCard"><span class="material-symbols-rounded" aria-hidden="true">inventory_2</span> Descargar conciliación</button></div>`;
       lista.appendChild(c);
       c.querySelector('button').addEventListener('click', (ev) => abrirVentana(ev.currentTarget));
       return true;

@@ -154,7 +154,7 @@ test('PARALELOS (UI): en el paso 4 del Concentrado Jurisdiccional, solo JURISDIC
   await page.evaluate(() => { document.getElementById('selMes').value = '10'; window.SIS06PParalelos.pintar(); });
   await expect(page.locator('#paralelosSIS [data-paralelos="mes"]')).toBeEnabled();
   await expect(page.locator('#paralelosSIS [data-paralelos="mes"]')).toContainText('octubre');
-  await expect(page.locator('#paralelosSIS [data-paralelos="acumulado"]')).toContainText('enero a octubre');
+  await expect(page.locator('#paralelosSIS [data-paralelos="acumulado"]')).toContainText('Enero a octubre');
 
   // HENM sin validar (el servidor responde error): sale el aviso y se puede descargar de todos modos
   await page.evaluate(() => {

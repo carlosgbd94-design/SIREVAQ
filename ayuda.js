@@ -255,14 +255,14 @@
         I('visibility', '#64748b', 'Las unidades son solo consulta', 'El trabajo de validar el SINBA-SIS de cada unidad es del municipio. Tú ves municipios; las unidades solo aparecen cuando necesitas el detalle.'),
         T('Los cuatro pasos'),
         P(1, 'Municipios', 'Ves si cada municipio y hospital ya cerró. Uno cierra cuando cierran todas sus unidades.'),
-        P(2, 'Por revisar', 'Lo que el concentrado detecta al sumar. Cada aviso dice qué pasa, quién lo resuelve y qué hacer.'),
+        P(2, 'Avisos', 'Lo que el concentrado nota al sumar. Los errores hay que atenderlos; los avisos informativos son solo para tenerlos presentes.'),
         P(3, 'Concentrado', 'La suma por biológico y lote. "Ver por municipio" abre qué aportó cada municipio.'),
-        P(4, 'Informe', 'Una lista te dice si falta algo; generas el informe del mes y descargas el Excel o el PDF.'),
+        P(4, 'Informe', 'Una lista te dice si falta algo; registras tu revisión del mes y descargas tus archivos.'),
         N('Desde octubre de 2026 el concentrado suma cada unidad (CLUES) agrupada por municipio; antes sumaba el Movimiento de cada municipio y hospital. El sistema toma el criterio correcto según el mes. Los hospitales (NHG y HENM) los valida la jurisdicción: su tarjeta tiene un botón para revisarlos.')
       ]
     },
     jur_validaciones: {
-      titulo: 'Paso 2 · Por revisar',
+      titulo: 'Paso 2 · Avisos',
       subtitulo: 'Lo que el concentrado detecta al sumar.',
       bloques: [
         T('Cómo leer un aviso'),
@@ -299,7 +299,7 @@
         I('lock', '#16a34a', 'Municipios cerrados', 'El informe suma solo lo que ya cerró. Si falta alguno, te pregunta antes de generarlo.'),
         I('rule', '#d97706', 'Errores y avisos', 'Lo ideal es generarlo sin errores pendientes.'),
         T('Los entregables'),
-        I('summarize', '#7c3aed', 'Informe del mes', 'Es la constancia del mes: guarda una foto del concentrado con quién la generó y cuándo, y no descarga archivos. Si se corrige algo después, se marca como desactualizada y puedes generar otra.'),
+        I('task_alt', '#7c3aed', 'Registro de revisión', 'Anota quién revisó el concentrado del mes y cuándo, como respaldo. No descarga archivos. Si se corrige algo después, queda como «con cambios posteriores» y puedes registrar otra revisión.'),
         I('download', '#0284c7', 'Excel y PDF', 'El Excel usa el formato oficial de Movimiento de Biológico; el PDF sirve para archivar o imprimir.')
       ]
     },
