@@ -72,6 +72,11 @@ body, html, input, select, textarea, button, p, label, div, span:not(.material-s
 
 .material-symbols-rounded {
   font-family: 'Material Symbols Rounded' !important;
+  /* Un icono es una ligadura (event, chat...): si hereda letter-spacing (tracking-widest) o
+     text-transform (uppercase) de un boton, la ligadura se rompe y se ve el nombre como texto. */
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  font-feature-settings: 'liga' 1;
 }
 
 /* Fuente de iconos sin cargar: no mostrar el nombre del icono como texto (ver script en mobile.html). */
