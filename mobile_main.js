@@ -2117,9 +2117,11 @@
                     const solicitanteMatch = message.match(/Solicita(?:nte)?:\s*([^.\n\r]+)/i) ||
                                              message.match(/por\s+([^.\n\r]+)/i);
                     let solicitante = solicitanteMatch ? solicitanteMatch[1].trim().replace(/\(.*?\)/g, "").split(" para ")[0] : "";
-                    if (!solicitante && fromUsuario) {
+                    // En entregas/recepciones el remitente es quien entregó o confirmó, no quien solicitó
+                    if (!solicitante && fromUsuario && !isDelivery) {
                         solicitante = fromUsuario;
                     }
+                    const quienEntrego = isDelivery && !/Solicita(?:nte)?:/i.test(message) && fromUsuario ? String(fromUsuario).trim() : "";
 
                     const fechaMatch = message.match(/Fecha de solicitud:\s*([\d-]+)/i) ||
                                        message.match(/Fecha:\s*([\d-]+)/i);
@@ -2141,7 +2143,11 @@
                             const details = [unidad, fechaReq ? `Sol: ${fechaReq}` : ""].filter(Boolean).join(" • ");
                             html += `<div class="text-[10px] text-slate-500 font-semibold mt-0.5">${details}</div>`;
                         }
-                        
+                        if (quienEntrego) {
+                            const tl = String(title || "").toLowerCase();
+                            html += `<div class="text-[10px] text-slate-500 font-semibold">${tl.includes("recib") && !tl.includes("entreg") ? "Confirmó la recepción" : "Entregó"}: ${quienEntrego}</div>`;
+                        }
+
                         const lines = message.split("\n");
                         const commentLines = lines.filter(line => {
                             const l = line.toLowerCase();

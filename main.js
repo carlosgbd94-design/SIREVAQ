@@ -2583,6 +2583,7 @@ function formatNotifBody(title, message, fromUsuario = "") {
   const solicitanteMatch = rawMsg.match(/Solicita(?:nte)?:\s*([^.\n\r]+)/i) || rawMsg.match(/por\s+([^.\n\r]+)/i);
   let solicitante = solicitanteMatch ? solicitanteMatch[1].trim().replace(/\(.*?\)/g, "").split(" para ")[0] : (fromUsuario || "");
 
+  const explicitSolicita = /Solicita(?:nte)?:/i.test(rawMsg);   // solo las solicitudes nuevas traen "Solicita: <quien pidió>"
   const isDelivery = (title && title.toLowerCase().includes("entrega")) || lowerMsg.includes("entregada") || lowerMsg.includes("recibido");
   const isPinolReq = lowerMsg.includes("unidad de salud:") || lowerMsg.includes("solicitud de pinol") || lowerMsg.includes("pinol entregado:");
 
@@ -2599,7 +2600,17 @@ function formatNotifBody(title, message, fromUsuario = "") {
 
     if (fechaReq) html += `<div style="margin-top:2px; font-size: 11px;">Fecha de solicitud: ${escapeHtml(fechaReq)}</div>`;
     if (unidad) html += `<div style="font-size: 11px;">Unidad de salud: ${escapeHtml(unidad)}</div>`;
-    if (solicitante) html += `<div style="font-size: 11px;">Solicita: ${escapeHtml(solicitante)}</div>`;
+    if (isDelivery && !explicitSolicita) {
+      // Entrega / recepción: quien aparece como remitente es quien ENTREGÓ (municipal) o quien CONFIRMÓ (unidad),
+      // nunca quien solicitó. Antes se mostraba como "Solicita".
+      const t = String(title || "").toLowerCase();
+      const quien = String(fromUsuario || "").trim();
+      if (quien) html += `<div style="font-size: 11px;">${t.includes("recib") && !t.includes("entreg") ? "Confirmó la recepción" : "Entregó"}: ${escapeHtml(quien)}</div>`;
+      const comentario = rawMsg.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^(unidad de salud|unidad|fecha de solicitud|fecha):/i.test(l) && !/^tu solicitud de pinol/i.test(l) && !/^pinol entregado:?$/i.test(l)).join(" ");
+      if (comentario) html += `<div style="font-size: 11px; font-style: italic; color:#64748b;">Comentario: ${escapeHtml(comentario)}</div>`;
+    } else if (solicitante) {
+      html += `<div style="font-size: 11px;">Solicita: ${escapeHtml(solicitante)}</div>`;
+    }
   } else {
     // Comunicados generales e instrucciones institucionales
     if (rawMsg) {
