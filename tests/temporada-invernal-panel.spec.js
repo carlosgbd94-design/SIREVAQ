@@ -155,13 +155,13 @@ test.describe('Temporada invernal: Influenza y COVID-19 en un tablero', () => {
     const ws = wb.getWorksheet('META-LOGRO COVID-19');
     const v = (r, c) => { const x = ws.getCell(r, c); const y = x.isMerged ? x.master.value : x.value; return y && y.result !== undefined ? y.result : y; };
     expect(String(v(4, 1))).toContain('COVID-19');
-    const nombres = []; for (let c = 7; c <= 30; c += 3) { const x = ws.getCell(8, c).value; if (x) nombres.push(String(x)); }
+    const nombres = []; for (let c = 7; c <= 30; c += 3) { const x = ws.getCell(7, c).value; if (x) nombres.push(String(x)); }
     expect(nombres).toEqual(['QUERETARO', 'CORREGIDORA', 'HENM', 'TOTAL JURISDICCIÓN']);
     const colTotal = 7 + 3 * 3;
-    expect(v(16, colTotal)).toBe(covApl);          // total aplicado (equivalentes de 0.5 mL)
-    expect(v(16, colTotal + 1)).toBe(covMeta);     // meta total
-    expect(v(17, colTotal) + v(18, colTotal)).toBe(covApl);   // Moderna + Pfizer
-    expect(String(v(10, 6))).toContain('Primera');
+    expect(v(15, colTotal)).toBe(covApl);          // total aplicado (equivalentes de 0.5 mL)
+    expect(v(15, colTotal + 1)).toBe(covMeta);     // meta total
+    expect(v(16, colTotal) + v(17, colTotal)).toBe(covApl);   // Moderna + Pfizer
+    expect(String(v(9, 6))).toContain('Primera');
     expect(ws.conditionalFormattings.length).toBeGreaterThanOrEqual(4);
     // Estructura válida para Excel: ninguna combinación de celdas se traslapa con otra (si no, Excel «repara» el libro)
     const rangos = (ws.model.merges || []).map((m) => { const [a1, b1] = m.split(':'); const f = (x) => { const c = x.match(/^([A-Z]+)(\d+)$/); let col = 0; for (const ch of c[1]) col = col * 26 + ch.charCodeAt(0) - 64; return [col, Number(c[2])]; }; const [c0, r0] = f(a1), [c1, r1] = f(b1 || a1); return { c0, r0, c1, r1, m }; });

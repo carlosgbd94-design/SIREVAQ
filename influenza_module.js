@@ -2732,7 +2732,10 @@ async function exportInfluenzaMetaLogroPlantilla() {
       ? await window.InfluenzaMetaLogroExport.construirLibroEntidades({ ExcelJS, plantilla, rubroIds: INFLUENZA_RUBROS.map(r => r.id), entidades: d.entidades, titulo, temporada, nombreTotal })
       : new ExcelJS.Workbook();
     if (T) {
-      await window.InfluenzaMetaLogroExport.agregarHojaCovid({ ExcelJS, wb, plantilla, rubros: CovidFrascos.RUBROS, entidades: T.cov.plantilla, titulo, temporada, nombreTotal });
+      const respCov = await fetch(encodeURI(COVID_PLANTILLA_URL));
+      if (!respCov.ok) throw new Error("No se pudo cargar la plantilla de COVID-19.");
+      const plantillaCovid = await respCov.arrayBuffer();
+      await window.InfluenzaMetaLogroExport.agregarHojaCovid({ ExcelJS, wb, plantilla: plantillaCovid, rubros: CovidFrascos.RUBROS, entidades: T.cov.plantilla, titulo, temporada, nombreTotal });
     }
     const limpio = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
     const que = conInf && T ? "Temporada_Invernal" : (conInf ? "Influenza" : "COVID19");
@@ -5258,7 +5261,7 @@ async function exportWeeklyMonthlyUnitExcel(clues, unidadNombre, mesAnio) {
 // ─── COVID-19: los mismos tres exportes del Concentrado de Avances (simple, con unidades/municipios y por semana) ───
 // Van sobre el formato oficial de Meta-Logro (Municipal/Jurisdiccional): un grupo LOGRO | META | % por entidad, con el
 // mismo semáforo, y el total en dosis equivalentes de 0.5 mL (las pediátricas de 0.25 mL cuentan media dosis).
-const COVID_PLANTILLA_URL = "./Formatos/Análisis_Meta_Logro_Influenza_2026-2027_UNIDAD_DE_SALUD_Municipal_Jurisdiccional.xlsx";
+const COVID_PLANTILLA_URL = "./Formatos/PLANTILLA COVID 2026-2027.xlsx";
 
 /** Meta COVID-19 de una unidad por rubro: la suya o, si es hospital, la de su destino (así la guarda Distribución de Metas). */
 function covExportMetasUnidad(u) {

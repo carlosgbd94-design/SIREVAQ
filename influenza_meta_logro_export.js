@@ -141,193 +141,137 @@
 
 
   /**
-   * Hoja de COVID-19 con el MISMO formato de la plantilla Municipal/Jurisdiccional: encabezado oficial, un grupo
-   * LOGRO | META | % por entidad (con el mismo semáforo) y renglón de total. Los renglones son los 6 rubros de COVID-19
-   * (los pediátricos son dosis de 0.25 mL, como en la meta); el total va en dosis equivalentes de 0.5 mL y debajo
-   * se separa lo aplicado con Moderna y con Pfizer.
+   * Hojas de COVID-19 sobre la plantilla oficial «Formatos/PLANTILLA COVID 2026-2027.xlsx»: «META-LOGRO COVID-19»
+   * (un grupo LOGRO | META | % por entidad, total en dosis equivalentes de 0.5 mL y lo aplicado con Moderna y Pfizer)
+   * y «DOSIS POR MARCA» (un bloque por entidad: Moderna 1.ª/2.ª dosis y Pfizer por grupo de población).
+   * Solo van los rubros que SIREVAQ maneja (c1..c6); la plantilla ya no trae Otros, comorbilidades por edad ni la marca Otra.
    * rubros: [{ id, grupo, edad }]; entidades: [{ nombre, metas:{c1..c6}, logros:{c1..c6}, marca:{MODERNA, PFIZER}, marcaR:{MODERNA:{c1..c6}, PFIZER:{c1..c6}} }].
-   * marcaR son las dosis aplicadas de cada marca por rubro (tal como se aplican, sin pesar): de ahí sale la hoja «DOSIS POR MARCA».
+   * marcaR son las dosis aplicadas de cada marca por rubro (tal como se aplican, sin pesar): de ahí sale «DOSIS POR MARCA».
    */
   async function agregarHojaCovid({ ExcelJS, wb, plantilla, rubros, entidades, titulo, temporada, nombreTotal, nombreHoja, totalExplicito }) {
     const tpl = new ExcelJS.Workbook();
     await tpl.xlsx.load(plantilla);
-    const src = tpl.getWorksheet(HOJA_RESUMEN) || tpl.worksheets[0];
-    const ws = wb.addWorksheet(nombreHoja || "META-LOGRO COVID-19", { views: [{ showGridLines: false, zoomScale: 90 }] });
-    const n = rubros.length, F0 = 10, F1 = F0 + n - 1, FT = F1 + 1, FM = FT + 1, FP = FT + 2, C0 = 7;
+    const src = tpl.getWorksheet("META-LOGRO COVID-19") || tpl.worksheets[0];
+    const srcM = tpl.getWorksheet("DOSIS POR MARCA") || tpl.worksheets[1];
+    if (!src || !srcM) throw new Error("La plantilla de COVID-19 no trae las hojas «META-LOGRO COVID-19» y «DOSIS POR MARCA».");
+    const ids = (rubros || []).map((r) => r.id);
+    // Renglón de cada rubro en las hojas de la plantilla (orden fijo de la plantilla)
+    const FILA = { c1: 9, c2: 10, c3: 11, c4: 12, c5: 13, c6: 14 };
     const peso = (id) => (id === "c1" || id === "c2" ? 0.5 : 1);
+    const MARCAS = ["MODERNA", "PFIZER"];
 
     const grupos = (entidades || []).map((e) => ({ nombre: e.nombre, metas: e.metas || {}, logros: e.logros || {}, marca: e.marca || {}, marcaR: e.marcaR || {} }));
     if (totalExplicito) {
       // Total que no es la suma de las columnas (p. ej. por semana: la meta es una sola y no se suma semana tras semana)
       grupos.push({ nombre: totalExplicito.nombre || nombreTotal || "TOTAL", metas: totalExplicito.metas || {}, logros: totalExplicito.logros || {}, marca: totalExplicito.marca || {}, marcaR: totalExplicito.marcaR || {} });
     } else if (grupos.length > 1) {
-      const suma = (k) => Object.fromEntries(rubros.map((r) => [r.id, grupos.reduce((t, g) => t + num(g[k][r.id]), 0)]));
+      const suma = (k) => Object.fromEntries(ids.map((id) => [id, grupos.reduce((t, g) => t + num(g[k][id]), 0)]));
       grupos.push({ nombre: nombreTotal || "TOTAL", metas: suma("metas"), logros: suma("logros"),
         marca: { MODERNA: grupos.reduce((t, g) => t + num(g.marca.MODERNA), 0), PFIZER: grupos.reduce((t, g) => t + num(g.marca.PFIZER), 0) },
-        marcaR: Object.fromEntries(["MODERNA", "PFIZER"].map((mk) => [mk, Object.fromEntries(rubros.map((r) => [r.id, grupos.reduce((t, g) => t + num(((g.marcaR || {})[mk] || {})[r.id]), 0)]))])) });
+        marcaR: Object.fromEntries(MARCAS.map((mk) => [mk, Object.fromEntries(ids.map((id) => [id, grupos.reduce((t, g) => t + num(((g.marcaR || {})[mk] || {})[id]), 0)]))])) });
     }
     if (!grupos.length) grupos.push({ nombre: "Sin datos", metas: {}, logros: {}, marca: {}, marcaR: {} });
 
-    // Columnas y renglones de encabezado tal cual la plantilla
+    const colNum = (t) => t.split("").reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+    // Copia estilos y valores de un rango de la plantilla a otro lugar de la hoja nueva (y sus celdas combinadas)
+    const copiar = (s, d, f0, f1, c0, c1, df, dc) => {
+      for (let r = f0; r <= f1; r++) {
+        if (s.getRow(r).height) d.getRow(r + df).height = s.getRow(r).height;
+        for (let c = c0; c <= c1; c++) {
+          const o = s.getCell(r, c), x = d.getCell(r + df, c + dc);
+          copiarEstilo(x, o);
+          if (o.value !== null && o.value !== undefined && !(o.value && o.value.formula)) x.value = o.value;
+        }
+      }
+      (s.model.merges || []).forEach((m) => {
+        const [a1, b1] = m.split(":");
+        const pa = a1.match(/^([A-Z]+)(\d+)$/), pb = b1.match(/^([A-Z]+)(\d+)$/);
+        const ra = +pa[2], rb = +pb[2], ca = colNum(pa[1]), cb = colNum(pb[1]);
+        if (ra >= f0 && rb <= f1 && ca >= c0 && cb <= c1) { try { d.mergeCells(ra + df, ca + dc, rb + df, cb + dc); } catch (e) { /* ya fusionada */ } }
+      });
+    };
+    // Renglones 1 a 4 (texto oficial) combinados a todo lo ancho; el 5 lleva el sujeto (ámbito y corte)
+    const encabezado = (s, d, ultima) => {
+      for (let r = 1; r <= 6; r++) { if (s.getRow(r).height) d.getRow(r).height = s.getRow(r).height; }
+      for (let r = 1; r <= 4; r++) {
+        copiarEstilo(d.getCell(r, 1), s.getCell(r, 1));
+        d.getCell(r, 1).value = s.getCell(r, 1).value;
+        d.mergeCells(r, 1, r, ultima);
+      }
+      d.getCell("A4").value = `Meta-Logro de Vacuna COVID-19 Temporada Invernal ${temporada || "2026-2027"}`;
+      copiarEstilo(d.getCell("A5"), s.getCell("A4"));
+      d.mergeCells(5, 1, 5, ultima);
+      d.getCell("A5").value = titulo;
+      d.getCell("A5").font = Object.assign({}, d.getCell("A5").font, { size: 12, bold: false });
+      d.getCell("A5").alignment = { horizontal: "center", vertical: "middle", shrinkToFit: true };
+    };
+
+    // ── Hoja META-LOGRO ──
+    const ws = wb.addWorksheet(nombreHoja || "META-LOGRO COVID-19", { views: [{ showGridLines: false, zoomScale: 90 }] });
     for (let c = 1; c <= 6; c++) ws.getColumn(c).width = src.getColumn(c).width;
-    for (let r = 1; r <= 9; r++) {
-      if (src.getRow(r).height) ws.getRow(r).height = src.getRow(r).height;
-      for (let c = 1; c <= 9; c++) { const o = src.getCell(r, c), d = ws.getCell(r, c); d.value = o.value; copiarEstilo(d, o); }
-    }
-    (src.model.merges || []).forEach((m) => {
-      const fin = Number(String(m.split(":")[1]).replace(/[A-Z]/g, ""));
-      const ini = m.split(":")[0].charAt(0);
-      if (fin <= 9 && (ini <= "F" || fin <= 5)) { try { ws.mergeCells(m); } catch (e) { /* ya fusionada */ } }
-    });
-    copiarEstilo(ws.getCell("A4"), src.getCell("A5"));
-    ws.mergeCells(4, 1, 4, 9);
-    ws.getCell("A4").value = `Meta-Logro de Vacuna COVID-19 Temporada Invernal ${temporada || "2026-2027"}`;
-    ws.getCell("A5").value = titulo;
-    ws.getCell("A5").alignment = { horizontal: "center", vertical: "middle", shrinkToFit: true };
-
-    // Renglones de datos (estilos de los renglones 10 y siguientes de la plantilla; el último, el del renglón 55)
-    rubros.forEach((r, i) => {
-      const fila = F0 + i, molde = i === n - 1 ? 55 : (i === 0 ? 10 : 11);
-      ws.getRow(fila).height = src.getRow(10).height || 30;
-      for (let c = 1; c <= 6; c++) copiarEstilo(ws.getCell(fila, c), src.getCell(molde, c));
-      ws.getCell(fila, 3).value = r.grupo;
-      ws.getCell(fila, 6).value = r.edad;
-    });
-    ws.getCell(F0, 1).value = "COVID-19 Aplicación de vacuna";
-    ws.getCell(F0, 2).value = "Campaña de vacunación contra COVID-19";
-    ws.mergeCells(F0, 1, FT, 1);
-    ws.mergeCells(F0, 2, F1, 2);
-    // El grupo de 6 a 59 meses ocupa sus dos renglones (primera y segunda dosis), como los grupos de la plantilla
-    let a = 0;
-    while (a < n) {
-      let b = a;
-      while (b + 1 < n && rubros[b + 1].grupo === rubros[a].grupo) b++;
-      ws.mergeCells(F0 + a, 3, F0 + b, 5);
-      a = b + 1;
-    }
-    // Total (renglón 56 de la plantilla) y los dos renglones por marca (el 57 de la plantilla)
-    ws.getRow(FT).height = src.getRow(56).height;
-    for (let c = 1; c <= 6; c++) copiarEstilo(ws.getCell(FT, c), src.getCell(56, c));
-    ws.getCell(FT, 2).value = "Total de dosis aplicadas (equivalentes de 0.5 mL)";
-    ws.mergeCells(FT, 2, FT, 6);
-    [[FM, "Moderna (dosis equivalentes de 0.5 mL)"], [FP, "Pfizer (dosis de 0.5 mL)"]].forEach(([fila, txt]) => {
-      ws.getRow(fila).height = src.getRow(57).height;
-      for (let c = 1; c <= 6; c++) copiarEstilo(ws.getCell(fila, c), src.getCell(57, c));
-      ws.getCell(fila, 6).value = txt;
-    });
-
-    const molde = [7, 8, 9];
-    const anchos = molde.map((c) => src.getColumn(c).width);
+    copiar(src, ws, 7, 17, 1, 6, 0, 0);
+    encabezado(src, ws, 6 + grupos.length * 3);
     ws.conditionalFormattings = [];
     grupos.forEach((g, k) => {
-      const c0 = C0 + k * 3;
-      for (let j = 0; j < 3; j++) ws.getColumn(c0 + j).width = anchos[j] || 14;
-      for (let fila = 8; fila <= FP; fila++) {
-        const m = fila <= 9 ? fila : (fila < F1 ? (fila === F0 ? 10 : 11) : (fila === F1 ? 55 : (fila === FT ? 56 : 57)));
-        for (let j = 0; j < 3; j++) copiarEstilo(ws.getCell(fila, c0 + j), src.getCell(m, molde[j]));
-      }
-      ws.mergeCells(8, c0, 8, c0 + 2);
+      const c0 = 7 + k * 3;
+      for (let j = 0; j < 3; j++) ws.getColumn(c0 + j).width = src.getColumn(7 + j).width || 14;
+      copiar(src, ws, 7, 17, 7, 9, 0, c0 - 7);
       const L = letra(c0), M = letra(c0 + 1), P = letra(c0 + 2);
-      ws.getCell(8, c0).value = g.nombre;
-      ws.getCell(9, c0).value = "LOGRO";
-      ws.getCell(9, c0 + 1).value = "META";
-      ws.getCell(9, c0 + 2).value = "%";
-      ws.getCell(9, c0 + 2).numFmt = "General";
-      rubros.forEach((r, i) => {
-        const fila = F0 + i, logro = num(g.logros[r.id]), meta = num(g.metas[r.id]);
+      ws.getCell(7, c0).value = g.nombre;
+      ws.getCell(8, c0).value = "LOGRO"; ws.getCell(8, c0 + 1).value = "META"; ws.getCell(8, c0 + 2).value = "%";
+      ids.forEach((id) => {
+        const fila = FILA[id]; if (!fila) return;
+        const logro = num(g.logros[id]), meta = num(g.metas[id]);
         ws.getCell(fila, c0).value = logro;
         ws.getCell(fila, c0 + 1).value = meta;
         ws.getCell(fila, c0 + 2).value = { formula: `IFERROR(${L}${fila}/${M}${fila}," ")`, result: meta > 0 ? logro / meta : " " };
         ws.getCell(fila, c0 + 2).numFmt = "0%";
       });
-      const eq = (k2) => rubros.reduce((t, r) => t + num(g[k2][r.id]) * peso(r.id), 0);
+      const eq = (k2) => ids.reduce((t, id) => t + num(g[k2][id]) * peso(id), 0);
       const tl = eq("logros"), tm = eq("metas");
-      const formulaEq = (col) => `((${col}${F0}+${col}${F0 + 1})/2)+SUM(${col}${F0 + 2}:${col}${F1})`;
-      ws.getCell(FT, c0).value = { formula: formulaEq(L), result: tl };
-      ws.getCell(FT, c0 + 1).value = { formula: formulaEq(M), result: tm };
-      ws.getCell(FT, c0 + 2).value = { formula: `IFERROR(${L}${FT}/${M}${FT}," ")`, result: tm > 0 ? tl / tm : " " };
-      ws.getCell(FT, c0).numFmt = "#,##0.##";
-      ws.getCell(FT, c0 + 1).numFmt = "#,##0.##";
-      ws.getCell(FT, c0 + 2).numFmt = "0%";
+      const formulaEq = (col) => `((${col}9+${col}10)/2)+SUM(${col}11:${col}14)`;
+      ws.getCell(15, c0).value = { formula: formulaEq(L), result: tl };
+      ws.getCell(15, c0 + 1).value = { formula: formulaEq(M), result: tm };
+      ws.getCell(15, c0 + 2).value = { formula: `IFERROR(${L}15/${M}15," ")`, result: tm > 0 ? tl / tm : " " };
+      ws.getCell(15, c0 + 2).numFmt = "0%";
       // Por marca: solo lo aplicado (la meta es una sola; Moderna y Pfizer suman contra ella)
-      ws.getCell(FM, c0).value = num(g.marca.MODERNA);
-      ws.getCell(FP, c0).value = num(g.marca.PFIZER);
-      ws.getCell(FM, c0).numFmt = "#,##0.##";
-      ws.getCell(FP, c0).numFmt = "#,##0.##";
-      ws.addConditionalFormatting(reglasSemaforo(P, F0, FT));
+      ws.getCell(16, c0).value = num(g.marca.MODERNA);
+      ws.getCell(17, c0).value = num(g.marca.PFIZER);
+      ws.addConditionalFormatting(reglasSemaforo(P, 9, 15));
     });
+    ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true };
 
-    // Hoja aparte «DOSIS POR MARCA»: la tabla de COVID-19 por marca (Moderna con 1.ª y 2.ª dosis, Pfizer y Otra) y grupo de
-    // población, un bloque por entidad. Son dosis tal como se aplicaron (las pediátricas de 0.25 mL cuentan una dosis).
+    // ── Hoja DOSIS POR MARCA: un bloque (renglones 7 a 15 de la plantilla) por entidad, hacia abajo ──
     const wm = wb.addWorksheet("DOSIS POR MARCA", { views: [{ showGridLines: false }] });
-    [32, 30, 15, 15, 15, 15].forEach((w, i) => { wm.getColumn(i + 1).width = w; });
-    const borde = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
-    const celda = (r, c, v, op) => {
-      const o = op || {};
-      const x = wm.getCell(r, c);
-      x.value = v; x.border = borde;
-      x.alignment = { horizontal: o.izq ? "left" : "center", vertical: "middle", wrapText: true };
-      x.font = { name: "Arial", size: 10, bold: !!o.neg };
-      if (o.relleno) x.fill = { type: "pattern", pattern: "solid", fgColor: { argb: o.relleno } };
-      if (typeof v === "number") x.numFmt = "#,##0";
-      return x;
-    };
-    const unir = (r, c0, c1) => { if (c1 > c0) wm.mergeCells(r, c0, r, c1); for (let c = c0; c <= c1; c++) wm.getCell(r, c).border = borde; };
-    let r0 = 1;
-    grupos.forEach((g) => {
+    for (let c = 1; c <= 7; c++) wm.getColumn(c).width = srcM.getColumn(c).width || 15;
+    encabezado(srcM, wm, 7);
+    const PASO = 11;
+    grupos.forEach((g, k) => {
+      const o = k * PASO;
+      copiar(srcM, wm, 7, 15, 1, 7, o, 0);
       const D = (mk, id) => num(((g.marcaR || {})[mk] || {})[id]);
-      // Encabezado: nombre de la entidad, «COVID-19» y las marcas con sus dosis
-      unir(r0, 1, 6); celda(r0, 1, g.nombre, { neg: true, relleno: "FFEDE7F6" });
-      const h = r0 + 1;
-      unir(h, 1, 2); celda(h, 1, "COVID-19", { neg: true });
-      unir(h, 3, 4); celda(h, 3, "MODERNA", { neg: true });
-      celda(h, 5, "PFIZER", { neg: true }); celda(h, 6, "OTRA", { neg: true });
-      unir(h + 1, 1, 2); celda(h + 1, 1, "");
-      celda(h + 1, 3, "1er Dosis"); celda(h + 1, 4, "2a Dosis"); celda(h + 1, 5, ""); celda(h + 1, 6, "");
-      let f = h + 2;
-      const sumaTot = { M: 0, P: 0, O: 0 };
-      // Niños de 6 a 59 meses: Moderna separa 1.ª y 2.ª dosis; Pfizer y Otra van en una sola columna
-      celda(f, 1, ""); celda(f, 2, "NIÑOS DE 6 A 59 MESES", { izq: true });
-      celda(f, 3, D("MODERNA", "c1")); celda(f, 4, D("MODERNA", "c2"));
-      celda(f, 5, D("PFIZER", "c1") + D("PFIZER", "c2")); celda(f, 6, D("OTRA", "c1") + D("OTRA", "c2"));
-      sumaTot.M += D("MODERNA", "c1") + D("MODERNA", "c2"); sumaTot.P += D("PFIZER", "c1") + D("PFIZER", "c2"); sumaTot.O += D("OTRA", "c1") + D("OTRA", "c2");
-      f++;
+      wm.getCell(7 + o, 3).value = g.nombre;
+      // Niños de 6 a 59 meses: solo Moderna (1.ª y 2.ª dosis); en la plantilla el encabezado de Pfizer cubre ese renglón
+      wm.getCell(10 + o, 5).value = D("MODERNA", "c1");
+      wm.getCell(10 + o, 6).value = D("MODERNA", "c2");
       // Grupos de una sola dosis por marca (la columna de Moderna ocupa las dos dosis)
-      [["EMBARAZADAS", "c5"], ["60 AÑOS Y MAS", "c4"], ["PERSONAL DE SALUD", "c6"]].forEach(([etq, id]) => {
-        celda(f, 1, ""); celda(f, 2, etq, { izq: true });
-        unir(f, 3, 4); celda(f, 3, D("MODERNA", id)); celda(f, 5, D("PFIZER", id)); celda(f, 6, D("OTRA", id));
-        sumaTot.M += D("MODERNA", id); sumaTot.P += D("PFIZER", id); sumaTot.O += D("OTRA", id);
-        f++;
+      [["c3", 11], ["c4", 12], ["c5", 13], ["c6", 14]].forEach(([id, fila]) => {
+        wm.getCell(fila + o, 5).value = D("MODERNA", id);
+        wm.getCell(fila + o, 7).value = D("PFIZER", id);
       });
-      // Comorbilidades y Otros, cada uno en 5 a 11 y 12 a 59 años. SIREVAQ captura las comorbilidades de 5 a 59 años en un solo
-      // rubro (c3) y, por decisión del usuario, todo va a la fila de 12 a 59 años; «Otros» y la marca «Otra» no se capturan.
-      // Pfizer no se aplica de 5 a 11 años (celda gris).
-      const GRIS = "FFBFBFBF";
-      const sub = (etq, mo, pf, ot, gris) => {
-        celda(f, 2, etq, { izq: true });
-        unir(f, 3, 4); celda(f, 3, mo);
-        celda(f, 5, pf, gris ? { relleno: GRIS } : undefined); celda(f, 6, ot);
-        sumaTot.M += mo; sumaTot.P += pf; sumaTot.O += ot;
-        f++;
-      };
-      const f0 = f;
-      sub("5 A 11 AÑOS", 0, 0, 0, true);
-      sub("12 A 59 AÑOS", D("MODERNA", "c3"), D("PFIZER", "c3"), D("OTRA", "c3"), false);
-      wm.mergeCells(f0, 1, f0 + 1, 1); celda(f0, 1, "PERSONAS DE 5 A 59 AÑOS CON COMORBILIDADES", { izq: true }); wm.getCell(f0 + 1, 1).border = borde;
-      const f1 = f;
-      sub("5 A 11 AÑOS", 0, 0, 0, true);
-      sub("12 A 59 AÑOS", 0, 0, 0, false);
-      wm.mergeCells(f1, 1, f1 + 1, 1); celda(f1, 1, "OTROS", { izq: true }); wm.getCell(f1 + 1, 1).border = borde;
-      // Total de dosis de cada marca
-      unir(f, 1, 2); celda(f, 1, "TOTAL", { neg: true });
-      unir(f, 3, 4); celda(f, 3, sumaTot.M, { neg: true }); celda(f, 5, sumaTot.P, { neg: true }); celda(f, 6, sumaTot.O, { neg: true });
-      r0 = f + 2;
+      const tM = ids.reduce((t, id) => t + D("MODERNA", id), 0), tP = ids.reduce((t, id) => t + (id === "c1" || id === "c2" ? 0 : D("PFIZER", id)), 0);
+      wm.getCell(15 + o, 5).value = { formula: `SUM(E${10 + o}:F${14 + o})`, result: tM };
+      wm.getCell(15 + o, 7).value = { formula: `SUM(G${11 + o}:G${14 + o})`, result: tP };
+      for (let f = 10; f <= 15; f++) for (let c = 5; c <= 7; c++) wm.getCell(f + o, c).numFmt = "#,##0";
     });
-    wm.getCell(r0, 1).value = "Dosis tal como se aplicaron (las pediátricas de 0.25 mL cuentan una dosis). SIREVAQ captura las comorbilidades de 5 a 59 años en un solo grupo (van en la fila de 12 a 59 años); «Otros» y la marca «Otra» no se capturan.";
-    wm.getCell(r0, 1).font = { name: "Arial", size: 9, italic: true, color: { argb: "FF475569" } };
+    const fNota = grupos.length * PASO + 7;
+    wm.mergeCells(fNota, 1, fNota, 7);
+    wm.getCell(fNota, 1).value = "Dosis tal como se aplicaron (las pediátricas de 0.25 mL cuentan una dosis). SIREVAQ captura las comorbilidades de 5 a 59 años en un solo grupo.";
+    wm.getCell(fNota, 1).font = { name: "Arial", size: 9, italic: true, color: { argb: "FF475569" } };
+    wm.getCell(fNota, 1).alignment = { wrapText: true, vertical: "top" };
+    wm.getRow(fNota).height = 28;
     wm.pageSetup = { orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true };
 
-    ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true };
     wb.calcProperties = Object.assign({}, wb.calcProperties, { fullCalcOnLoad: true });
     return wb;
   }

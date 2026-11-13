@@ -9,6 +9,7 @@ const raiz = path.join(__dirname, '..');
 const X = require(path.join(raiz, 'influenza_meta_logro_export.js'));
 const F = (n) => fs.readFileSync(path.join(raiz, 'Formatos', n));
 const PLANT_IND = F('Análisis_Meta_Logro_Influenza_2026-2027_UNIDAD_DE_SALUD_Individual.xlsx');
+const PLANT_COVID = F('PLANTILLA COVID 2026-2027.xlsx');
 const PLANT_MJ = F('Análisis_Meta_Logro_Influenza_2026-2027_UNIDAD_DE_SALUD_Municipal_Jurisdiccional.xlsx');
 
 const modulo = fs.readFileSync(path.join(raiz, 'influenza_module.js'), 'utf8');
@@ -129,7 +130,7 @@ const ent = (nombre, metas, logros) => ({ nombre, metas, logros, marca: { MODERN
 
 test('COVID-19: libro con una hoja, una columna por entidad y TOTAL en dosis equivalentes (pediátricas a media dosis)', async () => {
   const wb = await X.construirLibroCovid({
-    ExcelJS, plantilla: PLANT_MJ, rubros: RUBROS_COVID, titulo: 'JURISDICCIÓN SANITARIA', temporada: '2026-2027', nombreTotal: 'TOTAL JURISDICCIÓN',
+    ExcelJS, plantilla: PLANT_COVID, rubros: RUBROS_COVID, titulo: 'JURISDICCIÓN SANITARIA', temporada: '2026-2027', nombreTotal: 'TOTAL JURISDICCIÓN',
     entidades: [
       ent('QUERÉTARO', { c1: 100, c2: 100, c3: 50, c4: 0, c5: 0, c6: 0 }, { c1: 40, c2: 0, c3: 10, c4: 0, c5: 0, c6: 0 }),
       ent('HENM', { c1: 20, c2: 20, c3: 10, c4: 0, c5: 0, c6: 0 }, { c1: 0, c2: 0, c3: 5, c4: 0, c5: 0, c6: 0 })
@@ -137,9 +138,9 @@ test('COVID-19: libro con una hoja, una columna por entidad y TOTAL en dosis equ
   });
   expect(wb.worksheets.length).toBe(2);   // Meta-Logro y la hoja «DOSIS POR MARCA»
   const ws = wb.worksheets[0];
-  const heads = [7, 10, 13].map((c) => valor(ws, 8, c));
+  const heads = [7, 10, 13].map((c) => valor(ws, 7, c));
   expect(heads).toEqual(['QUERÉTARO', 'HENM', 'TOTAL JURISDICCIÓN']);
-  const FT = 16;   // 6 rubros desde el renglón 10
+  const FT = 15;   // 6 rubros desde el renglón 9
   // meta equivalente: Q (100+100)/2 + 50 = 150; H (20+20)/2 + 10 = 30; total 180. Logro: Q 40/2 + 10 = 30; H 5; total 35
   expect([valor(ws, FT, 7), valor(ws, FT, 8)]).toEqual([30, 150]);
   expect([valor(ws, FT, 10), valor(ws, FT, 11)]).toEqual([5, 30]);
@@ -149,46 +150,34 @@ test('COVID-19: libro con una hoja, una columna por entidad y TOTAL en dosis equ
 test('COVID-19 por semana: el total del rango usa la meta una sola vez (no la suma por semana)', async () => {
   const meta = { c1: 100, c2: 100, c3: 50, c4: 0, c5: 0, c6: 0 };   // 150 equivalentes
   const wb = await X.construirLibroCovid({
-    ExcelJS, plantilla: PLANT_MJ, rubros: RUBROS_COVID, titulo: 'QUERETARO', temporada: '2026-2027',
+    ExcelJS, plantilla: PLANT_COVID, rubros: RUBROS_COVID, titulo: 'QUERETARO', temporada: '2026-2027',
     entidades: [ent('Sem 43', meta, { c3: 10 }), ent('Sem 44', meta, { c3: 20 })],
     totalExplicito: ent('TOTAL DEL RANGO', meta, { c3: 30 })
   });
   const ws = wb.worksheets[0];
-  expect([7, 10, 13].map((c) => valor(ws, 8, c))).toEqual(['Sem 43', 'Sem 44', 'TOTAL DEL RANGO']);
-  expect([valor(ws, 16, 13), valor(ws, 16, 14)]).toEqual([30, 150]);   // 150, no 300
+  expect([7, 10, 13].map((c) => valor(ws, 7, c))).toEqual(['Sem 43', 'Sem 44', 'TOTAL DEL RANGO']);
+  expect([valor(ws, 15, 13), valor(ws, 15, 14)]).toEqual([30, 150]);   // 150, no 300
   expect(wb.worksheets[0].name).toBe('META-LOGRO COVID-19');
 });
 
-test('COVID-19: hoja «DOSIS POR MARCA» con la tabla (Moderna 1.ª/2.ª dosis, Pfizer, Otra) por grupo y un bloque por entidad', async () => {
+test('COVID-19: hoja «DOSIS POR MARCA» sobre la plantilla (Moderna 1.ª/2.ª dosis y Pfizer por grupo), un bloque por entidad', async () => {
   const metas = { c1: 100, c2: 100, c3: 50, c4: 0, c5: 0, c6: 0 };
   const R0 = { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0 };
   const e1 = { nombre: 'UNO', metas, logros: {}, marca: { MODERNA: 0, PFIZER: 0 }, marcaR: { MODERNA: { ...R0, c1: 40, c2: 10, c3: 30, c4: 5, c5: 2, c6: 3 }, PFIZER: R0 } };
   const e2 = { nombre: 'DOS', metas, logros: {}, marca: { MODERNA: 0, PFIZER: 0 }, marcaR: { MODERNA: { ...R0, c1: 8 }, PFIZER: { ...R0, c1: 1, c3: 20, c6: 4 } } };
-  const wb = await X.construirLibroCovid({ ExcelJS, plantilla: PLANT_MJ, rubros: RUBROS_COVID, entidades: [e1, e2], titulo: 't', nombreTotal: 'TOTAL' });
+  const wb = await X.construirLibroCovid({ ExcelJS, plantilla: PLANT_COVID, rubros: RUBROS_COVID, entidades: [e1, e2], titulo: 't', nombreTotal: 'TOTAL' });
   expect(wb.worksheets.map((w) => w.name)).toEqual(['META-LOGRO COVID-19', 'DOSIS POR MARCA']);
   const wm = wb.getWorksheet('DOSIS POR MARCA');
-  const c = (r, k) => { const x = wm.getCell(r, k); return x.isMerged ? x.master.value : x.value; };
-  // Bloque 1 (UNO): título 1, encabezado 2-3, niños 4, embarazadas 5, 60+ 6, personal de salud 7,
-  // comorbilidades 5-11 en 8 y 12-59 en 9, otros 5-11 en 10 y 12-59 en 11, total 12
-  expect(c(1, 1)).toBe('UNO');
-  expect([c(2, 3), c(2, 5), c(2, 6)]).toEqual(['MODERNA', 'PFIZER', 'OTRA']);
-  expect([c(3, 3), c(3, 4)]).toEqual(['1er Dosis', '2a Dosis']);
-  expect([c(4, 2), c(4, 3), c(4, 4), c(4, 5)]).toEqual(['NIÑOS DE 6 A 59 MESES', 40, 10, 0]);
-  expect([c(5, 2), c(5, 3)]).toEqual(['EMBARAZADAS', 2]);
-  expect([c(6, 2), c(6, 3)]).toEqual(['60 AÑOS Y MAS', 5]);
-  expect([c(7, 2), c(7, 3)]).toEqual(['PERSONAL DE SALUD', 3]);
-  expect([c(8, 1), c(8, 2), c(8, 3)]).toEqual(['PERSONAS DE 5 A 59 AÑOS CON COMORBILIDADES', '5 A 11 AÑOS', 0]);
-  expect([c(9, 2), c(9, 3)]).toEqual(['12 A 59 AÑOS', 30]);   // el rubro único de comorbilidades va a 12 a 59 años
-  expect([c(10, 1), c(10, 2), c(11, 2), c(10, 3), c(11, 3)]).toEqual(['OTROS', '5 A 11 AÑOS', '12 A 59 AÑOS', 0, 0]);
-  expect(wm.getCell(8, 5).fill.fgColor.argb).toBe('FFBFBFBF');    // Pfizer no se aplica de 5 a 11 años
-  expect(wm.getCell(10, 5).fill.fgColor.argb).toBe('FFBFBFBF');
-  expect(wm.getCell(9, 5).fill && wm.getCell(9, 5).fill.fgColor).toBeFalsy();
-  expect([c(12, 1), c(12, 3), c(12, 5), c(12, 6)]).toEqual(['TOTAL', 90, 0, 0]);   // Moderna 40+10+2+5+3+30
-  // Bloque 2 (DOS) empieza 2 renglones después (13 de alto con el espacio): Pfizer suma 1 + 20 + 4
-  expect(c(14, 1)).toBe('DOS');
-  expect([c(17, 3), c(17, 4), c(17, 5)]).toEqual([8, 0, 1]);
-  expect([c(25, 1), c(25, 3), c(25, 5)]).toEqual(['TOTAL', 8, 25]);
-  // Bloque TOTAL: suma de las dos entidades
-  expect(c(27, 1)).toBe('TOTAL');
-  expect([c(38, 1), c(38, 3), c(38, 5)]).toEqual(['TOTAL', 98, 25]);
+  const c = (r, k) => { const x = wm.getCell(r, k); const y = x.isMerged ? x.master.value : x.value; return y && y.formula ? (y.result === undefined ? 0 : y.result) : y; };
+  // Bloque 1 (UNO) en los renglones 7-15 de la plantilla; el bloque 2 (DOS) 11 renglones más abajo
+  expect(c(7, 3)).toBe('UNO');
+  expect([c(8, 5), c(8, 7)]).toEqual(['MODERNA', 'PFIZER']);
+  expect([c(9, 5), c(9, 6)]).toEqual(['1er Dosis', '2a Dosis']);
+  expect([c(10, 3), c(10, 5), c(10, 6)]).toEqual(['NIÑOS DE 6 A 59 MESES', 40, 10]);   // Pfizer no aplica a niños: su encabezado cubre el renglón
+  expect([c(11, 5), c(12, 5), c(13, 5), c(14, 5)]).toEqual([30, 5, 2, 3]);   // comorbilidades, 60+, embarazadas, salud
+  expect([c(15, 5), c(15, 7)]).toEqual([90, 0]);
+  expect(c(18, 3)).toBe('DOS');
+  expect(c(21, 5)).toBe(8);
+  expect([c(22, 7), c(25, 7)]).toEqual([20, 4]);
+  expect([c(26, 5), c(26, 7)]).toEqual([8, 24]);
 });
