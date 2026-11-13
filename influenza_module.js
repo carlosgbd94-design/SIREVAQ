@@ -3236,27 +3236,34 @@ function renderAvancesAndConcentrados() {
   const t = INF_TONO[tonoTot];
   const color = cov ? { c: "#0e7490", bg: "#ecfeff", d: "#0b5566" } : { c: "#9F2241", bg: "#FFEFEF", d: "#633E55" };
 
-  const kpi = (icono, etiqueta, valor, nota, c, bg, d) => `
-      <div class="kpiCard" style="border-left-color:${c} !important;background-color:${bg} !important;--kpi-color:${c};--kpi-bg:${bg};">
-        <div class="kpiHeader"><div class="kpiCardLabel" style="color:${c};">${etiqueta}</div><div class="kpiIcon"><span class="material-symbols-rounded">${icono}</span></div></div>
-        <div class="kpiCardValue" style="color:${d};">${valor}</div>
-        <div style="font-size:10px;font-weight:800;color:${c};text-transform:uppercase;margin-top:6px;">${nota}</div>
+  // Tablero de la temporada: una sola pieza (avance a la izquierda, cuatro cifras a la derecha), sin tarjetas de colores.
+  const stat = (etiqueta, valor, nota, tono) => `
+      <div class="kpiCard tv-stat"${tono ? ` data-tono="${tono}"` : ""}>
+        <div class="kpiCardLabel">${etiqueta}</div>
+        <div class="kpiCardValue">${valor}</div>
+        <div class="tv-stat__nota">${nota}</div>
       </div>`;
+  const pctBarra = Math.max(0, Math.min(100, Number(pctTot) || 0));
+  const pctEsp = Math.max(0, Math.min(100, Number(esperado) || 0));
   muniFrascosBox.innerHTML = `
-    <div class="text-xs font-black text-violet-950 uppercase tracking-widest mb-3 mt-6 ml-1" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="display:inline-block;padding:3px 12px;border-radius:99px;background:${color.bg};color:${color.d};border:1px solid ${color.c}55">${cov ? "COVID-19" : "Influenza"}</span>
-      <span>Resumen: ${amb.etiqueta} (semanas del ${minFecha} al ${maxFecha})</span>
+    <div class="tv-cab">
+      <span class="tv-vac" data-vac="${cov ? "covid" : "influenza"}">${cov ? "COVID-19" : "Influenza"}</span>
+      <span class="tv-cab__txt">Resumen: ${amb.etiqueta}</span>
+      <span class="tv-cab__rango">semanas del ${minFecha} al ${maxFecha}</span>
     </div>
-    <div class="dashboardKpis w-full" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;">
-      <div class="kpiCard" style="border-left-color:${t.bar} !important;background-color:${t.bg} !important;--kpi-color:${t.bar};--kpi-bg:${t.bg};">
-        <div class="kpiHeader"><div class="kpiCardLabel" style="color:${t.fg};">Avance contra la meta</div><div class="kpiIcon"><span class="material-symbols-rounded">flag</span></div></div>
-        <div class="kpiCardValue" style="color:${t.fg};">${metaTot > 0 ? infFmt(pctTot) + "%" : "—"}</div>
-        <div style="font-size:10px;font-weight:800;color:${t.fg};text-transform:uppercase;margin-top:6px;">${infFmt(acumTot, dd)} de ${infFmt(metaTot, dd)} ${eq}${metaTot > 0 ? " · esperado a hoy " + infFmt(esperado) + "%" : ""}</div>
+    <div class="dashboardKpis tv-board w-full">
+      <div class="kpiCard tv-main" data-tono="${tonoTot}">
+        <div class="kpiCardLabel">Avance contra la meta</div>
+        <div class="kpiCardValue">${metaTot > 0 ? infFmt(pctTot) + "%" : "—"}</div>
+        <div class="tv-prog" role="img" aria-label="${metaTot > 0 ? `Avance ${infFmt(pctTot)}%, esperado a hoy ${infFmt(esperado)}%` : "Sin meta"}">
+          <i style="width:${pctBarra}%"></i>${metaTot > 0 ? `<b style="left:${pctEsp}%" title="Esperado a hoy: ${infFmt(esperado)}%"></b>` : ""}
+        </div>
+        <div class="tv-stat__nota">${infFmt(acumTot, dd)} de ${infFmt(metaTot, dd)} ${eq}${metaTot > 0 ? " · esperado a hoy " + infFmt(esperado) + "%" : ""}</div>
       </div>
-      ${kpi("vaccines", "Dosis aplicadas (rango)", infFmt(rangoTot, dd), `${infFmt(rangoTot / dosisPorFr, 2)} frascos equiv.`, "#6366f1", "#f5f3ff", "#312e81")}
-      ${kpi("inventory_2", "Frascos entregados", infFmt(frascosTot, 0), `${infFmt(dosisFrascosTot, dd)} ${eq}`, "#a855f7", "#faf5ff", "#581c87")}
-      ${kpi(resguardoDosis < 0 ? "warning" : "hourglass_empty", "Diferencia en resguardo", infFmt(resguardoFr, 2), `${infFmt(resguardoDosis, dd)} ${eq}${resguardoDosis < 0 ? " · aplicó más de lo entregado" : ""}`, resguardoDosis < 0 ? "#e11d48" : "#ec4899", resguardoDosis < 0 ? "#fff1f2" : "#fdf2f8", resguardoDosis < 0 ? "#9f1239" : "#831843")}
-      ${kpi("fact_check", "Unidades con reporte", `${conReporte}<span style="font-size:14px;font-weight:700"> / ${unidadesConMeta.length}</span>`, sinReporte > 0 ? `${sinReporte} sin ningún reporte` : "Todas ya reportaron", sinReporte > 0 ? "#d97706" : "#059669", sinReporte > 0 ? "#fffbeb" : "#ecfdf5", sinReporte > 0 ? "#92400e" : "#065f46")}
+      ${stat("Dosis aplicadas (rango)", infFmt(rangoTot, dd), `${infFmt(rangoTot / dosisPorFr, 2)} frascos equiv.`)}
+      ${stat("Frascos entregados", infFmt(frascosTot, 0), `${infFmt(dosisFrascosTot, dd)} ${eq}`)}
+      ${stat("Diferencia en resguardo", infFmt(resguardoFr, 2), `${infFmt(resguardoDosis, dd)} ${eq}${resguardoDosis < 0 ? " · aplicó más de lo entregado" : ""}`, resguardoDosis < 0 ? "bad" : "")}
+      ${stat("Unidades con reporte", `${conReporte}<span class="tv-stat__de"> / ${unidadesConMeta.length}</span>`, sinReporte > 0 ? `${sinReporte} sin ningún reporte` : "Todas ya reportaron", sinReporte > 0 ? "warn" : "ok")}
     </div>`;
   if (cov) {
     muniFrascosBox.insertAdjacentHTML("beforeend", covidPorMarcaHtml(amb, minFecha, maxFecha));
@@ -4259,7 +4266,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
 
   if (report) {
     title.textContent = `Reporte de ${report.unidad}`;
-    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} | Capturado por: ${report.capturado_por}`;
+    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} · Capturado por: ${report.capturado_por}`;
 
     if (report.editado_por !== "UNIDAD") {
       badge.classList.remove("hidden");
@@ -4273,7 +4280,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
   } else {
     const unidad = _allUnidades.find(u => u.clues === clues);
     title.textContent = `Sin reporte: ${unidad ? unidad.unidad : clues}`;
-    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} | La unidad aún no envía su reporte. Si se lo pide, puedes capturarlo por ella.`;
+    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} · La unidad aún no envía su reporte. Si se lo pide, puedes capturarlo por ella.`;
     badge.classList.add("hidden");
   }
 
@@ -4536,7 +4543,7 @@ function renderValidacionEdicionGridCovid(clues, fecha) {
 
   if (report) {
     title.textContent = `Reporte de COVID-19 de ${report.unidad}`;
-    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} | Capturado por: ${report.capturado_por}`;
+    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} · Capturado por: ${report.capturado_por}`;
     if (report.editado_por !== "UNIDAD") {
       badge.classList.remove("hidden");
       badge.textContent = `Corregido por ${firmaDeReporte(report) || report.editado_por}`;
@@ -4544,7 +4551,7 @@ function renderValidacionEdicionGridCovid(clues, fecha) {
   } else {
     const unidad = _allUnidades.find(u => u.clues === clues);
     title.textContent = `Sin reporte de COVID-19: ${unidad ? unidad.unidad : clues}`;
-    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} | La unidad aún no envía su reporte. Si se lo pide, puedes capturarlo por ella.`;
+    subtitle.textContent = `${etiquetaSemanaValidacion(fecha)} · La unidad aún no envía su reporte. Si se lo pide, puedes capturarlo por ella.`;
     badge.classList.add("hidden");
   }
 
@@ -7008,6 +7015,24 @@ function updateFlaskCalculationMuni() {
   if (reportadosEl) reportadosEl.textContent = `${frascosAplicados} frascos (${totalDosis} dosis)`;
   if (diferenciaEl) diferenciaEl.textContent = `${dif} frascos`;
 
+  // Concentrado (nivel 1): el mismo dato en frascos y en dosis, y cuánto de lo entregado ya se aplicó
+  const dpf = dosisFrasco();
+  const ponTxt = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
+  ponTxt("frsHeroAmbito", esJuris ? "Jurisdicción Sanitaria" : (typeof infMuniEtiqueta === "function" ? infMuniEtiqueta(String(selectMuni).toUpperCase()) : selectMuni));
+  ponTxt("frsEntregadosDosis", frascoFmt(totalFrascosEntregados * dpf));
+  ponTxt("frsAplicadasDosis", frascoFmt(totalDosis));
+  ponTxt("frsResguardoDosis", frascoFmt(dif * dpf));
+  const aprovHero = totalFrascosEntregados > 0 ? totalDosis * 100 / (totalFrascosEntregados * dpf) : null;
+  ponTxt("frsAprovPct", aprovHero == null ? "—" : aprovHero.toFixed(1) + "%");
+  const barraAp = document.getElementById("frsBarraAp");
+  if (barraAp) barraAp.style.width = (aprovHero == null ? 0 : Math.min(100, aprovHero)) + "%";
+  const barraBox = document.getElementById("frsBarra");
+  if (barraBox) {
+    barraBox.setAttribute("aria-label", aprovHero == null ? "Sin frascos entregados"
+      : `${aprovHero.toFixed(1)}% de las dosis entregadas ya se aplicaron`);
+    barraBox.dataset.estado = aprovHero == null ? "vacio" : (aprovHero > 100 ? "excede" : "ok");
+  }
+
   if (warningBox) {
     if (totalFrascosEntregados > 0) {
       warningBox.className = "mb-4 p-4 rounded-xl border-2 block text-xs font-semibold ";
@@ -8265,6 +8290,9 @@ function frascoEstadoBalanceHtml(b) {
   return '<span class="frs-estado frs-estado--ok">En orden</span>';
 }
 
+// Frascos con un decimal y separador de miles (1,877.0)
+function frascoFmt1(n) { return Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }
+
 function frascoFechaCorta(f) {
   const m = /^\d{4}-(\d{2})-(\d{2})/.exec(String(f || ""));
   return m ? `${m[2]}/${m[1]}` : "—";
@@ -8998,11 +9026,16 @@ function renderFrascosDistribution() {
     tbodyMuni.innerHTML = "";
     if (esCovid()) {
       // Resumen de existencias contra capturas semanales: solo existe para influenza.
-      tbodyMuni.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">El resumen por dosis aplicadas de COVID-19 aún no está disponible; consulta «Entregas».</td></tr>`;
+      tbodyMuni.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400 font-bold">El resumen por dosis aplicadas de COVID-19 aún no está disponible; consulta «Entregas».</td></tr>`;
     }
     const csvData = [
-      ["Destino", "Frascos recibidos de la entrega (Total)", "Equivalente en Dosis", "Dosis Aplicadas", "Estimado en Resguardo (Frascos)", "Aprovechamiento %"]
+      ["Destino", "Frascos recibidos de la entrega (Total)", "Equivalente en Dosis", "Dosis Aplicadas", "Estimado en Resguardo (Frascos)", "Estimado en Resguardo (Dosis)", "Aprovechamiento %"]
     ];
+    const tot = { fr: 0, dosis: 0, ap: 0 };
+    const barraAprov = (pct) => {
+      const n = Number(pct);
+      return `<div class="frs-aprov"><span class="frs-aprov__n">${pct}%</span><span class="frs-aprov__bar${n > 100 ? " frs-aprov__bar--excede" : ""}"><i style="width:${Math.min(100, n)}%"></i></span></div>`;
+    };
     FRASCO_DESTINOS.forEach(d => {
       if (esCovid()) return;
       const totalFrascos = _adminRemesasArray.reduce((s, r) => s + Number((r.asignacion || {})[d.id] || 0), 0);
@@ -9010,20 +9043,36 @@ function renderFrascosDistribution() {
       const totalAplicadas = frascoDosisAplicadas(d.id);
       const resguardo = totalFrascos - (totalAplicadas / DOSIS_POR_FRASCO);
       const pct = equivDosis > 0 ? ((totalAplicadas / equivDosis) * 100).toFixed(1) : "0.0";
+      tot.fr += totalFrascos; tot.dosis += equivDosis; tot.ap += totalAplicadas;
 
       const row = document.createElement("tr");
-      row.className = "border-b border-slate-100 hover:bg-slate-50";
+      row.className = "frs-lvl-row";
       row.innerHTML = `
-        <td class="p-3 text-xs font-bold text-slate-700">${d.label}</td>
-        <td class="p-3 text-center text-xs font-bold text-slate-600">${frascoFmt(totalFrascos)}</td>
-        <td class="p-3 text-center text-xs font-bold text-slate-500">${frascoFmt(equivDosis)}</td>
-        <td class="p-3 text-center text-xs font-bold text-violet-950">${frascoFmt(totalAplicadas)}</td>
-        <td class="p-3 text-center text-xs font-bold text-amber-600">${resguardo.toFixed(1)}</td>
-        <td class="p-3 text-center text-xs font-bold text-emerald-600">${pct}%</td>
+        <th scope="row" class="frs-lvl-dest">${d.label}${d.hospital ? ' <small>hospital</small>' : ""}</th>
+        <td class="c">${frascoFmt(totalFrascos)}</td>
+        <td class="c frs-muted">${frascoFmt(equivDosis)}</td>
+        <td class="c"><b>${frascoFmt(totalAplicadas)}</b></td>
+        <td class="c ${resguardo < 0 ? "frs-neg" : ""}">${frascoFmt1(resguardo)}</td>
+        <td class="c frs-muted ${resguardo < 0 ? "frs-neg" : ""}">${frascoFmt(equivDosis - totalAplicadas)}</td>
+        <td>${barraAprov(pct)}</td>
       `;
       tbodyMuni.appendChild(row);
-      csvData.push([d.label, totalFrascos, equivDosis, totalAplicadas, resguardo.toFixed(1), `${pct}%`]);
+      csvData.push([d.label, totalFrascos, equivDosis, totalAplicadas, resguardo.toFixed(1), equivDosis - totalAplicadas, `${pct}%`]);
     });
+    const tfootMuni = document.getElementById("adminFrascosMunicipalTfoot");
+    if (tfootMuni) {
+      if (esCovid()) tfootMuni.innerHTML = "";
+      else {
+        const resT = tot.fr - tot.ap / DOSIS_POR_FRASCO;
+        const pctT = tot.dosis > 0 ? ((tot.ap / tot.dosis) * 100).toFixed(1) : "0.0";
+        tfootMuni.innerHTML = `<tr class="frs-lvl-total">
+          <th scope="row" class="frs-lvl-dest">Total Jurisdicción</th>
+          <td class="c">${frascoFmt(tot.fr)}</td><td class="c">${frascoFmt(tot.dosis)}</td><td class="c">${frascoFmt(tot.ap)}</td>
+          <td class="c ${resT < 0 ? "frs-neg" : ""}">${frascoFmt1(resT)}</td><td class="c ${resT < 0 ? "frs-neg" : ""}">${frascoFmt(tot.dosis - tot.ap)}</td>
+          <td>${barraAprov(pctT)}</td></tr>`;
+        csvData.push(["TOTAL JURISDICCIÓN", tot.fr, tot.dosis, tot.ap, resT.toFixed(1), tot.dosis - tot.ap, `${pctT}%`]);
+      }
+    }
 
     const exportBtn = document.getElementById("btnExportFrascosMuni");
     if (exportBtn) {

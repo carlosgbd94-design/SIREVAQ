@@ -16247,3 +16247,263 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 .notifVerMas:hover { background: rgba(2, 132, 199, .08); }
 .notifVerMasN { font-weight: 600; color: #64748b; }
 .notifBody[role="button"]:focus-visible { outline: 2px solid #0284c7; outline-offset: 2px; border-radius: 8px; }
+
+/* ===========================================================================
+   Temporada invernal · rediseño de subpaneles (2026-11)
+   Principio: una sola superficie por bloque, jerarquía por tamaño y peso (no por tarjetas de colores),
+   cifras con su unidad al lado y barras finas. Todo va acotado a #secInfluenza* / #secCovidAvance.
+   =========================================================================== */
+
+/* El encabezado de tabla ya no se pinta de azul primario al hacer scroll (regla global .is-scrolled th):
+   en Temporada invernal se queda claro y solo gana una línea inferior. */
+:is(#secInfluenzaAvances, #secInfluenzaValidacion, #secInfluenzaCobertura, #secCovidAvance, #secInfluenzaFrascos, #secInfluenzaConfig) .tableWrap.is-scrolled th,
+:is(#secInfluenzaAvances, #secInfluenzaValidacion, #secInfluenzaCobertura, #secCovidAvance, #secInfluenzaFrascos, #secInfluenzaConfig) .is-scrolled th,
+.tinv .tableWrap.is-scrolled th, .tinv .is-scrolled th {
+  background: #f8fafc !important; color: #475569 !important; box-shadow: 0 1px 0 #cbd5e1 !important;
+}
+
+/* ── Barra de subpaneles de Control de Frascos: control segmentado plano, sin recorte ni cápsula deslizante ── */
+#secInfluenzaFrascos #dockFrascos {
+  position: static; transform: none; width: max-content; max-width: 100%; padding: 4px; gap: 0;
+  background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+#secInfluenzaFrascos #dockFrascosTabs {
+  overflow: visible; flex-wrap: wrap; gap: 2px; border-radius: 10px;
+  -webkit-mask-image: none !important; mask-image: none !important;
+}
+#secInfluenzaFrascos #dockFrascosTabs .hoja-tinta { display: none; }
+#secInfluenzaFrascos #dockFrascos .hoja-tab {
+  border-radius: 10px; padding: 9px 16px; color: #475569; font-weight: 700;
+  transition: background-color .18s ease, color .18s ease, box-shadow .18s ease;
+}
+#secInfluenzaFrascos #dockFrascos .hoja-tab:not(.activo) .hoja-nombre { display: inline !important; }
+@media (hover: hover) and (pointer: fine) {
+  #secInfluenzaFrascos #dockFrascos .hoja-tab:not(.activo):hover { background: rgba(15, 23, 42, .05); color: #0f172a; }
+}
+#secInfluenzaFrascos #dockFrascos .hoja-tab.activo {
+  background: #ffffff; color: #0f172a; font-weight: 800;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .12), 0 0 0 1px #e2e8f0;
+}
+#secInfluenzaFrascos #dockFrascos .hoja-tab:focus-visible { outline: 2px solid #0f172a; outline-offset: 1px; }
+@media (max-width: 560px) {
+  #secInfluenzaFrascos #dockFrascos { width: 100%; }
+  #secInfluenzaFrascos #dockFrascos .hoja-tab { flex: 1 1 auto; justify-content: center; padding: 9px 10px; }
+}
+
+/* ── Resumen de frascos: nivel 1 (Jurisdicción) → 2 (municipios y hospitales) → 3 (unidades) ── */
+#secInfluenzaFrascos .frs-nivel {
+  display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; letter-spacing: .08em;
+  text-transform: uppercase; color: #64748b;
+}
+#secInfluenzaFrascos .frs-nivel > i {
+  display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%;
+  background: #0f172a; color: #ffffff; font-style: normal; font-size: 11px; font-weight: 800; letter-spacing: 0;
+}
+#secInfluenzaFrascos .frs-hero {
+  display: flex; flex-direction: column; gap: 14px; padding: 22px 24px 18px; background: #ffffff;
+  border: 1px solid #e2e8f0; border-radius: 22px;
+}
+#secInfluenzaFrascos .frs-hero__cab { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+#secInfluenzaFrascos .frs-hero__cab h4 { margin: 0; font-size: 13px; font-weight: 800; color: #334155; letter-spacing: 0; text-transform: none; }
+#secInfluenzaFrascos .frs-hero__cifras { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#secInfluenzaFrascos .frs-cifra { display: flex; flex-direction: column; gap: 3px; padding: 4px 22px; min-width: 0; }
+#secInfluenzaFrascos .frs-cifra:first-child { padding-left: 0; }
+#secInfluenzaFrascos .frs-cifra + .frs-cifra { border-left: 1px solid #e2e8f0; }
+#secInfluenzaFrascos .frs-cifra__lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #64748b; }
+#secInfluenzaFrascos .frs-cifra__val { font-size: 34px; line-height: 1.1; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+#secInfluenzaFrascos .frs-cifra__sub { font-size: 12.5px; font-weight: 600; color: #475569; font-variant-numeric: tabular-nums; }
+#secInfluenzaFrascos .frs-cifra--aprov .frs-cifra__val { color: #4c1d95; }
+#secInfluenzaFrascos .frs-barra { position: relative; height: 10px; border-radius: 999px; background: #ede9fe; overflow: hidden; margin-top: 4px; }
+#secInfluenzaFrascos .frs-barra__ap { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: #4c1d95; transition: width .5s cubic-bezier(.2, .9, .25, 1); }
+#secInfluenzaFrascos .frs-barra[data-estado="excede"] .frs-barra__ap { background: #be123c; }
+#secInfluenzaFrascos .frs-barra__leyenda { display: flex; gap: 18px; font-size: 12px; font-weight: 600; color: #475569; }
+#secInfluenzaFrascos .frs-barra__leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+#secInfluenzaFrascos .frs-pt { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+#secInfluenzaFrascos .frs-pt--ap { background: #4c1d95; }
+#secInfluenzaFrascos .frs-pt--rs { background: #ddd6fe; }
+/* Aviso de balance: una línea tranquila dentro del bloque, no una caja de color */
+#secInfluenzaFrascos #muniFrascosWarningBox {
+  margin: 4px 0 0 !important; padding: 10px 0 0 !important; border: 0 !important; border-top: 1px solid #e2e8f0 !important;
+  border-radius: 0 !important; background: transparent !important; font-size: 12.5px; font-weight: 600; color: #334155 !important;
+}
+#secInfluenzaFrascos #muniFrascosWarningBox.hidden { display: none !important; }
+@media (max-width: 860px) {
+  #secInfluenzaFrascos .frs-hero__cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; }
+  #secInfluenzaFrascos .frs-cifra:nth-child(odd) { padding-left: 0; }
+  #secInfluenzaFrascos .frs-cifra:nth-child(3) { border-left: 0; }
+  #secInfluenzaFrascos .frs-cifra__val { font-size: 28px; }
+}
+
+/* Nivel 2: municipios y hospitales (una superficie, filas con barra de aprovechamiento) */
+#secInfluenzaFrascos #adminFrascosMunicipalTableContainer { border-radius: 22px !important; padding: 20px 22px !important; gap: 14px !important; }
+#secInfluenzaFrascos .frs-lvl-cab { display: flex; flex-direction: column; gap: 4px; }
+#secInfluenzaFrascos .frs-lvl-table { background: #ffffff; font-size: 13px; }
+#secInfluenzaFrascos .frs-lvl-table thead tr { background: transparent; }
+#secInfluenzaFrascos .frs-lvl-table th {
+  padding: 8px 12px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #64748b;
+  background: #f8fafc; border-bottom: 1px solid #e2e8f0; position: static; white-space: normal; line-height: 1.25; vertical-align: bottom;
+}
+#secInfluenzaFrascos .frs-lvl-table .c { text-align: center; font-variant-numeric: tabular-nums; }
+#secInfluenzaFrascos .frs-lvl-table td, #secInfluenzaFrascos .frs-lvl-table tbody th { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: 600; color: #334155; background: transparent; text-transform: none; letter-spacing: 0; }
+#secInfluenzaFrascos .frs-lvl-table .frs-lvl-dest { text-align: left; font-weight: 800; color: #0f172a; }
+#secInfluenzaFrascos .frs-lvl-dest small { margin-left: 6px; font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
+#secInfluenzaFrascos .frs-lvl-table .frs-muted { color: #64748b; }
+#secInfluenzaFrascos .frs-lvl-table .frs-neg { color: #be123c; font-weight: 800; }
+#secInfluenzaFrascos .frs-lvl-table tfoot th, #secInfluenzaFrascos .frs-lvl-table tfoot td {
+  padding: 13px 12px; font-weight: 800; color: #0f172a; background: #f5f3ff; border-top: 2px solid #4c1d95; border-bottom: 0;
+}
+#secInfluenzaFrascos .frs-th-aprov { min-width: 170px; text-align: left; }
+#secInfluenzaFrascos .frs-aprov { display: flex; align-items: center; gap: 10px; }
+#secInfluenzaFrascos .frs-aprov__n { min-width: 48px; font-weight: 800; font-variant-numeric: tabular-nums; color: #0f172a; }
+#secInfluenzaFrascos .frs-aprov__bar { position: relative; flex: 1 1 auto; min-width: 60px; height: 7px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+#secInfluenzaFrascos .frs-aprov__bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: #4c1d95; }
+#secInfluenzaFrascos .frs-aprov__bar--excede > i { background: #be123c; }
+
+/* Nivel 3: unidades */
+#secInfluenzaFrascos .frs-balance-card { border-radius: 22px; padding: 20px 22px; gap: 14px; }
+#secInfluenzaFrascos .frs-balance-cab { display: flex; flex-direction: column; gap: 6px; }
+#secInfluenzaFrascos .frs-balance-cab h4 { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: 0; text-transform: none; color: #0f172a; }
+
+/* ── Tablero de Avances (Influenza y COVID-19): una pieza con el avance a la izquierda y cuatro cifras ── */
+#muniFrascosAnalisisBox .tv-cab { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 24px 0 12px 4px; }
+#muniFrascosAnalisisBox .tv-vac { padding: 3px 12px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; background: #0f172a; color: #ffffff; }
+#muniFrascosAnalisisBox .tv-cab__txt { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #0f172a; }
+#muniFrascosAnalisisBox .tv-cab__rango { font-size: 12px; font-weight: 600; color: #64748b; }
+#muniFrascosAnalisisBox .tv-board {
+  display: grid !important; grid-template-columns: minmax(280px, 1.5fr) repeat(4, minmax(150px, 1fr)); gap: 0 !important;
+  background: #ffffff; border: 1px solid #e2e8f0; border-radius: 22px; overflow: hidden; padding: 0 !important; margin: 0;
+}
+#muniFrascosAnalisisBox .tv-board .kpiCard {
+  background: transparent !important; border: 0 !important; border-left: 1px solid #e2e8f0 !important; border-radius: 0 !important;
+  box-shadow: none !important; transform: none !important; padding: 18px 20px !important; min-height: 0 !important;
+  display: flex; flex-direction: column; gap: 4px; justify-content: flex-start;
+}
+#muniFrascosAnalisisBox .tv-board .kpiCard::before, #muniFrascosAnalisisBox .tv-board .kpiCard::after { display: none !important; }
+#muniFrascosAnalisisBox .tv-board .kpiCard:first-child { border-left: 0 !important; }
+#muniFrascosAnalisisBox .tv-board .kpiCardLabel { font-size: 11px !important; font-weight: 800 !important; letter-spacing: .08em; text-transform: uppercase; color: #64748b !important; }
+#muniFrascosAnalisisBox .tv-board .kpiCardValue { font-size: 30px !important; line-height: 1.1 !important; font-weight: 800 !important; color: #0f172a !important; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+#muniFrascosAnalisisBox .tv-board .tv-main .kpiCardValue { font-size: 44px !important; }
+#muniFrascosAnalisisBox .tv-board .tv-main[data-tono="ok"] .kpiCardValue { color: #047857 !important; }
+#muniFrascosAnalisisBox .tv-board .tv-main[data-tono="warn"] .kpiCardValue { color: #b45309 !important; }
+#muniFrascosAnalisisBox .tv-board .tv-main[data-tono="bad"] .kpiCardValue { color: #be123c !important; }
+#muniFrascosAnalisisBox .tv-stat__nota { font-size: 12px; font-weight: 600; color: #475569; line-height: 1.35; }
+#muniFrascosAnalisisBox .tv-stat__de { font-size: 15px; font-weight: 700; color: #64748b; }
+#muniFrascosAnalisisBox .tv-stat[data-tono="bad"] .kpiCardValue { color: #be123c !important; }
+#muniFrascosAnalisisBox .tv-stat[data-tono="warn"] .tv-stat__nota { color: #b45309; font-weight: 700; }
+#muniFrascosAnalisisBox .tv-stat[data-tono="ok"] .tv-stat__nota { color: #047857; font-weight: 700; }
+#muniFrascosAnalisisBox .tv-prog { position: relative; height: 8px; border-radius: 999px; background: #e2e8f0; margin: 6px 0 4px; }
+#muniFrascosAnalisisBox .tv-prog > i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: #0f172a; }
+#muniFrascosAnalisisBox .tv-main[data-tono="ok"] .tv-prog > i { background: #047857; }
+#muniFrascosAnalisisBox .tv-main[data-tono="warn"] .tv-prog > i { background: #b45309; }
+#muniFrascosAnalisisBox .tv-main[data-tono="bad"] .tv-prog > i { background: #be123c; }
+#muniFrascosAnalisisBox .tv-prog > b { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: #0f172a; border-radius: 2px; }
+@media (max-width: 1100px) {
+  #muniFrascosAnalisisBox .tv-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #muniFrascosAnalisisBox .tv-board .tv-main { grid-column: 1 / -1; border-bottom: 1px solid #e2e8f0 !important; }
+  #muniFrascosAnalisisBox .tv-board .kpiCard:nth-child(2n+3) { border-left: 0 !important; }
+}
+
+/* ── Corregir reportes · vista de captura de una unidad ── */
+#secInfluenzaValidacion:has(#validationReportContent:not(.hidden)) > .rs-nota,
+#secInfluenzaValidacion:has(#validationReportContent:not(.hidden)) > div:first-child { display: none; }
+#validationReportContent { gap: 18px; }
+#validationReportContent > div:first-child {
+  border-bottom: 0; padding-bottom: 0; align-items: flex-start; gap: 16px; flex-wrap: wrap;
+}
+#validationReportTitle { font-size: 22px; line-height: 1.2; font-weight: 800; letter-spacing: -.01em; text-transform: none; color: #0f172a; }
+#validationReportSubtitle { font-size: 13px; font-weight: 600; color: #475569; margin-top: 4px; }
+#validationReportContent > div + div {
+  background: transparent !important; border: 0 !important; border-radius: 0 !important; padding: 0 !important;
+  display: flex; flex-direction: column; gap: 16px;
+}
+#validationReportContent > div + div > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+#validationAyudaIntro { font-size: 13.5px; line-height: 1.5; color: #334155; max-width: 78ch; }
+#validationReportContent .vl-leyenda { border-radius: 12px; }
+#validationNombreGrupo { max-width: 420px; }
+#validationCardsContainer { gap: 16px; }
+#validationCardsContainer > div:not(.inf-aviso) {
+  background: #ffffff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 18px 20px 6px;
+}
+#validationCardsContainer > div > div:first-child { border-bottom: 0; padding-bottom: 0; margin-bottom: 8px; }
+#validationCardsContainer h4 { font-size: 12px; letter-spacing: .07em; color: #334155; }
+#validationCardsContainer .tableWrap { border: 0; border-radius: 0; overflow-x: auto; }
+#validationCardsContainer table { border-collapse: collapse; background: transparent; }
+#validationCardsContainer thead tr { background: transparent; border-bottom: 1px solid #cbd5e1; }
+#validationCardsContainer thead th {
+  position: static; background: transparent !important; color: #64748b !important; box-shadow: none !important;
+  font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 10px 12px; white-space: normal; vertical-align: bottom;
+}
+#validationCardsContainer tbody tr { background: transparent !important; border-bottom: 1px solid #f1f5f9; }
+#validationCardsContainer tbody tr:last-child { border-bottom: 0; }
+#validationCardsContainer tbody tr:nth-child(even) { background: transparent !important; }
+#validationCardsContainer tbody th, #validationCardsContainer tbody td { padding: 12px; background: transparent !important; font-variant-numeric: tabular-nums; }
+#validationCardsContainer tbody th { font-size: 13px; font-weight: 700; color: #0f172a; }
+#validationCardsContainer input[type="number"] {
+  width: 92px; height: 42px; border: 1px solid #94a3b8 !important; border-radius: 10px !important; background: #ffffff !important;
+  font-size: 16px; font-weight: 800; color: #0f172a; text-align: center; -moz-appearance: textfield; appearance: textfield;
+}
+#validationCardsContainer input[type="number"]::-webkit-outer-spin-button,
+#validationCardsContainer input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#validationCardsContainer input[type="number"]:focus { border-color: #4c1d95 !important; box-shadow: 0 0 0 3px rgba(76, 29, 149, .18) !important; outline: none; }
+#validationCardsContainer input[type="number"]:disabled { background: #f1f5f9 !important; border-style: dashed !important; color: #94a3b8; }
+/* Acciones al pie, siempre a la vista */
+#validationReportContent > div + div > .flex.gap-4 {
+  position: sticky; bottom: 0; z-index: 20; padding: 12px 0 4px; margin-top: 8px !important;
+  background: linear-gradient(to bottom, rgba(248, 250, 252, 0), #f8fafc 38%);
+}
+#secInfluenzaFrascos .frs-btn-export {
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border: 0; border-radius: 999px; cursor: pointer;
+  background: #0f172a; color: #ffffff; font-size: 12px; font-weight: 800; letter-spacing: .02em;
+  transition: background-color .18s ease;
+}
+#secInfluenzaFrascos .frs-btn-export .material-symbols-rounded { font-size: 18px; }
+@media (hover: hover) and (pointer: fine) { #secInfluenzaFrascos .frs-btn-export:hover { background: #334155; } }
+#secInfluenzaFrascos .frs-btn-export:focus-visible { outline: 2px solid #4c1d95; outline-offset: 2px; }
+#secInfluenzaFrascos #muniFrascosEntregados::after { content: " frascos"; font-size: 15px; font-weight: 700; color: #475569; letter-spacing: 0; }
+#validationCardsContainer > div:not(.inf-aviso) > div:first-child { margin: 0 !important; padding: 0 !important; }
+#validationCardsContainer > div:not(.inf-aviso) > .tableWrap { margin: 0 !important; }
+#validationCardsContainer h4 { margin: 0; }
+#validationCardsContainer > div:not(.inf-aviso) { padding-top: 16px; }
+/* COVID-19 por marca: misma superficie neutra que el resto del tablero (sin borde ni título cian) */
+#muniFrascosAnalisisBox .cvm:not(.cvm--plano) { border-color: #e2e8f0 !important; background: #ffffff !important; border-radius: 22px !important; }
+#muniFrascosAnalisisBox .cvm-titulo { color: #0f172a !important; }
+/* Cobertura y demás cifras en fila de la Temporada: una sola pieza con divisores (mismo lenguaje que el tablero de Avances) */
+:is(#secInfluenzaCobertura, #secInfluenzaAvances, #secCovidAvance, #secInfluenzaValidacion) .rs-kpis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0;
+  background: #ffffff; border: 1px solid #e2e8f0; border-radius: 22px; overflow: hidden;
+}
+:is(#secInfluenzaCobertura, #secInfluenzaAvances, #secCovidAvance, #secInfluenzaValidacion) .rs-kpi {
+  border: 0; border-left: 1px solid #e2e8f0; border-radius: 0; background: transparent; padding: 18px 22px; align-items: flex-start;
+}
+:is(#secInfluenzaCobertura, #secInfluenzaAvances, #secCovidAvance, #secInfluenzaValidacion) .rs-kpi:first-child { border-left: 0; }
+:is(#secInfluenzaCobertura, #secInfluenzaAvances, #secCovidAvance, #secInfluenzaValidacion) .rs-kpi__ico { display: none; }
+:is(#secInfluenzaCobertura, #secInfluenzaAvances, #secCovidAvance, #secInfluenzaValidacion) .rs-kpi__lbl { font-size: 11px; letter-spacing: .08em; color: #64748b; }
+:is(#secInfluenzaCobertura, #secInfluenzaAvances, #secCovidAvance, #secInfluenzaValidacion) .rs-kpi__val { font-size: 32px; font-weight: 800; letter-spacing: -.01em; margin-top: 3px; }
+:is(#secInfluenzaCobertura, #secInfluenzaAvances, #secCovidAvance, #secInfluenzaValidacion) .rs-kpi--mal .rs-kpi__val { color: #be123c; }
+:is(#secInfluenzaCobertura, #secInfluenzaAvances, #secCovidAvance, #secInfluenzaValidacion) .rs-kpi--aviso .rs-kpi__val { color: #b45309; }
+:is(#secInfluenzaCobertura, #secInfluenzaAvances, #secCovidAvance, #secInfluenzaValidacion) .rs-kpi--ok .rs-kpi__val { color: #047857; }
+@media (max-width: 700px) {
+  :is(#secInfluenzaCobertura, #secInfluenzaAvances, #secCovidAvance, #secInfluenzaValidacion) .rs-kpi { border-left: 0; border-top: 1px solid #e2e8f0; }
+  :is(#secInfluenzaCobertura, #secInfluenzaAvances, #secCovidAvance, #secInfluenzaValidacion) .rs-kpi:first-child { border-top: 0; }
+}
+
+/* ── Fechas de campaña ── */
+#secInfluenzaConfig .hint {
+  display: block; padding: 0; background: transparent; border: 0; box-shadow: none; font-size: 13px; line-height: 1.55; color: #475569; max-width: 80ch;
+}
+#secInfluenzaConfig .hint b { display: inline-block; margin-bottom: 2px; font-size: 17px; font-weight: 800; letter-spacing: -.01em; color: #0f172a; }
+#secInfluenzaConfig > div:first-child { gap: 16px; }
+#secInfluenzaConfig > div:first-child > .bg-surface { border-radius: 22px !important; padding: 20px 22px !important; gap: 14px !important; }
+#secInfluenzaConfig .grid { display: grid !important; flex-direction: initial; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
+@media (max-width: 720px) { #secInfluenzaConfig .grid { grid-template-columns: 1fr; } }
+#secInfluenzaConfig label { margin: 0 0 6px; font-size: 12px; font-weight: 700; color: #475569; line-height: 1.35; }
+#secInfluenzaConfig h4 { font-size: 12px; letter-spacing: .07em; color: #0f172a; }
+
+/* Indicadores de la temporada (tablero Ambas / Influenza / COVID-19): cifras en una sola pieza con divisores finos */
+.iinf-kpis { gap: 1px; background: #e2e8f0; border: 1px solid #e2e8f0; border-radius: 22px; overflow: hidden; }
+.iinf-kpi { border: 0; border-radius: 0; background: #ffffff; padding: 18px 22px; }
+.iinf-kpi > .material-symbols-rounded { display: none; }
+.iinf-kpi small { font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.iinf-kpi b { font-size: 30px; letter-spacing: -.01em; margin: 2px 0; }
+.iinf-kpi b small { font-size: 14px; letter-spacing: 0; }

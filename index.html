@@ -155,7 +155,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=10">
   <link rel="stylesheet" href="ayuda.css?v=7">
-  <link rel="stylesheet" href="style.css?v=2026.234" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.235" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -3759,38 +3759,86 @@
           </div>
           </div>
           <div class="frs-panel" data-frs-panel="resumen">
-          <!-- Resumen de Control de Frascos (Municipal KPIs) -->
-          <div class="dashboardKpis mb-2">
-            <div class="kpiCard info">
-              <div class="kpiHeader">
-                <div class="kpiCardLabel">Total Frascos Entregados</div>
-                <div class="kpiIcon"><span class="material-symbols-rounded">inventory_2</span></div>
+          <!-- Nivel 1: concentrado de la Jurisdicción (o del municipio) con frascos Y dosis -->
+          <section class="frs-hero" aria-labelledby="frsHeroTitulo">
+            <header class="frs-hero__cab">
+              <span class="frs-nivel"><i>1</i> <span id="frsHeroAmbito">Jurisdicción</span></span>
+              <h4 id="frsHeroTitulo">Concentrado de frascos</h4>
+            </header>
+            <div class="frs-hero__cifras">
+              <div class="frs-cifra">
+                <span class="frs-cifra__lbl">Entregados</span>
+                <b class="frs-cifra__val" id="muniFrascosEntregados">0</b>
+                <span class="frs-cifra__sub"><span id="frsEntregadosDosis">0</span> dosis</span>
               </div>
-              <div class="kpiCardValue font-black text-slate-800" id="muniFrascosEntregados">0</div>
+              <div class="frs-cifra">
+                <span class="frs-cifra__lbl">Aplicadas</span>
+                <b class="frs-cifra__val" id="frsAplicadasDosis">0</b>
+                <span class="frs-cifra__sub" id="muniFrascosReportados">0 frascos (0 dosis)</span>
+              </div>
+              <div class="frs-cifra">
+                <span class="frs-cifra__lbl">En resguardo</span>
+                <b class="frs-cifra__val" id="muniFrascosDiferencia">0 frascos</b>
+                <span class="frs-cifra__sub"><span id="frsResguardoDosis">0</span> dosis</span>
+              </div>
+              <div class="frs-cifra frs-cifra--aprov">
+                <span class="frs-cifra__lbl">Aprovechamiento</span>
+                <b class="frs-cifra__val" id="frsAprovPct">—</b>
+                <span class="frs-cifra__sub">dosis aplicadas / entregadas</span>
+              </div>
             </div>
-
-            <div class="kpiCard ok">
-              <div class="kpiHeader">
-                <div class="kpiCardLabel">Total Frascos Aplicados</div>
-                <div class="kpiIcon"><span class="material-symbols-rounded">vaccines</span></div>
-              </div>
-              <div class="kpiCardValue font-black text-slate-800" id="muniFrascosReportados"
-                style="font-size: 20px; line-height: 1.2;">0 frascos (0 dosis)</div>
+            <div class="frs-barra" id="frsBarra" role="img" aria-label="Sin entregas">
+              <i class="frs-barra__ap" id="frsBarraAp" style="width:0%"></i>
             </div>
+            <div class="frs-barra__leyenda" aria-hidden="true">
+              <span><i class="frs-pt frs-pt--ap"></i>Aplicadas</span>
+              <span><i class="frs-pt frs-pt--rs"></i>En resguardo</span>
+            </div>
+          <div id="muniFrascosWarningBox" class="hidden mb-4 p-4 rounded-xl border text-xs font-semibold"></div>
+          </section>
 
-            <div class="kpiCard warn">
-              <div class="kpiHeader">
-                <div class="kpiCardLabel">Frascos en Resguardo</div>
-                <div class="kpiIcon"><span class="material-symbols-rounded">hourglass_empty</span></div>
+          <!-- Resumen Municipal de Frascos (Solo para ADMIN y JURISDICCIONAL) -->
+          <div id="adminFrascosMunicipalTableContainer"
+            class="hidden flex flex-col gap-4 bg-surface border border-slate-200 rounded-[28px] p-6 mb-4"
+            style="background-color: #ffffff;">
+            <div class="flex items-center justify-between">
+              <div class="frs-lvl-cab">
+                <span class="frs-nivel"><i>2</i> Municipios y hospitales</span>
+                <h4 class="text-sm font-black text-violet-950 uppercase tracking-wider m-0">Concentrado de Frascos por
+                  Municipio</h4>
               </div>
-              <div class="kpiCardValue font-black text-slate-800" id="muniFrascosDiferencia">0 frascos</div>
+              <button
+                class="frs-btn-export"
+                id="btnExportFrascosMuni">
+                <span class="material-symbols-rounded text-xs">download</span> Exportar Concentrado
+              </button>
+            </div>
+            <div class="tableWrap overflow-x-auto w-full rounded-2xl border border-slate-100 shadow-sm">
+              <table class="frs-lvl-table w-full border-collapse text-left text-xs font-semibold text-slate-700">
+                <thead>
+                  <tr>
+                    <th scope="col">Destino</th>
+                    <th scope="col" class="c">Frascos entregados</th>
+                    <th scope="col" class="c">Dosis entregadas</th>
+                    <th scope="col" class="c">Dosis aplicadas</th>
+                    <th scope="col" class="c">Resguardo (frascos)</th>
+                    <th scope="col" class="c">Resguardo (dosis)</th>
+                    <th scope="col" class="frs-th-aprov">Aprovechamiento</th>
+                  </tr>
+                </thead>
+                <tbody id="adminFrascosMunicipalTbody">
+                  <!-- JS llenará esta tabla con los 4 municipios -->
+                </tbody>
+                <tfoot id="adminFrascosMunicipalTfoot"></tfoot>
+              </table>
             </div>
           </div>
-          <div id="muniFrascosWarningBox" class="hidden mb-4 p-4 rounded-xl border text-xs font-semibold"></div>
+
 
           <!-- Reparto vs. captura semanal de Meta-Logro, por unidad -->
           <div class="frs-balance-card" id="frascosBalanceBox">
             <div class="frs-balance-cab">
+              <span class="frs-nivel"><i>3</i> Unidades</span>
               <h4>Reparto vs. captura semanal</h4>
               <p>Frascos repartidos a cada unidad contra las <b>dosis aplicadas</b> que la unidad captura cada semana en Meta-Logro (1 frasco = 10 dosis). En rojo, las unidades que ya aplicaron más de lo que les repartieron.</p>
             </div>
@@ -3811,43 +3859,6 @@
                 </thead>
                 <tbody id="frascosBalanceTbody"></tbody>
                 <tfoot id="frascosBalanceTfoot"></tfoot>
-              </table>
-            </div>
-          </div>
-
-          <!-- Resumen Municipal de Frascos (Solo para ADMIN y JURISDICCIONAL) -->
-          <div id="adminFrascosMunicipalTableContainer"
-            class="hidden flex flex-col gap-4 bg-surface border border-slate-200 rounded-[28px] p-6 mb-4"
-            style="background-color: #ffffff;">
-            <div class="flex items-center justify-between">
-              <h4 class="text-sm font-black text-violet-950 uppercase tracking-wider m-0">Concentrado de Frascos por
-                Municipio</h4>
-              <button
-                class="export-btn-premium text-xs font-black px-4 py-2 bg-violet-900 text-white rounded-xl hover:bg-violet-800 flex items-center gap-2 cursor-pointer transition-colors"
-                id="btnExportFrascosMuni">
-                <span class="material-symbols-rounded text-xs">download</span> Exportar Concentrado
-              </button>
-            </div>
-            <div class="tableWrap overflow-x-auto w-full rounded-2xl border border-slate-100 shadow-sm">
-              <table class="w-full border-collapse text-left text-xs font-semibold text-slate-700">
-                <thead>
-                  <tr class="bg-slate-50 border-b border-slate-200">
-                    <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider">Municipio</th>
-                    <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Frascos
-                      Entregados (Total)</th>
-                    <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Equivalente
-                      en Dosis</th>
-                    <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Dosis
-                      Aplicadas</th>
-                    <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Estimado en
-                      Resguardo (Frascos)</th>
-                    <th class="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">
-                      Aprovechamiento %</th>
-                  </tr>
-                </thead>
-                <tbody id="adminFrascosMunicipalTbody">
-                  <!-- JS llenará esta tabla con los 4 municipios -->
-                </tbody>
               </table>
             </div>
           </div>
