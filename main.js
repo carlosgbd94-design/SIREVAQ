@@ -1784,8 +1784,22 @@ let ACTIVE_USERS = {};
  * basándose en target_scope y campos de targeting.
  * Retorna un array de strings (nombres de usuario).
  */
+// Alcances que YA reparte la base de datos (trigger fanout_notification_trigger) en la misma transacción del alta.
+// Repetirlo desde el navegador costaba 3 consultas + inserciones que fallaban por duplicado, y metía filas a "usuarios"
+// que no son cuentas. Solo los alcances de abajo (que el trigger no conoce) se siguen repartiendo desde aquí.
+const NOTIF_ALCANCES_DEL_TRIGGER = new Set(["GLOBAL", "ROLE", "USUARIO", "CLUES", "MUNICIPIO", "ALL_CLUES", "MUNICIPAL_USERS_ALL", "MUNICIPIO_UNITS", "ALL_MY_UNITS"]);
+
+// Los avisos de Pinol son del flujo municipal/administrador (y de la unidad que lo pide): jurisdiccional, visualizador y
+// caravanas no ven ni surten Pinol, así que no deben recibirlos.
+const NOTIF_ROLES_SIN_PINOL = new Set(["JURISDICCIONAL", "VISUALIZADOR_JURISDICCIONAL", "CARAVANAS"]);
+function esAvisoPinol_(n) {
+  if (!n) return false;
+  return String(n.id || "").startsWith("NOTIF:PINOL") || String(n.type || "").toUpperCase() === "PINOL" || /pinol/i.test(String(n.title || ""));
+}
+
 async function resolveNotificationRecipients(record) {
   const scope = String(record.target_scope || "GLOBAL").toUpperCase();
+  if (NOTIF_ALCANCES_DEL_TRIGGER.has(scope)) return [];
   const targetMuni = String(record.target_municipio || "").trim();
   const targetClues = String(record.target_clues || "").trim();
   const targetUser = String(record.target_usuario || "").trim();
@@ -2060,6 +2074,10 @@ function queueDesabastoRealtimeToast(n) {
   }, DESAB_TOAST_WINDOW_MS);
 }
 
+const NOTIF_NUEVOS_IDS = new Set();
+let NOTIF_NUEVOS_TIMER = null;
+let NOTIF_RECARGA_TIMER = null;
+
 function initNotificationsRealtime() {
   if (!window.supabase || !TOKEN || !USER) return;
 
@@ -2085,23 +2103,12 @@ function initNotificationsRealtime() {
         table: 'notificaciones'
       },
       async (payload) => {
+        // Este canal lo reciben TODOS los usuarios con cada alta (aunque el aviso sea de otra unidad), así que ya no
+        // recarga ni avisa por sí solo: lo hace el canal de "mi buzón" de abajo, que solo se dispara para quien lo recibe.
+        // Solo se conserva el caso de que el aviso sea mío (lo envié yo) para que aparezca de inmediato.
         const n = payload.new;
-        if (!n) return;
-        console.log("[Realtime] Nueva notificación maestra en tiempo real:", n.id, n.target_scope);
-
-        // Una tarde de capturas dispara muchas altas de desabasto seguidas: se juntan y se
-        // avisa una sola vez (un toast + un solo refresco de la bandeja).
-        if (String(n.type || '').toUpperCase() === 'ALERTA_DESABASTO') {
-          queueDesabastoRealtimeToast(n);
-          return;
-        }
-
-        if (typeof loadNotifications === 'function') {
-          loadNotifications({ silent: true }).catch(() => { });
-        }
-        if (typeof showSmartToastNotification === 'function' && n.from_usuario !== usuario) {
-          showSmartToastNotification(n);
-        }
+        if (!n || n.from_usuario !== usuario) return;
+        if (typeof loadNotifications === 'function') loadNotifications({ silent: true }).catch(() => { });
       }
     )
     .on(
@@ -2114,9 +2121,33 @@ function initNotificationsRealtime() {
       },
       async (payload) => {
         console.log("[Realtime] Cambio en mi buzón personal:", payload.eventType);
-        if (typeof loadNotifications === 'function') {
-          loadNotifications({ silent: true }).catch(() => { });
+
+        // Aviso nuevo PARA MÍ: aquí sí suena/avisa (antes lo hacía cualquier alta de la jurisdicción).
+        if (payload.eventType === 'INSERT' && payload.new && payload.new.notificacion_id) {
+          // Se juntan los avisos que llegan en ráfaga (p. ej. decenas de desabastos) y se piden de una sola vez.
+          NOTIF_NUEVOS_IDS.add(payload.new.notificacion_id);
+          clearTimeout(NOTIF_NUEVOS_TIMER);
+          NOTIF_NUEVOS_TIMER = setTimeout(async () => {
+            const ids = [...NOTIF_NUEVOS_IDS];
+            NOTIF_NUEVOS_IDS.clear();
+            try {
+              const { data: nuevos } = await window.supabase.from('notificaciones').select('*').in('id', ids);
+              (nuevos || []).filter(n => n && n.from_usuario !== usuario).forEach(n => {
+                if (String(n.type || '').toUpperCase() === 'ALERTA_DESABASTO') {
+                  // Se juntan en un solo toast y un solo refresco.
+                  queueDesabastoRealtimeToast(n);
+                } else if (typeof showSmartToastNotification === 'function') {
+                  showSmartToastNotification(n);
+                }
+              });
+            } catch (e) { /* sin aviso emergente; la bandeja se actualiza igual */ }
+          }, 500);
         }
+        // Una sola recarga por ráfaga de cambios (no una por fila).
+        clearTimeout(NOTIF_RECARGA_TIMER);
+        NOTIF_RECARGA_TIMER = setTimeout(() => {
+          if (typeof loadNotifications === 'function') loadNotifications({ silent: true }).catch(() => { });
+        }, 350);
       }
     )
     .subscribe((status) => {
@@ -2801,9 +2832,17 @@ function buildNotificationsHtml(items = []) {
           <span class="material-symbols-rounded">${isDesabastoActive ? 'warning' : 'check_circle'}</span>
         </span>
       `;
-    } else if (!isRead && !pinolConfirmed && !isPinolAck) {
-      leadingIcon = `<span class="notifUnreadDot"></span>`;
+    } else {
+      // Icono por tipo de aviso (antes solo había un puntito azul): se lee de un vistazo si es informativo, éxito o advertencia.
+      const TIPOS = {
+        SUCCESS: ["check_circle", "ok", "Éxito"], SIS_VALIDADO: ["verified", "ok", "SINBA-SIS validado"],
+        WARN: ["warning", "warn", "Advertencia"], ERROR: ["error", "bad", "Error"],
+        PARAMS_PENDIENTES: ["tune", "warn", "Parámetros pendientes"], INFO: ["campaign", "info", "Comunicado"]
+      };
+      const [ico, tono, nombre] = TIPOS[type] || TIPOS.INFO;
+      leadingIcon = `<span class="notifTypeIcon ${tono}" title="${nombre}" role="img" aria-label="${nombre}"><span class="material-symbols-rounded" aria-hidden="true">${ico}</span></span>`;
     }
+    const unreadDot = (!isRead && !pinolConfirmed && !isPinolAck) ? `<span class="notifUnreadDot" role="img" aria-label="No leída" title="No leída"></span>` : "";
 
     const pinolTag = (meta && String(meta.source || "").toUpperCase() === "PINOL")
       ? `<span class="notifPillPinol"><span class="material-symbols-rounded">inventory_2</span>PINOL</span>`
@@ -2840,7 +2879,7 @@ function buildNotificationsHtml(items = []) {
                 ${desabastoTag}
               </div>
               <div class="notifMeta">
-                ${formatNotifDate(item.created_ts)}
+                ${unreadDot}<time datetime="${escapeAttr(item.created_ts || "")}" title="${escapeAttr(formatNotifFull(item.created_ts))}">${formatNotifRelative(item.created_ts)}</time>${item.from_usuario && ['INFO', 'WARN', 'ERROR'].includes(type) && !isPinol ? ` · <span class="notifFrom">${escapeHtml(String(item.from_usuario).replace(/^L\.E\.\s*/i, ''))}</span>` : ''}
               </div>
             </div>
             
@@ -2869,7 +2908,7 @@ function buildNotificationsHtml(items = []) {
             </div>
           </div>
           
-          <div class="notifBody snippet" style="cursor:pointer;" onclick="openNotifDetailModal('${escapeAttr(item.id || "")}')">
+          <div class="notifBody snippet" style="cursor:pointer;" role="button" tabindex="0" aria-label="Abrir: ${escapeAttr(item.title || "Notificación")}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openNotifDetailModal('${escapeAttr(item.id || "")}')}" onclick="openNotifDetailModal('${escapeAttr(item.id || "")}')">
             ${formatNotifBody(item.title, item.message, item.from_usuario)}
             ${(isDesabastoActive && meta?.missing?.length) ? `<div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:4px;">${meta.missing.slice(0, 8).map(v => `<span style="background:var(--md-sys-color-error-container); color:var(--md-sys-color-on-error-container); padding:2px 6px; border-radius:6px; font-size:9px; font-weight:700;">${escapeHtml(v)}</span>`).join("")}${meta.missing.length > 8 ? `<span style="padding:2px 6px; font-size:9px; font-weight:700;">+${meta.missing.length - 8} más</span>` : ''}</div>` : ''}
             ${item.is_digest ? `<div style="margin-top:8px;"><button type="button" class="notifDigestOpenBtn" onclick="event.stopPropagation(); openDesabastoCenter();">Ver ${meta?.units_count === 1 ? 'la unidad' : 'las unidades'} y verificar <span class="material-symbols-rounded" style="font-size:14px; vertical-align:-3px;">arrow_forward</span></button></div>` : ''}
@@ -2877,8 +2916,32 @@ function buildNotificationsHtml(items = []) {
         </div>
       </div>
     `;
-  }).join("");
+  }).join("").replace(/(<button type="button" class="notifIconPureBtn[^"]*" )title="([^"]+)"/g, '$1title="$2" aria-label="$2"');
 }
+
+// "Hace 5 min", "Hoy 10:32", "Ayer 14:05" o la fecha corta; el título (hover) trae la fecha completa.
+function formatNotifRelative(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return String(ts);
+  const ahora = new Date();
+  const min = Math.round((ahora - d) / 60000);
+  const hora = d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (min < 1) return "Justo ahora";
+  if (min < 60) return `Hace ${min} min`;
+  const mismoDia = d.toDateString() === ahora.toDateString();
+  if (mismoDia) return `Hoy ${hora}`;
+  const ayer = new Date(ahora); ayer.setDate(ahora.getDate() - 1);
+  if (d.toDateString() === ayer.toDateString()) return `Ayer ${hora}`;
+  return formatNotifDate(ts);
+}
+function formatNotifFull(ts) {
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? "" : d.toLocaleString("es-MX", { dateStyle: "long", timeStyle: "short" });
+}
+
+const NOTIF_GRUPO_TOPE = 30;           // tarjetas por grupo antes de "Ver más" (con cientos de avisos la bandeja se volvía pesada)
+let NOTIF_GRUPO_VISIBLES = {};
 
 function isNotifGroupCollapsed(groupKey) {
   return !!(NOTIF_GROUPS_COLLAPSED && NOTIF_GROUPS_COLLAPSED[groupKey]);
@@ -2979,7 +3042,12 @@ function buildGroupedNotificationsHtml(items = []) {
         </button>
 
         <div class="notifGroupBody" style="display:${collapsed ? "none" : "flex"}; flex-direction: column;">
-          ${buildNotificationsHtml(group.items)}
+          ${(() => {
+            const tope = NOTIF_GRUPO_VISIBLES[group.key] || NOTIF_GRUPO_TOPE;
+            const resto = group.items.length - tope;
+            return buildNotificationsHtml(group.items.slice(0, tope))
+              + (resto > 0 ? `<button type="button" class="notifVerMas" data-notif-group-more="${group.key}">Ver ${Math.min(resto, NOTIF_GRUPO_TOPE)} más <span class="notifVerMasN">(${resto} sin mostrar)</span></button>` : "");
+          })()}
         </div>
       </section>
     `;
@@ -3073,10 +3141,19 @@ function syncMainNotifBadge(unread = 0) {
 
 }
 
+let NOTIF_ULTIMA_CARGA_TS = 0;
+let NOTIF_ULTIMA_CARGA_DATA = null;
+
 async function loadNotifications(options = {}) {
-  const { silent = true } = options || {};
+  const { silent = true, maxAgeMs = 0 } = options || {};
 
   if (!TOKEN || !USER) return null;
+
+  // Llamadas "por si acaso" (abrir el panel, arranque, respaldo cada pocos minutos): si ya se cargó hace poco
+  // no se repite la consulta; el tiempo real y las acciones del usuario siguen recargando sin esperar.
+  if (maxAgeMs > 0 && NOTIF_ULTIMA_CARGA_DATA && (Date.now() - NOTIF_ULTIMA_CARGA_TS) < maxAgeMs) {
+    return NOTIF_ULTIMA_CARGA_DATA;
+  }
 
   if (NOTIF_LOAD_PROMISE) {
     return NOTIF_LOAD_PROMISE;
@@ -3129,6 +3206,8 @@ async function loadNotifications(options = {}) {
         }
       }
 
+      NOTIF_ULTIMA_CARGA_TS = Date.now();
+      NOTIF_ULTIMA_CARGA_DATA = data;
       return data;
     } finally {
       NOTIF_LOAD_PROMISE = null;
@@ -3997,6 +4076,14 @@ function bindNotificationsUiEvents() {
       return; // IMPORTANTE: No seguir al cierre por "clic fuera" ya que el DOM cambió
     }
 
+    const masBtn = ev.target.closest("[data-notif-group-more]");
+    if (masBtn) {
+      const key = masBtn.getAttribute("data-notif-group-more");
+      NOTIF_GRUPO_VISIBLES[key] = (NOTIF_GRUPO_VISIBLES[key] || NOTIF_GRUPO_TOPE) + NOTIF_GRUPO_TOPE;
+      rerenderNotificationsFromState();
+      return;
+    }
+
     // Close dropdown on outside click
     const refs = getTopNotifDropdownRefs();
     if (refs.box && refs.box.style.display === "block") {
@@ -4338,7 +4425,7 @@ function toggleTopNotifDropdown() {
   openTopNotifDropdown();
 
   rerenderNotificationsFromState();
-  loadNotifications({ silent: true }).catch(err => {
+  loadNotifications({ silent: true, maxAgeMs: 60000 }).catch(err => {
     console.error("toggleTopNotifDropdown loadNotifications error:", err);
   });
 }
@@ -6083,14 +6170,18 @@ async function supabaseRequest(action = "", payload, options = {}) {
 
         // 1. Consultar estado personal de lectura/eliminación en notificaciones_perfil para el usuario actual
         let perfilMap = new Map();
+        const propiasEmbebidas = [];   // avisos que SON mios (tengo fila en mi buzon), aunque ya no esten entre los 200 mas recientes
         try {
           const myPerfilRows = await fetchAllRows(() => supabase
             .from('notificaciones_perfil')
-            .select('notificacion_id, status, read_ts, deleted')
+            .select('notificacion_id, status, read_ts, deleted, notificaciones(*)')
             .eq('usuario', usuario)
             .order('notificacion_id'));
 
-          (myPerfilRows || []).forEach(p => perfilMap.set(p.notificacion_id, p));
+          (myPerfilRows || []).forEach(p => {
+            perfilMap.set(p.notificacion_id, p);
+            if (p.notificaciones && !p.deleted) propiasEmbebidas.push(p.notificaciones);
+          });
         } catch (ePerfil) {
           console.warn("[Notif] Aviso al leer notificaciones_perfil:", ePerfil);
         }
@@ -6107,11 +6198,18 @@ async function supabaseRequest(action = "", payload, options = {}) {
           throw masterErr;
         }
 
+        // Los 200 mas recientes son de TODA la jurisdiccion: a una unidad se le podian caer avisos propios mas viejos.
+        // Se agregan los que tienen fila en MI buzon (ya venian en la misma consulta de arriba, sin pedir nada extra).
+        const vistos = new Set((masterNotifs || []).map(n => n.id));
+        const masterTodas = (masterNotifs || []).concat(propiasEmbebidas.filter(n => !vistos.has(n.id)))
+          .sort((a, b) => String(b.created_ts || '').localeCompare(String(a.created_ts || '')));
+
         // 3. Filtrar notificaciones maestras según alcance y rol
         const items = [];
-        (masterNotifs || []).forEach(n => {
+        masterTodas.forEach(n => {
           const pState = perfilMap.get(n.id);
           if (pState && pState.deleted) return; // Omitir si fue eliminada por el usuario
+          if (esAvisoPinol_(n) && NOTIF_ROLES_SIN_PINOL.has(userRole)) return; // Pinol no es de este perfil
 
           let matches = false;
           const scope = String(n.target_scope || n.scope || 'GLOBAL').toUpperCase();
@@ -6161,8 +6259,8 @@ async function supabaseRequest(action = "", payload, options = {}) {
           } else if (scope === 'CLUES') {
             if (n.target_clues === userClues) {
               matches = true;
-            } else if (String(n.type || '').toUpperCase() === 'SIS_VALIDADO') {
-              matches = false;   // "Tu SINBA-SIS ya es definitivo" es solo para la unidad (no una copia por unidad a jurisdicción/municipio)
+            } else if (String(n.type || '').toUpperCase() === 'SIS_VALIDADO' || /^pinol entregado/i.test(String(n.title || ''))) {
+              matches = false;   // "Tu SINBA-SIS ya es definitivo" y "Pinol entregado" son solo para la unidad (el municipal es quien entrega) (no una copia por unidad a jurisdicción/municipio)
             } else if (userRole === 'ADMIN' || userRole === 'JURISDICCIONAL' || userRole === 'VISUALIZADOR_JURISDICCIONAL') {
               matches = true;
             } else if (userRole === 'MUNICIPAL' || userRole === 'CARAVANAS') {
@@ -9949,7 +10047,7 @@ async function runPostLoginInit(user) {
 
   await Promise.all([
     getTodayReports(fechaHoy),
-    loadNotifications({ silent: true }),
+    loadNotifications({ silent: true, maxAgeMs: 20000 }),
     getCaptureOverview(fechaHoy, "SR"),
     refreshPinolBadgeOnly?.()
   ]);
@@ -10132,7 +10230,7 @@ async function hydrateSessionUi(user, status, opts = {}) {
       }).catch(e => console.warn("Error al solicitar permiso de notificaciones:", e));
     }
 
-    await loadNotifications({ silent: true });
+    await loadNotifications({ silent: true, maxAgeMs: 20000 });
     startNotificationsAutoRefresh();
 
     if (user && (user.rol === "ADMIN" || user.rol === "MUNICIPAL" || user.rol === "JURISDICCIONAL" || user.rol === "VISUALIZADOR_JURISDICCIONAL")) {
@@ -21576,10 +21674,11 @@ function startRealtimeUX() {
 
   LIVE_TIMERS.push(setInterval(() => {
     if (!canRunRealtime()) return;
-    loadNotifications({ silent: true }).catch(err => {
+    // Respaldo: el tiempo real (canal de mi buzón) ya recarga en cuanto llega o cambia algo.
+    loadNotifications({ silent: true, maxAgeMs: 240000 }).catch(err => {
       console.warn("realtime loadNotifications error:", err);
     });
-  }, 45000));
+  }, 300000));
 }
 
 /**

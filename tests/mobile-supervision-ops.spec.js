@@ -69,9 +69,8 @@ test.describe('Móvil · operaciones de supervisión', () => {
     await expect.poll(() => reqs.filter((r) => r.m === 'POST' && r.nombre === 'notificaciones').length).toBe(1);
     const maestro = reqs.find((r) => r.m === 'POST' && r.nombre === 'notificaciones').body;
     expect(maestro).toMatchObject({ target_scope: 'MUNICIPIO_UNITS', target_municipio: 'CORREGIDORA', title: 'Recordatorio', from_usuario: 'sup', type: 'INFO', status: 'UNREAD' });
-    await expect.poll(() => estado.db.notificaciones_perfil.length).toBe(6);
-    expect(estado.db.notificaciones_perfil.map((r) => r.usuario)).not.toContain('sup');
-    expect(estado.db.notificaciones_perfil.every((r) => r.notificacion_id === maestro.id)).toBe(true);
+    // El reparto a los buzones lo hace el trigger de la BD (aquí el servidor es simulado y no lo tiene): el móvil ya no inserta copias.
+    expect(estado.db.notificaciones_perfil).toHaveLength(0);
     expect(errores).toEqual([]);
   });
 
@@ -118,9 +117,9 @@ test.describe('Móvil · operaciones de supervisión', () => {
     expect(fila).toMatchObject({ cantidad_entregada: 3, comentario_entrega: 'Entregado en ventanilla', entregado_por: 'Sup' });
     const patch = reqs.find((r) => r.m === 'PATCH' && r.nombre === 'pinol_solicitudes');
     expect(patch.q).toContain('estatus=eq.PENDIENTE');
-    await expect.poll(() => estado.db.notificaciones_perfil.filter((r) => r.notificacion_id === 'NOTIF:PINOL_ENTREGA:p1').length).toBeGreaterThan(0);
-    expect(estado.db.notificaciones_perfil.map((r) => r.usuario)).toContain('unidad830');
-    expect(estado.db.notificaciones_perfil.map((r) => r.usuario)).not.toContain('sup');
+    // El aviso de entrega (alcance CLUES) lo reparte el trigger de la BD (a la unidad, al municipal y al admin; no a jurisdiccional):
+    // desde el móvil ya no se insertan copias por perfil (antes se repartían de nuevo y podían meter a quien el trigger excluye).
+    expect(estado.db.notificaciones_perfil.filter((r) => r.notificacion_id === 'NOTIF:PINOL_ENTREGA:p1')).toHaveLength(0);
     await expect(page.locator('#supOps_PIN .sv-unidad')).toHaveCount(0); // ya no hay pendientes en su alcance
     expect(errores).toEqual([]);
   });

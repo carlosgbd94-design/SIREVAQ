@@ -304,18 +304,7 @@
         await db().from("notificaciones_perfil").update({ status: "READ", read_ts: ahoraIso() })
           .eq("notificacion_id", "NOTIF:PINOL_REQ:" + r.id).eq("usuario", quien());
       } catch (e) { /* informativo */ }
-      try {
-        const nid = "NOTIF:PINOL_ENTREGA:" + r.id;
-        const { data: notif } = await db().from("notificaciones").select("*").eq("id", nid).maybeSingle();
-        if (notif) {
-          const dest = await resolverDestinatarios(notif);
-          const filas = dest.map((u) => ({ notificacion_id: nid, usuario: u, status: "UNREAD", deleted: false }));
-          for (let i = 0; i < filas.length; i += 50) {
-            const { error: e2 } = await db().from("notificaciones_perfil").insert(filas.slice(i, i + 50));
-            if (e2 && e2.code !== "23505") console.warn("[Pinol] reparto parcial:", e2.message);
-          }
-        }
-      } catch (e) { console.warn("[Pinol] No se pudo repartir el aviso de entrega:", e); }
+      // El aviso de entrega (alcance CLUES) lo reparte solo la base de datos: ya no se pide ni se reparte desde aquí.
       PINOL.entrega = null;
       aviso("Solicitud marcada como entregada.");
     } catch (e) {
@@ -590,7 +579,9 @@
       const { registro, destinatarios } = ENV.rec;
       const { error } = await db().from("notificaciones").insert(registro);
       if (error) throw error;
-      const filas = destinatarios.map((u) => ({ notificacion_id: registro.id, usuario: u, status: "UNREAD", deleted: false }));
+      // Estos alcances ya los reparte la base de datos al insertar el aviso; repartirlos de nuevo solo duplicaba consultas.
+      const loReparteLaBD = ["GLOBAL", "ROLE", "USUARIO", "CLUES", "MUNICIPIO", "ALL_CLUES", "MUNICIPAL_USERS_ALL", "MUNICIPIO_UNITS", "ALL_MY_UNITS"].includes(String(registro.target_scope || "").toUpperCase());
+      const filas = loReparteLaBD ? [] : destinatarios.map((u) => ({ notificacion_id: registro.id, usuario: u, status: "UNREAD", deleted: false }));
       for (let i = 0; i < filas.length; i += 50) {
         const { error: e2 } = await db().from("notificaciones_perfil").insert(filas.slice(i, i + 50));
         if (e2 && e2.code !== "23505") console.warn("[Avisos] reparto parcial:", e2.message);
