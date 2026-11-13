@@ -51,6 +51,15 @@
     ws.getCell("A5").alignment = { horizontal: "center", vertical: "middle", shrinkToFit: true };
   }
 
+  // ExcelJS no guarda el tema de colores del libro: el texto con color de tema 0 (blanco en la plantilla) sale negro sobre los
+  // rellenos oscuros. Se fija el blanco explícito en todas las celdas que lo traían como color de tema.
+  function fijarBlancos(ws) {
+    ws.eachRow({ includeEmpty: false }, (row) => row.eachCell({ includeEmpty: true }, (c) => {
+      const col = c.font && c.font.color;
+      if (col && col.theme === 0 && !col.argb) c.font = Object.assign({}, c.font, { color: { argb: "FFFFFFFF" } });
+    }));
+  }
+
   function reglasSemaforo(col, f0, f1) {
     const x = `${col}${f0}`;
     const regla = (formula, c, prioridad) => ({
@@ -134,6 +143,7 @@
       for (let r = 8; r <= FF; r++) for (let j = 0; j < 3; j++) { const c = ws.getCell(r, C0 + 3 + j); c.value = null; c.style = {}; }
     }
 
+    fijarBlancos(ws);
     ws.pageSetup = Object.assign({}, ws.pageSetup, { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 });
     wb.calcProperties = Object.assign({}, wb.calcProperties, { fullCalcOnLoad: true });
     return wb;
@@ -237,8 +247,13 @@
       // Por marca: solo lo aplicado (la meta es una sola; Moderna y Pfizer suman contra ella)
       ws.getCell(16, c0).value = num(g.marca.MODERNA);
       ws.getCell(17, c0).value = num(g.marca.PFIZER);
+      // Sin punto decimal sobrante («1,377.»): con decimales solo cuando el valor trae media dosis
+      const fmtDosis = (v) => (Number.isInteger(Math.round(v * 100) / 100) ? "#,##0" : "#,##0.0");
+      ws.getCell(15, c0).numFmt = fmtDosis(tl); ws.getCell(15, c0 + 1).numFmt = fmtDosis(tm);
+      ws.getCell(16, c0).numFmt = fmtDosis(num(g.marca.MODERNA)); ws.getCell(17, c0).numFmt = fmtDosis(num(g.marca.PFIZER));
       ws.addConditionalFormatting(reglasSemaforo(P, 9, 15));
     });
+    fijarBlancos(ws);
     ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true };
 
     // ── Hoja DOSIS POR MARCA: un bloque (renglones 7 a 15 de la plantilla) por entidad, hacia abajo ──
@@ -270,6 +285,7 @@
     wm.getCell(fNota, 1).font = { name: "Arial", size: 9, italic: true, color: { argb: "FF475569" } };
     wm.getCell(fNota, 1).alignment = { wrapText: true, vertical: "top" };
     wm.getRow(fNota).height = 28;
+    fijarBlancos(wm);
     wm.pageSetup = { orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true };
 
     wb.calcProperties = Object.assign({}, wb.calcProperties, { fullCalcOnLoad: true });
@@ -318,6 +334,10 @@
     });
 
     escribirEncabezado(resumen, temporada || "2026-2027", titulo);
+    // La columna L de la plantilla solo avisaba «Meta rebasada» (casi siempre vacía y con relleno): se quita.
+    for (let r = 8; r <= 9 + ids.length; r++) { const c = resumen.getCell(r, 12); c.value = null; c.style = {}; }
+    resumen.getColumn(12).width = 2;
+    wb.worksheets.forEach(fijarBlancos);
     // La barra de avance no debe mostrar el número (la plantilla lo ocultaba con showValue=0, ExcelJS lo pierde al guardar)
     for (let r = 9; r <= 9 + ids.length; r++) resumen.getCell(r, 11).numFmt = ";;;";
     // En cada mes, el renglón 4 trae la unidad (vínculo al resumen) y el 5 el mes de esa hoja

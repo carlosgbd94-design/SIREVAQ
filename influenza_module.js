@@ -5340,7 +5340,8 @@ function covExportEntidades(tipo, amb, rango) {
   const etq = (w) => (w.corte ? "Corte " : "Sem ") + w.semana;
   return {
     entidades: rango.semanas.map(w => covExportEntidad(etq(w), amb.units, (c) => c.fecha === w.fecha)),
-    totalExplicito: covExportEntidad("TOTAL DEL RANGO", amb.units, enRango)
+    // con una sola semana el total del rango sería una copia idéntica de esa semana: no se duplica
+    totalExplicito: rango.semanas.length === 1 ? undefined : covExportEntidad("TOTAL DEL RANGO", amb.units, enRango)
   };
 }
 

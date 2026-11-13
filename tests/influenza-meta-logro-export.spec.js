@@ -72,6 +72,9 @@ test('Individual: cada captura cae en su mes y su semana; la meta va al resumen'
   expect(String(res.getCell('A4').value)).toContain('Temporada Invernal 2026-2027');   // título fijo aparte del sujeto
   expect(res.getCell('K9').numFmt).toBe(';;;');                                          // la barra de avance no muestra el número
   expect(String(w2.getWorksheet('OCTUBRE').getCell('C5').value)).toContain('OCTUBRE');
+  // El renglón de total conserva el texto blanco (ExcelJS pierde el color de tema) y la columna L (aviso vacío) ya no existe
+  for (const c of ['B55', 'G55', 'H55', 'I55']) expect(res.getCell(c).font.color.argb, c).toBe('FFFFFFFF');
+  expect(res.getCell('L9').value).toBeNull();
 });
 
 test('Municipal/Jurisdiccional: un grupo LOGRO|META|% por entidad, total y semáforo en cada %', async () => {
