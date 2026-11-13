@@ -155,7 +155,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=10">
   <link rel="stylesheet" href="ayuda.css?v=7">
-  <link rel="stylesheet" href="style.css?v=2026.233" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.234" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -1786,7 +1786,7 @@
               <div class="flex-1 flex flex-col gap-6 w-full">
                 <!-- Vacuna que se reporta (solo si la unidad tiene meta de COVID-19); el guardado es el mismo botón azul -->
                 <div id="capVacunaSel" class="cvc-seg vx-seg vx-seg--captura" role="group" aria-label="Vacuna que vas a reportar" hidden>
-                  <p class="vx-lead"><span class="material-symbols-rounded" aria-hidden="true">ac_unit</span>Tu unidad reporta <b>dos vacunas</b> en la temporada invernal. Elige cuál vas a capturar esta semana.</p>
+                  <p class="vx-lead"><span class="material-symbols-rounded" aria-hidden="true">ac_unit</span>Tu unidad reporta <b>dos vacunas</b> en la temporada invernal. Elige cuál vas a capturar esta semana. Si no hubo aplicaciones de ninguna, marca <b>Sin movimiento</b> arriba: se guardan las dos en ceros.</p>
                   <div class="vx-opciones">
                     <button type="button" class="cvc-seg-btn vx-btn" data-vac="INFLUENZA" aria-pressed="true">
                       <span class="material-symbols-rounded vx-ico" aria-hidden="true">vaccines</span>
@@ -1795,10 +1795,6 @@
                     <button type="button" class="cvc-seg-btn vx-btn" data-vac="COVID" aria-pressed="false">
                       <span class="material-symbols-rounded vx-ico" aria-hidden="true">coronavirus</span>
                       <span class="vx-txt"><b>COVID-19</b><small class="vx-estado"></small></span>
-                    </button>
-                    <button type="button" id="btnSinMovAmbasVacunas" class="vx-sinmov-ambas">
-                      <span class="material-symbols-rounded" aria-hidden="true">pause_circle</span>
-                      <span>Sin movimiento en ambas<small>Guarda Influenza y COVID-19 en ceros</small></span>
                     </button>
                   </div>
                 </div>

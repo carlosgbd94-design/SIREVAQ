@@ -451,6 +451,9 @@ function updateInfluenzaSinMovimientoUI() {
   const iconBg = document.getElementById("iconSinMovimientoINFBg");
   const labelText = document.getElementById("labelSinMovimientoINF");
 
+  const lblSm = document.getElementById("labelSinMovimientoINF");
+  if (lblSm) cardINF.title = (typeof _covidPanelListo !== "undefined" && _covidPanelListo) ? "Aplica a Influenza y COVID-19: al guardar, las dos quedan en ceros" : "";
+
   if (chkINF.checked) {
     cardINF.style.borderColor = "var(--md-sys-color-primary)";
     cardINF.style.background = "var(--md-sys-color-primary-container)";
@@ -2114,6 +2117,8 @@ function influenzaValidarCaptura(selectedFecha) {
 window.influenzaValidarCaptura = influenzaValidarCaptura;
 
 async function saveInfluenzaReport() {
+  // Con «Sin movimiento» marcado y la unidad con las dos vacunas, un solo guardado deja Influenza y COVID-19 en ceros.
+  if (document.getElementById("chkSinMovimientoINF")?.checked && typeof _covidPanelListo !== "undefined" && _covidPanelListo) return guardarSinMovimientoAmbas();
   if (typeof _capturaVacuna !== "undefined" && _capturaVacuna === "COVID") return guardarCovidDesdePanel();
   const selectedFecha = document.getElementById("influenza_semana").value;
   const nombre = document.getElementById("nombreINFLUENZA").value.trim();
@@ -8728,6 +8733,7 @@ function aplicarVacunaCaptura() {
   if (inf) inf.hidden = _capturaVacuna === "COVID";
   if (cov) cov.hidden = _capturaVacuna !== "COVID" || !tiene;
   actualizarContadorDosisHub();
+  updateInfluenzaSinMovimientoUI();
   capSincronizarNombre();
   renderAccionesReporte();
   if (typeof syncCommandHub === "function") syncCommandHub();
@@ -8745,7 +8751,6 @@ function renderCovidCaptura() {
   if (sel && !sel.dataset.listo) {
     sel.dataset.listo = "1";
     sel.addEventListener("click", (e) => { const b = e.target.closest("[data-vac]"); if (b) elegirVacunaCaptura(b.dataset.vac); });
-    document.getElementById("btnSinMovAmbasVacunas")?.addEventListener("click", guardarSinMovimientoAmbas);
   }
   const fecha = document.getElementById("influenza_semana")?.value;
   if (!fecha) { _covidPanelListo = false; aplicarVacunaCaptura(); return; }

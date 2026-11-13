@@ -16247,11 +16247,3 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 .notifVerMas:hover { background: rgba(2, 132, 199, .08); }
 .notifVerMasN { font-weight: 600; color: #64748b; }
 .notifBody[role="button"]:focus-visible { outline: 2px solid #0284c7; outline-offset: 2px; border-radius: 8px; }
-
-/* Captura de temporada invernal: un solo botón para «Sin movimiento» en Influenza y COVID-19 (en la misma fila, a la derecha) */
-#capVacunaSel .vx-sinmov-ambas { display:inline-flex; align-items:center; gap:10px; margin-left:auto; min-height:48px; padding:6px 18px !important; border-radius:14px !important; border:2px solid #67e8f9 !important; background:#ecfeff !important; color:#155e75 !important; font-size:13.5px; font-weight:800; cursor:pointer; text-align:left; }
-#capVacunaSel .vx-sinmov-ambas .material-symbols-rounded { font-size:20px; }
-#capVacunaSel .vx-sinmov-ambas small { display:block; font-size:11px; font-weight:700; opacity:.85; }
-#capVacunaSel .vx-sinmov-ambas:hover { background:#cffafe !important; }
-#capVacunaSel .vx-sinmov-ambas:focus-visible { outline:3px solid #0e7490; outline-offset:2px; }
-@media (max-width: 520px) { #capVacunaSel .vx-sinmov-ambas { margin-left:0; width:100%; } }
