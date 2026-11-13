@@ -6148,7 +6148,11 @@ async function supabaseRequest(action = "", payload, options = {}) {
               }
             }
           } else if (scope === 'CLUES') {
-            if (n.target_clues === userClues || userRole === 'ADMIN' || userRole === 'JURISDICCIONAL' || userRole === 'VISUALIZADOR_JURISDICCIONAL') {
+            if (n.target_clues === userClues) {
+              matches = true;
+            } else if (String(n.type || '').toUpperCase() === 'SIS_VALIDADO') {
+              matches = false;   // "Tu SINBA-SIS ya es definitivo" es solo para la unidad (no una copia por unidad a jurisdicción/municipio)
+            } else if (userRole === 'ADMIN' || userRole === 'JURISDICCIONAL' || userRole === 'VISUALIZADOR_JURISDICCIONAL') {
               matches = true;
             } else if (userRole === 'MUNICIPAL' || userRole === 'CARAVANAS') {
               const targetMuniNorm = n.target_municipio ? normalizeTextKey_(n.target_municipio) : "";
