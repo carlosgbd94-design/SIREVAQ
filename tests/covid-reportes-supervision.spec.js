@@ -157,3 +157,29 @@ for (const vac of ['COVID', 'INFLUENZA']) {
     await expect(btn).toHaveClass(/(^| )hidden( |$)/);
   });
 }
+
+test('Corregir reportes: unidades ordenadas por CLUES y al cambiar de vacuna se cierra el reporte abierto', async ({ page }) => {
+  test.setTimeout(60000);
+  const unis = [
+    { clues: 'QTSSA000900', unidad: 'A PRIMERA', municipio: 'QUERETARO', activo: 'SI' },
+    { clues: 'QTSSA000100', unidad: 'Z ULTIMA', municipio: 'QUERETARO', activo: 'SI' },
+    { clues: 'QTSSA000500', unidad: 'M MEDIA', municipio: 'QUERETARO', activo: 'SI' }
+  ];
+  await page.route(/\.supabase\.co\//, servidor({ campanas: [{ id: 'c1', nombre: CAMP, fecha_inicio: '2026-10-02', fecha_fin: '2027-04-30', activo: true }], unidades: unis }));
+  await page.clock.setFixedTime(new Date(HOY + 'T12:00:00'));
+  await page.goto('/index.html', { waitUntil: 'load' });
+  await page.waitForFunction(() => typeof vacunaElegir === 'function', null, { timeout: 20000 });
+  const r = await page.evaluate(async (unis) => {
+    _allUnidades = unis;
+    document.getElementById('adminInfluenzaMuni').innerHTML = '<option value="QUERETARO">Q</option>';
+    const filas = infFilasSemana('2026-11-13').map(f => f.u.clues);
+    window.loadCovidAdminData = async () => {};
+    document.getElementById('validationDashboard').classList.add('hidden');
+    document.getElementById('validationReportContent').classList.remove('hidden');
+    await vacunaElegir('COVID');
+    return { filas, detalle: document.getElementById('validationReportContent').classList.contains('hidden'), lista: !document.getElementById('validationDashboard').classList.contains('hidden') };
+  }, unis);
+  expect(r.filas).toEqual(['QTSSA000100', 'QTSSA000500', 'QTSSA000900']);
+  expect(r.detalle).toBe(true);
+  expect(r.lista).toBe(true);
+});

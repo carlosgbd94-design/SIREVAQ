@@ -16233,3 +16233,23 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
   pointer-events: none;
   box-shadow: 0 2px 6px rgba(217, 119, 6, .35);
 }
+
+/* ===== Notificaciones: icono por tipo, hora relativa y "Ver más" ===== */
+.notifTypeIcon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 7px; flex: none; background: #e0f2fe; color: #0369a1; }
+.notifTypeIcon .material-symbols-rounded { font-size: 15px; }
+.notifTypeIcon.ok { background: #dcfce7; color: #15803d; }
+.notifTypeIcon.warn { background: #fef3c7; color: #b45309; }
+.notifTypeIcon.bad { background: #fee2e2; color: #b91c1c; }
+.notifMeta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.notifMeta .notifUnreadDot { width: 7px; height: 7px; }
+.notifMeta .notifFrom { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notifVerMas { margin: 6px auto 2px; padding: 8px 16px; border: 1px solid var(--md-sys-color-outline-variant, #cbd5e1); border-radius: 999px; background: transparent; color: var(--md-sys-color-primary, #0f172a); font-size: 12px; font-weight: 800; cursor: pointer; }
+.notifVerMas:hover { background: rgba(2, 132, 199, .08); }
+.notifVerMasN { font-weight: 600; color: #64748b; }
+.notifBody[role="button"]:focus-visible { outline: 2px solid #0284c7; outline-offset: 2px; border-radius: 8px; }
+
+/* Captura de temporada invernal: un solo botón para «Sin movimiento» en Influenza y COVID-19 */
+#capVacunaSel .vx-sinmov-ambas { display:inline-flex; align-items:center; gap:8px; align-self:flex-start; margin-top:10px; padding:8px 14px !important; border-radius:999px !important; border:1px solid #67e8f9 !important; background:#ecfeff !important; color:#155e75 !important; font-size:12.5px; font-weight:800; cursor:pointer; }
+#capVacunaSel .vx-sinmov-ambas .material-symbols-rounded { font-size:18px; }
+#capVacunaSel .vx-sinmov-ambas:hover { background:#cffafe !important; }
+#capVacunaSel .vx-sinmov-ambas:focus-visible { outline:3px solid #0e7490; outline-offset:2px; }

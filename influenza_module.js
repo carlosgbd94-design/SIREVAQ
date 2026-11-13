@@ -2450,6 +2450,14 @@ async function vacunaElegir(vacuna, marca) {
   _muniRepartoState = { numero: null, fijos: {}, editados: new Set(), tocados: new Set() };
   const perdidaInp = document.getElementById("covidPerdidaInput");
   if (perdidaInp) delete perdidaInp.dataset.sucio;
+  if (cambioVacuna) {
+    // El reporte abierto en "Corregir reportes" es de la otra vacuna: se cierra y se vuelve al listado.
+    document.getElementById("validationReportContent")?.classList.add("hidden");
+    document.getElementById("validationDashboard")?.classList.remove("hidden");
+    _currentValidationReport = null;
+    _valUltimaClues = null;
+    _valIrAClues = null;
+  }
   if (esCovid() && cambioVacuna) await loadCovidAdminData();
   vacunaPintarSelectores();
   renderActiveAdminSection();
@@ -4004,7 +4012,7 @@ function infFilasSemana(fecha) {
   const muni = String(document.getElementById("adminInfluenzaMuni")?.value || "").toUpperCase();
   return _allUnidades
     .filter(u => String(u.municipio || "").toUpperCase() === muni)
-    .sort((a, b) => String(a.unidad).localeCompare(String(b.unidad), "es"))
+    .sort((a, b) => String(a.clues).localeCompare(String(b.clues), "es", { numeric: true }))
     .map(u => {
       const report = infCapturasVista().find(r => r.clues === u.clues && r.fecha === fecha) || null;
       return { u, report, estado: estadoValidacion(report), total: infTotalDosisReporte(report) };
@@ -8737,6 +8745,7 @@ function renderCovidCaptura() {
   if (sel && !sel.dataset.listo) {
     sel.dataset.listo = "1";
     sel.addEventListener("click", (e) => { const b = e.target.closest("[data-vac]"); if (b) elegirVacunaCaptura(b.dataset.vac); });
+    document.getElementById("btnSinMovAmbasVacunas")?.addEventListener("click", guardarSinMovimientoAmbas);
   }
   const fecha = document.getElementById("influenza_semana")?.value;
   if (!fecha) { _covidPanelListo = false; aplicarVacunaCaptura(); return; }
@@ -8837,6 +8846,50 @@ async function guardarCapturaCovid(fecha, p) {
       renderCovidCaptura();
       if (res && res.folio) showToast(`Folio del reporte de COVID-19: ${res.folio}`, true, "info");
       return res;
+    }
+  });
+}
+
+/** Un solo botón: guarda «Sin movimiento» de Influenza y de COVID-19 (las que aún no tengan reporte esa semana). */
+async function guardarSinMovimientoAmbas() {
+  const fecha = document.getElementById("influenza_semana")?.value;
+  const nombre = (document.getElementById("nombreINFLUENZA")?.value || "").trim();
+  if (!fecha) { showToast("Elige primero la semana a reportar.", false, "bad"); return; }
+  if (!nombre) { showToast("Por favor ingresa el nombre de quien reporta la captura.", false, "bad"); return; }
+  const cierre = influenzaEstadoCaptura(fecha);
+  if (!cierre.abierta) { showToast(cierre.motivo, false, "bad"); return; }
+  const errVentana = influenzaVentanaError(fecha);
+  if (errVentana) { showToast(errVentana, false, "bad"); return; }
+  const faltaInf = !capReporteGuardado(fecha, "INFLUENZA");
+  const faltaCov = !capReporteGuardado(fecha, "COVID");
+  if (!faltaInf && !faltaCov) { showToast("Las dos vacunas ya tienen reporte guardado esta semana. Para cambiarlas usa Editar.", false, "warn"); return; }
+  const campana = document.getElementById("influenza_campana").value;
+  await AppService.runCapture({
+    btnId: "btnSaveINFLUENZA",
+    title: "Guardando reportes",
+    msg: "Registrando «Sin movimiento» de Influenza y COVID-19...",
+    successMsg: "✅ Sin movimiento registrado en Influenza y COVID-19",
+    eventTitle: "Temporada invernal",
+    eventMsg: `Captura semana ${fecha} marcada Sin Movimiento (Influenza y COVID-19).`,
+    action: async () => {
+      const base = { clues: USER.clues, unidad: USER.unidad, municipio: USER.municipio, fecha, anio_campana: campana, capturado_por: nombre, editado_por: "UNIDAD", sin_movimiento: true };
+      if (faltaInf) {
+        const valores = {};
+        INFLUENZA_RUBROS.forEach(rb => { valores[rb.id] = 0; });
+        await AppService.call("saveinfluenza_captura", { ...base, valores });
+      }
+      if (faltaCov) {
+        await AppService.call("savecovid_captura", { ...base, valores: { MODERNA: {}, PFIZER: {} } });
+      }
+      try { localStorage.setItem(`sirevaq_inf_nombre_${USER?.clues}`, nombre); } catch (e) { /* sin almacenamiento */ }
+      _infSinMovReabierto = null;
+      _capEdicion = null;
+      await loadInfluenzaUnitData();
+      const r = await AppService.call("getcovid_capturas", { clues: USER.clues, anio_campana: campana }, { silent: true });
+      _covidCapturasCache = (r && r.data) || [];
+      updateInfluenzaWeekBtnLabel(fecha);
+      capRepintar();
+      loadInfluenzaHistoryList();
     }
   });
 }
