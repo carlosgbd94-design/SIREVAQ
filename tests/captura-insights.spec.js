@@ -341,6 +341,9 @@ async function pintarResumen(page, tipo, fecha) {
 
 const filas = (page, id) => page.locator(`#${id} tr`).evaluateAll((trs) => trs.map((tr) => tr.innerText.replace(/\s+/g, ' ').trim()));
 const axe = (page, sel) => page.evaluate(async (s) => {
+  // Con el runner de CI (más lento) axe corría a media animación de entrada y medía colores semitransparentes: se espera a que terminen.
+  await Promise.all(document.getAnimations().filter((a) => a.effect && a.effect.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {})));
+  await new Promise((r) => setTimeout(r, 250));
   const r = await window.axe.run(s, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'] }, rules: { 'heading-order': { enabled: false } } });
   return r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(' | ')}`);
 }, sel);
