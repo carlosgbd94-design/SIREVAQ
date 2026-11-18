@@ -7964,198 +7964,168 @@
   </div>
 
   <div class="overlay" id="exportOverlay">
-    <div class="modal"
-      style="width: 100%; max-width: 480px; background: var(--md-sys-color-surface); border-radius: 24px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.08); border: 1px solid var(--md-sys-color-surface-container); overflow: hidden; display: flex; flex-direction: column; max-height: 85vh;">
+    <div class="modal exp-modal" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
 
-      <!-- Premium Header -->
-      <div style="padding: 28px 28px 16px 28px; background: var(--md-sys-color-surface);">
+      <header class="exp-head">
+        <span class="exp-head-icon" aria-hidden="true"><span class="material-symbols-rounded">download</span></span>
+        <div class="exp-head-txt">
+          <p class="exp-eyebrow">Exportación de datos</p>
+          <h2 id="exportModalTitle">Exportar Existencia de Biológicos</h2>
+          <p class="exp-sub">Elige qué reporte necesitas, el periodo y el alcance.</p>
+        </div>
         <button type="button" class="js1-modal-close-x" id="btnCancelExport" aria-label="Cerrar">
           <span class="material-symbols-rounded">close</span>
         </button>
-        <div
-          style="color: #0ea5e9; font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-          <span class="material-symbols-rounded" style="font-size: 16px;">download</span>
-          Exportación de datos
-        </div>
-        <h2 id="exportModalTitle"
-          style="margin: 0; font-size: 20px; font-weight: 850; color: var(--md-sys-color-on-surface); letter-spacing: -0.01em;">
-          Exportar Existencia de Biológicos
-        </h2>
-        <p
-          style="margin: 4px 0 0 0; color: var(--md-sys-color-on-surface-variant); font-size: 13px; line-height: 1.4; font-weight: 500;">
-          Configura los parámetros del reporte a continuación.
-        </p>
-      </div>
+      </header>
 
-      <!-- Scrollable Body -->
-      <div
-        style="padding: 12px 28px 24px 28px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 20px; background: var(--md-sys-color-surface);">
+      <div class="exp-body">
 
-        <!-- Tipo de Reporte -->
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-          <label
-            style="font-size: 11px; font-weight: 800; color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: 0.05em;">
-            Tipo de reporte
-          </label>
-          <div style="position: relative;">
-            <select id="exportTipo"
-              style="width: 100%; height: 44px; appearance: none; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 10px; padding: 0 36px 0 14px; font-size: 14px; font-weight: 700; color: var(--md-sys-color-on-surface); cursor: pointer; outline: none; transition: border-color 0.2s; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+        <!-- Reporte -->
+        <section class="exp-sec" aria-labelledby="expSecReporte">
+          <h3 class="exp-sec-t" id="expSecReporte"><span class="material-symbols-rounded" aria-hidden="true">tune</span>Reporte</h3>
+          <div class="exp-field">
+            <label for="exportTipo">Tipo de reporte</label>
+            <select id="exportTipo">
               <option value="SR">Existencia de biológicos</option>
+              <option value="SRL">Existencia por lote (detalle)</option>
               <option value="CONS">Consumibles</option>
               <option value="BIO">Pedido de biológico</option>
             </select>
           </div>
-        </div>
-
-        <!-- Formato de salida -->
-        <div id="exportFormatBox" style="display: flex; flex-direction: column; gap: 6px;">
-          <label
-            style="font-size: 11px; font-weight: 800; color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: 0.05em;">
-            Formato de salida
-          </label>
-          <div style="position: relative;">
-            <select id="exportFormat"
-              style="width: 100%; height: 44px; appearance: none; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 10px; padding: 0 36px 0 14px; font-size: 14px; font-weight: 700; color: var(--md-sys-color-on-surface); cursor: pointer; outline: none; transition: border-color 0.2s; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+          <div class="exp-field" id="exportFormatBox">
+            <label for="exportFormat">Formato de salida</label>
+            <select id="exportFormat">
               <option value="xlsx">Excel (.xlsx) - Matriz Consolidada</option>
               <option value="pdf">PDF de Resguardo (.pdf) - Formato Oficial</option>
             </select>
           </div>
-        </div>
+        </section>
 
-        <!-- Fechas (Mes / exact / range) -->
-        <div id="exportFechaMonthBox" style="display:none; flex-direction: column; gap: 6px;">
-          <label
-            style="font-size: 11px; font-weight: 800; color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: 0.05em;">
-            Mes a exportar
-          </label>
-          <div style="display: flex; gap: 10px;">
-            <div style="position: relative; flex: 2;">
-              <select id="exportMonth"
-                style="width: 100%; height: 44px; appearance: none; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 10px; padding: 0 32px 0 14px; font-size: 14px; font-weight: 700; color: var(--md-sys-color-on-surface); cursor: pointer; outline: none;">
-                <option value="01">Enero</option>
-                <option value="02">Febrero</option>
-                <option value="03">Marzo</option>
-                <option value="04">Abril</option>
-                <option value="05">Mayo</option>
-                <option value="06">Junio</option>
-                <option value="07">Julio</option>
-                <option value="08">Agosto</option>
-                <option value="09">Septiembre</option>
-                <option value="10">Octubre</option>
-                <option value="11">Noviembre</option>
-                <option value="12">Diciembre</option>
-              </select>
-            </div>
-            <div style="position: relative; flex: 1;">
-              <select id="exportYear"
-                style="width: 100%; height: 44px; appearance: none; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 10px; padding: 0 32px 0 14px; font-size: 14px; font-weight: 700; color: var(--md-sys-color-on-surface); cursor: pointer; outline: none;">
-                <option value="2024">2024</option>
-                <option value="2025">2025</option>
-                <option value="2026">2026</option>
-                <option value="2027">2027</option>
-              </select>
-            </div>
-          </div>
-        </div>
+        <!-- Periodo -->
+        <section class="exp-sec" aria-labelledby="expSecPeriodo">
+          <h3 class="exp-sec-t" id="expSecPeriodo"><span class="material-symbols-rounded" aria-hidden="true">event</span>Periodo</h3>
 
-        <div id="exportBioExactDateBox"
-          style="display: none; background: var(--md-sys-color-surface-container); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 14px; padding: 14px; flex-direction: column; gap: 8px;">
-          <label for="exportBioExactDate"
-            style="font-size: 11px; font-weight: 800; color: var(--md-sys-color-on-surface); text-transform: uppercase; letter-spacing: 0.05em;">
-            Pedido a exportar
-          </label>
-          <div style="position: relative;">
-            <select id="exportBioExactDate"
-              style="width: 100%; height: 44px; appearance: none; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 10px; padding: 0 36px 0 14px; font-size: 14px; font-weight: 700; color: var(--md-sys-color-on-surface); cursor: pointer; outline: none;"></select>
-          </div>
-          <p id="exportBioExactHint" role="status" aria-live="polite" style="margin: 0; font-size: 11px; color: var(--md-sys-color-on-surface-variant); font-weight: 600;">Se
-            detectaron varios pedidos este mes. Elige cuál exportar.</p>
-        </div>
-
-        <div id="exportFechaSingleBox" style="display:none; flex-direction: column; gap: 6px;">
-          <label
-            style="font-size: 11px; font-weight: 800; color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: 0.05em;">
-            Fecha a exportar
-          </label>
-          <div style="position: relative;">
-            <input type="date" id="exportFecha"
-              style="width: 100%; height: 44px; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 10px; padding: 0 14px; font-size: 14px; font-weight: 700; color: var(--md-sys-color-on-surface); outline: none; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
-          </div>
-        </div>
-
-        <div id="exportFechaRangeBox" style="display:block;">
-          <div style="display: flex; gap: 12px;">
-            <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
-              <label
-                style="font-size: 11px; font-weight: 800; color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: 0.05em;">
-                Inicio
-              </label>
-              <div style="position: relative;">
-                <input type="date" id="exportFechaInicio"
-                  style="width: 100%; height: 44px; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 10px; padding: 0 12px; font-size: 14px; font-weight: 700; color: var(--md-sys-color-on-surface); outline: none; transition: border-color 0.2s; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+          <div id="exportFechaMonthBox" style="display:none;">
+            <div class="exp-row">
+              <div class="exp-field exp-grow">
+                <label for="exportMonth">Mes a exportar</label>
+                <select id="exportMonth">
+                  <option value="01">Enero</option>
+                  <option value="02">Febrero</option>
+                  <option value="03">Marzo</option>
+                  <option value="04">Abril</option>
+                  <option value="05">Mayo</option>
+                  <option value="06">Junio</option>
+                  <option value="07">Julio</option>
+                  <option value="08">Agosto</option>
+                  <option value="09">Septiembre</option>
+                  <option value="10">Octubre</option>
+                  <option value="11">Noviembre</option>
+                  <option value="12">Diciembre</option>
+                </select>
               </div>
-            </div>
-            <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
-              <label
-                style="font-size: 11px; font-weight: 800; color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: 0.05em;">
-                Fin
-              </label>
-              <div style="position: relative;">
-                <input type="date" id="exportFechaFin"
-                  style="width: 100%; height: 44px; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 10px; padding: 0 12px; font-size: 14px; font-weight: 700; color: var(--md-sys-color-on-surface); outline: none; transition: border-color 0.2s; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+              <div class="exp-field exp-narrow">
+                <label for="exportYear">Año</label>
+                <select id="exportYear">
+                  <option value="2024">2024</option>
+                  <option value="2025">2025</option>
+                  <option value="2026">2026</option>
+                  <option value="2027">2027</option>
+                </select>
               </div>
             </div>
           </div>
-        </div>
 
-        <p id="exportFechaHint"
-          style="margin: -4px 0 0 0; font-size: 12px; font-weight: 600; color: var(--md-sys-color-on-surface-variant);">
-          Reporte de existencia por rango de fechas.</p>
+          <div id="exportBioExactDateBox" class="exp-callout" style="display:none;">
+            <div class="exp-field">
+              <label for="exportBioExactDate">Pedido a exportar</label>
+              <select id="exportBioExactDate"></select>
+            </div>
+            <p id="exportBioExactHint" class="exp-hint" role="status" aria-live="polite">Se detectaron varios pedidos este mes. Elige cuál exportar.</p>
+          </div>
 
-        <div style="height: 1px; background: var(--md-sys-color-surface-container); margin: 4px 0;"></div>
+          <div id="exportFechaSingleBox" style="display:none;">
+            <div class="exp-field">
+              <label for="exportFecha">Fecha a exportar</label>
+              <input type="date" id="exportFecha">
+            </div>
+          </div>
 
-        <!-- Municipios -->
-        <div id="exportMunicipiosBox" style="display:block; display: flex; flex-direction: column; gap: 12px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-            <label
-              style="font-size: 11px; font-weight: 800; color: var(--md-sys-color-on-surface); text-transform: uppercase; letter-spacing: 0.05em; margin: 0;">
-              Municipios a exportar
-            </label>
-            <div style="display: flex; gap: 6px;">
-              <button type="button" id="btnExportSelectAll"
-                style="display: flex; align-items: center; gap: 4px; padding: 6px 12px; background: var(--md-sys-color-surface-container); border-radius: 8px; font-size: 10px; font-weight: 800; color: #334155; cursor: pointer; transition: all 0.2s; border: 1px solid var(--md-sys-color-outline-variant);">
-                <span class="material-symbols-rounded" style="font-size: 14px; color: #0ea5e9;">checklist</span> TODOS
-              </button>
-              <button type="button" id="btnExportClearAll"
-                style="display: flex; align-items: center; gap: 4px; padding: 6px 12px; background: var(--md-sys-color-surface-container); border-radius: 8px; font-size: 10px; font-weight: 800; color: #334155; cursor: pointer; transition: all 0.2s; border: 1px solid var(--md-sys-color-outline-variant);">
-                <span class="material-symbols-rounded"
-                  style="font-size: 14px; color: var(--md-sys-color-on-surface-variant);">deselect</span> NINGUNO
-              </button>
+          <div id="exportFechaRangeBox" style="display:block;">
+            <div class="exp-row">
+              <div class="exp-field exp-grow">
+                <label for="exportFechaInicio">Inicio</label>
+                <input type="date" id="exportFechaInicio">
+              </div>
+              <span class="material-symbols-rounded exp-arrow" aria-hidden="true">arrow_forward</span>
+              <div class="exp-field exp-grow">
+                <label for="exportFechaFin">Fin</label>
+                <input type="date" id="exportFechaFin">
+              </div>
+            </div>
+          </div>
+
+          <p id="exportFechaHint" class="exp-hint">Reporte de existencia por rango de fechas.</p>
+        </section>
+
+        <!-- Alcance: municipios -->
+        <section class="exp-sec" id="exportMunicipiosBox" aria-labelledby="expSecAlcance" style="display:block;">
+          <div class="exp-sec-bar">
+            <h3 class="exp-sec-t" id="expSecAlcance"><span class="material-symbols-rounded" aria-hidden="true">location_on</span>Municipios</h3>
+            <div class="exp-links">
+              <button type="button" class="exp-link" id="btnExportSelectAll">Todos</button>
+              <span class="exp-sep" aria-hidden="true"></span>
+              <button type="button" class="exp-link" id="btnExportClearAll">Ninguno</button>
             </div>
           </div>
 
           <div id="exportMunicipiosChecks"></div>
 
-          <div id="exportSplitWrap" style="display:none; margin-top: 6px;">
-            <label for="exportSplitByMunicipio" class="export-split-card">
-              <input type="checkbox" id="exportSplitByMunicipio">
-              <div class="text-container">
-                <span class="title">Separar por municipio</span>
-                <span class="subtitle">Descarga un archivo ZIP con los reportes individuales.</span>
-              </div>
+          <div id="exportSplitWrap" style="display:none;">
+            <label for="exportSplitByMunicipio" class="exp-switch">
+              <span class="exp-switch-txt">
+                <span class="exp-switch-title">Separar por municipio</span>
+                <span class="exp-switch-sub">Descarga un archivo ZIP con los reportes individuales.</span>
+              </span>
+              <input type="checkbox" id="exportSplitByMunicipio" role="switch">
             </label>
           </div>
+        </section>
+
+        <!-- Existencia por lote: unidad, biológicos y lotes -->
+        <div id="exportSrlBox" class="exp-srl" style="display:none;">
+          <section class="exp-sec" aria-labelledby="expSecUnidad">
+            <h3 class="exp-sec-t" id="expSecUnidad"><span class="material-symbols-rounded" aria-hidden="true">local_hospital</span>Unidad</h3>
+            <div class="exp-field">
+              <label for="exportSrlUnidad" class="exp-sr-only">Unidad</label>
+              <select id="exportSrlUnidad">
+                <option value="">Todas las unidades de los municipios elegidos</option>
+              </select>
+            </div>
+          </section>
+
+          <section class="exp-sec" aria-labelledby="expSecLotes">
+            <div class="exp-sec-bar">
+              <h3 class="exp-sec-t" id="expSecLotes"><span class="material-symbols-rounded" aria-hidden="true">vaccines</span>Biológicos y lotes</h3>
+              <div class="exp-links">
+                <span id="exportSrlHint" class="exp-count" role="status" aria-live="polite"></span>
+                <span class="exp-sep" aria-hidden="true"></span>
+                <button type="button" class="exp-link" id="btnSrlAll">Todos</button>
+                <span class="exp-sep" aria-hidden="true"></span>
+                <button type="button" class="exp-link" id="btnSrlNone">Ninguno</button>
+              </div>
+            </div>
+            <div id="exportSrlLotes" class="exp-lista"></div>
+          </section>
         </div>
       </div>
 
-      <!-- Bottom Action Bar -->
-      <div
-        style="padding: 16px 28px; background: var(--md-sys-color-surface); border-top: 1px solid var(--md-sys-color-surface-container); display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
-        <button id="btnDoExport" type="button"
-          style="display: flex; align-items: center; gap: 6px; padding: 10px 20px; background: #0ea5e9; border: none; border-radius: 10px; font-size: 13px; font-weight: 700; color: var(--md-sys-color-surface); cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(14, 165, 233, 0.15);">
-          <span class="material-symbols-rounded" style="font-size: 18px;">download</span> Generar Reporte
+      <footer class="exp-foot">
+        <button type="button" class="exp-btn-ghost" id="btnExportCancel2">Cancelar</button>
+        <button id="btnDoExport" type="button" class="exp-btn-primary">
+          <span class="material-symbols-rounded" aria-hidden="true">download</span>Generar reporte
         </button>
-      </div>
+      </footer>
 
     </div>
   </div>

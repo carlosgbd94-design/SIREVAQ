@@ -13020,7 +13020,28 @@ async function updateExportFechaHint() {
   const hoy = todayYmdLocal();
   const titleEl = $("exportModalTitle");
 
-  if (tipo === "BIO") {
+  const srlBox = $("exportSrlBox");
+  if (srlBox) srlBox.style.display = tipo === "SRL" ? "flex" : "none";
+  // El rango de 7 días de "Existencia por lote" no debe quedarse puesto en los demás reportes.
+  if (tipo !== "SRL" && $("exportFechaInicio") && $("exportFechaInicio").dataset.srl === "1") {
+    $("exportFechaInicio").value = hoy;
+    delete $("exportFechaInicio").dataset.srl;
+  }
+
+  if (tipo === "SRL") {
+    if (titleEl) titleEl.textContent = "Exportar Existencia por Lote";
+    $("exportFechaRangeBox").style.display = "block";
+    $("exportFechaSingleBox").style.display = "none";
+    $("exportFechaMonthBox").style.display = "none";
+    $("exportFechaHint").textContent = "Se toma la última captura de cada unidad dentro del rango.";
+    if ($("exportFormatBox")) $("exportFormatBox").style.display = "none";
+    if (!$("exportFechaFin").value) $("exportFechaFin").value = hoy;
+    if (!$("exportFechaInicio").value || $("exportFechaInicio").value === hoy) {
+      $("exportFechaInicio").value = dateToLocalYmd(new Date(Date.now() - 7 * 86400000));
+      $("exportFechaInicio").dataset.srl = "1";
+    }
+    srlRefrescar_().catch(console.error);
+  } else if (tipo === "BIO") {
     if (titleEl) titleEl.textContent = "Exportar Pedido de Biológico";
     $("exportFechaRangeBox").style.display = "none";
     $("exportFechaSingleBox").style.display = "none";
@@ -13928,13 +13949,13 @@ async function loadExportOptions() {
   }
 
   const grid = document.createElement("div");
-  grid.className = "export-muni-grid";
+  grid.className = "exp-chips";
 
   municipios.forEach((m) => {
     const id = "expmun_" + m.replace(/\s+/g, "_").replace(/[^\w]/g, "");
 
     const label = document.createElement("label");
-    label.className = "export-muni-card";
+    label.className = "exp-chip";
     label.setAttribute("for", id);
 
     label.innerHTML = `
@@ -13950,6 +13971,7 @@ async function loadExportOptions() {
   if (USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL" || USER.rol === "VISUALIZADOR_JURISDICCIONAL") {
     document.querySelectorAll(".exportMunicipioChk").forEach(chk => chk.checked = true);
   }
+  if ($("exportTipo") && $("exportTipo").value === "SRL") srlRefrescar_().catch(console.error);
 }
 
 // Selector accesible (radiogroup) para elegir qué pedido capturar cuando hay más de uno abierto hoy.
@@ -16655,11 +16677,15 @@ async function performSaveSR() {
 
 $("btnExportSelectAll").onclick = () => {
   document.querySelectorAll(".exportMunicipioChk").forEach(chk => chk.checked = true);
+  if ($("exportMunicipiosChecks")) $("exportMunicipiosChecks").dispatchEvent(new Event("change"));
 };
 
 $("btnExportClearAll").onclick = () => {
   document.querySelectorAll(".exportMunicipioChk").forEach(chk => chk.checked = false);
+  if ($("exportMunicipiosChecks")) $("exportMunicipiosChecks").dispatchEvent(new Event("change"));
 };
+
+if ($("btnExportCancel2")) $("btnExportCancel2").onclick = () => $("btnCancelExport")?.click();
 
 $("exportTipo").addEventListener("change", updateExportFechaHint);
 
@@ -17004,6 +17030,378 @@ async function performCancelEditBIO() {
   showToast("Edición cancelada");
 }
 
+// ============================================================
+// EXISTENCIA POR LOTE (detalle) — unidad, municipio o toda la jurisdicción; todos los biológicos o los lotes elegidos.
+// Lee existencia_detalle (un renglón por unidad + biológico + lote) y toma la ÚLTIMA captura de cada unidad dentro del rango.
+// ============================================================
+const SRL = { cache: null, cacheKey: "", desmarcados: new Set(), unidades: null, bioOrder: null, token: 0 };
+
+function srlClave_(bio, lote) { return `${bio}\u0001${lote}`; }
+function srlNorm_(s) { return String(s || "").trim().toUpperCase(); }
+
+function srlRango_() {
+  const hoy = todayYmdLocal();
+  const fFin = ($("exportFechaFin") && $("exportFechaFin").value) || hoy;
+  const fIni = ($("exportFechaInicio") && $("exportFechaInicio").value) || fFin;
+  return fIni <= fFin ? { fIni, fFin } : { fIni: fFin, fFin: fIni };
+}
+
+async function srlCargarDatos_(fIni, fFin, forzar = false) {
+  const key = `${fIni}|${fFin}`;
+  if (!forzar && SRL.cache && SRL.cacheKey === key) return SRL.cache;
+  const rol = String((USER && USER.rol) || "").toUpperCase();
+  const armar = () => {
+    let q = window.supabase.from("existencia_detalle")
+      .select("id, clues, unidad, municipio, fecha, biologico, lote, cantidad, capturado_por")
+      .gte("fecha", fIni).lte("fecha", fFin);
+    if (rol === "UNIDAD") q = q.eq("clues", USER.clues);
+    else if (rol === "MUNICIPAL" && USER.municipio) q = q.in("municipio", String(USER.municipio).split(/[;,]/).map(m => m.trim()).filter(Boolean));
+    return q.order("fecha").order("clues").order("biologico").order("lote").order("id");
+  };
+  const rows = await fetchAllRows(armar);
+
+  // Última fecha capturada por unidad dentro del rango = su existencia vigente.
+  const ultima = new Map();
+  rows.forEach(r => {
+    const c = srlNorm_(r.clues);
+    if (!ultima.has(c) || r.fecha > ultima.get(c)) ultima.set(c, r.fecha);
+  });
+  // Se acumulan los frascos del mismo biológico + lote (la tabla guarda un renglón por fecha de entrada).
+  const acum = new Map();
+  rows.forEach(r => {
+    const c = srlNorm_(r.clues);
+    if (r.fecha !== ultima.get(c)) return;
+    const bio = String(r.biologico || "").trim();
+    const lote = srlNorm_(r.lote);
+    const k = `${c}|${bio.toLowerCase()}|${lote}`;
+    const prev = acum.get(k);
+    if (prev) prev.frascos += Number(r.cantidad || 0);
+    else acum.set(k, {
+      clues: c, unidad: r.unidad || "", municipio: r.municipio || "", fecha: r.fecha,
+      capturado_por: r.capturado_por || "", biologico: bio, lote, frascos: Number(r.cantidad || 0)
+    });
+  });
+  SRL.cache = Array.from(acum.values()).map(r => ({ ...r, frascos: srlR2_(r.frascos) })).filter(r => r.frascos > 0);
+  SRL.cacheKey = key;
+  return SRL.cache;
+}
+
+async function srlOrdenBiologicos_() {
+  if (SRL.bioOrder) return SRL.bioOrder;
+  const orden = {};
+  try {
+    const { data } = await window.supabase.from("biologicos_catalogo").select("biologico, orden_biologico").order("orden_biologico");
+    (data || []).forEach((b, i) => { orden[String(b.biologico).toLowerCase().trim()] = i; });
+  } catch (e) { console.warn("[export] catálogo de biológicos:", e); }
+  SRL.bioOrder = orden;
+  return orden;
+}
+
+// Mismos colores por biológico que la matriz de Existencias (generateProfessionalXLSX).
+const SRL_COLORES = [
+  ["BCG", "3A86B7", "FFFFFFFF"], ["HEPATITIS B", "C43D3D", "FFFFFFFF"], ["HEXAVALENTE", "9ACD32", "FF000000"],
+  ["DPT", "E9C46A", "FF000000"], ["ROTAVIRUS", "264653", "FFFFFFFF"], ["NEUMO", "3D405B", "FFFFFFFF"],
+  ["SRP", "B23A48", "FFFFFFFF"], ["SR", "7B5EA7", "FFFFFFFF"], ["VPH", "2A9D8F", "FF000000"],
+  ["VARICELA", "8ED1C2", "FF000000"], ["HEPATITIS A", "BDBDBD", "FF000000"], ["TDPA", "E76F51", "FFFFFFFF"],
+  ["TD", "9E9E9E", "FF000000"], ["COVID", "4A4A4A", "FFFFFFFF"], ["INFLUENZA", "F1BDAD", "FF000000"], ["VSR", "D8B4A0", "FF000000"]
+];
+function srlColorBio_(bio) {
+  const n = exportNormText_(bio);
+  const exacto = SRL_COLORES.find(c => c[0] === n);
+  const c = exacto || SRL_COLORES.find(x => n.startsWith(x[0]) && x[0].length > 3) || ["", "64748B", "FFFFFFFF"];
+  return { fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + c[1] } }, font: { color: { argb: c[2] }, bold: true, name: "Arial Nova", size: 11 } };
+}
+const srlR2_ = (x) => Math.round(Number(x) * 100) / 100;
+
+function srlOrdenar_(a, b) {
+  const o = SRL.bioOrder || {};
+  const oa = o[a.biologico.toLowerCase()] ?? 999, ob = o[b.biologico.toLowerCase()] ?? 999;
+  if (oa !== ob) return oa - ob;
+  return a.biologico.localeCompare(b.biologico) || a.lote.localeCompare(b.lote);
+}
+
+// Filtra por municipios marcados (vacío = todos los que el rol puede ver) y, si se elige, por una sola unidad.
+function srlFiltrar_(rows, municipios, clues) {
+  const rol = String((USER && USER.rol) || "").toUpperCase();
+  return rows.filter(r => {
+    if (rol !== "UNIDAD" && rol !== "ADMIN" && rol !== "JURISDICCIONAL" && rol !== "VISUALIZADOR_JURISDICCIONAL" && !canSeeMunicipio_(USER, r.municipio)) return false;
+    if (!exportRowEnSeleccion_(r.clues, r.municipio, municipios)) return false;
+    return !clues || srlNorm_(r.clues) === srlNorm_(clues);
+  });
+}
+
+async function srlCargarUnidades_() {
+  if (!SRL.unidades) {
+    const rol = String((USER && USER.rol) || "").toUpperCase();
+    try {
+      const { data, error } = await window.supabase.from("unidades").select("clues, unidad, municipio").order("unidad");
+      if (error) throw error;
+      SRL.unidades = (data || []).filter(u => rol === "UNIDAD" ? u.clues === USER.clues : canSeeMunicipio_(USER, u.municipio));
+    } catch (e) {
+      console.warn("[export] unidades:", e);
+      SRL.unidades = [];
+    }
+  }
+  const sel = $("exportSrlUnidad");
+  if (!sel) return;
+  const municipios = getSelectedExportMunicipios();
+  const previo = sel.value;
+  const lista = SRL.unidades.filter(u => exportRowEnSeleccion_(u.clues, u.municipio, municipios));
+  sel.innerHTML = '<option value="">Todas las unidades de los municipios elegidos</option>' +
+    lista.map(u => `<option value="${escapeAttr(u.clues)}">${escapeHtml(String(u.unidad || u.clues).toUpperCase())} · ${escapeHtml(u.clues)}</option>`).join("");
+  sel.value = lista.some(u => u.clues === previo) ? previo : "";
+}
+
+async function srlRefrescar_() {
+  const token = ++SRL.token;
+  const cont = $("exportSrlLotes");
+  if (!cont) return;
+  cont.innerHTML = '<p class="exp-empty">Buscando lotes…</p>';
+  if ($("exportSrlHint")) $("exportSrlHint").textContent = "";
+  try {
+    const { fIni, fFin } = srlRango_();
+    await srlOrdenBiologicos_();
+    await srlCargarUnidades_();
+    await srlCargarDatos_(fIni, fFin);
+  } catch (e) {
+    console.error("[export] existencia por lote:", e);
+    if (token === SRL.token) cont.innerHTML = '<p class="exp-empty exp-error">No se pudieron leer las existencias.</p>';
+    return;
+  }
+  if (token !== SRL.token) return;
+  srlPintarLotes_();
+}
+
+function srlPintarLotes_() {
+  const cont = $("exportSrlLotes");
+  const hint = $("exportSrlHint");
+  if (!cont || !SRL.cache) return;
+  const rows = srlFiltrar_(SRL.cache, getSelectedExportMunicipios(), $("exportSrlUnidad") ? $("exportSrlUnidad").value : "");
+  if (!rows.length) {
+    cont.innerHTML = '<p class="exp-empty">No hay existencias capturadas en ese rango para la selección actual.</p>';
+    if (hint) hint.textContent = "";
+    return;
+  }
+  const porBio = new Map();
+  rows.forEach(r => {
+    if (!porBio.has(r.biologico)) porBio.set(r.biologico, new Map());
+    const lotes = porBio.get(r.biologico);
+    if (!lotes.has(r.lote)) lotes.set(r.lote, { frascos: 0, unidades: new Set() });
+    const l = lotes.get(r.lote);
+    l.frascos += r.frascos;
+    l.unidades.add(srlNorm_(r.clues));
+  });
+  const bios = Array.from(porBio.keys()).sort((a, b) => srlOrdenar_({ biologico: a, lote: "" }, { biologico: b, lote: "" }));
+  const fmt = (n) => srlR2_(n).toLocaleString("es-MX");
+  cont.innerHTML = bios.map(bio => {
+    const lotes = Array.from(porBio.get(bio).entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    const total = lotes.reduce((s, [, l]) => s + l.frascos, 0);
+    const color = srlColorBio_(bio).fill.fgColor.argb.slice(2);
+    return `<details class="srlGrupo exp-bio">
+      <summary class="exp-bio-row">
+        <input type="checkbox" class="exp-check srlBioChk" data-bio="${escapeAttr(bio)}" aria-label="Todos los lotes de ${escapeAttr(bio)}">
+        <span class="exp-dot" style="background:#${color}"></span>
+        <span class="exp-bio-name">${escapeHtml(bio.toUpperCase())}</span>
+        <span class="exp-bio-meta">${lotes.length} ${lotes.length === 1 ? "lote" : "lotes"} · ${fmt(total)} fr.</span>
+        <span class="material-symbols-rounded exp-chev" aria-hidden="true">expand_more</span>
+      </summary>
+      <div class="exp-lotes">
+        ${lotes.map(([lote, l]) => `<label class="exp-lote-row">
+          <input type="checkbox" class="exp-check srlLoteChk" data-bio="${escapeAttr(bio)}" data-lote="${escapeAttr(lote)}" ${SRL.desmarcados.has(srlClave_(bio, lote)) ? "" : "checked"}>
+          <span class="exp-lote-num">${escapeHtml(lote || "SIN LOTE")}</span>
+          <span class="exp-lote-meta">${fmt(l.frascos)} fr. · ${l.unidades.size} ${l.unidades.size === 1 ? "unidad" : "unidades"}</span>
+        </label>`).join("")}
+      </div>
+    </details>`;
+  }).join("");
+  srlSincronizarBios_();
+  srlActualizarHint_();
+}
+
+// El checkbox de cada biológico refleja sus lotes (marcado, intermedio o vacío).
+function srlSincronizarBios_() {
+  document.querySelectorAll("#exportSrlLotes .srlGrupo").forEach(g => {
+    const chk = g.querySelector(".srlBioChk");
+    const lotes = Array.from(g.querySelectorAll(".srlLoteChk"));
+    const marcados = lotes.filter(l => l.checked).length;
+    chk.checked = marcados === lotes.length;
+    chk.indeterminate = marcados > 0 && marcados < lotes.length;
+  });
+}
+
+function srlActualizarHint_() {
+  const hint = $("exportSrlHint");
+  if (!hint) return;
+  const marcados = Array.from(document.querySelectorAll("#exportSrlLotes .srlLoteChk:checked"));
+  const todos = document.querySelectorAll("#exportSrlLotes .srlLoteChk").length;
+  hint.textContent = `${marcados.length} de ${todos} lotes`;
+}
+
+function srlHayLotesElegidos_() {
+  return document.querySelectorAll("#exportSrlLotes .srlLoteChk:checked").length > 0;
+}
+
+async function exportarExistenciaPorLote_() {
+  const { fIni, fFin } = srlRango_();
+  await Promise.all([srlOrdenBiologicos_(), typeof ensureCovidLoteMarca === "function" ? ensureCovidLoteMarca() : null]);
+  const datos = await srlCargarDatos_(fIni, fFin, true);
+  const municipios = getSelectedExportMunicipios();
+  const clues = $("exportSrlUnidad") ? $("exportSrlUnidad").value : "";
+  const rows = srlFiltrar_(datos, municipios, clues)
+    .filter(r => !SRL.desmarcados.has(srlClave_(r.biologico, r.lote)))
+    .sort((a, b) => String(a.municipio).localeCompare(String(b.municipio)) || String(a.unidad).localeCompare(String(b.unidad)) || srlOrdenar_(a, b));
+  if (!rows.length) {
+    showToast("No se encontraron existencias con esos filtros.", false, "info");
+    return;
+  }
+  if (!window.ExcelJS) { try { await ensureLibsLoaded("exceljs"); } catch (e) { console.warn("[export] exceljs no cargó:", e); } }
+  if (!window.ExcelJS) { showToast("Librería de exportación no cargada", false); return; }
+
+  // Alcance para el encabezado y el nombre del archivo.
+  const rol = String((USER && USER.rol) || "").toUpperCase();
+  const totalChk = document.querySelectorAll(".exportMunicipioChk").length;
+  let alcance;
+  if (clues) {
+    const u = rows[0];
+    alcance = `UNIDAD: ${String(u.unidad).toUpperCase()} (${u.clues})`;
+  } else if (municipios.length > 0 && municipios.length < totalChk) {
+    alcance = `MUNICIPIO${municipios.length > 1 ? "S" : ""}: ${municipios.join(", ").toUpperCase()}`;
+  } else if (rol === "MUNICIPAL") {
+    alcance = `MUNICIPIO: ${String(USER.municipio || "").toUpperCase()}`;
+  } else {
+    alcance = "TODA LA JURISDICCIÓN";
+  }
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "SIREVAQ";
+  const headerFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2F3E46" } };
+  const fontWhite = { color: { argb: "FFFFFFFF" }, bold: true, name: "Arial Nova", size: 11 };
+  const borde = { style: "thin", color: { argb: "FFD9D9D9" } };
+  const borderAll = { top: borde, left: borde, bottom: borde, right: borde };
+  const fechaCorta = (ymd) => { const [y, m, d] = String(ymd || "").split("-"); return y ? `${d}/${m}/${y}` : ""; };
+
+  function hoja(nombre, titulo, encabezados, anchos, filas, columnasSuma, colBio) {
+    const ws = wb.addWorksheet(nombre, { views: [{ showGridLines: false, state: "frozen", ySplit: 4 }] });
+    const n = encabezados.length;
+    ws.getCell("A1").value = titulo;
+    ws.getCell("A1").fill = headerFill;
+    ws.getCell("A1").font = { color: { argb: "FFFFFFFF" }, bold: true, name: "Arial Nova", size: 14 };
+    ws.getCell("A1").alignment = { vertical: "middle", horizontal: "center" };
+    ws.mergeCells(1, 1, 1, n);
+    ws.getRow(1).height = 42;
+    ws.getCell("A2").value = alcance;
+    ws.getCell("A2").font = { bold: true };
+    ws.mergeCells(2, 1, 2, Math.max(2, n - 3));
+    ws.getCell(2, n).value = `CORTE: última captura de cada unidad del ${fechaCorta(fIni)} al ${fechaCorta(fFin)}`;
+    ws.getCell(2, n).font = { bold: true };
+    ws.getCell(2, n).alignment = { horizontal: "right" };
+    encabezados.forEach((h, i) => {
+      const c = ws.getCell(4, i + 1);
+      c.value = h; c.fill = headerFill; c.font = fontWhite; c.border = borderAll;
+      c.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      ws.getColumn(i + 1).width = anchos[i];
+    });
+    ws.getRow(4).height = 30;
+    filas.forEach((f, i) => {
+      f.forEach((v, j) => {
+        const c = ws.getCell(5 + i, j + 1);
+        c.value = v; c.border = borderAll;
+        c.font = { name: "Arial Nova", size: 11 };
+        c.alignment = { vertical: "middle", horizontal: typeof v === "number" ? "center" : "left" };
+        if (typeof v === "number") c.numFmt = "#,##0.##";
+        if (j + 1 === colBio) { const e = srlColorBio_(v); c.fill = e.fill; c.font = e.font; }
+      });
+    });
+    const ultima = 4 + filas.length;
+    const filaTotal = ultima + 1;
+    ws.getCell(filaTotal, 1).value = "TOTAL";
+    ws.getCell(filaTotal, 1).font = { bold: true, name: "Arial Nova", size: 11 };
+    for (let j = 1; j <= n; j++) {
+      const c = ws.getCell(filaTotal, j);
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
+      c.border = borderAll;
+    }
+    columnasSuma.forEach(col => {
+      const letra = ws.getColumn(col).letter;
+      const suma = srlR2_(filas.reduce((s, f) => s + Number(f[col - 1] || 0), 0));
+      const c = ws.getCell(filaTotal, col);
+      c.value = { formula: `SUM(${letra}5:${letra}${ultima})`, result: suma };
+      c.font = { bold: true, name: "Arial Nova", size: 11 };
+      c.alignment = { horizontal: "center" };
+      c.numFmt = "#,##0.##";
+    });
+    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: ultima, column: n } };
+    ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+    return ws;
+  }
+
+  const dosisDe = (r) => Math.round(r.frascos * getDosesPerVial(r.biologico, r.lote));
+  hoja("EXISTENCIA POR LOTE", "EXISTENCIA DE BIOLÓGICO POR LOTE",
+    ["MUNICIPIO", "CLUES", "UNIDAD", "BIOLÓGICO", "LOTE", "FRASCOS", "DOSIS", "FECHA DE CAPTURA", "CAPTURÓ"],
+    [18, 15, 38, 22, 18, 11, 11, 16, 26],
+    rows.map(r => [String(r.municipio).toUpperCase(), r.clues, String(r.unidad).toUpperCase(), r.biologico.toUpperCase(), r.lote, r.frascos, dosisDe(r), fechaCorta(r.fecha), String(r.capturado_por || "").toUpperCase()]),
+    [6, 7], 4);
+
+  // Resumen: una fila por biológico + lote, sumando las unidades elegidas.
+  const resumen = new Map();
+  rows.forEach(r => {
+    const k = srlClave_(r.biologico, r.lote);
+    if (!resumen.has(k)) resumen.set(k, { biologico: r.biologico, lote: r.lote, frascos: 0, dosis: 0, unidades: new Set() });
+    const s = resumen.get(k);
+    s.frascos = srlR2_(s.frascos + r.frascos); s.dosis += dosisDe(r); s.unidades.add(srlNorm_(r.clues));
+  });
+  hoja("RESUMEN POR LOTE", "RESUMEN DE EXISTENCIA POR LOTE",
+    ["BIOLÓGICO", "LOTE", "UNIDADES", "FRASCOS", "DOSIS"],
+    [24, 20, 12, 12, 12],
+    Array.from(resumen.values()).sort(srlOrdenar_).map(s => [s.biologico.toUpperCase(), s.lote, s.unidades.size, s.frascos, s.dosis]),
+    [4, 5], 1);
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const limpio = (s) => String(s).replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, " ").trim().slice(0, 60);
+  const alcanceArchivo = limpio(alcance.replace(/^(UNIDAD|MUNICIPIOS?): /, "").replace(/\s*\([^)]*\)$/, "")) || "Existencia";
+  const nombre = `Existencia por lote - ${alcanceArchivo} - ${fFin}.xlsx`;
+  const blob = new Blob([buffer], { type: "application/octet-stream" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  a.click();
+  window.URL.revokeObjectURL(url);
+  showToast("El reporte se generó correctamente");
+}
+
+if ($("exportFechaInicio")) $("exportFechaInicio").addEventListener("change", () => { delete $("exportFechaInicio").dataset.srl; if ($("exportTipo").value === "SRL") srlRefrescar_().catch(console.error); });
+if ($("exportFechaFin")) $("exportFechaFin").addEventListener("change", () => { if ($("exportTipo").value === "SRL") srlRefrescar_().catch(console.error); });
+if ($("exportMunicipiosChecks")) $("exportMunicipiosChecks").addEventListener("change", () => {
+  if ($("exportTipo").value !== "SRL") return;
+  srlCargarUnidades_().then(srlPintarLotes_).catch(console.error);
+});
+if ($("exportSrlUnidad")) $("exportSrlUnidad").addEventListener("change", srlPintarLotes_);
+if ($("exportSrlLotes")) $("exportSrlLotes").addEventListener("change", (ev) => {
+  const bioChk = ev.target.closest(".srlBioChk");
+  const loteChk = ev.target.closest(".srlLoteChk");
+  if (bioChk) {
+    bioChk.closest(".srlGrupo").querySelectorAll(".srlLoteChk").forEach(l => { l.checked = bioChk.checked; });
+  } else if (!loteChk) return;
+  document.querySelectorAll("#exportSrlLotes .srlLoteChk").forEach(l => {
+    const k = srlClave_(l.dataset.bio, l.dataset.lote);
+    if (l.checked) SRL.desmarcados.delete(k); else SRL.desmarcados.add(k);
+  });
+  srlSincronizarBios_();
+  srlActualizarHint_();
+});
+function srlMarcarTodos_(valor) {
+  document.querySelectorAll("#exportSrlLotes .srlLoteChk").forEach(l => {
+    l.checked = valor;
+    const k = srlClave_(l.dataset.bio, l.dataset.lote);
+    if (valor) SRL.desmarcados.delete(k); else SRL.desmarcados.add(k);
+  });
+  srlSincronizarBios_();
+  srlActualizarHint_();
+}
+if ($("btnSrlAll")) $("btnSrlAll").addEventListener("click", () => srlMarcarTodos_(true));
+if ($("btnSrlNone")) $("btnSrlNone").addEventListener("click", () => srlMarcarTodos_(false));
+
 function setupExportFormatOptions() {
   const select = $("exportFormat");
   if (!select) return;
@@ -17042,6 +17440,24 @@ if ($("btnCancelExport")) $("btnCancelExport").onclick = () => {
 
 
 if ($("btnDoExport")) $("btnDoExport").onclick = async () => {
+  if (($("exportTipo").value || "SR") === "SRL") {
+    // Existencia por lote: valida la selección antes de cerrar el modal.
+    if (!srlHayLotesElegidos_()) {
+      showToast("Elige al menos un lote para exportar.", false);
+      return;
+    }
+    $("exportOverlay")?.classList.remove("show");
+    showOverlay("Generando reporte...");
+    try {
+      await exportarExistenciaPorLote_();
+    } catch (e) {
+      console.error("Export existencia por lote:", e);
+      showToast("Error al exportar", false);
+    } finally {
+      hideOverlay();
+    }
+    return;
+  }
   $("exportOverlay")?.classList.remove("show");
   showOverlay("Generando reporte...");
   try {
