@@ -16899,3 +16899,34 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
   #exportOverlay .exp-foot { padding: 14px 20px; }
   #exportOverlay .exp-narrow { flex-basis: 96px; }
 }
+
+/* COVID-19 · Resumen de frascos: cada marca por separado (Moderna cian, Pfizer ámbar) */
+#secInfluenzaFrascos .frs-marcas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+#secInfluenzaFrascos .frs-marca { border-radius: 16px; padding: 14px 16px; border: 1px solid #e2e8f0; }
+#secInfluenzaFrascos .frs-marca--m { background: #ecfeff; border-color: #a5f3fc; }
+#secInfluenzaFrascos .frs-marca--p { background: #fffbeb; border-color: #fde68a; }
+#secInfluenzaFrascos .frs-marca h5 { margin: 0 0 10px; font-size: 14px; font-weight: 900; color: #0f172a; }
+#secInfluenzaFrascos .frs-marca h5 small { margin-left: 6px; font-size: 11px; font-weight: 700; color: #475569; }
+#secInfluenzaFrascos .frs-marca dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; }
+#secInfluenzaFrascos .frs-marca dt { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #475569; }
+#secInfluenzaFrascos .frs-marca dd { margin: 2px 0 0; font-size: 16px; font-weight: 900; color: #0f172a; font-variant-numeric: tabular-nums; }
+#secInfluenzaFrascos .frs-marca dd small { display: block; font-size: 11.5px; font-weight: 600; color: #475569; }
+#secInfluenzaFrascos .frs-marca dd.frs-neg { color: #be123c; }
+@media (max-width: 900px) { #secInfluenzaFrascos .frs-marcas { grid-template-columns: 1fr; } #secInfluenzaFrascos .frs-marca dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+#secInfluenzaFrascos th.frs-gm { background: #cffafe; color: #155e75; }
+#secInfluenzaFrascos th.frs-gp { background: #fef3c7; color: #92400e; }
+#secInfluenzaFrascos .frs-lvl-table td.frs-cm, #secInfluenzaFrascos .frs-table td.frs-cm { background: #f0fdff; }
+#secInfluenzaFrascos .frs-lvl-table td.frs-cp, #secInfluenzaFrascos .frs-table td.frs-cp { background: #fffdf3; }
+#secInfluenzaFrascos .frs-lvl-table td.frs-neg, #secInfluenzaFrascos .frs-table td.frs-neg { color: #be123c; }
+#frascosBalanceTable thead th[colspan] { border-bottom: 1px solid #e2e8f0; }
+
+/* COVID-19 · tablas por marca: caben completas sin desplazarse (encabezado en dos líneas, relleno corto) */
+#secInfluenzaFrascos .frs-lvl-table th, #secInfluenzaFrascos .frs-lvl-table td { vertical-align: middle; }
+#secInfluenzaFrascos th small { display: block; margin-top: 1px; font-size: 10px; font-weight: 700; letter-spacing: .03em; text-transform: lowercase; opacity: .85; }
+#secInfluenzaFrascos .frs-table.frs-covid { table-layout: auto; width: 100%; min-width: 0; }
+#secInfluenzaFrascos .frs-table.frs-covid th, #secInfluenzaFrascos .frs-table.frs-covid td { padding: 9px 6px; font-size: 12.5px; white-space: normal; }
+#secInfluenzaFrascos .frs-table.frs-covid th { font-size: 11px; line-height: 1.2; }
+#secInfluenzaFrascos .frs-table.frs-covid thead tr:first-child th:first-child, #secInfluenzaFrascos .frs-table.frs-covid tbody td:first-child { min-width: 150px; text-align: left; padding-left: 10px; }
+#secInfluenzaFrascos .frs-table.frs-covid .frs-estado { white-space: normal; }
+/* El texto de "Repartir entrega" no va sobre el Resumen */
+#secInfluenzaFrascos[data-frs-sub="resumen"] #frascosHint, #secInfluenzaFrascos[data-frs-sub="resumen"] #frascosVacunaNota { display: none !important; }

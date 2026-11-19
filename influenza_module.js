@@ -6975,6 +6975,9 @@ async function saveInfluenzaMetasConfig() {
 function updateFlaskCalculationMuni() {
   const selectMuni = document.getElementById("adminInfluenzaMuni")?.value;
   if (!selectMuni) return;
+  const marcasHero = document.getElementById("covidHeroMarcas");
+  if (marcasHero) marcasHero.style.display = esCovid() ? "" : "none";
+  if (esCovid()) return covidPintarHero(USER.rol === "ADMIN" || USER.rol === "JURISDICCIONAL", selectMuni);
 
   // ADMIN/JURISDICCIONAL ven la jurisdicción completa (4 municipios + 2 hospitales);
   // MUNICIPAL ve su municipio (los hospitales cuentan aparte, aunque sean unidades de QUERETARO).
@@ -7049,6 +7052,202 @@ function updateFlaskCalculationMuni() {
     } else {
       warningBox.className = "hidden";
     }
+  }
+}
+
+// ─── Aprovechamiento de COVID-19: lo entregado (frascos de cada marca) contra lo aplicado en las capturas ──────
+// Todo en dosis de 0.5 mL: Moderna 5 por frasco, Pfizer 6; las dosis pediátricas (0.25 mL) cuentan la mitad.
+// covid_capturas.valores = { MODERNA:{c1..c6}, PFIZER:{...} }. Devuelve una forma parecida a frascoBalance().
+function covidAplicadasEq(pred) {
+  const r = { M: 0, P: 0, ultima: "" };
+  (_covidCapturasAll || []).forEach(c => {
+    if (!pred(c)) return;
+    CovidFrascos.RUBROS.forEach(rb => {
+      const w = metaPesoRubro(rb.id);
+      r.M += Number(((c.valores || {}).MODERNA || {})[rb.id] || 0) * w;
+      r.P += Number(((c.valores || {}).PFIZER || {})[rb.id] || 0) * w;
+    });
+    if (c.fecha && c.fecha > r.ultima) r.ultima = c.fecha;
+  });
+  return r;
+}
+
+function covidBalanceDe(fM, fP, ap) {
+  const dM = CovidFrascos.dosisPorFrasco("MODERNA"), dP = CovidFrascos.dosisPorFrasco("PFIZER");
+  const entM = fM * dM, entP = fP * dP;
+  const recibidos = fM + fP, dosisRecibidas = entM + entP, aplicadas = Math.round(ap.M + ap.P);
+  const existencia = Math.round(dosisRecibidas - ap.M - ap.P);
+  const exceso = Math.round(Math.max(0, ap.M - entM) + Math.max(0, ap.P - entP));
+  let estado = "ok";
+  if (exceso > 0) estado = "excede";
+  else if (!recibidos && !aplicadas) estado = "vacio";
+  else if (recibidos && existencia === 0) estado = "agotado";
+  const marca = (fr, ent, a, d) => ({ fr, ent, ap: a, existencia: ent - a, res: (ent - a) / d, aprov: ent > 0 ? a * 100 / ent : null });
+  return { recibidos, fM, fP, dosisRecibidas, aplicadas, existencia, exceso, ultima: ap.ultima, estado,
+    m: marca(fM, entM, ap.M, dM), p: marca(fP, entP, ap.P, dP),
+    resguardoFrascos: (entM - ap.M) / dM + (entP - ap.P) / dP,
+    aprov: dosisRecibidas > 0 ? (ap.M + ap.P) * 100 / dosisRecibidas : null };
+}
+
+// Un destino (municipio u hospital): lo que Jurisdicción le asignó en las entregas contra lo que sus unidades aplicaron.
+function covidBalanceDestino(destId) {
+  const asig = (marca) => _covidRemesasAll.filter(r => r.marca === marca).reduce((s, r) => s + Number((r.asignacion || {})[destId] || 0), 0);
+  return covidBalanceDe(asig("MODERNA"), asig("PFIZER"), covidAplicadasEq(c => frascoDestinoDeClues(c.clues, c.municipio) === destId));
+}
+
+// Una unidad: lo que se le repartió (covid_distribucion) contra lo que ella capturó.
+function covidBalanceUnidad(clues) {
+  const fr = (marca) => _covidFrascosAll.filter(d => d.marca === marca && d.clues === clues).reduce((s, d) => s + Number(d.cantidad_frascos || 0), 0);
+  return covidBalanceDe(fr("MODERNA"), fr("PFIZER"), covidAplicadasEq(c => c.clues === clues));
+}
+
+// Cabecera propia de COVID en las tablas del Resumen (se guarda la de Influenza para restaurarla al cambiar de vacuna).
+function covidAlternarCabecera(thead, html) {
+  if (!thead) return;
+  if (thead.dataset.inf === undefined) thead.dataset.inf = thead.innerHTML;
+  thead.innerHTML = html == null ? thead.dataset.inf : html;
+}
+const covPct = (n) => n == null ? "—" : n.toFixed(1) + "%";
+// Cuatro columnas por marca: frascos entregados, dosis aplicadas, y lo que queda en resguardo (frascos y dosis).
+function covidGrupoCab(cls) {
+  return `<th class="c ${cls}" scope="col">Entregados<small>frascos</small></th><th class="c ${cls}" scope="col">Aplicadas<small>dosis</small></th><th class="c ${cls}" scope="col">Resguardo<small>frascos</small></th><th class="c ${cls}" scope="col">Resguardo<small>dosis</small></th>`;
+}
+function covidCeldasMarca(x, cls) {
+  const neg = x.existencia < 0 ? " frs-neg" : "";
+  return `<td class="c ${cls}">${frascoFmt(x.fr)}</td><td class="c ${cls}"><b>${frascoFmt(Math.round(x.ap))}</b></td>` +
+    `<td class="c ${cls}${neg}"><b>${frascoFmt1(x.res)}</b></td><td class="c ${cls}${neg}">${frascoFmt(Math.round(x.existencia))}</td>`;
+}
+function covidAprovCelda(b, conBarra) {
+  const n = b.aprov;
+  const sub = `<span class="frs-sub">Moderna ${covPct(b.m.aprov)} · Pfizer ${covPct(b.p.aprov)}</span>`;
+  if (!conBarra) return `<td class="c"><b>${covPct(n)}</b><br>${sub}</td>`;
+  return `<td><div class="frs-aprov"><span class="frs-aprov__n">${n == null ? "—" : n.toFixed(1) + "%"}</span><span class="frs-aprov__bar${n > 100 ? " frs-aprov__bar--excede" : ""}"><i style="width:${Math.min(100, n || 0)}%"></i></span></div>${sub}</td>`;
+}
+// Suma de balances (para los totales): vuelve a armar el objeto con la misma forma.
+function covidSumaBalances(lista) {
+  const dM = CovidFrascos.dosisPorFrasco("MODERNA"), dP = CovidFrascos.dosisPorFrasco("PFIZER");
+  const z = () => ({ fr: 0, ent: 0, ap: 0 });
+  const M = z(), P = z();
+  lista.forEach(b => { M.fr += b.m.fr; M.ent += b.m.ent; M.ap += b.m.ap; P.fr += b.p.fr; P.ent += b.p.ent; P.ap += b.p.ap; });
+  const fin = (x, d) => ({ ...x, existencia: x.ent - x.ap, res: (x.ent - x.ap) / d, aprov: x.ent > 0 ? x.ap * 100 / x.ent : null });
+  const m = fin(M, dM), p = fin(P, dP);
+  const ent = m.ent + p.ent, ap = m.ap + p.ap;
+  return { m, p, aprov: ent > 0 ? ap * 100 / ent : null };
+}
+
+function covidTheadDestinos() {
+  return `<tr><th rowspan="2" scope="col">Destino</th>
+    <th colspan="4" scope="colgroup" class="c frs-gm">Moderna · 5 dosis por frasco</th>
+    <th colspan="4" scope="colgroup" class="c frs-gp">Pfizer · 6 dosis por frasco</th>
+    <th rowspan="2" scope="col" class="frs-th-aprov">Aprovechamiento (dosis aplicadas / entregadas)</th></tr>
+    <tr>${covidGrupoCab("frs-gm")}${covidGrupoCab("frs-gp")}</tr>`;
+}
+function covidTheadUnidades() {
+  return `<tr><th rowspan="2" scope="col">Unidad / CLUES</th>
+    <th colspan="4" scope="colgroup" class="c frs-gm">Moderna · 5 dosis por frasco</th>
+    <th colspan="4" scope="colgroup" class="c frs-gp">Pfizer · 6 dosis por frasco</th>
+    <th rowspan="2" scope="col" class="c">Aprovechamiento</th>
+    <th rowspan="2" scope="col" class="c">Última captura</th>
+    <th rowspan="2" scope="col" class="c">Estado</th></tr>
+    <tr>${covidGrupoCab("frs-gm")}${covidGrupoCab("frs-gp")}</tr>`;
+}
+
+// Nivel 2 (Jurisdicción): una fila por municipio/hospital con cada marca por separado. Devuelve las filas del CSV.
+function covidRenderDestinos(tbody, tfoot) {
+  const csv = [["Destino",
+    "Moderna frascos entregados", "Moderna dosis aplicadas", "Moderna resguardo (frascos)", "Moderna resguardo (dosis)", "Moderna aprovechamiento %",
+    "Pfizer frascos entregados", "Pfizer dosis aplicadas", "Pfizer resguardo (frascos)", "Pfizer resguardo (dosis)", "Pfizer aprovechamiento %",
+    "Aprovechamiento total %"]];
+  const fila = (nombre, b) => [nombre,
+    b.m.fr, Math.round(b.m.ap), b.m.res.toFixed(1), Math.round(b.m.existencia), covPct(b.m.aprov),
+    b.p.fr, Math.round(b.p.ap), b.p.res.toFixed(1), Math.round(b.p.existencia), covPct(b.p.aprov), covPct(b.aprov)];
+  const todos = [];
+  FRASCO_DESTINOS.forEach(d => {
+    const b = covidBalanceDestino(d.id);
+    todos.push(b);
+    const tr = document.createElement("tr");
+    tr.className = "frs-lvl-row";
+    tr.innerHTML = `<th scope="row" class="frs-lvl-dest">${d.label}${d.hospital ? " <small>hospital</small>" : ""}</th>${covidCeldasMarca(b.m, "frs-cm")}${covidCeldasMarca(b.p, "frs-cp")}${covidAprovCelda(b, true)}`;
+    tbody.appendChild(tr);
+    csv.push(fila(d.label, b));
+  });
+  const T = covidSumaBalances(todos);
+  if (tfoot) tfoot.innerHTML = `<tr class="frs-lvl-total"><th scope="row" class="frs-lvl-dest">Total Jurisdicción</th>${covidCeldasMarca(T.m, "frs-cm")}${covidCeldasMarca(T.p, "frs-cp")}${covidAprovCelda(T, true)}</tr>`;
+  csv.push(fila("TOTAL JURISDICCIÓN", T));
+  return csv;
+}
+
+// Nivel 3: una fila por unidad con cada marca por separado.
+function covidRenderUnidades(esJuris, filas) {
+  const tbody = document.getElementById("frascosBalanceTbody");
+  tbody.innerHTML = filas.length ? filas.map(({ u, destino, b }) => {
+    const dest = FRASCO_DESTINOS.find(d => d.id === destino);
+    return `<tr class="frs-row" data-estado="${b.estado}">
+      <td><b>${covidEsc(u.unidad)}</b><br><span class="frs-sub">${covidEsc(u.clues)}${esJuris ? " · " + covidEsc(dest ? dest.label : destino) : ""}</span></td>
+      ${covidCeldasMarca(b.m, "frs-cm")}${covidCeldasMarca(b.p, "frs-cp")}${covidAprovCelda(b, false)}
+      <td class="c frs-muted">${frascoFechaCorta(b.ultima)}</td>
+      <td class="c">${frascoEstadoBalanceHtml(b)}</td></tr>`;
+  }).join("") : `<tr><td colspan="12" class="frs-muted" style="padding:18px;text-align:center">Todavía no hay frascos repartidos ni capturas semanales.</td></tr>`;
+  const T = covidSumaBalances(filas.map(f => f.b));
+  const pie = document.getElementById("frascosBalanceTfoot");
+  if (pie) pie.innerHTML = `<tr class="frs-total" data-estado="${filas.some(f => f.b.estado === "excede") ? "excede" : "ok"}"><td>TOTAL</td>${covidCeldasMarca(T.m, "frs-cm")}${covidCeldasMarca(T.p, "frs-cp")}${covidAprovCelda(T, false)}<td></td><td></td></tr>`;
+}
+
+// Resumen por marca bajo el concentrado (nivel 1).
+function covidPintarMarcasHero(bs) {
+  const box = document.getElementById("covidHeroMarcas");
+  if (!box) return;
+  const T = covidSumaBalances(bs);
+  const tarjeta = (nombre, dosisFrasco, x, cls) => {
+    const neg = x.existencia < 0 ? " frs-neg" : "";
+    return `<div class="frs-marca ${cls}"><h5>${nombre} <small>${dosisFrasco} dosis por frasco</small></h5>
+      <dl><div><dt>Entregados</dt><dd>${frascoFmt(x.fr)} frascos<small>${frascoFmt(x.ent)} dosis</small></dd></div>
+      <div><dt>Aplicadas</dt><dd>${frascoFmt(Math.round(x.ap))} dosis<small>${frascoFmt1(x.ap / dosisFrasco)} frascos</small></dd></div>
+      <div><dt>En resguardo</dt><dd class="${neg.trim()}">${frascoFmt1(x.res)} frascos<small>${frascoFmt(Math.round(x.existencia))} dosis</small></dd></div>
+      <div><dt>Aprovechamiento</dt><dd>${covPct(x.aprov)}<small>aplicadas / entregadas</small></dd></div></dl></div>`;
+  };
+  box.innerHTML = tarjeta("Moderna", CovidFrascos.dosisPorFrasco("MODERNA"), T.m, "frs-marca--m") + tarjeta("Pfizer", CovidFrascos.dosisPorFrasco("PFIZER"), T.p, "frs-marca--p");
+}
+
+// Concentrado (nivel 1) de COVID-19: mismos elementos que Influenza.
+function covidPintarHero(esJuris, selectMuni) {
+  const ids = esJuris ? FRASCO_DESTINOS.map(d => d.id) : [String(selectMuni).toUpperCase()];
+  const bs = ids.map(covidBalanceDestino);
+  const S = bs.reduce((a, b) => ({ fr: a.fr + b.recibidos, ent: a.ent + b.dosisRecibidas, ap: a.ap + b.aplicadas, res: a.res + b.resguardoFrascos, exc: a.exc + b.exceso }), { fr: 0, ent: 0, ap: 0, res: 0, exc: 0 });
+  const ponTxt = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
+  ponTxt("frsHeroAmbito", esJuris ? "Jurisdicción Sanitaria" : (typeof infMuniEtiqueta === "function" ? infMuniEtiqueta(String(selectMuni).toUpperCase()) : selectMuni));
+  ponTxt("muniFrascosEntregados", frascoFmt(S.fr));
+  ponTxt("frsEntregadosDosis", frascoFmt(S.ent));
+  ponTxt("frsAplicadasDosis", frascoFmt(S.ap));
+  const dMed = (CovidFrascos.dosisPorFrasco("MODERNA") + CovidFrascos.dosisPorFrasco("PFIZER")) / 2;
+  ponTxt("muniFrascosReportados", `${frascoFmt1(S.ap / dMed)} frascos (${frascoFmt(S.ap)} dosis)`);
+  ponTxt("muniFrascosDiferencia", `${frascoFmt1(S.res)} frascos`);
+  ponTxt("frsResguardoDosis", frascoFmt(S.ent - S.ap));
+  const aprov = S.ent > 0 ? S.ap * 100 / S.ent : null;
+  ponTxt("frsAprovPct", aprov == null ? "—" : aprov.toFixed(1) + "%");
+  const barraAp = document.getElementById("frsBarraAp");
+  if (barraAp) barraAp.style.width = (aprov == null ? 0 : Math.min(100, aprov)) + "%";
+  const barraBox = document.getElementById("frsBarra");
+  if (barraBox) {
+    barraBox.setAttribute("aria-label", aprov == null ? "Sin frascos entregados" : `${aprov.toFixed(1)}% de las dosis entregadas ya se aplicaron`);
+    barraBox.dataset.estado = aprov == null ? "vacio" : (S.exc > 0 ? "excede" : "ok");
+  }
+  covidPintarMarcasHero(bs);
+  const warningBox = document.getElementById("muniFrascosWarningBox");
+  if (warningBox) {
+    if (S.fr > 0) {
+      warningBox.className = "mb-4 p-4 rounded-xl border-2 block text-xs font-semibold ";
+      if (S.exc > 0) {
+        warningBox.classList.add("bg-rose-50", "border-rose-200", "text-rose-950");
+        warningBox.innerHTML = `⚠️ <b>Inconsistencia:</b> hay unidades que reportan ${frascoFmt(S.exc)} dosis aplicadas de más de una marca respecto a lo que se les entregó de ella.`;
+      } else if (S.ent > 0 && S.ap < S.ent * 0.5) {
+        warningBox.classList.add("bg-amber-50", "border-amber-200", "text-amber-950");
+        warningBox.innerHTML = `⚠️ <b>Observación:</b> se han entregado ${frascoFmt(S.fr)} frascos (${frascoFmt(S.ent)} dosis) y solo se reportan ${frascoFmt(S.ap)} dosis aplicadas: hay un resguardo del ${Math.round((1 - S.ap / S.ent) * 100)}% sin aplicar.`;
+      } else {
+        warningBox.classList.add("bg-emerald-50", "border-emerald-200", "text-emerald-950");
+        warningBox.innerHTML = `✅ <b>Balance logístico:</b> balance correcto. Frascos en resguardo estimado: ${frascoFmt1(S.res)} (${frascoFmt(S.ent - S.ap)} dosis).`;
+      }
+    } else warningBox.className = "hidden";
   }
 }
 
@@ -8282,7 +8481,7 @@ function frascoBalance(filasFrascos, capturas) {
 
 function frascoEstadoBalanceHtml(b) {
   if (b.estado === "excede") {
-    const txt = b.recibidos ? `Aplicó ${frascoFmt(b.aplicadas - b.dosisRecibidas)} dosis de más` : "Aplicó sin reparto";
+    const txt = b.recibidos ? `Aplicó ${frascoFmt(b.exceso != null ? b.exceso : b.aplicadas - b.dosisRecibidas)} dosis de más` : "Aplicó sin reparto";
     return `<span class="frs-estado frs-estado--excede" title="Capturó más dosis aplicadas de las que le repartieron">${txt}</span>`;
   }
   if (b.estado === "vacio") return '<span class="frs-estado frs-estado--vacio">Sin reparto ni captura</span>';
@@ -8309,12 +8508,18 @@ function renderFrascosBalance() {
   const orden = FRASCO_DESTINOS.map(d => d.id);
   let filas = unidades.map(u => {
     const destino = frascoDestinoDeClues(u.clues);
-    const b = frascoBalance(_adminFrascosArray.filter(d => d.clues === u.clues), _adminCapturasArray.filter(c => c.clues === u.clues));
+    const b = esCovid() ? covidBalanceUnidad(u.clues)
+      : frascoBalance(_adminFrascosArray.filter(d => d.clues === u.clues), _adminCapturasArray.filter(c => c.clues === u.clues));
     return { u, destino, b };
   });
   if (esJuris) filas = filas.filter(f => f.b.recibidos || f.b.aplicadas);
   filas.sort((a, b) => (orden.indexOf(a.destino) - orden.indexOf(b.destino)) || String(a.u.unidad).localeCompare(String(b.u.unidad), "es"));
 
+  document.getElementById("frascosBalanceTable")?.classList.toggle("frs-covid", esCovid());
+  covidAlternarCabecera(document.querySelector("#frascosBalanceTable thead"), esCovid() ? covidTheadUnidades() : null);
+  const cab = document.querySelector("#frascosBalanceBox .frs-balance-cab p");
+  if (cab) { if (!cab.dataset.inf) cab.dataset.inf = cab.innerHTML; cab.innerHTML = esCovid() ? "Frascos de <b>Moderna y Pfizer</b> repartidos a cada unidad contra las <b>dosis aplicadas</b> que la unidad captura cada semana, cada marca por separado (dosis de 0.5 mL: Moderna 5 por frasco, Pfizer 6; las pediátricas cuentan la mitad). En rojo, la unidad que ya aplicó de una marca más de lo que le repartieron." : cab.dataset.inf; }
+  if (esCovid()) return covidRenderUnidades(esJuris, filas);
   const col = document.getElementById("frascosBalanceDestinoTh");
   if (col) col.style.display = esJuris ? "" : "none";
   tbody.innerHTML = filas.length ? filas.map(({ u, destino, b }) => {
@@ -9024,14 +9229,11 @@ function renderFrascosDistribution() {
 
     const tbodyMuni = document.getElementById("adminFrascosMunicipalTbody");
     tbodyMuni.innerHTML = "";
-    if (esCovid()) {
-      // Resumen de existencias contra capturas semanales: solo existe para influenza.
-      tbodyMuni.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400 font-bold">El resumen por dosis aplicadas de COVID-19 aún no está disponible; consulta «Entregas».</td></tr>`;
-    }
     const csvData = [
       ["Destino", "Frascos recibidos de la entrega (Total)", "Equivalente en Dosis", "Dosis Aplicadas", "Estimado en Resguardo (Frascos)", "Estimado en Resguardo (Dosis)", "Aprovechamiento %"]
     ];
     const tot = { fr: 0, dosis: 0, ap: 0 };
+    covidAlternarCabecera(document.querySelector("#adminFrascosMunicipalTableContainer thead"), esCovid() ? covidTheadDestinos() : null);
     const barraAprov = (pct) => {
       const n = Number(pct);
       return `<div class="frs-aprov"><span class="frs-aprov__n">${pct}%</span><span class="frs-aprov__bar${n > 100 ? " frs-aprov__bar--excede" : ""}"><i style="width:${Math.min(100, n)}%"></i></span></div>`;
@@ -9074,6 +9276,7 @@ function renderFrascosDistribution() {
       }
     }
 
+    if (esCovid()) csvData.splice(0, csvData.length, ...covidRenderDestinos(tbodyMuni, tfootMuni));
     const exportBtn = document.getElementById("btnExportFrascosMuni");
     if (exportBtn) {
       exportBtn.onclick = () => {
@@ -9081,7 +9284,7 @@ function renderFrascosDistribution() {
           + csvData.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(",")).join("\n");
         const link = document.createElement("a");
         link.setAttribute("href", encodeURI(csvContent));
-        link.setAttribute("download", `Concentrado_Frascos_Influenza.csv`);
+        link.setAttribute("download", esCovid() ? `Concentrado_Frascos_COVID19.csv` : `Concentrado_Frascos_Influenza.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -9125,10 +9328,8 @@ function renderFrascosDistribution() {
 
   const exp = document.getElementById("btnExportFrascosExcel");
   if (exp) exp.onclick = exportFrascosExcel;
-  if (!esCovid()) {
-    renderFrascosBalance();
-    updateFlaskCalculationMuni();
-  }
+  renderFrascosBalance();
+  updateFlaskCalculationMuni();
   if (esCovid()) renderCovidControlFrascos();
   vacunaPintarSelectores();
   iniciarDockFrascos(esJuris);
@@ -9231,7 +9432,7 @@ function frascoIrA(sub) {
   sec.dataset.frsSub = sub;
   // El control por marca junta las dos marcas: ahí no se elige marca.
   const barraMarca = document.getElementById("frascosMarcaBar");
-  if (barraMarca) barraMarca.style.display = (esCovid() && sub !== "covidctl") ? "" : "none";
+  if (barraMarca) barraMarca.style.display = (esCovid() && sub !== "covidctl" && sub !== "resumen") ? "" : "none";
   document.querySelectorAll("#dockFrascosTabs .hoja-tab").forEach(b => {
     const activo = b.dataset.frs === sub;
     b.classList.toggle("activo", activo);
@@ -9245,9 +9446,6 @@ function iniciarDockFrascos(esJuris) {
   // El historial por unidad es solo del municipal; Jurisdicción ve sus entregas en "Entregas".
   const hist = document.getElementById("dockFrascosHist");
   if (hist) hist.style.display = (esJuris || esCovid()) ? "none" : "";
-  // «Resumen» compara lo repartido contra las capturas semanales de influenza: no aplica a COVID.
-  const resumenTab = tabs.querySelector('[data-frs="resumen"]');
-  if (resumenTab) resumenTab.style.display = esCovid() ? "none" : "";
   // «Control por marca» es el resumen de COVID-19: las dos marcas juntas contra la meta.
   const controlTab = tabs.querySelector('[data-frs="covidctl"]');
   if (controlTab) controlTab.style.display = esCovid() ? "" : "none";
@@ -9260,7 +9458,7 @@ function iniciarDockFrascos(esJuris) {
     if (window.DockGlass) window.DockGlass.instalar(tabs);
   }
   const sec = document.getElementById("secInfluenzaFrascos");
-  if (esCovid() && ["resumen", "historial"].includes(sec?.dataset.frsSub)) frascoIrA("repartir");
+  if (esCovid() && sec?.dataset.frsSub === "historial") frascoIrA("repartir");
   else if (!esCovid() && sec?.dataset.frsSub === "covidctl") frascoIrA("repartir");
   else if (esJuris && sec?.dataset.frsSub === "historial") frascoIrA("repartir");
   else frascoIrA(sec?.dataset.frsSub || "repartir");

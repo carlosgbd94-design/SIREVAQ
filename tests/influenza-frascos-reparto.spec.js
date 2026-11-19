@@ -1774,3 +1774,30 @@ test('Botón «Editar» del hub: círculo solo ícono (igual que Guardar/Cancela
   expect(foco.o).toBe('solid');
   expect(parseFloat(foco.r)).toBeGreaterThanOrEqual(28);
 });
+
+test('COVID Resumen: aprovechamiento por unidad y concentrado, igual que Influenza (niños valen la mitad)', async ({ page }) => {
+  await montarMunicipalCovid(page);
+  await page.evaluate(() => {
+    _covidFrascosAll = [
+      { marca: 'MODERNA', clues: 'Q1', municipio: 'QUERETARO', cantidad_frascos: 2, numero_entrega: 1 },   // 10 dosis
+      { marca: 'PFIZER', clues: 'Q1', municipio: 'QUERETARO', cantidad_frascos: 1, numero_entrega: 1 }     // 6 dosis
+    ];
+    // Moderna: 4 de niños (c1 = 2 equivalentes) + 6 adultos = 8; Pfizer: 3 adultos
+    _covidCapturasAll = [{ clues: 'Q1', fecha: '2026-10-30', valores: { MODERNA: { c1: 4, c3: 6 }, PFIZER: { c3: 3 } } }];
+    renderFrascosDistribution();
+    frascoIrA('resumen');
+  });
+  await expect(page.locator('#dockFrascosTabs [data-frs="resumen"]')).toBeVisible();   // COVID también tiene Resumen
+  await expect(page.locator('#frascosMarcaBar')).toBeHidden();                          // el resumen junta las dos marcas
+  // Cada marca por separado: celdas = [entregados, aplicadas, resguardo frascos, resguardo dosis] de Moderna y luego de Pfizer
+  const celdas = await page.locator('#frascosBalanceTbody tr', { hasText: 'Q1' }).locator('td').allInnerTexts();
+  expect(celdas.slice(1, 5).map((s) => s.trim())).toEqual(['2', '8', '0.4', '2']);       // Moderna: 2 frascos (10 dosis), 8 aplicadas (4 niños = 2 + 6 adultos)
+  expect(celdas.slice(5, 9).map((s) => s.trim())).toEqual(['1', '3', '0.5', '3']);       // Pfizer: 1 frasco (6 dosis), 3 aplicadas
+  await expect(page.locator('#frascosBalanceTbody tr', { hasText: 'Q1' })).toContainText('68.8%');   // 11 / 16 dosis
+  await expect(page.locator('#frascosBalanceTbody tr', { hasText: 'Q1' })).toContainText('Moderna 80.0% · Pfizer 50.0%');
+  await expect(page.locator('#covidHeroMarcas .frs-marca')).toHaveCount(2);
+  await expect(page.locator('#covidHeroMarcas')).toContainText('Moderna');
+  await expect(page.locator('#covidHeroMarcas')).toContainText('Pfizer');
+  await expect(page.locator('#frsAplicadasDosis')).not.toHaveText('0');
+  await expect(page.locator('#frsAprovPct')).toContainText('%');
+});
