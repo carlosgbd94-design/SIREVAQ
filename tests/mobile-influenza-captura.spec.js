@@ -30,6 +30,11 @@ function estadoCovid() {
   st.db.covid_metas = [{ clues: 'QTSSA000001', municipio: 'QUERETARO', anio_campana: CAMP, metas: { c1: 20, c3: 50, c4: 100 } }];
   st.db.covid_capturas = [{ clues: 'QTSSA000001', unidad: 'CENTRO A', municipio: 'QUERETARO', fecha: '2026-10-09', anio_campana: CAMP,
     valores: { MODERNA: { c3: 10, c4: 30 }, PFIZER: { c4: 20 } }, capturado_por: 'ANA', editado_por: 'UNIDAD', historial_ediciones: [], folio: 'COV-20261009-AAAA1111' }];
+  // Recibido en la campaña: 20 frascos de Moderna (100 dosis) y 5 de Pfizer (30 dosis)
+  st.db.covid_distribucion_frascos = [
+    { clues: 'QTSSA000001', anio_campana: CAMP, marca: 'MODERNA', cantidad_frascos: 20, numero_entrega: 1 },
+    { clues: 'QTSSA000001', anio_campana: CAMP, marca: 'PFIZER', cantidad_frascos: 5, numero_entrega: 1 }
+  ];
   return st;
 }
 
@@ -221,11 +226,13 @@ test.describe('Influenza: captura de la unidad en móvil', () => {
     await page.fill('#ic_cv_PFIZER_c4', '10');
     await expect(page.locator('#icf_cv_c4')).toHaveText('Faltan 20');            // las dos marcas suman: 50 + 30
     await expect(page.locator('#hubCounter .hub-counter-num')).toHaveText('30');
-    // Se pasa de la meta sumando ambas marcas
+    // Pasarse de la meta sumando ambas marcas solo avisa; lo que bloquea es pasarse de lo recibido de la marca
     await page.fill('#ic_cv_MODERNA_c4', '45');
     await page.fill('#ic_cv_PFIZER_c4', '10');
+    await expect(page.locator('#icf_cv_c4')).toHaveText('Rebasa meta por 5');
+    await page.fill('#ic_cv_MODERNA_c4', '75');                                    // 40 + 75 = 115 > 100 recibidas de Moderna
     await page.click('#hubSaveBtn');
-    await expect(page.locator('#icError')).toContainText('supera la meta');
+    await expect(page.locator('#icError')).toContainText('solo ha recibido 100');
     expect(srv.reqs.filter(r => r.nombre === 'covid_capturas' && r.m === 'POST')).toHaveLength(0);
     await page.fill('#ic_cv_MODERNA_c4', '20');
     await page.click('#hubSaveBtn');

@@ -45,19 +45,34 @@ test('Mes: solo semanas cuya fecha cae en el mes', () => {
   expect(C.delMes(c, 10, 2026)).toHaveLength(1);
 });
 
-test('Validación contra la meta: Moderna y Pfizer suman; lo ya guardado no bloquea', () => {
+test('Meta por grupo solo avisa: Moderna + Pfizer suman, pero no bloquea (lo que bloquea es el abasto)', () => {
   const metas = { c1: 20, c2: 20, c3: 10, c4: 30, c5: 5, c6: 10 };
   const acum = { c3: 2, c4: 0 };
   let r = C.validar({ MODERNA: { c3: 5 }, PFIZER: { c3: 4 } }, metas, acum, {});
-  expect(r.error).toMatch(/supera la meta.*por 1 dosis/);
+  expect(r.error).toBeNull();
+  expect(r.avisos).toEqual([{ rubro: 'c3', exceso: 1, sinMeta: false }]);
   r = C.validar({ MODERNA: { c3: 4 }, PFIZER: { c3: 4 } }, metas, acum, {});
   expect(r.error).toBeNull();
-  // ya estaba guardado por encima: no se bloquea mientras no suba
-  r = C.validar({ MODERNA: { c4: 40 } }, metas, {}, { MODERNA: { c4: 40 } });
-  expect(r.error).toBeNull();
-  // sin meta en el rubro
+  expect(r.avisos).toHaveLength(0);
+  // rubro sin meta: ya no bloquea, solo avisa
   r = C.validar({ MODERNA: { c5: 1 } }, { c1: 1 }, {}, {});
-  expect(r.error).toMatch(/no tiene meta/);
+  expect(r.error).toBeNull();
+  expect(r.avisos[0].sinMeta).toBe(true);
+});
+
+test('Moderna capturada como adulto agotó la meta: Pfizer sigue pudiendo reportarse mientras no pase de lo recibido', () => {
+  const metas = { c3: 10, c4: 20, c5: 0, c6: 6 };       // meta adulta 36
+  const ab = (modAplic, pfiAplic) => ({ repartido: { MODERNA: 50, PFIZER: 36 }, acumMarca: { MODERNA: modAplic, PFIZER: pfiAplic } });
+  // Meses anteriores: 36 de Moderna adulto (meta llena). Esta semana 30 Pfizer: pasa (36 recibidas de Pfizer)
+  let r = C.validar({ PFIZER: { c4: 30 } }, metas, { c3: 10, c4: 20, c6: 6 }, {}, null, ab(36, 0));
+  expect(r.error).toBeNull();
+  expect(r.avisos.length).toBeGreaterThan(0);
+  // Lo aplicado de Pfizer en meses anteriores cuenta contra lo recibido: 20 antes + 30 ahora > 36
+  r = C.validar({ PFIZER: { c4: 30 } }, metas, {}, {}, null, ab(0, 20));
+  expect(r.error).toMatch(/solo ha recibido 36/);
+  // Moderna también se controla contra lo suyo
+  r = C.validar({ MODERNA: { c4: 15 } }, metas, {}, {}, null, ab(40, 0));
+  expect(r.error).toMatch(/dosis de Moderna/);
 });
 
 test('Panel: mismo diseño que Influenza, una tabla con Moderna y Pfizer lado a lado, avisa excesos y valida al recoger', async ({ page }) => {
@@ -67,6 +82,7 @@ test('Panel: mismo diseño que Influenza, una tabla con Moderna y Pfizer lado a 
   const pintado = await page.evaluate(() => window.CovidCapturaUI.render({
     container: document.getElementById('covidCapturaContainer'),
     metas: { c1: 20, c2: 20, c3: 10, c4: 30, c5: 5, c6: 10 },
+    frascos: { MODERNA: 20, PFIZER: 20 },
     capturas: [], fecha: '2026-10-30', cerrada: false, USER: { clues: 'QTIMB000001' }
   }));
   expect(pintado).toBe(true);
@@ -75,9 +91,9 @@ test('Panel: mismo diseño que Influenza, una tabla con Moderna y Pfizer lado a 
   await expect(page.locator('#input_cov_PFIZER_c1')).toHaveCount(0);
   await page.locator('#input_cov_MODERNA_c3').fill('8');
   await page.locator('#input_cov_PFIZER_c3').fill('5');
-  await expect(page.locator('#disp_cov_c3')).toContainText('Te pasas por 3');
+  await expect(page.locator('#disp_cov_c3')).toContainText('Rebasas la meta por 3');
   const mal = await page.evaluate(() => window.CovidCapturaUI.recoger());
-  expect(mal.error).toMatch(/supera la meta/);
+  expect(mal.error).toBeNull();   // la meta solo avisa; hay frascos recibidos de sobra
   await page.locator('#input_cov_PFIZER_c3').fill('2');
   await page.locator('#input_cov_MODERNA_c4').fill('12');
   const g = await page.evaluate(() => window.CovidCapturaUI.recoger());
@@ -176,7 +192,7 @@ test('Tope por marca: no se puede aplicar más de lo repartido; sin reparto regi
   expect(r.error).toBeNull();
   // una más: 51 > 50
   r = C.validar({ MODERNA: { c4: 9, c1: 4 } }, metas, {}, {}, null, { repartido: rep, acumMarca: { MODERNA: 40, PFIZER: 0 } });
-  expect(r.error).toMatch(/habría aplicado 51 dosis de Moderna y solo tiene 50 repartidas \(te pasas por 1\)/);
+  expect(r.error).toMatch(/habría aplicado 51 dosis de Moderna y solo ha recibido 50 \(te pasas por 1\)/);
   expect(r.abasto[0]).toMatchObject({ marca: 'MODERNA', exceso: 1 });
   // Pfizer: 13 > 12; Moderna sigue en su tope
   r = C.validar({ PFIZER: { c3: 13 } }, metas, {}, {}, null, { repartido: rep, acumMarca: { MODERNA: 0, PFIZER: 0 } });
@@ -212,13 +228,16 @@ test('Panel: el control de abasto avisa en vivo cuando se pasa de lo repartido y
   await expect(moderna).toHaveAttribute('data-tono', 'over');
   await expect(moderna).toContainText('Te pasas por 3 dosis');
   const mal = await page.evaluate(() => window.CovidCapturaUI.recoger());
-  expect(mal.error).toMatch(/habría aplicado 13 dosis de Moderna y solo tiene 10 repartidas/);
+  expect(mal.error).toMatch(/habría aplicado 13 dosis de Moderna y solo ha recibido 10/);
   await page.locator('#input_cov_MODERNA_c4').fill('4');
   expect((await page.evaluate(() => window.CovidCapturaUI.recoger())).error).toBeNull();
-  // Sin reparto registrado no se pinta el control ni hay tope
+  // Sin reparto registrado cuenta como 0 recibidas: se pinta el control y no se puede reportar nada
   await page.evaluate(() => window.CovidCapturaUI.render({
     container: document.getElementById('covidCapturaContainer'), metas: { c4: 100 }, frascos: null,
     capturas: [], fecha: '2026-10-30', cerrada: false, USER: { clues: 'QTIMB000001' }
   }));
-  await expect(page.locator('.cvc-abasto')).toHaveCount(0);
+  await expect(page.locator('.cvc-abasto')).toHaveCount(1);
+  await expect(page.locator('#cvc_ab_MODERNA')).toContainText('0 de 0 dosis');
+  await page.locator('#input_cov_MODERNA_c4').fill('1');
+  expect((await page.evaluate(() => window.CovidCapturaUI.recoger())).error).toMatch(/solo ha recibido 0/);
 });

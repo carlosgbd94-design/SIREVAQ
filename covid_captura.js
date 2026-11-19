@@ -106,26 +106,25 @@
   function validar(valores, metas, acumOtras, previo, reglas, abasto) {
     const nuevo = porRubro(valores);
     const antes = porRubro(previo || {});
-    const excedidos = [];
-    let sinMeta = null, bloqueado = null;
+    // La meta por grupo ya NO bloquea (la federación entrega la marca como quiere y la de adultos es mucho menor que la
+    // pediátrica): solo avisa. Lo que bloquea es el abasto por marca: no aplicar más de lo recibido (abajo).
+    const avisos = [];
+    let bloqueado = null;
     RUBROS.forEach((r) => {
       if (nuevo[r] <= antes[r]) return;
       if (reglas && reglas[r]) { bloqueado = bloqueado || { r, regla: reglas[r] }; return; }
       const meta = n(metas && metas[r]);
-      if (!meta) { sinMeta = sinMeta || r; return; }
       const exceso = n(acumOtras && acumOtras[r]) + nuevo[r] - meta;
-      if (exceso > 0) excedidos.push({ rubro: r, exceso });
+      if (exceso > 0) avisos.push({ rubro: r, exceso, sinMeta: !meta });
     });
     const pasadas = excesosAbasto(valores, previo, abasto && abasto.acumMarca, abasto && abasto.repartido);
     let error = null;
     if (bloqueado) error = `${ETIQUETA[bloqueado.r]}: ${bloqueado.regla.texto}`;
-    else if (sinMeta) error = `${ETIQUETA[sinMeta]}: la unidad no tiene meta de COVID-19 asignada en este rubro.`;
-    else if (excedidos.length) error = `No se puede guardar el reporte: ${ETIQUETA[excedidos[0].rubro]} supera la meta de tu unidad por ${excedidos[0].exceso} dosis (Moderna y Pfizer suman contra la misma meta).`;
     else if (pasadas.length) {
       const e = pasadas[0], nom = e.marca === "PFIZER" ? "Pfizer" : "Moderna";
-      error = `No se puede guardar el reporte: con él tu unidad habría aplicado ${e.aplicado} dosis de ${nom} y solo tiene ${e.repartido} repartidas (te pasas por ${e.exceso}). Revisa la captura o pide a tu municipio o Jurisdicción que registre la entrega de frascos.`;
+      error = `No se puede guardar el reporte: con él tu unidad habría aplicado ${e.aplicado} dosis de ${nom} y solo ha recibido ${e.repartido} (te pasas por ${e.exceso}). Se cuenta todo lo aplicado en meses anteriores contra todo lo recibido en la campaña. Revisa la captura o pide a tu municipio o Jurisdicción que registre la entrega de frascos.`;
     }
-    return { error, excedidos, abasto: pasadas };
+    return { error, avisos, excedidos: avisos, abasto: pasadas };
   }
 
   /** Paquete para el complemento CeNSIA: { idCasilla: dosis } solo con lo > 0 en casillas válidas. */

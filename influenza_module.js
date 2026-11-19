@@ -8787,11 +8787,11 @@ function renderCovidCaptura() {
   _covidPanelListo = window.CovidCapturaUI.render({
     container: cont,
     metas: _covidMetaUnidadCache ? _covidMetaUnidadCache.metas : null,
-    // Frascos repartidos a la unidad por marca (null = aún sin reparto registrado: no hay contra qué comparar)
-    frascos: (_covidDistUnidad || []).length ? {
-      MODERNA: _covidDistUnidad.filter(d => d.marca === "MODERNA").reduce((t, d) => t + Number(d.cantidad_frascos || 0), 0),
-      PFIZER: _covidDistUnidad.filter(d => d.marca === "PFIZER").reduce((t, d) => t + Number(d.cantidad_frascos || 0), 0)
-    } : null,
+    // Frascos recibidos por marca en toda la campaña (sin reparto registrado = 0: no se puede reportar más de lo recibido)
+    frascos: {
+      MODERNA: (_covidDistUnidad || []).filter(d => d.marca === "MODERNA").reduce((t, d) => t + Number(d.cantidad_frascos || 0), 0),
+      PFIZER: (_covidDistUnidad || []).filter(d => d.marca === "PFIZER").reduce((t, d) => t + Number(d.cantidad_frascos || 0), 0)
+    },
     capturas: _covidCapturasCache,
     fecha,
     cerrada: !estado.abierta,

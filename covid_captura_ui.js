@@ -49,9 +49,11 @@
       C.MARCAS.forEach((m) => { acumMarca[m][r] = otras.reduce((s, c) => s + (Number(c.valores?.[m]?.[r]) || 0), 0); });
     });
 
-    // Abasto: dosis repartidas por marca (frascos x dosis por frasco). null = la unidad aún no tiene reparto registrado.
+    // Abasto: dosis recibidas por marca en TODA la campaña (frascos x dosis por frasco). Sin reparto registrado cuenta como 0
+    // recibidas: no se puede reportar más de lo que se recibió (igual que el trigger covid_trg_tope_abasto).
     const dpf = { MODERNA: 5, PFIZER: 6 };
-    const repartido = ctx.frascos ? { MODERNA: (Number(ctx.frascos.MODERNA) || 0) * dpf.MODERNA, PFIZER: (Number(ctx.frascos.PFIZER) || 0) * dpf.PFIZER } : null;
+    const fr = ctx.frascos || {};
+    const repartido = { MODERNA: (Number(fr.MODERNA) || 0) * dpf.MODERNA, PFIZER: (Number(fr.PFIZER) || 0) * dpf.PFIZER };
     const acumMarcaEq = { MODERNA: otras.reduce((t, c2) => t + C.equivalentesMarca(c2.valores, "MODERNA"), 0), PFIZER: otras.reduce((t, c2) => t + C.equivalentesMarca(c2.valores, "PFIZER"), 0) };
 
     if (ctx.cerrada) {
@@ -67,8 +69,8 @@
       reemplazo.className = "inf-reemplazo";
       reemplazo.setAttribute("aria-label", "Cómo funciona el guardado de COVID-19 de la semana");
       reemplazo.innerHTML = actual
-        ? `<span class="material-symbols-rounded" aria-hidden="true">swap_horiz</span><div><b>Esta semana ya tiene un reporte de COVID-19 guardado${actual.folio ? ` (folio ${esc(actual.folio)})` : ""}.</b> Si lo vuelves a guardar, <b>el nuevo reemplaza por completo al anterior</b>: no se suma. Captura siempre el <b>total de la semana</b>. Moderna y Pfizer suman contra la misma meta.</div>`
-        : `<span class="material-symbols-rounded" aria-hidden="true">info</span><div><b>Un solo reporte por semana.</b> Captura el <b>total de la semana</b> de cada marca; si vuelves a guardar esta semana, el nuevo reporte reemplaza al anterior. Moderna y Pfizer suman contra la misma meta.</div>`;
+        ? `<span class="material-symbols-rounded" aria-hidden="true">swap_horiz</span><div><b>Esta semana ya tiene un reporte de COVID-19 guardado${actual.folio ? ` (folio ${esc(actual.folio)})` : ""}.</b> Si lo vuelves a guardar, <b>el nuevo reemplaza por completo al anterior</b>: no se suma. Captura siempre el <b>total de la semana</b>. Lo que se bloquea es aplicar más de lo recibido de cada marca.</div>`
+        : `<span class="material-symbols-rounded" aria-hidden="true">info</span><div><b>Un solo reporte por semana.</b> Captura el <b>total de la semana</b> de cada marca; si vuelves a guardar esta semana, el nuevo reporte reemplaza al anterior. Lo que se bloquea es aplicar más de lo recibido de cada marca.</div>`;
       box.appendChild(reemplazo);
     }
 
@@ -112,9 +114,9 @@
           <tbody class="tbody-inputs"></tbody>
         </table>
       </div>
-      <p class="text-xs text-slate-500 m-0">La meta no distingue marca: Moderna y Pfizer suman contra el mismo número, aunque los frascos se hayan repartido por marca.</p>`;
+      <p class="text-xs text-slate-500 m-0">La meta no distingue marca y es solo una referencia: si la rebasas se te avisa, pero no se bloquea. Lo que sí se bloquea es aplicar más dosis de una marca de las que has recibido (cuenta todo lo recibido y todo lo aplicado en meses anteriores).</p>`;
     // Control de abasto por marca: lo aplicado contra lo repartido, en vivo mientras se captura
-    if (repartido) {
+    {
       const ab = document.createElement("section");
       ab.className = "cvc-abasto";
       ab.setAttribute("aria-label", "Frascos repartidos contra dosis aplicadas, por marca");
@@ -180,7 +182,6 @@
       return C.limpiar(v);
     };
     const pintarAbasto = (vals) => {
-      if (!repartido) return;
       ["MODERNA", "PFIZER"].forEach((m) => {
         const el = box.querySelector(`#cvc_ab_${m}`);
         if (!el) return;
@@ -212,14 +213,17 @@
         const pctEl = box.querySelector(`#pct_cov_${r}`);
         const bar = box.querySelector(`#bar_cov_${r}`);
         if (exceso > 0) {
-          disp.className = "inf-disp is-over";
-          disp.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">warning</span>Te pasas por ${fmt(exceso)}`;
+          disp.className = "inf-disp is-justo";
+          disp.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">info</span>Rebasas la meta por ${fmt(exceso)}`;
         } else {
           disp.className = "inf-disp" + (exceso === 0 ? " is-justo" : "");
           disp.textContent = `${fmt(total)} de ${fmt(meta)}`;
         }
         box.querySelectorAll(`.inf-input[data-r="${r}"]`).forEach((input) => {
-          if (exceso > 0) { input.setAttribute("aria-invalid", "true"); input.classList.add("is-over"); }
+          // Pasarse de la meta solo avisa; el campo se marca inválido únicamente si se pasa del abasto de su marca
+          const m = input.dataset.m, rec = repartido[m] || 0;
+          const sobra = acumMarcaEq[m] + C.equivalentesMarca(leer(), m) > rec;
+          if (sobra) { input.setAttribute("aria-invalid", "true"); input.classList.add("is-over"); }
           else { input.removeAttribute("aria-invalid"); input.classList.remove("is-over"); }
         });
         pctEl.textContent = `${pct}%`; pctEl.dataset.tono = t;
@@ -240,7 +244,7 @@
       /** Lo tecleado + su validación contra la meta (la usa el guardado del panel de captura). */
       recoger: () => {
         const v = leer();
-        const val = C.validar(v, metas, acumRubro, previo, reglas, repartido ? { repartido, acumMarca: acumMarcaEq } : null);
+        const val = C.validar(v, metas, acumRubro, previo, reglas, { repartido, acumMarca: acumMarcaEq });
         return { valores: v, error: val.error, sin_movimiento: C.totalDosis(v) === 0 };
       }
     };

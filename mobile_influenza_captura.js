@@ -110,6 +110,13 @@
   function acumuladoCovid(r) {
     return S.covid.capturas.reduce((a, c) => (c.fecha !== S.fecha ? a + CC().porRubro(c.valores)[r] : a), 0);
   }
+  const DPF_COVID = { MODERNA: 5, PFIZER: 6 };
+  const repartidoCovid = () => ({ MODERNA: num(S.covid.frascos && S.covid.frascos.MODERNA) * DPF_COVID.MODERNA, PFIZER: num(S.covid.frascos && S.covid.frascos.PFIZER) * DPF_COVID.PFIZER });
+  // Dosis equivalentes (0.5 mL) de una marca en las demás semanas de la campaña
+  const acumMarcaCovid = () => ({
+    MODERNA: S.covid.capturas.reduce((a, c) => (c.fecha !== S.fecha ? a + CC().equivalentesMarca(c.valores, "MODERNA") : a), 0),
+    PFIZER: S.covid.capturas.reduce((a, c) => (c.fecha !== S.fecha ? a + CC().equivalentesMarca(c.valores, "PFIZER") : a), 0)
+  });
   const rubrosCovid = () => CC().RUBROS.filter(r => num(S.covid.metas[r]) > 0);
   const metaTotal = () => (esCovid()
     ? CC().RUBROS.reduce((a, r) => a + num(S.covid.metas[r]), 0)
@@ -188,19 +195,23 @@
   }
   // COVID-19 es opcional: si no hay meta (o la tabla no responde) la unidad solo ve Influenza
   async function cargarCovid(db, p) {
-    S.covid = { metas: null, capturas: [] };
+    S.covid = { metas: null, capturas: [], frascos: { MODERNA: 0, PFIZER: 0 } };
     try {
       const destino = Object.keys(CLUES_HOSPITALES).find(k => CLUES_HOSPITALES[k] === p.clues);
-      const [m, c] = await Promise.all([
+      const [m, c, d] = await Promise.all([
         db.from("covid_metas").select("clues,municipio,metas").eq("anio_campana", S.camp.nombre).or(`clues.eq.${p.clues},clues.is.null`),
-        db.from("covid_capturas").select("*").eq("anio_campana", S.camp.nombre).eq("clues", p.clues).order("fecha", { ascending: false })
+        db.from("covid_capturas").select("*").eq("anio_campana", S.camp.nombre).eq("clues", p.clues).order("fecha", { ascending: false }),
+        // Todo lo recibido en la campaña (no solo este mes): contra esto se cuenta lo aplicado en todas las semanas
+        db.from("covid_distribucion_frascos").select("marca,cantidad_frascos").eq("anio_campana", S.camp.nombre).eq("clues", p.clues)
       ]);
       if (m.error || c.error || !CC()) return;
       const filas = m.data || [];
       const propia = filas.find(r => r.clues === p.clues);
       const delDestino = destino ? filas.find(r => !r.clues && String(r.municipio).toUpperCase() === destino) : null;
       const metas = (delDestino && delDestino.metas) || (propia && propia.metas) || null;
-      if (metas && CC().RUBROS.some(r => num(metas[r]) > 0)) S.covid = { metas, capturas: c.data || [] };
+      const frascos = { MODERNA: 0, PFIZER: 0 };
+      ((d && d.data) || []).forEach(x => { if (frascos[x.marca] !== undefined) frascos[x.marca] += num(x.cantidad_frascos); });
+      if (metas && CC().RUBROS.some(r => num(metas[r]) > 0)) S.covid = { metas, capturas: c.data || [], frascos };
     } catch (_) { /* sin COVID-19 visible */ }
     if (!S.covid.metas && S.vac === "COVID") S.vac = "INFLUENZA";
   }
@@ -409,7 +420,7 @@
         <div class="ic-barra-av" aria-hidden="true"><span id="icb_cv_${r}"></span></div>
       </div>`;
     }).join("");
-    return `<section class="ic-grupo" aria-label="COVID-19, dosis por marca"><h3>COVID-19 - Dosis por marca</h3>${filas}</section>`;
+    return `<section class="ic-grupo" aria-label="COVID-19, dosis por marca"><h3>COVID-19 - Dosis por marca</h3><p class="ic-nota" id="icAbCov" aria-live="polite" style="margin:0 0 8px;font-size:13px"></p>${filas}</section>`;
   }
 
   function leerCovid() {
@@ -437,16 +448,25 @@
       const falt = rootEl.querySelector(`#icf_cv_${r}`);
       const barra = rootEl.querySelector(`#icb_cv_${r}`);
       if (falt) {
-        falt.textContent = quedan >= 0 ? `Faltan ${quedan}` : `Rebasa por ${-quedan}`;
-        falt.classList.toggle("ic-faltan--mal", quedan < 0);
+        falt.textContent = quedan >= 0 ? `Faltan ${quedan}` : `Rebasa meta por ${-quedan}`;
+        falt.classList.remove("ic-faltan--mal");
       }
       if (barra) {
         const pct = meta > 0 ? Math.min(100, Math.round((total / meta) * 100)) : 0;
         barra.style.width = pct + "%";
-        barra.className = total > meta ? "ic-barra--mal" : pct >= 85 ? "ic-barra--ok" : pct >= 50 ? "ic-barra--medio" : "";
+        barra.className = pct >= 85 ? "ic-barra--ok" : pct >= 50 ? "ic-barra--medio" : "";
       }
-      const rebasa = total > meta && nuevo[r] > antes[r];
-      rootEl.querySelectorAll(`input[data-grupo="${r}"]`).forEach(i => { if (rebasa) i.setAttribute("aria-invalid", "true"); else i.removeAttribute("aria-invalid"); });
+      // Pasarse de la meta solo avisa; lo inválido es pasarse de lo recibido de la marca (abajo)
+    });
+    const rec = repartidoCovid(), acm = acumMarcaCovid();
+    const ab = rootEl.querySelector("#icAbCov");
+    if (ab) {
+      const f1 = x => Number(x).toLocaleString("es-MX", { maximumFractionDigits: 1 });
+      ab.textContent = "Recibidas en la campaña (aplicadas incluidas): " + C.MARCAS.map(m => `${m === "PFIZER" ? "Pfizer" : "Moderna"} ${f1(acm[m] + C.equivalentesMarca(v, m))} de ${f1(rec[m])} dosis`).join(" · ") + ". No puedes aplicar más de lo recibido; la meta solo es referencia.";
+    }
+    C.MARCAS.forEach(m => {
+      const sobra = acm[m] + C.equivalentesMarca(v, m) > rec[m];
+      rootEl.querySelectorAll(`input[data-marca="${m}"]`).forEach(i => { if (sobra) i.setAttribute("aria-invalid", "true"); else i.removeAttribute("aria-invalid"); });
     });
     return { v, esta, previas };
   }
@@ -645,7 +665,7 @@
         CC().RUBROS.forEach(r => { acum[r] = acumuladoCovid(r); });
         const reglasCov = {};
         CC().RUBROS.forEach(r => { reglasCov[r] = reglaCovid(r, f); });
-        const val = CC().validar(v, S.covid.metas, acum, rep ? rep.valores : {}, reglasCov);
+        const val = CC().validar(v, S.covid.metas, acum, rep ? rep.valores : {}, reglasCov, { repartido: repartidoCovid(), acumMarca: acumMarcaCovid() });
         if (val.error) errores.push({ msg: val.error, el: rootEl.querySelector("input[data-marca]:not(:disabled)") });
       }
     } else if (!S.sinMov) {

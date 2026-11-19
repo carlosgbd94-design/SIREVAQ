@@ -62,11 +62,10 @@ test('Reportes por semana con COVID-19: la supervisión corrige Moderna/Pfizer, 
   // El nombre de quien corrige viene del perfil (no hay que escribirlo); si se borra, no guarda sin firma
   await expect(page.locator('#validationNombreResponsable')).toHaveValue('Muni');
   await poner(page, '#validationNombreResponsable', '');
-  // Pasarse de la meta (8 de otras semanas + 40) lo impide; sin firma tampoco guarda
+  // Pasarse de la meta ya no impide guardar (solo es aviso); sin firma no guarda
   await poner(page, '#val_input_cov_PFIZER_c3', '40');
   await page.evaluate(() => saveValidationReportCovid('QTSSA000001', '2026-11-06'));
   await expect(page.locator('#validationFormError')).toContainText('firmado');
-  await expect(page.locator('#validationFormError')).toContainText('supera la meta');
   expect(await page.evaluate(() => window.__guardados.length)).toBe(0);
 
   // Corrección válida con firma
