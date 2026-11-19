@@ -765,9 +765,16 @@
         biovac_lotes ( numero_lote, caducidad, dosis_por_frasco_override, biologico_id )`)
       .eq('movimiento_id', movimiento.id);
 
+    // El nombre de quien elabora se captura UNA sola vez (en el SINBA-SIS): ese es el que membreta las hojas.
+    let responsableSis = '';
+    try {
+      const { data: cap } = await db.from('sis06p_capturas').select('capturado_por')
+        .eq('clues', unidad.clues).eq('anio', movimiento.anio).eq('mes', movimiento.mes).maybeSingle();
+      responsableSis = (cap && cap.capturado_por) || '';
+    } catch (e) { /* sin captura: se usa el del movimiento */ }
     const datosHeader = {
       mesNombre: MESES_NOMBRE[movimiento.mes], dia: movimiento.fecha_corte ? Number(movimiento.fecha_corte.slice(8, 10)) : '',
-      anio: movimiento.anio, municipio: unidad.municipio, responsable: movimiento.responsable_elaboracion || ''
+      anio: movimiento.anio, municipio: unidad.municipio, responsable: responsableSis || movimiento.responsable_elaboracion || ''
     };
 
     const detalleUnidades = await agregarNotasUnidades({ db, unidad, movimiento, renglonesDb: renglonesDb || [], biologicos });

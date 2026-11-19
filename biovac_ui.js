@@ -1950,6 +1950,22 @@ function render() {
   const inpResp = document.getElementById('inpResponsable');
   inpResp.value = m.responsable_elaboracion || '';
   inpResp.readOnly = !cabeceraEditable;
+  // El nombre de quien elabora se captura UNA sola vez, en el SINBA-SIS ("Responsable de la información").
+  // Aquí solo se muestra (de la captura del SIS), para que no haya dos nombres distintos del mismo documento.
+  if (!esJurisdiccional) {
+    inpResp.readOnly = true;
+    inpResp.title = 'Se toma del «Responsable de la información» del SINBA-SIS de esta unidad y mes.';
+    const unidadMov = (estado.unidades || []).find((u) => u.id === m.unidad_id);
+    if (unidadMov && unidadMov.clues) {
+      try {
+        estado.db.from('sis06p_capturas').select('capturado_por')
+          .eq('clues', unidadMov.clues).eq('anio', m.anio).eq('mes', m.mes).maybeSingle()
+          .then(({ data }) => {
+            if (data && data.capturado_por && estado.movimiento === m) inpResp.value = data.capturado_por;
+          }, () => {});
+      } catch (e) { /* solo informativo: sin captura se queda el nombre del movimiento */ }
+    }
+  }
   // UNIDAD: el responsable ya está en el encabezado (uno solo para las 4
   // hojas del SINBA-SIS) -- no se repite aquí.
   const campoResp = inpResp.closest('.campo');
@@ -3982,7 +3998,9 @@ async function guardarCabecera(silencioso) {
   // UNIDAD: el responsable es el del encabezado (uno solo para todo el
   // SINBA-SIS); el resto de roles lo sigue capturando en la cabecera del Movimiento.
   const esUnidadCab = estado.perfil && estado.perfil.rol === 'UNIDAD';
-  const responsable = (esUnidadCab ? responsableElaboracion() : document.getElementById('inpResponsable').value.trim()) || null;
+  // Fuera del renglón jurisdiccional, el campo del Movimiento es solo lectura (el nombre viene del SIS): no se reescribe aquí.
+  const responsable = (esUnidadCab ? responsableElaboracion()
+    : (estado.movimiento.id === null ? document.getElementById('inpResponsable').value.trim() : (estado.movimiento.responsable_elaboracion || ''))) || null;
   const fechaCorte = ultimoDiaMes(estado.movimiento.anio, estado.movimiento.mes);
 
   if (estado.movimiento.id === null) {

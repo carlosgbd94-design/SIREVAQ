@@ -1889,7 +1889,7 @@
   // a 3 renglones normales + 2 de A.R.F./Canje. El morado de Canje (vs. rojo
   // de A.R.F.) ya lo resuelve ese mismo motor por categoría, sin nada extra
   // aquí.
-  async function llenarMovimientoOficial(wb, unidadBiovac, movimiento) {
+  async function llenarMovimientoOficial(wb, unidadBiovac, movimiento, responsableSis) {
     const wsMov = wb.getWorksheet('MOV-DE-BIOLÓGICO');
     if (!wsMov) throw new Error('La plantilla no tiene la hoja "MOV-DE-BIOLÓGICO".');
 
@@ -1905,7 +1905,7 @@
     const diaCorte = movimiento.fecha_corte ? Number(movimiento.fecha_corte.slice(8, 10)) : new Date(movimiento.anio, movimiento.mes, 0).getDate();
     const datosHeader = {
       mesNombre: MESES_NOMBRE_MAYUS[movimiento.mes - 1], dia: diaCorte, anio: movimiento.anio,
-      municipio: unidadBiovac.nombre, responsable: movimiento.responsable_elaboracion || ''
+      municipio: unidadBiovac.nombre, responsable: responsableSis || movimiento.responsable_elaboracion || ''
     };
     await window.BiovacExportExcel.construirWorkbookDesdeDatos({
       ws: wsMov, bloques: bloques || [], biologicos: biologicos || [], renglonesDb: renglonesDb || [],
@@ -2231,7 +2231,7 @@
     let movimientoErrorMsg = null;
     if (movimiento && unidadBiovac && window.BiovacExportExcel) {
       try {
-        await llenarMovimientoOficial(wb, unidadBiovac, movimiento);
+        await llenarMovimientoOficial(wb, unidadBiovac, movimiento, responsableGeneral);
         movimientoIncluido = true;
       } catch (errMov) {
         console.error('[SIS-06-P] No se pudo llenar Movimiento de Biológico en el Excel:', errMov);

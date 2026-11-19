@@ -207,9 +207,16 @@ async function cargarYRenderizarUnidad() {
       biovac_lotes ( numero_lote, caducidad, dosis_por_frasco_override, biologico_id )`).eq('movimiento_id', movimiento.id)
   ]);
 
+  // Un solo nombre para todas las hojas: el del SINBA-SIS (captura); el del movimiento solo si no hay captura.
+  let responsableSis = '';
+  try {
+    const { data: cap } = await db.from('sis06p_capturas').select('capturado_por')
+      .eq('clues', unidad.clues).eq('anio', anio).eq('mes', mes).maybeSingle();
+    responsableSis = (cap && cap.capturado_por) || '';
+  } catch (e) { /* sin captura */ }
   const datosHeader = {
     dia: movimiento.fecha_corte ? Number(movimiento.fecha_corte.slice(8, 10)) : '',
-    mesNombre: MESES_NOMBRE[mes], anio, municipio: unidad.municipio, responsable: movimiento.responsable_elaboracion
+    mesNombre: MESES_NOMBRE[mes], anio, municipio: unidad.municipio, responsable: responsableSis || movimiento.responsable_elaboracion
   };
 
   renderizarHojas({ bloques, biologicos, renglonesDb, anio, mes, datosHeader });
