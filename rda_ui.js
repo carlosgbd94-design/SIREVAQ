@@ -3250,6 +3250,8 @@ const _prepareClonedDocForHDImage = (clonedDoc, contentEl) => {
     const clonedContent = clonedDoc.getElementById('rdaDashboardContent');
     if (clonedContent) {
         _applyExportFixesToRoot(clonedContent);
+        // Deserción de esquema: la lista de unidades tiene scroll interno en pantalla; al exportar va completa.
+        clonedContent.querySelectorAll('.ab-scroll').forEach(el => { el.style.maxHeight = 'none'; el.style.overflow = 'visible'; });
     }
     _convertCanvasesToImages(contentEl, clonedDoc);
 };
@@ -5203,11 +5205,171 @@ const ABANDONO_CHAINS = [
     ]}
 ];
 
-// Panel de Continuidad / Abandono de Esquema — análisis AGREGADO (dosis-N ÷ dosis-1 del
+// Panel de Continuidad / Deserción de Esquema — análisis AGREGADO (dosis-N ÷ dosis-1 del
 // periodo), no seguimiento del mismo paciente: registros_sis no tiene identificador de
 // paciente, es un conteo mensual por unidad. Se integra como esquema independiente dentro
 // del propio dashboard de Indicadores (mismo patrón que renderComparativaMultianual), sin
 // tocar ni reemplazar el cálculo de ningún otro esquema.
+//
+// Lectura del panel (de lo general a lo accionable):
+//   1) "Lectura rápida": 3 frases con lo que hay que saber (mayor fuga, concentración, capturas raras).
+//   2) Escalera por esquema: cuánto de la Dosis 1 llega a cada paso (barra fantasma = Dosis 1).
+//   3) Mapa por municipio (solo con la jurisdicción completa).
+//   4) Unidades prioritarias: ordenadas por dosis sin continuar (no por %), con base mínima para
+//      que 1→0 dosis no encabece la lista, y comparadas contra el promedio del alcance.
+const _abState = { cadena: 'todas', orden: 'perdidas', base: 20, limite: 15 };
+let _abCtx = null;
+
+const _abEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const _abN = n => Number(n).toLocaleString('es-MX');
+// Referencia habitual de supervisión (OPS): <5% aceptable · 5-10% atención · >10% alto · >=20% crítico.
+const _abTono = p => (p >= 20 ? 'crit' : p >= 10 ? 'bad' : p >= 5 ? 'warn' : 'ok');
+const _abTonoTxt = { ok: 'Aceptable', warn: 'Atención', bad: 'Alta', crit: 'Crítica' };
+
+const _AB_CSS = `
+<style>
+#abDesercion { --ab-ink:#0f172a; --ab-mut:#475569; --ab-line:#e2e8f0; --ab-ok:#0b6b57; --ab-warn:#8a5a00; --ab-bad:#b42318; --ab-crit:#8f1d14;
+  --ab-ok-bg:#e4f4ef; --ab-warn-bg:#fdf0cf; --ab-bad-bg:#fde7e4; font-variant-numeric:tabular-nums; color:var(--ab-ink); }
+#abDesercion * { box-sizing:border-box; }
+#abDesercion .ab-h { margin:0; font-size:16px; font-weight:900; }
+#abDesercion .ab-sub { font-size:12px; font-weight:700; color:var(--ab-mut); }
+#abDesercion .ab-sec { margin-top:26px; }
+#abDesercion .ab-sec > h4 { margin:0 0 3px; font-size:14px; font-weight:900; }
+#abDesercion .ab-sec > p { margin:0 0 12px; font-size:12px; font-weight:600; color:var(--ab-mut); line-height:1.45; }
+#abDesercion .ab-lectura { margin:16px 0 0; padding:0; list-style:none; display:grid; gap:8px; }
+#abDesercion .ab-lectura li { border-left:3px solid var(--ab-ink); padding:2px 0 2px 12px; font-size:13px; font-weight:600; line-height:1.5; color:#1e293b; }
+#abDesercion .ab-lectura li b { font-weight:900; }
+#abDesercion .ab-lectura li.ab-l-warn { border-left-color:#d97706; }
+#abDesercion .ab-lectura li.ab-l-bad { border-left-color:var(--ab-bad); }
+#abDesercion details.ab-nota { margin-top:14px; font-size:12px; color:var(--ab-mut); font-weight:600; line-height:1.5; }
+#abDesercion details.ab-nota summary { cursor:pointer; font-weight:800; color:var(--ab-ink); width:max-content; }
+#abDesercion details.ab-nota p { margin:6px 0 0; max-width:880px; }
+#abDesercion .ab-leyenda { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:11.5px; font-weight:700; color:var(--ab-mut); margin-bottom:10px; }
+#abDesercion .ab-leyenda i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+#abDesercion .ab-esc { border-top:1px solid var(--ab-line); }
+#abDesercion .ab-chain { display:grid; grid-template-columns:150px minmax(0,1fr) 190px; gap:18px; align-items:center; padding:14px 2px; border-bottom:1px solid var(--ab-line); }
+#abDesercion .ab-chain-name b { display:block; font-size:13.5px; font-weight:900; }
+#abDesercion .ab-chain-name span { font-size:11.5px; font-weight:700; color:var(--ab-mut); }
+#abDesercion .ab-steps { display:grid; gap:10px; }
+#abDesercion .ab-step { display:flex; flex-direction:column; align-items:stretch; gap:4px; min-width:0; text-align:center; }
+#abDesercion .ab-drop { align-self:center; font-size:11px; font-weight:800; padding:1px 7px; border-radius:99px; white-space:nowrap; }
+#abDesercion .ab-drop.base { color:var(--ab-mut); background:#f1f5f9; }
+#abDesercion .ab-track { position:relative; height:58px; background:#dfe5ec; border-radius:5px; overflow:hidden; }
+#abDesercion .ab-fill { position:absolute; left:0; right:0; bottom:0; background:#334155; border-radius:5px 5px 0 0; }
+#abDesercion .ab-step b { font-size:14px; font-weight:900; }
+#abDesercion .ab-step small { font-size:11px; font-weight:700; color:var(--ab-mut); line-height:1.25; }
+#abDesercion .ab-total { text-align:right; }
+#abDesercion .ab-total strong { display:block; font-size:26px; line-height:1; font-weight:900; letter-spacing:-.5px; }
+#abDesercion .ab-total span { display:block; margin-top:4px; font-size:11.5px; font-weight:700; color:var(--ab-mut); line-height:1.35; }
+#abDesercion .ab-t-ok { color:var(--ab-ok); } #abDesercion .ab-t-warn { color:var(--ab-warn); }
+#abDesercion .ab-t-bad { color:var(--ab-bad); } #abDesercion .ab-t-crit { color:var(--ab-crit); }
+#abDesercion .ab-drop.abt-ok, #abDesercion .ab-cell.abt-ok { background:var(--ab-ok-bg); color:var(--ab-ok); }
+#abDesercion .ab-drop.abt-warn, #abDesercion .ab-cell.abt-warn { background:var(--ab-warn-bg); color:var(--ab-warn); }
+#abDesercion .ab-drop.abt-bad, #abDesercion .ab-cell.abt-bad { background:var(--ab-bad-bg); color:var(--ab-bad); }
+#abDesercion .ab-drop.abt-crit, #abDesercion .ab-cell.abt-crit { background:var(--ab-crit); color:#fff; }
+#abDesercion .ab-fill.abt-ok { background:#2f8f7a; } #abDesercion .ab-fill.abt-warn { background:#d9a21b; }
+#abDesercion .ab-fill.abt-bad { background:#d9534a; } #abDesercion .ab-fill.abt-crit { background:var(--ab-crit); }
+#abDesercion .ab-scroll { max-height:430px; overflow:auto; overscroll-behavior:contain; }
+#abDesercion .ab-scroll table { table-layout:fixed; min-width:760px; }
+#abDesercion .ab-scroll th:nth-child(1) { width:44px; } #abDesercion .ab-scroll th:nth-child(3) { width:27%; }
+#abDesercion .ab-scroll th:nth-child(4) { width:112px; } #abDesercion .ab-scroll th:nth-child(5) { width:112px; }
+#abDesercion .ab-scroll th:nth-child(6) { width:92px; } #abDesercion .ab-scroll th:nth-child(7) { width:104px; } #abDesercion .ab-scroll th:nth-child(8) { width:92px; }
+#abDesercion .ab-scroll td { overflow-wrap:anywhere; }
+#abDesercion .ab-scroll th { position:sticky; top:0; z-index:1; box-shadow:0 1px 0 var(--ab-line); }
+#abDesercion .ab-wrap { overflow-x:auto; border:1px solid var(--ab-line); border-radius:12px; background:#fff; }
+#abDesercion table { width:100%; border-collapse:collapse; }
+#abDesercion th { text-align:left; padding:9px 12px; font-size:11px; font-weight:800; color:var(--ab-mut); text-transform:uppercase; letter-spacing:.03em; background:#f8fafc; border-bottom:1px solid var(--ab-line); white-space:nowrap; }
+#abDesercion th small { display:block; text-transform:none; letter-spacing:0; font-weight:700; }
+#abDesercion td { padding:9px 12px; font-size:12.5px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+#abDesercion tr:last-child td { border-bottom:0; }
+#abDesercion .num { text-align:right; } #abDesercion .ctr { text-align:center; }
+#abDesercion .ab-cell { display:inline-block; min-width:62px; padding:4px 8px; border-radius:7px; font-weight:900; font-size:12.5px; text-align:center; line-height:1.2; }
+#abDesercion .ab-cell small { display:block; font-size:10.5px; font-weight:700; opacity:.9; }
+#abDesercion .ab-muni td:first-child { font-weight:800; }
+#abDesercion .ab-muni tr.tot td { background:#f8fafc; font-weight:900; border-top:1px solid var(--ab-line); }
+#abDesercion .ab-ctl { display:flex; flex-wrap:wrap; gap:8px 22px; margin-bottom:12px; align-items:center; }
+#abDesercion .ab-ctl-g { display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+#abDesercion .ab-ctl-g > span { font-size:11px; font-weight:800; color:var(--ab-mut); margin-right:4px; text-transform:uppercase; letter-spacing:.03em; }
+#abDesercion button.ab-chip { min-height:0 !important; height:auto !important; padding:5px 11px !important; border-radius:99px !important; border:1px solid #cbd5e1 !important; background:#fff !important; color:var(--ab-ink) !important;
+  font:700 12px/1.2 inherit !important; font-family:inherit !important; cursor:pointer; box-shadow:none !important; width:auto !important; transform:none !important; }
+#abDesercion button.ab-chip:hover { border-color:#64748b !important; }
+#abDesercion button.ab-chip[aria-pressed="true"] { background:var(--ab-ink) !important; border-color:var(--ab-ink) !important; color:#fff !important; }
+#abDesercion button.ab-chip:focus-visible { outline:2px solid #2563eb !important; outline-offset:2px; }
+#abDesercion .ab-u b { display:block; font-weight:800; }
+#abDesercion .ab-u span { font-size:11.5px; color:var(--ab-mut); font-weight:600; }
+#abDesercion .ab-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+#abDesercion .ab-mini { display:block; width:84px; height:5px; border-radius:3px; background:#e2e8f0; margin:4px 0 0 auto; overflow:hidden; }
+#abDesercion .ab-mini i { display:block; height:100%; background:#334155; }
+#abDesercion .ab-vs.mas { color:var(--ab-bad); font-weight:800; } #abDesercion .ab-vs.menos { color:var(--ab-ok); font-weight:800; }
+#abDesercion .ab-pie { margin-top:10px; font-size:12px; color:var(--ab-mut); font-weight:600; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+#abDesercion .ab-vacio { padding:22px; text-align:center; color:var(--ab-mut); font-weight:700; font-size:13px; }
+@media (max-width: 860px) {
+  #abDesercion .ab-chain { grid-template-columns:1fr; gap:10px; }
+  #abDesercion .ab-total { text-align:left; display:flex; align-items:baseline; gap:10px; }
+  #abDesercion .ab-total span { margin:0; }
+}
+</style>`;
+
+function _abPrioridadHtml() {
+    const c = _abCtx; if (!c) return '';
+    const S = _abState;
+    const cmp = S.orden === 'pct'
+        ? (a, b) => b.pct - a.pct || b.perdidas - a.perdidas
+        : (a, b) => b.perdidas - a.perdidas || b.pct - a.pct;
+    const lista = c.entradas.filter(e => e.prev >= S.base && (S.cadena === 'todas' || e.chain === S.cadena)).sort(cmp);
+    const mejores = new Map();
+    lista.forEach(e => { if (!mejores.has(e.clues)) mejores.set(e.clues, e); });
+    const unicas = [...mejores.values()];
+    const totPerd = unicas.reduce((a, e) => a + e.perdidas, 0);
+    const vis = unicas;
+    let acum = 0;
+    const filas = vis.map((e, i) => {
+        acum += e.perdidas;
+        const tono = _abTono(e.pct);
+        const dif = e.pct - e.ref;
+        const vs = Math.abs(dif) < 0.5 ? '<span class="ab-vs">≈ promedio</span>'
+            : `<span class="ab-vs ${dif > 0 ? 'mas' : 'menos'}">${dif > 0 ? '+' : '−'}${Math.abs(dif).toFixed(1)} pp</span>`;
+        return `<tr>
+            <td class="num" style="color:#64748b; font-weight:700;">${i + 1}</td>
+            <td class="ab-u"><b>${_abEsc(e.unidad || e.clues)}</b><span>${_abEsc(e.municipio || '')}</span></td>
+            <td><span class="ab-dot" style="background:${e.color}"></span><b style="font-weight:800;">${_abEsc(e.chain)}</b> <span style="color:#475569; font-weight:600;">${_abEsc(e.from)} → ${_abEsc(e.to)}</span></td>
+            <td class="num">${_abN(e.prev)} → <b>${_abN(e.cur)}</b><span class="ab-mini" aria-hidden="true"><i style="width:${(e.cur / e.prev * 100).toFixed(1)}%"></i></span></td>
+            <td class="num"><b style="font-size:14px; font-weight:900;">${_abN(e.perdidas)}</b></td>
+            <td class="ctr"><span class="ab-cell abt-${tono}" title="${_abTonoTxt[tono]}">${e.pct.toFixed(1)}%</span></td>
+            <td class="num">${vs}</td>
+            <td class="num" style="color:#475569; font-weight:700;">${totPerd ? Math.round(acum / totPerd * 100) : 0}%</td>
+        </tr>`;
+    }).join('');
+
+    const chip = (grupo, v, txt, on) => `<button type="button" class="ab-chip" data-ab="${grupo}" data-v="${_abEsc(v)}" aria-pressed="${on ? 'true' : 'false'}">${_abEsc(txt)}</button>`;
+    const cadenas = c.cadenasActivas.map(ch => chip('cadena', ch.label, ch.label, S.cadena === ch.label)).join('');
+    const controles = `
+        <div class="ab-ctl" role="group" aria-label="Filtros de la lista de unidades">
+            <div class="ab-ctl-g"><span>Esquema</span>${chip('cadena', 'todas', 'Todos', S.cadena === 'todas')}${cadenas}</div>
+            <div class="ab-ctl-g"><span>Ordenar por</span>${chip('orden', 'perdidas', 'Dosis sin continuar', S.orden === 'perdidas')}${chip('orden', 'pct', '% de deserción', S.orden === 'pct')}</div>
+            <div class="ab-ctl-g"><span>Base mínima</span>${chip('base', '1', 'Cualquiera', S.base === 1)}${chip('base', '20', '≥ 20 dosis', S.base === 20)}${chip('base', '50', '≥ 50 dosis', S.base === 50)}</div>
+        </div>`;
+
+    const tabla = vis.length ? `
+        <div class="ab-wrap ab-scroll" tabindex="0" role="region" aria-label="Lista de unidades con desplazamiento"><table aria-label="Unidades con mayor número de dosis sin continuar entre pasos del esquema">
+            <thead><tr>
+                <th scope="col" class="num">#</th><th scope="col">Unidad</th><th scope="col">Paso donde más se pierde</th>
+                <th scope="col" class="num">Dosis<small>previa → aplicada</small></th>
+                <th scope="col" class="num">Sin continuar</th>
+                <th scope="col" class="ctr">Deserción</th>
+                <th scope="col" class="num">vs. promedio<small>del alcance</small></th>
+                <th scope="col" class="num">Acumulado<small>del total</small></th>
+            </tr></thead>
+            <tbody>${filas}</tbody>
+        </table></div>`
+        : `<div class="ab-wrap"><div class="ab-vacio">Ninguna unidad cumple el filtro. Prueba con «Cualquiera» en base mínima o con otro esquema.</div></div>`;
+
+    const pie = `<div class="ab-pie">
+        <span>${unicas.length} ${unicas.length === 1 ? 'unidad' : 'unidades'} con dosis sin continuar · <b>${_abN(totPerd)}</b> dosis en total. Desplázate dentro de la lista; el encabezado queda fijo.</span>
+    </div>`;
+    return controles + tabla + pie;
+}
+
 async function renderAbandonoEsquema(muniFilter, uniFilter) {
     const container = document.getElementById('rdaDashboardContent');
     if (!container) return;
@@ -5227,172 +5389,179 @@ async function renderAbandonoEsquema(muniFilter, uniFilter) {
         if (muniFilter) rows = rows.filter(r => (r.municipio || '').toUpperCase().trim() === muniFilter.toUpperCase().trim());
         if (uniFilter) rows = rows.filter(r => r.clues === uniFilter);
 
-        // Totales agregados (jurisdicción o filtro actual) por cada paso de cada cadena
-        const chainTotals = ABANDONO_CHAINS.map(chain => ({
-            ...chain,
-            totals: chain.steps.map(s => rows.reduce((a, r) => a + (Number(r[s.key]) || 0), 0))
-        }));
+        const suma = (rs, key) => rs.reduce((a, r) => a + (Number(r[key]) || 0), 0);
+        const resumir = (rs, ch) => {
+            const totals = ch.steps.map(s => suma(rs, s.key));
+            const base = totals[0];
+            const ult = totals[totals.length - 1];
+            const pasos = ch.steps.map((s, i) => {
+                const prev = i ? totals[i - 1] : null;
+                return {
+                    label: s.label, total: totals[i],
+                    ret: base > 0 ? totals[i] / base * 100 : null,
+                    drop: (i && prev > 0) ? Math.max(0, (prev - totals[i]) / prev * 100) : null,
+                    perdidas: (i && prev > 0) ? Math.max(0, prev - totals[i]) : 0,
+                    sobra: !!(i && prev > 0 && totals[i] > prev)
+                };
+            });
+            return { ...ch, totals, pasos, base, ult, acum: base > 0 ? Math.max(0, (base - ult) / base * 100) : null, perdidasAcum: Math.max(0, base - ult) };
+        };
 
-        // Mayor caída relativa por unidad (para la tabla de hallazgos) — solo evalúa unidades
-        // con al menos 1 aplicación en el primer paso de la cadena, para no dividir entre cero
-        // ni destacar unidades sin volumen real.
-        const worstDrops = [];
+        const chains = ABANDONO_CHAINS.map(ch => resumir(rows, ch));
+        const activas = chains.filter(ch => ch.base > 0);
+        const sinRegistros = chains.filter(ch => ch.base <= 0).map(ch => ch.label);
+
+        // Entradas por unidad y paso (solo caídas) + capturas donde un paso supera al anterior.
+        const entradas = [], incons = [];
+        const perdidaPorUnidad = new Map();
         rows.forEach(r => {
-            let worst = null;
-            ABANDONO_CHAINS.forEach(chain => {
-                for (let i = 1; i < chain.steps.length; i++) {
-                    const prevKey = chain.steps[i - 1].key;
-                    const curKey = chain.steps[i].key;
-                    const prevVal = Number(r[prevKey]) || 0;
-                    const curVal = Number(r[curKey]) || 0;
-                    if (prevVal <= 0) continue;
-                    const dropPct = ((prevVal - curVal) / prevVal) * 100;
-                    if (!worst || dropPct > worst.dropPct) {
-                        worst = { chain: chain.label, from: chain.steps[i - 1].label, to: chain.steps[i].label, prevVal, curVal, dropPct };
+            ABANDONO_CHAINS.forEach(ch => {
+                const ref = chains.find(x => x.label === ch.label);
+                for (let i = 1; i < ch.steps.length; i++) {
+                    const prev = Number(r[ch.steps[i - 1].key]) || 0;
+                    const cur = Number(r[ch.steps[i].key]) || 0;
+                    if (prev <= 0) continue;
+                    if (cur > prev) {
+                        if (prev >= 20 && cur - prev >= 10 && cur > prev * 1.25) incons.push({ unidad: r.nombre || r.clues, chain: ch.label, from: ch.steps[i - 1].label, to: ch.steps[i].label, prev, cur });
+                        continue;
                     }
+                    if (cur === prev) continue;
+                    entradas.push({
+                        clues: r.clues, unidad: r.nombre, municipio: r.municipio, chain: ch.label, color: ch.color,
+                        from: ch.steps[i - 1].label, to: ch.steps[i].label, prev, cur, perdidas: prev - cur,
+                        pct: (prev - cur) / prev * 100, ref: ref.pasos[i].drop || 0
+                    });
+                    perdidaPorUnidad.set(r.clues, (perdidaPorUnidad.get(r.clues) || 0) + (prev - cur));
                 }
             });
-            if (worst && worst.dropPct > 0) {
-                worstDrops.push({ clues: r.clues, unidad: r.nombre, municipio: r.municipio, ...worst });
-            }
         });
-        worstDrops.sort((a, b) => b.dropPct - a.dropPct);
+        _abCtx = { entradas, cadenasActivas: activas };
+        if (_abState.cadena !== 'todas' && !activas.some(a => a.label === _abState.cadena)) _abState.cadena = 'todas';
 
-        const resumenGrafica = 'Gráfica de barras con el total de dosis de cada paso por cadena. ' + chainTotals.map(c => c.label + ': ' + c.steps.map((st, i) => st.label + ' ' + c.totals[i].toLocaleString('es-MX')).join(', ')).join('. ');
-        const scopeLabel = uniFilter ? (rows[0]?.nombre || uniFilter) : (muniFilter ? `Municipio: ${muniFilter}` : 'Jurisdicción Sanitaria 1 (4 Municipios)');
+        // ---------- Lectura rápida ----------
+        const lecturas = [];
+        let fuga = null;
+        activas.forEach(ch => ch.pasos.forEach((p, i) => {
+            if (i && p.drop != null && (!fuga || p.drop > fuga.p.drop)) fuga = { ch, p, de: ch.pasos[i - 1].label };
+        }));
+        if (fuga) {
+            const t = _abTono(fuga.p.drop);
+            lecturas.push(`<li class="${t === 'ok' ? '' : t === 'warn' ? 'ab-l-warn' : 'ab-l-bad'}">El punto donde más se pierde es <b>${_abEsc(fuga.ch.label)}: ${_abEsc(fuga.de)} → ${_abEsc(fuga.p.label)}</b>. De ${_abN(fuga.ch.pasos.find(p => p.label === fuga.de).total)} dosis previas se aplicaron ${_abN(fuga.p.total)}: <b>${fuga.p.drop.toFixed(1)}% de deserción (${_abN(fuga.p.perdidas)} dosis sin continuar)</b>.</li>`);
+        }
+        const perdidas = [...perdidaPorUnidad.values()].sort((a, b) => b - a);
+        const totalPerdidas = perdidas.reduce((a, b) => a + b, 0);
+        if (perdidas.length >= 4 && totalPerdidas > 0) {
+            let a = 0, k = 0;
+            while (k < perdidas.length && a < totalPerdidas / 2) { a += perdidas[k++]; }
+            lecturas.push(`<li><b>${k} de ${perdidas.length} unidades</b> con pérdida concentran la mitad de las dosis sin continuar (${_abN(totalPerdidas)} sumando todos los pasos). Empezar por ellas rinde más que repartir el esfuerzo parejo.</li>`);
+        }
+        if (incons.length) {
+            const ej = incons.slice(0, 3).map(x => `${_abEsc(x.unidad)} (${_abEsc(x.chain)} ${_abEsc(x.to)}: ${x.cur} vs ${x.prev})`).join('; ');
+            lecturas.push(`<li class="ab-l-warn"><b>${incons.length} ${incons.length === 1 ? 'unidad registra' : 'unidades registran'} más dosis de las que había en el paso previo</b>: ${ej}${incons.length > 3 ? '…' : ''} Revisa si la captura quedó en otro paso o si atienden población de fuera. No se cuentan como deserción.</li>`);
+        }
+        if (!lecturas.length) lecturas.push('<li>No hay dosis suficientes en este filtro para calcular deserción.</li>');
 
-        const chainRowsHtml = chainTotals.map(chain => {
-            const stepsHtml = chain.steps.map((s, i) => {
-                const total = chain.totals[i];
-                const prevTotal = i === 0 ? null : chain.totals[i - 1];
-                const rate = (i === 0 || !prevTotal) ? null : (total / prevTotal * 100);
-                const desercion = rate === null ? null : Math.max(0, 100 - rate);
-                return `
-                    <td style="text-align:center; padding:8px 10px;">
-                        <div style="font-weight:800; font-size:14px; color:#0f172a;">${total.toLocaleString('es-MX')}</div>
-                        ${(i > 0 && !prevTotal) ? '<div style="font-size:11.5px; font-weight:700; color:#64748b;">Sin dosis previas</div>' : desercion !== null ? `<div style="font-size:11.5px; font-weight:800; color:${rate < 70 ? '#dc2626' : rate < 90 ? '#b45309' : '#15803d'};">Deserción: ${desercion.toFixed(1)}%</div>` : '<div style="font-size:11.5px; font-weight:700; color:#64748b;">Base (Dosis 1)</div>'}
-                    </td>`;
+        // ---------- Escalera por esquema ----------
+        const escalera = activas.map(ch => {
+            const n = ch.pasos.length;
+            const pasosHtml = ch.pasos.map((p, i) => {
+                const t = p.drop == null ? null : _abTono(p.drop);
+                const chip = i === 0 ? '<span class="ab-drop base">Base</span>'
+                    : p.drop == null ? '<span class="ab-drop base">Sin previas</span>'
+                    : `<span class="ab-drop abt-${t}" title="${_abTonoTxt[t]}">${p.drop > 0 ? '−' : ''}${p.drop.toFixed(1)}%</span>`;
+                const h = p.ret == null ? 0 : Math.min(100, p.ret);
+                return `<div class="ab-step">${chip}
+                    <div class="ab-track" aria-hidden="true"><div class="ab-fill ${t ? 'abt-' + t : ''}" style="height:${h.toFixed(1)}%"></div></div>
+                    <b>${_abN(p.total)}</b>
+                    <small>${_abEsc(p.label)}${i ? ` · ${p.ret == null ? '—' : p.ret.toFixed(0) + '% de D1'}` : ''}</small>
+                </div>`;
             }).join('');
-            return `
-                <tr style="border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:8px 10px; vertical-align:middle; font-weight:800; font-size:12.5px; color:${({ '#d97706': '#b45309', '#f59e0b': '#b45309', '#16a34a': '#15803d' })[chain.color] || chain.color};">${chain.label}</td>
-                    ${stepsHtml}
-                    ${chain.steps.length < 4 ? '<td></td>'.repeat(4 - chain.steps.length) : ''}
-                </tr>`;
+            const tA = ch.acum == null ? 'ok' : _abTono(ch.acum);
+            const resumen = ch.pasos.map(p => `${p.label} ${_abN(p.total)}${p.drop != null ? ` (deserción ${p.drop.toFixed(1)}%)` : ''}`).join(', ');
+            return `<div class="ab-chain" role="group" aria-label="${_abEsc(ch.label)}: ${_abEsc(resumen)}">
+                <div class="ab-chain-name"><b><span class="ab-dot" style="background:${ch.color}"></span>${_abEsc(ch.label)}</b><span>${_abEsc(ch.pasos[0].label)} → ${_abEsc(ch.pasos[n - 1].label)}</span></div>
+                <div class="ab-steps" style="grid-template-columns:repeat(${n}, minmax(0,1fr));">${pasosHtml}</div>
+                <div class="ab-total"><strong class="ab-t-${tA}">${ch.acum == null ? '—' : ch.acum.toFixed(1) + '%'}</strong>
+                    <span>deserción acumulada · ${_abN(ch.perdidasAcum)} dosis sin continuar de ${_abN(ch.base)}</span></div>
+            </div>`;
         }).join('');
 
-        const worstDropsHtml = worstDrops.slice(0, 30).map(w => `
-            <tr style="border-bottom:1px solid #f1f5f9;">
-                <td style="padding:7px 10px; font-size:12.5px; color:#475569;">${w.municipio || ''}</td>
-                <td style="padding:7px 10px; font-size:12.5px; font-weight:700; color:#0f172a;">${w.unidad || w.clues}</td>
-                <td style="padding:7px 10px; font-size:12.5px; color:#475569;">${w.chain}: ${w.from} → ${w.to}</td>
-                <td style="padding:7px 10px; font-size:12.5px; color:#475569; text-align:center;">${w.prevVal} → ${w.curVal}</td>
-                <td style="padding:7px 10px; text-align:center;"><span style="font-weight:800; font-size:12.5px; color:${w.dropPct >= 50 ? '#dc2626' : '#b45309'};">-${w.dropPct.toFixed(1)}%</span></td>
-            </tr>`).join('');
+        // ---------- Mapa por municipio ----------
+        let municipiosHtml = '';
+        if (!muniFilter && !uniFilter && activas.length) {
+            const munis = [...new Set(rows.map(r => (r.municipio || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+            const celda = (rs, ch) => {
+                const x = resumir(rs, ch);
+                if (x.base <= 0) return '<td class="ctr" style="color:#94a3b8;">—</td>';
+                const t = _abTono(x.acum);
+                return `<td class="ctr"><span class="ab-cell abt-${t}">${x.acum.toFixed(1)}%<small>${_abN(x.perdidasAcum)} de ${_abN(x.base)}</small></span></td>`;
+            };
+            const cab = activas.map(ch => `<th scope="col" class="ctr">${_abEsc(ch.label)}<small>${_abEsc(ch.pasos[0].label)} → ${_abEsc(ch.pasos[ch.pasos.length - 1].label)}</small></th>`).join('');
+            const filasM = munis.map(m => {
+                const rs = rows.filter(r => (r.municipio || '').trim() === m);
+                return `<tr><td>${_abEsc(m)}</td>${activas.map(ch => celda(rs, ch)).join('')}</tr>`;
+            }).join('');
+            municipiosHtml = `
+            <section class="ab-sec">
+                <h4>¿Dónde se concentra? Deserción acumulada por municipio</h4>
+                <p>Cada celda es el porcentaje de la Dosis 1 que no llegó al último paso, con las dosis que representa. El color usa la misma referencia que la escalera.</p>
+                <div class="ab-wrap ab-muni"><table aria-label="Deserción acumulada por municipio y esquema">
+                    <thead><tr><th scope="col">Municipio</th>${cab}</tr></thead>
+                    <tbody>${filasM}<tr class="tot"><td>Jurisdicción</td>${activas.map(ch => celda(rows, ch)).join('')}</tr></tbody>
+                </table></div>
+            </section>`;
+        }
 
-        container.innerHTML = `
-            <div style="padding:24px;">
-                <div role="note" style="background:#fffbeb; border:1px solid #fde68a; border-radius:14px; padding:14px 18px; margin-bottom:20px; display:flex; gap:12px; align-items:flex-start;">
-                    <span class="material-symbols-rounded" style="color:#d97706; font-size:22px;">info</span>
-                    <div style="font-size:12.5px; font-weight:700; color:#78350f; line-height:1.5;">
-                        Índice de deserción según la metodología de supervisión del <strong>Manual de Vacunación 2021</strong>
-                        (evaluación de tasas de deserción entre dosis, ej. DTP1/BCG vs. DTP3/Sarampión), aplicada aquí a cada
-                        paso de dosis disponible. Es una <strong>razón agregada</strong> (total de dosis-N ÷ total de dosis-1
-                        del periodo evaluado), <strong>no es seguimiento del mismo paciente</strong> — los registros de SIS son
-                        conteos mensuales por unidad, no expedientes individuales. Úsalo para identificar en qué paso de cada
-                        esquema se concentra la deserción, no como "cuántos pacientes abandonaron literalmente".
+        const scopeLabel = uniFilter ? (rows[0]?.nombre || uniFilter) : (muniFilter ? `Municipio: ${muniFilter}` : 'Jurisdicción Sanitaria 1 (4 Municipios)');
+
+        container.innerHTML = `${_AB_CSS}
+            <div id="abDesercion" style="padding:24px;">
+                <h3 class="ab-h">Índice de Deserción de Esquema</h3>
+                <span class="ab-sub">${_abEsc(scopeLabel)} · ${anio}, enero a ${MONTH_NAMES[maxMes - 1] || maxMes}</span>
+
+                <ul class="ab-lectura" aria-label="Lectura rápida">${lecturas.join('')}</ul>
+                ${sinRegistros.length ? `<p class="ab-sub" style="margin:10px 0 0;">Sin registros en el periodo (no se muestran): ${_abEsc(sinRegistros.join(', '))}.</p>` : ''}
+                <details class="ab-nota"><summary>Cómo se calcula y cómo leerlo</summary>
+                    <p>Deserción de un paso = (dosis del paso previo − dosis del paso) ÷ dosis del paso previo. La deserción acumulada compara la Dosis 1 contra el último paso del esquema.
+                    Es una <b>razón agregada del periodo</b> (conteos mensuales por unidad del SIS), <b>no seguimiento de pacientes</b>: sirve para ubicar en qué paso y en qué unidades se pierde la continuidad, no para decir cuántos niños abandonaron. Los pasos de refuerzo se aplican a otra edad, por lo que su caída incluye el desfase entre cohortes.
+                    Referencia de color: menos de 5% aceptable · 5 a 10% atención · 10 a 20% alta · 20% o más crítica. Metodología de supervisión del Manual de Vacunación 2021.</p>
+                </details>
+
+                <section class="ab-sec">
+                    <h4>Cuánto de la Dosis 1 llega a cada paso</h4>
+                    <p>La barra gris es la Dosis 1 (100%); la barra de color es lo aplicado en ese paso. La etiqueta sobre cada barra es la caída frente al paso inmediato anterior.</p>
+                    <div class="ab-leyenda" aria-hidden="true">
+                        <span><i style="background:#2f8f7a"></i>&lt; 5%</span><span><i style="background:#d9a21b"></i>5 a 10%</span><span><i style="background:#d9534a"></i>10 a 20%</span><span><i style="background:#8f1d14"></i>≥ 20%</span>
                     </div>
-                </div>
+                    <div class="ab-esc">${escalera || '<div class="ab-vacio">Sin dosis registradas en este filtro.</div>'}</div>
+                </section>
 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <div>
-                        <h3 style="margin:0; font-size:16px; font-weight:900; color:#0f172a;">Índice de Deserción por Cadena de Dosis</h3>
-                        <span style="font-size:12px; font-weight:700; color:#475569;">${scopeLabel} · ${anio}, Enero a ${MONTH_NAMES[maxMes - 1] || maxMes}</span>
-                    </div>
-                </div>
+                ${municipiosHtml}
 
-                <div style="background:#fff; border:1px solid #e2e8f0; border-radius:16px; overflow:hidden; margin-bottom:16px;">
-                    <table aria-label="Dosis por paso de cada cadena y su deserción respecto al paso anterior" style="width:100%; border-collapse:collapse;">
-                        <thead>
-                            <tr style="background:#f8fafc;">
-                                <th scope="col" style="text-align:left; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Cadena</th>
-                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Paso 1</th>
-                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Paso 2</th>
-                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Paso 3</th>
-                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Paso 4</th>
-                            </tr>
-                        </thead>
-                        <tbody>${chainRowsHtml}</tbody>
-                    </table>
-                </div>
+                <section class="ab-sec">
+                    <h4>Unidades donde conviene intervenir primero</h4>
+                    <p>Se ordenan por dosis sin continuar: una unidad que pierde 64 dosis pesa más que una que «pierde» 100% de 3. Con la base mínima activa se evitan porcentajes engañosos de unidades con muy poco volumen.</p>
+                    <div id="abPrioridad">${_abPrioridadHtml()}</div>
+                </section>
+            </div>`;
 
-                <div id="abandonoChartContainer" role="img" aria-label="${resumenGrafica}" style="width:100%; height:360px; background:#fff; border:1px solid #e2e8f0; border-radius:16px; margin-bottom:16px;"></div>
-
-                <h4 style="margin:0 0 10px; font-size:14px; font-weight:900; color:#0f172a;">Mayor índice de deserción por unidad (Top 30)</h4>
-                <div style="background:#fff; border:1px solid #e2e8f0; border-radius:16px; overflow:hidden;">
-                    <table aria-label="Unidades con mayor deserción entre dosis" style="width:100%; border-collapse:collapse;">
-                        <thead>
-                            <tr style="background:#f8fafc;">
-                                <th scope="col" style="text-align:left; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Municipio</th>
-                                <th scope="col" style="text-align:left; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Unidad</th>
-                                <th scope="col" style="text-align:left; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Paso con mayor deserción</th>
-                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Dosis</th>
-                                <th scope="col" style="text-align:center; padding:8px 10px; font-size:11.5px; font-weight:800; color:#475569; text-transform:uppercase;">Deserción</th>
-                            </tr>
-                        </thead>
-                        <tbody>${worstDropsHtml || '<tr><td colspan="5" style="padding:20px; text-align:center; color:#94a3b8;">Sin datos suficientes para calcular deserción en este filtro.</td></tr>'}</tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-
-        setTimeout(() => {
-            const chartDom = document.getElementById('abandonoChartContainer');
-            if (chartDom && typeof echarts !== 'undefined') {
-                if (_rdaCharts.abandono) { try { _rdaCharts.abandono.dispose(); } catch(e){} _rdaCharts.abandono = null; }
-                const chart = echarts.init(chartDom, null, { renderer: 'canvas' });
-                _rdaCharts.abandono = chart;
-
-                const categories = [];
-                const values = [];
-                const colors = [];
-                chainTotals.forEach(chain => {
-                    chain.steps.forEach((s, i) => {
-                        categories.push(`${chain.label} — ${s.label}`);
-                        values.push(chain.totals[i]);
-                        colors.push(chain.color);
-                    });
-                });
-
-                chart.setOption({
-                    grid: { left: '3%', right: '4%', bottom: '3%', top: 20, containLabel: true },
-                    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-                    xAxis: { type: 'value', axisLabel: { fontFamily: 'Inter, sans-serif' } },
-                    yAxis: { type: 'category', data: categories, inverse: true, axisLabel: { fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 700 } },
-                    series: [{
-                        type: 'bar',
-                        data: values.map((v, i) => ({ value: v, itemStyle: { color: colors[i], borderRadius: [0, 6, 6, 0] } })),
-                        label: { show: true, position: 'right', fontWeight: 800, fontSize: 11 },
-                        barWidth: '55%'
-                    }]
-                });
-
-                if (!window._rdaEchartsResizeAttached) {
-                    window.addEventListener('resize', () => {
-                        if (_rdaCharts.b) _rdaCharts.b.resize();
-                        if (_rdaCharts.total) _rdaCharts.total.resize();
-                        if (_rdaCharts.d) _rdaCharts.d.resize();
-                        if (_rdaCharts.comparativa) { try { _rdaCharts.comparativa.resize(); } catch(e){} }
-                        if (_rdaCharts.abandono) { try { _rdaCharts.abandono.resize(); } catch(e){} }
-                    });
-                    window._rdaEchartsResizeAttached = true;
-                }
-            }
-        }, 100);
-
+        const raiz = document.getElementById('abDesercion');
+        raiz.addEventListener('click', ev => {
+            const b = ev.target.closest('button[data-ab]');
+            if (!b) return;
+            const g = b.dataset.ab, v = b.dataset.v;
+            if (g === 'cadena') _abState.cadena = v;
+            else if (g === 'orden') _abState.orden = v;
+            else if (g === 'base') _abState.base = Number(v) || 1;
+            const dest = document.getElementById('abPrioridad');
+            dest.innerHTML = _abPrioridadHtml();
+            const sel = `button[data-ab="${g}"][data-v="${v}"]`;
+            const nuevo = dest.querySelector(sel);
+            if (nuevo) nuevo.focus({ preventScroll: true });
+        });
     } catch (e) {
         console.error("Error cargando análisis de continuidad de esquema:", e);
-        container.innerHTML = `<div style="padding: 32px; color: #ef4444; font-weight: 700;">Error al generar análisis de continuidad: ${e.message}</div>`;
+        container.innerHTML = `<div style="padding: 32px; color: #ef4444; font-weight: 700;">Error al generar análisis de continuidad: ${_abEsc(e.message)}</div>`;
     } finally {
         if (typeof hideOverlay === 'function') hideOverlay();
     }
