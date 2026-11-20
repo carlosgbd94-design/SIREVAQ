@@ -335,7 +335,8 @@
     const sinMeta = [];
     let tarjetas = "";
     Object.entries(grupos).forEach(([titulo, lista]) => {
-      if (lista.every(rb => !Number(metas[rb.id] || 0))) { sinMeta.push(titulo); return; }
+      // Si el reporte ya trae dosis en el grupo se muestra completo: si no, al guardar se perderían esas cifras.
+      if (lista.every(rb => !Number(metas[rb.id] || 0)) && !lista.some(rb => Number(rep && rep.valores && rep.valores[rb.id] || 0) > 0)) { sinMeta.push(titulo); return; }
       const filas = lista.map(rb => {
         const meta = Number(metas[rb.id] || 0);
         const val = rep && rep.valores && rep.valores[rb.id] !== undefined ? rep.valores[rb.id] : "";

@@ -15634,7 +15634,7 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 #secInfluenzaFrascos .marca-btn:focus-visible { outline: 3px solid #0f172a; outline-offset: 2px; }
 
 #secInfluenzaFrascos .frs-tope { display: block; font-size: 17px; font-weight: 900; color: #4c1d95; line-height: 1.1; }
-#secInfluenzaFrascos .frs-tope--cero { color: #b91c1c; }
+#secInfluenzaFrascos .frs-tope--cero { color: #047857; }   /* 0 por recibir = meta completa, no un error */
 #secInfluenzaFrascos .frs-tope-sub { display: block; margin-top: 2px; font-size: 10px; font-weight: 700; color: #475569; line-height: 1.25; }
 
 /* Verificador (frascos y metas): cuadro de esquinas redondeadas, centrado sobre el botón de guardar; en línea, una píldora baja.
@@ -15753,6 +15753,7 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 
 /* Reportes por semana y Cobertura por semanas (Influenza, supervisión) */
 .rs-nota { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 12px 16px; border-radius: 16px; background: #ecfdf5; border: 1px solid #6ee7b7; color: #064e3b; font-size: 14px; font-weight: 600; line-height: 1.45; }
+.rs-nota[hidden] { display: none; }   /* el display:flex de arriba pisaba el atributo hidden: la nota de COVID salía en Influenza */
 .rs-nota .material-symbols-rounded { font-size: 22px; color: #047857; flex: none; }
 .rs-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
 .rs-kpi { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 18px; border: 1px solid #cbd5e1; background: #ffffff; }
@@ -16930,3 +16931,50 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 #secInfluenzaFrascos .frs-table.frs-covid .frs-estado { white-space: normal; }
 /* El texto de "Repartir entrega" no va sobre el Resumen */
 #secInfluenzaFrascos[data-frs-sub="resumen"] #frascosHint, #secInfluenzaFrascos[data-frs-sub="resumen"] #frascosVacunaNota { display: none !important; }
+/* «Reparte los frascos en proporción a la meta…» solo explica el reparto: en Entregas no corresponde */
+#secInfluenzaFrascos[data-frs-sub="entregas"] #frascosHint { display: none !important; }
+
+/* ── Corregir reportes · editor de una unidad: franja de resumen, cabecera de grupo y grupos sin meta plegados ── */
+#validationCardsContainer .vl-franja {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); background: #ffffff;
+  border: 1px solid #e2e8f0; border-radius: 18px; overflow: hidden;
+}
+#validationCardsContainer .vl-franja > div { padding: 14px 20px; display: flex; flex-direction: column; gap: 2px; border-left: 1px solid #e2e8f0; }
+#validationCardsContainer .vl-franja > div:first-child { border-left: 0; }
+#validationCardsContainer .vl-franja span { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #64748b; }
+#validationCardsContainer .vl-franja b { font-size: 24px; line-height: 1.15; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
+#validationCardsContainer .vl-franja small { font-size: 13px; font-weight: 700; color: #64748b; }
+#validationCardsContainer .vl-grupo-cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin: 0 0 4px !important; }
+#validationCardsContainer .vl-grupo-dato { font-size: 12.5px; font-weight: 600; color: #475569; }
+#validationCardsContainer .vl-grupo-dato b { color: #0f172a; font-variant-numeric: tabular-nums; }
+#validationCardsContainer tbody th, #validationCardsContainer tbody td { padding: 8px 12px; }
+#validationCardsContainer .vl-sinmeta { background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 18px; padding: 0 20px; }
+#validationCardsContainer .vl-sinmeta > summary {
+  display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 14px 0; font-size: 13.5px; font-weight: 600; color: #334155; list-style: none;
+}
+#validationCardsContainer .vl-sinmeta > summary::-webkit-details-marker { display: none; }
+#validationCardsContainer .vl-sinmeta > summary .material-symbols-rounded { font-size: 20px; color: #64748b; }
+#validationCardsContainer .vl-sinmeta > summary:focus-visible { outline: 3px solid #0f172a; outline-offset: 2px; border-radius: 8px; }
+#validationCardsContainer .vl-sinmeta__no { color: #64748b; font-weight: 500; }
+#validationCardsContainer .vl-sinmeta__grupo { padding: 10px 0 12px; border-top: 1px solid #f1f5f9; }
+#validationCardsContainer .vl-sinmeta__grupo h5 { margin: 0 0 6px; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #475569; }
+#validationCardsContainer .vl-sinmeta__grupo p { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+#validationCardsContainer .vl-chip { padding: 3px 10px; border-radius: 99px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 600; }
+
+/* Sin scroll dentro del scroll: las tablas de Temporada invernal crecen con la página (solo desplazan a lo ancho) */
+#adminInfluenzaMunicipalTableContainer .tableWrap { max-height: none; overflow-y: hidden; margin-top: 0; }
+#secInfluenzaCobertura .cob-scroll { max-height: none; overflow-y: hidden; }
+#secInfluenzaFrascos .frs-scroll { max-height: none !important; overflow-y: hidden; }
+/* Metas: la columna del grupo es solo una marca de color (el nombre del grupo va en la franja) */
+#secInfluenzaMetas th.meta-g-marca, #secInfluenzaMetas td.meta-g-marca { width: 10px; min-width: 10px; max-width: 10px; padding: 0 !important; }
+
+/* Pestañas de Temporada invernal: se quedan fijas debajo del encabezado flotante (antes pasaban por debajo y quedaban tapadas) */
+#panelINFLUENZAADMIN .tinv-cab { display: contents; }
+#panelINFLUENZAADMIN .tinv-cab .tinv-vacuna { margin: 0 0 12px; }
+#panelINFLUENZAADMIN .tinv-nav { position: sticky; top: 104px; z-index: 40; margin: 0 0 16px; }
+@media (max-width: 640px) { #panelINFLUENZAADMIN .tinv-nav { top: 84px; } }
+#secInfluenzaFrascos .frs-btn:disabled { background: #e2e8f0; border-color: #cbd5e1; color: #64748b; cursor: not-allowed; }
+/* Fechas Campaña: botones de la tabla alineados en una sola línea y a la misma altura */
+#influenzaCampanasTableBody td { vertical-align: middle; }
+#influenzaCampanasTableBody td:last-child > div { display: inline-flex; align-items: center; gap: 8px; }
+#influenzaCampanasTableBody button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 32px; margin: 0 !important; line-height: 1; }

@@ -3159,6 +3159,12 @@ function infSoltarTodos() {
   if (real) sel.value = real.value;
 }
 
+/** «2026-10-12» → «12/10/2026», igual que los selectores de fecha de la misma pantalla. */
+function fechaDMA(f) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(f || ""));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(f || "—");
+}
+
 function renderAvancesAndConcentrados() {
   const semInicioSelect = document.getElementById("adminInfluenzaSemanaInicio");
   const semFinSelect = document.getElementById("adminInfluenzaSemanaFin");
@@ -3249,7 +3255,7 @@ function renderAvancesAndConcentrados() {
     <div class="tv-cab">
       <span class="tv-vac" data-vac="${cov ? "covid" : "influenza"}">${cov ? "COVID-19" : "Influenza"}</span>
       <span class="tv-cab__txt">Resumen: ${amb.etiqueta}</span>
-      <span class="tv-cab__rango">semanas del ${minFecha} al ${maxFecha}</span>
+      <span class="tv-cab__rango">semanas del ${fechaDMA(minFecha)} al ${fechaDMA(maxFecha)}</span>
     </div>
     <div class="dashboardKpis tv-board w-full">
       <div class="kpiCard tv-main" data-tono="${tonoTot}">
@@ -3297,7 +3303,8 @@ function renderAvancesAndConcentrados() {
       <td class="p-3 text-center text-xs font-black">${df ? infFmt(df, 0) : ""}</td>
     </tr>`;
   };
-  const ordenar = (arr) => arr.slice().sort((a, b) => String(a.u.unidad).localeCompare(String(b.u.unidad), "es"));
+  // Dentro de cada municipio (o de la unidad del ámbito municipal) el orden es por CLUES, no por nombre.
+  const ordenar = (arr) => arr.slice().sort((a, b) => String(a.u.clues).localeCompare(String(b.u.clues), "es", { numeric: true }));
   let html = "";
   if (amb.juris) {
     const MUNIS = ["QUERETARO", "CORREGIDORA", "MARQUES", "HUIMILPAN"];
@@ -3459,6 +3466,12 @@ function updateInfluenzaDashboardVisuals(amb, minFecha, maxFecha) {
   const campaignWeeks = generateCampaignWeeks();
   const weeksSorted = campaignWeeks.map(w => w.fecha).sort();
   const totalWeeks = weeksSorted.length;
+  // Días de campaña (inclusive) hasta una fecha: base única del esperado, el ritmo y la proyección
+  const msDia = 86400000;
+  const t0 = Date.parse((_campaignConfig.fecha_inicio || "") + "T12:00:00");
+  const t1 = Date.parse((_campaignConfig.fecha_fin || "") + "T12:00:00");
+  const diasTotalCampana = (t1 > t0) ? Math.round((t1 - t0) / msDia) : Math.max(1, totalWeeks * 7);
+  const diasCampana = (f) => Math.max(0, Math.min(diasTotalCampana, Math.round((Date.parse(f + "T12:00:00") - t0) / msDia)));
 
   const units = infUnidadesAmbito(amb);
   const cluesSet = new Set(units.map(u => u.clues));
@@ -3482,13 +3495,17 @@ function updateInfluenzaDashboardVisuals(amb, minFecha, maxFecha) {
     const weekDoses = capturas.filter(c => c.fecha === wFecha).reduce((s, c) => s + infDosisReporte(c), 0);
     runningCumulative += weekDoses;
     actualTrend.push(Math.round(runningCumulative * 10) / 10);
-    expectedTrend.push(municipalMetaTotal > 0 ? Math.round((municipalMetaTotal / totalWeeks) * (idx + 1)) : 0);
+    // Meta lineal por TIEMPO (días de campaña), la misma base que el «esperado a hoy» del tablero: las semanas
+    // «de corte» (fin de mes) son tramos cortos y no deben pesar como una semana completa.
+    expectedTrend.push(municipalMetaTotal > 0 ? Math.round(municipalMetaTotal * diasCampana(wFecha) / diasTotalCampana) : 0);
   });
 
   const accumulatedUpToMax = actualTrend[currentWeekIndex - 1] || 0;
-  const velocity = currentWeekIndex > 0 ? (accumulatedUpToMax / currentWeekIndex) : 0;
-  const semanasRestantes = Math.max(0, totalWeeks - currentWeekIndex);
-  const projectedEndValue = Math.round(accumulatedUpToMax + velocity * semanasRestantes);
+  // Ritmo y proyección también por tiempo: días transcurridos hasta la «Semana fin» (sin pasar de hoy)
+  const corteFecha = (maxFecha && maxFecha < hoyStr) ? maxFecha : hoyStr;
+  const diasTrans = Math.min(diasTotalCampana, Math.max(1, diasCampana(corteFecha)));
+  const velocity = accumulatedUpToMax / (diasTrans / 7);
+  const projectedEndValue = Math.round(accumulatedUpToMax * diasTotalCampana / diasTrans);
   const projectedPct = municipalMetaTotal > 0 ? Math.round((projectedEndValue / municipalMetaTotal) * 100) : 0;
 
   let statusText, statusBadgeClass, statusDesc;
@@ -3496,10 +3513,10 @@ function updateInfluenzaDashboardVisuals(amb, minFecha, maxFecha) {
     statusText = "⚪ Sin meta";
     statusBadgeClass = "bg-slate-100 text-slate-700 border-slate-300";
     statusDesc = "Este ámbito no tiene meta asignada, así que no se puede proyectar el cierre.";
-  } else if (currentWeekIndex < 4) {
+  } else if (diasTrans < 28) {
     statusText = "⚪ Preliminar";
     statusBadgeClass = "bg-slate-100 text-slate-700 border-slate-300";
-    statusDesc = `Solo hay ${currentWeekIndex === 1 ? "1 semana" : currentWeekIndex + " semanas"} de campaña: la proyección (${projectedPct}% de la meta) se estabiliza a partir de la 4.ª semana.`;
+    statusDesc = `Solo van ${diasTrans} días de campaña: la proyección (${projectedPct}% de la meta) se estabiliza a partir de la 4.ª semana.`;
   } else if (projectedPct >= 95) {
     statusText = "🟢 Óptimo";
     statusBadgeClass = "bg-emerald-100 text-emerald-800 border-emerald-300";
@@ -3527,7 +3544,7 @@ function updateInfluenzaDashboardVisuals(amb, minFecha, maxFecha) {
         <div class="bg-white/60 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
           <div class="text-[9px] font-bold text-slate-450 uppercase leading-none">Velocidad Promedio</div>
           <div class="text-base font-extrabold text-violet-950 mt-1.5 leading-none">${Math.round(velocity).toLocaleString('es-MX')} <span class="text-xs font-bold text-slate-500">d/sem</span></div>
-          <div class="text-[10px] text-slate-500 mt-1.5 leading-none">Semanas transcurridas: ${currentWeekIndex} de ${totalWeeks}</div>
+          <div class="text-[10px] text-slate-500 mt-1.5 leading-none">Día ${diasTrans} de ${diasTotalCampana} de la campaña (${Math.round(diasTrans * 100 / diasTotalCampana)}%)</div>
         </div>
         <div class="bg-white/60 p-3 rounded-xl border border-slate-100 flex flex-col justify-between">
           <div class="text-[9px] font-bold text-slate-450 uppercase leading-none">Meta Asignada</div>
@@ -4302,10 +4319,11 @@ function renderValidacionEdicionGrid(clues, fecha) {
 
   const gruposSinMeta = [];
   Object.entries(groups).forEach(([groupTitle, rubros]) => {
-    // Un grupo donde la unidad no tiene meta en ningún renglón no se captura: va en un solo aviso al final,
-    // no como una tabla entera de guiones.
-    if (rubros.every(rb => !Number(metas[rb.id] || 0))) {
-      gruposSinMeta.push(groupTitle);
+    // Un grupo donde la unidad no tiene meta en ningún renglón no se captura: va plegado al final (con todos sus
+    // renglones a la vista), no como una tabla entera de guiones. Si el reporte ya trae dosis en ese grupo se
+    // muestra completo: si no, al guardar se perderían esas cifras.
+    if (rubros.every(rb => !Number(metas[rb.id] || 0)) && !rubros.some(rb => Number(report?.valores?.[rb.id] || 0) > 0)) {
+      gruposSinMeta.push({ titulo: groupTitle, rubros });
       return;
     }
     const card = document.createElement("div");
@@ -4348,9 +4366,9 @@ function renderValidacionEdicionGrid(clues, fecha) {
             ${esc(rb.edad)}
             ${motivoBloqueo}
           </th>
-          <td class="p-3 text-center text-xs font-bold text-slate-700">${meta || '—'}</td>
-          <td class="p-3 text-center text-xs font-bold text-slate-700">${originalVal}</td>
-          <td class="p-3 text-center text-xs font-bold text-violet-950">${acum}</td>
+          <td class="p-3 text-center text-xs font-bold text-slate-700">${meta ? meta.toLocaleString("es-MX") : '—'}</td>
+          <td class="p-3 text-center text-xs font-bold text-slate-700">${Number(originalVal).toLocaleString("es-MX") === "NaN" ? originalVal : Number(originalVal).toLocaleString("es-MX")}</td>
+          <td class="p-3 text-center text-xs font-bold text-violet-950">${acum.toLocaleString("es-MX")}</td>
           <td class="p-3 text-center">
             <input type="number" min="0" step="1" inputmode="numeric"
               id="val_input_inf_${rb.id}" data-rubro="${rb.id}"
@@ -4377,9 +4395,12 @@ function renderValidacionEdicionGrid(clues, fecha) {
       `;
     });
 
+    const metaGrupo = rubros.reduce((s, rb) => s + Number(metas[rb.id] || 0), 0);
+    const nCapturables = rubros.filter(rb => Number(metas[rb.id] || 0) > 0 && !reglaDosisRubro(rb, fecha)).length;
     card.innerHTML = `
-      <div class="pb-2 border-b border-slate-100 mb-2">
+      <div class="vl-grupo-cab">
         <h4 class="text-xs font-black text-violet-950 uppercase tracking-wider m-0">${esc(groupTitle)}</h4>
+        <span class="vl-grupo-dato">Meta del grupo <b>${metaGrupo.toLocaleString("es-MX")}</b> · esta semana <b id="vl_gt_${esc(groupTitle).replace(/[^a-z0-9]+/gi, "_")}">0</b>${nCapturables < rubros.length ? ` · ${rubros.length - nCapturables} de ${rubros.length} renglones sin captura` : ""}</span>
       </div>
       <div class="tableWrap overflow-x-auto w-full rounded-xl border border-slate-200" tabindex="0" role="region" aria-label="Tabla: ${esc(groupTitle)}">
         <table class="w-full border-collapse text-left text-xs text-slate-700">
@@ -4406,10 +4427,41 @@ function renderValidacionEdicionGrid(clues, fecha) {
 
   if (gruposSinMeta.length) {
     const sinMeta = document.createElement("div");
-    sinMeta.className = "inf-aviso inf-aviso--info";
-    sinMeta.textContent = `Sin meta para esta unidad (no se capturan): ${gruposSinMeta.join("; ")}.`;
-    cardsContainer.appendChild(sinMeta);
+    // Todos los rubros se ven: los grupos sin meta van plegados, con sus renglones, para que no estorben.
+    const nReng = gruposSinMeta.reduce((s, g) => s + g.rubros.length, 0);
+    const sinMetaEl = document.createElement("details");
+    sinMetaEl.className = "vl-sinmeta";
+    sinMetaEl.innerHTML = `<summary><span class="material-symbols-rounded" aria-hidden="true">lock</span>
+        <span><b>${nReng} renglones sin meta</b> para esta unidad, en ${gruposSinMeta.length} grupo${gruposSinMeta.length === 1 ? "" : "s"} <span class="vl-sinmeta__no">(no se capturan)</span></span></summary>
+      ${gruposSinMeta.map(g => `<div class="vl-sinmeta__grupo"><h5>${esc(g.titulo)}</h5><p>${g.rubros.map(rb => `<span class="vl-chip">${esc(rb.edad)}</span>`).join("")}</p></div>`).join("")}`;
+    cardsContainer.appendChild(sinMetaEl);
   }
+  // Franja de resumen: lo que lleva la unidad con lo que está escrito (se actualiza al teclear)
+  const franja = document.createElement("section");
+  franja.className = "vl-franja";
+  franja.setAttribute("aria-label", "Resumen del reporte");
+  cardsContainer.insertBefore(franja, cardsContainer.firstChild);
+  const pintarFranja = () => {
+    let esta = 0, metaT = 0, acumT = 0, conMeta = 0;
+    const porGrupo = {};
+    INFLUENZA_RUBROS.forEach(rb => {
+      const m = Number(metas[rb.id] || 0);
+      const inp = document.getElementById(`val_input_inf_${rb.id}`);
+      const v = inp ? (parseInt(inp.value, 10) || 0) : 0;
+      esta += v;
+      if (m > 0) { metaT += m; acumT += acumuladosPrevios[rb.id]; conMeta++; }
+      const k = `vl_gt_${esc(`${rb.categoria} - ${rb.grupo}`).replace(/[^a-z0-9]+/gi, "_")}`;
+      porGrupo[k] = (porGrupo[k] || 0) + v;
+    });
+    Object.entries(porGrupo).forEach(([k, v]) => { const el = document.getElementById(k); if (el) el.textContent = v.toLocaleString("es-MX"); });
+    const pct = metaT > 0 ? Math.round((acumT + esta) * 100 / metaT) : 0;
+    franja.innerHTML = `
+      <div><span>Dosis de esta semana</span><b>${esta.toLocaleString("es-MX")}</b></div>
+      <div><span>Meta anual de la unidad</span><b>${metaT.toLocaleString("es-MX")}</b></div>
+      <div><span>Avance con este valor</span><b>${metaT > 0 ? pct + "%" : "—"}</b></div>
+      <div><span>Renglones con meta</span><b>${conMeta}<small> de ${INFLUENZA_RUBROS.length}</small></b></div>`;
+  };
+  pintarFranja();
 
   // Un solo manejador para todos los campos: porcentaje, aviso de meta rebasada y resumen de cambios
   cardsContainer.oninput = (ev) => {
@@ -4430,6 +4482,7 @@ function renderValidacionEdicionGrid(clues, fecha) {
     const rebasa = meta > 0 && pct > 100;
     if (overEl) overEl.textContent = rebasa ? "Supera la meta anual" : "";
     if (rebasa) input.setAttribute("aria-invalid", "true"); else input.removeAttribute("aria-invalid");
+    pintarFranja();
     actualizarResumenValidacion();
   };
   nombreInput.oninput = () => {
@@ -4566,9 +4619,9 @@ function renderValidacionEdicionGridCovid(clues, fecha) {
       const original = report ? Number(orig?.[m]?.[r] || 0) : "—";
       filas += `<tr class="border-b border-slate-100 last:border-0 ${bloqueado ? "vl-bloqueada" : ""}">
         <th scope="row" class="p-3 text-xs font-semibold text-slate-800 text-left">${esc(C.ETIQUETA[r])} · ${nombreMarca(m)}${aviso}</th>
-        <td class="p-3 text-center text-xs font-bold text-slate-700">${meta || "—"}</td>
-        <td class="p-3 text-center text-xs font-bold text-slate-700">${original}</td>
-        <td class="p-3 text-center text-xs font-bold text-violet-950">${acum[r]}</td>
+        <td class="p-3 text-center text-xs font-bold text-slate-700">${meta ? meta.toLocaleString("es-MX") : "—"}</td>
+        <td class="p-3 text-center text-xs font-bold text-slate-700">${typeof original === "number" ? original.toLocaleString("es-MX") : original}</td>
+        <td class="p-3 text-center text-xs font-bold text-violet-950">${Number(acum[r]).toLocaleString("es-MX")}</td>
         <td class="p-3 text-center"><input type="number" min="0" step="1" inputmode="numeric" id="val_input_cov_${m}_${r}" data-rubro="${r}" data-marca="${m}"
           aria-label="${esc(C.ETIQUETA[r])} · ${nombreMarca(m)}: valor de esta semana${bloqueado ? (regla ? " (no disponible esta semana)" : " (la unidad no tiene meta)") : ""}"
           class="text-center font-bold bg-slate-50 border border-slate-400 rounded-lg outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-200 transition-all"
@@ -6111,8 +6164,8 @@ function renderMetasConfigurationGrid() {
   }
 
   const celdaGrupo = (rb) => `
-        <td class="p-3 align-middle"><div style="width: 220px; min-width: 220px; max-width: 220px; word-break: break-word; white-space: normal; line-height: 1.25; font-size: 12px; font-weight: 600; color: #334155;">${rb.categoria} - ${rb.grupo}</div></td>
-        <td class="p-3 align-middle"><div style="width: 130px; min-width: 130px; max-width: 130px; word-break: break-word; white-space: normal; line-height: 1.25; font-size: 12px; color: #475569;">${rb.edad}</div></td>`;
+        <td class="p-0 align-middle meta-g-marca" aria-hidden="true"></td>
+        <td class="p-3 align-middle"><div style="width: 190px; min-width: 190px; max-width: 190px; word-break: break-word; white-space: normal; line-height: 1.25; font-size: 12.5px; font-weight: 600; color: #334155;" title="${rb.categoria} - ${rb.grupo}">${rb.edad}</div></td>`;
   const inputMeta = (extra, valor, clase) => `<input type="text" inputmode="numeric" autocomplete="off" class="meta-num ${clase} w-20 text-center font-bold bg-slate-50 border border-slate-300 rounded-xl px-2 py-1 focus:border-violet-500 outline-none" ${extra} value="${valor}">`;
   const leer = (el) => (el ? (parseInt(el.value, 10) || 0) : 0);
 
@@ -6123,8 +6176,8 @@ function renderMetasConfigurationGrid() {
     const th = (t, w) => `<th class="p-3 text-center text-xs font-black text-slate-500 uppercase" style="width: ${w}; min-width: 96px;">${t}</th>`;
     thead.innerHTML = `
       <tr class="bg-slate-50 border-b border-slate-200">
-        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 220px; min-width: 220px; max-width: 220px;">Grupo</th>
-        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 130px; min-width: 130px; max-width: 130px;">Subgrupo / Edad</th>
+        <th class="p-0 meta-g-marca" style="width: 10px; min-width: 10px; max-width: 10px;"><span class="vl-sr">Grupo</span></th>
+        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 190px; min-width: 190px; max-width: 190px;">Edad</th>
         ${th("Querétaro", "9%")}${th("Corregidora", "9%")}${th("El Marqués", "9%")}${th("Huimilpan", "9%")}${th("HENM", "9%")}${th("NHGQ", "9%")}
         <th class="p-3 text-center text-xs font-black text-slate-500 uppercase font-bold" style="width: 9%; min-width: 120px;">Total Jurisd.</th>
         <th class="meta-cmp-cell meta-cmp-th p-3 text-center text-xs font-black text-slate-500 uppercase">Comparación</th>
@@ -6203,7 +6256,7 @@ function renderMetasConfigurationGrid() {
         if (metaPesoRubro(tr.dataset.rb) === 0.5) granPed += suma; else granAd += suma;
         const ref = leer(tr.querySelector("input[data-juris]"));
         granRefEqJ += ref * metaPesoRubro(tr.dataset.rb);
-        document.getElementById(`total_j_${tr.dataset.rb}`).textContent = suma;
+        document.getElementById(`total_j_${tr.dataset.rb}`).textContent = suma.toLocaleString("es-MX");
         pintar(document.getElementById(`cmp_${tr.dataset.rb}`), ref, suma);
         metaDescAcum(ref, suma);
         granJ += suma;
@@ -6211,14 +6264,14 @@ function renderMetasConfigurationGrid() {
       });
       const razon = esCovid() ? covidRazonDeGrid(tbody, false) : null;
       ids.forEach(id => {
-        document.getElementById(`tot_${id}`).textContent = esCovid() ? covidAvanceFmt(eqDestino[id]) : porDestino[id];
+        document.getElementById(`tot_${id}`).textContent = esCovid() ? covidAvanceFmt(eqDestino[id]) : porDestino[id].toLocaleString("es-MX");
         const valor = esCovid() ? { ped: Math.ceil(pedDestino[id] / 2), adulto: adDestino[id], razon } : porDestino[id];
         metaPintarFrascos(document.getElementById(`frs_${id}`), valor, id === "QUERETARO");
       });
-      document.getElementById("tot_J").textContent = esCovid() ? covidAvanceFmt(granEq) : granJ;
+      document.getElementById("tot_J").textContent = esCovid() ? covidAvanceFmt(granEq) : granJ.toLocaleString("es-MX");
       metaPintarFrascos(document.getElementById("frs_J"),
         esCovid() ? { ped: Math.ceil(granPed / 2), adulto: granAd, razon } : granJ, true, true);
-      document.getElementById("tot_juris").textContent = esCovid() ? covidAvanceFmt(granRefEqJ) : granRef;
+      document.getElementById("tot_juris").textContent = esCovid() ? covidAvanceFmt(granRefEqJ) : granRef.toLocaleString("es-MX");
       // COVID: el total se compara en dosis equivalentes de 0.5 mL (igual que el TOTAL de arriba y el formato)
       pintar(document.getElementById("cmp_TOTAL"), esCovid() ? granRefEqJ : granRef, esCovid() ? granEq : granJ);
       metaPintarPill();
@@ -6236,8 +6289,8 @@ function renderMetasConfigurationGrid() {
 
     thead.innerHTML = `
       <tr class="bg-slate-50 border-b border-slate-200">
-        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 220px; min-width: 220px; max-width: 220px;">Grupo</th>
-        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 130px; min-width: 130px; max-width: 130px;">Subgrupo / Edad</th>
+        <th class="p-0 meta-g-marca" style="width: 10px; min-width: 10px; max-width: 10px;"><span class="vl-sr">Grupo</span></th>
+        <th class="p-3 text-xs font-black text-slate-500 uppercase text-left" style="width: 190px; min-width: 190px; max-width: 190px;">Edad</th>
         <th class="p-3 text-center text-xs font-black text-slate-500 uppercase font-bold" style="width: 10%;">Meta Muni</th>
         ${muniUnits.map(u => `<th class="meta-th-unidad p-3 text-center text-[10px] font-black text-slate-500 uppercase" title="${u.unidad}">${u.unidad}</th>`).join("")}
         <th class="meta-cmp-cell meta-cmp-th p-3 text-center text-xs font-black text-slate-500 uppercase">Comparación</th>
@@ -7014,9 +7067,11 @@ function updateFlaskCalculationMuni() {
   const diferenciaEl = document.getElementById("muniFrascosDiferencia");
   const warningBox = document.getElementById("muniFrascosWarningBox");
 
-  if (entregadosEl) entregadosEl.textContent = totalFrascosEntregados;
-  if (reportadosEl) reportadosEl.textContent = `${frascosAplicados} frascos (${totalDosis} dosis)`;
-  if (diferenciaEl) diferenciaEl.textContent = `${dif} frascos`;
+  // Cifras con separador de miles y sin ruido de coma flotante (igual que el resto del panel)
+  const fF = (n) => frascoFmt(Math.round(n * 100) / 100);
+  if (entregadosEl) entregadosEl.textContent = fF(totalFrascosEntregados);
+  if (reportadosEl) reportadosEl.textContent = `${fF(frascosAplicados)} frascos (${fF(totalDosis)} dosis)`;
+  if (diferenciaEl) diferenciaEl.textContent = `${fF(dif)} frascos`;
 
   // Concentrado (nivel 1): el mismo dato en frascos y en dosis, y cuánto de lo entregado ya se aplicó
   const dpf = dosisFrasco();
@@ -7041,13 +7096,13 @@ function updateFlaskCalculationMuni() {
       warningBox.className = "mb-4 p-4 rounded-xl border-2 block text-xs font-semibold ";
       if (dif < 0) {
         warningBox.classList.add("bg-rose-50", "border-rose-200", "text-rose-950");
-        warningBox.innerHTML = `⚠️ <b>Inconsistencia:</b> Se han reportado más dosis aplicadas en el municipio (${totalDosis} dosis = ${frascosAplicados} frascos) que el total de frascos entregados (${totalFrascosEntregados} frascos).`;
+        warningBox.innerHTML = `⚠️ <b>Inconsistencia:</b> Se han reportado más dosis aplicadas ${esJuris ? "en la Jurisdicción" : "en el municipio"} (${fF(totalDosis)} dosis = ${fF(frascosAplicados)} frascos) que el total de frascos entregados (${fF(totalFrascosEntregados)} frascos).`;
       } else if (dif > 0 && dif >= (totalFrascosEntregados * 0.5)) {
         warningBox.classList.add("bg-amber-50", "border-amber-200", "text-amber-950");
-        warningBox.innerHTML = `⚠️ <b>Observación:</b> Se han entregado ${totalFrascosEntregados} frascos, pero las unidades solo han reportado aplicar ${totalDosis} dosis (${frascosAplicados} frascos). Hay un resguardo del ${Math.round((dif/totalFrascosEntregados)*100)}% sin aplicar en el municipio.`;
+        warningBox.innerHTML = `⚠️ <b>Observación:</b> Se han entregado ${fF(totalFrascosEntregados)} frascos, pero las unidades solo han reportado aplicar ${fF(totalDosis)} dosis (${fF(frascosAplicados)} frascos). Hay un resguardo del ${Math.round((dif/totalFrascosEntregados)*100)}% sin aplicar ${esJuris ? "en la Jurisdicción" : "en el municipio"}.`;
       } else {
         warningBox.classList.add("bg-emerald-50", "border-emerald-200", "text-emerald-950");
-        warningBox.innerHTML = `✅ <b>Balance Logístico:</b> Balance correcto. Frascos en resguardo estimado municipal: ${dif} frascos (${dif * 10} dosis).`;
+        warningBox.innerHTML = `✅ <b>Balance Logístico:</b> Balance correcto. Frascos en resguardo estimado ${esJuris ? "de la Jurisdicción" : "municipal"}: ${fF(dif)} frascos (${fF(dif * dpf)} dosis).`;
       }
     } else {
       warningBox.className = "hidden";
@@ -7806,6 +7861,13 @@ function refreshRemesa(enfocado) {
     return { metas: r && r.metas, it: i, v: res.frascos[i.id] || 0 };
   }))}` : "";
   frascoPintarPill(["remesaPill"], { total, asignado: res.asignado, porAsignar: res.porAsignar });
+  // Sin frascos por repartir no hay nada que guardar: el botón se apaga (antes se veía activo junto al aviso «Sin frascos…»)
+  const btnGuardar = document.getElementById("btnSaveRemesa");
+  if (btnGuardar) {
+    const nada = !total && !res.asignado;
+    btnGuardar.disabled = nada;
+    btnGuardar.title = nada ? "Captura el total de frascos recibidos para poder guardar el reparto" : "";
+  }
   document.getElementById("rem_dos_T").textContent = frascoFmt(res.asignado * dosisFrasco());
   const filaTotal = document.getElementById("rem_inp_T").closest("tr");
   if (filaTotal) filaTotal.dataset.estado = !total ? "" : res.porAsignar === 0 ? "ok" : res.porAsignar > 0 ? "falta" : "excede";
@@ -8245,13 +8307,23 @@ function frascoMatrizDatos(ambito) {
 }
 
 // Semáforo de entrega: dosis equivalentes de los frascos entregados contra la meta del destino/unidad.
-const FRASCO_SEMAFORO = [
-  { tono: "ok", icono: "check_circle", rango: "80% o más", texto: "Entrega casi completa", min: 80 },
-  { tono: "med", icono: "warning", rango: "50% a 79%", texto: "Entrega a medias", min: 50 },
-  { tono: "bajo", icono: "error", rango: "Menos de 50%", texto: "Entrega rezagada", min: 0 }
-];
+// El avance de la entrega se juzga contra el tiempo de la campaña (lo esperado a hoy), no contra el 100 %: a mitad
+// de campaña un 45 % entregado es normal y no debe salir en rojo.
+function frascoUmbrales() {
+  const esp = Math.max(0, Math.min(100, Math.round(typeof infEsperadoPct === "function" ? infEsperadoPct() : 0)));
+  return { esp, med: Math.round(esp * 0.7) };
+}
+function frascoSemaforoTabla() {
+  const u = frascoUmbrales();
+  return [
+    { tono: "ok", icono: "check_circle", rango: `${u.esp}% o más`, texto: "Entrega al ritmo de la campaña", min: u.esp },
+    { tono: "med", icono: "warning", rango: `${u.med}% a ${Math.max(u.med, u.esp - 1)}%`, texto: "Entrega por debajo del ritmo", min: u.med },
+    { tono: "bajo", icono: "error", rango: `Menos de ${u.med}%`, texto: "Entrega rezagada", min: 0 }
+  ];
+}
 function frascoSemaforo(pct) {
-  return FRASCO_SEMAFORO.find(t => pct >= t.min) || FRASCO_SEMAFORO[FRASCO_SEMAFORO.length - 1];
+  const t = frascoSemaforoTabla();
+  return t.find(x => pct >= x.min) || t[t.length - 1];
 }
 
 function renderFrascosMatrix(ambito) {
@@ -8304,7 +8376,7 @@ function renderFrascosMatrix(ambito) {
   }
   const leyenda = document.getElementById("frascosMatrixLegend");
   if (leyenda) {
-    leyenda.innerHTML = FRASCO_SEMAFORO.map(t => `<li><span class="frs-sem frs-sem--${t.tono}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${t.rango}</span> ${t.texto}</li>`).join("");
+    leyenda.innerHTML = frascoSemaforoTabla().map(t => `<li><span class="frs-sem frs-sem--${t.tono}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${t.rango}</span> ${t.texto}</li>`).join("");
   }
 }
 
@@ -8513,7 +8585,7 @@ function renderFrascosBalance() {
     return { u, destino, b };
   });
   if (esJuris) filas = filas.filter(f => f.b.recibidos || f.b.aplicadas);
-  filas.sort((a, b) => (orden.indexOf(a.destino) - orden.indexOf(b.destino)) || String(a.u.unidad).localeCompare(String(b.u.unidad), "es"));
+  filas.sort((a, b) => (orden.indexOf(a.destino) - orden.indexOf(b.destino)) || String(a.u.clues).localeCompare(String(b.u.clues), "es", { numeric: true }));
 
   document.getElementById("frascosBalanceTable")?.classList.toggle("frs-covid", esCovid());
   covidAlternarCabecera(document.querySelector("#frascosBalanceTable thead"), esCovid() ? covidTheadUnidades() : null);
@@ -9422,7 +9494,7 @@ function renderCovidControlFrascos() {
       </tr></thead>
       <tbody>${cuerpo}</tbody><tfoot>${pie}</tfoot></table></div>`;
   const ley = document.getElementById("covidControlLegend");
-  if (ley) ley.innerHTML = FRASCO_SEMAFORO.map(t => `<li><span class="frs-sem frs-sem--${t.tono}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${t.rango}</span> ${t.texto}</li>`).join("");
+  if (ley) ley.innerHTML = frascoSemaforoTabla().map(t => `<li><span class="frs-sem frs-sem--${t.tono}"><span class="material-symbols-rounded" aria-hidden="true">${t.icono}</span>${t.rango}</span> ${t.texto}</li>`).join("");
 }
 
 // Barra flotante: un solo subpanel a la vez (Repartir / Entregas / Resumen / Historial).
@@ -10036,7 +10108,7 @@ async function covidIndCalcular({ units, muniFilter, uniFilter, camp, cal }) {
   let paraPlantilla;
   if (uniFilter) paraPlantilla = porUnidad.slice(0, 1).map(u => ficha(u.unidad, metasAmbito, [u]));
   else if (muniFilter) {
-    paraPlantilla = porUnidad.filter(u => u.conMeta || u.apl > 0).sort((a, b) => String(a.unidad).localeCompare(String(b.unidad), "es"))
+    paraPlantilla = porUnidad.filter(u => u.conMeta || u.apl > 0).sort((a, b) => String(a.clues).localeCompare(String(b.clues), "es", { numeric: true }))
       .map(u => ficha(u.unidad, u.metas || {}, [u]));
   } else {
     paraPlantilla = [...new Set(units.map(u => u.destino))].map(dn => { const us = porUnidad.filter(u => u.destino === dn); return ficha(dn, metaDeDestino(dn, us), us); })
@@ -11086,8 +11158,8 @@ function renderInfluenzaCampanasTable() {
     return `
       <tr class="border-b border-slate-100 hover:bg-violet-50/10 transition-colors duration-150">
         <td class="p-3 font-bold text-slate-700">${c.nombre}</td>
-        <td class="p-3 text-center font-semibold text-slate-600">${c.fecha_inicio}</td>
-        <td class="p-3 text-center font-semibold text-slate-600">${c.fecha_fin}</td>
+        <td class="p-3 text-center font-semibold text-slate-600">${fechaDMA(c.fecha_inicio)}</td>
+        <td class="p-3 text-center font-semibold text-slate-600">${fechaDMA(c.fecha_fin)}</td>
         <td class="p-3 text-center">${statusBadge}</td>
         <td class="p-3 text-right">
           <div class="inline-flex gap-2 justify-end">

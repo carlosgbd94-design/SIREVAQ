@@ -113,6 +113,23 @@ test('Municipio de Querétaro (Influenza): suma sus unidades y deja fuera al hos
   expect(total).toContain('300');
 });
 
+test('Orden de la tabla: por municipio y, dentro de cada uno, por CLUES (no por nombre)', async ({ page }) => {
+  await montar(page, 'ADMIN', 'INFLUENZA');
+  // «ZETA» va primero por CLUES (A0) aunque alfabéticamente sería la última; lo mismo en Corregidora
+  await page.evaluate(() => {
+    _allUnidades.push({ clues: 'A0', unidad: 'ZETA', municipio: 'QUERETARO' }, { clues: 'B0', unidad: 'ALFA', municipio: 'CORREGIDORA' }, { clues: 'A9', unidad: 'ZZ', municipio: 'CORREGIDORA' });
+    _adminMetasArray.push({ clues: 'A0', municipio: 'QUERETARO', metas: { r1: 10 } }, { clues: 'B0', municipio: 'CORREGIDORA', metas: { r1: 10 } }, { clues: 'A9', municipio: 'CORREGIDORA', metas: { r1: 10 } });
+  });
+  const orden = async () => page.locator('#adminInfluenzaMunicipalTbody tr[data-clues]').evaluateAll((trs) => trs.map((t) => t.dataset.clues));
+  await page.selectOption('#adminInfluenzaMuni', '__JURIS__');
+  await page.evaluate(() => window.__render());
+  // Jurisdicción: Querétaro, luego Corregidora; cada grupo por CLUES
+  expect(await orden()).toEqual(['A0', 'Q1', 'A9', 'B0', 'C1', 'H1']);
+  await page.selectOption('#adminInfluenzaMuni', 'QUERETARO');
+  await page.evaluate(() => window.__render());
+  expect(await orden()).toEqual(['A0', 'Q1']);   // municipal: solo CLUES
+});
+
 test('Jurisdicción: el botón suma los municipios con subtotales y total; solo lo ven Admin y Jurisdicción', async ({ page }) => {
   await montar(page, 'ADMIN', 'INFLUENZA');
   await page.evaluate(() => window.__render());

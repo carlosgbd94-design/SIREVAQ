@@ -473,7 +473,7 @@ test('Reparto vs. captura semanal (municipal): compara por unidad lo repartido c
   await expect(page.locator('#frascosBalanceTfoot')).toContainText('2,600');
   // KPIs del resumen: entregado = lo que asignó Jurisdicción; aplicado = 260 frascos; resguardo 52
   await expect(page.locator('#muniFrascosEntregados')).toHaveText('312');
-  await expect(page.locator('#muniFrascosReportados')).toContainText('260 frascos (2600 dosis)');
+  await expect(page.locator('#muniFrascosReportados')).toContainText('260 frascos (2,600 dosis)');
   await expect(page.locator('#muniFrascosDiferencia')).toHaveText('52 frascos');
 });
 
@@ -617,7 +617,7 @@ test('Metas jurisdiccionales: sin cero inicial y Comparación verde/roja contra 
   await q.click();
   await page.keyboard.type('5476');
   await expect(q).toHaveValue('5476');                     // antes quedaba "05476"
-  await expect(page.locator('#total_j_r1')).toHaveText('5476');
+  await expect(page.locator('#total_j_r1')).toHaveText('5,476');
 
   const cmp = page.locator('#cmp_r1');
   await page.locator('input[data-rb="r1"][data-juris]').fill('6000');
@@ -627,7 +627,7 @@ test('Metas jurisdiccionales: sin cero inicial y Comparación verde/roja contra 
   await expect(cmp).toHaveAttribute('data-estado', 'ok');
   await expect(cmp).toContainText('Coincide');
   await expect(page.locator('#cmp_TOTAL')).toHaveAttribute('data-estado', 'ok');
-  await expect(page.locator('#tot_J')).toHaveText('6000');
+  await expect(page.locator('#tot_J')).toHaveText('6,000');
   // La comparación queda pegada a la derecha aunque se haga scroll horizontal
   expect(await cmp.evaluate((e) => getComputedStyle(e).position)).toBe('sticky');
 });
