@@ -582,6 +582,21 @@
         window.CalendarioCap.openCalendar();
     };
 
+    // Diagnóstico explicativo de la unidad (diagnostico_unidad.js)
+    window.openDiagnosticoUnidad = () => {
+        if (!window.DiagnosticoUnidad) { showToast('No se pudo cargar el diagnóstico. Recarga la página.', 'error'); return; }
+        if (!window.__diagnosticoUnidadInit) {
+            window.DiagnosticoUnidad.init({
+                getClient: () => supabaseClient,
+                getUser: () => ({ rol: currentProfile?.rol, usuario: currentProfile?.usuario || currentUser?.email, clues: currentProfile?.clues }),
+                toast: (msg, kind) => showToast(msg, kind === 'bad' ? 'error' : 'success')
+            });
+            window.__diagnosticoUnidadInit = true;
+        }
+        document.getElementById('profileDropdown')?.classList.add('hidden');
+        window.DiagnosticoUnidad.open();
+    };
+
     window.openContactoModal = () => {
         if (!ensurePerfilCuenta()) return;
         document.getElementById('profileDropdown')?.classList.add('hidden');
@@ -3774,6 +3789,7 @@
         document.getElementById('chkBiometria')?.addEventListener('change', (e) => handleRegisterBiometrics(e.target.checked));
 
         document.getElementById('btnThemeToggleProfile')?.addEventListener('click', toggleTheme);
+        document.getElementById('btnDiagnosticoMobile')?.addEventListener('click', () => window.openDiagnosticoUnidad());
         document.getElementById('btnCalendarioCapMobile')?.addEventListener('click', () => window.openCalendarioCapacitaciones());
         document.getElementById('btnProfileContactMobile')?.addEventListener('click', () => window.openContactoModal());
         document.getElementById('btnProfileChangePasswordMobile')?.addEventListener('click', () => window.openChangePasswordFlow());

@@ -28,6 +28,7 @@ const GROUP_HEAD = [
   'feedback_autoreply.js',
   'perfil_cuenta.js',
   'calendario_capacitaciones.js',
+  'diagnostico_unidad.js', // diagnóstico explicativo de la unidad (perfil > Diagnóstico); main.js lo usa solo al abrirlo
   'desabasto_center.js', // antes que main.js: main.js usa window.DesabastoCenter al cargar
   'pinol_ruta.js', // armador de la ruta de Pinol; main.js lo usa solo al operar, no al cargar
   'main.js',

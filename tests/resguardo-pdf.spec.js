@@ -144,8 +144,8 @@ test('sin meta de niños: no recibe Moderna (tope 0) y se cubre al 100% con Pfiz
   expect(sn.pfizerFrascos * 6).toBeGreaterThanOrEqual(366);
   const base = { total: 400, adulto: 400, propiasOtras: 0, otraMarca: 0 };
   expect(F.topeFrascos({ ...base, marca: 'MODERNA', sinNinos: true })).toBe(0);
-  expect(F.topeFrascos({ ...base, marca: 'MODERNA', sinNinos: false })).toBeGreaterThan(0);
-  expect(F.topeFrascos({ ...base, marca: 'PFIZER', sinNinos: true })).toBeGreaterThan(0);
+  expect(F.topeFrascos({ ...base, marca: 'MODERNA', sinNinos: false })).toBeUndefined();
+  expect(F.topeFrascos({ ...base, marca: 'PFIZER', sinNinos: true })).toBeUndefined();
   // una unidad con niños sí recibe Moderna
   expect(F.sinNinos({ c1: 40, c2: 40, c4: 20 }, f).sinNinos).toBe(false);
   // sin ninguna meta no se marca como "sin niños"

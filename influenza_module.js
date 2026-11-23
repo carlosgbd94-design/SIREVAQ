@@ -2520,7 +2520,7 @@ function vacunaPintarSelectores() {
     nota.style.display = esCovid() ? "" : "none";
     nota.innerHTML = _marcaCovid === "PFIZER"
       ? "<b>COVID-19 · Pfizer</b>: solo adultos (0.5 mL); 1 frasco = 6 dosis. Se reparte en proporción a la meta de adultos (5-59 años con riesgo, 60+, embarazadas y personal de salud)."
-      : "<b>COVID-19 · Moderna</b>: pediátrica (0.25 mL) y adulto (0.5 mL); 1 frasco = 5 dosis de 0.5 mL (las pediátricas de 0.25 mL cuentan la mitad). Lo entregado de Pfizer también descuenta de la misma meta.";
+      : "<b>COVID-19 · Moderna</b>: pediátrica (0.25 mL) y adulto (0.5 mL); 1 frasco = 5 dosis de 0.5 mL (las pediátricas de 0.25 mL cuentan la mitad). La meta es solo referencia: no limita lo que entrega la federación (sí pasa lo mismo con Pfizer).";
   }
   temporadaAplicarVacuna();
 }
@@ -7384,15 +7384,22 @@ function frascoConTope(items, otrasFn, nivel) {
           .reduce((s, d) => s + Number(d.cantidad_frascos || 0), 0)
       : _covidRemesasAll.filter(r => r.marca !== _marcaCovid)
           .reduce((s, r) => s + Number((r.asignacion || {})[i.id] || 0), 0);
-    const tope = CovidFrascos.topeFrascos({
+    const sinNinosMeta = CovidFrascos.sinNinos(metas, covidFactor()).sinNinos;
+    // La meta es solo referencia (restantes): la federación entrega como quiere. Único tope duro: sin niños no hay Moderna.
+    const restantes = CovidFrascos.frascosRestantes({
       total: CovidFrascos.metaMarcaConPerdida(metas, "MODERNA", covidFactor()),
       adulto: CovidFrascos.metaMarcaConPerdida(metas, "PFIZER", covidFactor()),
-      marca: _marcaCovid, propiasOtras: otras, otraMarca,
-      sinNinos: CovidFrascos.sinNinos(metas, covidFactor()).sinNinos
+      marca: _marcaCovid, propiasOtras: otras, otraMarca
     });
-    const sinNinos = CovidFrascos.sinNinos(metas, covidFactor()).sinNinos && _marcaCovid === "MODERNA";
-    return { ...i, otras, otraMarca, sinNinos, metaFrascos: frascoTopeMeta(i.meta), tope: hayMetas ? tope : undefined };
+    const tope = CovidFrascos.topeFrascos({ marca: _marcaCovid, sinNinos: sinNinosMeta });
+    const sinNinos = sinNinosMeta && _marcaCovid === "MODERNA";
+    return { ...i, otras, otraMarca, sinNinos, metaFrascos: frascoTopeMeta(i.meta), tope, restantes: hayMetas ? restantes : undefined };
   });
+}
+
+// Cifra que se muestra y suma en «Faltan por recibir»: el tope duro, o en COVID (sin tope) lo que falta para la meta.
+function frascoCifraRef(it) {
+  return it.tope !== undefined && it.tope !== null ? it.tope : it.restantes;
 }
 
 function frascoTextoExceso(excesos, etiquetaFn, items) {
@@ -7645,6 +7652,12 @@ function covidNinosTotalHtml(filas) {
 }
 
 function frascoTopeCeldaHtml(it, metasRec, v) {
+  // COVID: sin tope duro, se muestra lo que falta para la meta solo como referencia (puede pasarse; no bloquea).
+  if (esCovid() && (it.tope === undefined || it.tope === null)) {
+    if (it.restantes === undefined) return `<span class="frs-muted">sin meta</span>${covidNinosHtml(it, metasRec, v)}`;
+    const pasado = (Number(v) || 0) > it.restantes;
+    return `<span class="frs-tope${it.restantes <= 0 ? " frs-tope--cero" : ""}" title="Referencia: faltan ${frascoFmt(it.restantes)} frascos para llegar a su meta (descontadas las dos marcas). No bloquea: la federación entrega como quiere.">${frascoFmt(it.restantes)}</span>${pasado ? '<span class="frs-tope-sub">rebasa la meta (se permite)</span>' : ""}${covidNinosHtml(it, metasRec, v)}`;
+  }
   if (it.tope === undefined || it.tope === null) return '<span class="frs-muted">sin meta</span>';
   const cero = it.tope <= 0;
   const sub = esCovid()
@@ -7855,8 +7868,8 @@ function refreshRemesa(enfocado) {
     const r = metasVista().find(m => !m.clues && String(m.municipio).toUpperCase() === i.id);
     return { metas: r && r.metas, it: i };
   }));
-  const sumaTope = items.reduce((a, i) => a + (i.tope === undefined ? 0 : i.tope), 0);
-  document.getElementById("rem_tope_T").innerHTML = items.some(i => i.tope !== undefined) ? `<span class="frs-tope">${frascoFmt(sumaTope)}</span>${covidNinosTotalHtml(items.map(i => {
+  const sumaTope = items.reduce((a, i) => a + (frascoCifraRef(i) || 0), 0);
+  document.getElementById("rem_tope_T").innerHTML = items.some(i => frascoCifraRef(i) !== undefined) ? `<span class="frs-tope">${frascoFmt(sumaTope)}</span>${covidNinosTotalHtml(items.map(i => {
     const r = metasVista().find(m => !m.clues && String(m.municipio).toUpperCase() === i.id);
     return { metas: r && r.metas, it: i, v: res.frascos[i.id] || 0 };
   }))}` : "";
@@ -8207,8 +8220,8 @@ function refreshRepartoMunicipal(muni, enfocado) {
       const r = metasVista().find(m => m.clues === i.id);
       return { metas: r && r.metas, it: i };
     }));
-    const sumaTopeM = items.reduce((a, i) => a + (i.tope === undefined ? 0 : i.tope), 0);
-    document.getElementById("mr_tope_T").innerHTML = items.some(i => i.tope !== undefined) ? `<span class="frs-tope">${frascoFmt(sumaTopeM)}</span>${covidNinosTotalHtml(items.map(i => {
+    const sumaTopeM = items.reduce((a, i) => a + (frascoCifraRef(i) || 0), 0);
+    document.getElementById("mr_tope_T").innerHTML = items.some(i => frascoCifraRef(i) !== undefined) ? `<span class="frs-tope">${frascoFmt(sumaTopeM)}</span>${covidNinosTotalHtml(items.map(i => {
       const r = metasVista().find(m => m.clues === i.id);
       return { metas: r && r.metas, it: i, v: res.frascos[i.id] || 0 };
     }))}` : "";

@@ -9,8 +9,8 @@
  * Marcas:
  *   MODERNA: pediátrica y adulto; 1 frasco = 5 dosis de 0.5 mL (10 pediátricas de 0.25 mL).
  *   PFIZER:  solo adultos (c3..c6); 1 frasco = 6 dosis.
- * El tope de frascos de un destino/unidad considera las dos marcas (en dosis de 0.5 mL) y limita a
- * Pfizer a la meta adulta. Debe coincidir con supabase/covid_metas_frascos.sql.
+ * La meta NO limita el reparto de frascos (la federación entrega como quiere); frascosRestantes solo la muestra como
+ * referencia. Único bloqueo: sin meta de niños no recibe Moderna (supabase/covid_reparto_sin_tope_meta.sql).
  */
 (function (root) {
   "use strict";
@@ -98,9 +98,7 @@
    *  - propiasOtras: frascos de ESTA marca en las demás entregas.
    *  - otraMarca: frascos de la OTRA marca (todas sus entregas).
    */
-  function topeFrascos({ total, adulto, marca, propiasOtras, otraMarca, sinNinos }) {
-    // Sin meta de niños no recibe Moderna: se cubre al 100 % con Pfizer (igual que el servidor).
-    if (marca === "MODERNA" && sinNinos) return 0;
+  function frascosRestantes({ total, adulto, marca, propiasOtras, otraMarca }) {
     const dpf = dosisPorFrasco(marca);
     const dpfOtra = dosisPorFrasco(marca === "PFIZER" ? "MODERNA" : "PFIZER");
     const otrasDosis = n(propiasOtras) * dpf + n(otraMarca) * dpfOtra;
@@ -109,6 +107,15 @@
       tope = Math.min(tope, Math.ceil(Math.max(0, n(adulto) - n(propiasOtras) * 6) / 6));
     }
     return tope;
+  }
+
+  /**
+   * ÚNICO bloqueo del reparto de COVID: una meta sin niños no recibe Moderna (0 frascos). Devuelve `undefined`
+   * cuando no hay tope: la federación entrega las marcas como quiere, así que la meta ya no limita el reparto
+   * (solo se muestra como referencia con frascosRestantes). Igual que los triggers de supabase/covid_reparto_sin_tope_meta.sql.
+   */
+  function topeFrascos({ marca, sinNinos }) {
+    return marca === "MODERNA" && sinNinos ? 0 : undefined;
   }
 
   // ─── Predistribución de la meta COVID con los porcentajes de la meta de influenza ──────────────────────
@@ -420,7 +427,7 @@
     };
   }
 
-  const api = { RUBROS, MARCAS, dosisPorFrasco, metaPediatrica, metaAdulta, metaEquivalente, metaMarca, topeFrascos, frascosPorMeta, coberturaNinos, sinNinos,
+  const api = { RUBROS, MARCAS, dosisPorFrasco, metaPediatrica, metaAdulta, metaEquivalente, metaMarca, topeFrascos, frascosRestantes, frascosPorMeta, coberturaNinos, sinNinos,
     pesosInfluenza, repartirEntero, predistribuir, factorPerdida, metaMarcaConPerdida,
     razonPerdida, recibirDosis, esCerrado, candidatosCerrados, cerrarLado, predistribuirCerrado, DPF_MODERNA, DPF_PFIZER,
     VARIABLE_SIS, avanceRubros };

@@ -5355,6 +5355,24 @@ window.openCalendarioCapacitaciones = function () {
   window.CalendarioCap.openCalendar();
 };
 
+// Diagnóstico explicativo de la unidad (diagnostico_unidad.js)
+window.openDiagnosticoUnidad = function () {
+  if (!window.DiagnosticoUnidad) {
+    showToast("No se pudo cargar el diagnóstico. Recarga la página.", false, "bad");
+    return;
+  }
+  if (!window.__diagnosticoUnidadInit) {
+    window.DiagnosticoUnidad.init({
+      getClient: () => window.supabase,
+      getUser: () => USER,
+      toast: (msg, kind) => showToast(msg, kind !== "bad", kind === "bad" ? "bad" : "good")
+    });
+    window.__diagnosticoUnidadInit = true;
+  }
+  $("profileDropdown")?.classList.add("hidden");
+  window.DiagnosticoUnidad.open();
+};
+
 function ensurePerfilCuenta() {
   if (!window.PerfilCuenta) {
     showToast("No se pudo cargar el módulo de perfil. Recarga la página.", false, "bad");

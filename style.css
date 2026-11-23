@@ -15502,7 +15502,6 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
 #secInfluenzaFrascos .tinv-fila #dockFrascos { align-self: auto; max-width: 100%; }
 #secInfluenzaFrascos .tinv-fila .vac-bar { margin: 0; }
 #secInfluenzaFrascos .tinv-fila .vac-bar .frs-lbl { margin: 0; }
-#secInfluenzaFrascos .tinv-fila #frascosVacunaNota { flex: 1 1 100%; margin: 0; padding: 0; }
 #secInfluenzaFrascos > .hint { margin: 0; }
 #secInfluenzaMetas .hint { margin: 0; }
 /* Control de Frascos (municipal): acciones en la misma fila que los campos; el estado de lotes ocupa su propia
@@ -16981,7 +16980,14 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 
 /* Subbotoneras fijas en todos los paneles de index.html: se quedan visibles bajo el encabezado flotante al hacer scroll.
    (Los docks de SIS, Requisiciones y Concentrado jurisdiccional ya flotan fijos abajo, con dock_glass.css.) */
-#secInfluenzaFrascos > .tinv-fila { position: sticky; top: 178px; z-index: 35; }            /* debajo de las pestañas de Temporada */
+#secInfluenzaFrascos > .tinv-fila { position: sticky; top: 178px; z-index: 35; }
+/* Barra de vidrio única: subpaneles + marca en una sola pieza; el contenido ya no se ve por los huecos al desplazar */
+#secInfluenzaFrascos > .tinv-fila {
+  padding: 8px 12px; border-radius: 22px; justify-content: space-between;
+  background: rgba(255, 255, 255, .9); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border: 1px solid rgba(203, 213, 225, .7); box-shadow: 0 6px 18px rgba(15, 23, 42, .08);
+}
+#secInfluenzaFrascos > .tinv-fila #frascosMarcaBar { margin-left: auto; }            /* debajo de las pestañas de Temporada */
 #panelCAP { position: sticky; top: 104px; z-index: 40; }
 @media (max-width: 640px) {
   #secInfluenzaFrascos > .tinv-fila { top: 150px; }
@@ -16995,7 +17001,7 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
    Los contenedores pasan de overflow:auto a clip (no son «scroll» para el sticky); las tablas anchas (matriz de
    entregas, cobertura y metas) conservan su propio desplazamiento. */
 #panelINFLUENZAADMIN { --stk: 170px; }                    /* encabezado flotante + pestañas de Temporada */
-#secInfluenzaFrascos { --stk: 240px; }   /* + subpaneles de Control de Frascos */
+#secInfluenzaFrascos { --stk: 268px; }   /* + subpaneles de Control de Frascos */
 @media (min-width: 1100px) {
   #adminInfluenzaMunicipalTableContainer .tableWrap,
   #secInfluenzaFrascos .frs-scroll:has(> table:not(#frascosMatrixTable)),
@@ -17058,4 +17064,10 @@ div:has(> #influenzaUnitTabsContainer) { position: sticky; top: 176px; z-index: 
    así el encabezado, la franja del bloque y los totales siempre están a la vista */
 @media (min-width: 1100px) {
   #secInfluenzaMetas .tableWrap:not(:has(#tot_J)) { position: sticky; top: var(--stk); max-height: calc(100vh - var(--stk) - 16px); }
+}
+
+/* Encabezado fijo de Control de Frascos: la columna de la marca elegida conserva su morado (el fondo gris del thead fijo la dejaba con texto blanco ilegible) */
+@media (min-width: 1100px) {
+  #secInfluenzaFrascos .frs-scroll:has(> table:not(#frascosMatrixTable)) table[data-marca="MODERNA"] thead th.col-mod,
+  #secInfluenzaFrascos .frs-scroll:has(> table:not(#frascosMatrixTable)) table[data-marca="PFIZER"] thead th.col-pfz { background: #4c1d95 !important; color: #ffffff !important; }
 }

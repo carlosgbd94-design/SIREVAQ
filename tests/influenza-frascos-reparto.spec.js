@@ -879,16 +879,21 @@ test('COVID: la meta se calcula en dosis de 0.5 mL y Pfizer solo cubre la parte 
       equiv: CovidFrascos.metaEquivalente(m),
       adulta: CovidFrascos.metaAdulta(m),
       impar: CovidFrascos.metaEquivalente({ c1: 1, c2: 0, c3: 0 }),            // 0.5 → sube a 1
-      modernaLibre: CovidFrascos.topeFrascos({ total: 1000, adulto: 800, marca: 'MODERNA', propiasOtras: 0, otraMarca: 0 }),
-      pfizerLibre: CovidFrascos.topeFrascos({ total: 1000, adulto: 800, marca: 'PFIZER', propiasOtras: 0, otraMarca: 0 }),
+      modernaLibre: CovidFrascos.frascosRestantes({ total: 1000, adulto: 800, marca: 'MODERNA', propiasOtras: 0, otraMarca: 0 }),
+      pfizerLibre: CovidFrascos.frascosRestantes({ total: 1000, adulto: 800, marca: 'PFIZER', propiasOtras: 0, otraMarca: 0 }),
       // 80 frascos de Moderna (5 dosis = 400) ya entregados: a Pfizer le caben (1000-400)/6 = 100
-      pfizerTrasModerna: CovidFrascos.topeFrascos({ total: 1000, adulto: 800, marca: 'PFIZER', propiasOtras: 0, otraMarca: 80 }),
+      pfizerTrasModerna: CovidFrascos.frascosRestantes({ total: 1000, adulto: 800, marca: 'PFIZER', propiasOtras: 0, otraMarca: 80 }),
       // 100 frascos de Pfizer (600 dosis): a Moderna le caben (1000-600)/5 = 80
-      modernaTrasPfizer: CovidFrascos.topeFrascos({ total: 1000, adulto: 800, marca: 'MODERNA', propiasOtras: 0, otraMarca: 100 })
+      modernaTrasPfizer: CovidFrascos.frascosRestantes({ total: 1000, adulto: 800, marca: 'MODERNA', propiasOtras: 0, otraMarca: 100 }),
+      // la meta ya NO bloquea: solo «sin niños» frena a Moderna
+      sinTopePfizer: CovidFrascos.topeFrascos({ marca: 'PFIZER', sinNinos: true }),
+      sinTopeModerna: CovidFrascos.topeFrascos({ marca: 'MODERNA', sinNinos: false }),
+      sinNinosModerna: CovidFrascos.topeFrascos({ marca: 'MODERNA', sinNinos: true })
     };
   });
   expect(r).toEqual({ equiv: 1000, adulta: 800, impar: 1, modernaLibre: 200, pfizerLibre: 134,
-    pfizerTrasModerna: 100, modernaTrasPfizer: 80 });   // Moderna = 5 dosis por frasco, Pfizer = 6
+    pfizerTrasModerna: 100, modernaTrasPfizer: 80,
+    sinTopePfizer: undefined, sinTopeModerna: undefined, sinNinosModerna: 0 });   // Moderna = 5 dosis por frasco, Pfizer = 6
 });
 
 test('COVID Jurisdicción: reparte Moderna por la meta equivalente y Pfizer descuenta lo ya entregado de Moderna', async ({ page }) => {
@@ -927,11 +932,13 @@ test('COVID Jurisdicción: reparte Moderna por la meta equivalente y Pfizer desc
     _marcaCovid = 'PFIZER';
     _remesaState.numero = null;
     renderFrascosDistribution();
-    return calcularRemesa().items.filter((i) => ['QUERETARO', 'CORREGIDORA'].includes(i.id)).map((i) => [i.id, i.meta, i.tope]);
+    return calcularRemesa().items.filter((i) => ['QUERETARO', 'CORREGIDORA'].includes(i.id)).map((i) => [i.id, i.meta, frascoCifraRef(i), i.tope]);
   });
-  expect(topes).toEqual([['QUERETARO', 800, 117], ['CORREGIDORA', 500, 84]]);   // meta Pfizer = solo adulta
+  expect(topes).toEqual([['QUERETARO', 800, 117, undefined], ['CORREGIDORA', 500, 84, undefined]]);   // solo referencia (meta adulta): sin tope duro
+  // La federación entrega Pfizer como quiere: 300 frascos rebasan la meta (201 de referencia) y NO se bloquea
   await page.fill('#remesaTotalInput', '300');
-  await expect(page.locator('#remesaResumen')).toContainText('ya no caben');       // 201 máx. entre los dos
+  await expect(page.locator('#remesaResumen')).not.toContainText('ya no caben');
+  await expect(page.locator('#remesaResumen')).not.toContainText('Rebasa la meta');
 });
 
 test('COVID Metas: 6 rubros del formato y renglón de frascos Moderna (niños, 10) / Pfizer (adultos, 6)', async ({ page }) => {
@@ -1077,13 +1084,15 @@ test('COVID pérdida: el tope de frascos y los topes del municipio usan la meta 
   }, JURIS_COVID);
   const q = await page.evaluate(() => calcularRemesa().items.find((i) => i.id === 'QUERETARO'));
   expect(q.meta).toBe(81734);
-  expect(q.tope).toBe(16347);
+  expect(q.restantes).toBe(16347);   // referencia: ya no es tope duro
+  expect(q.tope).toBeUndefined();
   expect(q.metaFrascos).toBe(16347);
   // Pfizer: solo adultos con pérdida = 12,843 → 2,141 frascos
   const pf = await page.evaluate(() => { _marcaCovid = 'PFIZER'; _remesaState.numero = null; renderFrascosDistribution();
     return calcularRemesa().items.find((i) => i.id === 'QUERETARO'); });
   expect(pf.meta).toBe(12843);
-  expect(pf.tope).toBe(2141);
+  expect(pf.restantes).toBe(2141);
+  expect(pf.tope).toBeUndefined();
 });
 
 test('COVID pérdida (Metas): Jurisdicción captura la pérdida; el municipal la ve sin poder cambiarla', async ({ page }) => {
@@ -1493,7 +1502,7 @@ test('COVID municipal: Pfizer solo llega a unidades con meta adulta y el tope de
     _covidFrascosAll = [{ marca: 'PFIZER', clues: 'Q3', municipio: 'QUERETARO', numero_entrega: 1, cantidad_frascos: 10 }];
     _muniRepartoState.numero = null;
     renderFrascosDistribution();
-    return frascoItemsMunicipal('QUERETARO').map((i) => [i.id, i.tope]);
+    return frascoItemsMunicipal('QUERETARO').map((i) => [i.id, frascoCifraRef(i)]);
   });
   expect(topes).toEqual([['Q1', 520], ['Q2', 260], ['Q3', 0]]);
   await expect(page.locator('#frascosBatchTbody tr', { hasText: 'UMQ TRES' })).toContainText('Pfizer: 10');   // lo de la otra marca se ve
@@ -1503,7 +1512,7 @@ test('COVID municipal: Pfizer solo llega a unidades con meta adulta y el tope de
     _covidFrascosAll = [];
     _marcaCovid = 'PFIZER'; _muniRepartoState.numero = null;
     renderFrascosDistribution();
-    return frascoItemsMunicipal('QUERETARO').map((i) => [i.id, i.meta, i.tope]);
+    return frascoItemsMunicipal('QUERETARO').map((i) => [i.id, i.meta, frascoCifraRef(i)]);
   });
   expect(pf).toEqual([['Q1', 600, 100], ['Q2', 300, 50], ['Q3', 100, 17]]);
   await expect(page.locator('#kpiDosis')).toContainText('30 dosis');                  // 5 frascos x 6 dosis
