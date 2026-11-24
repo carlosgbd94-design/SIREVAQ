@@ -17064,3 +17064,5 @@ th.text-slate-500, #panelINFLUENZAADMIN .vac-seg .vac-btn:not(.activo) { color: 
 .text-surface-onVariant\/60 { color: rgb(67 71 78 / 0.82); }
 #secInfluenzaFrascos .frs-table th { color: #475569; }
 .notif-tpl-chip { color: #0369a1; }
+/* Reparto por unidades: la nota bajo «Faltan por recibir» envuelve en varias líneas (en una sola medía 720 px y sacaba de la caja la columna «Frascos que le tocan») */
+#secInfluenzaFrascos .frs-tope-sub { white-space: normal; max-width: 280px; margin-left: auto; margin-right: auto; text-align: center; }
