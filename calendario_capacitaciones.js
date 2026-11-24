@@ -185,7 +185,7 @@
     .agenda h3{margin:12px 0 6px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
     .ev-row{display:flex;gap:12px;padding:11px 12px;border:1px solid var(--line);border-radius:16px;margin-bottom:6px;transition:background .3s,border-color .3s}
     .ev-row.flash{background:var(--accent-soft);border-color:var(--accent)}
-    .ev-row.past{opacity:.62}
+    .ev-row.past{opacity:.92}
     .date{flex:none;width:52px;text-align:center;border-radius:14px;background:var(--field);padding:6px 0;line-height:1}
     .date b{display:block;font-size:20px;font-weight:800}
     .date span{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}

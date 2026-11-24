@@ -8297,7 +8297,7 @@ html.sirevaq-scroll-locked .btn-save-animate {
 /* TRACKER STICKY (NUEVO) */
 .command-hub-tracker {
   position: sticky;
-  top: 180px;
+  top: 120px;
   overflow: visible;
   pointer-events: auto;
 }
@@ -14088,7 +14088,7 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 #secInfluenzaFrascos .frs-table .c { text-align: center; }
 #secInfluenzaFrascos .frs-total td { font-weight: 900; background: #f8fafc; }
 #secInfluenzaFrascos .frs-row:hover td { background: #f8fafc; }
-#secInfluenzaFrascos .frs-sub { font-size: 10px; font-weight: 400; color: #94a3b8; }
+#secInfluenzaFrascos .frs-sub { font-size: 10px; font-weight: 400; color: #64748b; }
 #secInfluenzaFrascos .frs-muted { color: #64748b; }
 @keyframes frs-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(7px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(5px); } }
 #secInfluenzaFrascos .frs-shake { animation: frs-shake .45s ease-in-out; box-shadow: 0 0 0 3px #fb7185; }
@@ -15647,10 +15647,10 @@ html.dark .live-legend-chip { background: #1e293b; color: #f1f5f9; border-color:
 #panelINFLUENZAADMIN .frs-pill:empty { display: none; }
 #panelINFLUENZAADMIN .frs-pill .material-symbols-rounded { font-size: 22px; width: 22px; height: 22px; overflow: hidden; font-variation-settings: 'FILL' 1; }
 #panelINFLUENZAADMIN .frs-pill b { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
-#panelINFLUENZAADMIN .frs-pill small { font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; opacity: .85; }
-#panelINFLUENZAADMIN .frs-pill[data-estado="ok"] { background: #f5faf7; border-color: #d3e6da; color: #3f7d5e; }
-#panelINFLUENZAADMIN .frs-pill[data-estado="falta"] { background: #fbf9f3; border-color: #ebe1c9; color: #8c6d2c; }
-#panelINFLUENZAADMIN .frs-pill[data-estado="excede"] { background: #fbf5f5; border-color: #ecd5d5; color: #a24b4b; }
+#panelINFLUENZAADMIN .frs-pill small { font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; opacity: 1; }
+#panelINFLUENZAADMIN .frs-pill[data-estado="ok"] { background: #f5faf7; border-color: #d3e6da; color: #2f6b4d; }
+#panelINFLUENZAADMIN .frs-pill[data-estado="falta"] { background: #fbf9f3; border-color: #ebe1c9; color: #7a5c1f; }
+#panelINFLUENZAADMIN .frs-pill[data-estado="excede"] { background: #fbf5f5; border-color: #ecd5d5; color: #8f3a3a; }
 #panelINFLUENZAADMIN .frs-pill--inline {
   flex-direction: row; max-width: none; padding: 6px 14px 6px 10px; gap: 8px; border-radius: 12px; box-shadow: none;
 }
@@ -16970,17 +16970,15 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 /* Pestañas de Temporada invernal: se quedan fijas debajo del encabezado flotante (antes pasaban por debajo y quedaban tapadas) */
 #panelINFLUENZAADMIN .tinv-cab { display: contents; }
 #panelINFLUENZAADMIN .tinv-cab .tinv-vacuna { margin: 0 0 12px; }
-#panelINFLUENZAADMIN .tinv-nav { position: sticky; top: 104px; z-index: 40; margin: 0 0 16px; }
-@media (max-width: 640px) { #panelINFLUENZAADMIN .tinv-nav { top: 84px; } }
+#panelINFLUENZAADMIN .tinv-nav { margin: 0 0 16px; }   /* ya no es fija: tapaba los encabezados de las tablas */
 #secInfluenzaFrascos .frs-btn:disabled { background: #e2e8f0; border-color: #cbd5e1; color: #64748b; cursor: not-allowed; }
 /* Fechas Campaña: botones de la tabla alineados en una sola línea y a la misma altura */
 #influenzaCampanasTableBody td { vertical-align: middle; }
 #influenzaCampanasTableBody td:last-child > div { display: inline-flex; align-items: center; gap: 8px; }
 #influenzaCampanasTableBody button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 32px; margin: 0 !important; line-height: 1; }
 
-/* Subbotoneras fijas en todos los paneles de index.html: se quedan visibles bajo el encabezado flotante al hacer scroll.
-   (Los docks de SIS, Requisiciones y Concentrado jurisdiccional ya flotan fijos abajo, con dock_glass.css.) */
-#secInfluenzaFrascos > .tinv-fila { position: sticky; top: 178px; z-index: 35; }
+/* Las botoneras de los paneles con tablas ya NO se quedan fijas: tapaban los encabezados, que es lo que importa ver.
+   Solo el encabezado flotante de la app y el de cada tabla (bajo él) permanecen a la vista. */
 /* Barra de vidrio única: subpaneles + marca en una sola pieza; el contenido ya no se ve por los huecos al desplazar */
 #secInfluenzaFrascos > .tinv-fila {
   padding: 8px 12px; border-radius: 22px; justify-content: space-between;
@@ -16988,11 +16986,6 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
   border: 1px solid rgba(203, 213, 225, .7); box-shadow: 0 6px 18px rgba(15, 23, 42, .08);
 }
 #secInfluenzaFrascos > .tinv-fila #frascosMarcaBar { margin-left: auto; }            /* debajo de las pestañas de Temporada */
-#panelCAP { position: sticky; top: 104px; z-index: 40; }
-@media (max-width: 640px) {
-  #secInfluenzaFrascos > .tinv-fila { top: 150px; }
-  #panelCAP { top: 84px; }
-}
 /* overflow:hidden de las tarjetas de panel bloqueaba el sticky; clip recorta igual (esquinas redondeadas) sin crear scroll */
 #panelCONCENTRADO, #panelCAP, [id^="panel"]:has(#influenzaUnitTabsContainer), [id^="panel"]:has(#panelAdminSecurityTabs) { overflow: clip; }
 
@@ -17000,8 +16993,8 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
    Al hacer scroll, la tabla conserva su fila de títulos justo debajo de la botonera: siempre se sabe qué columna es.
    Los contenedores pasan de overflow:auto a clip (no son «scroll» para el sticky); las tablas anchas (matriz de
    entregas, cobertura y metas) conservan su propio desplazamiento. */
-#panelINFLUENZAADMIN { --stk: 170px; }                    /* encabezado flotante + pestañas de Temporada */
-#secInfluenzaFrascos { --stk: 268px; }   /* + subpaneles de Control de Frascos */
+#panelINFLUENZAADMIN { --stk: 104px; }                    /* solo el encabezado flotante de la app */
+#secInfluenzaFrascos { --stk: 104px; }
 @media (min-width: 1100px) {
   #adminInfluenzaMunicipalTableContainer .tableWrap,
   #secInfluenzaFrascos .frs-scroll:has(> table:not(#frascosMatrixTable)),
@@ -17047,19 +17040,9 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 @media (min-width: 1100px) {
   #captureContentArea .cp-card.cp-flush { overflow: clip !important; }
   #captureContentArea .cp-tablewrap { overflow: clip !important; max-height: none !important; }
-  #captureContentArea .cp-tablewrap thead th { position: sticky !important; top: 170px !important; z-index: 6; }
+  #captureContentArea .cp-tablewrap thead th { position: sticky !important; top: 104px !important; z-index: 6; }
 }
 
-/* Subpestañas de Influenza de la unidad: debajo de la botonera de Captura (que ya está fija) */
-div:has(> #influenzaUnitTabsContainer) { position: sticky; top: 176px; z-index: 39; }
-@media (max-width: 640px) { div:has(> #influenzaUnitTabsContainer) { top: 150px; } }
-
-/* Seguridad (ADMIN): la fila del título con sus pestañas se queda fija bajo el encabezado, con fondo de vidrio para no mezclarse con lo que pasa por debajo */
-#panelADMIN > div:has(> #panelAdminSecurityTabs) {
-  position: sticky; top: 104px; z-index: 40; padding: 8px 12px; border-radius: 22px;
-  background: rgba(255, 255, 255, .88); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-}
-@media (max-width: 640px) { #panelADMIN > div:has(> #panelAdminSecurityTabs) { top: 84px; } }
 /* Metas municipal (una columna por unidad): la caja con su propio desplazamiento se ajusta a la pantalla y se queda bajo las barras fijas,
    así el encabezado, la franja del bloque y los totales siempre están a la vista */
 @media (min-width: 1100px) {
@@ -17071,3 +17054,13 @@ div:has(> #influenzaUnitTabsContainer) { position: sticky; top: 176px; z-index: 
   #secInfluenzaFrascos .frs-scroll:has(> table:not(#frascosMatrixTable)) table[data-marca="MODERNA"] thead th.col-mod,
   #secInfluenzaFrascos .frs-scroll:has(> table:not(#frascosMatrixTable)) table[data-marca="PFIZER"] thead th.col-pfz { background: #4c1d95 !important; color: #ffffff !important; }
 }
+
+/* ── Contraste de texto (WCAG AA): colores que quedaban por debajo de 4.5:1 sobre blanco o sobre su fondo ───────────── */
+.fc-counter, .cvm-nota { color: #64748b; }
+.text-slate-400 { color: #64748b !important; }                         /* #94a3b8 daba 2.6:1 */
+th.text-slate-500, #panelINFLUENZAADMIN .vac-seg .vac-btn:not(.activo) { color: #475569 !important; }   /* #64748b sobre #f1f5f9 daba 4.3:1 */
+.text-primary\/50, .text-primary\/40 { color: #4f6b8c !important; }   /* azul primario con transparencia: quedaba pálido */
+#profileDropdown .pf-chev { color: #64748b; opacity: 1; }
+.text-surface-onVariant\/60 { color: rgb(67 71 78 / 0.82); }
+#secInfluenzaFrascos .frs-table th { color: #475569; }
+.notif-tpl-chip { color: #0369a1; }

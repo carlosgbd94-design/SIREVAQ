@@ -751,23 +751,24 @@ test('Metas municipales: fila de frascos (solo Pedro Escobedo admite abierto), r
   await expect(page.locator('#frs_QTSSA001863')).toContainText('21.5');
   await pe.fill('220');
   await expect(page.locator('#frs_QTSSA001863')).toHaveAttribute('data-estado', 'ok');
-  const q1x = pe;
-
-  // Repartir parejo: 100 entre 3 unidades -> 34/33/33
+  // Las unidades salen ordenadas por CLUES: Q2, Q3, QTSSA001863 (la que se renombró queda al final)
+  // Repartir parejo: 100 entre 3 unidades -> la que sobra va a la primera por CLUES (Q2): 34/33/33
   await page.locator('tr[data-rb="r1"] .meta-split-btn').click();
-  await expect(q1x).toHaveValue('34');
+  const q2 = page.locator('input[data-rb="r1"][data-clues="Q2"]');
+  await expect(q2).toHaveValue('34');
   await expect(page.locator('input[data-rb="r1"][data-clues="Q3"]')).toHaveValue('33');
+  await expect(pe).toHaveValue('33');
 
-  // Pegado de bloque (2 filas x 2 columnas) desde Q1/r1
-  await q1x.focus();
+  // Pegado de bloque (2 filas x 2 columnas) desde Q2/r1 hacia Q3
+  await q2.focus();
   await page.evaluate(() => {
-    const el = document.querySelector('input[data-rb="r1"][data-clues="QTSSA001863"]');
+    const el = document.querySelector('input[data-rb="r1"][data-clues="Q2"]');
     const dt = new DataTransfer(); dt.setData('text/plain', '10\t20\n30\t40\n');
     el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
   });
-  await expect(page.locator('input[data-rb="r1"][data-clues="Q2"]')).toHaveValue('20');
+  await expect(page.locator('input[data-rb="r1"][data-clues="Q3"]')).toHaveValue('20');
   const r2 = await page.evaluate(() => INFLUENZA_RUBROS[1].id);
-  await expect(page.locator(`input[data-rb="${r2}"][data-clues="Q2"]`)).toHaveValue('40');
+  await expect(page.locator(`input[data-rb="${r2}"][data-clues="Q3"]`)).toHaveValue('40');
 });
 
 test('Metas jurisdiccionales: frasco abierto en rojo salvo Querétaro', async ({ page }) => {

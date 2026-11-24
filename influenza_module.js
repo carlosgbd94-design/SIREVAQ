@@ -3284,7 +3284,7 @@ function renderAvancesAndConcentrados() {
     return `<tr class="border-b border-slate-100 hover:bg-slate-50" data-clues="${f.u.clues}" style="${cov ? "" : "cursor:pointer"}">
       <td class="p-3 text-xs font-semibold text-slate-700">${f.u.unidad}${f.meta > 0 && !f.ultima ? ` <span style="margin-left:6px">${infPill("bad", "Sin reportes")}</span>` : ""}</td>
       <td class="p-3 text-xs text-slate-500 font-mono">${f.u.clues}</td>
-      <td class="p-3 text-center text-xs font-bold text-slate-600">${f.meta > 0 ? infFmt(f.meta, 0) : '<span style="color:#94a3b8">sin meta</span>'}</td>
+      <td class="p-3 text-center text-xs font-bold text-slate-600">${f.meta > 0 ? infFmt(f.meta, 0) : '<span style="color:#64748b">sin meta</span>'}</td>
       <td class="p-3 text-center text-xs font-bold text-violet-950">${infFmt(f.acum, dd)}</td>
       <td class="p-3 text-center text-xs font-bold">${f.meta > 0 ? infBarraPct(pct, tono) : "—"}</td>
       <td class="p-3 text-center text-xs font-bold text-slate-700">${f.frascos ? infFmt(f.frascos, 0) : ""}</td>
@@ -5992,11 +5992,11 @@ function metaPintarFrascos(td, total, permiteAbierto, soloInformar) {
     const pf = CovidFrascos.recibirDosis(o.adulto, o.razon) / CovidFrascos.DPF_PFIZER;
     const cerrado = Number.isInteger(mod) && Number.isInteger(pf);
     const fmt = (n) => (Number.isInteger(n) ? n.toLocaleString("es-MX") : n.toFixed(1));
-    let estado = "ok", color = "#16a34a";
+    let estado = "ok", color = "#166534";
     if (!cerrado) {
       if (soloInformar) { estado = "info"; color = "#64748b"; }
-      else if (permiteAbierto) { estado = "aviso"; color = "#d97706"; }
-      else { estado = "mal"; color = "#dc2626"; }
+      else if (permiteAbierto) { estado = "aviso"; color = "#92400e"; }
+      else { estado = "mal"; color = "#b91c1c"; }
     } else if (soloInformar) color = "#64748b";
     td.dataset.estado = estado;
     td.style.color = color;
@@ -6005,12 +6005,12 @@ function metaPintarFrascos(td, total, permiteAbierto, soloInformar) {
   }
   const resto = total % 10;
   const f = total / 10;
-  let estado = "ok", color = "#16a34a", txt = `${f} fr. ✓`;
+  let estado = "ok", color = "#166534", txt = `${f} fr. ✓`;
   if (resto) {
     txt = `${f.toFixed(1)} fr. abierto<br><span style="font-weight:600;font-size:10px">+${10 - resto} → ${Math.ceil(f)} · −${resto} → ${Math.floor(f)}</span>`;
     if (soloInformar) { estado = "info"; color = "#64748b"; }
-    else if (permiteAbierto) { estado = "aviso"; color = "#d97706"; }
-    else { estado = "mal"; color = "#dc2626"; }
+    else if (permiteAbierto) { estado = "aviso"; color = "#92400e"; }
+    else { estado = "mal"; color = "#b91c1c"; }
   } else if (soloInformar) color = "#64748b";
   td.dataset.estado = estado;
   td.style.color = color;
@@ -7417,7 +7417,8 @@ function frascoTextoExceso(excesos, etiquetaFn, items) {
 // Unidades que reparten frascos dentro de un municipio (sin los hospitales, que son destino propio).
 function frascoUnidadesMunicipio(muni) {
   return _allUnidades.filter(u =>
-    String(u.municipio).toUpperCase() === String(muni).toUpperCase() && !FRASCO_CLUES_HOSPITAL.has(u.clues));
+    String(u.municipio).toUpperCase() === String(muni).toUpperCase() && !FRASCO_CLUES_HOSPITAL.has(u.clues))
+    .sort((a, b) => String(a.clues).localeCompare(String(b.clues), "es", { numeric: true }));   // siempre por CLUES
 }
 
 // Municipal que atiende más de un municipio (p. ej. Corregidora y Huimilpan): selector propio en Control de

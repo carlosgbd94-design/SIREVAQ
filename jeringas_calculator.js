@@ -42,7 +42,7 @@ const JERINGA_DEFS = [
         descripcion: 'JERINGAS DE PLÁSTICO, PARA APLICAR BCG Y ANTISARAMPIÓN, CAPACIDAD 0.5 ML CON DOS AGUJAS.UNA CALIBRE 20 X 32 MM PARA CARGAR LA JERINGA CON EL BIOLÓGICO Y OTRA 27 X 13 MM PARA APLICAR LA VACUNA,CADA JERINGA CON LA LEYENDA PROGRAMA DE ATENC'
     },
     {
-        key: '25x16', nombre: '25x16 mm', colorLabel: 'Naranja', swatchCss: '#f97316',
+        key: '25x16', nombre: '25x16 mm', colorLabel: 'Naranja', swatchCss: '#c2410c',
         tileText: '25·16', tileTextColor: '#ffffff', captionColor: '#c2410c', cajaSize: 50,
         usoLabel: 'Hepatitis B — únicamente recién nacido (VAC06)',
         bioKeys: ['HepB_0_7', 'HEPB_0_7'],

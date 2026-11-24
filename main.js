@@ -10596,9 +10596,9 @@ function loteCapturaHtml_(item) {
   const deRequi = String(item.origen || "").toUpperCase() === "REQUISICION";
   const origen = deRequi ? "Requisición" : "Manual";
   const sync = (deRequi || item.requi_ultima_sync)
-    ? `<div style="font-size:10px; opacity:0.6; font-weight:600;" title="Última vez que el motor de Requisiciones extrajo este lote">Requi: ${escapeHtml(fmt(item.requi_ultima_sync))}</div>` : "";
+    ? `<div style="font-size:10px; opacity:0.72; font-weight:600;" title="Última vez que el motor de Requisiciones extrajo este lote">Requi: ${escapeHtml(fmt(item.requi_ultima_sync))}</div>` : "";
   return `<div style="font-weight:800; font-size:12px;">${escapeHtml(fmt(item.created_ts))}</div>
-    <div style="font-size:10px; opacity:0.6; font-weight:600;">${origen}</div>${sync}`;
+    <div style="font-size:10px; opacity:0.72; font-weight:600;">${origen}</div>${sync}`;
 }
 
 // Municipios que se ofrecen al asignar un lote (mismos valores que la cuadrícula de «Carga de lotes por municipio»).
@@ -10694,7 +10694,7 @@ function renderLotesAdmin() {
             <select id="editBio_${gi}" class="inline-edit-input" aria-label="Biológico">
               ${window.BIOS_LIST.map(b => `<option value="${b}" ${g.biologico === b ? 'selected' : ''}>${b}</option>`).join("")}
             </select>
-            <div style="font-size:10px; opacity:0.6; font-weight:600; margin-top:4px;">${escapeHtml(g.fecha_recepcion || "—")}</div>
+            <div style="font-size:10px; opacity:0.72; font-weight:600; margin-top:4px;">${escapeHtml(g.fecha_recepcion || "—")}</div>
           </td>
           <td>
             <input type="text" id="editLote_${gi}" class="inline-edit-input" aria-label="Número de lote" value="${escapeHtml(g.lote)}" oninput="this.value = this.value.toUpperCase()" />
@@ -10735,7 +10735,7 @@ function renderLotesAdmin() {
         <tr class="lote-row-${expiryInfo.class}">
           <td>
             <div style="font-weight:900; color:var(--md-sys-color-primary);">${escapeHtml(g.biologico)}</div>
-            <div style="font-size:10px; opacity:0.6; font-weight:600;">${escapeHtml(g.fecha_recepcion || "—")}</div>
+            <div style="font-size:10px; opacity:0.72; font-weight:600;">${escapeHtml(g.fecha_recepcion || "—")}</div>
           </td>
           <td style="font-family:monospace; font-weight:700; font-size:14px;">${escapeHtml(g.lote)}</td>
           <td>

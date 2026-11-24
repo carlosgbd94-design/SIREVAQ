@@ -125,7 +125,7 @@ function initRDADashboard() {
             }
             #rdaViewToggleContainer button.inactive {
                 background: transparent !important;
-                color: #64748b !important;
+                color: #475569 !important;
                 box-shadow: none !important;
                 border-color: transparent !important;
             }
