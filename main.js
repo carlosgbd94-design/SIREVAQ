@@ -13755,12 +13755,10 @@ function refreshBioAlerts(force = false) {
 
     // 🛡️ REGLA SENIOR: Bloqueo en múltiplos para biológicos críticos (Hexavalente múltiplo de 10, otros críticos de 5)
     let multiplo = 1;
-    if (bioKey === "HEXAVALENTE") {
+    if (["HEXAVALENTE", "NEUMOCOCICA 13", "NEUMOCOCICA 20"].includes(bioKey)) {
       multiplo = 10;
     } else if ([
       "ROTAVIRUS",
-      "NEUMOCOCICA 13",
-      "NEUMOCOCICA 20",
       "SRP"
     ].includes(bioKey)) {
       multiplo = 5;
@@ -16899,7 +16897,7 @@ async function performSaveBIO() {
     const normKey = normalizeStr(item.biologico);
 
     // REGLA A: Múltiplos para biológicos críticos (Hexavalente múltiplo de 10, otros de 5)
-    const isHexavalente = normKey === "HEXAVALENTE";
+    const isHexavalente = ["HEXAVALENTE", "NEUMOCOCICA 13", "NEUMOCOCICA 20"].includes(normKey); // múltiplo de 10
     const isCritical = criticalBioNames.some(cName => {
       const normCritical = cName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
       return normKey === normCritical; // <-- Igualdad estricta (Evita falsos positivos con .includes)
@@ -20503,7 +20501,7 @@ function renderPinolCommandCenter() {
   if ($("pinolTotal")) animateCounter("pinolTotal", parseInt($("pinolTotal").textContent) || 0, total);
   if ($("pinolPendientes")) animateCounter("pinolPendientes", parseInt($("pinolPendientes").textContent) || 0, pendientes.length);
   if ($("pinolCriticos")) animateCounter("pinolCriticos", parseInt($("pinolCriticos").textContent) || 0, criticos.length);
-  if ($("pinolLitrosRuta")) $("pinolLitrosRuta").textContent = `${litrosRuta} L (${botellasRuta} bot)`;
+  if ($("pinolLitrosRuta")) $("pinolLitrosRuta").innerHTML = `${escapeHtml(String(litrosRuta))} L <small>(${escapeHtml(String(botellasRuta))} bot)</small>`;
   if ($("pinolEntregadas")) animateCounter("pinolEntregadas", parseInt($("pinolEntregadas").textContent) || 0, entregadas.length);
   if ($("pinolRecibidas")) animateCounter("pinolRecibidas", parseInt($("pinolRecibidas").textContent) || 0, recibidas.length);
 
@@ -20658,7 +20656,7 @@ function renderPinolCommandCenter() {
     return `
       <tr class="${isCritical ? 'pinol-row-critical' : ''}">
         <td class="text-center" style="vertical-align: middle !important;">
-          ${estatus === 'PENDIENTE' ? `<input type="checkbox" class="pinol-row-checkbox w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" data-id="${escapeAttr(id)}" ${isChecked ? 'checked' : ''} />` : '—'}
+          ${estatus === 'PENDIENTE' ? `<input type="checkbox" class="pinol-row-checkbox w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" aria-label="Seleccionar la solicitud de ${escapeAttr(x?.unidad || id)}" data-id="${escapeAttr(id)}" ${isChecked ? 'checked' : ''} />` : '—'}
         </td>
         <td class="font-bold text-slate-700" style="vertical-align: middle !important;">${escapeHtml(fechaSoliFormateada)}${esperaHtml}</td>
         <td class="font-bold text-slate-900" style="vertical-align: middle !important;">${escapeHtml(x?.municipio || "")}</td>

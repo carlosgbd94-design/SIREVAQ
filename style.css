@@ -17066,3 +17066,19 @@ th.text-slate-500, #panelINFLUENZAADMIN .vac-seg .vac-btn:not(.activo) { color: 
 .notif-tpl-chip { color: #0369a1; }
 /* Reparto por unidades: la nota bajo «Faltan por recibir» envuelve en varias líneas (en una sola medía 720 px y sacaba de la caja la columna «Frascos que le tocan») */
 #secInfluenzaFrascos .frs-tope-sub { white-space: normal; max-width: 280px; margin-left: auto; margin-right: auto; text-align: center; }
+
+/* ── Pase de diseño (todos los paneles) ─────────────────────────────────────────────────────────────────────── */
+/* Las cajas de tabla aprovechan el alto de la pantalla en vez de un tope fijo de 480 px (menos scroll dentro de scroll) */
+.tableWrap { max-height: max(480px, calc(100vh - 240px)); }
+/* Pinol: «13.2 L (16 bot)» ya no se parte en dos líneas y desnivela la fila de tarjetas */
+#pinolLitrosRuta { white-space: nowrap; }
+#pinolLitrosRuta small { font-size: .5em; font-weight: 700; color: #64748b; letter-spacing: 0; }
+/* Pinol: casilla de cada solicitud con zona de clic de 24 px */
+.pinol-row-checkbox { width: 20px; height: 20px; margin: 2px; }
+/* Pie: el correo es un enlace propio, con zona de clic mínima de 24 px */
+.appFooter a { display: inline-block; padding: 5px 4px; min-height: 24px; }
+/* Avisos: el título mide lo mismo que los selectores de su fila */
+#notifTitle { height: 44px; }
+/* Bandeja de avisos: los iconos de acción miden 32 px (antes 20) y el contador no tapa al icono vecino */
+.notifIconPureBtn { min-width: 32px; min-height: 32px; }
+.notifIconPureBtn .notifBadgeCounter { width: 18px !important; height: 18px !important; min-width: 18px !important; font-size: 10px !important; top: -3px !important; right: -5px !important; }
