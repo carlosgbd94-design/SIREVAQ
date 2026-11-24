@@ -2086,7 +2086,7 @@ function actualizarDetalleCovid() {
     let aviso = '';
     let bloquea = false;
     if (op.otra) { aviso = `Esta entrega ya está vinculada a la requisición de ${etiquetaMes(op.otra)} · Entrega ${op.otra.entrega}.`; bloquea = true; }
-    else if (conLote.length) { aviso = `${m.etiqueta} ya tiene lotes asignados en esta requisición; para no pisarlos, corrige su reparto directo en los pasos 2 y 3.`; bloquea = true; }
+    else if (conLote.length) aviso = `${m.etiqueta} ya tiene lotes asignados: al traer el reparto se reemplazan y los lotes vuelven a «por definir» (tendrás que asignarlos otra vez).`;
     else if (actual > 0) aviso = `Esta requisición ya tiene ${actual.toLocaleString('es-MX')} frascos de ${m.etiqueta}: se reemplazan por el reparto.`;
     el.innerHTML = `<b>${Number(op.total_frascos).toLocaleString('es-MX')} frascos recibidos</b> · ${esc(textoDestinos(op.asignacion || {}))}${aviso ? `<br><span style="color:#b45309;font-weight:700">${esc(aviso)}</span>` : ''}`;
     if (!bloquea) hayQueTraer = true;
@@ -2143,7 +2143,10 @@ async function traerRepartoCovid() {
   })).filter((x) => x.actual > 0);
   if (reemplazos.length && !(await confirmar({
     titulo: 'Reemplazar COVID-19 de esta requisición', tono: 'aviso', aceptar: 'Reemplazar',
-    mensaje: reemplazos.map((x) => `${x.m.etiqueta}: hoy tiene ${x.actual.toLocaleString('es-MX')} frascos; se reemplazan por la ${ordinalEntrega(x.op.numero_entrega)} (${Number(x.op.total_frascos).toLocaleString('es-MX')} frascos).`).join(' ')
+    mensaje: reemplazos.map((x) => {
+      const conLote = estado.items.some((i) => i.requi_biologico_id === x.bio.id && !esPendiente(i) && Number(i.cantidad_surtida) > 0);
+      return `${x.m.etiqueta}: hoy tiene ${x.actual.toLocaleString('es-MX')} frascos; se reemplazan por la ${ordinalEntrega(x.op.numero_entrega)} (${Number(x.op.total_frascos).toLocaleString('es-MX')} frascos).${conLote ? ' Sus lotes ya asignados se pierden: quedan «por definir».' : ''}`;
+    }).join(' ')
   }))) return;
   $('covTraer').disabled = true;
   const resultados = [];

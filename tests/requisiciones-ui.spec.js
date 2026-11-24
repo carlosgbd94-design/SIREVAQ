@@ -1235,6 +1235,26 @@ test('Requisiciones: traer el reparto de COVID-19 trae Moderna y Pfizer en rengl
   expect(errores).toEqual([]);
 });
 
+test('Requisiciones: COVID-19 con lotes ya asignados se puede volver a traer (avisa y los lotes quedan por definir)', async ({ page }) => {
+  await page.addInitScript(() => { window.__FAKE_COVID__ = true; });
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  await page.evaluate(() => {
+    const d = window.__FAKE_DB__;
+    d.requi_lotes.push({ id: 'lote-real-mod', requi_biologico_id: 'bio-mod', numero_lote: 'M123', caducidad: '2027-01-01' });
+    d.requi_items_jurisdiccion.push({ id: 'it-real', requisicion_id: 'req-hoy', requi_biologico_id: 'bio-mod', lote_id: 'lote-real-mod', cantidad_surtida: 40 });
+  });
+  await page.evaluate(() => cargarDatosRequisicion());
+  await page.click('#btnMenuTraer');
+  await page.click('#btnTraerCovid');
+  await expect(page.locator('#covDetalleModerna')).toContainText('ya tiene lotes asignados');
+  await expect(page.locator('#covTraer')).toBeEnabled();
+  await page.click('#covTraer');
+  await expect(page.locator('#modalCovid')).toBeHidden();
+  expect(await db(page, "db.requi_items_jurisdiccion.filter((i) => i.requi_biologico_id === 'bio-mod').map((i) => i.lote_id !== 'lote-real-mod')")).toEqual([true]);
+  expect(errores).toEqual([]);
+});
+
 test('Requisiciones: la entrega de COVID-19 ya vinculada a otra requisición no se puede traer', async ({ page }) => {
   await page.addInitScript(() => { window.__FAKE_COVID__ = true; });
   const errores = await preparar(page, { conReq: true });

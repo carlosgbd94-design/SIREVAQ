@@ -89,11 +89,8 @@ begin
     raise exception 'La entrega % de % del reparto ya está vinculada a otra requisición', p_numero, v_marca;
   end if;
 
-  if exists (select 1 from requi_items_jurisdiccion i join requi_lotes l on l.id = i.lote_id
-              where i.requisicion_id = p_requisicion and i.requi_biologico_id = v_bio
-                and l.numero_lote <> 'POR DEFINIR' and i.cantidad_surtida > 0) then
-    raise exception 'La vacuna COVID-19 % de esta requisición ya tiene lotes asignados; no se reemplaza su reparto', v_marca;
-  end if;
+  -- (2026-11-24) Ya no se rechaza cuando hay lotes asignados: la federación cambia las entregas y la requisición
+  -- debe poder actualizarse. El cliente pide confirmación y los lotes vuelven a «POR DEFINIR».
 
   insert into requi_lotes (requi_biologico_id, numero_lote) values (v_bio, 'POR DEFINIR')
     on conflict (requi_biologico_id, numero_lote) do nothing;
