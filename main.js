@@ -6352,9 +6352,9 @@ async function supabaseRequest(action = "", payload, options = {}) {
           if (resCalendar.data && resCalendar.data.length > 0) {
             const cal = resCalendar.data[0];
             intelligentWindow = {
-              start: new Date(cal.habilitar_desde),
-              target: new Date(cal.fecha_programada),
-              end: new Date(cal.habilitar_hasta)
+              start: calFechaYmd(cal.habilitar_desde),
+              target: calFechaYmd(cal.fecha_programada),
+              end: calFechaYmd(cal.habilitar_hasta)
             };
             windowSource = "CALENDAR";
           }
@@ -6925,7 +6925,7 @@ async function supabaseRequest(action = "", payload, options = {}) {
           canBio = true;
           bioReason = bioExtras[0].motivo || "Pedido extraordinario habilitado por Administrador";
         } else if (bioOverride) {
-          const isTodayInBioWindow = today >= bioOverride.habilitar_desde && today <= bioOverride.habilitar_hasta;
+          const isTodayInBioWindow = today >= calFechaYmd(bioOverride.habilitar_desde) && today <= calFechaYmd(bioOverride.habilitar_hasta);
           if (isTodayInBioWindow) {
             canBio = true;
             bioReason = bioOverride.motivo || "Apertura mensual extraordinaria habilitada por Administrador";
@@ -7219,7 +7219,8 @@ async function supabaseRequest(action = "", payload, options = {}) {
             canCaptureBio: canBio,
             bioReason: bioReason,
             bioExtras: bioExtras,
-            isExtraordinary: !!(consOverride || (bioOverride && today >= bioOverride.habilitar_desde && today <= bioOverride.habilitar_hasta)),
+            bioCalendario: bioOverride ? { desde: calFechaYmd(bioOverride.habilitar_desde), hasta: calFechaYmd(bioOverride.habilitar_hasta), objetivo: calFechaYmd(bioOverride.fecha_programada) } : null,
+            isExtraordinary: !!(consOverride || (bioOverride && today >= calFechaYmd(bioOverride.habilitar_desde) && today <= calFechaYmd(bioOverride.habilitar_hasta))),
             compliance_pct,
             userRank,
             userTier,
@@ -11887,6 +11888,15 @@ function dateToLocalYmd(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// Las columnas del calendario (habilitar_desde/hasta son timestamptz, fecha_programada es date) guardan un DÍA, no
+// un instante. Leerlas con new Date() las corre un día atrás en México (UTC-6); se toma la fecha tal como se guardó.
+function calFechaYmd(v) {
+  if (!v) return "";
+  if (v instanceof Date) return dateToLocalYmd(v);
+  const m = String(v).match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : "";
+}
+
 function isMexicanHoliday(date) {
   // Use dayjs for robust date parsing and timezone handling
   if (typeof dayjs === 'undefined') {
@@ -14043,14 +14053,17 @@ async function loadBioForm() {
   const currentWindow = calculateBioIntelligentWindow(now.getFullYear(), now.getMonth());
 
   // Fechas ISO para lógica de validación
-  const windowStartYmd = dateToLocalYmd(currentWindow.start);
-  const windowTargetYmd = dateToLocalYmd(currentWindow.target);
-  const windowEndYmd = dateToLocalYmd(currentWindow.end);
+  // Si el Administrador activó el calendario del mes, manda ese (igual que bioGetForm y el panel de captura).
+  const cal = (typeof STATUS !== "undefined" && STATUS && STATUS.bioCalendario && STATUS.bioCalendario.desde && STATUS.bioCalendario.hasta && STATUS.bioCalendario.objetivo) ? STATUS.bioCalendario : null;
+  const windowStartYmd = cal ? cal.desde : dateToLocalYmd(currentWindow.start);
+  const windowTargetYmd = cal ? cal.objetivo : dateToLocalYmd(currentWindow.target);
+  const windowEndYmd = cal ? cal.hasta : dateToLocalYmd(currentWindow.end);
 
   // Fechas amigables para visualización en el Banner
-  const windowStartFriendly = formatDateMx(currentWindow.start);
-  const windowEndFriendly = formatDateMx(currentWindow.end);
-  const windowTargetFriendly = formatDateMx(currentWindow.target);
+  const ymdAFecha = (ymd) => new Date(ymd + "T12:00:00");
+  const windowStartFriendly = formatDateMx(cal ? ymdAFecha(cal.desde) : currentWindow.start);
+  const windowEndFriendly = formatDateMx(cal ? ymdAFecha(cal.hasta) : currentWindow.end);
+  const windowTargetFriendly = formatDateMx(cal ? ymdAFecha(cal.objetivo) : currentWindow.target);
 
   const hoyYmd = todayYmdLocal();
 
@@ -14844,8 +14857,8 @@ function renderCaptureSummary(data) {
 
     // 1. Prioridad: Calendario Administrativo (Apertura Manual)
     if (data.calendar_override) {
-      windowStart = data.calendar_override.habilitar_desde.split("T")[0]; // ISO Date
-      windowEnd = data.calendar_override.habilitar_hasta.split("T")[0];
+      windowStart = calFechaYmd(data.calendar_override.habilitar_desde);
+      windowEnd = calFechaYmd(data.calendar_override.habilitar_hasta);
       source = "Administración (Manual)";
     } else {
       // 2. Fallback: Algoritmo Inteligente (Día 22 +/- hábiles)

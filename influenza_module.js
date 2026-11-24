@@ -7808,6 +7808,15 @@ function cargarRemesaSeleccionada() {
       }
       refreshRemesa(e.target);
     });
+    tr.querySelector("input").addEventListener("focus", (e) => e.target.select());   // escribir 0 reemplaza la cantidad
+    // Dejar la celda vacía y salir de ella cuenta como 0 (si no, volvía a la cantidad por meta al tocar otra celda).
+    tr.querySelector("input").addEventListener("blur", (e) => {
+      if (e.target.value.trim() !== "") return;
+      _remesaState.fijos[d.id] = 0;
+      _remesaState.editados.add(d.id);
+      _remesaState.tocados.add(d.id);
+      refreshRemesa();
+    });
   });
   const tf = document.createElement("tr");
   tf.className = "frs-total";
@@ -8056,6 +8065,15 @@ function renderFrascosMunicipal(muni) {
         _muniRepartoState.tocados.add(u.clues);
       }
       refreshRepartoMunicipal(muni, e.target);
+    });
+    tr.querySelector("input").addEventListener("focus", (e) => e.target.select());
+    // Celda vacía al salir = 0 (antes volvía a la cantidad por meta al tocar otra celda).
+    tr.querySelector("input").addEventListener("blur", (e) => {
+      if (e.target.value.trim() !== "") return;
+      _muniRepartoState.fijos[u.clues] = 0;
+      _muniRepartoState.editados.add(u.clues);
+      _muniRepartoState.tocados.add(u.clues);
+      refreshRepartoMunicipal(muni);
     });
   });
 

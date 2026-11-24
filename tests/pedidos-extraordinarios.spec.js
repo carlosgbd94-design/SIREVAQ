@@ -489,4 +489,34 @@ test.describe('Pedidos extraordinarios', () => {
     expect(await page.evaluate(() => BIO_STATE.tipoPedido)).toBe('EXTRAORDINARIO');
     expect(errores).toEqual([]);
   });
+
+  // Las fechas del calendario son DÍAS (timestamptz a medianoche UTC desde el panel ADMIN): en México (UTC-6)
+  // new Date() las corría un día atrás y la ventana cerraba un día antes (o abría un día después).
+  test.describe('calendario mensual con fechas a medianoche UTC (México)', () => {
+    test.use({ timezoneId: 'America/Mexico_City' });
+    const cal = { anio_mes: '2026-11', fecha_programada: '2026-11-20', habilitar_desde: '2026-11-19T00:00:00+00:00', habilitar_hasta: '2026-11-24T00:00:00+00:00', motivo: 'Ampliada', activo: 'SI' };
+
+    for (const hoy of ['2026-11-19', '2026-11-24']) {
+      test(`el pedido mensual se puede capturar el ${hoy} (primer y último día de la ventana del calendario)`, async ({ page }) => {
+        const e = estadoBase(hoy);
+        e.db.calendario_pedidos = [{ ...cal }];
+        const { errores } = await preparar(page, e);
+        const st = await page.evaluate(async () => (await supabaseRequest('unitstatus', { action: 'unitstatus' })).data);
+        expect(st.canCaptureBio).toBe(true);
+        await abrirPedido(page);
+        const s = await page.evaluate(() => ({ can: BIO_STATE.canCapture, fin: BIO_STATE.captureWindowEndYmd, tipo: BIO_STATE.tipoPedido, fecha: BIO_STATE.fechaPedidoProgramada }));
+        expect(s).toEqual({ can: true, fin: '2026-11-24', tipo: 'MENSUAL', fecha: '2026-11-20' });
+        expect(errores).toEqual([]);
+      });
+    }
+
+    test('el 25 ya está cerrado', async ({ page }) => {
+      const e = estadoBase('2026-11-25');
+      e.db.calendario_pedidos = [{ ...cal }];
+      const { errores } = await preparar(page, e);
+      await abrirPedido(page);
+      expect(await page.evaluate(() => BIO_STATE.canCapture)).toBe(false);
+      expect(errores).toEqual([]);
+    });
+  });
 });

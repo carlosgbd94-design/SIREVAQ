@@ -904,9 +904,11 @@
         const now = new Date();
         let start, target, end;
         if (data && data.fecha_programada) {
-            start = new Date(data.habilitar_desde);
-            target = new Date(data.fecha_programada);
-            end = new Date(data.habilitar_hasta);
+            // Son días, no instantes: new Date() los correría un día atrás en México (UTC-6).
+            const soloDia = (v) => { const m = String(v || "").match(/^(\d{4}-\d{2}-\d{2})/); return m ? new Date(+m[1].slice(0, 4), +m[1].slice(5, 7) - 1, +m[1].slice(8, 10)) : new Date(NaN); };
+            start = soloDia(data.habilitar_desde);
+            target = soloDia(data.fecha_programada);
+            end = soloDia(data.habilitar_hasta);
         } else {
             const intelligentWindow = calculateBioIntelligentWindow(now.getFullYear(), now.getMonth());
             start = intelligentWindow.start;

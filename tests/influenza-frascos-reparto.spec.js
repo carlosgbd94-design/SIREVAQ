@@ -75,6 +75,19 @@ const valores = (page, ids) => page.evaluate(
   (l) => l.map((id) => document.getElementById(`rem_inp_${id}`).value), ids);
 const DEST = ['QUERETARO', 'CORREGIDORA', 'MARQUES', 'HUIMILPAN', 'HENM', 'NHG'];
 
+test('Jurisdicción: vaciar una celda y salir de ella la deja en 0 (no vuelve a la cantidad por meta)', async ({ page }) => {
+  await montar(page, 'JURISDICCIONAL');
+  await page.evaluate(() => { _adminRemesasArray = []; renderFrascosDistribution(); });
+  await page.fill('#remesaTotalInput', '458');
+  expect((await valores(page, DEST))[1]).toBe('47');
+  await page.fill('#rem_inp_CORREGIDORA', '');
+  await page.locator('#rem_inp_CORREGIDORA').blur();
+  await page.focus('#rem_inp_MARQUES');
+  await page.keyboard.type('99');                 // tocar otra celda no devuelve los 47 a Corregidora
+  expect((await valores(page, DEST))[1]).toBe('0');
+  await expect(page.locator('#rem_mark_CORREGIDORA')).toContainText('editado');
+});
+
 test('Jurisdicción: reparte 458 frascos por meta sin rebasar el total y permite editar', async ({ page }) => {
   await montar(page, 'JURISDICCIONAL');
   await page.evaluate(() => { _adminRemesasArray = []; renderFrascosDistribution(); });
