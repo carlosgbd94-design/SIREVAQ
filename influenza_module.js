@@ -524,6 +524,8 @@ async function initInfluenzaCaptureFlow() {
         if (typeof syncTabGroupIndicator === 'function') {
           syncTabGroupIndicator('#influenzaUnitTabsContainer');
         }
+        // Guardar solo tiene sentido en «Captura de Reporte»: en Resumen e Historial el botón se oculta
+        if (typeof syncCommandHub === "function") syncCommandHub();
       };
     }
   });

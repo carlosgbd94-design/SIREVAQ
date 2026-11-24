@@ -15285,7 +15285,14 @@ function setLoggedInUI(user, status) {
   if (ensureCalendarioCap()) window.CalendarioCap.checkReminders();
   // «¿Qué hay de nuevo?»: una vez por versión, solo para las unidades (la tarjeta se puede volver a abrir desde cualquier guía)
   if (String(role || "").toUpperCase() === "UNIDAD" && window.Ayuda && typeof window.Ayuda.novedadesUnaVez === "function") {
-    setTimeout(() => { try { window.Ayuda.novedadesUnaVez(); } catch (e) { /* no bloquea */ } }, 3500);
+    // Si el aviso «Hemos precargado tu última captura» sigue abierto, se espera a que lo cierren: antes se encimaban dos diálogos
+    let intentosNovedades = 0;
+    const lanzarNovedades = () => {
+      const avisoAbierto = document.getElementById("prefillNoticeOverlay")?.classList.contains("show");
+      if (avisoAbierto && intentosNovedades++ < 40) return setTimeout(lanzarNovedades, 1500);
+      try { window.Ayuda.novedadesUnaVez(); } catch (e) { /* no bloquea */ }
+    };
+    setTimeout(lanzarNovedades, 3500);
   }
   populateHistoryMunicipioFilter(user);
 
@@ -24647,7 +24654,7 @@ function getAperturaStatusHelper(fechaApertura) {
   else if (daysLeft <= 5) { tone = "warn"; icon = "warning"; text = `${daysLeft} día${daysLeft === 1 ? "" : "s"} restantes`; }
 
   const bg = tone === "bad" ? "#fef2f2" : tone === "warn" ? "#fffbeb" : "#f0fdf4";
-  const color = tone === "bad" ? "#ef4444" : tone === "warn" ? "#d97706" : "#10b981";
+  const color = tone === "bad" ? "#b91c1c" : tone === "warn" ? "#92400e" : "#047857";   // contraste AA sobre su fondo claro
 
   return {
     tone, daysLeft, diffDays,
@@ -26668,6 +26675,10 @@ function syncCommandHub() {
   const cme = captureTab === "INFLUENZA" ? window.capturaModoEdicion : null;
   const infGuardado = !!(cme && cme.guardado());
   const infEditando = !!(cme && cme.editando());
+
+  // Influenza de la unidad: en «Resumen de meta» e «Historial de Reportes» no se guarda nada, así que el botón no se muestra
+  const subCapInf = document.getElementById("subtabUnitCaptura");
+  hub.classList.toggle("hub-sin-captura", captureTab === "INFLUENZA" && !!subCapInf && !subCapInf.classList.contains("active"));
 
   // 1. Visibilidad Global (Solo en paneles de captura)
   const isCapture = (mainPanel === "CAP");

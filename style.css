@@ -730,7 +730,7 @@ label {
   font-size: 13px;
   font-weight: 600;
   color: var(--primary);
-  opacity: 0.55;
+  opacity: 0.8;
   pointer-events: none;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   margin: 0 !important;
@@ -8937,7 +8937,7 @@ body[data-role="UNIDAD"] .panelCaptureSummary {
 
 .bio-metric-pill {
   display: inline-block; padding: 4px 10px; background: #f1f5f9; border-radius: 6px;
-  font-size: 12px; font-weight: 700; color: #64748b;
+  font-size: 12px; font-weight: 700; color: #475569;
 }
 
 .bio-chip {
@@ -14338,7 +14338,7 @@ button.pn-pure-obs:hover span.material-symbols-rounded { color: #0369a1 !importa
 .inf-paso-num .material-symbols-rounded { font-size: 16px; }
 .inf-paso-cuerpo { min-width: 0; }
 .inf-paso-titulo { font-size: 12px; font-weight: 800; color: #1e293b; line-height: 1.25; }
-.inf-paso-texto { margin-top: 3px; font-size: 11px; font-weight: 600; color: #64748b; line-height: 1.4; overflow-wrap: anywhere; }
+.inf-paso-texto { margin-top: 3px; font-size: 11px; font-weight: 600; color: #475569; line-height: 1.4; overflow-wrap: anywhere; }
 .inf-paso.is-active { border-color: #c4b5fd; background: #faf5ff; }
 .inf-paso.is-active .inf-paso-num { background: #7c3aed; color: #ffffff; }
 .inf-paso.is-done .inf-paso-num { background: #10b981; color: #ffffff; }
@@ -17082,3 +17082,106 @@ th.text-slate-500, #panelINFLUENZAADMIN .vac-seg .vac-btn:not(.activo) { color: 
 /* Bandeja de avisos: los iconos de acción miden 32 px (antes 20) y el contador no tapa al icono vecino */
 .notifIconPureBtn { min-width: 32px; min-height: 32px; }
 .notifIconPureBtn .notifBadgeCounter { width: 18px !important; height: 18px !important; min-width: 18px !important; font-size: 10px !important; top: -3px !important; right: -5px !important; }
+.hint-eyebrow.bioDayTitle { color: #2f55c4; opacity: 1; }   /* «Estatus de ventana»: 4.1:1 sobre el fondo azul claro */
+
+/* ── Utilidades de color de Tailwind que usa la interfaz y no estaban en tailwind_compiled.css (no hay compilador instalado: se generan a mano) ──
+   Sin ellas, «bg-emerald-600 text-white» dejaba el botón blanco sobre blanco (Historial de reportes, Confirmar surtido).
+   Los fondos sólidos con texto blanco usan un tono más oscuro que el estándar de Tailwind para cumplir contraste AA. ── */
+.bg-amber-100\/80 { background-color: rgb(254 243 199 / 0.8) }
+.bg-amber-500 { background-color: #b45309 }
+.bg-amber-500\/5 { background-color: rgb(245 158 11 / 0.05) }
+.bg-cyan-50 { background-color: #ecfeff }
+.bg-emerald-100\/50 { background-color: rgb(209 250 229 / 0.5) }
+.bg-emerald-100\/80 { background-color: rgb(209 250 229 / 0.8) }
+.bg-emerald-600 { background-color: #047857 }
+.bg-indigo-100 { background-color: #e0e7ff }
+.bg-indigo-600 { background-color: #4f46e5 }
+.bg-rose-600 { background-color: #be123c }
+.bg-sky-100\/50 { background-color: rgb(224 242 254 / 0.5) }
+.bg-sky-50 { background-color: #f0f9ff }
+.bg-sky-600 { background-color: #0369a1 }
+.bg-slate-100\/60 { background-color: rgb(241 245 249 / 0.6) }
+.bg-slate-100\/70 { background-color: rgb(241 245 249 / 0.7) }
+.bg-slate-200\/70 { background-color: rgb(226 232 240 / 0.7) }
+.bg-slate-500\/20 { background-color: rgb(100 116 139 / 0.2) }
+.bg-slate-900 { background-color: #0f172a }
+.bg-slate-900\/40 { background-color: rgb(15 23 42 / 0.4) }
+.bg-slate-900\/60 { background-color: rgb(15 23 42 / 0.6) }
+.bg-slate-900\/70 { background-color: rgb(15 23 42 / 0.7) }
+.bg-slate-900\/75 { background-color: rgb(15 23 42 / 0.75) }
+.bg-teal-100 { background-color: #ccfbf1 }
+.bg-teal-100\/80 { background-color: rgb(204 251 241 / 0.8) }
+.bg-teal-500 { background-color: #14b8a6 }
+.bg-violet-100 { background-color: #ede9fe }
+.bg-violet-100\/50 { background-color: rgb(237 233 254 / 0.5) }
+.bg-violet-50 { background-color: #f5f3ff }
+.bg-violet-50\/80 { background-color: rgb(245 243 255 / 0.8) }
+.bg-violet-500 { background-color: #8b5cf6 }
+.bg-white\/65 { background-color: rgb(255 255 255 / 0.65) }
+.border-blue-100 { border-color: #dbeafe }
+.border-cyan-300 { border-color: #67e8f9 }
+.border-emerald-200 { border-color: #a7f3d0 }
+.border-emerald-300 { border-color: #6ee7b7 }
+.border-emerald-600 { border-color: #059669 }
+.border-indigo-400 { border-color: #818cf8 }
+.border-sky-100 { border-color: #e0f2fe }
+.border-slate-200\/50 { border-color: rgb(226 232 240 / 0.5) }
+.border-slate-400\/20 { border-color: rgb(148 163 184 / 0.2) }
+.border-slate-800 { border-color: #1e293b }
+.border-violet-100 { border-color: #ede9fe }
+.border-violet-200 { border-color: #ddd6fe }
+.border-violet-300 { border-color: #c4b5fd }
+.disabled\:bg-slate-100:disabled { background-color: #f1f5f9 }
+.focus\:border-violet-500:focus { border-color: #8b5cf6 }
+.focus\:border-violet-600:focus { border-color: #7c3aed }
+.focus\:ring-emerald-500:focus { --tw-ring-color: #10b981 }
+.focus\:ring-indigo-500:focus { --tw-ring-color: #6366f1 }
+.focus\:ring-violet-200:focus { --tw-ring-color: #ddd6fe }
+.from-amber-500\/10 { --tw-gradient-from: rgb(245 158 11 / 0.1); --tw-gradient-to: rgb(255 255 255 / 0); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) }
+.from-violet-50\/50 { --tw-gradient-from: rgb(245 243 255 / 0.5); --tw-gradient-to: rgb(255 255 255 / 0); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) }
+.group:hover .group-hover\:bg-amber-500\/10 { background-color: rgb(245 158 11 / 0.1) }
+.hover\:bg-amber-600:hover { background-color: #92400e }
+.hover\:bg-emerald-50\/80:hover { background-color: rgb(236 253 245 / 0.8) }
+.hover\:bg-emerald-700:hover { background-color: #065f46 }
+.hover\:bg-indigo-50\/60:hover { background-color: rgb(238 242 255 / 0.6) }
+.hover\:bg-rose-700:hover { background-color: #9f1239 }
+.hover\:bg-sky-50\/80:hover { background-color: rgb(240 249 255 / 0.8) }
+.hover\:bg-sky-700:hover { background-color: #075985 }
+.hover\:bg-slate-200:hover { background-color: #e2e8f0 }
+.hover\:bg-slate-300:hover { background-color: #cbd5e1 }
+.hover\:bg-slate-300\/60:hover { background-color: rgb(203 213 225 / 0.6) }
+.hover\:bg-slate-50\/50:hover { background-color: rgb(248 250 252 / 0.5) }
+.hover\:bg-slate-50\/80:hover { background-color: rgb(248 250 252 / 0.8) }
+.hover\:bg-slate-800:hover { background-color: #1e293b }
+.hover\:bg-violet-100\/50:hover { background-color: rgb(237 233 254 / 0.5) }
+.hover\:bg-violet-100\/80:hover { background-color: rgb(237 233 254 / 0.8) }
+.hover\:bg-violet-50:hover { background-color: #f5f3ff }
+.hover\:bg-violet-50\/10:hover { background-color: rgb(245 243 255 / 0.1) }
+.hover\:bg-violet-50\/80:hover { background-color: rgb(245 243 255 / 0.8) }
+.hover\:text-emerald-900:hover { color: #064e3b }
+.hover\:text-rose-600:hover { color: #e11d48 }
+.hover\:text-rose-800:hover { color: #9f1239 }
+.hover\:text-sky-900:hover { color: #0c4a6e }
+.hover\:text-slate-700:hover { color: #334155 }
+.hover\:text-violet-900:hover { color: #4c1d95 }
+.shadow-amber-500\/20 { --tw-shadow-color: rgb(245 158 11 / 0.2); --tw-shadow: var(--tw-shadow-colored) }
+.text-amber-600 { color: #d97706 }
+.text-blue-600 { color: #2563eb }
+.text-cyan-900 { color: #164e63 }
+.text-emerald-400 { color: #34d399 }
+.text-emerald-800 { color: #065f46 }
+.text-emerald-900 { color: #064e3b }
+.text-indigo-400 { color: #818cf8 }
+.text-indigo-900 { color: #312e81 }
+.text-sky-600 { color: #0284c7 }
+.text-slate-200 { color: #e2e8f0 }
+.text-slate-400\/80 { color: rgb(148 163 184 / 0.8) }
+.text-teal-600 { color: #0d9488 }
+.text-violet-600 { color: #7c3aed }
+.text-violet-700 { color: #6d28d9 }
+.text-violet-800 { color: #5b21b6 }
+.text-violet-900 { color: #4c1d95 }
+.text-violet-950 { color: #2e1065 }
+.to-fuchsia-50\/30 { --tw-gradient-to: rgb(253 244 255 / 0.3) }
+.via-white { --tw-gradient-to: rgb(255 255 255 / 0); --tw-gradient-stops: var(--tw-gradient-from), #ffffff, var(--tw-gradient-to) }
+#globalCommandHub.hub-sin-captura { display: none !important; }

@@ -155,7 +155,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=10">
   <link rel="stylesheet" href="ayuda.css?v=7">
-  <link rel="stylesheet" href="style.css?v=2026.270" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.274" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -411,7 +411,7 @@
   <script defer src="guias_contenido.js?v=8"></script>
   <script defer src="ayuda.js?v=28"></script>
   <script defer src="a11y_global.js?v=7"></script>
-  <script src="dist/bundle-head.js?v=2026.338" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
+  <script src="dist/bundle-head.js?v=2026.340" defer onerror="sirevaqShowBundleLoadError('bundle-head.js')"></script>
 
   <!-- 🔧 Service Worker Registration (PWA) -->
   <script>
@@ -1674,7 +1674,7 @@
                 <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
                 <div><b>Existencia y pedido se capturan en FRASCOS, no en dosis.</b> Cuenta los frascos que tienes y los que necesitas (no multipliques por las dosis que trae cada uno). Solo el Mín / Máx se muestra en dosis.</div>
               </div>
-              <div class="cp-scroll overflow-y-auto">
+              <div class="cp-scroll overflow-y-auto" tabindex="0" role="region" aria-label="Lista del pedido; usa las flechas para desplazarte">
                 <div class="bio-card-sticky-header mb-3">
                   <div class="pl-2">Biológico</div>
                   <div class="text-center">Existencia<span class="fr-unit">frascos</span></div>

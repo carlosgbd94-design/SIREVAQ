@@ -309,3 +309,11 @@ body.mun-guiado [tabindex="-1"]:focus, body.mun-guiado [tabindex="-1"]:focus-vis
 .mun-pend button:focus-visible { outline: 2px solid #b45309; outline-offset: 2px; }
 .disc-cuenta-det summary { cursor: pointer; font-size: 12px; font-weight: 700; color: #475569; }
 .disc-consecuencia { margin-top: 8px; opacity: .9; }
+
+/* ── Pase de diseño SINBA-SIS ───────────────────────────────────────────────────────────────────────────────── */
+/* Los selectores de la barra (Unidad/Municipio) miden y se redondean igual que el campo de texto del responsable (44 px, 18 px de radio) */
+.panel-encabezado .barra > .campo > select { height: 44px; box-sizing: border-box; border-radius: 18px; padding: 0 14px; }
+/* «Ver cómo se corrige»: zona de clic de 28 px (medía 18) */
+.tut-enlace { min-height: 28px; display: inline-flex; align-items: center; }
+/* Casilla «Solo biológicos con captura»: 18 px en vez de 13 */
+#cehSoloConDatos { width: 18px; height: 18px; accent-color: #0b5cad; vertical-align: middle; }
