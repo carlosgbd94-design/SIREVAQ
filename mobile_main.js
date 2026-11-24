@@ -3537,6 +3537,10 @@
                                 capturado_por: nombreBIO.toUpperCase(),
                                 tipo_pedido: tipoPedidoActual,
                                 sin_pedido: sinPedido,
+                                // Los parámetros viajan con el pedido: el detalle (Live View) los lee de aquí
+                                promedio_frascos: Number(biologicosCatalogo.find(b => normalizeString(b.biologico) === normalizeString(bioName))?.promedio_frascos) || 0,
+                                min_dosis: Number(biologicosCatalogo.find(b => normalizeString(b.biologico) === normalizeString(bioName))?.min_dosis) || 0,
+                                max_dosis: Number(biologicosCatalogo.find(b => normalizeString(b.biologico) === normalizeString(bioName))?.max_dosis) || 0,
                                 existencia_actual_frascos: 0,
                                 pedido_frascos: 0
                             };

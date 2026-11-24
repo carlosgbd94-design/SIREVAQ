@@ -172,6 +172,8 @@ test.describe('Pedidos extraordinarios (móvil)', () => {
     await expect.poll(() => idx(srv.reqs, 'biologicos_pedido', 'POST').length).toBeGreaterThan(0);
     const post = idx(srv.reqs, 'biologicos_pedido', 'POST')[0];
     post.body.forEach((r) => { expect(r.tipo_pedido).toBe('EXTRAORDINARIO'); expect(r.fecha_pedido_programada).toBe('2026-10-26'); });
+    // Los parámetros (promedio, mín y máx) viajan con el pedido: el detalle de Live View los lee de aquí
+    post.body.forEach((r) => { expect(r.promedio_frascos).toBe(10); expect(r.max_dosis).toBe(100); expect(r.min_dosis).toBe(0); });
     expect(idx(srv.reqs, 'biologicos_pedido', 'DELETE')[0].q).toContain('fecha_pedido_programada=eq.2026-10-26');
     expect(e.db.biologicos_pedido.filter((r) => r.fecha_pedido_programada === '2026-10-22').map((r) => r.pedido_frascos)).toEqual([50]);
     expect(errores).toEqual([]);
