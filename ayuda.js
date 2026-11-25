@@ -73,7 +73,7 @@
         P(4, 'Guarda', 'Con el botón Guardar de la barra flotante. Después, «Editar» permite corregir mientras la ventana siga abierta.'),
         T('Reglas de validación'),
         I('functions', '#4338ca', 'Existencia + pedido ≥ promedio', 'Lo que tienes más lo que pides debe alcanzar el promedio mensual del biológico. Si no, el aviso indica cuántos frascos faltan.'),
-        I('format_list_numbered', '#4338ca', 'Múltiplos', 'Hexavalente se pide de 10 en 10; Rotavirus, Neumocócica 13, Neumocócica 20 y SRP, de 5 en 5.'),
+        I('format_list_numbered', '#4338ca', 'Múltiplos', 'Hexavalente, Neumocócica 13 y Neumocócica 20 se piden de 10 en 10; Rotavirus y SRP, de 5 en 5.'),
         I('campaign', '#7c3aed', 'Biológicos de campaña', 'Influenza, COVID-19, VPH y Varicela se capturan sin validar contra el promedio y aparecen como «Campaña».'),
         T('Opción «Solo existencias» (sin pedido)'),
         I('inventory', '#16a34a', 'Qué hace', 'Actívala cuando este mes no necesitas pedir: los pedidos quedan en 0 y solo reportas tu existencia. El sistema te pide confirmar antes de activarla.'),

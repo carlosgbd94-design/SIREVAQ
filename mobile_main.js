@@ -628,11 +628,11 @@
     };
 
     // Múltiplo en que debe pedirse cada biológico (misma regla que el escritorio, main.js):
-    // Hexavalente de 10 en 10; Rotavirus, Neumocócica 13/20 y SRP de 5 en 5; el resto libre.
+    // Hexavalente y Neumocócica 13/20 de 10 en 10; Rotavirus y SRP de 5 en 5; el resto libre.
     const bioMultiploPedido = (name) => {
         const key = String(name || "").toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
-        if (key === "HEXAVALENTE") return 10;
-        if (["ROTAVIRUS", "NEUMOCOCICA 13", "NEUMOCOCICA 20", "SRP"].includes(key)) return 5;
+        if (["HEXAVALENTE", "NEUMOCOCICA 13", "NEUMOCOCICA 20"].includes(key)) return 10;
+        if (["ROTAVIRUS", "SRP"].includes(key)) return 5;
         return 1;
     };
 
