@@ -134,8 +134,8 @@
     const r = rol();
     const muni = [...new Set(unidades.map((u) => u.municipio).filter(Boolean))];
     if (r === "CARAVANAS") return ["Mis unidades móviles", `${unidades.length} unidades`];
-    if (r === "MUNICIPAL") return ["Municipios a cargo", `${muni.length} municipios · ${unidades.length} unidades`];
-    return ["Jurisdicción Sanitaria 1", `${muni.length} municipios · ${unidades.length} unidades`];
+    if (r === "MUNICIPAL") return [muni.length === 1 ? "Municipio a cargo" : "Municipios a cargo", `${muni.length} ${muni.length === 1 ? "municipio" : "municipios"} · ${unidades.length} ${unidades.length === 1 ? "unidad" : "unidades"}`];
+    return ["Jurisdicción Sanitaria 1", `${muni.length} ${muni.length === 1 ? "municipio" : "municipios"} · ${unidades.length} ${unidades.length === 1 ? "unidad" : "unidades"}`];
   }
 
   // ── Datos ──
