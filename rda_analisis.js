@@ -138,5 +138,52 @@
         return out.sort((a, b) => a.prioridad - b.prioridad);
     }
 
-    return { GRUPOS, FACTOR, nivelDe, analiza, titulares };
+    // ── Esquemas de solo dosis (adolescentes/adultos, mayores, embarazadas, adicionales): no hay población meta,
+    // así que se lee la distribución: qué biológico pesa, qué municipio/unidades concentran y quién no aplicó.
+    const ESQUEMAS_DOSIS = {
+        adultos: [['HepB', 'adol_hb'], ['SR', 'adol_sr'], ['VPH', 'adol_vph'], ['Td', 'adol_td'], ['Tdpa', 'adol_tdpa']],
+        mayores: [['Neumo 13', 'am_neumo13'], ['Neumo 20', 'am_neumo20'], ['Td mayores', 'am_td']],
+        embarazadas: [['Tdpa', 'emb_tdpa'], ['VSR', 'emb_vsr']],
+        adicionales: [['Varicela', 'varicela'], ['Hepatitis A', 'hepatitis_a']]
+    };
+
+    function analizaDosis(unidades, esquema) {
+        const defs = ESQUEMAS_DOSIS[esquema];
+        if (!defs) return null;
+        const us = unidades.map(u => {
+            const por = defs.map(([, campo]) => Number(u[campo]) || 0);
+            return { clues: u.clues, nombre: u.nombre || u.clues, municipio: u.municipio || 'SIN MUNICIPIO', por, total: por.reduce((a, b) => a + b, 0) };
+        });
+        const total = us.reduce((a, u) => a + u.total, 0);
+        const bios = defs.map(([label], i) => {
+            const t = us.reduce((a, u) => a + u.por[i], 0);
+            const aplicaron = us.filter(u => u.por[i] > 0).length;
+            const top = us.filter(u => u.por[i] > 0).sort((a, b) => b.por[i] - a.por[i]).slice(0, 3).map(u => ({ nombre: u.nombre, municipio: u.municipio, dosis: u.por[i] }));
+            return { label, total: t, share: total > 0 ? t / total * 100 : 0, aplicaron, sin: us.length - aplicaron, top };
+        });
+        const mun = new Map();
+        us.forEach(u => { const m = mun.get(u.municipio) || { municipio: u.municipio, dosis: 0, unidades: 0 }; m.dosis += u.total; m.unidades++; mun.set(u.municipio, m); });
+        const municipios = [...mun.values()].sort((a, b) => b.dosis - a.dosis);
+        const ordenadas = us.filter(u => u.total > 0).sort((a, b) => b.total - a.total);
+        let acum = 0, nMitad = 0;
+        for (const u of ordenadas) { acum += u.total; nMitad++; if (acum >= total * 0.5) break; }
+        const sinDosis = us.filter(u => u.total === 0);
+        const out = { total, unidades: us.length, bios, municipios, sinDosis, nMitad, conDosis: ordenadas.length, titulares: [] };
+        const fmt = (n) => Math.round(n).toLocaleString('es-MX');
+        const pct = (n) => (Math.round(n * 10) / 10).toLocaleString('es-MX');
+        if (total > 0) {
+            const g = bios.slice().sort((a, b) => b.total - a.total)[0];
+            if (bios.length > 1) out.titulares.push({ icon: 'vaccines', texto: `${g.label} es el biológico que más pesa: ${pct(g.share)} % de las ${fmt(total)} dosis del esquema.` });
+            const m = municipios[0];
+            if (municipios.length > 1 && m.dosis > 0) out.titulares.push({ icon: 'location_on', texto: `${m.municipio} aplica ${pct(m.dosis / total * 100)} % de las dosis con ${pct(m.unidades / us.length * 100)} % de las unidades.` });
+            if (ordenadas.length >= 6) out.titulares.push({ icon: "filter_alt", texto: nMitad === 1 ? `${ordenadas[0].nombre} sola suma la mitad de las dosis del esquema.` : `${nMitad} de ${ordenadas.length} unidades que aplicaron suman la mitad de las dosis.` });
+        }
+        if (us.length > 1 && sinDosis.length) {
+            const nombres = sinDosis.length <= 4 ? `: ${sinDosis.map(u => u.nombre).join(', ')}` : '';
+            out.titulares.push({ icon: 'report', texto: `${sinDosis.length} de ${us.length} unidades no registran ninguna dosis de este esquema${nombres}.` });
+        }
+        return out;
+    }
+
+    return { GRUPOS, FACTOR, nivelDe, analiza, titulares, ESQUEMAS_DOSIS, analizaDosis };
 });

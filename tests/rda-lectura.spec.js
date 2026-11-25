@@ -86,3 +86,65 @@ test('pantalla: pinta una tarjeta por grupo, semáforo y la unidad con más reza
   await page.evaluate(() => window.removeRdaLectura());
   expect(await page.locator('#rdaLecturaCorte').count()).toBe(0);
 });
+
+test('motor: esquemas de solo dosis — reparto por biológico, municipio, unidades sin dosis y concentración', () => {
+  const us = [
+    { clues: 'A', nombre: 'UA', municipio: 'Q', adol_hb: 10, adol_sr: 90, adol_vph: 0, adol_td: 0, adol_tdpa: 0 },
+    { clues: 'B', nombre: 'UB', municipio: 'Q', adol_hb: 0, adol_sr: 100, adol_vph: 0, adol_td: 0, adol_tdpa: 0 },
+    { clues: 'C', nombre: 'UC', municipio: 'M', adol_hb: 0, adol_sr: 0, adol_vph: 0, adol_td: 0, adol_tdpa: 0 }
+  ];
+  const r = A.analizaDosis(us, 'adultos');
+  expect(r.total).toBe(200);
+  expect(r.bios.find((b) => b.label === 'SR').total).toBe(190);
+  expect(r.bios.find((b) => b.label === 'SR').share).toBeCloseTo(95, 6);
+  expect(r.bios.find((b) => b.label === 'SR').aplicaron).toBe(2);
+  expect(r.bios.find((b) => b.label === 'HepB').aplicaron).toBe(1);
+  expect(r.municipios[0]).toMatchObject({ municipio: 'Q', dosis: 200, unidades: 2 });
+  expect(r.sinDosis.map((u) => u.clues)).toEqual(['C']);
+  expect(r.titulares.map((t) => t.texto).join('\n')).toMatch(/SR es el biológico que más pesa: 95 %/);
+  expect(r.titulares.map((t) => t.texto).join('\n')).toMatch(/1 de 3 unidades no registran ninguna dosis de este esquema: UC/);
+  expect(A.analizaDosis(us, 'basico')).toBeNull();
+});
+
+test('tabla de detalle: columna FALTAN, filtros por nivel, búsqueda y rótulo de municipio que el PDF no lee como texto', async ({ page }) => {
+  const fs = require('fs');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'rda_ui.js'), 'utf8');
+  const cuerpo = src.slice(src.indexOf('function _rdaTablaTools'), src.indexOf('// ══════════ EXPORT'));
+  expect(cuerpo.length).toBeGreaterThan(500);
+  await page.setContent(`<div id="rdaTableContainer"><table id="rdaDetailTable"><thead></thead><tbody id="rdaDetailTbody"></tbody></table></div><span id="rdaTableCount"></span>`);
+  // _tablaTools inserta su barra antes del contenedor: necesita un padre
+  await page.evaluate(() => { const c = document.getElementById('rdaTableContainer'); const w = document.createElement('div'); c.parentNode.insertBefore(w, c); w.appendChild(c); w.appendChild(document.getElementById('rdaTableCount')); });
+  await page.addScriptTag({ path: path.join(__dirname, '..', 'rda_analisis.js') });
+  await page.addScriptTag({ content: `var _rdaState={esquema:'basico',vistaBasico:'esquema',sortCol:null,sortAsc:false};var _rdaCache={maxMes:10,anio:2026};var USER={rol:'JURISDICCIONAL'};${cuerpo};window.__render=function(u){renderTable(u,'basico',{cobertura_menor1:50,cobertura_uno:50,cobertura_cuatro:50,cobertura_seis:0});};` });
+  const U = (clues, muni, pob, dosis) => ({ clues, nombre: 'U ' + clues, municipio: muni, pob_menor_1: pob, pob_1_ano: pob, pob_4_anos: pob,
+    bcg_dosis: dosis, hepb_0_7_dosis: dosis, hexa_3_dosis: dosis, rota_2_dosis: dosis, neumo_2_dosis: dosis, hexa_ref_dosis: dosis, neumo_ref_dosis: dosis, srp_2_dosis: dosis, dpt_4_dosis: dosis });
+  // meta al corte por grupo = pob * 0.0833 * 10; con pob 1200 -> 999.6, así que dosis 1000 (~100 %), 800 (~80 %), 100 (~10 %)
+  const unidades = [U('A', 'QUERETARO', 1200, 1000), U('B', 'QUERETARO', 1200, 800), U('C', 'CORREGIDORA', 1200, 100)];
+  await page.evaluate((u) => window.__render(u), unidades);
+  const heads = await page.locator('#rdaDetailTable thead th').allInnerTexts();
+  expect(heads.slice(-3)).toEqual(['FALTAN', 'META AL CORTE', 'APLICADAS (EQUIV.)']);
+  expect(await page.locator('#rdaDetailTbody tr.rt-fila').count()).toBe(3);
+  // el rótulo del municipio es UNA celda con solo el nombre (el PDF lo toma como encabezado de grupo); el resumen va en data-resumen
+  const grupo = page.locator('#rdaDetailTbody tr.rt-grupo td').first();
+  expect(await grupo.innerText()).toBe('CORREGIDORA');
+  expect(await grupo.getAttribute('data-resumen')).toMatch(/1 unidad · 1 crítica/);
+  // faltan = meta - aplicadas: C -> 999.6*3 - 100*? (equivalentes: dosis*5/4 + dosis*3/3 + dosis = 3.25*dosis)
+  const filaC = page.locator('#rdaDetailTbody tr.rt-fila', { hasText: 'U C' });
+  const metaC = Math.round(1200 * 0.0833 * 10 * 3), aplC = Math.round(100 * 5 / 4 + 100 + 100);
+  expect(await filaC.locator('td').nth(6).innerText()).toBe((metaC - aplC).toLocaleString('es-MX'));
+  // la unidad que superó su meta muestra "+excedente" en vez de un faltante
+  const filaA = page.locator('#rdaDetailTbody tr.rt-fila', { hasText: 'U A' });
+  expect(await filaA.locator('td').nth(6).innerText()).toMatch(/^\+/);
+  // chips: críticas = C solamente (A ~ 100 % óptima, B ~ 80 % regular)
+  await expect(page.locator('#rdaTablaTools .rt-chip[data-n="critico"]')).toContainText('1');
+  await page.locator('#rdaTablaTools .rt-chip[data-n="critico"]').click();
+  expect(await page.locator('#rdaDetailTbody tr.rt-fila').count()).toBe(1);
+  await expect(page.locator('#rdaTableCount')).toHaveText('1 de 3 unidades');
+  await page.locator('#rdaTablaTools .rt-chip[data-n=""]').click();
+  await page.locator('#rdaTablaBusca').fill('u b');
+  expect(await page.locator('#rdaDetailTbody tr.rt-fila').count()).toBe(1);
+  // la barra de herramientas no entra a las exportaciones
+  expect(await page.locator('#rdaTablaTools').getAttribute('class')).toContain('rda-no-export');
+  // la fila de total sigue siendo de 3 celdas de texto + columnas y es la última
+  expect(await page.locator('#rdaDetailTbody tr[data-rda-total]').count()).toBe(1);
+});

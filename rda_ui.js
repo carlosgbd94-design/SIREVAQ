@@ -896,6 +896,7 @@ async function renderDashboard() {
 
     renderKPIs(agg, esquema);
     if (esquema === 'basico' && window.renderRdaLectura) window.renderRdaLectura(fUnits, maxMes, _rdaCache.anio);
+    else if (window.RdaAnalisis && RdaAnalisis.ESQUEMAS_DOSIS[esquema] && window.renderRdaLecturaDosis) window.renderRdaLecturaDosis(fUnits, esquema);
     else if (window.removeRdaLectura) window.removeRdaLectura();
     if (isSingleUnit) {
         renderDoughnut(agg, esquema);
@@ -1966,6 +1967,41 @@ function renderBarChart(fUnits, muniFilter, esquema) {
     }
 }
 
+// Barra de la tabla de detalle: búsqueda + nivel (peor grupo de edad). Se crea una vez y solo se actualizan los conteos,
+// para no perder el foco del cuadro de búsqueda al teclear. Devuelve null si no aplica (y la quita).
+function _rdaTablaTools(mostrar, filas, repintar) {
+    let bar = document.getElementById('rdaTablaTools');
+    const cont = document.getElementById('rdaTableContainer');
+    if (!mostrar || !cont) { if (bar) bar.remove(); _rdaState.tNivel = ''; _rdaState.tBusca = ''; return null; }
+    const cuenta = { '': filas.length, critico: 0, regular: 0, optimo: 0 };
+    filas.forEach(r => { if (r.peor != null) cuenta[RdaAnalisis.nivelDe(r.peor)]++; });
+    const chips = [['', 'Todas'], ['critico', 'Críticas'], ['regular', 'Regulares'], ['optimo', 'Óptimas']];
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'rdaTablaTools';
+        bar.className = 'rda-no-export';
+        bar.innerHTML = '<label class="rt-busca"><span class="material-symbols-rounded" aria-hidden="true">search</span><input type="search" id="rdaTablaBusca" placeholder="Buscar unidad, CLUES o municipio" aria-label="Buscar unidad en la tabla"></label><div class="rt-chips" role="group" aria-label="Filtrar por nivel de avance de la unidad"></div><button type="button" id="rdaTablaRezago" class="rt-orden" title="Ordena de la unidad que más le falta a la que menos">Mayor rezago</button>';
+        cont.parentElement.insertBefore(bar, cont);
+        const input = bar.querySelector('input');
+        input.addEventListener('input', () => { _rdaState.tBusca = input.value; _rdaState.tRepintar && _rdaState.tRepintar(); });
+        bar.querySelector('.rt-chips').addEventListener('click', e => {
+            const b = e.target.closest('button[data-n]'); if (!b) return;
+            _rdaState.tNivel = b.dataset.n; _rdaState.tRepintar && _rdaState.tRepintar();
+        });
+        bar.querySelector('#rdaTablaRezago').addEventListener('click', () => {
+            const ya = _rdaState.sortCol === 'brecha' && !_rdaState.sortAsc;
+            _rdaState.sortCol = ya ? null : 'brecha'; _rdaState.sortAsc = false;
+            _rdaState.tRepintar && _rdaState.tRepintar();
+        });
+    }
+    _rdaState.tRepintar = repintar;
+    bar.querySelector('.rt-chips').innerHTML = chips.map(([k, t]) =>
+        `<button type="button" data-n="${k}" class="rt-chip${(_rdaState.tNivel || '') === k ? ' on' : ''}" aria-pressed="${(_rdaState.tNivel || '') === k}">${k ? `<i class="rt-dot rt-${k}"></i>` : ''}${t} <b>${cuenta[k]}</b></button>`).join('');
+    bar.querySelector('#rdaTablaRezago').classList.toggle('on', _rdaState.sortCol === 'brecha');
+    const inp = bar.querySelector('input'); if (inp.value !== (_rdaState.tBusca || '')) inp.value = _rdaState.tBusca || '';
+    return bar;
+}
+
 // Renderización de la Tabla de Datos con Cabecera Dinámica y Columna "Meta" Condicional
 function renderTable(fUnits, esquema, agg) {
     const table = document.getElementById('rdaDetailTable');
@@ -2017,6 +2053,8 @@ function renderTable(fUnits, esquema, agg) {
     // "Meta" sólo es visible para el esquema "basico"
     const showMeta = (esquema === 'basico');
     const vistaBio = (esquema === 'basico' && _rdaState.vistaBasico === 'biologico');
+    // "Faltan": meta al corte menos aplicadas equivalentes (solo vista por grupo de edad del esquema básico)
+    const showFaltan = showMeta && !vistaBio;
     // Proporciones fijas de columnas
     const numV = vCols.length;
     const colGroupHTML = `
@@ -2024,9 +2062,10 @@ function renderTable(fUnits, esquema, agg) {
             <col style="width: 130px;">
             <col style="width: 220px;">
             <col style="width: 150px;">
-            ${vCols.map(() => `<col style="width: 110px;">`).join('')}
-            ${showMeta ? `<col style="width: 130px;">` : ''}
-            <col style="width: 140px;">
+            ${vCols.map(() => `<col style="width: ${showFaltan ? 94 : 110}px;">`).join('')}
+            ${showFaltan ? `<col style="width: 94px;">` : ''}
+            ${showMeta ? `<col style="width: ${showFaltan ? 108 : 130}px;">` : ''}
+            <col style="width: ${showFaltan ? 118 : 140}px;">
         </colgroup>
     `;
 
@@ -2036,6 +2075,7 @@ function renderTable(fUnits, esquema, agg) {
             <th style="padding: 12px; text-align: left;" data-sort="nombre">UNIDAD MÉDICA</th>
             <th style="padding: 12px; text-align: left;" data-sort="municipio">MUNICIPIO</th>
             ${vCols.map(c => `<th style="padding: 12px; text-align: center;" data-sort="${c.s}">${c.n}</th>`).join('')}
+            ${showFaltan ? `<th style="padding: 12px; text-align: center;" data-sort="brecha">FALTAN</th>` : ''}
             ${showMeta ? `<th style="padding: 12px; text-align: center;" data-sort="meta">${vistaBio ? 'POBLACIÓN ANUAL' : 'META AL CORTE'}</th>` : ''}
             <th style="padding: 12px; text-align: center;" data-sort="dosis">${vistaBio ? 'DOSIS REGISTRADAS' : (showMeta ? 'APLICADAS (EQUIV.)' : 'DOSIS')}</th>
         </tr>
@@ -2075,7 +2115,7 @@ function renderTable(fUnits, esquema, agg) {
     }
 
     // 2. Mapear filas
-    const rows = fUnits.map(u => {
+    let rows = fUnits.map(u => {
         const res = { 
             clues: u.clues, 
             nombre: u.nombre, 
@@ -2118,6 +2158,11 @@ function renderTable(fUnits, esquema, agg) {
                 }
                 res.dosis = Math.round(dosisM1 / 4 + dosisUno / 3 + dosisCuatro + dosisSeis);
                 res.meta = Math.round(factorM1 + factorUno + factorCuatro + (_rdaCache.anio === 2025 ? factorSeis : 0));
+                res.brecha = res.meta - res.dosis;
+                // Nivel de la unidad = el de su grupo de edad más atrasado (solo grupos con población meta)
+                const _pcts = [[factorM1, res.v1], [factorUno, res.v2], [factorCuatro, res.v3]].concat(_rdaCache.anio === 2025 ? [[factorSeis, res.v4]] : [])
+                    .filter(x => x[0] > 0).map(x => x[1]);
+                res.peor = _pcts.length ? Math.min(..._pcts) : null;
             }
         } else if (esquema === 'adultos') {
             res.v1 = u.adol_hb || 0;
@@ -2164,7 +2209,17 @@ function renderTable(fUnits, esquema, agg) {
         });
     }
 
-    if (countEl) countEl.textContent = `${rows.length} ${rows.length === 1 ? 'unidad' : 'unidades'}`;
+    const allRows = rows;
+    // Barra de herramientas (búsqueda y nivel) — solo esquema básico por grupo de edad con varias unidades
+    const tools = _rdaTablaTools(esquema === 'basico' && !vistaBio && fUnits.length > 1, allRows, () => renderTable(fUnits, esquema, agg));
+    const nivelSel = tools ? (_rdaState.tNivel || '') : '';
+    const busca = tools ? String(_rdaState.tBusca || '').trim().toLowerCase() : '';
+    if (nivelSel) rows = rows.filter(r => r.peor != null && RdaAnalisis.nivelDe(r.peor) === nivelSel);
+    if (busca) rows = rows.filter(r => `${r.clues} ${r.nombre} ${r.municipio}`.toLowerCase().includes(busca));
+    const maxFaltan = Math.max(1, ...allRows.map(r => r.brecha || 0));
+    if (countEl) countEl.textContent = rows.length === allRows.length
+        ? `${rows.length} ${rows.length === 1 ? 'unidad' : 'unidades'}`
+        : `${rows.length} de ${allRows.length} unidades`;
     
     const badge = (v, vName) => {
         if (esquema !== 'basico') {
@@ -2181,7 +2236,7 @@ function renderTable(fUnits, esquema, agg) {
         let statusColor = '#15803d';
         // Check-circle
         let statusIcon = '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>';
-        if (pct < 80) {
+        if (pct < 75) {
             statusText = 'CRÍTICO';
             statusColor = '#dc2626';
             // Triángulo de alerta
@@ -2195,36 +2250,49 @@ function renderTable(fUnits, esquema, agg) {
         const barPct = Math.max(0, Math.min(100, pct));
 
         return `
-            <div role="img" aria-label="${vName}: ${pct} por ciento, ${statusText.toLowerCase()}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;" title="${statusText}">
-                <div style="display: inline-flex; align-items: center; gap: 5px;">
-                    <span style="display: flex; align-items: center; justify-content: center; color: ${statusColor}; flex-shrink: 0;">
-                        <svg viewBox="0 0 24 24" width="13" height="13" style="fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;">${statusIcon}</svg>
-                    </span>
-                    <span style="font-size: 13px; font-weight: 900; color: #0f172a; line-height: 1.5;">${pct}%</span>
+            <div class="rt-av" role="img" aria-label="${vName}: ${pct} por ciento, ${statusText.toLowerCase()}" title="${statusText}">
+                <div class="rt-av-top" style="color:${statusColor}">
+                    <svg viewBox="0 0 24 24" width="13" height="13" style="fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex:none;">${statusIcon}</svg>
+                    <b>${pct}%</b>
                 </div>
-                <span style="display: block; width: 52px; height: 4px; border-radius: 2px; background: #eef1f6; overflow: hidden;">
-                    <span style="display: block; height: 100%; border-radius: 2px; width: ${barPct}%; background: ${statusColor};"></span>
-                </span>
+                <span class="rt-track"><i style="width:${barPct}%;background:${statusColor}"></i><u style="left:75%"></u><u style="left:95%"></u></span>
             </div>
         `;
     };
 
     let html = '';
     let currentMuni = null;
-    const totalCols = 4 + vCols.length + (showMeta ? 1 : 0);
+    const totalCols = 4 + vCols.length + (showMeta ? 1 : 0) + (showFaltan ? 1 : 0);
+
+    // Resumen por municipio para el rótulo de grupo (se pinta con CSS: no entra al texto que lee el PDF)
+    const resumenMuni = (m) => {
+        const us = allRows.filter(r => (r.municipio || 'Sin Municipio').toUpperCase() === m);
+        const crit = us.filter(r => r.peor != null && r.peor < 75).length;
+        const meta = us.reduce((a, r) => a + (r.meta || 0), 0), dos = us.reduce((a, r) => a + (r.dosis || 0), 0);
+        const av = meta > 0 ? Math.round(dos / meta * 1000) / 10 : null;
+        return `${us.length} ${us.length === 1 ? 'unidad' : 'unidades'}${showFaltan ? ` · ${crit} ${crit === 1 ? 'crítica' : 'críticas'}` : ''}${av != null && showFaltan ? ` · avance ${av}%` : ''}`;
+    };
+    const faltanCelda = (b) => {
+        if (b > 0) {
+            return `<div class="rt-fal"><b>${Math.round(b).toLocaleString('es-MX')}</b><span class="rt-track rt-track-s"><i style="width:${Math.max(4, Math.min(100, b / maxFaltan * 100))}%"></i></span></div>`;
+        }
+        return `<div class="rt-fal rt-ok"><b>+${Math.round(-b).toLocaleString('es-MX')}</b></div>`;
+    };
 
     rows.forEach(r => {
         const muni = (r.municipio || 'Sin Municipio').toUpperCase();
         if (!_rdaState.sortCol && muni !== currentMuni && fUnits.length > 1) {
-            html += `<tr><td colspan="${totalCols}" style="padding:12px 24px; background-color:#f8fafc; font-size:12px; font-weight:800; color:#334155; text-transform:uppercase; letter-spacing:0.05em; border-bottom:2px solid #e2e8f0; border-top:2px solid #e2e8f0;">${muni}</td></tr>`;
+            html += `<tr class="rt-grupo"><td colspan="${totalCols}" data-resumen="${resumenMuni(muni)}">${muni}</td></tr>`;
             currentMuni = muni;
         }
+        const nv = r.peor == null ? '' : RdaAnalisis.nivelDe(r.peor);
         html += `
-        <tr style="border-bottom:1px solid #f1f5f9;">
-            <td style="padding:16px 24px;font-size:11px;font-weight:700;color:#64748b;">${r.clues}</td>
-            <td style="padding:16px 24px;font-size:11px;font-weight:800;color:#0f172a">${r.nombre}</td>
-            <td style="padding:16px 24px;font-size:11px;color:#64748b;font-weight:600;">${r.municipio}</td>
+        <tr class="rt-fila" ${nv ? `data-nivel="${nv}"` : ''}>
+            <td class="rt-c1">${r.clues}</td>
+            <td class="rt-c2">${r.nombre}</td>
+            <td class="rt-c3">${r.municipio}</td>
             ${vCols.map(c => `<td style="padding:8px 12px;text-align:center">${badge(r[c.s], c.n)}</td>`).join('')}
+            ${showFaltan ? `<td style="padding:8px 12px;text-align:center">${faltanCelda(r.brecha)}</td>` : ''}
             ${showMeta ? `<td style="padding:16px 24px;text-align:center;font-size:11px;font-weight:800;color:#64748b">${(r.meta || 0).toLocaleString('es-MX')}</td>` : ''}
             <td style="padding:16px 24px;text-align:center;font-size:11px;font-weight:800;color:#0f172a">${(r.dosis || 0).toLocaleString('es-MX')}</td>
         </tr>`;
@@ -2240,20 +2308,20 @@ function renderTable(fUnits, esquema, agg) {
     const canSeeMunicipalTotal = roleForTotal === 'MUNICIPAL';
     const canSeeCaravanasTotal = roleForTotal === 'CARAVANAS';
     // Sin fila de total cuando se ve una sola unidad: el total sería la misma fila repetida
-    if ((canSeeJurisdictionTotal || canSeeMunicipalTotal || canSeeCaravanasTotal) && rows.length > 1 && fUnits.length > 1) {
+    if ((canSeeJurisdictionTotal || canSeeMunicipalTotal || canSeeCaravanasTotal) && allRows.length > 1 && fUnits.length > 1) {
         let totalRowLabel;
         if (canSeeMunicipalTotal) {
-            totalRowLabel = (rows[0]?.municipio || '').toUpperCase() === 'HOSPITALES' ? 'ACUMULADO DE HOSPITALES' : `TOTAL MUNICIPAL (${(rows[0]?.municipio || '').toUpperCase()})`;
+            totalRowLabel = (allRows[0]?.municipio || '').toUpperCase() === 'HOSPITALES' ? 'ACUMULADO DE HOSPITALES' : `TOTAL MUNICIPAL (${(allRows[0]?.municipio || '').toUpperCase()})`;
         } else if (canSeeCaravanasTotal) {
-            const caravanasMunicipios = [...new Set(rows.map(r => (r.municipio || '').toUpperCase()))];
+            const caravanasMunicipios = [...new Set(allRows.map(r => (r.municipio || '').toUpperCase()))];
             totalRowLabel = caravanasMunicipios.length === 1
                 ? `TOTAL CARAVANAS (${caravanasMunicipios[0]})`
                 : 'TOTAL CARAVANAS (JURISDICCIÓN SANITARIA 1)';
         } else {
             totalRowLabel = 'TOTAL JURISDICCIONAL (JURISDICCIÓN SANITARIA 1)';
         }
-        const jurPob = rows.reduce((sum, r) => sum + (r.meta || 0), 0);
-        const jurDosis = rows.reduce((sum, r) => sum + (r.dosis || 0), 0);
+        const jurPob = allRows.reduce((sum, r) => sum + (r.meta || 0), 0);
+        const jurDosis = allRows.reduce((sum, r) => sum + (r.dosis || 0), 0);
 
         // Porcentajes globales de la jurisdicción/municipio (no promedio simple de unidades)
         const bio = (_rdaState.vistaBasico === 'biologico');
@@ -2264,14 +2332,14 @@ function renderTable(fUnits, esquema, agg) {
         const jurVCols = vCols.map(c => {
             if (esquema === 'basico') return mapaBasico[c.s] ?? '—';
             // Esquemas de solo dosis: el total es la SUMA de las unidades (antes se mostraba el promedio)
-            return rows.reduce((sum, r) => sum + (r[c.s] || 0), 0);
+            return allRows.reduce((sum, r) => sum + (r[c.s] || 0), 0);
         });
 
         const muniFiltro = document.getElementById('rdaFilterMunicipio')?.value || '';
         const textoAmbito = (!canSeeMunicipalTotal && !canSeeCaravanasTotal && muniFiltro)
             ? `${muniFiltro.toUpperCase() === 'HOSPITALES' ? 'ACUMULADO' : 'MUNICIPAL'} · ${muniFiltro.toUpperCase()}`
             : canSeeMunicipalTotal
-            ? `${(rows[0]?.municipio || '').toUpperCase() === 'HOSPITALES' ? 'ACUMULADO' : 'MUNICIPAL'} · ${(rows[0]?.municipio || '').toUpperCase()}`
+            ? `${(allRows[0]?.municipio || '').toUpperCase() === 'HOSPITALES' ? 'ACUMULADO' : 'MUNICIPAL'} · ${(allRows[0]?.municipio || '').toUpperCase()}`
             : (canSeeCaravanasTotal ? totalRowLabel.replace('TOTAL ', '').replace(/\s*\(JURISDICCIÓN SANITARIA 1\)/, '') : 'JURISDICCIONAL · JS 1');
         html += `
             <tr data-rda-total="1" class="rda-fila-total">
@@ -2279,6 +2347,7 @@ function renderTable(fUnits, esquema, agg) {
                 <td style="padding:14px 24px; font-size:11px; font-weight:800; color:#334155; white-space:normal; line-height:1.3;">${textoAmbito}</td>
                 <td style="padding:14px 24px;"></td>
                 ${vCols.map((c, idx) => `<td style="padding:12px 10px; text-align:center;">${badge(jurVCols[idx], c.n)}</td>`).join('')}
+                ${showFaltan ? `<td style="padding:12px 10px; text-align:center;">${faltanCelda(jurPob - jurDosis)}</td>` : ''}
                 ${showMeta ? `<td style="padding:14px 24px; text-align:center; font-size:12px; font-weight:900; color:#0369a1;">${jurPob.toLocaleString('es-MX')}</td>` : ''}
                 <td style="padding:14px 24px; text-align:center; font-size:12px; font-weight:900; color:#0f766e;">${jurDosis.toLocaleString('es-MX')}</td>
             </tr>
@@ -2286,7 +2355,7 @@ function renderTable(fUnits, esquema, agg) {
     }
 
     tbody.innerHTML = rows.length === 0
-        ? `<tr><td colspan="${totalCols}" style="padding:40px;text-align:center;color:#94a3b8;font-weight:600;">Sin datos</td></tr>`
+        ? `<tr><td colspan="${totalCols}" style="padding:40px;text-align:center;color:#64748b;font-weight:600;">${allRows.length ? 'Ninguna unidad coincide con el filtro.' : 'Sin datos'}</td></tr>`
         : html;
 }
 
@@ -2979,6 +3048,7 @@ const _applyExportFixesToRoot = (clonedContent) => {
             .iinf-hero-num .iinf-chip { margin-top: 8px !important; }
             .iinf-det > summary { display: block !important; list-style: none !important; }
             .iinf-tabla thead th { position: static !important; }
+            .rda-no-export { display: none !important; }
             /* === Detener todas las animaciones === */
             * {
                 animation: none !important;
