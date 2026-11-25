@@ -12,7 +12,7 @@
 <script defer src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="dock_glass.css?v=10">
 <link rel="stylesheet" href="ayuda.css?v=1">
-<script defer src="ayuda.js?v=27"></script>
+<script defer src="ayuda.js?v=28"></script>
 <script defer src="a11y_global.js?v=7"></script>
 <script defer src="dock_glass.js?v=6"></script>
 <script defer src="biovac_engine.js?v=2026.1"></script>
@@ -28,9 +28,9 @@
     --primary: #0f172a; --secondary: #0ea5e9;
     --surface: #ffffff; --surface-container: #f1f4f8;
     --outline: #73777f; --outline-variant: #e2e8f0;
-    --text: #1a1c20; --muted: #64748b;
+    --text: #1a1c20; --muted: #55657a;
     --error: #ba1a1a; --error-bg: #fef2f2; --error-border: #fecaca;
-    --success: #10b981; --success-bg: #f0fdf9;
+    --success: #10b981; --success-text: #047857; --success-bg: #f0fdf9;
     --warning: #b45309; --warning-bg: #fffbeb; --warning-border: #fde68a;
     --canje: #7c3aed; --canje-bg: #f5f3ff; --canje-border: #ddd6fe;
     --shadow-1: 0 1px 3px rgba(0,0,0,.06); --shadow-2: 0 4px 8px rgba(0,0,0,.10);
@@ -117,10 +117,10 @@
   }
   .estado-badge:empty { display: none; }
   .estado-BORRADOR { background: #f1f5f9; color: var(--muted); }
-  .estado-CERRADO { background: var(--success-bg); color: var(--success); }
+  .estado-CERRADO { background: var(--success-bg); color: var(--success-text); }
   .estado-EN_CORRECCION { background: var(--warning-bg); color: var(--warning); }
   .estado-SIN_MOVIMIENTO { background: var(--error-bg); color: var(--error); }
-  .estado-GENERADO { background: var(--success-bg); color: var(--success); }
+  .estado-GENERADO { background: var(--success-bg); color: var(--success-text); }
   .estado-CON_CORRECCIONES_POSTERIORES { background: var(--warning-bg); color: var(--warning); }
 
   #avisoUsuario {
@@ -130,7 +130,7 @@
     vertical-align: middle; margin-left: 8px; position: relative; top: -2px;
   }
   #avisoUsuario:empty { display: none; }
-  #avisoUsuario.aviso-ok { background: var(--success-bg); border-color: rgba(16,185,129,.3); color: var(--success); }
+  #avisoUsuario.aviso-ok { background: var(--success-bg); border-color: rgba(16,185,129,.3); color: var(--success-text); }
   #avisoUsuario .material-symbols-rounded { font-size: 14px; }
 
   .seccion-titulo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -150,7 +150,7 @@
   .validacion.ERROR { background: var(--error-bg); color: var(--error); border-color: var(--error-border); }
   .validacion.ADVERTENCIA { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-border); }
   .validacion .codigo { font-weight: 800; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; flex: none; }
-  .sin-validaciones { color: var(--success); font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; margin: 0; }
+  .sin-validaciones { color: var(--success-text); font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; margin: 0; }
 
   .informe-fila {
     display: flex; gap: 10px; align-items: center; font-size: 12.5px; padding: 8px 0;
@@ -258,7 +258,7 @@
     box-shadow: var(--shadow-2); z-index: 999; display: none; font-weight: 600;
   }
   .toast.error { background: var(--error); }
-  .toast.ok { background: var(--success); }
+  .toast.ok { background: var(--success-text); }
 
   .modal-overlay {
     position: fixed; inset: 0; background: rgba(15,23,42,.5); display: none;
@@ -291,7 +291,7 @@
   border: 2px solid var(--outline-variant); color: var(--muted); display: flex; align-items: center; justify-content: center; font: 800 11.5px 'Poppins', sans-serif;
 }
 .ruta-num .material-symbols-rounded { font-size: 15px; }
-.ruta-paso.hecho .ruta-num { background: var(--success); border-color: var(--success); color: #fff; }
+.ruta-paso.hecho .ruta-num { background: var(--success); border-color: var(--success-text); color: #fff; }
 .ruta-paso.actual .ruta-num { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: 0 0 0 4px rgba(15,23,42,.1); }
 .ruta-paso.alerta .ruta-num { background: var(--warning); border-color: var(--warning); color: #fff; box-shadow: 0 0 0 4px rgba(180,83,9,.15); }
 .ruta-txt { min-width: 0; padding: 1px 8px 0 9px; background: var(--surface); position: relative; z-index: 1; }
@@ -334,11 +334,11 @@
 .jur-muni-icono { width: 38px; height: 38px; border-radius: 12px; background: var(--surface-container); display: flex; align-items: center; justify-content: center; flex: none; }
 .jur-muni-icono .material-symbols-rounded { color: #64748b; }
 .jur-muni.completo .jur-muni-icono { background: #dcfce7; }
-.jur-muni.completo .jur-muni-icono .material-symbols-rounded { color: var(--success); }
+.jur-muni.completo .jur-muni-icono .material-symbols-rounded { color: var(--success-text); }
 .jur-muni-tit { flex: 1; min-width: 0; }
 .jur-muni-tit b { display: block; font-size: 13.5px; color: var(--primary); }
 .jur-muni-tit small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; font-weight: 600; }
-.jur-ok { color: var(--success); font-size: 24px; }
+.jur-ok { color: var(--success-text); font-size: 24px; }
 .jur-detalle { margin-top: 10px; }
 .jur-detalle summary { cursor: pointer; font-size: 11.5px; font-weight: 800; color: var(--muted); list-style: none; }
 .jur-detalle summary::-webkit-details-marker { display: none; }
@@ -392,7 +392,7 @@
 .jur-check li b { display: block; font-size: 13px; color: var(--primary); }
 .jur-check li small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; font-weight: 600; }
 .jur-check li.ok { background: var(--success-bg); }
-.jur-check li.ok > .material-symbols-rounded { color: var(--success); }
+.jur-check li.ok > .material-symbols-rounded { color: var(--success-text); }
 .jur-check li.pend, .jur-check li.aviso { background: var(--warning-bg); }
 .jur-check li.pend > .material-symbols-rounded, .jur-check li.aviso > .material-symbols-rounded { color: var(--warning); }
 .jur-entregables { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: stretch; }
@@ -421,7 +421,7 @@
 .aviso-prev-txt { flex: 1; min-width: 0; }
 .aviso-prev-txt b { display: block; font-size: 13px; color: var(--primary); }
 .aviso-prev-txt small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.45; font-weight: 600; }
-.aviso-prev-mas { font-size: 11.5px; font-weight: 700; color: #0284c7; white-space: nowrap; }
+.aviso-prev-mas { font-size: 11.5px; font-weight: 700; color: #0369a1; white-space: nowrap; }
 .aviso-prev[open] .aviso-prev-mas { display: none; }
 .aviso-prev-cuerpo { padding: 0 14px 12px 48px; font-size: 12.5px; line-height: 1.5; color: var(--text); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .aviso-prev-cuerpo p { margin: 0; }
@@ -438,7 +438,7 @@
   table.concentrado .btn-mini { white-space: nowrap; }
   table.concentrado col.col-accion { width: 15%; }
   .jur-estado { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; color: var(--muted); background: var(--surface-container); border-radius: 999px; padding: 4px 11px; white-space: nowrap; }
-  .jur-estado.ok { color: var(--success); background: #dcfce7; }
+  .jur-estado.ok { color: #047857; background: #dcfce7; }
   .jur-estado .material-symbols-rounded { font-size: 15px; }
   .jur-barra-fina { height: 5px; margin: 12px 0 0; }
   .jur-sis { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); font-weight: 600; }
@@ -518,7 +518,7 @@
   .drilldown tr.muni-resumen.fila-gris td b, .drilldown tr.muni-resumen.fila-gris td:nth-child(n+3):nth-child(-n+7) { text-decoration: line-through; }
   .drilldown tr.fila-correccion td { background: #fef3c7; color: #78350f; border-bottom: 2px solid var(--warning-border); vertical-align: top; }
   .drilldown tr.fila-correccion small.dif { display: block; font-size: 10.5px; font-weight: 800; }
-  .drilldown tr.fila-correccion small.dif.ok { color: var(--success); }
+  .drilldown tr.fila-correccion small.dif.ok { color: var(--success-text); }
   .drilldown tr.fila-correccion small.dif.mal { color: #b45309; }
   .drilldown tr.fila-correccion input { width: 72px; padding: 5px 4px; text-align: center; font-weight: 700; border: 1.5px solid var(--warning-border); border-radius: 8px; }
   .drilldown tr.fila-correccion .motivo { font-size: 11px; font-weight: 600; font-style: italic; }

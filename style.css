@@ -17185,3 +17185,5 @@ th.text-slate-500, #panelINFLUENZAADMIN .vac-seg .vac-btn:not(.activo) { color: 
 .to-fuchsia-50\/30 { --tw-gradient-to: rgb(253 244 255 / 0.3) }
 .via-white { --tw-gradient-to: rgb(255 255 255 / 0); --tw-gradient-stops: var(--tw-gradient-from), #ffffff, var(--tw-gradient-to) }
 #globalCommandHub.hub-sin-captura { display: none !important; }
+
+.hover\:bg-rose-700:hover { background-color: #9f1239 }
