@@ -895,7 +895,8 @@ async function renderDashboard() {
     }
 
     renderKPIs(agg, esquema);
-    if (esquema === 'basico' && window.renderRdaLectura) window.renderRdaLectura(fUnits, maxMes, _rdaCache.anio);
+    if (esquema === 'basico' && _rdaState.vistaBasico === 'biologico' && window.renderRdaLecturaBio) window.renderRdaLecturaBio(fUnits, maxMes);
+    else if (esquema === 'basico' && window.renderRdaLectura) window.renderRdaLectura(fUnits, maxMes, _rdaCache.anio);
     else if (window.RdaAnalisis && RdaAnalisis.ESQUEMAS_DOSIS[esquema] && window.renderRdaLecturaDosis) window.renderRdaLecturaDosis(fUnits, esquema);
     else if (window.removeRdaLectura) window.removeRdaLectura();
     if (isSingleUnit) {
@@ -1969,7 +1970,7 @@ function renderBarChart(fUnits, muniFilter, esquema) {
 
 // Barra de la tabla de detalle: búsqueda + nivel (peor grupo de edad). Se crea una vez y solo se actualizan los conteos,
 // para no perder el foco del cuadro de búsqueda al teclear. Devuelve null si no aplica (y la quita).
-function _rdaTablaTools(mostrar, filas, repintar) {
+function _rdaTablaTools(mostrar, filas, repintar, conRezago) {
     let bar = document.getElementById('rdaTablaTools');
     const cont = document.getElementById('rdaTableContainer');
     if (!mostrar || !cont) { if (bar) bar.remove(); _rdaState.tNivel = ''; _rdaState.tBusca = ''; return null; }
@@ -1995,6 +1996,7 @@ function _rdaTablaTools(mostrar, filas, repintar) {
         });
     }
     _rdaState.tRepintar = repintar;
+    const bR = bar.querySelector('#rdaTablaRezago'); if (bR) { if (conRezago === false) bR.style.setProperty('display', 'none', 'important'); else bR.style.removeProperty('display'); }
     bar.querySelector('.rt-chips').innerHTML = chips.map(([k, t]) =>
         `<button type="button" data-n="${k}" class="rt-chip${(_rdaState.tNivel || '') === k ? ' on' : ''}" aria-pressed="${(_rdaState.tNivel || '') === k}">${k ? `<i class="rt-dot rt-${k}"></i>` : ''}${t} <b>${cuenta[k]}</b></button>`).join('');
     bar.querySelector('#rdaTablaRezago').classList.toggle('on', _rdaState.sortCol === 'brecha');
@@ -2143,6 +2145,9 @@ function renderTable(fUnits, esquema, agg) {
                     res.v10 = factorSeis > 0 ? Math.round(((u.srp_6_dosis || 0) / factorSeis * 100) * 10) / 10 : 0;
                 }
                 res.meta = res.pob;
+                const _pb = [[factorM1, res.v1], [factorM1, res.v2], [factorM1, res.v3], [factorM1, res.v4], [factorUno, res.v5], [factorM1, res.v6], [factorUno, res.v7], [factorUno, res.v8], [factorCuatro, res.v9]]
+                    .filter(x => x[0] > 0).map(x => x[1]);
+                res.peor = _pb.length ? Math.min(..._pb) : null;
                 res.dosis = (u.bcg_dosis || 0) + (u.hepb_0_7_dosis || 0) + (u.hexa_1_dosis || 0) + (u.hexa_2_dosis || 0) + (u.hexa_3_dosis || 0) + (u.rota_2_dosis || 0) + (u.neumo_1_dosis || 0) + (u.neumo_2_dosis || 0) + (u.neumo_c1_dosis || 0) + (u.neumo_c2_dosis || 0) + (u.hexa_ref_dosis || 0) + (u.neumo_ref_dosis || 0) + (u.neumo_c3_dosis || 0) + (u.srp_1_dosis || 0) + (u.srp_2_dosis || 0) + (u.dpt_4_dosis || 0) + (u.srp_6_dosis || 0);
             } else {
                 const dosisM1 = (u.bcg_dosis || 0) + (u.hepb_0_7_dosis || 0) + (u.hexa_3_dosis || 0) + (u.rota_2_dosis || 0) + (u.neumo_2_dosis || 0);
@@ -2209,9 +2214,10 @@ function renderTable(fUnits, esquema, agg) {
         });
     }
 
+    if (vistaBio && _rdaState.sortCol === 'brecha') _rdaState.sortCol = null;
     const allRows = rows;
     // Barra de herramientas (búsqueda y nivel) — solo esquema básico por grupo de edad con varias unidades
-    const tools = _rdaTablaTools(esquema === 'basico' && !vistaBio && fUnits.length > 1, allRows, () => renderTable(fUnits, esquema, agg));
+    const tools = _rdaTablaTools(esquema === 'basico' && fUnits.length > 1, allRows, () => renderTable(fUnits, esquema, agg), !vistaBio);
     const nivelSel = tools ? (_rdaState.tNivel || '') : '';
     const busca = tools ? String(_rdaState.tBusca || '').trim().toLowerCase() : '';
     if (nivelSel) rows = rows.filter(r => r.peor != null && RdaAnalisis.nivelDe(r.peor) === nivelSel);
@@ -2270,7 +2276,7 @@ function renderTable(fUnits, esquema, agg) {
         const crit = us.filter(r => r.peor != null && r.peor < 75).length;
         const meta = us.reduce((a, r) => a + (r.meta || 0), 0), dos = us.reduce((a, r) => a + (r.dosis || 0), 0);
         const av = meta > 0 ? Math.round(dos / meta * 1000) / 10 : null;
-        return `${us.length} ${us.length === 1 ? 'unidad' : 'unidades'}${showFaltan ? ` · ${crit} ${crit === 1 ? 'crítica' : 'críticas'}` : ''}${av != null && showFaltan ? ` · avance ${av}%` : ''}`;
+        return `${us.length} ${us.length === 1 ? 'unidad' : 'unidades'} · ${crit} ${crit === 1 ? 'crítica' : 'críticas'}${av != null && showFaltan ? ` · avance ${av}%` : ''}`;
     };
     const faltanCelda = (b) => {
         if (b > 0) {

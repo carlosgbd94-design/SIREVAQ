@@ -222,5 +222,61 @@
         return { grupos, titulares };
     }
 
-    return { GRUPOS, FACTOR, nivelDe, analiza, titulares, ESQUEMAS_DOSIS, analizaDosis, comparaAnios };
+    // ── Vista "Por biológico": misma fórmula de la tabla (dosis del biológico ÷ meta al corte de su grupo, sin divisor)
+    const BIOLOGICOS = [
+        { key: 'v1', nombre: 'BCG', grupo: 'menor1', dosis: u => u.bcg_dosis || 0 },
+        { key: 'v2', nombre: 'Hepatitis B', grupo: 'menor1', dosis: u => u.hepb_0_7_dosis || 0 },
+        { key: 'v3', nombre: 'Rotavirus', grupo: 'menor1', dosis: u => u.rota_2_dosis || 0 },
+        { key: 'v4', nombre: 'Hexavalente <1 año', multi: true, grupo: 'menor1', dosis: u => (u.hexa_1_dosis || 0) + (u.hexa_2_dosis || 0) + (u.hexa_3_dosis || 0) },
+        { key: 'v5', nombre: 'Hexavalente 1 año', grupo: 'uno', dosis: u => u.hexa_ref_dosis || 0 },
+        { key: 'v6', nombre: 'Neumocócica <1 año', multi: true, grupo: 'menor1', dosis: u => (u.neumo_1_dosis || 0) + (u.neumo_2_dosis || 0) + (u.neumo_c1_dosis || 0) + (u.neumo_c2_dosis || 0) },
+        { key: 'v7', nombre: 'Neumocócica 1 año', grupo: 'uno', dosis: u => (u.neumo_ref_dosis || 0) + (u.neumo_c3_dosis || 0) },
+        { key: 'v8', nombre: 'SRP', grupo: 'uno', dosis: u => (u.srp_1_dosis || 0) + (u.srp_2_dosis || 0) },
+        { key: 'v9', nombre: 'DPT', grupo: 'cuatro', dosis: u => u.dpt_4_dosis || 0 }
+    ];
+    const POB_GRUPO = { menor1: u => u.pob_menor_1 || 0, uno: u => u.pob_1_ano || 0, cuatro: u => u.pob_4_anos || 0 };
+
+    function analizaBiologicos(unidades, mm) {
+        mm = Math.min(12, Math.max(1, Number(mm) || 12));
+        const fmt = (n) => (Math.round(n * 10) / 10).toLocaleString('es-MX');
+        const bios = BIOLOGICOS.map(b => {
+            const filas = [];
+            let metaT = 0, dosT = 0;
+            for (const u of unidades) {
+                const meta = POB_GRUPO[b.grupo](u) * FACTOR * mm;
+                const dos = b.dosis(u);
+                metaT += meta; dosT += dos;
+                if (meta >= 1) filas.push({ clues: u.clues, nombre: u.nombre || u.clues, municipio: u.municipio || '', meta, dosis: dos, avance: dos / meta * 100, brecha: Math.max(0, meta - dos) });
+            }
+            const niveles = { optimo: 0, regular: 0, critico: 0 };
+            filas.forEach(f => { f.nivel = nivelDe(f.avance); niveles[f.nivel]++; });
+            const avance = metaT > 0 ? dosT / metaT * 100 : null;
+            const peores = filas.filter(f => f.brecha > 0).sort((a, c) => c.brecha - a.brecha).slice(0, 3);
+            return { key: b.key, nombre: b.nombre, multi: !!b.multi, grupo: b.grupo, avance, nivel: avance == null ? null : nivelDe(avance), meta: metaT, dosis: dosT,
+                brecha: Math.max(0, metaT - dosT), niveles, unidadesConMeta: filas.length, peores };
+        }).filter(b => b.avance != null);
+        const orden = bios.slice().sort((a, c) => a.avance - c.avance);
+        // Hexavalente y Neumocócica <1 año suman las 3 dosis por niño (la tabla las mide así), por eso pasan de 100 %:
+        // no son comparables con los biológicos de una sola dosis y quedan fuera de las frases de más/menos avanzado.
+        const comparables = orden.filter(b => !b.multi);
+        const titulares = [];
+        if (comparables.length > 1) {
+            const lo = comparables[0], hi = comparables[comparables.length - 1];
+            titulares.push({ icon: 'vaccines', texto: `El biológico más rezagado es ${lo.nombre} (${fmt(lo.avance)} %); el más avanzado, ${hi.nombre} (${fmt(hi.avance)} %). Hay ${fmt(hi.avance - lo.avance)} puntos de distancia.` });
+        }
+        // Unidades con varios biológicos críticos
+        const porUnidad = new Map();
+        for (const b of BIOLOGICOS) for (const u of unidades) {
+            const meta = POB_GRUPO[b.grupo](u) * FACTOR * mm;
+            if (meta < 1) continue;
+            const o = porUnidad.get(u.clues) || { nombre: u.nombre || u.clues, n: 0, crit: 0 };
+            o.n++; if (b.dosis(u) / meta * 100 < 75) o.crit++;
+            porUnidad.set(u.clues, o);
+        }
+        const todasCrit = [...porUnidad.values()].filter(o => o.n >= 5 && o.crit === o.n);
+        if (todasCrit.length) titulares.push({ icon: 'report', texto: `${todasCrit.length} ${todasCrit.length === 1 ? 'unidad está' : 'unidades están'} en nivel crítico en todos sus biológicos con meta${todasCrit.length <= 3 ? `: ${todasCrit.map(o => o.nombre).join(', ')}` : ''}.` });
+        return { mm, bios, orden, titulares };
+    }
+
+    return { GRUPOS, FACTOR, nivelDe, analiza, titulares, ESQUEMAS_DOSIS, analizaDosis, comparaAnios, BIOLOGICOS, analizaBiologicos };
 });

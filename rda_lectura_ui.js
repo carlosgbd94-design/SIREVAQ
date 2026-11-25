@@ -137,6 +137,46 @@
           <div class="rl-grid rl-grid-d">${cards}</div>${muni}`;
         host._analisis = r;
     };
+    // Vista "Por biológico" del esquema básico: un biológico por tarjeta, del más rezagado al más avanzado
+    window.renderRdaLecturaBio = function (fUnits, mm) {
+        const A = window.RdaAnalisis;
+        const r = A && A.analizaBiologicos(fUnits, mm);
+        let host = document.getElementById('rdaLecturaCorte');
+        if (!r || !r.bios.length) { if (host) host.remove(); return; }
+        const grid = document.getElementById('rdaAnalysisGrid');
+        if (!grid) return;
+        if (!host) {
+            host = document.createElement('section');
+            host.id = 'rdaLecturaCorte';
+            host.className = 'rl';
+            host.setAttribute('aria-label', 'Lectura por biológico');
+            grid.parentElement.insertBefore(host, grid);
+        }
+        const unica = fUnits.length <= 1;
+        const cards = r.orden.map(b => {
+            const nv = NIVEL[b.nivel];
+            const tot = b.unidadesConMeta;
+            const sem = !unica && tot > 1 ? `<div class="rl-semaforo" style="margin-top:12px">${['optimo', 'regular', 'critico'].filter(k => b.niveles[k] > 0)
+                .map(k => `<span class="rl-seg" style="flex:${b.niveles[k]};background:${NIVEL[k].color}" title="${NIVEL[k].txt}: ${b.niveles[k]}"></span>`).join('')}</div>
+                <div class="rl-legs">${['optimo', 'regular', 'critico'].map(k => `<span class="rl-leg"><i class="rl-dot" style="background:${NIVEL[k].color}"></i>${b.niveles[k]} ${NIVEL[k].txt.toLowerCase()}${b.niveles[k] === 1 ? '' : 's'}</span>`).join('')}</div>` : '';
+            const top = !unica && b.peores.length ? `<div class="rl-sub">Donde más falta</div>` + b.peores.map(f => `
+                <div class="rl-fila"><span class="rl-nom" title="${esc(f.nombre)} · ${esc(f.municipio)}">${esc(corto(f.nombre))}</span>
+                <span class="rl-barra"><i style="width:${Math.max(4, f.brecha / b.peores[0].brecha * 100)}%;background:${NIVEL[f.nivel].color}"></i></span>
+                <span class="rl-num">−${n0(f.brecha)}</span></div>`).join('') : '';
+            return `<article class="rl-card">
+              <header><h4>${esc(b.nombre)}</h4><span class="rl-pill" style="color:${nv.ink}"><span class="material-symbols-rounded" aria-hidden="true">${nv.icon}</span>${nv.txt} · ${p1(b.avance)} %</span></header>
+              <div class="rl-pista"><i class="rl-hoy" style="width:${Math.min(100, b.avance)}%;border-radius:6px;background:${nv.color}"></i><i class="rl-marca rl-m-100" style="left:100%"></i></div>
+              <div class="rl-pista-txt"><span><b>${n0(b.dosis)}</b> dosis de <b>${n0(b.meta)}</b> de meta al corte${b.multi ? ' · suma las 3 dosis del esquema' : ''}</span></div>
+              ${sem}${top}</article>`;
+        }).join('');
+        host.innerHTML = `
+          <div class="rl-head"><h3>Lectura por biológico</h3>
+            <p>Corte a ${esc(MESES[r.mm - 1])} · ${r.mm} de 12 meses. Cada biológico se mide contra la meta al corte de su grupo de edad; van del más rezagado al más avanzado.</p></div>
+          ${r.titulares.length ? `<ul class="rl-tit">${r.titulares.slice(0, 4).map(t => `<li><span class="material-symbols-rounded" aria-hidden="true">${t.icon}</span><span>${esc(t.texto)}</span></li>`).join('')}</ul>` : ''}
+          <div class="rl-grid">${cards}</div>`;
+        host._analisis = r;
+    };
+
     // Comparativa multianual: devuelve el HTML (la vista arma su contenido con una plantilla de texto)
     window.rdaLecturaComparativaHtml = function (u25, u26, mm25, mm26) {
         const A = window.RdaAnalisis;

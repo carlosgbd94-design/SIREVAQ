@@ -166,3 +166,23 @@ test('motor: comparativa 2025 vs 2026 — mejoran/estables/caen con banda de 3 p
   expect(g.peores[0].clues).toBe('C');
   expect(g.peores[0].delta).toBeCloseTo(100 / (1200 * 0.0833 * 10) * 100 - 600 / (1200 * 0.0833 * 12) * 100, 6);
 });
+
+test('motor: vista por biológico — avance de cada biológico con su meta, nivel, y los de varias dosis fuera de los más/menos avanzados', () => {
+  const mk = (clues, pob, o) => ({ clues, nombre: 'U' + clues, municipio: 'Q', pob_menor_1: pob, pob_1_ano: pob, pob_4_anos: pob, bcg_dosis: 0, hepb_0_7_dosis: 0, rota_2_dosis: 0, dpt_4_dosis: 0, srp_1_dosis: 0, srp_2_dosis: 0, ...o });
+  // pob 1200 -> meta al corte (10 meses) 999.6
+  const us = [mk('A', 1200, { bcg_dosis: 1000, hepb_0_7_dosis: 100, hexa_1_dosis: 1000, hexa_2_dosis: 1000, hexa_3_dosis: 1000, dpt_4_dosis: 800 }),
+              mk('B', 1200, { bcg_dosis: 500, hepb_0_7_dosis: 100, dpt_4_dosis: 800 })];
+  const r = A.analizaBiologicos(us, 10);
+  const por = Object.fromEntries(r.bios.map((b) => [b.key, b]));
+  expect(por.v1.meta).toBeCloseTo(2 * 999.6, 6);
+  expect(por.v1.avance).toBeCloseTo(1500 / (2 * 999.6) * 100, 6);       // BCG 75.04 % -> regular
+  expect(por.v1.nivel).toBe('regular');
+  expect(por.v2.nivel).toBe('critico');                                  // HepB 10 %
+  expect(por.v4.multi).toBe(true);
+  expect(por.v4.avance).toBeCloseTo(3000 / (2 * 999.6) * 100, 6);       // suma 3 dosis: puede pasar de 100 %
+  expect(por.v9.niveles).toEqual({ optimo: 0, regular: 2, critico: 0 }); // DPT 800/999.6 = 80 % en ambas
+  // más/menos avanzado se eligen entre los de una dosis: Rotavirus (0 %, el primero de los empatados) y DPT (80 %), no Hexavalente (150 %)
+  const txt = r.titulares.map((t) => t.texto).join('\n');
+  expect(txt).toMatch(/más rezagado es Rotavirus \(0 %\); el más avanzado, DPT \(80 %\)/);
+  expect(txt).not.toMatch(/más avanzado, Hexavalente/);
+});
