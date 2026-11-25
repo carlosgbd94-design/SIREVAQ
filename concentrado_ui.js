@@ -1,24 +1,24 @@
 /**
  * concentrado_ui.js — Panel "Concentrado de Aplicaciones" (ADMIN / JURISDICCIONAL / VISUALIZADOR_JURISDICCIONAL)
- * Motor aislado: RPCs propias (get_concentrado_por_biologico, get_concentrado_aplicaciones),
- * sin dependencias de rda_ui.js / rda_calculator.js / influenza_module.js. No modifica ni
- * reutiliza get_rda_indicators.
  *
- * Diseño anti-truncamiento: la jurisdicción completa tiene ~163 claves SIS de vacunación
- * activas por unidad — pedir el detalle crudo (clues x clave) para las 71 unidades da más
- * de 11,000 filas, muy por encima del límite por defecto de fila de PostgREST/Supabase
- * (1000). Por eso la vista por defecto ("Por biológico") usa un RPC que agrega en SQL a
- * nivel (unidad, biológico) -- ~1,200 filas -- y el detalle crudo por clave solo se pide
- * bajo demanda cuando el usuario cambia a "Por clave". Además, TODAS las llamadas RPC se
- * paginan con .range() sin importar el tamaño esperado, así nunca se trunca en silencio
- * sin importar cómo esté configurado el límite del proyecto.
+ * Rediseño (nov-2026): en vez de una tabla pivote, el panel se lee de arriba abajo:
+ *   1. Hero: total del periodo, cambio contra el mismo periodo del año anterior y ritmo mensual (clic en un mes = verlo solo).
+ *   2. Biológicos: listón de participación + fichas que SON el filtro (uno o varios) de todo lo demás.
+ *   3. Hallazgos: lo que conviene revisar, redactado a partir de los datos (unidades sin dosis, caídas, biológicos en cero…).
+ *   4. Municipios: composición y cambio de cada uno; clic acota el panel.
+ *   5. Unidades: ranking con composición por biológico, cambio y detalle (dosis por clave SIS bajo demanda) o la matriz
+ *      completa unidad × biológico/clave para quien la necesite. El Excel exporta lo que se ve.
+ *
+ * El cálculo vive en concentrado_motor.js (puro, probado en Node). Motor de datos aislado: RPCs propias
+ * (get_concentrado_por_biologico, get_concentrado_aplicaciones, get_concentrado_mensual); no toca get_rda_indicators.
+ * Todas las llamadas se paginan (PAGE_SIZE) para no truncar en silencio contra el tope de filas de PostgREST.
  */
 (function (window) {
   'use strict';
 
-  // 17 biológicos "padre" (misma lista/orden que public.biologicos_catalogo) — colores
-  // reutilizados 1:1 de la paleta `insumos` ya usada en main.js:generateProfessionalXLSX
-  // para que este reporte luzca visualmente consistente con el resto de SIREVAQ.
+  const M = window.ConcentradoMotor;
+
+  // Paleta del Excel institucional (misma `insumos` de main.js:generateProfessionalXLSX). La pantalla usa otra (ver motor).
   const CONCENTRADO_BIOLOGICOS = [
     { key: 'BCG', label: 'BCG', color: '3A86B7', fontColor: 'FFFFFFFF' },
     { key: 'HEPATITIS B', label: 'Hepatitis B', color: 'C43D3D', fontColor: 'FFFFFFFF' },
@@ -41,13 +41,7 @@
   const CONCENTRADO_OTROS = { key: 'OTROS', label: 'Otros / sin clasificar', color: 'CBD5E1', fontColor: 'FF000000' };
   const CONCENTRADO_BIOLOGICOS_ALL = CONCENTRADO_BIOLOGICOS.concat([CONCENTRADO_OTROS]);
 
-  // Une, por cada biológico "padre", TODAS las variantes de public.sis_variables_mapeo que
-  // le pertenecen (incluye alias MOTHER_*, y las variantes ADOL_/AM_/EMB_ por grupo
-  // poblacional) — a diferencia de RDA, aquí NO nos interesa el grupo poblacional, solo el
-  // biológico. Debe coincidir 1:1 con el mapa "alias_map" del lado SQL
-  // (supabase/rpc_concentrado_aplicaciones.sql, get_concentrado_por_biologico) -- aquí solo
-  // se usa para anotar la vista "Por clave" con el biológico de origen, el cálculo real de
-  // la vista "Por biológico" ya lo hace el RPC.
+  // Debe coincidir 1:1 con alias_map de get_concentrado_por_biologico / get_concentrado_mensual (supabase/).
   const CANONICAL_BIOLOGICO_ALIASES = {
     'BCG': ['BCG', 'MOTHER_BCG'],
     'HEPATITIS B': ['HEPB_0_7', 'ADOL_HB', 'HEPATITIS B', 'MOTHER_HEPATITIS_B'],
@@ -69,38 +63,27 @@
   };
 
   const MUNI_ORDER_CONCENTRADO = ['CORREGIDORA', 'HUIMILPAN', 'MARQUES', 'QUERETARO'];
-  // QTSSA001740 (Hospital de Especialidades del Niño y la Mujer) no tiene ni una sola fila
-  // en registros_sis bajo ese CLUES -- su captura histórica quedó ligada a otro CLUES/nombre
-  // ("HENM", ver main.js:generateProfessionalXLSX). Se excluye del panel: no aporta nada y
-  // su nombre larguísimo rompe el ancho de la columna Unidad para todas las demás filas.
+  // QTSSA001740 (Hospital de Especialidades del Niño y la Mujer) no tiene filas en registros_sis bajo ese CLUES (su captura
+  // quedó ligada a "HENM", ver main.js:generateProfessionalXLSX): se excluye, su nombre larguísimo rompe las columnas.
   const EXCLUDED_CLUES = new Set(['QTSSA001740']);
-  // Anchos fijos de las 3 primeras columnas (CLUES/Unidad/Municipio), que quedan pegadas
-  // (sticky) al hacer scroll horizontal por las ~17 columnas de biológico.
   const STICKY_W = { clues: 108, unidad: 210, municipio: 104 };
-  // OJO: si Supabase tiene configurado un tope de fila a nivel de PostgREST (API Settings
-  // -> Max Rows, típicamente 1000), ese tope se aplica ENCIMA de p_limit sin avisar --
-  // pedir páginas de 3000 hacía que la primera respuesta llegara recortada a 1000 y el
-  // bucle de abajo, al ver "menos filas de las pedidas", creía erróneamente que ya era la
-  // última página y descartaba el resto (las unidades al final del orden alfabético). Se
-  // usa un tamaño de página chico, muy por debajo de cualquier tope típico, para que la
-  // comparación "¿llegaron menos de PAGE_SIZE?" vuelva a ser una señal confiable de fin.
+  // Tamaño de página chico, muy por debajo de cualquier tope de PostgREST (típicamente 1000): "llegaron menos de PAGE_SIZE"
+  // vuelve a ser una señal confiable de fin de datos.
   const PAGE_SIZE = 500;
+  const FILAS_VISIBLES = 12;
 
-  // Mayúsculas + sin acentos. CRÍTICO para municipio: en unidades_medicas los valores
-  // reales son "MARQUÉS" y "QUERÉTARO" (con acento) -- sin este strip, MUNI_ORDER_CONCENTRADO
-  // nunca hacía match contra esos dos municipios y el panel solo mostraba Corregidora/Huimilpan.
-  function normUp_(s) {
-    return String(s || '').trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  }
+  const normUp_ = M.normUp;
+  const fmt_ = M.fmt;
+  const esc_ = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const bonito_ = (s) => { const t = String(s || '').toLowerCase(); return t.charAt(0).toUpperCase() + t.slice(1); };
 
   function biologicoLabelFor_(key) {
-    const found = CONCENTRADO_BIOLOGICOS_ALL.find(b => b.key === key);
+    const found = CONCENTRADO_BIOLOGICOS_ALL.find((b) => b.key === key);
     return found ? found.label : key;
   }
-
   function biologicoOrderIndex_(key) {
-    const idx = CONCENTRADO_BIOLOGICOS.findIndex(b => b.key === key);
-    return idx === -1 ? CONCENTRADO_BIOLOGICOS.length : idx; // 'OTROS' siempre al final
+    const idx = CONCENTRADO_BIOLOGICOS.findIndex((b) => b.key === key);
+    return idx === -1 ? CONCENTRADO_BIOLOGICOS.length : idx;
   }
 
   const _state = {
@@ -108,33 +91,40 @@
     anio: 2026,
     mesIni: 1,
     mesFin: 12,
+    mesCorte: 12,
     municipio: '',
-    busqueda: '', // texto libre: filtra por nombre de unidad o CLUES (normalizado, sin acentos)
-    vista: 'biologico', // 'biologico' | 'clave'
+    busqueda: '',
+    sel: [],                 // biológicos elegidos (vacío = todos)
+    modo: 'ranking',         // 'ranking' | 'matriz'
+    vista: 'biologico',      // agrupación de la matriz y del Excel: 'biologico' | 'clave'
+    orden: 'total',          // 'total' | 'caida' | 'alza' | 'nombre' | 'sin'
+    abiertas: new Set(),     // CLUES con el detalle abierto
+    verTodas: false,
     loading: false,
-    bioFetchKey: null,   // `${anio}|${mesIni}|${mesFin}` de _state.bioRows
-    claveFetchKey: null, // `${anio}|${mesIni}|${mesFin}` de _state.claveRows (carga perezosa)
-    bioRows: [],     // [{clues,nombre,municipio,biologico,total_dosis}] -- ya agregado en SQL
-    claveRows: [],   // [{clues,nombre,municipio,variable_sis,total_dosis}] -- crudo, solo bajo demanda
-    unidades: [],    // catálogo de unidades activas visibles al usuario: {clues,nombre,municipio}
-    claveToBiologico: new Map() // variable_sis (upper) -> biologico padre, solo para anotar la vista "Por clave"
+    reqId: 0,
+    bioFetchKey: null,
+    claveFetchKey: null,
+    claveLoading: false,
+    bioRows: [],
+    prevRows: null,          // mismo rango del año anterior (null si no se pudo pedir)
+    claveRows: [],
+    mensual: null,           // serie del año consultado / del anterior (null = no disponible)
+    mensualPrev: null,
+    mensualCache: {},
+    mensualCargando: false,
+    unidades: [],
+    claveToBiologico: new Map(),
+    foco: null
   };
+  const _idx = { clave: new Map() };
 
-  // ── Paginación defensiva: nunca confiar en que un solo fetch trae todo, NI en que el
-  // número de filas que llega coincide con lo pedido -- si Supabase tiene un tope de fila
-  // configurado a nivel de PostgREST (API Settings -> Max Rows), ese tope recorta la
-  // respuesta POR DEBAJO de nuestro propio p_limit sin avisar. Por eso el offset avanza
-  // por las filas que REALMENTE llegaron (rows.length), no por PAGE_SIZE nominal -- así,
-  // aunque el tope real del servidor sea más chico que PAGE_SIZE, solo se traduce en más
-  // vueltas, nunca en filas saltadas. Se sigue pidiendo hasta que una página llega vacía.
-  // Parámetros explícitos p_offset/p_limit (llamados por POST, el default de .rpc()) en
-  // vez de .range() -- .range() fuerza GET, que además de exigir que la función sea
-  // STABLE, se puede cachear en el navegador y servir una respuesta vieja entre despliegues.
-  async function fetchAllPaginated_(rpcName, params) {
+  // ── Paginación defensiva (POST con p_offset/p_limit, el offset avanza por filas que LLEGARON) ──────────────────────
+  async function fetchAllPaginated_(rpcName, params, pageSize) {
+    const tam = pageSize || PAGE_SIZE;
     let all = [];
     let offset = 0;
     while (true) {
-      const { data, error } = await window.supabase.rpc(rpcName, { ...params, p_offset: offset, p_limit: PAGE_SIZE });
+      const { data, error } = await window.supabase.rpc(rpcName, { ...params, p_offset: offset, p_limit: tam });
       if (error) throw error;
       const rows = data || [];
       if (rows.length === 0) break;
@@ -144,277 +134,260 @@
     return all;
   }
 
-  // ── 1. Construcción del mapa clave -> biológico padre desde sis_variables_mapeo ──────
-  // (solo para etiquetar sub-columnas en la vista "Por clave"; el cálculo real de "Por
-  // biológico" ya viene agregado del RPC get_concentrado_por_biologico)
+  // ── Mapa clave SIS -> biológico (solo para etiquetar el desglose por clave) ───────────────────────────────────────
   async function buildAliasLookup_(anio) {
     _state.claveToBiologico = new Map();
-
-    const { data, error } = await window.supabase
-      .from('sis_variables_mapeo')
-      .select('biologico, variables')
-      .eq('anio', anio);
-
-    if (error) {
-      console.error('[Concentrado] Error cargando sis_variables_mapeo:', error);
-      return;
-    }
-
+    const { data, error } = await window.supabase.from('sis_variables_mapeo').select('biologico, variables').eq('anio', anio);
+    if (error) { console.error('[Concentrado] Error cargando sis_variables_mapeo:', error); return; }
     const aliasIndex = new Map();
-    Object.keys(CANONICAL_BIOLOGICO_ALIASES).forEach(parent => {
-      CANONICAL_BIOLOGICO_ALIASES[parent].forEach(alias => aliasIndex.set(normUp_(alias), parent));
+    Object.keys(CANONICAL_BIOLOGICO_ALIASES).forEach((parent) => {
+      CANONICAL_BIOLOGICO_ALIASES[parent].forEach((alias) => aliasIndex.set(normUp_(alias), parent));
     });
-
-    (data || []).forEach(row => {
-      const bioNameUp = normUp_(row.biologico);
-      const parent = aliasIndex.get(bioNameUp) || 'OTROS';
-      const claves = Array.isArray(row.variables) ? row.variables : [];
-      claves.forEach(clave => {
+    (data || []).forEach((row) => {
+      const parent = aliasIndex.get(normUp_(row.biologico)) || 'OTROS';
+      (Array.isArray(row.variables) ? row.variables : []).forEach((clave) => {
         const claveUp = normUp_(clave);
         if (claveUp) _state.claveToBiologico.set(claveUp, parent);
       });
     });
   }
 
-  // ── 2. Catálogo de unidades visibles según el alcance del usuario ───────────────────
   async function loadUnidadesVisibles_() {
     const [medRes, actRes] = await Promise.all([
       window.supabase.from('unidades_medicas').select('clues, nombre, municipio'),
       window.supabase.from('unidades').select('clues, activo').eq('activo', 'SI')
     ]);
-
     if (medRes.error) { console.error('[Concentrado] Error cargando unidades_medicas:', medRes.error); return; }
     if (actRes.error) { console.error('[Concentrado] Error cargando unidades activas:', actRes.error); return; }
-
-    const activasSet = new Set((actRes.data || []).map(u => u.clues));
+    const activasSet = new Set((actRes.data || []).map((u) => u.clues));
     const user = window.USER || {};
-
     _state.unidades = (medRes.data || [])
-      .filter(u => activasSet.has(u.clues))
-      .filter(u => !EXCLUDED_CLUES.has(u.clues))
-      .filter(u => typeof window.canSeeMunicipio_ === 'function' ? window.canSeeMunicipio_(user, u.municipio) : true)
+      .filter((u) => activasSet.has(u.clues))
+      .filter((u) => !EXCLUDED_CLUES.has(u.clues))
+      .filter((u) => typeof window.canSeeMunicipio_ === 'function' ? window.canSeeMunicipio_(user, u.municipio) : true)
       .sort((a, b) => (a.municipio || '').localeCompare(b.municipio || '') || a.clues.localeCompare(b.clues));
   }
 
   function municipiosVisibles_() {
-    const set = new Set(_state.unidades.map(u => normUp_(u.municipio)));
-    return MUNI_ORDER_CONCENTRADO.filter(m => set.has(m));
+    const set = new Set(_state.unidades.map((u) => normUp_(u.municipio)));
+    return MUNI_ORDER_CONCENTRADO.filter((m) => set.has(m));
   }
 
-  // ── 3. Fetch de los RPCs aislados (con paginación defensiva) ────────────────────────
-  async function fetchBiologicoData_(force) {
-    const key = `${_state.anio}|${_state.mesIni}|${_state.mesFin}`;
-    if (!force && _state.bioFetchKey === key) return;
+  // ── Carga de datos ────────────────────────────────────────────────────────────────────────────────────────────────
+  const $ = (id) => document.getElementById(id);
+  const rangoKey_ = () => `${_state.anio}|${_state.mesIni}|${_state.mesFin}`;
 
-    _state.loading = true;
-    renderLoadingState_();
-
+  async function cargarMensual_(anio) {
+    if (_state.mensualCache[anio] !== undefined) return _state.mensualCache[anio];
     try {
-      _state.bioRows = await fetchAllPaginated_('get_concentrado_por_biologico', {
-        p_anio: _state.anio, p_mes_ini: _state.mesIni, p_mes_fin: _state.mesFin
-      });
-      _state.bioFetchKey = key;
+      const filas = await fetchAllPaginated_('get_concentrado_mensual', { p_anio: anio }, 1000);
+      _state.mensualCache[anio] = filas;
     } catch (err) {
+      console.warn('[Concentrado] Serie mensual no disponible:', err);
+      _state.mensualCache[anio] = null;
+    }
+    return _state.mensualCache[anio];
+  }
+
+  async function fetchBiologicoData_(force) {
+    const key = rangoKey_();
+    if (!force && _state.bioFetchKey === key) { render_(); return; }
+    if (force) _state.mensualCache = {};
+    const req = ++_state.reqId;
+    _state.loading = true;
+    render_();
+    const p = { p_anio: _state.anio, p_mes_ini: _state.mesIni, p_mes_fin: _state.mesFin };
+    const pPrev = { ...p, p_anio: _state.anio - 1 };
+    try {
+      // Primero lo esencial (total, biológicos, municipios, unidades); la serie mensual se pide después para no competir
+      // por la base y no retrasar la primera pantalla (con datos reales cada consulta pesada tarda varios segundos).
+      const [rows, prev] = await Promise.all([
+        fetchAllPaginated_('get_concentrado_por_biologico', p),
+        fetchAllPaginated_('get_concentrado_por_biologico', pPrev).catch((e) => { console.warn('[Concentrado] Sin comparativo del año anterior:', e); return null; })
+      ]);
+      if (req !== _state.reqId) return; // llegó otra consulta después: esta ya no vale
+      _state.bioRows = rows;
+      _state.prevRows = prev;
+      _state.bioFetchKey = key;
+      const cA = _state.mensualCache[_state.anio], cB = _state.mensualCache[_state.anio - 1];
+      _state.mensualCargando = cA === undefined || cB === undefined;
+      _state.mensual = cA || null;
+      _state.mensualPrev = cB || null;
+    } catch (err) {
+      if (req !== _state.reqId) return;
       console.error('[Concentrado] Error en RPC get_concentrado_por_biologico:', err);
       if (window.showToast) window.showToast('No se pudo cargar el concentrado de aplicaciones.', false, 'bad');
-      _state.bioRows = [];
-      _state.bioFetchKey = null;
+      _state.bioRows = []; _state.prevRows = null; _state.bioFetchKey = null;
     }
-
     _state.loading = false;
-    renderConcentradoTable();
+    render_();
+    if (_state.mensualCargando) {
+      const [anio] = [_state.anio];
+      Promise.all([cargarMensual_(anio), cargarMensual_(anio - 1)]).then(([a, b]) => {
+        if (req !== _state.reqId) return;
+        _state.mensual = a; _state.mensualPrev = b; _state.mensualCargando = false;
+        render_();
+      });
+    }
   }
 
-  // Vista "Por clave": detalle crudo, mucho más pesado (~11k filas para toda la
-  // jurisdicción) -- se pide una sola vez por rango de fechas, solo cuando el usuario
-  // realmente activa esa pestaña, y se cachea igual que la vista por biológico.
+  // Desglose por clave SIS: ~11 mil filas para toda la jurisdicción, solo bajo demanda (matriz por clave o detalle de unidad).
   async function fetchClaveData_(force) {
-    const key = `${_state.anio}|${_state.mesIni}|${_state.mesFin}`;
-    if (!force && _state.claveFetchKey === key) return;
-
-    _state.loading = true;
-    renderLoadingState_();
-
+    const key = rangoKey_();
+    if (!force && _state.claveFetchKey === key) { render_(); return; }
+    _state.claveLoading = true;
+    render_();
     try {
-      _state.claveRows = await fetchAllPaginated_('get_concentrado_aplicaciones', {
-        p_anio: _state.anio, p_mes_ini: _state.mesIni, p_mes_fin: _state.mesFin
-      });
+      _state.claveRows = await fetchAllPaginated_('get_concentrado_aplicaciones', { p_anio: _state.anio, p_mes_ini: _state.mesIni, p_mes_fin: _state.mesFin });
       _state.claveFetchKey = key;
+      reindexaClaves_();
     } catch (err) {
       console.error('[Concentrado] Error en RPC get_concentrado_aplicaciones:', err);
       if (window.showToast) window.showToast('No se pudo cargar el desglose por clave.', false, 'bad');
-      _state.claveRows = [];
-      _state.claveFetchKey = null;
+      _state.claveRows = []; _state.claveFetchKey = null; _idx.clave = new Map();
     }
-
-    _state.loading = false;
-    renderConcentradoTable();
+    _state.claveLoading = false;
+    render_();
   }
 
-  function fetchActivo_(force) {
-    return _state.vista === 'clave' ? fetchClaveData_(force) : fetchBiologicoData_(force);
+  function reindexaClaves_() {
+    const m = new Map();
+    _state.claveRows.forEach((r) => {
+      let o = m.get(r.clues); if (!o) { o = {}; m.set(r.clues, o); }
+      o[normUp_(r.variable_sis)] = (o[normUp_(r.variable_sis)] || 0) + Number(r.total_dosis || 0);
+    });
+    _idx.clave = m;
   }
 
-  // ── 4. Agregación en cliente (por unidad, según la vista activa) ────────────────────
+  // ── Alcance, columnas y agregados (también los usa el Excel) ──────────────────────────────────────────────────────
+  function unidadesVisiblesFiltro_() {
+    let out = _state.unidades;
+    if (_state.municipio) out = out.filter((u) => normUp_(u.municipio) === _state.municipio);
+    if (_state.busqueda) out = out.filter((u) => normUp_(u.nombre).includes(_state.busqueda) || normUp_(u.clues).includes(_state.busqueda));
+    return out;
+  }
+
+  const selSet_ = () => (_state.sel.length ? new Set(_state.sel) : null);
+
   function computeUnitAggregate_(clues) {
+    const sel = selSet_();
     if (_state.vista === 'clave') {
-      const rowsUnidad = _state.claveRows.filter(r => r.clues === clues);
       const porClave = {};
       let totalGeneral = 0;
-      rowsUnidad.forEach(r => {
-        const val = Number(r.total_dosis || 0);
-        porClave[normUp_(r.variable_sis)] = val;
-        totalGeneral += val;
+      const o = _idx.clave.get(clues) || {};
+      Object.keys(o).forEach((c) => {
+        if (sel && !sel.has(_state.claveToBiologico.get(c) || 'OTROS')) return;
+        porClave[c] = o[c]; totalGeneral += o[c];
       });
       return { totalGeneral, porFuente: porClave };
     }
-
-    const rowsUnidad = _state.bioRows.filter(r => r.clues === clues);
     const porBiologico = {};
     let totalGeneral = 0;
-    rowsUnidad.forEach(r => {
-      const val = Number(r.total_dosis || 0);
-      porBiologico[r.biologico] = val;
-      totalGeneral += val;
+    _state.bioRows.forEach((r) => {
+      if (r.clues !== clues) return;
+      if (sel && !sel.has(r.biologico)) return;
+      porBiologico[r.biologico] = Number(r.total_dosis || 0);
+      totalGeneral += Number(r.total_dosis || 0);
     });
     return { totalGeneral, porFuente: porBiologico };
   }
 
-  // Unidades visibles bajo el filtro actual de municipio/búsqueda (sin considerar año/mes,
-  // eso ya lo resolvió el RPC). Se usa tanto para renderizar filas como para los KPIs, así
-  // ambos siempre están sincronizados.
-  function unidadesVisiblesFiltro_() {
-    let out = _state.unidades;
-    if (_state.municipio) out = out.filter(u => normUp_(u.municipio) === _state.municipio);
-    if (_state.busqueda) {
-      out = out.filter(u => normUp_(u.nombre).includes(_state.busqueda) || normUp_(u.clues).includes(_state.busqueda));
-    }
-    return out;
-  }
-
-  // Suma, para el conjunto de unidades visible ahora mismo, el total por fuente (biológico
-  // o clave según la vista) — una sola pasada que alimenta tanto la decisión de qué
-  // columnas mostrar como los KPIs.
   function computeScopeAggregate_(unidades) {
     const porFuenteTotal = {};
-    let grandTotal = 0;
-    let unidadesConDatos = 0;
-
-    unidades.forEach(u => {
+    let grandTotal = 0, unidadesConDatos = 0;
+    unidades.forEach((u) => {
       const agg = computeUnitAggregate_(u.clues);
       if (agg.totalGeneral > 0) unidadesConDatos++;
       grandTotal += agg.totalGeneral;
-      Object.keys(agg.porFuente).forEach(k => { porFuenteTotal[k] = (porFuenteTotal[k] || 0) + agg.porFuente[k]; });
+      Object.keys(agg.porFuente).forEach((k) => { porFuenteTotal[k] = (porFuenteTotal[k] || 0) + agg.porFuente[k]; });
     });
-
     return { porFuenteTotal, grandTotal, unidadesConDatos };
   }
 
-  // Columnas a mostrar para la vista activa. Siempre las mismas 17 (o el set completo de
-  // claves con datos en el rango de fechas elegido) -- un set de columnas predecible es
-  // más fácil de escanear que uno que cambia de tamaño según el filtro de unidad/municipio.
-  // Las celdas en 0 se muestran como "—", no se ocultan columnas completas.
   function columnasActivas_(scopeAgg) {
+    const sel = selSet_();
     if (_state.vista === 'clave') {
       return Object.keys(scopeAgg.porFuenteTotal)
-        .map(c => {
+        .map((c) => {
           const parent = _state.claveToBiologico.get(c) || 'OTROS';
-          return { key: c, label: c, sublabel: biologicoLabelFor_(parent), color: null, fontColor: null, parentIdx: biologicoOrderIndex_(parent) };
+          return { key: c, label: c, sublabel: biologicoLabelFor_(parent), color: null, fontColor: null, parentIdx: biologicoOrderIndex_(parent), parent };
         })
-        // Orden del esquema de vacunación (BCG primero... Influenza casi al final, como
-        // biologicos_catalogo.orden_biologico), no alfabético por clave SIS.
+        .filter((c) => !sel || sel.has(c.parent))
         .sort((a, b) => (a.parentIdx - b.parentIdx) || a.key.localeCompare(b.key));
     }
-    return CONCENTRADO_BIOLOGICOS_ALL;
+    return CONCENTRADO_BIOLOGICOS_ALL.filter((c) => !sel || sel.has(c.key));
   }
 
-  // ── 5. Render de filtros (poblado inicial de selects) ───────────────────────────────
-  function renderFiltros_() {
-    const selAnio = $('concFilterAnio');
-    const selMesIni = $('concFilterMesIni');
-    const selMesFin = $('concFilterMesFin');
-    const selMuni = $('concFilterMunicipio');
-    const inpBusqueda = $('concSearchUnidad');
+  // ── Filtros (selects y búsqueda viven en index.html) ──────────────────────────────────────────────────────────────
+  function sincronizaMeses_() {
+    const a = $('concFilterMesIni'), b = $('concFilterMesFin');
+    if (a) a.value = String(_state.mesIni);
+    if (b) b.value = String(_state.mesFin);
+  }
 
-    const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  function renderFiltros_() {
+    const selAnio = $('concFilterAnio'), selMesIni = $('concFilterMesIni'), selMesFin = $('concFilterMesFin');
+    const selMuni = $('concFilterMunicipio'), inpBusqueda = $('concSearchUnidad');
 
     if (selAnio && !selAnio.dataset.filled) {
-      selAnio.innerHTML = ['2026', '2025'].map(a => `<option value="${a}">${a}</option>`).join('');
+      selAnio.innerHTML = ['2026', '2025'].map((a) => `<option value="${a}">${a}</option>`).join('');
       selAnio.value = String(_state.anio);
       selAnio.dataset.filled = '1';
       selAnio.addEventListener('change', async () => {
         _state.anio = Number(selAnio.value);
-        _state.mesFin = await resolveMesCorte_(_state.anio);
+        _state.mesCorte = await resolveMesCorte_(_state.anio);
+        _state.mesFin = _state.mesCorte;
         if (_state.mesIni > _state.mesFin) _state.mesIni = _state.mesFin;
-        if (selMesFin) selMesFin.value = String(_state.mesFin);
-        if (selMesIni) selMesIni.value = String(_state.mesIni);
+        sincronizaMeses_();
+        _state.claveFetchKey = null;
         await buildAliasLookup_(_state.anio);
-        fetchActivo_(true);
+        fetchBiologicoData_(true);
       });
     }
-
     if (selMesIni && !selMesIni.dataset.filled) {
-      selMesIni.innerHTML = MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+      selMesIni.innerHTML = M.MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
       selMesIni.value = String(_state.mesIni);
       selMesIni.dataset.filled = '1';
       selMesIni.addEventListener('change', () => {
         _state.mesIni = Number(selMesIni.value);
-        if (_state.mesIni > _state.mesFin) { _state.mesFin = _state.mesIni; if (selMesFin) selMesFin.value = String(_state.mesFin); }
-        fetchActivo_(true);
+        if (_state.mesIni > _state.mesFin) _state.mesFin = _state.mesIni;
+        sincronizaMeses_();
+        cambioDeRango_();
       });
     }
-
     if (selMesFin && !selMesFin.dataset.filled) {
-      selMesFin.innerHTML = MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+      selMesFin.innerHTML = M.MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
       selMesFin.value = String(_state.mesFin);
       selMesFin.dataset.filled = '1';
       selMesFin.addEventListener('change', () => {
         _state.mesFin = Number(selMesFin.value);
-        if (_state.mesFin < _state.mesIni) { _state.mesIni = _state.mesFin; if (selMesIni) selMesIni.value = String(_state.mesIni); }
-        fetchActivo_(true);
+        if (_state.mesFin < _state.mesIni) _state.mesIni = _state.mesFin;
+        sincronizaMeses_();
+        cambioDeRango_();
       });
     }
-
     if (selMuni) {
       const munis = municipiosVisibles_();
-      selMuni.innerHTML = '<option value="">Todos los municipios</option>' + munis.map(m => `<option value="${m}">${m.charAt(0) + m.slice(1).toLowerCase()}</option>`).join('');
+      selMuni.innerHTML = '<option value="">Todos los municipios</option>' + munis.map((m) => `<option value="${m}">${bonito_(m)}</option>`).join('');
       selMuni.value = _state.municipio;
       if (!selMuni.dataset.bound) {
-        selMuni.addEventListener('change', () => {
-          _state.municipio = selMuni.value;
-          renderConcentradoTable();
-        });
+        selMuni.addEventListener('change', () => { _state.municipio = selMuni.value; _state.abiertas.clear(); _state.verTodas = false; render_(); });
         selMuni.dataset.bound = '1';
       }
     }
-
-    // Búsqueda libre por nombre o CLUES -- reemplaza al select de "Unidad": escribir es
-    // más rápido que abrir un desplegable de 70+ opciones para encontrar una en concreto.
     if (inpBusqueda && !inpBusqueda.dataset.bound) {
-      inpBusqueda.addEventListener('input', () => {
-        _state.busqueda = normUp_(inpBusqueda.value);
-        renderConcentradoTable();
-      });
+      inpBusqueda.addEventListener('input', () => { _state.busqueda = normUp_(inpBusqueda.value); _state.verTodas = false; render_(); });
       inpBusqueda.dataset.bound = '1';
     }
   }
 
-  function renderBiologicoVistaTabs_() {
-    const tabBio = $('concTabBiologico');
-    const tabClave = $('concTabClave');
-    if (tabBio && !tabBio.dataset.bound) {
-      tabBio.addEventListener('click', () => setVista_('biologico'));
-      tabBio.dataset.bound = '1';
-    }
-    if (tabClave && !tabClave.dataset.bound) {
-      tabClave.addEventListener('click', () => setVista_('clave'));
-      tabClave.dataset.bound = '1';
-    }
+  function cambioDeRango_() {
+    _state.abiertas.clear();
+    fetchBiologicoData_(false);
+    if (_state.vista === 'clave' || _state.claveFetchKey) { _state.claveFetchKey = null; if (_state.modo === 'matriz' && _state.vista === 'clave') fetchClaveData_(false); }
   }
 
-  // Mes de corte "inteligente": reutiliza la RPC get_rda_max_mes ya existente (solo
-  // lectura, no se toca ni se modifica RDA) para no sumar meses del año que todavía no
-  // tienen ninguna captura -- evita diluir los totales con ceros estructurales.
+  // Mes de corte "inteligente": reutiliza get_rda_max_mes (solo lectura) para no diluir totales con meses sin captura.
   async function resolveMesCorte_(anio) {
     try {
       const { data, error } = await window.supabase.rpc('get_rda_max_mes', { p_anio: anio });
@@ -427,161 +400,438 @@
     return 12;
   }
 
-  function setVista_(vista) {
-    if (_state.vista === vista) return;
-    _state.vista = vista;
-    const tabBio = $('concTabBiologico');
-    const tabClave = $('concTabClave');
-    if (tabBio) tabBio.classList.toggle('active', vista === 'biologico');
-    if (tabClave) tabClave.classList.toggle('active', vista === 'clave');
-    if (typeof window.syncTabGroupIndicator === 'function') {
-      window.syncTabGroupIndicator('#concVistaTabs');
-    }
-    // Carga perezosa: el detalle por clave (pesado) solo se pide la primera vez que se
-    // activa esa pestaña para el rango de fechas actual, no en cada carga del panel.
-    fetchActivo_(false);
-  }
-
-  // ── 6. Render de la tabla (unidad -> subtotal municipal -> total jurisdiccional) ──
-  function renderLoadingState_() {
-    const tbody = $('concTbody');
-    if (!tbody) return;
-    tbody.innerHTML = `<tr><td colspan="20" class="p-6 text-center text-surface-onVariant/60">Cargando concentrado de aplicaciones…</td></tr>`;
-  }
-
-  function renderConcentradoTable() {
-    const thead = $('concThead');
-    const tbody = $('concTbody');
-    if (!thead || !tbody) return;
-
-    if (_state.loading) { renderLoadingState_(); return; }
-
-    const unidadesFiltradas = unidadesVisiblesFiltro_();
-    const scopeAgg = computeScopeAggregate_(unidadesFiltradas);
-    const cols = columnasActivas_(scopeAgg);
-
-    updateSearchCount_(unidadesFiltradas.length);
-
-    // Encabezado + primeras 3 columnas pegadas (sticky) en ambos ejes -- al hacer scroll
-    // horizontal por las ~17 columnas de biológico, o vertical por las unidades, CLUES/
-    // Unidad/Municipio y el encabezado de columna siguen siempre visibles.
-    const leftClues = 0, leftUnidad = STICKY_W.clues, leftMuni = STICKY_W.clues + STICKY_W.unidad;
-    const stickyLeftAll = STICKY_W.clues + STICKY_W.unidad + STICKY_W.municipio;
-
-    thead.innerHTML = `<tr>
-      <th class="p-4 text-left sticky top-0 bg-slate-50" style="left:${leftClues}px; width:${STICKY_W.clues}px; min-width:${STICKY_W.clues}px; z-index:30;">CLUES</th>
-      <th class="p-4 text-left sticky top-0 bg-slate-50" style="left:${leftUnidad}px; width:${STICKY_W.unidad}px; min-width:${STICKY_W.unidad}px; z-index:30;">Unidad</th>
-      <th class="p-4 text-left sticky top-0 bg-slate-50" style="left:${leftMuni}px; width:${STICKY_W.municipio}px; min-width:${STICKY_W.municipio}px; z-index:30;">Municipio</th>
-      ${cols.map(c => `<th class="p-4 text-center sticky top-0 z-20 bg-slate-50 whitespace-nowrap">${c.label}${c.sublabel ? `<div class="font-normal text-slate-400" style="font-size:9px; text-transform:none;">${c.sublabel}</div>` : ''}</th>`).join('')}
-      <th class="p-4 text-center sticky top-0 z-20 bg-slate-50">TOTAL</th>
-    </tr>`;
-
-    if (cols.length === 0) {
-      tbody.innerHTML = `<tr><td class="p-6 text-center text-surface-onVariant/60">No hay claves SIS con datos en este rango de fechas.</td></tr>`;
-      renderKpis_(scopeAgg.grandTotal, scopeAgg.unidadesConDatos, unidadesFiltradas.length, {}, []);
-      return;
-    }
-
-    if (unidadesFiltradas.length === 0) {
-      tbody.innerHTML = `<tr><td class="p-8 text-center text-surface-onVariant/60">Ninguna unidad coincide con "${$('concSearchUnidad')?.value || ''}". Revisa el nombre/CLUES o quita el filtro de municipio.</td></tr>`;
-      renderKpis_(0, 0, 0, {}, cols);
-      return;
-    }
-
-    const munisVisibles = _state.municipio ? [_state.municipio] : municipiosVisibles_();
-    // Con una búsqueda activa, la tabla ya no representa "todas las unidades del
-    // municipio/jurisdicción" sino solo las que coinciden con el texto -- una fila de
-    // TOTAL MUNICIPAL/JURISDICCIONAL en ese contexto es engañosa (parece un total real
-    // cuando es apenas la suma de los resultados filtrados), así que se ocultan.
-    const mostrarTotalMunicipal = !_state.busqueda;
-    const mostrarTotalJurisdiccional = !_state.busqueda && !_state.municipio && munisVisibles.length > 1;
-
-    // Devuelve el atributo class+style COMPLETO de una celda pegada (sticky) -- se usa tal
-    // cual en el <td>, no se concatena a medias con otro class="" (evita comillas rotas).
-    const tdSticky = (leftPx, w, extraClass) =>
-      `class="p-4 sticky z-10 bg-surface ${extraClass || ''}" style="left:${leftPx}px; width:${w}px; min-width:${w}px;"`;
-
-    let filasHtml = '';
-
-    munisVisibles.forEach(muni => {
-      const unidadesMuni = unidadesFiltradas.filter(u => normUp_(u.municipio) === muni);
-      if (unidadesMuni.length === 0) return;
-
-      let subtotalesPorCol = {};
-      let subtotalGeneral = 0;
-
-      unidadesMuni.forEach(u => {
-        const agg = computeUnitAggregate_(u.clues);
-
-        filasHtml += `<tr class="group hover:bg-primary/10 border-b border-outline-variant/20">
-          <td ${tdSticky(leftClues, STICKY_W.clues, 'whitespace-nowrap font-semibold group-hover:bg-primary/10')}>${u.clues}</td>
-          <td ${tdSticky(leftUnidad, STICKY_W.unidad, 'truncate group-hover:bg-primary/10')} title="${u.nombre}">${u.nombre}</td>
-          <td ${tdSticky(leftMuni, STICKY_W.municipio, 'whitespace-nowrap group-hover:bg-primary/10')}>${muni.charAt(0) + muni.slice(1).toLowerCase()}</td>
-          ${cols.map(c => {
-            const v = agg.porFuente[c.key] || 0;
-            subtotalesPorCol[c.key] = (subtotalesPorCol[c.key] || 0) + v;
-            return `<td class="p-4 text-center">${v ? v.toLocaleString('es-MX') : '—'}</td>`;
-          }).join('')}
-          <td class="p-4 text-center font-bold">${agg.totalGeneral.toLocaleString('es-MX')}</td>
-        </tr>`;
-
-        subtotalGeneral += agg.totalGeneral;
-      });
-
-      if (mostrarTotalMunicipal) {
-        filasHtml += `<tr class="bg-primary/5 font-extrabold">
-          <td class="p-4 sticky left-0 z-10 bg-primary/5" colspan="3" style="width:${stickyLeftAll}px; min-width:${stickyLeftAll}px;">TOTAL MUNICIPAL — ${muni.charAt(0) + muni.slice(1).toLowerCase()}</td>
-          ${cols.map(c => `<td class="p-4 text-center">${(subtotalesPorCol[c.key] || 0).toLocaleString('es-MX')}</td>`).join('')}
-          <td class="p-4 text-center">${subtotalGeneral.toLocaleString('es-MX')}</td>
-        </tr>`;
-      }
+  // ── Render ────────────────────────────────────────────────────────────────────────────────────────────────────────
+  function analizar_(municipio) {
+    return M.analiza({
+      unidades: _state.unidades, filas: _state.bioRows, filasPrev: _state.prevRows,
+      sel: _state.sel, municipio: municipio === undefined ? _state.municipio : municipio, busqueda: _state.busqueda
     });
-
-    if (mostrarTotalJurisdiccional) {
-      filasHtml += `<tr class="bg-primary/10 font-extrabold" style="border-top: 2px solid rgba(0,51,102,0.4);">
-        <td class="p-4 sticky left-0 z-10 bg-primary/10" colspan="3" style="width:${stickyLeftAll}px; min-width:${stickyLeftAll}px;">TOTAL JURISDICCIONAL (JURISDICCIÓN SANITARIA 1)</td>
-        ${cols.map(c => `<td class="p-4 text-center">${(scopeAgg.porFuenteTotal[c.key] || 0).toLocaleString('es-MX')}</td>`).join('')}
-        <td class="p-4 text-center">${scopeAgg.grandTotal.toLocaleString('es-MX')}</td>
-      </tr>`;
-    }
-
-    tbody.innerHTML = filasHtml || `<tr><td colspan="${cols.length + 4}" class="p-6 text-center text-surface-onVariant/60">Sin aplicaciones registradas para este filtro.</td></tr>`;
-
-    renderKpis_(scopeAgg.grandTotal, scopeAgg.unidadesConDatos, unidadesFiltradas.length, scopeAgg.porFuenteTotal, cols);
   }
 
-  function updateSearchCount_(n) {
+  function chipDelta_(d, titulo) {
+    if (d == null) return '<span class="cn-d cn-d-na" title="Sin cifra del año anterior para comparar">—</span>';
+    const cls = d > 0.005 ? 'cn-d-up' : d < -0.005 ? 'cn-d-down' : 'cn-d-flat';
+    const ic = d > 0.005 ? 'arrow_upward' : d < -0.005 ? 'arrow_downward' : 'remove';
+    return `<span class="cn-d ${cls}" title="${esc_(titulo || '')}"><span class="material-symbols-rounded" aria-hidden="true">${ic}</span>${esc_(M.pctTxt(d))}</span>`;
+  }
+
+  function pila_(porBio, anchoPct, tituloUnidad) {
+    const segs = M.segmentos(porBio, selSet_());
+    const total = segs.reduce((s, x) => s + x.v, 0);
+    if (!total) return '<span class="cn-stack cn-stack-vacia" aria-hidden="true"></span>';
+    const partes = segs.map((s) => `<i style="flex:${s.v} 1 0; background:${s.color}" data-tip="${esc_(s.label)}: ${fmt_(s.v)} (${Math.round(s.v * 100 / total)}%)${s.detalle ? '\n' + esc_(s.detalle.slice(0, 6).map((d) => `${d.label} ${fmt_(d.v)}`).join(' · ')) : ''}"></i>`).join('');
+    return `<span class="cn-stack" style="width:${Math.max(2, anchoPct).toFixed(1)}%" role="img" aria-label="${esc_(tituloUnidad || 'Composición por biológico')}">${partes}</span>`;
+  }
+
+  function seccionHero_(an, meses) {
+    const rango = M.rangoTxt(_state.mesIni, _state.mesFin, _state.anio);
+    const rangoPrev = M.rangoTxt(_state.mesIni, _state.mesFin, _state.anio - 1);
+    const sel = _state.sel;
+    const etiquetaSel = sel.length ? sel.map((k) => M.labelDe(k)).join(' + ') : 'Todos los biológicos';
+    const ambito = [_state.municipio ? bonito_(_state.municipio) : 'Jurisdicción Sanitaria 1', _state.busqueda ? `búsqueda «${esc_($('concSearchUnidad') ? $('concSearchUnidad').value : '')}»` : ''].filter(Boolean).join(' · ');
+
+    let delta = '';
+    if (an.hayPrev && an.prev > 0) {
+      const d = an.delta;
+      const cls = d > 0.005 ? 'cn-d-up' : d < -0.005 ? 'cn-d-down' : 'cn-d-flat';
+      const ic = d > 0.005 ? 'arrow_upward' : d < -0.005 ? 'arrow_downward' : 'remove';
+      const palabra = d > 0.005 ? 'más' : d < -0.005 ? 'menos' : 'igual';
+      delta = `<p class="cn-hero-delta"><span class="cn-d ${cls}"><span class="material-symbols-rounded" aria-hidden="true">${ic}</span>${esc_(M.pctTxt(d))}</span> ${palabra} que en ${esc_(rangoPrev)} <span class="cn-muted">(${fmt_(an.prev)} dosis)</span></p>`;
+    } else {
+      delta = `<p class="cn-hero-delta cn-muted">${an.hayPrev ? `En ${esc_(rangoPrev)} este filtro no tuvo dosis: no hay base de comparación.` : `Sin cifras de ${_state.anio - 1} para comparar.`}</p>`;
+    }
+
+    // Mes más fuerte dentro del rango (solo si el rango abarca varios meses)
+    let fuerte = '';
+    if (meses && _state.mesFin > _state.mesIni) {
+      const enRango = meses.filter((m) => m.mes >= _state.mesIni && m.mes <= _state.mesFin && m.conDatos);
+      const top = enRango.slice().sort((a, b) => b.total - a.total)[0];
+      if (top && top.total > 0) fuerte = `<div><dt>Mes más fuerte</dt><dd>${M.MESES[top.mes - 1]} <span class="cn-muted">${fmt_(top.total)}</span></dd></div>`;
+    }
+
+    const avisos = meses ? M.avisosDeComparacion(meses, _state.mesIni, _state.mesFin, _state.anio) : [];
+    const aviso = avisos.length ? `<p class="cn-aviso"><span class="material-symbols-rounded" aria-hidden="true">info</span><span>Ojo con la comparación: ${esc_(avisos.join('; '))}.</span></p>` : '';
+
+    return `<section class="cn-hero" aria-label="Resumen del periodo">
+      <div class="cn-hero-main">
+        <p class="cn-eyebrow">${esc_(etiquetaSel)} · ${esc_(rango)}</p>
+        <p class="cn-big" id="concKpiTotal">${fmt_(an.total)}</p>
+        <p class="cn-hero-sub">aplicaciones · ${esc_(ambito)}</p>
+        ${delta}
+        <dl class="cn-facts">
+          <div><dt>Unidades con dosis</dt><dd id="concKpiUnidades">${an.conDatos} <span class="cn-muted">de ${an.nUnidades}</span></dd></div>
+          <div><dt>Promedio por unidad</dt><dd>${fmt_(an.promedio)}</dd></div>
+          ${fuerte}
+        </dl>
+        ${aviso}
+      </div>
+      ${seccionRitmo_(meses)}
+    </section>`;
+  }
+
+  function seccionRitmo_(meses) {
+    if (!meses && _state.mensualCargando) {
+      return `<div class="cn-ritmo cn-ritmo-na" role="status"><h4>Ritmo mensual ${_state.anio}</h4><p class="cn-muted"><span class="material-symbols-rounded cn-gira" aria-hidden="true">progress_activity</span> Cargando el ritmo mes por mes…</p></div>`;
+    }
+    if (!meses) {
+      return `<div class="cn-ritmo cn-ritmo-na"><h4>Ritmo mensual</h4><p class="cn-muted">La serie mensual no está disponible en este momento. El resto del panel sí.</p></div>`;
+    }
+    const max = Math.max(1, ...meses.map((m) => Math.max(m.total, m.prev)));
+    const unico = _state.sel.length === 1 ? M.colorDe(_state.sel[0]) : '';
+    const bars = meses.map((m) => {
+      const enRango = m.mes >= _state.mesIni && m.mes <= _state.mesFin;
+      const h = m.total > 0 ? Math.max(3, m.total * 86 / max) : 0;
+      const hp = m.prev > 0 ? m.prev * 86 / max : 0;
+      const tip = `${M.MESES[m.mes - 1]} ${_state.anio}: ${m.conDatos ? fmt_(m.total) : 'sin captura todavía'}` +
+        (m.conDatos && m.incompleto ? `\nCaptura parcial: ${m.unidades} de ${m.maxU} unidades` : '') +
+        `\n${M.MESES[m.mes - 1]} ${_state.anio - 1}: ${m.conDatosPrev ? fmt_(m.prev) : 'sin datos'}` +
+        (m.conDatosPrev && m.incompletoPrev ? ` (captura parcial: ${m.unidadesPrev} de ${m.maxUPrev})` : '');
+      const peak = m.total > 0 && m.mes === (meses.find((x) => x.total === Math.max(...meses.map((y) => y.total))) || {}).mes;
+      return `<button type="button" class="cn-mes ${enRango ? 'is-in' : 'is-out'} ${m.conDatos ? '' : 'is-vacio'} ${m.incompleto ? 'is-parcial' : ''}" data-a="mes" data-v="${m.mes}" data-tip="${esc_(tip)}" aria-label="${esc_(tip.replace(/\n/g, '. '))}" aria-pressed="${enRango && _state.mesIni === _state.mesFin && _state.mesIni === m.mes ? 'true' : 'false'}">
+        <span class="cn-mes-area">
+          ${peak ? `<span class="cn-mes-val">${fmt_(m.total)}</span>` : ''}
+          <span class="cn-mes-bar" style="height:${h}%;${unico && enRango ? `background:${unico}` : ''}"></span>
+          ${hp ? `<span class="cn-mes-prev ${m.incompletoPrev ? 'is-parcial' : ''}" style="height:${hp}%"></span>` : ''}
+        </span>
+        <span class="cn-mes-lbl">${M.MES3[m.mes - 1]}</span>
+      </button>`;
+    }).join('');
+    const unMes = _state.mesIni === _state.mesFin;
+    return `<div class="cn-ritmo">
+      <div class="cn-ritmo-cab">
+        <h4>Ritmo mensual ${_state.anio}</h4>
+        <ul class="cn-leyenda" aria-label="Cómo leer la gráfica">
+          <li><i class="cn-lg-bar"></i>${_state.anio}</li>
+          <li><i class="cn-lg-prev"></i>${_state.anio - 1}</li>
+          <li><i class="cn-lg-parcial"></i>captura parcial</li>
+        </ul>
+      </div>
+      <div class="cn-meses" role="group" aria-label="Meses del año; elige uno para verlo solo">${bars}</div>
+      <p class="cn-ritmo-pie cn-muted">${unMes ? 'Viendo un solo mes. Toca el mismo mes otra vez para volver a enero–corte.' : 'Toca un mes para verlo solo; el resto del panel se ajusta.'}</p>
+    </div>`;
+  }
+
+  function seccionBiologicos_(an) {
+    const ordenados = an.porBio.filter((b) => b.key !== 'OTROS' || b.total > 0).sort((a, b) => b.total - a.total || M.BIOLOGICOS.findIndex((x) => x.key === a.key) - M.BIOLOGICOS.findIndex((x) => x.key === b.key));
+    const maxShare = Math.max(0.0001, ...ordenados.map((b) => b.share));
+    const sel = selSet_();
+    const hayFiltro = !!sel;
+    const liston = M.segmentos(Object.fromEntries(an.porBio.map((b) => [b.key, b.total])), null);
+    const totalListon = liston.reduce((s, x) => s + x.v, 0);
+    const segs = liston.map((s) => {
+      const activo = !sel || (s.key === 'OTROS_GRIS' ? [...sel].some((k) => !M.SLOTS.some((x) => x[0] === k)) : sel.has(s.key));
+      return `<i class="${activo ? '' : 'is-off'}" style="flex:${s.v} 1 0; background:${s.color}" data-tip="${esc_(s.label)}: ${fmt_(s.v)} (${Math.round(s.v * 100 / (totalListon || 1))}%)"></i>`;
+    }).join('');
+    const chips = ordenados.map((b) => {
+      const on = sel && sel.has(b.key);
+      const cero = b.total === 0;
+      const partes = [];
+      if (!cero) partes.push(`${(b.share * 100).toFixed(b.share < 0.1 ? 1 : 0)}%`);
+      return `<li><button type="button" class="cn-chip ${on ? 'is-on' : ''} ${cero ? 'is-cero' : ''}" data-a="bio" data-v="${esc_(b.key)}" aria-pressed="${on ? 'true' : 'false'}"
+          data-tip="${esc_(`${b.label}: ${fmt_(b.total)} dosis${_state.prevRows ? `\n${M.rangoTxt(_state.mesIni, _state.mesFin, _state.anio - 1)}: ${fmt_(b.prev)}` : ''}`)}">
+        <span class="cn-chip-top"><i class="cn-dot" style="background:${b.color}"></i><span class="cn-chip-nom">${esc_(b.label)}</span>${on ? '<span class="material-symbols-rounded cn-chip-ok" aria-hidden="true">check</span>' : ''}</span>
+        <span class="cn-chip-num">${fmt_(b.total)}</span>
+        <span class="cn-chip-pie"><span class="cn-chip-pct">${cero ? (b.prev > 0 ? 'en cero' : 'sin dosis') : partes.join('')}</span>${cero ? '' : chipDelta_(b.delta, `Contra ${M.rangoTxt(_state.mesIni, _state.mesFin, _state.anio - 1)}`)}</span>
+        <span class="cn-chip-barra"><i style="width:${cero ? 0 : Math.max(3, b.share * 100 / maxShare)}%;background:${b.color}"></i></span>
+      </button></li>`;
+    }).join('');
+    return `<section class="cn-sec cn-bio" aria-labelledby="cnBioT">
+      <header class="cn-sec-cab">
+        <div><h4 id="cnBioT">Biológicos</h4><p class="cn-muted">Elige uno o varios: todo lo demás se recalcula con tu elección.</p></div>
+        ${hayFiltro ? `<button type="button" class="cn-link" data-a="bio-clear"><span class="material-symbols-rounded" aria-hidden="true">filter_alt_off</span>Quitar filtro (${sel.size})</button>` : ''}
+      </header>
+      <div class="cn-liston ${hayFiltro ? 'hay-filtro' : ''}" role="img" aria-label="Participación de cada biológico en el total">${segs}</div>
+      <ul class="cn-chips">${chips}</ul>
+      <p class="cn-nota cn-muted">Los ocho de mayor volumen tienen color propio; el resto va en gris. El color sigue a la vacuna, nunca a su lugar en el ranking.</p>
+    </section>`;
+  }
+
+  function seccionHallazgos_(an, meses) {
+    const ctx = { rango: M.rangoTxt(_state.mesIni, _state.mesFin, _state.anio), rangoPrev: M.rangoTxt(_state.mesIni, _state.mesFin, _state.anio - 1) };
+    const lista = M.hallazgos(an, ctx);
+    _state.hallazgos = lista;
+    const tarjetas = lista.length ? lista.map((h, i) => `<li class="cn-hall cn-hall-${h.tipo}">
+        <span class="material-symbols-rounded cn-hall-ic" aria-hidden="true">${h.icono}</span>
+        <div class="cn-hall-tx"><strong>${esc_(h.titulo)}</strong><p>${esc_(h.texto)}</p>
+          <button type="button" class="cn-link" data-a="hall" data-v="${i}">${h.accion.tipo === 'bio' ? 'Filtrar por este biológico' : 'Ver en el ranking'}<span class="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button></div>
+      </li>`).join('') : `<li class="cn-hall cn-hall-bien"><span class="material-symbols-rounded cn-hall-ic" aria-hidden="true">task_alt</span><div class="cn-hall-tx"><strong>Nada urgente en este filtro</strong><p>Todas las unidades del alcance registran dosis y no hay caídas fuertes contra ${esc_(ctx.rangoPrev)}.</p></div></li>`;
+    return `<section class="cn-sec cn-halls" aria-labelledby="cnHallT">
+      <header class="cn-sec-cab"><div><h4 id="cnHallT">Lo que conviene revisar</h4><p class="cn-muted">Calculado con los datos de arriba; cambia cuando cambias los filtros.</p></div></header>
+      <ul class="cn-hall-lista">${tarjetas}</ul>
+    </section>`;
+  }
+
+  function seccionMunicipios_(anTodos) {
+    if (anTodos.porMuni.length <= 1 && !_state.municipio) return '';
+    const maxT = Math.max(1, ...anTodos.porMuni.map((m) => m.total));
+    const filas = anTodos.porMuni.map((m) => {
+      const on = _state.municipio === m.muni;
+      return `<li><button type="button" class="cn-muni-row ${on ? 'is-on' : ''}" data-a="muni" data-v="${esc_(m.muni)}" aria-pressed="${on ? 'true' : 'false'}">
+        <span class="cn-muni-nom">${esc_(bonito_(m.nombre))}<small>${m.conDatos} de ${m.n} ${m.n === 1 ? 'unidad' : 'unidades'} con dosis</small></span>
+        <span class="cn-muni-bar">${pila_(m.porBio, m.total * 100 / maxT, `Composición de ${m.nombre}`)}</span>
+        <span class="cn-muni-tot">${fmt_(m.total)}<small>${Math.round(m.share * 100)}% del total</small></span>
+        ${chipDelta_(m.delta, `Contra ${M.rangoTxt(_state.mesIni, _state.mesFin, _state.anio - 1)}`)}
+      </button></li>`;
+    }).join('');
+    return `<section class="cn-sec cn-munis" aria-labelledby="cnMuniT">
+      <header class="cn-sec-cab"><div><h4 id="cnMuniT">Por municipio</h4><p class="cn-muted">${_state.municipio ? 'Toca el municipio activo para volver a ver todos.' : 'Toca uno para acotar el panel. El largo de la barra compara volumen entre municipios; sus colores, la mezcla de biológicos.'}</p></div></header>
+      <ul class="cn-muni-lista">${filas}</ul>
+    </section>`;
+  }
+
+  function seccionUnidades_(an) {
+    const modoBtn = (v, ic, txt) => `<button type="button" class="cn-seg-btn ${_state.modo === v ? 'is-on' : ''}" data-a="modo" data-v="${v}" aria-pressed="${_state.modo === v}"><span class="material-symbols-rounded" aria-hidden="true">${ic}</span>${txt}</button>`;
+    const cab = `<header class="cn-sec-cab">
+        <div><h4 id="cnUniT">Unidades</h4><p class="cn-muted">${an.nUnidades} en este alcance${an.nUnidades !== an.conDatos ? ` · ${an.nUnidades - an.conDatos} sin dosis` : ''}.${_state.modo === 'ranking' ? ' La barra muestra la mezcla de biológicos de cada unidad; el número, cuánto aplicó.' : ''}</p></div>
+        <div class="cn-controles">
+          ${_state.modo === 'ranking' ? `<label class="cn-orden"><span>Ordenar por</span><select id="concOrden" aria-label="Orden del ranking">
+            ${[['total', 'Más aplicaciones'], ['caida', 'Mayor caída'], ['alza', 'Mayor alza'], ['sin', 'Sin dosis primero'], ['nombre', 'Nombre']].map(([v, t]) => `<option value="${v}" ${_state.orden === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>` : ''}
+          <div class="cn-seg" role="group" aria-label="Forma de ver las unidades">${modoBtn('ranking', 'leaderboard', 'Ranking')}${modoBtn('matriz', 'grid_view', 'Matriz')}</div>
+        </div>
+      </header>`;
+    if (!an.nUnidades) return `<section class="cn-sec cn-unis" aria-labelledby="cnUniT">${cab}<p class="cn-vacio">Ninguna unidad coincide con la búsqueda o el municipio elegido. Quita un filtro para ver más.</p></section>`;
+    return `<section class="cn-sec cn-unis" aria-labelledby="cnUniT">${cab}${_state.modo === 'matriz' ? matriz_() : ranking_(an)}</section>`;
+  }
+
+  function ranking_(an) {
+    const lista = M.ordena(an.unidades, _state.orden);
+    const visibles = _state.verTodas ? lista : lista.slice(0, FILAS_VISIBLES);
+    const filas = visibles.map((u, i) => {
+      const abierta = _state.abiertas.has(u.clues);
+      const sinDosis = u.totalTodas === 0;
+      return `<li class="cn-row ${abierta ? 'is-open' : ''} ${sinDosis ? 'is-sin' : ''}">
+        <button type="button" class="cn-row-cab" data-a="uni" data-v="${esc_(u.clues)}" aria-expanded="${abierta}">
+          <span class="cn-pos">${i + 1}</span>
+          <span class="cn-uni-nom"><strong>${esc_(u.nombre)}</strong><small>${esc_(u.clues)} · ${esc_(bonito_(u.municipio))}</small></span>
+          <span class="cn-uni-bar">${sinDosis ? '<span class="cn-sin"><span class="material-symbols-rounded" aria-hidden="true">event_busy</span>Sin dosis en el periodo</span>' : (u.total ? pila_(u.porBio, 100, `Composición de ${u.nombre}`) : '<span class="cn-sin cn-sin-sel">Sin dosis del biológico elegido</span>')}</span>
+          <span class="cn-uni-tot">${fmt_(u.total)}<small>${an.total ? (u.share * 100).toFixed(u.share < 0.1 ? 1 : 0) + '% del total' : ''}</small></span>
+          ${chipDelta_(u.delta, `Contra ${M.rangoTxt(_state.mesIni, _state.mesFin, _state.anio - 1)}: ${fmt_(u.prev)}`)}
+          <span class="material-symbols-rounded cn-chev" aria-hidden="true">expand_more</span>
+        </button>
+        ${abierta ? detalleUnidad_(u) : ''}
+      </li>`;
+    }).join('');
+    const restantes = lista.length - FILAS_VISIBLES;
+    const pie = lista.length > FILAS_VISIBLES
+      ? `<button type="button" class="cn-mas" data-a="mas">${_state.verTodas ? 'Ver menos' : (restantes === 1 ? 'Ver la unidad restante' : `Ver las ${restantes} unidades restantes`)}</button>` : '';
+    return `<ol class="cn-rank">${filas}</ol>${pie}`;
+  }
+
+  function detalleUnidad_(u) {
+    const sel = selSet_();
+    const idxClaves = _idx.clave.get(u.clues) || {};
+    const hayClaves = _state.claveFetchKey === rangoKey_();
+    const prevU = {}; // dosis del año anterior por biológico de esta unidad
+    (_state.prevRows || []).forEach((r) => { if (r.clues === u.clues) prevU[r.biologico] = (prevU[r.biologico] || 0) + Number(r.total_dosis || 0); });
+    const llaves = Object.keys(u.porBio).concat(Object.keys(prevU)).filter((k, i, a) => a.indexOf(k) === i)
+      .filter((k) => (!sel || sel.has(k)) && ((u.porBio[k] || 0) > 0 || (prevU[k] || 0) > 0))
+      .sort((a, b) => (u.porBio[b] || 0) - (u.porBio[a] || 0) || (prevU[b] || 0) - (prevU[a] || 0));
+    const items = llaves.map((k) => {
+      const claves = hayClaves ? Object.keys(idxClaves).filter((c) => (_state.claveToBiologico.get(c) || 'OTROS') === k).sort() : [];
+      const v = u.porBio[k] || 0, prev = prevU[k] || 0;
+      return `<li class="cn-det-it"><span class="cn-det-n"><i class="cn-dot" style="background:${M.colorDe(k)}"></i>${esc_(M.labelDe(k))}</span>
+        <span class="cn-det-v"><b>${fmt_(v)}</b>${_state.prevRows ? chipDelta_(M.cambio(v, prev), `Contra ${M.rangoTxt(_state.mesIni, _state.mesFin, _state.anio - 1)}`) : ''}</span>
+        ${_state.prevRows ? `<span class="cn-muted cn-det-prev">${prev ? `${fmt_(prev)} el año pasado` : 'sin dosis el año pasado'}</span>` : ''}
+        ${claves.length ? `<span class="cn-claves">${claves.map((c) => `<span title="Clave SIS ${esc_(c)}"><code>${esc_(c)}</code> ${fmt_(idxClaves[c])}</span>`).join('')}</span>` : ''}
+      </li>`;
+    }).join('');
+    const boton = hayClaves ? '' : `<button type="button" class="cn-link" data-a="claves" ${_state.claveLoading ? 'disabled' : ''}><span class="material-symbols-rounded" aria-hidden="true">key</span>${_state.claveLoading ? 'Cargando claves…' : 'Ver dosis por clave SIS'}</button>`;
+    return `<div class="cn-det">
+      ${llaves.length ? `<ul class="cn-det-lista">${items}</ul>` : '<p class="cn-muted">Esta unidad no tiene dosis de los biológicos elegidos, ni en este periodo ni en el año anterior.</p>'}
+      <div class="cn-det-pie">${boton}<span class="cn-muted">${esc_(u.clues)} · ${esc_(u.nombre)}</span></div>
+    </div>`;
+  }
+
+  function matriz_() {
+    const unidades = unidadesVisiblesFiltro_();
+    const scopeAgg = computeScopeAggregate_(unidades);
+    const cols = columnasActivas_(scopeAgg);
+    const agrupar = `<div class="cn-matriz-barra"><span class="cn-muted">Agrupar columnas por</span>
+      <div class="cn-seg cn-seg-chico" role="group" aria-label="Agrupación de la matriz">
+        <button type="button" class="cn-seg-btn ${_state.vista === 'biologico' ? 'is-on' : ''}" data-a="agrupar" data-v="biologico" aria-pressed="${_state.vista === 'biologico'}">Biológico</button>
+        <button type="button" class="cn-seg-btn ${_state.vista === 'clave' ? 'is-on' : ''}" data-a="agrupar" data-v="clave" aria-pressed="${_state.vista === 'clave'}">Clave SIS</button>
+      </div></div>`;
+    if (_state.vista === 'clave' && _state.claveLoading) return `${agrupar}<p class="cn-vacio">Cargando el desglose por clave SIS…</p>`;
+    if (!cols.length) return `${agrupar}<p class="cn-vacio">No hay columnas con datos para este rango y filtro.</p>`;
+
+    const maxCol = {};
+    cols.forEach((c) => { maxCol[c.key] = 0; });
+    const aggs = new Map();
+    unidades.forEach((u) => { const a = computeUnitAggregate_(u.clues); aggs.set(u.clues, a); cols.forEach((c) => { maxCol[c.key] = Math.max(maxCol[c.key], a.porFuente[c.key] || 0); }); });
+    const heat = (v, c) => (v ? ` style="background:rgba(37,106,191,${(0.05 + 0.3 * v / (maxCol[c.key] || 1)).toFixed(3)})"` : '');
+
+    const leftU = STICKY_W.clues, leftM = STICKY_W.clues + STICKY_W.unidad, anchoIzq = leftM + STICKY_W.municipio;
+    const th = `<tr>
+      <th class="cn-sticky" style="left:0;width:${STICKY_W.clues}px;min-width:${STICKY_W.clues}px">CLUES</th>
+      <th class="cn-sticky" style="left:${leftU}px;width:${STICKY_W.unidad}px;min-width:${STICKY_W.unidad}px">Unidad</th>
+      <th class="cn-sticky" style="left:${leftM}px;width:${STICKY_W.municipio}px;min-width:${STICKY_W.municipio}px">Municipio</th>
+      ${cols.map((c) => `<th class="cn-num">${esc_(c.label)}${c.sublabel ? `<small>${esc_(c.sublabel)}</small>` : ''}</th>`).join('')}
+      <th class="cn-num">Total</th></tr>`;
+
+    const munis = _state.municipio ? [_state.municipio] : municipiosVisibles_();
+    const mostrarMuni = !_state.busqueda;
+    const mostrarJuris = !_state.busqueda && !_state.municipio && munis.length > 1;
+    let cuerpo = '';
+    munis.forEach((muni) => {
+      const us = unidades.filter((u) => normUp_(u.municipio) === muni);
+      if (!us.length) return;
+      const nomMuni = bonito_(us[0].municipio);
+      const sub = {}; let subTotal = 0;
+      us.forEach((u) => {
+        const a = aggs.get(u.clues);
+        cuerpo += `<tr><td class="cn-sticky" style="left:0">${esc_(u.clues)}</td><td class="cn-sticky cn-trunc" style="left:${leftU}px" title="${esc_(u.nombre)}">${esc_(u.nombre)}</td><td class="cn-sticky" style="left:${leftM}px">${esc_(nomMuni)}</td>
+          ${cols.map((c) => { const v = a.porFuente[c.key] || 0; sub[c.key] = (sub[c.key] || 0) + v; return `<td class="cn-num"${heat(v, c)}>${v ? fmt_(v) : '<span class="cn-muted">—</span>'}</td>`; }).join('')}
+          <td class="cn-num cn-tot">${fmt_(a.totalGeneral)}</td></tr>`;
+        subTotal += a.totalGeneral;
+      });
+      if (mostrarMuni) cuerpo += `<tr class="cn-sub"><td class="cn-sticky" colspan="3" style="left:0;min-width:${anchoIzq}px">Total municipal — ${esc_(nomMuni)}</td>${cols.map((c) => `<td class="cn-num">${fmt_(sub[c.key] || 0)}</td>`).join('')}<td class="cn-num cn-tot">${fmt_(subTotal)}</td></tr>`;
+    });
+    if (mostrarJuris) cuerpo += `<tr class="cn-sub cn-juris"><td class="cn-sticky" colspan="3" style="left:0;min-width:${anchoIzq}px">Total jurisdiccional</td>${cols.map((c) => `<td class="cn-num">${fmt_(scopeAgg.porFuenteTotal[c.key] || 0)}</td>`).join('')}<td class="cn-num cn-tot">${fmt_(scopeAgg.grandTotal)}</td></tr>`;
+    return `${agrupar}<div class="cn-tabla-wrap" tabindex="0" role="region" aria-label="Matriz de aplicaciones; usa las flechas para desplazarte"><table class="cn-tabla"><thead>${th}</thead><tbody>${cuerpo}</tbody></table></div>
+      <p class="cn-nota cn-muted">El tono de cada celda compara contra el valor más alto de su columna.</p>`;
+  }
+
+  function esqueleto_() {
+    return `<div class="cn-cargando" role="status" aria-live="polite"><span class="material-symbols-rounded cn-gira" aria-hidden="true">progress_activity</span>Armando el concentrado de aplicaciones…</div>`;
+  }
+
+  function render_() {
+    const root = $('concRoot');
+    if (!root) return;
+    updateSearchCount_();
+    if (_state.loading && !_state.bioRows.length) { root.innerHTML = esqueleto_(); return; }
+    root.classList.toggle('is-loading', _state.loading);
+
+    const an = analizar_();
+    const anTodos = analizar_('');
+    const meses = (_state.mensual && _state.mensual.length) ? M.serieMensual(_state.mensual, _state.mensualPrev, { municipio: _state.municipio, sel: _state.sel }) : null;
+    const sinNada = !_state.bioRows.length && !_state.loading;
+
+    const html = sinNada
+      ? `<p class="cn-vacio">No hay aplicaciones registradas en el SIS para ${esc_(M.rangoTxt(_state.mesIni, _state.mesFin, _state.anio))}. Prueba con otro rango de meses.</p>`
+      : seccionHero_(an, meses) + seccionBiologicos_(an) + seccionHallazgos_(an, meses) + seccionMunicipios_(anTodos) + seccionUnidades_(an);
+    root.innerHTML = html;
+
+    if (_state.foco) {
+      const el = root.querySelector(_state.foco);
+      if (el) el.focus({ preventScroll: true });
+      _state.foco = null;
+    }
+  }
+
+  // Compatibilidad con el nombre histórico (main.js / pruebas)
+  window.renderConcentradoTable = render_;
+
+  function updateSearchCount_() {
     const el = $('concSearchCount');
     if (!el) return;
-    const total = _state.unidades.length;
-    el.textContent = (_state.busqueda || _state.municipio) ? `${n} de ${total} unidades` : '';
+    const n = unidadesVisiblesFiltro_().length;
+    el.textContent = (_state.busqueda || _state.municipio) ? `${n} de ${_state.unidades.length} unidades` : '';
   }
 
-  function renderKpis_(totalGeneral, unidadesConDatos, totalUnidades, totalesPorCol, cols) {
-    const kpiTotal = $('concKpiTotal');
-    const kpiUnidades = $('concKpiUnidades');
-    const kpiPrincipal = $('concKpiPrincipal');
+  // ── Interacción (delegación) ──────────────────────────────────────────────────────────────────────────────────────
+  function alternaBio_(key) {
+    const i = _state.sel.indexOf(key);
+    if (i >= 0) _state.sel.splice(i, 1); else _state.sel.push(key);
+    _state.abiertas.clear();
+    _state.foco = `[data-a="bio"][data-v="${key.replace(/"/g, '\\"')}"]`;
+    render_();
+  }
 
-    if (kpiTotal) kpiTotal.textContent = totalGeneral.toLocaleString('es-MX');
-    if (kpiUnidades) kpiUnidades.textContent = `${unidadesConDatos} / ${totalUnidades}`;
+  function aplicaRango_(ini, fin) {
+    _state.mesIni = ini; _state.mesFin = fin;
+    sincronizaMeses_();
+    cambioDeRango_();
+  }
 
-    if (kpiPrincipal) {
-      let mejor = null;
-      cols.forEach(c => {
-        if (c.key === 'OTROS') return;
-        const v = totalesPorCol[c.key] || 0;
-        if (!mejor || v > mejor.v) mejor = { label: c.label, v };
-      });
-      kpiPrincipal.textContent = mejor ? `${mejor.label} (${mejor.v.toLocaleString('es-MX')})` : '—';
+  function onClick_(ev) {
+    const t = ev.target.closest('[data-a]');
+    if (!t) return;
+    const a = t.dataset.a, v = t.dataset.v;
+    if (a === 'bio') return alternaBio_(v);
+    if (a === 'bio-clear') { _state.sel = []; _state.abiertas.clear(); return render_(); }
+    if (a === 'mes') {
+      const m = Number(v);
+      if (_state.mesIni === m && _state.mesFin === m) return aplicaRango_(1, _state.mesCorte);
+      return aplicaRango_(m, m);
+    }
+    if (a === 'muni') {
+      _state.municipio = _state.municipio === v ? '' : v;
+      const s = $('concFilterMunicipio'); if (s) s.value = _state.municipio;
+      _state.abiertas.clear(); _state.verTodas = false;
+      _state.foco = `[data-a="muni"][data-v="${v}"]`;
+      return render_();
+    }
+    if (a === 'uni') {
+      if (_state.abiertas.has(v)) _state.abiertas.delete(v); else _state.abiertas.add(v);
+      _state.foco = `[data-a="uni"][data-v="${v}"]`;
+      return render_();
+    }
+    if (a === 'modo') {
+      _state.modo = v;
+      if (v === 'matriz' && _state.vista === 'clave' && _state.claveFetchKey !== rangoKey_()) return fetchClaveData_(false);
+      return render_();
+    }
+    if (a === 'agrupar') {
+      _state.vista = v;
+      if (v === 'clave' && _state.claveFetchKey !== rangoKey_()) return fetchClaveData_(false);
+      return render_();
+    }
+    if (a === 'mas') { _state.verTodas = !_state.verTodas; _state.foco = '[data-a="mas"]'; return render_(); }
+    if (a === 'claves') return fetchClaveData_(false);
+    if (a === 'hall') {
+      const h = (_state.hallazgos || [])[Number(v)];
+      if (!h) return;
+      if (h.accion.tipo === 'bio') { _state.sel = [h.accion.valor]; _state.abiertas.clear(); render_(); const el = $('cnBioT'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+      _state.modo = 'ranking'; _state.orden = h.accion.valor; _state.verTodas = false; render_();
+      const el = $('cnUniT'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
   }
+
+  // Tooltip único, también con teclado (foco) y sin depender de title
+  function bindTooltip_(root) {
+    let tip = $('cnTip');
+    if (!tip) { tip = document.createElement('div'); tip.id = 'cnTip'; tip.className = 'cn-tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true; document.body.appendChild(tip); }
+    const muestra = (el) => {
+      const txt = el.getAttribute('data-tip'); if (!txt) return;
+      tip.innerHTML = txt.split('\n').map((l) => `<span>${l}</span>`).join('');
+      tip.hidden = false;
+      const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+      let x = r.left + r.width / 2 - tw / 2, y = r.top - th - 8;
+      if (y < 4) y = r.bottom + 8;
+      x = Math.max(8, Math.min(x, window.innerWidth - tw - 8));
+      tip.style.left = `${x}px`; tip.style.top = `${y}px`;
+    };
+    const oculta = () => { tip.hidden = true; };
+    root.addEventListener('mouseover', (e) => { const el = e.target.closest('[data-tip]'); if (el) muestra(el); });
+    root.addEventListener('mouseout', (e) => { if (e.target.closest('[data-tip]')) oculta(); });
+    root.addEventListener('focusin', (e) => { const el = e.target.closest('[data-tip]'); if (el) muestra(el); });
+    root.addEventListener('focusout', oculta);
+    root.addEventListener('scroll', oculta, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') oculta(); });
+  }
+
+  function bindRoot_() {
+    const root = $('concRoot');
+    if (!root || root.dataset.bound) return;
+    root.dataset.bound = '1';
+    root.addEventListener('click', onClick_);
+    root.addEventListener('change', (e) => {
+      if (e.target && e.target.id === 'concOrden') { _state.orden = e.target.value; _state.verTodas = false; _state.foco = '#concOrden'; render_(); }
+    });
+    bindTooltip_(root);
+  }
+
 
   // ── 7. Exportación a Excel institucional (ExcelJS) ──────────────────────────────────
   async function exportConcentradoExcel() {
+    // ExcelJS se carga bajo demanda (igual que en el resto de exportaciones de SIREVAQ)
+    if (!window.ExcelJS && typeof window.ensureLibsLoaded === 'function') { try { await window.ensureLibsLoaded('exceljs'); } catch (e) { console.warn('[Concentrado] exceljs no cargó:', e); } }
     if (!window.ExcelJS) {
       if (window.showToast) window.showToast('Librería de exportación no cargada todavía, intenta de nuevo en unos segundos.', false, 'bad');
       return;
     }
+    if (_state.vista === 'clave' && _state.claveFetchKey !== rangoKey_()) await fetchClaveData_(false);
     const rowsActivas = _state.vista === 'clave' ? _state.claveRows : _state.bioRows;
     if (_state.loading || rowsActivas.length === 0) {
       if (window.showToast) window.showToast('No hay datos cargados para exportar.', false, 'bad');
@@ -632,7 +882,8 @@
     ws.getCell('A2').alignment = { horizontal: 'center', vertical: 'middle' };
 
     ws.mergeCells(3, 1, 3, totalCols);
-    ws.getCell('A3').value = `${vistaLabel} · ${mesesLabel} · Emitido: ${new Date().toLocaleDateString('es-MX')}`;
+    const selLabel = _state.sel.length ? ` · Solo: ${_state.sel.map((k) => M.labelDe(k)).join(', ')}` : '';
+    ws.getCell('A3').value = `${vistaLabel}${selLabel} · ${mesesLabel} · Emitido: ${new Date().toLocaleDateString('es-MX')}`;
     ws.getCell('A3').font = { name: 'Arial Nova', size: 9, italic: true, color: { argb: 'FF64748B' } };
     ws.getCell('A3').alignment = { horizontal: 'center', vertical: 'middle' };
 
@@ -788,30 +1039,30 @@
     }
     const btnRefresh = $('btnRefreshConcentrado');
     if (btnRefresh && !btnRefresh.dataset.bound) {
-      btnRefresh.addEventListener('click', () => fetchActivo_(true));
+      btnRefresh.addEventListener('click', () => { _state.claveFetchKey = null; fetchBiologicoData_(true); });
       btnRefresh.dataset.bound = '1';
     }
-
-    renderBiologicoVistaTabs_();
-    if (typeof window.syncTabGroupIndicator === 'function') {
-      setTimeout(() => window.syncTabGroupIndicator('#concVistaTabs'), 60);
-    }
+    bindRoot_();
 
     if (_state.initialized) {
       renderFiltros_();
-      renderConcentradoTable();
+      render_();
       return;
     }
 
     try {
+      _state.loading = true;
+      render_();
       await loadUnidadesVisibles_();
       await buildAliasLookup_(_state.anio);
-      _state.mesFin = await resolveMesCorte_(_state.anio);
+      _state.mesCorte = await resolveMesCorte_(_state.anio);
+      _state.mesFin = _state.mesCorte;
       if (_state.mesIni > _state.mesFin) _state.mesIni = _state.mesFin;
       renderFiltros_();
       _state.initialized = true;
       await fetchBiologicoData_(true);
     } catch (err) {
+      _state.loading = false;
       console.error('[Concentrado] Error inicializando el panel:', err);
       if (window.showToast) window.showToast('Error al inicializar el concentrado de aplicaciones.', false, 'bad');
     }

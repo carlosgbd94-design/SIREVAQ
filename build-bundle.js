@@ -58,6 +58,7 @@ const GROUP_BODY = [
   'jeringas_calculator.js',
   'auditoria_console.js',
   'rda_ui.js',
+  'concentrado_motor.js', // cálculo puro del panel Concentrado de Aplicaciones (también lo prueba Node)
   'concentrado_ui.js',
 ];
 

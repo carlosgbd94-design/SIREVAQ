@@ -155,7 +155,7 @@
   <link rel="stylesheet" href="tailwind_compiled.css">
   <link rel="stylesheet" href="dock_glass.css?v=10">
   <link rel="stylesheet" href="ayuda.css?v=7">
-  <link rel="stylesheet" href="style.css?v=2026.275" type="text/css">
+  <link rel="stylesheet" href="style.css?v=2026.278" type="text/css">
 
   <style>
     /* Botones de acción de la tabla Pinol: estilo definido en style.css
@@ -2811,23 +2811,8 @@
         </div>
 
         <div class="hint">
-          Suma de todas las aplicaciones de biológicos capturadas en el SIS por unidad, con total municipal y
-          jurisdiccional. Alterna entre ver los totales agrupados por biológico o desglosados por clave SIS.
-        </div>
-
-        <!-- Toggle de vista: Por biológico / Por clave SIS -->
-        <div class="w-full mt-4 mb-2 flex flex-wrap items-center justify-start gap-3">
-          <div class="nav-container relative" id="concVistaTabs">
-            <div id="concVistaTabIndicator" class="nav-indicator nav-indicator-premium"></div>
-            <button id="concTabBiologico" class="nav-tab active">
-              <span class="material-symbols-rounded">category</span>
-              <span>Por biológico</span>
-            </button>
-            <button id="concTabClave" class="nav-tab">
-              <span class="material-symbols-rounded">key</span>
-              <span>Por clave SIS</span>
-            </button>
-          </div>
+          Lo aplicado en el SIS por unidad, leído de arriba abajo: total y ritmo mensual, qué biológicos pesan, qué conviene revisar,
+          cómo se reparte por municipio y qué hace cada unidad. Compara contra el mismo periodo del año anterior.
         </div>
 
         <!-- Barra de filtros de alcance + búsqueda, todo en la misma fila -->
@@ -2887,48 +2872,7 @@
           </div>
         </div>
 
-        <!-- KPIs resumen -->
-        <div class="dashboardKpis mt-4">
-          <div class="kpiCard info">
-            <div class="kpiHeader">
-              <div class="kpiCardLabel">Total de Aplicaciones</div>
-              <div class="kpiIcon"><span class="material-symbols-rounded">vaccines</span></div>
-            </div>
-            <div class="kpiCardValue" id="concKpiTotal">0</div>
-          </div>
-          <div class="kpiCard ok">
-            <div class="kpiHeader">
-              <div class="kpiCardLabel">Unidades con Registro</div>
-              <div class="kpiIcon"><span class="material-symbols-rounded">domain</span></div>
-            </div>
-            <div class="kpiCardValue" id="concKpiUnidades">0 / 0</div>
-          </div>
-          <div class="kpiCard warn">
-            <div class="kpiHeader">
-              <div class="kpiCardLabel">Biológico Principal</div>
-              <div class="kpiIcon"><span class="material-symbols-rounded">star</span></div>
-            </div>
-            <div class="kpiCardValue" id="concKpiPrincipal" style="font-size:16px;">—</div>
-          </div>
-        </div>
-
-        <!-- Tabla de concentrado: encabezado fijo + primeras 3 columnas fijas al hacer
-             scroll horizontal, para no perder de vista qué unidad se está viendo entre
-             las ~17 columnas de biológico. -->
-        <div class="tableWrap mt-8 w-full rounded-2xl border border-outline-variant/30 shadow-sm overflow-auto" style="max-height: 68vh;" tabindex="0" role="region" aria-label="Concentrado de aplicaciones; usa las flechas para desplazarte">
-          <table class="w-full text-left border-collapse min-w-[900px] leaderboard-table">
-            <thead id="concThead">
-              <tr>
-                <th class="p-4 text-center" colspan="4">Cargando…</th>
-              </tr>
-            </thead>
-            <tbody id="concTbody" class="bg-surface text-[13px] font-medium">
-              <tr>
-                <td colspan="4" class="p-6 text-center text-surface-onVariant/60">Selecciona la pestaña "Concentrado" para cargar los datos.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <div id="concRoot" class="cn"></div>
       </div>
 
       <!-- META LOGRO INFLUENZA ADMIN/MUNICIPAL -->
@@ -8773,7 +8717,7 @@
 
   <!-- Empaquetado: bundle-body.js = rda_calculator + rda_parser + param_calculator
        + rda_ui, en ese mismo orden. Generado por build-bundle.js. -->
-  <script src="dist/bundle-body.js?v=2026.81" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
+  <script src="dist/bundle-body.js?v=2026.84" defer onerror="sirevaqShowBundleLoadError('bundle-body.js')"></script>
 
   <!-- FEEDBACK FAB & MODAL -->
   <style>
