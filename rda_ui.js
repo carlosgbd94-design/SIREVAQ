@@ -762,6 +762,8 @@ async function renderDashboard() {
     const optMetaLogro = document.getElementById('rdaExportMetaLogro');
     if (optMetaLogro) optMetaLogro.style.display = (esquema === 'meta_logro_influenza') ? 'flex' : 'none';
 
+    if (esquema !== 'basico' && window.removeRdaLectura) window.removeRdaLectura();
+
     if (esquema === 'meta_logro_influenza') {
         // Temporada invernal: Influenza + COVID-19 en un solo tablero (pestañas). Se espera: la exportación masiva (ZIP)
         // necesita el tablero ya pintado antes de capturar cada unidad.
@@ -893,6 +895,8 @@ async function renderDashboard() {
     }
 
     renderKPIs(agg, esquema);
+    if (esquema === 'basico' && window.renderRdaLectura) window.renderRdaLectura(fUnits, maxMes, _rdaCache.anio);
+    else if (window.removeRdaLectura) window.removeRdaLectura();
     if (isSingleUnit) {
         renderDoughnut(agg, esquema);
     }

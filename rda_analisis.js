@@ -1,0 +1,142 @@
+/* Lectura analítica del avance RDA (esquema básico). Cálculo puro, sin DOM: lo usa rda_ui.js y lo prueban los tests.
+ * La fórmula RDA NO cambia: avance = (dosis ÷ divisor) ÷ (población × 0.0833 × meses del corte). Aquí solo se
+ * LEE ese avance: ritmo, proyección al cierre, brecha por unidad/municipio, semáforo y concentración. */
+(function (root, factory) {
+    if (typeof module === 'object' && module.exports) module.exports = factory();
+    else root.RdaAnalisis = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+    'use strict';
+
+    const FACTOR = 0.0833;
+    // Mismos cortes que las tarjetas de avance: >=95 óptimo, >=75 regular, resto crítico.
+    const nivelDe = (p) => (p >= 95 ? 'optimo' : p >= 75 ? 'regular' : 'critico');
+
+    // Definición de cada grupo de edad: población, dosis y divisor del esquema básico.
+    const GRUPOS = [
+        { key: 'menor1', nombre: 'Menores de 1 año', corto: '<1', div: 4, vacunas: '5 vacunas',
+          pob: u => u.pob_menor_1 || 0,
+          dosis: u => (u.bcg_dosis || 0) + (u.hepb_0_7_dosis || 0) + (u.hexa_3_dosis || 0) + (u.rota_2_dosis || 0) + (u.neumo_2_dosis || 0) },
+        { key: 'uno', nombre: 'Niños de 1 año', corto: '1', div: 3, vacunas: '3 vacunas',
+          pob: u => u.pob_1_ano || 0,
+          dosis: u => (u.hexa_ref_dosis || 0) + (u.neumo_ref_dosis || 0) + (u.srp_2_dosis || 0) },
+        { key: 'cuatro', nombre: 'Niños de 4 años', corto: '4', div: 1, vacunas: 'DPT',
+          pob: u => u.pob_4_anos || 0,
+          dosis: u => u.dpt_4_dosis || 0 }
+    ];
+    const GRUPO_6 = { key: 'seis', nombre: 'Niños de 6 años', corto: '6', div: 1, vacunas: 'SRP',
+        pob: u => u.pob_6_anos || 0, dosis: u => u.srp_6_dosis || 0 };
+
+    const r1 = (n) => Math.round(n * 10) / 10;
+
+    function medidasDe(g, u, mm) {
+        const pob = g.pob(u);
+        const meta = pob * FACTOR * mm;
+        const eq = g.dosis(u) / g.div;
+        return { pob, meta, eq, avance: meta > 0 ? eq / meta * 100 : null, brecha: Math.max(0, meta - eq) };
+    }
+
+    /** unidades: filas de get_rda_indicators ya filtradas por ámbito. mm: meses del corte (1-12). */
+    function analiza(unidades, mm, opciones) {
+        opciones = opciones || {};
+        mm = Math.min(12, Math.max(1, Number(mm) || 12));
+        const grupos = GRUPOS.concat(opciones.anio === 2025 ? [GRUPO_6] : []);
+        const res = grupos.map(g => {
+            const filas = [];
+            let pobT = 0, metaT = 0, eqT = 0;
+            for (const u of unidades) {
+                const m = medidasDe(g, u, mm);
+                pobT += m.pob; metaT += m.meta; eqT += m.eq;
+                if (m.meta >= 1) filas.push({ clues: u.clues, nombre: u.nombre || u.clues, municipio: u.municipio || '', ...m });
+            }
+            const avance = metaT > 0 ? eqT / metaT * 100 : null;
+            const restantes = 12 - mm;
+            const ritmo = eqT / mm;                       // aplicadas equivalentes por mes, a la fecha
+            const anual = pobT * FACTOR * 12;             // meta del año completo
+            const proyeccion = eqT + ritmo * restantes;   // cierre si se mantiene el ritmo
+            const proyPct = anual > 0 ? proyeccion / anual * 100 : null;
+            const faltanAnual = Math.max(0, anual - eqT);
+            const ritmoNecesario = restantes > 0 ? faltanAnual / restantes : null;
+            const brechaCorte = Math.max(0, metaT - eqT);
+
+            // Semáforo por unidad (solo unidades con población meta)
+            const niveles = { optimo: 0, regular: 0, critico: 0 };
+            filas.forEach(f => { f.nivel = nivelDe(f.avance); niveles[f.nivel]++; });
+
+            // Brecha: quién concentra lo que falta
+            const porBrecha = filas.filter(f => f.brecha > 0).sort((a, b) => b.brecha - a.brecha);
+            const brechaUnidades = porBrecha.reduce((s, f) => s + f.brecha, 0);
+            let acum = 0, nMitad = 0;
+            for (const f of porBrecha) { acum += f.brecha; nMitad++; if (acum >= brechaUnidades * 0.5) break; }
+
+            // Municipios
+            const mun = new Map();
+            for (const f of filas) {
+                const k = f.municipio || 'SIN MUNICIPIO';
+                const a = mun.get(k) || { municipio: k, meta: 0, eq: 0, brecha: 0, unidades: 0 };
+                a.meta += f.meta; a.eq += f.eq; a.brecha += f.brecha; a.unidades++;
+                mun.set(k, a);
+            }
+            const municipios = [...mun.values()].map(a => ({ ...a, avance: a.meta > 0 ? a.eq / a.meta * 100 : null }))
+                .sort((a, b) => b.brecha - a.brecha);
+
+            return {
+                key: g.key, nombre: g.nombre, corto: g.corto, vacunas: g.vacunas, div: g.div,
+                pob: pobT, meta: metaT, eq: eqT, avance, nivel: avance == null ? null : nivelDe(avance),
+                brechaCorte, restantes, ritmo, anual, proyeccion, proyPct, faltanAnual, ritmoNecesario,
+                // cuántas veces hay que multiplicar el ritmo actual para cerrar en 100 %
+                factorRitmo: ritmoNecesario != null && ritmo > 0 ? ritmoNecesario / ritmo : null,
+                niveles, unidadesConMeta: filas.length,
+                filas, topBrecha: porBrecha.slice(0, 5), nMitadBrecha: nMitad, brechaUnidades,
+                municipios, mejores: filas.slice().sort((a, b) => b.avance - a.avance).slice(0, 3)
+            };
+        });
+        return { mm, grupos: res, titulares: titulares(res, mm) };
+    }
+
+    // Frases cortas y accionables que cruzan los grupos (las tarjetas ya dicen lo propio de cada grupo).
+    function titulares(gs, mm) {
+        const out = [];
+        const fmt = (n) => Math.round(n).toLocaleString('es-MX');
+        const ok = gs.filter(g => g.avance != null);
+        if (!ok.length) return out;
+        const restantes = 12 - mm;
+
+        if (restantes > 0) {
+            const sinAlcanzar = ok.filter(g => g.proyPct != null && g.proyPct < 100);
+            const lejano = ok.filter(g => g.factorRitmo != null).sort((a, b) => b.factorRitmo - a.factorRitmo)[0];
+            if (!sinAlcanzar.length) {
+                out.push({ prioridad: 1, icon: 'verified', texto: `Quedan ${restantes} ${restantes === 1 ? 'mes' : 'meses'} y, al ritmo actual, los ${ok.length} grupos cierran el año en 100 % o más.` });
+            } else if (lejano) {
+                out.push({ prioridad: 1, icon: 'speed', texto: `Quedan ${restantes} ${restantes === 1 ? 'mes' : 'meses'}: al ritmo actual ${sinAlcanzar.length === ok.length ? 'ningún grupo' : sinAlcanzar.length + ' de ' + ok.length + ' grupos no'} llega${sinAlcanzar.length === ok.length ? '' : 'n'} al 100 % anual. El más lejano es ${lejano.nombre.toLowerCase()}: necesita ${(Math.round(lejano.factorRitmo * 10) / 10)}× su ritmo actual.` });
+            }
+        }
+
+        // Concentración: el grupo donde menos unidades explican la mitad del rezago
+        const conc = ok.filter(g => g.unidadesConMeta >= 6 && g.nMitadBrecha > 0 && g.brechaUnidades > 0)
+            .sort((a, b) => a.nMitadBrecha / a.unidadesConMeta - b.nMitadBrecha / b.unidadesConMeta)[0];
+        if (conc) out.push({ prioridad: 2, icon: 'filter_alt', texto: `El rezago está concentrado: en ${conc.nombre.toLowerCase()}, ${conc.nMitadBrecha} de ${conc.unidadesConMeta} unidades suman la mitad de lo que falta (${fmt(conc.brechaUnidades)} equivalentes).` });
+
+        // Municipio y unidad con más rezago sumando los grupos
+        const mun = new Map(), uni = new Map();
+        let total = 0;
+        for (const g of ok) for (const f of g.filas) {
+            if (f.brecha <= 0) continue;
+            total += f.brecha;
+            const km = f.municipio || 'SIN MUNICIPIO';
+            mun.set(km, (mun.get(km) || 0) + f.brecha);
+            const u = uni.get(f.clues) || { nombre: f.nombre, municipio: f.municipio, brecha: 0 };
+            u.brecha += f.brecha; uni.set(f.clues, u);
+        }
+        if (total > 0 && mun.size > 1) {
+            const [m, b] = [...mun.entries()].sort((a, c) => c[1] - a[1])[0];
+            out.push({ prioridad: 3, icon: 'location_on', texto: `${m} aporta ${Math.round(b / total * 100)} % del rezago jurisdiccional sumando los grupos (${fmt(b)} de ${fmt(total)} equivalentes).` });
+        }
+        if (total > 0 && uni.size > 3) {
+            const u = [...uni.values()].sort((a, c) => c.brecha - a.brecha)[0];
+            out.push({ prioridad: 3, icon: 'domain', texto: `${u.nombre} es la unidad con más rezago: ${Math.round(u.brecha / total * 100)} % del total (${fmt(u.brecha)} equivalentes).` });
+        }
+        return out.sort((a, b) => a.prioridad - b.prioridad);
+    }
+
+    return { GRUPOS, FACTOR, nivelDe, analiza, titulares };
+});

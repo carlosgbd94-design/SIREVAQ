@@ -57,6 +57,8 @@ const GROUP_BODY = [
   'param_calculator.js',
   'jeringas_calculator.js',
   'auditoria_console.js',
+  'rda_analisis.js', // lectura analítica del avance RDA (puro, también lo prueba Node)
+  'rda_lectura_ui.js',
   'rda_ui.js',
   'concentrado_motor.js', // cálculo puro del panel Concentrado de Aplicaciones (también lo prueba Node)
   'concentrado_ui.js',
