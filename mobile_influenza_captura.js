@@ -298,7 +298,7 @@
           <h2 id="icTitulo" tabindex="-1">Temporada invernal</h2>
           <p>Reporte semanal de dosis de ${nombreVac()} aplicadas en tu unidad.</p>
         </div>
-        ${hayCovid() ? `<p class="ic-vac-lead"><span class="material-symbols-rounded" aria-hidden="true">ac_unit</span>Tu unidad reporta <b>dos vacunas</b>. Elige cuál capturas esta semana.</p>
+        ${hayCovid() ? `<p class="ic-vac-lead"><span class="material-symbols-rounded" aria-hidden="true">ac_unit</span><span>Tu unidad reporta <b>dos vacunas</b>. Elige cuál capturas esta semana.</span></p>
         <div class="ic-vac" role="group" aria-label="Vacuna a reportar">
           ${[["INFLUENZA", "Influenza", "vaccines"], ["COVID", "COVID-19", "coronavirus"]].map(([v, txt, ico]) => {
             const ya = (v === "COVID" ? S.covid.capturas : S.capturas || []).some(r => r.fecha === S.fecha);
