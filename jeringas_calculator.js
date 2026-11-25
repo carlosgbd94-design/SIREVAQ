@@ -356,7 +356,7 @@ window.jerRenderUnitMatrix = function(unit) {
                                 <span class="spm-bio-name-lbl">${def.nombre}</span>
                                 ${jerColorCaptionHtml(def)}
                             </div>
-                            <div style="font-size:9.5px; font-weight:700; color:#94a3b8; margin-top:1px;">Caja de ${def.cajaSize} · ${def.usoLabel}</div>
+                            <div style="font-size:9.5px; font-weight:700; color:#64748b; margin-top:1px;">Caja de ${def.cajaSize} · ${def.usoLabel}</div>
                         </div>
                     </div>
                 </td>

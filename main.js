@@ -20611,9 +20611,9 @@ function renderPinolCommandCenter() {
 
     let stockBadge = `<div style="display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 5px !important; font-size: 13px !important; font-weight: 800 !important; color: #166534 !important;"><span class="material-symbols-rounded" style="font-size: 16px !important; color: #166534 !important;">check_circle</span><span>${existencia} Bot.</span></div>`;
     if (existencia === 0) {
-      stockBadge = `<div style="display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 5px !important; font-size: 13px !important; font-weight: 800 !important; color: #dc2626 !important;"><span class="material-symbols-rounded" style="font-size: 16px !important; color: #dc2626 !important;">warning</span><span>0 Bot <span style="font-size: 11px !important; font-weight: 700 !important; color: #ef4444 !important;">(Crítico)</span></span></div>`;
+      stockBadge = `<div style="display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 5px !important; font-size: 13px !important; font-weight: 800 !important; color: #dc2626 !important;"><span class="material-symbols-rounded" style="font-size: 16px !important; color: #dc2626 !important;">warning</span><span>0 Bot <span style="font-size: 11px !important; font-weight: 700 !important; color: #b91c1c !important;">(Crítico)</span></span></div>`;
     } else if (existencia <= 2) {
-      stockBadge = `<div style="display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 5px !important; font-size: 13px !important; font-weight: 800 !important; color: #d97706 !important;"><span class="material-symbols-rounded" style="font-size: 16px !important; color: #d97706 !important;">error</span><span>${existencia} Bot.</span></div>`;
+      stockBadge = `<div style="display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 5px !important; font-size: 13px !important; font-weight: 800 !important; color: #92400e !important;"><span class="material-symbols-rounded" style="font-size: 16px !important; color: #92400e !important;">error</span><span>${existencia} Bot.</span></div>`;
     }
 
     // Cuánto lleva esperando (pendiente) o sin confirmar (enviada): lo que decide a quién atender primero
@@ -20672,10 +20672,10 @@ function renderPinolCommandCenter() {
             ${escapeHtml(x?.unidad || "")}
             <span class="material-symbols-rounded text-[15px] text-slate-400">info</span>
           </div>
-          <div class="text-[11px] font-mono font-bold text-slate-400">${escapeHtml(x?.clues || "")}</div>
+          <div class="text-[11px] font-mono font-bold" style="color:#475569">${escapeHtml(x?.clues || "")}</div>
         </td>
         <td class="text-center" style="vertical-align: middle !important;">${stockBadge}</td>
-        <td class="text-center font-black text-slate-900" style="vertical-align: middle !important;">${solicitado} pzas <span class="text-[10px] text-slate-400 font-normal">(${(solicitado * 0.828).toFixed(1)}L)</span>${(estatus !== "PENDIENTE" && Number(x?.cantidad_entregada) > 0 && Number(x.cantidad_entregada) !== solicitado) ? `<div style="font-size:10.5px; font-weight:800; margin-top:2px; color:#166534;">entregó ${Number(x.cantidad_entregada)} pzas</div>` : ""}</td>
+        <td class="text-center font-black text-slate-900" style="vertical-align: middle !important;">${solicitado} pzas <span class="text-[10px] font-normal" style="color:#475569">(${(solicitado * 0.828).toFixed(1)}L)</span>${(estatus !== "PENDIENTE" && Number(x?.cantidad_entregada) > 0 && Number(x.cantidad_entregada) !== solicitado) ? `<div style="font-size:10.5px; font-weight:800; margin-top:2px; color:#166534;">entregó ${Number(x.cantidad_entregada)} pzas</div>` : ""}</td>
         <td class="text-center" style="vertical-align: middle !important;">${obsHtml}</td>
         <td class="text-xs font-semibold text-slate-600" style="vertical-align: middle !important;">${escapeHtml(fechaEntregaFormateada || "—")}</td>
         <td style="vertical-align: middle !important;">${estatusHtml}${sinConfirmarHtml}</td>

@@ -149,7 +149,7 @@ window.INFLUENZA_SIS_MAPPING||console.error("[rda_calculator] window.INFLUENZA_S
                                 <span class="spm-bio-name-lbl">${n.nombre}</span>
                                 ${jerColorCaptionHtml(n)}
                             </div>
-                            <div style="font-size:9.5px; font-weight:700; color:#94a3b8; margin-top:1px;">Caja de ${n.cajaSize} \xB7 ${n.usoLabel}</div>
+                            <div style="font-size:9.5px; font-weight:700; color:#64748b; margin-top:1px;">Caja de ${n.cajaSize} \xB7 ${n.usoLabel}</div>
                         </div>
                     </div>
                 </td>
