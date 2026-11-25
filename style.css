@@ -17510,3 +17510,6 @@ th.text-slate-500, #panelINFLUENZAADMIN .vac-seg .vac-btn:not(.activo) { color: 
 #rdaLecturaComparativa .rl-num{font-weight:800;color:#0f172a;font-variant-numeric:tabular-nums;text-align:right}
 #rdaLecturaComparativa .rl-fila-m{grid-template-columns:minmax(0,.7fr) minmax(0,2fr) auto;padding:5px 0;font-size:12px}
 #rdaLecturaComparativa .rl-grid-d{grid-template-columns:repeat(auto-fit,minmax(196px,1fr))}
+#rdaLecturaCorte .rl-grid-b{grid-template-columns:repeat(var(--rl-cols,3),minmax(0,1fr))}
+@media (max-width:1000px){#rdaLecturaCorte .rl-grid-b{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){#rdaLecturaCorte .rl-grid-b{grid-template-columns:1fr}}

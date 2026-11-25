@@ -173,7 +173,7 @@
           <div class="rl-head"><h3>Lectura por biológico</h3>
             <p>Corte a ${esc(MESES[r.mm - 1])} · ${r.mm} de 12 meses. Cada biológico se mide contra la meta al corte de su grupo de edad; van del más rezagado al más avanzado.</p></div>
           ${r.titulares.length ? `<ul class="rl-tit">${r.titulares.slice(0, 4).map(t => `<li><span class="material-symbols-rounded" aria-hidden="true">${t.icon}</span><span>${esc(t.texto)}</span></li>`).join('')}</ul>` : ''}
-          <div class="rl-grid">${cards}</div>`;
+          <div class="rl-grid rl-grid-b" style="--rl-cols:${r.orden.length % 3 === 0 ? 3 : (r.orden.length % 4 === 0 ? 4 : 3)}">${cards}</div>`;
         host._analisis = r;
     };
 
