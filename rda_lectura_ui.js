@@ -137,5 +137,34 @@
           <div class="rl-grid rl-grid-d">${cards}</div>${muni}`;
         host._analisis = r;
     };
+    // Comparativa multianual: devuelve el HTML (la vista arma su contenido con una plantilla de texto)
+    window.rdaLecturaComparativaHtml = function (u25, u26, mm25, mm26) {
+        const A = window.RdaAnalisis;
+        if (!A || !A.comparaAnios) return '';
+        const r = A.comparaAnios(u25, u26, mm25, mm26);
+        if (!r.grupos.some(g => g.comparables > 0)) return '';
+        const f1 = (n) => p1(n);
+        const filas = (lista, signo) => lista.map(f => `
+            <div class="rl-fila"><span class="rl-nom" title="${esc(f.nombre)} · ${esc(f.municipio)}">${esc(corto(f.nombre))}</span>
+            <span class="rl-barra"><i style="width:${Math.min(100, Math.max(4, Math.abs(f.delta)))}%;background:${signo > 0 ? '#10b981' : '#e11d48'}"></i></span>
+            <span class="rl-num">${signo > 0 ? '+' : ''}${f1(f.delta)}</span></div>`).join('');
+        const cards = r.grupos.filter(g => g.comparables > 0).map(g => {
+            const tot = g.comparables;
+            const seg = [['mejoran', '#10b981', 'avanzan más'], ['estables', '#94a3b8', 'se mantienen'], ['caen', '#e11d48', 'van por debajo']]
+                .filter(([k]) => g[k] > 0).map(([k, c, t]) => `<span class="rl-seg" style="flex:${g[k]};background:${c}" title="${g[k]} ${t}"></span>`).join('');
+            return `<article class="rl-card">
+              <header><h4>${esc(g.nombre)}</h4><span class="rl-pill" style="color:#0f172a">${tot} unidades comparables</span></header>
+              <div class="rl-semaforo" style="margin-top:12px">${seg}</div>
+              <div class="rl-legs"><span class="rl-leg"><i class="rl-dot" style="background:#10b981"></i>${g.mejoran} avanzan más</span><span class="rl-leg"><i class="rl-dot" style="background:#94a3b8"></i>${g.estables} se mantienen</span><span class="rl-leg"><i class="rl-dot" style="background:#e11d48"></i>${g.caen} van por debajo</span></div>
+              ${g.peores.length ? `<div class="rl-sub">Mayores caídas (puntos)</div>${filas(g.peores, -1)}` : ''}
+              ${g.mejores.length ? `<div class="rl-sub">Mayores avances (puntos)</div>${filas(g.mejores, 1)}` : ''}
+            </article>`;
+        }).join('');
+        const nota = mm25 !== mm26 ? `El 2025 se toma completo (${mm25} meses) y el 2026 a ${mm26}; el avance se calcula contra la meta de los meses de cada corte, así que los porcentajes sí son comparables.` : 'Mismo corte en ambos años.';
+        return `<section class="rl" id="rdaLecturaComparativa" style="margin:0 0 32px" aria-label="Lectura de la comparación">
+          <div class="rl-head"><h3>Lectura de la comparación</h3><p>${esc(nota)} Se comparan las unidades presentes en los dos años; "avanzan más" y "van por debajo" usan una banda de ±3 puntos.</p></div>
+          ${r.titulares.length ? `<ul class="rl-tit">${r.titulares.map(t => `<li><span class="material-symbols-rounded" aria-hidden="true">${t.icon}</span><span>${esc(t.texto)}</span></li>`).join('')}</ul>` : ''}
+          <div class="rl-grid">${cards}</div></section>`;
+    };
     window.removeRdaLectura = function () { document.getElementById('rdaLecturaCorte')?.remove(); };
 })();

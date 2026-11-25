@@ -185,5 +185,42 @@
         return out;
     }
 
-    return { GRUPOS, FACTOR, nivelDe, analiza, titulares, ESQUEMAS_DOSIS, analizaDosis };
+    /** Compara el avance de cada unidad en dos años (mismo CLUES). u25/u26: filas de get_rda_indicators;
+     *  mm25/mm26: meses del corte de cada año. "Mejoró" y "cayó" usan una banda de ±3 puntos como la tabla comparativa. */
+    function comparaAnios(u25, u26, mm25, mm26) {
+        const por25 = new Map(u25.map(u => [u.clues, u]));
+        const BANDA = 3;
+        const fmt = (n) => (Math.round(n * 10) / 10).toLocaleString('es-MX');
+        const grupos = GRUPOS.map(g => {
+            const filas = [];
+            for (const u of u26) {
+                const v = por25.get(u.clues);
+                if (!v) continue;
+                const a = medidasDe(g, v, mm25), b = medidasDe(g, u, mm26);
+                if (a.meta < 1 || b.meta < 1) continue;
+                filas.push({ clues: u.clues, nombre: u.nombre || u.clues, municipio: u.municipio || '', av25: a.avance, av26: b.avance, delta: b.avance - a.avance, metaMin: Math.min(a.meta, b.meta) });
+            }
+            const mejoran = filas.filter(f => f.delta > BANDA).length;
+            const caen = filas.filter(f => f.delta < -BANDA).length;
+            // Rankings: al menos 30 aplicaciones de meta al corte en ambos años. Una unidad móvil con población casi nula
+            // daría porcentajes de cientos y taparía lo importante (sigue contando en el semáforo).
+            const ord = filas.filter(f => f.metaMin >= 30).sort((x, y) => y.delta - x.delta);
+            return { key: g.key, nombre: g.nombre, comparables: filas.length, mejoran, caen, estables: filas.length - mejoran - caen,
+                mejores: ord.filter(f => f.delta > 0).slice(0, 3), peores: ord.slice().reverse().filter(f => f.delta < 0).slice(0, 3) };
+        });
+        const titulares = [];
+        for (const g of grupos) {
+            if (g.comparables >= 5) titulares.push({ icon: g.caen > g.mejoran ? 'trending_down' : 'trending_up',
+                texto: `${g.nombre}: ${g.mejoran} de ${g.comparables} unidades avanzan más que el año pasado, ${g.estables} se mantienen y ${g.caen} van por debajo.` });
+        }
+        const todas = grupos.flatMap(g => g.peores.map(f => ({ ...f, grupo: g.nombre })));
+        const caida = todas.sort((a, b) => a.delta - b.delta)[0];
+        if (caida) titulares.push({ icon: 'warning', texto: `Mayor caída: ${caida.nombre} (${caida.grupo.toLowerCase()}) pasó de ${fmt(caida.av25)} % a ${fmt(caida.av26)} % (${fmt(caida.delta)} pts).` });
+        const subidas = grupos.flatMap(g => g.mejores.map(f => ({ ...f, grupo: g.nombre })));
+        const alza = subidas.sort((a, b) => b.delta - a.delta)[0];
+        if (alza) titulares.push({ icon: 'emoji_events', texto: `Mayor avance: ${alza.nombre} (${alza.grupo.toLowerCase()}) pasó de ${fmt(alza.av25)} % a ${fmt(alza.av26)} % (+${fmt(alza.delta)} pts).` });
+        return { grupos, titulares };
+    }
+
+    return { GRUPOS, FACTOR, nivelDe, analiza, titulares, ESQUEMAS_DOSIS, analizaDosis, comparaAnios };
 });

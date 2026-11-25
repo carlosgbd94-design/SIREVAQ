@@ -148,3 +148,21 @@ test('tabla de detalle: columna FALTAN, filtros por nivel, búsqueda y rótulo d
   // la fila de total sigue siendo de 3 celdas de texto + columnas y es la última
   expect(await page.locator('#rdaDetailTbody tr[data-rda-total]').count()).toBe(1);
 });
+
+test('motor: comparativa 2025 vs 2026 — mejoran/estables/caen con banda de 3 puntos y rankings sin unidades de población mínima', () => {
+  const mk = (clues, pob, dosis) => ({ clues, nombre: 'U' + clues, municipio: 'Q', pob_menor_1: pob, pob_1_ano: pob, pob_4_anos: pob, dpt_4_dosis: dosis });
+  // grupo de 4 años (divisor 1). 2025 completo (12 meses) y 2026 a 10: meta = pob*0.0833*meses
+  const u25 = [mk('A', 1200, 600), mk('B', 1200, 600), mk('C', 1200, 600), mk('D', 4, 1)];
+  const u26 = [mk('A', 1200, 900), mk('B', 1200, 600), mk('C', 1200, 100), mk('D', 4, 3), mk('E', 1200, 50)];
+  const r = A.comparaAnios(u25, u26, 12, 10);
+  const g = r.grupos.find((x) => x.key === 'cuatro');
+  expect(g.comparables).toBe(4);                       // E no existía en 2025
+  // A: 600/(1200*.0833*12)=50.0% -> 900/(1200*.0833*10)=90.0% (+40); B: 50.0% -> 60.0% (+10); C: 50.0% -> 10.0% (-40); D: 20.8% -> 90.1% (meta < 30 en 2025)
+  expect(g.mejoran).toBe(3);
+  expect(g.caen).toBe(1);
+  expect(g.estables).toBe(0);
+  expect(g.mejores[0].clues).toBe('A');                // D no entra a los rankings (meta mínima < 30)
+  expect(g.mejores.some((f) => f.clues === 'D')).toBe(false);
+  expect(g.peores[0].clues).toBe('C');
+  expect(g.peores[0].delta).toBeCloseTo(100 / (1200 * 0.0833 * 10) * 100 - 600 / (1200 * 0.0833 * 12) * 100, 6);
+});

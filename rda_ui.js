@@ -6025,6 +6025,8 @@ async function renderComparativaMultianual(muniFilter, uniFilter) {
                     ${renderKpiCard('Niños de 4 Años (4)', t25.cov4A, t26.cov4A)}
                 </div>
 
+                ${(!uniFilter && window.rdaLecturaComparativaHtml) ? window.rdaLecturaComparativaHtml(u2025, u2026, maxMes2025, maxMes2026) : ''}
+
                 <!-- HISTOGRAMA GRÁFICO DUAL EN TONOS PIZARRA SOBRIOS (SLATE) -->
                 <div style="background: #ffffff; border-radius: 20px; padding: 24px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(15,23,42,0.03); margin-bottom: 32px;">
                     <div id="chartComparativeMulti" role="img" aria-label="Gráfica de barras: cobertura por grupo de edad de 2025 contra 2026. Los valores exactos están en las tablas de abajo." style="width: 100%; height: 400px;"></div>
