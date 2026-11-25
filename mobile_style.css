@@ -504,6 +504,23 @@ html.dark .touch-stepper-wrap .stepper-btn {
   font-variant-numeric: tabular-nums;
 }
 
+/* Pantallas angostas (gama baja, o «Tamaño de pantalla» grande en Samsung): a 320px la caja
+   quedaba en 48px útiles y un número de 5 cifras se cortaba (el usuario no ve lo que pide).
+   ≤380px: etiqueta y botones más compactos. ≤340px: la etiqueta pasa arriba y la caja de
+   número usa todo el ancho (≥150px). */
+@media (max-width: 380px) {
+  .cascade-field:has(.touch-stepper-wrap) { grid-template-columns: 76px minmax(0, 1fr); gap: 6px; }
+  .cascade-field:has(.touch-stepper-wrap) label { letter-spacing: 0.02em; font-size: 11px; }
+  .touch-stepper-wrap { gap: 4px !important; }
+  .touch-stepper-wrap .stepper-btn { width: 40px; min-width: 40px; max-width: 40px; height: 44px; }
+  .touch-stepper-wrap input { min-width: 0; padding: 0 2px; }
+}
+@media (max-width: 340px) {
+  .cascade-field:has(.touch-stepper-wrap) { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .cascade-field:has(.touch-stepper-wrap) label { font-size: 11px; }
+  .touch-stepper-wrap input { font-size: 20px; }
+}
+
 /* 👥 Overlays and Modals */
 .dropdown-overlay {
   position: fixed;
@@ -1813,3 +1830,6 @@ html.dark #captureContentArea input::placeholder, html.dark #captureContentArea 
 #panelINFC .ic-vac-txt small { font-size: 11px; font-weight: 700; opacity: .9; }
 #panelINFC .ic-vac-btn[aria-pressed="true"] { background: var(--vx); border-color: var(--vx); color: #fff; box-shadow: none; }
 html.dark #panelINFC .ic-vac-lead { color: #e2e8f0; }
+
+/* Etiquetas del dock sobre el vidrio translucido: con #64748b el contraste caia a ~2.5 cuando detras pasaba contenido de color */
+html:not(.dark) .dock-item:not(.active) .dock-label { color: #334155; }
