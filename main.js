@@ -6382,11 +6382,13 @@ async function supabaseRequest(action = "", payload, options = {}) {
           if (resSaved.error) console.warn("[biogetform] saved warning:", resSaved.error);
 
           const savedMap = {};
-          if (resSaved.data) {
-            resSaved.data.forEach(item => {
-              savedMap[item.biologico] = item;
-            });
-          }
+          // Lo que el municipio capturó a nombre de la unidad (tipo MUNICIPAL) no es del propio pedido de la unidad:
+          // no se precarga ni cuenta como "ya capturado". Al guardar su pedido, la unidad lo reemplaza.
+          const savedPropios = (resSaved.data || []).filter(item => item.tipo_pedido !== 'MUNICIPAL');
+          savedPropios.forEach(item => {
+            savedMap[item.biologico] = item;
+          });
+          resSaved.data = savedPropios;
 
           const mappedRows = (resParams.data || []).map(p => {
             const savedItem = savedMap[p.biologico];
@@ -6491,6 +6493,16 @@ async function supabaseRequest(action = "", payload, options = {}) {
         // Agrupar fechas/tipos de pedidos si es BIO
         let availableWindows = [];
         let activeWindow = null;
+
+        // Pedido que el municipio capturó a nombre de una unidad (tipo MUNICIPAL): NO es captura de la unidad, así que
+        // no entra a las ventanas ni a "capturadas"; la unidad sigue pendiente y solo se marca como "cubierta por el municipio".
+        const municipalPorClues = new Map();
+        if (tipo === "BIO") {
+          captureRecords.forEach(r => {
+            if ((r.tipo_pedido || "") === "MUNICIPAL") municipalPorClues.set(String(r.clues || "").trim().toUpperCase(), r);
+          });
+          captureRecords = captureRecords.filter(r => (r.tipo_pedido || "") !== "MUNICIPAL");
+        }
 
         if (tipo === "BIO") {
           const windowsMap = new Map();
@@ -6617,12 +6629,24 @@ async function supabaseRequest(action = "", payload, options = {}) {
               }
               return metadata;
             }),
-            faltantes: faltantes.map(u => ({
-              municipio: u.municipio || u.MUNICIPIO,
-              clues: u.clues || u.CLUES,
-              unidad: u.unidad || u.UNIDAD,
-              estatus: "PENDIENTE"
-            }))
+            // Fecha del pedido ordinario del mes (la que usa Jurisdicción para jalar el pedido): ventana con capturas,
+            // o el calendario de Administración, o el día 22 corrido al día hábil anterior.
+            fecha_ordinaria: tipo === "BIO" ? (
+              (activeWindow && activeWindow.tipo_pedido === "MENSUAL" ? activeWindow.fecha : null)
+              || (resCalendar.data && resCalendar.data.fecha_programada ? calFechaYmd(resCalendar.data.fecha_programada) : null)
+              || dateToLocalYmd(getBioCaptureWindow(dateObj.getFullYear(), dateObj.getMonth() + 1).target)
+            ) : null,
+            faltantes: faltantes.map(u => {
+              const cc = String(u.clues || u.CLUES || "").trim().toUpperCase();
+              const mun = municipalPorClues.get(cc);
+              return {
+                municipio: u.municipio || u.MUNICIPIO,
+                clues: u.clues || u.CLUES,
+                unidad: u.unidad || u.UNIDAD,
+                estatus: "PENDIENTE",
+                ...(mun ? { capturado_municipio: true, capturado_municipio_por: mun.capturado_por || "", capturado_municipio_fecha: mun.fecha } : {})
+              };
+            })
           }
         };
       }
@@ -14935,6 +14959,24 @@ function renderCaptureSummary(data) {
     try { return window.CapturaInsights ? window.CapturaInsights.rowHtml(r, estado) : ""; } catch (e) { return ""; }
   };
 
+  // Captura municipal del pedido de una unidad pendiente (pedido_municipal.js); no cuenta como cumplimiento de la unidad
+  const pedidoMunicipalBoton = (r) => {
+    try { return window.PedidoMunicipal ? window.PedidoMunicipal.botonHtml(r, data) : ""; } catch (e) { return ""; }
+  };
+  if (window.PedidoMunicipal) {
+    window.PedidoMunicipal.setContexto(data, async () => {
+      try {
+        const res = await supabaseRequest("admincaptureoverview", {
+          action: "adminCaptureOverview", fecha: data.fecha, tipo: data.tipo,
+          selectedMunicipio: $("histMunicipioFilter")?.value || "TODOS",
+          targetWindow: data.active_window ? { fecha: data.active_window.fecha, tipo_pedido: data.active_window.tipo_pedido } : undefined
+        });
+        if (res && res.ok) renderCaptureSummary(res.data);
+      } catch (e) { console.error("Refresco del resumen tras pedido municipal:", e); }
+    });
+    window.PedidoMunicipal.enganchar();
+  }
+
   function renderCapturadasOnly(list) {
     const tbodyCap = $("capturadasTbody");
     if (!list.length) {
@@ -15038,10 +15080,13 @@ function renderCaptureSummary(data) {
             <div style="font-family:monospace; font-size:10px; color:#475569; margin-top:2px;">${escapeHtml(r.clues || "")}</div>
           </td>
           <td data-label="Unidad" style="padding:12px 14px; font-weight:700; color:#1e293b; font-size:12px; vertical-align:middle; background:#ffffff;">${escapeHtml(r.unidad || "")}${fichasIndicadores(r, "fal")}</td>
-          <td data-label="Estatus" style="padding:12px 14px; text-align:center; vertical-align:middle; width:70px; background:#ffffff; border-top-right-radius:14px; border-bottom-right-radius:14px;">
-            <span style="display:inline-flex; align-items:center; justify-content:center; color:#f59e0b;" data-hint="Pendiente por capturar hoy">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            </span>
+          <td data-label="Estatus" style="padding:12px 14px; text-align:center; vertical-align:middle; width:90px; background:#ffffff; border-top-right-radius:14px; border-bottom-right-radius:14px;">
+            <div style="display:flex; align-items:center; justify-content:center; gap:6px;">
+              <span style="display:inline-flex; align-items:center; justify-content:center; color:#f59e0b;" data-hint="Pendiente por capturar hoy">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </span>
+              ${pedidoMunicipalBoton(r)}
+            </div>
           </td>
         </tr>
       `).join("");

@@ -44,6 +44,7 @@ const GROUP_HEAD = [
   'influenza_module.js',
   'captura_insights.js',
   'captura_insights_ui.js',
+  'pedido_municipal.js', // captura municipal del pedido de una unidad (no cuenta como su cumplimiento); main.js lo usa en el Resumen de captura
   'sis_csv.js',
   'sis_export_module.js',
   'sis_aviso_envio.js',

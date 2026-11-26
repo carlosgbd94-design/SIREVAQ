@@ -1411,3 +1411,27 @@ test('Requisiciones: el perfil municipal no ve el Kardex del mes', async ({ page
   await expect(page.locator('#tabExpRutas')).toBeVisible();     // municipal de Querétaro
   expect(errores).toEqual([]);
 });
+
+test('Requisiciones: aviso discreto cuando el municipio cambió el pedido después de traerlo (sin campanita)', async ({ page }) => {
+  const errores = await preparar(page, { conReq: true });
+  await expect(page.locator('#contenidoRequisicion')).toBeVisible();
+  const aviso = page.locator('#avisoPedidoMunicipal');
+  await expect(aviso).toBeHidden();   // sin pedido traído no hay aviso
+  await page.evaluate(async () => {
+    estado.requisicion.pedido_fecha = '2026-10-22';
+    window.__AVISOS_PM__ = { error: null, data: { fecha: '2026-10-22', cambios: [
+      { clues: 'C1', unidad: 'Centro Uno', municipio: 'CORREGIDORA', accion: 'GUARDAR', frascos: 70, nombre: 'MARIA' },
+      { clues: 'C2', unidad: 'Centro Dos', municipio: 'HUIMILPAN', accion: 'QUITAR', frascos: 0, nombre: 'JOSE' }] } };
+    await cargarAvisoPedidoMunicipal();
+  });
+  await expect(aviso).toBeVisible();
+  await expect(aviso).toContainText('cambió el pedido de 2 unidades');
+  await expect(page.locator('#avisoPmLista')).toBeHidden();
+  await page.click('#btnAvisoPmVer');
+  await expect(page.locator('#avisoPmLista')).toContainText('Centro Uno');
+  await expect(page.locator('#avisoPmLista')).toContainText('capturó 70 frascos');
+  await expect(page.locator('#avisoPmLista')).toContainText('retiró su pedido');
+  await page.click('#btnAvisoPmTraer');   // abre el mismo modal de Traer pedido
+  await expect(page.locator('#modalPedido')).toBeVisible();
+  expect(errores).toEqual([]);
+});

@@ -1,0 +1,14 @@
+-- (REEMPLAZADO por pedido_municipal_banner_requisiciones.sql: el aviso ya NO va a la campanita sino a un banner en Requisiciones.)
+-- Versión inicial: notificación de alcance MUNICIPIO, type PEDIDO_MUNICIPAL.
+-- Dice si el pedido de esa fecha YA se trajo a una requisición (hay que volver a traerlo) o todavía no.
+-- Una notificación por unidad, fecha de pedido y día (id fijo; guardar de nuevo la actualiza y la deja sin leer).
+-- Redefine pedido_municipal_guardar / pedido_municipal_quitar de pedido_municipal_captura.sql (aplicar después de ese archivo).
+-- Aplicado en producción tal cual con la migración «pedido_municipal_aviso_jurisdiccion».
+--
+-- Función de aviso:
+--   _pedido_municipal_avisar(p_clues, p_fecha, p_unidad, p_municipio, p_nombre, p_rol, p_accion ('GUARDAR'|'QUITAR'), p_frascos)
+-- y, al final de pedido_municipal_guardar (tras calcular v_total):
+--   perform _pedido_municipal_avisar(upper(trim(p_clues)), p_fecha, a.unidad, a.municipio, a.nombre, a.rol, 'GUARDAR', v_total);
+-- y en pedido_municipal_quitar, si v_n > 0:
+--   perform _pedido_municipal_avisar(upper(trim(p_clues)), p_fecha, a.unidad, a.municipio, a.nombre, a.rol, 'QUITAR', 0);
+-- (el texto completo de las tres funciones está en la migración aplicada; consultar con pg_get_functiondef).

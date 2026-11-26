@@ -1082,10 +1082,42 @@ async function cargarDatosRequisicion() {
   if (!estado.catalogo.some((b) => b.id === estado.bioRapido)) estado.bioRapido = null;
   $('tarjetaSinRequisicion').style.display = 'none';
   $('contenidoRequisicion').style.display = 'block';
+  cargarAvisoPedidoMunicipal();   // sin esperar: es solo un aviso
   document.body.classList.add('con-dock');
   renderDestinosMasivos();
   activarPaso(estado.pasoActual || 1, { sinScroll: true });
   restaurarBorrador();
+}
+
+// Aviso discreto: el municipio capturó/corrigió/quitó el pedido de una unidad DESPUÉS de que el pedido se trajo a esta
+// requisición. Solo lo ve Jurisdicción; desaparece al volver a traer el pedido (la base marca cuándo se trajo).
+async function cargarAvisoPedidoMunicipal() {
+  const caja = $('avisoPedidoMunicipal');
+  if (!caja) return;
+  const ocultar = () => { caja.style.display = 'none'; caja.innerHTML = ''; };
+  const r = estado.requisicion;
+  if (!estado.puedeEditar || !r || !r.pedido_fecha) return ocultar();
+  const reqId = r.id;
+  let res;
+  try { res = await estado.db.rpc('requi_avisos_pedido_municipal', { p_requisicion: reqId }); } catch (e) { return ocultar(); }
+  if (!estado.requisicion || estado.requisicion.id !== reqId) return;   // ya se cambió de requisición
+  const cambios = (res && !res.error && res.data && res.data.cambios) || [];
+  if (!cambios.length) return ocultar();
+  const fecha = res.data.fecha;
+  const filas = cambios.map((c) => `<li><b>${esc(c.unidad || c.clues)}</b><span>${esc(c.municipio || '')}</span><span>${c.accion === 'QUITAR' ? 'el municipio retiró su pedido' : 'el municipio capturó ' + Number(c.frascos).toLocaleString('es-MX') + ' frascos'}</span></li>`).join('');
+  caja.innerHTML = `<div class="aviso-pm-fila"><span class="material-symbols-rounded" aria-hidden="true">sync_problem</span>` +
+    `<span class="aviso-pm-txt">El municipio cambió el pedido de ${plural(cambios.length, 'unidad', 'unidades')} después de traerlo a esta requisición. Vuelve a traerlo para incluir los cambios.</span>` +
+    `<span class="aviso-pm-acc"><button type="button" class="btn-pm" id="btnAvisoPmVer" aria-expanded="false" aria-controls="avisoPmLista">Ver unidades</button>` +
+    `<button type="button" class="btn-pm pri" id="btnAvisoPmTraer">Traer pedido otra vez</button></span></div>` +
+    `<ul class="aviso-pm-lista" id="avisoPmLista" hidden>${filas}</ul>`;
+  caja.style.display = 'block';
+  $('btnAvisoPmVer').onclick = () => {
+    const l = $('avisoPmLista'); const abierto = l.hidden;
+    l.hidden = !abierto;
+    $('btnAvisoPmVer').setAttribute('aria-expanded', String(abierto));
+    $('btnAvisoPmVer').textContent = abierto ? 'Ocultar unidades' : 'Ver unidades';
+  };
+  $('btnAvisoPmTraer').onclick = () => abrirTraerPedido();
 }
 
 // ---------------------------------------------------------------------------

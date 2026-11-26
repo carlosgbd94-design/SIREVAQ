@@ -364,7 +364,7 @@
       return {
         auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 't@test.mx' } } } }) },
         from: constructor,
-        rpc: async (nombre, args) => (nombre === 'requi_items_de_requisicion' ? rpcItemsDeRequisicion(args) : nombre === 'requi_asignar_lotes' ? rpcAsignarLotes(args) : nombre === 'requi_traer_reparto_influenza' ? rpcTraerInfluenza(args) : nombre === 'requi_traer_reparto_covid' ? rpcTraerCovid(args) : nombre === 'bio_pedidos_clasificados' ? rpcPedidosClasificados(args) : nombre === 'requi_traer_pedido_biologico' ? rpcTraerPedido(args) : { data: null, error: { message: 'rpc no simulada: ' + nombre } })
+        rpc: async (nombre, args) => (nombre === 'requi_items_de_requisicion' ? rpcItemsDeRequisicion(args) : nombre === 'requi_asignar_lotes' ? rpcAsignarLotes(args) : nombre === 'requi_traer_reparto_influenza' ? rpcTraerInfluenza(args) : nombre === 'requi_traer_reparto_covid' ? rpcTraerCovid(args) : nombre === 'bio_pedidos_clasificados' ? rpcPedidosClasificados(args) : nombre === 'requi_traer_pedido_biologico' ? rpcTraerPedido(args) : nombre === 'requi_avisos_pedido_municipal' ? (window.__AVISOS_PM__ || { data: { fecha: null, cambios: [] }, error: null }) : { data: null, error: { message: 'rpc no simulada: ' + nombre } })
       };
     }
   };

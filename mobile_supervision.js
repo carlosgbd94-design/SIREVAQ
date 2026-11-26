@@ -182,6 +182,8 @@
     } else {
       filas = await rpcTodas(db, TIPOS[tipo].rpc, { p_fecha_inicio: ymd(r.ini), p_fecha_fin: ymd(r.fin) });
     }
+    // El pedido que capturó el municipio a nombre de la unidad (tipo MUNICIPAL) no es captura de la unidad: sigue pendiente.
+    if (tipo === "BIO") filas = filas.filter((x) => String(x.tipo_pedido || "") !== "MUNICIPAL");
     S.capturas[k] = new Set(filas.map((x) => String(x.clues || x.CLUES || "").trim().toUpperCase()).filter(Boolean));
   }
 
