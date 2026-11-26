@@ -95,6 +95,7 @@
 
     const filas = ordenarSeguimiento(await anotarSinEnvio(data || [], mes, anio));
     await anotarSinMovimiento(filas, mes, anio);
+    await anotarProgramacion(filas, mes, anio);
     window.__sis06pUltimasFilas = filas;
     // MUNICIPAL con el cierre guiado: el seguimiento se pinta como el paso 1
     // (municipal_guiado.js); el resto de este archivo lo sigue usando ADMIN/JURISDICCIONAL.
@@ -286,6 +287,7 @@
       if (f.sin_envio && f.estado !== 'ENVIADO' && f.estado !== 'VALIDADO') detalle = `Se continúa sin ella: ${f.sin_envio_motivo || 'sin motivo'}`;
       else if (f.estado === 'VALIDADO') detalle = `Validado por ${f.validado_por || '—'}, ${f.validado_en ? new Date(f.validado_en).toLocaleDateString('es-MX') : ''}`;
       else if (f.estado === 'ENVIADO') detalle = `Enviado por ${responsableSIS(f)}, ${f.enviado_en ? new Date(f.enviado_en).toLocaleDateString('es-MX') : ''}`;
+      else if (f.prog_para) detalle = `Cerró y programó su envío para el ${new Date(String(f.prog_para).slice(0, 10) + 'T12:00:00').toLocaleDateString('es-MX')}${f.prog_dias > 0 ? ` (${f.prog_dias} ${f.prog_dias === 1 ? 'día' : 'días'} antes del fin de mes)` : ''}`;
       else detalle = detalleAvance(f);
 
       return `
@@ -868,6 +870,23 @@
       filas.forEach((f) => { f.sin_movimiento = set.has(f.clues); });
     } catch (e) { /* sin la columna: todo sigue como antes */ }
   }
+  // «Cerrar y programar envío»: unidades que congelaron su SINBA-SIS y esperan el envío automático. El municipal las ve
+  // (f.prog_*) para cuestionar un cierre anticipado y poder revocarlo.
+  async function anotarProgramacion(filas, mes, anio) {
+    try {
+      const { data: pr } = await unaVez('prog:' + mes + ':' + anio, () => estado.db.from('sis06p_capturas')
+        .select('clues,envio_programado_en,envio_programado_para,envio_programado_por,envio_programado_dias_antes,programacion_revocada_en')
+        .eq('mes', mes).eq('anio', anio).not('envio_programado_en', 'is', null));
+      const por = new Map((pr || []).map((r) => [r.clues, r]));
+      filas.forEach((f) => {
+        const r = por.get(f.clues);
+        f.prog_en = r ? r.envio_programado_en : null;
+        f.prog_para = r ? r.envio_programado_para : null;
+        f.prog_por = r ? r.envio_programado_por : null;
+        f.prog_dias = r ? Number(r.envio_programado_dias_antes) || 0 : 0;
+      });
+    } catch (e) { /* sin las columnas en la base: todo sigue como antes */ }
+  }
   function claveEstado(f) { return f.sin_envio && f.estado !== 'ENVIADO' && f.estado !== 'VALIDADO' ? 'SIN_ENVIO' : f.estado; }
 
   // Solo trae las filas del seguimiento (sin pintar nada): las usa el cierre guiado
@@ -877,6 +896,7 @@
     if (error) { toast('No se pudo cargar el seguimiento: ' + error.message, 'error'); return null; }
     const filas = ordenarSeguimiento(await anotarSinEnvio(data || [], mes, anio));
     await anotarSinMovimiento(filas, mes, anio);
+    await anotarProgramacion(filas, mes, anio);
     window.__sis06pUltimasFilas = filas;
     return filas;
   }

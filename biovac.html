@@ -51,12 +51,12 @@ window.onunhandledrejection = function (event) {
 <script defer src="feedback_autoreply.js?v=2026.2"></script>
 <script defer src="covid_captura.js?v=1"></script>
 <script defer src="diagnostico_sis.js?v=12"></script>
-<script defer src="biovac_ui.js?v=2026.137"></script>
-<script defer src="sis06p_biovac_module.js?v=2026.102"></script>
+<script defer src="biovac_ui.js?v=2026.138"></script>
+<script defer src="sis06p_biovac_module.js?v=2026.106"></script>
 <script defer src="sis_csv.js?v=6"></script>
-<script defer src="sis06p_dashboard_module.js?v=2026.38"></script>
+<script defer src="sis06p_dashboard_module.js?v=2026.40"></script>
 <script defer src="sis06p_concentrado_municipal_module.js?v=2026.10"></script>
-<script defer src="municipal_guiado.js?v=39"></script>
+<script defer src="municipal_guiado.js?v=41"></script>
 <style>
   :root {
     --primary: #0f172a; --secondary: #0ea5e9;
@@ -513,6 +513,17 @@ window.onunhandledrejection = function (event) {
   #sisListoEnviar.espera { background: #f0fdf4; border: 1.5px solid #86efac; color: #14532d; }
   #sisListoEnviar.espera > .material-symbols-rounded { color: #16a34a; }
   @media (max-width: 760px) { #sisListoEnviar { flex-wrap: wrap; padding: 12px 14px; } #sisListoEnviar .btn-primario { width: 100%; justify-content: center; } }
+  /* Cerrar y programar envío: aviso de la unidad (programado = azul; revocado / fallido = ámbar) */
+  #sisProgramacion { display: none; align-items: center; gap: 12px; margin-top: 12px; padding: 14px 16px; border-radius: 14px; }
+  #sisProgramacion > .material-symbols-rounded { font-size: 30px; flex-shrink: 0; }
+  #sisProgramacion > div { flex: 1; min-width: 0; }
+  #sisProgramacion b { display: block; font-size: 15px; font-weight: 800; }
+  #sisProgramacion p { margin: 3px 0 0; font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+  #sisProgramacion.abierto { background: #eff6ff; border: 2px solid #60a5fa; color: #1e3a8a; }
+  #sisProgramacion.abierto > .material-symbols-rounded { color: #2563eb; }
+  #sisProgramacion.espera { background: #fffbeb; border: 2px solid #f59e0b; color: #78350f; }
+  #sisProgramacion.espera > .material-symbols-rounded { color: #d97706; }
+  @media (max-width: 760px) { #sisProgramacion { flex-wrap: wrap; padding: 12px 14px; } #sisProgramacion .btn-secundario { width: 100%; justify-content: center; } }
   @keyframes dockPulso { 0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, .55); } 55% { box-shadow: 0 0 0 9px rgba(245, 158, 11, 0); } }
   .dock-enviar.dock-pulso { animation: dockPulso 1.8s ease-out infinite; }
   @media (prefers-reduced-motion: reduce) { .dock-enviar.dock-pulso { animation: none; outline: 2px solid #f59e0b; } }
@@ -1374,6 +1385,8 @@ window.onunhandledrejection = function (event) {
     <button type="button" class="dock-btn" id="btnImprimirSIS06P" style="display:none;" title="Imprimir el concentrado SIS-06-P validado"><span class="material-symbols-rounded">print</span><span class="dock-etiqueta">Imprimir</span></button>
     <button type="button" class="dock-btn dock-validar" id="btnMarcarValidado" style="display:none;" title="Marcar como Validado"><span class="material-symbols-rounded">verified</span><span class="dock-etiqueta">Validar</span></button>
     <button type="button" class="dock-btn dock-enviar" id="btnEnviarSIS06P" aria-label="Enviar el SINBA-SIS para validación" style="display:none;" title="Enviar el SINBA-SIS para validación"><span class="material-symbols-rounded">send</span><span class="dock-etiqueta">Enviar</span></button>
+    <button type="button" class="dock-btn" id="btnCancelarProgSIS06P" aria-label="Cancelar el envío programado y reabrir el SINBA-SIS" style="display:none;" title="Cancelar el envío programado: se reabre tu captura"><span class="material-symbols-rounded">event_busy</span><span class="dock-etiqueta">Cancelar prog.</span></button>
+    <button type="button" class="dock-btn" id="btnProgramarSIS06P" aria-label="Cerrar el SINBA-SIS y programar su envío automático" style="display:none;" title="Cerrar tu captura ahora y que el SINBA-SIS se envíe solo cuando abra la ventana de envío"><span class="material-symbols-rounded">schedule_send</span><span class="dock-etiqueta">Programar</span></button>
     <button type="button" class="dock-btn dock-guardar en-reposo" id="btnGuardarSIS06P" title="Guardar concentrado SIS-06-P"><span class="material-symbols-rounded" id="iconoGuardarSIS">check</span><span class="dock-etiqueta" id="etiquetaGuardarSIS">Guardado</span></button>
     <button type="button" class="dock-btn dock-guardar" id="btnCorreccionDock" style="display:none;" title="Reabrir este Movimiento para corregirlo"><span class="material-symbols-rounded" id="iconoCorreccionDock" aria-hidden="true">edit_note</span><span class="dock-etiqueta" id="etiquetaCorreccionDock">Reabrir y corregir</span></button>
     <button type="button" class="dock-btn" id="btnDeshacer" style="display:none;" disabled title="Nada que deshacer (Ctrl+Z)"><span class="material-symbols-rounded">undo</span><span class="dock-etiqueta">Deshacer</span></button>

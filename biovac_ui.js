@@ -998,7 +998,7 @@ function inicializarToggleSIS06P() {
   // una unidad elegida -- ver actualizarDock en sis06p_biovac_module.js, que
   // los muestra en ese caso). Sin eso no ocupan lugar en la barra.
   if (rolActual !== 'UNIDAD') {
-    ['btnGuardarSIS06P', 'btnExportarSISCompleto', 'btnEnviarSIS06P', 'btnMarcarValidado', 'btnImprimirSIS06P'].forEach((id) => {
+    ['btnGuardarSIS06P', 'btnExportarSISCompleto', 'btnEnviarSIS06P', 'btnProgramarSIS06P', 'btnCancelarProgSIS06P', 'btnMarcarValidado', 'btnImprimirSIS06P'].forEach((id) => {
       const b = document.getElementById(id);
       if (b) b.style.display = 'none';
     });
@@ -1479,11 +1479,13 @@ async function cargarSIS06PTotalesParaComparar(anio, mes) {
   if (!clues) return;
   try {
     const [{ data: captura }, { data: mapa, error: errMapa }, { data: comparativo, error: errComp }] = await Promise.all([
-      estado.db.from('sis06p_capturas').select('estado').eq('clues', clues).eq('mes', mes).eq('anio', anio).maybeSingle(),
+      estado.db.from('sis06p_capturas').select('estado, envio_programado_en, envio_programado_para').eq('clues', clues).eq('mes', mes).eq('anio', anio).maybeSingle(),
       estado.db.from('sis_biovac_mapa').select('biovac_clave, grupo_conciliacion, etiqueta'),
       estado.db.rpc('sis06p_comparativo', { p_mes: mes, p_anio: anio, p_clues: clues })
     ]);
-    estado.sis06pEstadoActual = captura ? captura.estado : 'BORRADOR';
+    // «PROGRAMADO»: la unidad cerró y programó el envío (BORRADOR congelado hasta que salga solo): para ella es solo lectura.
+    estado.sis06pEstadoActual = captura ? ((captura.estado === 'BORRADOR' && captura.envio_programado_en) ? 'PROGRAMADO' : captura.estado) : 'BORRADOR';
+    estado.sis06pProgramadoPara = captura && captura.envio_programado_en ? captura.envio_programado_para : null;
     if (errMapa) throw errMapa;
     if (errComp) throw errComp;
 
@@ -3274,7 +3276,10 @@ function renderBannerMovimiento(m, esJurisdiccional) {
   const rol = estado.perfil ? estado.perfil.rol : null;
   if (esJurisdiccional || !rol) { cont.innerHTML = ''; return; }
   if (rol === 'UNIDAD' && movimientoBloqueadoParaUnidad()) {
-    cont.innerHTML = movimientoEnviadoParaUnidad()
+    cont.innerHTML = (movimientoEnviadoParaUnidad() && estado.sis06pEstadoActual === 'PROGRAMADO')
+      ? `<div class="banner-mov cerrado"><span class="material-symbols-rounded">schedule_send</span>
+      <div class="texto"><b>Cerrado y programado: solo lectura</b>Tu SINBA-SIS se enviará solo el ${(estado.sis06pProgramadoPara ? String(estado.sis06pProgramadoPara).slice(8, 10) + '/' + String(estado.sis06pProgramadoPara).slice(5, 7) + '/' + String(estado.sis06pProgramadoPara).slice(0, 4) : 'día programado')}. Si necesitas editar, cancela la programación en la hoja SIS-06-P.</div></div>`
+      : movimientoEnviadoParaUnidad()
       ? `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock</span>
       <div class="texto"><b>Enviado: solo lectura</b>Ya enviaste el SINBA-SIS de este mes, así que el Movimiento de Biológico no se puede modificar. Si algo está mal, pide la corrección al municipal.</div></div>`
       : `<div class="banner-mov cerrado"><span class="material-symbols-rounded">lock_clock</span>

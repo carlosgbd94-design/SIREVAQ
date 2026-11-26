@@ -58,6 +58,11 @@
   function nombreMes(m) { const x = (typeof MESES !== 'undefined') && MESES.find((k) => k.v === m); return x ? x.l : String(m); }
   function etiquetaMuni(v) { return (window.SIS06PDashboard && window.SIS06PDashboard.MUNICIPIO_LABEL[v]) || v; }
   function fechaCorta(iso) { return iso ? new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : ''; }
+  // Fechas "solo día" (YYYY-MM-DD): se leen al mediodía local para que no retrocedan un día por la zona horaria.
+  function fechaDia(d) { return d ? new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : ''; }
+  // «Cerrar y programar envío»: la unidad congeló su SINBA-SIS y el sistema lo enviará solo (el municipal puede revocarlo).
+  function programada(f) { return Boolean(f && f.prog_para && f.estado !== 'ENVIADO' && f.estado !== 'VALIDADO'); }
+  function textoAnticipo(f) { return f.prog_dias > 0 ? `${plural(f.prog_dias, 'día', 'días')} antes del fin de mes` : 'al fin de mes'; }
 
   function filasOrdenadas() {
     // Siempre por CLUES (no por quién envió primero): cada unidad se queda en su lugar y es fácil de ubicar.
@@ -151,7 +156,7 @@
     // Movimiento del municipio (paso 3): la barra ya la maneja esa hoja (Guardar/Exportar).
     if (st.paso === 3 && st.vista3 === 'movimiento') return;
     if (st.paso !== 2) {
-      ['btnGuardarSIS06P', 'btnExportarSISCompleto', 'btnEnviarSIS06P', 'btnMarcarValidado', 'btnImprimirSIS06P'].forEach((id) => { const b = $(id); if (b) b.style.display = 'none'; });
+      ['btnGuardarSIS06P', 'btnExportarSISCompleto', 'btnEnviarSIS06P', 'btnProgramarSIS06P', 'btnCancelarProgSIS06P', 'btnMarcarValidado', 'btnImprimirSIS06P'].forEach((id) => { const b = $(id); if (b) b.style.display = 'none'; });
     }
     if (st.paso === 2) { if (window.SIS06PBiovac) window.SIS06PBiovac.actualizarDock(); return; }
     const r = resumen(st.filas);
@@ -312,7 +317,13 @@
     if (e === 'VALIDADO') return `Validado por ${f.validado_por || '—'}${f.validado_en ? ', ' + fechaCorta(f.validado_en) : ''}${sm}`;
     if (e === 'ENVIADO') return `Enviado por ${responsableSIS(f)}${f.enviado_en ? ', ' + fechaCorta(f.enviado_en) : ''}${sm}`;
     if (e === 'OMITIDA') return `Se continúa sin ella: ${f.sin_envio_motivo || 'sin motivo'}`;
+    if (programada(f)) return `Cerró y programó su envío para el ${fechaDia(f.prog_para)} (${fechaCorta(f.prog_en)}, ${textoAnticipo(f)})`;
     return detalleAvance(f);
+  }
+  function pillProgramada(f) {
+    if (!programada(f)) return '';
+    const anticipado = f.prog_dias > 0;
+    return `<span class="mun-pill ${anticipado ? 'aviso' : 'sinmov'}" title="Cerró su SINBA-SIS ${esc(textoAnticipo(f))} y lo programó para enviarse el ${esc(fechaDia(f.prog_para))}. Su captura está congelada.">Programó envío${anticipado ? ` · ${f.prog_dias} d antes` : ''}</span>`;
   }
   function pillSinMovimiento(f) {
     return f.sin_movimiento && (estadoDe(f) === 'ENVIADO' || estadoDe(f) === 'VALIDADO') ? '<span class="mun-pill sinmov" title="La unidad declaró que no recibió ni aplicó biológico este mes">Sin movimiento</span>' : '';
@@ -339,7 +350,8 @@
   const negrita = (t) => String(t == null ? '' : t).replace(/\*/g, '').trim();
   function textoPendientes() {
     const { mes, anio } = periodo();
-    const pend = filasOrdenadas().filter((f) => estadoDe(f) === 'SIN');
+    // Las que ya cerraron y programaron su envío no se recuerdan: se enviarán solas.
+    const pend = filasOrdenadas().filter((f) => estadoDe(f) === 'SIN' && !programada(f));
     const varios = municipios().length > 1;
     const lineas = pend.map((f) => `• *${negrita(f.unidad || f.clues)}* (${f.clues})${varios && f.municipio ? ` · ${etiquetaMuni(f.municipio)}` : ''}`);
     return `Hola, buen día. Les recordamos que aún está pendiente el envío del *SINBA-SIS de ${nombreMes(mes)} ${anio}* de las siguientes *unidades de salud* (${pend.length}):\n\n${lineas.join('\n')}\n\nLes pedimos enviarlo a la brevedad desde SIREVAQ. Si tienen algún problema para hacerlo, avísennos. ¡Gracias!`;
@@ -375,9 +387,10 @@
     if (!st.filas.length) { cont.innerHTML = '<div class="mun-vacio">No hay unidades en tu alcance.</div>'; pintarRuta(); pintarDock(); return; }
     // Filtro de «problemas»: unidades con diferencias entre paloteo y Movimiento
     const conDif = (f) => estadoDe(f) !== 'OMITIDA' && tieneDiferencias(f);
-    const conteos = { todas: r.total, ENVIADO: r.enviado, SIN: r.sin, VALIDADO: r.validado, OMITIDA: r.omitida, DIF: st.filas.filter(conDif).length };
+    const conteos = { todas: r.total, ENVIADO: r.enviado, SIN: r.sin, VALIDADO: r.validado, OMITIDA: r.omitida, DIF: st.filas.filter(conDif).length, PROG: st.filas.filter(programada).length };
     if (st.filtro === 'DIF' && !conteos.DIF) st.filtro = 'todas';
-    const visibles = filasOrdenadas().filter((f) => st.filtro === 'todas' || (st.filtro === 'DIF' ? conDif(f) : estadoDe(f) === st.filtro));
+    if (st.filtro === 'PROG' && !conteos.PROG) st.filtro = 'todas';
+    const visibles = filasOrdenadas().filter((f) => st.filtro === 'todas' || (st.filtro === 'DIF' ? conDif(f) : st.filtro === 'PROG' ? programada(f) : estadoDe(f) === st.filtro));
     const pct = r.esperadas ? Math.round((r.validado / r.esperadas) * 100) : 0;
     const cta = r.enviado > 0
       ? `<button type="button" class="btn-primario" id="munCtaSiguiente"><span class="material-symbols-rounded">fact_check</span> Revisar la siguiente por validar (${r.enviado})</button>`
@@ -389,8 +402,9 @@
     // «Copiar pendientes»: las unidades que aún no envían (sin contar las que se continúan sin envío), listas para pegar en un mensaje
     // Logo de WhatsApp: burbuja verde con el teléfono blanco centrado en ella
     const WA = '<svg class="mun-ib-wa" viewBox="0 0 24 24" aria-hidden="true"><path fill="#25d366" d="M12 2.2a9.8 9.8 0 0 0-8.4 14.8L2.3 21.8l4.9-1.3A9.8 9.8 0 1 0 12 2.2z"/><path fill="#fff" transform="translate(12 12) scale(.56) translate(-12 -12)" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>';
-    const copiarBtn = r.sin > 0
-      ? `<button type="button" class="mun-ib" id="munCopiarPendientes" aria-label="Copiar mensaje para WhatsApp con las ${r.sin} unidades pendientes de enviar" title="Copiar mensaje para WhatsApp: ${r.sin} unidades pendientes de enviar">${WA}<span class="material-symbols-rounded mun-ib-copy" aria-hidden="true">content_copy</span></button>`
+    const sinRecordar = st.filas.filter((f) => estadoDe(f) === 'SIN' && !programada(f)).length;
+    const copiarBtn = sinRecordar > 0
+      ? `<button type="button" class="mun-ib" id="munCopiarPendientes" aria-label="Copiar mensaje para WhatsApp con las ${sinRecordar} unidades pendientes de enviar" title="Copiar mensaje para WhatsApp: ${sinRecordar} unidades pendientes de enviar">${WA}<span class="material-symbols-rounded mun-ib-copy" aria-hidden="true">content_copy</span></button>`
       : '';
     const chip = (k, txt) => `<button type="button" class="mun-chip ${st.filtro === k ? 'activo' : ''}" data-filtro="${k}">${txt}<b>${conteos[k]}</b></button>`;
 
@@ -412,13 +426,13 @@
         <div class="mun-leyenda"><span><i class="pt vacio"></i>sin enviar</span><span><i class="pt parcial"></i>por validar</span><span><i class="pt completo"></i>validada</span>${r.omitida ? '<span><i class="pt omitida"></i>sin envío</span>' : ''}</div>
       </div>
       <div class="mun-acciones">${cta}
-        <div class="mun-chips">${copiarBtn}${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}${r.omitida ? chip('OMITIDA', 'Sin envío') : ''}${conteos.DIF ? chip('DIF', 'Con diferencias') : ''}</div>
+        <div class="mun-chips">${copiarBtn}${chip('todas', 'Todas')}${chip('ENVIADO', 'Por validar')}${chip('SIN', 'Sin enviar')}${chip('VALIDADO', 'Validadas')}${r.omitida ? chip('OMITIDA', 'Sin envío') : ''}${conteos.PROG ? chip('PROG', 'Envío programado') : ''}${conteos.DIF ? chip('DIF', 'Con diferencias') : ''}</div>
       </div>
       <div class="mun-grid">${visibles.map((f) => `
         <button type="button" class="mun-unidad ${CLASE_EST[estadoDe(f)]}" data-clues="${esc(f.clues)}" title="${esc((f.unidad || f.clues) + ' · ' + detalleUnidad(f))}">
           <span class="mun-dot"></span>
           <span class="mun-u-txt"><b>${esc(f.unidad || f.clues)}</b><small>${esc(f.clues)} · ${esc(detalleUnidad(f))}</small></span>
-          <span class="mun-u-pills"><span class="mun-pill ${CLASE_EST[estadoDe(f)]}">${ETIQUETA[estadoDe(f)]}</span>${pillSinMovimiento(f)}${pillConciliacion(f)}</span>
+          <span class="mun-u-pills"><span class="mun-pill ${CLASE_EST[estadoDe(f)]}">${ETIQUETA[estadoDe(f)]}</span>${pillProgramada(f)}${pillSinMovimiento(f)}${pillConciliacion(f)}</span>
         </button>`).join('') || '<div class="mun-vacio">Ninguna unidad en este filtro.</div>'}</div>`;
     pintarRuta();
     pintarDock();
@@ -471,6 +485,7 @@
         <select id="munRevSelect" class="mun-select" aria-label="Elegir unidad">${lista.map((x) => `<option value="${esc(x.clues)}" ${f && x.clues === f.clues ? 'selected' : ''}>${esc(x.unidad || x.clues)}</option>`).join('')}</select>
         <button type="button" class="btn-secundario btn-mini" id="munSigPend" ${r.enviado - (e === 'ENVIADO' ? 1 : 0) > 0 ? '' : 'disabled'}><span class="material-symbols-rounded">skip_next</span> Siguiente por validar (${r.enviado})</button>
         ${e === 'SIN' ? '<button type="button" class="btn-secundario btn-mini" id="munSinEnvio" title="Esta unidad no va a enviar este mes: se continúa sin ella (queda registrado y se puede deshacer)"><span class="material-symbols-rounded" aria-hidden="true">event_busy</span> Continuar sin esta unidad</button>' : ''}
+        ${f && programada(f) ? `<button type="button" class="btn-secundario btn-mini" id="munRevocarProg" title="La unidad cerró antes de tiempo (${esc(textoAnticipo(f))}). Revoca la programación para que vuelva a poder capturar."><span class="material-symbols-rounded" aria-hidden="true">event_repeat</span> Revocar programación</button>` : ''}
         ${e === 'OMITIDA' ? '<button type="button" class="btn-secundario btn-mini" id="munQuitarSinEnvio" title="Volver a esperar el envío de esta unidad"><span class="material-symbols-rounded" aria-hidden="true">undo</span> Volver a esperarla</button>' : ''}
       </div>
       <div class="puntos mun-rev-puntos">${puntosHtml(lista, f && f.clues)}</div>
@@ -977,6 +992,31 @@
     toast('Listo: se continúa sin esta unidad.', 'ok');
     await refrescarFilas();
   }
+  // La unidad cerró su SINBA-SIS antes de que termine el mes estadístico: el municipal puede cuestionarlo y revocar la
+  // programación (la unidad vuelve a poder capturar y verá el motivo). Queda en la bitácora.
+  async function revocarProgramacion(clues) {
+    const f = st.filas.find((x) => x.clues === clues);
+    if (!f || !programada(f)) return;
+    const { mes, anio } = periodo();
+    const motivo = await mostrarModal({
+      titulo: 'Revocar el envío programado',
+      mensaje: `${f.unidad || clues} cerró su SINBA-SIS de ${nombreMes(mes)} ${anio} ${textoAnticipo(f)} y lo programó para enviarse el ${fechaDia(f.prog_para)}. Si lo revocas, su captura se reabre y tendrá que volver a cerrarlo al terminar el mes. Escribe el motivo: la unidad lo verá.`,
+      pedirMotivo: true, placeholderMotivo: 'Ej. El mes aún no termina: sigue vacunando hasta el último día', textoAceptar: 'Revocar programación'
+    });
+    if (!motivo) return;
+    if (String(motivo).trim().length < 15) { toast('El motivo debe tener al menos 15 caracteres.', 'error'); return; }
+    const { error } = await estado.db.rpc('sis06p_revocar_programacion', { p_captura_id: await capturaId(clues, mes, anio), p_usuario: nombreRevisor(), p_motivo: String(motivo).trim() });
+    if (error) { toast('No se pudo revocar: ' + error.message, 'error'); return; }
+    toast('Programación revocada: la unidad vuelve a poder capturar.', 'ok');
+    await refrescarFilas();
+  }
+  async function capturaId(clues, mes, anio) {
+    const { data } = await estado.db.from('sis06p_capturas').select('id').eq('clues', clues).eq('mes', mes).eq('anio', anio).maybeSingle();
+    return data ? data.id : null;
+  }
+  function nombreRevisor() {
+    return (typeof nombreCompletoDePerfil === 'function' && nombreCompletoDePerfil(estado.perfil)) || (estado.perfil && estado.perfil.usuario) || 'Revisor';
+  }
   async function quitarSinEnvio(clues) {
     const { mes, anio } = periodo();
     const { error } = await estado.db.rpc('sis06p_quitar_sin_envio', { p_clues: clues, p_mes: mes, p_anio: anio });
@@ -1032,6 +1072,7 @@
       else if (t.closest('#munVerMovimiento')) verMovimiento();
       else if (t.closest('#munSinEnvio')) marcarSinEnvio(st.clues);
       else if (t.closest('#munQuitarSinEnvio')) quitarSinEnvio(st.clues);
+      else if (t.closest('#munRevocarProg')) revocarProgramacion(st.clues);
       else if (t.closest('#munVolverConcentrado') || t.closest('#munVolverConcentradoEnt')) irAPaso(3);
       else if (t.closest('#munVolverUnidades') || t.closest('#munVolverLista')) irAPaso(1);
       else if (t.closest('#munIrEntrega')) irAPaso(4);

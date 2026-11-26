@@ -982,9 +982,13 @@
     const est = captura ? captura.estado : 'BORRADOR';
     return Boolean(esUnidadSesion() && est === 'BORRADOR' && _ventanaCache && _ventanaCache.dentro_prellenado === false);
   }
+  // «Cerrar y programar envío»: la captura quedó congelada y el sistema la enviará solo (el servidor también lo exige).
+  function estaProgramada(captura) {
+    return Boolean(captura && captura.estado === 'BORRADOR' && captura.envio_programado_en);
+  }
   function soloLecturaPara(captura) {
     const est = captura ? captura.estado : 'BORRADOR';
-    if (esUnidadSesion()) return est !== 'BORRADOR' || fueraDeVentanaDeCaptura(captura);
+    if (esUnidadSesion()) return est !== 'BORRADOR' || fueraDeVentanaDeCaptura(captura) || estaProgramada(captura);
     if (esAdminSesion()) return false;
     return !captura || est === 'BORRADOR';
   }
@@ -1062,12 +1066,21 @@
         : (estadoActual === 'VALIDADO' ? 'Se habilita cuando tu municipio cierre el mes' : 'Disponible hasta que el municipal valide el SINBA-SIS de este mes');
     }
 
+    const btnProgramar = document.getElementById('btnProgramarSIS06P');
+    const btnCancelarProg = document.getElementById('btnCancelarProgSIS06P');
     if (esUnidad) {
-      if (btnGuardar) btnGuardar.style.display = (estadoActual === 'BORRADOR' && !fueraDeVentana) ? 'inline-flex' : 'none';
-      if (btnEnviar) btnEnviar.style.display = estadoActual === 'BORRADOR' ? 'inline-flex' : 'none';
+      const prog = estaProgramada(currentReport);
+      const dentroEnvio = Boolean(_ventanaCache && _ventanaCache.dentro_envio);
+      if (btnGuardar) btnGuardar.style.display = (estadoActual === 'BORRADOR' && !fueraDeVentana && !prog) ? 'inline-flex' : 'none';
+      if (btnEnviar) btnEnviar.style.display = (estadoActual === 'BORRADOR' && !prog) ? 'inline-flex' : 'none';
+      // Programar: antes de que abra la ventana de envío (después se usa «Enviar»). Cancelar: mientras siga programado.
+      if (btnProgramar) btnProgramar.style.display = (estadoActual === 'BORRADOR' && !prog && !fueraDeVentana && !dentroEnvio && !(currentReport && currentReport.programacion_revocada_en)) ? 'inline-flex' : 'none';
+      if (btnCancelarProg) btnCancelarProg.style.display = prog ? 'inline-flex' : 'none';
       if (btnValidar) btnValidar.style.display = 'none';
       if (btnImprimir) btnImprimir.style.display = sisLiberada(currentReport) ? 'inline-flex' : 'none';
     } else {
+      if (btnProgramar) btnProgramar.style.display = 'none';
+      if (btnCancelarProg) btnCancelarProg.style.display = 'none';
       const admin = esAdminSesion();
       if (btnGuardar) btnGuardar.style.display = ((admin && activa) || (currentReport && estadoActual !== 'BORRADOR')) ? 'inline-flex' : 'none';
       if (btnEnviar) btnEnviar.style.display = (admin && activa && estadoActual === 'BORRADOR') ? 'inline-flex' : 'none';
@@ -1110,7 +1123,7 @@
     const badge = document.getElementById('sis06pBadgeEstado');
     if (badge) {
       badge.className = 'estado-badge estado-' + estadoActual;
-      badge.textContent = estadoActual === 'BORRADOR' ? 'Borrador' : estadoActual === 'ENVIADO' ? 'Enviado — pendiente de validación' : 'Información validada';
+      badge.textContent = estadoActual === 'BORRADOR' ? (esUnidad && estaProgramada(currentReport) ? 'Cerrado — envío programado' : 'Borrador') : estadoActual === 'ENVIADO' ? 'Enviado — pendiente de validación' : 'Información validada';
     }
     _sinMov = Boolean(currentReport && currentReport.sin_movimiento);
     renderSinMovimiento(currentReport, estadoActual, fueraDeVentana);
@@ -2509,7 +2522,7 @@
 
     // El responsable se puede cambiar siempre que el SINBA-SIS no se haya enviado (aunque el mes todavía no abra su captura:
     // se recuerda en este dispositivo y viaja con el SIS cuando se guarda). Solo queda fijo tras el envío.
-    const bloqueado = Boolean(captura && captura.estado !== 'BORRADOR');
+    const bloqueado = Boolean(captura && (captura.estado !== 'BORRADOR' || estaProgramada(captura)));
     inp.readOnly = bloqueado;
     inp.title = bloqueado
       ? 'El SINBA-SIS ya fue enviado: el responsable quedó fijo. Si hay que cambiarlo, pídelo al municipal.'
@@ -3294,6 +3307,7 @@
 
     let t3;
     if (enviado) t3 = `Enviado${captura && captura.enviado_en ? ' el ' + fechaMesCorta(captura.enviado_en) : ''}`;
+    else if (estaProgramada(captura)) t3 = `Programado: se envía solo el ${fechaMesCorta(captura.envio_programado_para)}`;
     else if (v) t3 = v.dentro_envio ? `Ya puedes enviar (hasta el ${fechaMesCorta(v.fin_envio)})` : `Se habilita del ${fechaMesCorta(v.inicio_envio)} al ${fechaMesCorta(v.fin_envio)}`;
     else t3 = 'En la ventana de fin de mes';
 
@@ -3505,8 +3519,9 @@
   }
   function renderSinMovimiento(currentReport, estadoActual, fueraDeVentana) {
     let el = document.getElementById('sisSinMovimiento');
-    const unidad = (esUnidadSesion() || esAdminSesion()) && estadoActual === 'BORRADOR' && !fueraDeVentana && !enEntregaMunicipal();
-    const declarado = estadoActual !== 'BORRADOR' && currentReport && currentReport.sin_movimiento;
+    const prog = esUnidadSesion() && estaProgramada(currentReport);
+    const unidad = (esUnidadSesion() || esAdminSesion()) && estadoActual === 'BORRADOR' && !fueraDeVentana && !enEntregaMunicipal() && !prog;
+    const declarado = (estadoActual !== 'BORRADOR' || prog) && currentReport && currentReport.sin_movimiento;
     if (!unidad && !declarado) { if (el) el.style.display = 'none'; return; }
     if (!el) {
       const ref = document.getElementById('rutaMes');
@@ -3525,7 +3540,7 @@
     el.style.display = 'flex';
     if (declarado) {
       el.className = 'declarado';
-      el.innerHTML = '<span class="material-symbols-rounded" aria-hidden="true">do_not_disturb_on</span><div><b>SINBA-SIS enviado «Sin movimiento»</b><p>La unidad declaró que este mes no recibió ni aplicó biológico.</p></div>';
+      el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">do_not_disturb_on</span><div><b>SINBA-SIS ${prog ? 'programado' : 'enviado'} «Sin movimiento»</b><p>La unidad declaró que este mes no recibió ni aplicó biológico.</p></div>`;
       return;
     }
     el.className = _sinMov ? 'on' : '';
@@ -3541,7 +3556,7 @@
   function estaListoSinEnviar() {
     if (!esUnidadSesion() || !datosUnidadActiva() || enEntregaMunicipal()) return false;
     const { captura, est, filas, difs } = estadoRuta();
-    if (est !== 'BORRADOR' || !captura || _sinGuardar || filas === null || difs.length > 0) return false;
+    if (est !== 'BORRADOR' || !captura || estaProgramada(captura) || _sinGuardar || filas === null || difs.length > 0) return false;
     if (!responsableElaboracion()) return false;
     if (!movimientoDeclarado(captura)) return false;
     const caducados = typeof lotesCaducadosConExistencia === 'function' ? lotesCaducadosConExistencia() : [];
@@ -3578,11 +3593,134 @@
     el.style.display = 'flex';
   }
 
+  // ---- Cerrar y programar envío -------------------------------------------------------------------------------------
+  // Último aviso de la bitácora (revocación del municipal o fallo del envío automático) de la captura a la vista.
+  let _progUltima = { id: null, fila: null };
+  async function cargarProgUltima(captura) {
+    if (!captura || !captura.id || !estado.db) { _progUltima = { id: null, fila: null }; return; }
+    if (_progUltima.id === captura.id && _progUltima.cargada) return;
+    _progUltima = { id: captura.id, fila: null, cargada: false };
+    try {
+      const { data } = await estado.db.from('sis06p_programaciones').select('accion, motivo, usuario, rol, created_at')
+        .eq('captura_id', captura.id).in('accion', ['REVOCADO', 'FALLIDO', 'PROGRAMADO', 'DESPROGRAMADO']).order('created_at', { ascending: false }).limit(1);
+      _progUltima = { id: captura.id, fila: (data && data[0]) || null, cargada: true };
+    } catch (e) { _progUltima = { id: captura.id, fila: null, cargada: true }; }
+    renderProgramacion();
+  }
+  function renderProgramacion() {
+    let el = document.getElementById('sisProgramacion');
+    const captura = capturaDelMesActual();
+    if (!esUnidadSesion() || !datosUnidadActiva() || enEntregaMunicipal() || !captura || captura.estado !== 'BORRADOR') {
+      if (el) el.style.display = 'none';
+      return;
+    }
+    const prog = estaProgramada(captura);
+    if (!prog && (_progUltima.id !== captura.id || !_progUltima.cargada)) cargarProgUltima(captura);
+    const u = !prog && _progUltima.id === captura.id ? _progUltima.fila : null;
+    const aviso = u && (u.accion === 'REVOCADO' || u.accion === 'FALLIDO') ? u : null;
+    if (!prog && !aviso) { if (el) el.style.display = 'none'; return; }
+    if (!el) {
+      const ref = document.getElementById('rutaMes');
+      if (!ref) return;
+      el = document.createElement('div');
+      el.id = 'sisProgramacion';
+      ref.insertAdjacentElement('afterend', el);
+      el.addEventListener('click', (ev) => { if (ev.target.closest('[data-cancelar-prog]')) cancelarProgramacion(); });
+    }
+    if (prog) {
+      el.className = 'abierto';
+      el.setAttribute('role', 'status');
+      el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">schedule_send</span>
+        <div><b>Cerrado y programado: se enviará solo el ${_esc(fechaMesCorta(captura.envio_programado_para))}</b>
+        <p>Tu SINBA-SIS está bloqueado para edición. Tu municipal ve que lo cerraste${captura.envio_programado_dias_antes > 0 ? ` ${captura.envio_programado_dias_antes} día${captura.envio_programado_dias_antes === 1 ? '' : 's'} antes del fin de mes` : ''} y puede revocarlo. Si todavía tienes aplicaciones por registrar, cancela la programación.</p></div>
+        <button type="button" class="btn-secundario btn-mini" data-cancelar-prog><span class="material-symbols-rounded">event_busy</span> Cancelar programación</button>`;
+    } else {
+      const revocado = aviso.accion === 'REVOCADO';
+      el.className = 'espera';
+      el.setAttribute('role', 'alert');
+      el.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">${revocado ? 'event_repeat' : 'error'}</span>
+        <div><b>${revocado ? 'Tu municipal revocó el envío programado' : 'El envío programado no se pudo hacer'}</b>
+        <p>${_esc(aviso.motivo || '')}${/[.!?]$/.test(String(aviso.motivo || '').trim()) ? '' : '.'}${revocado ? ' Tu captura quedó abierta: sigue registrando y envía cuando abra la ventana de envío (no podrás volver a programar este mes antes de esa fecha).' : ' Tu captura quedó abierta: corrígelo y vuelve a cerrarlo o envíalo.'}</p></div>`;
+    }
+    el.style.display = 'flex';
+  }
+  async function programarEnvio() {
+    const activa = datosUnidadActiva();
+    if (!activa) return;
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const captura = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
+    if (!captura) { toast('Guarda tu concentrado antes de programar el envío.', 'error'); return; }
+    if (_sinGuardar) { toast('Tienes cambios sin guardar en el paloteo: guárdalos antes de programar.', 'error'); return; }
+    const v = _ventanaCache;
+    const finMes = new Date(anio, mes, 0);
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const dias = Math.max(0, Math.round((finMes - hoy) / 86400000));
+    const confirma = await mostrarModal({
+      titulo: 'Cerrar y programar el envío',
+      mensaje: `Tu SINBA-SIS de ${mesNombre(mes)} ${anio} se cerrará AHORA (ya no podrás editar el paloteo, el Movimiento ni Influenza) y se enviará solo el ${v ? fechaMesCorta(v.inicio_envio) : 'último día del mes'}. ` +
+        (dias > 0 ? `Todavía faltan ${dias} día${dias === 1 ? '' : 's'} para que termine el mes: lo que apliques de aquí al último día NO entrará, y tu municipal verá que cerraste antes de tiempo y puede revocarlo. Si vas a seguir vacunando, mejor no lo programes y envía el último día del mes. ` : '') +
+        '¿Cerrar y programar el envío?',
+      textoAceptar: 'Sí, cerrar y programar'
+    });
+    if (!confirma) return;
+    mostrarCargando('Programando el envío...');
+    try {
+      const { error } = await estado.db.rpc('sis06p_programar_envio', { p_captura_id: captura.id, p_usuario: responsableElaboracion() || nombreCompletoDePerfil(estado.perfil) });
+      if (error) throw error;
+      _progUltima = { id: null, fila: null };
+      await recargarTrasProgramacion(activa.clues, mes, anio);
+      toast('Listo: tu SINBA-SIS quedó cerrado y se enviará solo.', 'ok');
+    } catch (err) {
+      console.error('[SIS-06-P] Error al programar el envío:', err);
+      toast('No se pudo programar: ' + err.message, 'error');
+    } finally {
+      ocultarCargando();
+    }
+  }
+  async function cancelarProgramacion() {
+    const activa = datosUnidadActiva();
+    const mes = Number(document.getElementById('selMes').value);
+    const anio = Number(document.getElementById('selAnio').value);
+    const captura = _sis06pCapturasCache.find((r) => Number(r.mes) === mes && Number(r.anio) === anio);
+    if (!activa || !estaProgramada(captura)) return;
+    const ok = await mostrarModal({
+      titulo: 'Cancelar la programación',
+      mensaje: 'Tu SINBA-SIS se reabre para editarlo y ya no se enviará solo: tendrás que enviarlo tú cuando abra la ventana de envío. Tu municipal verá que lo cerraste y lo cancelaste. ¿Cancelar la programación?',
+      textoAceptar: 'Sí, cancelar'
+    });
+    if (!ok) return;
+    mostrarCargando('Cancelando la programación...');
+    try {
+      const { error } = await estado.db.rpc('sis06p_desprogramar_envio', { p_captura_id: captura.id, p_usuario: responsableElaboracion() || nombreCompletoDePerfil(estado.perfil) });
+      if (error) throw error;
+      _progUltima = { id: null, fila: null };
+      await recargarTrasProgramacion(activa.clues, mes, anio);
+      toast('Programación cancelada: tu SINBA-SIS está abierto otra vez.', 'ok');
+    } catch (err) {
+      console.error('[SIS-06-P] Error al cancelar la programación:', err);
+      toast('No se pudo cancelar: ' + err.message, 'error');
+    } finally {
+      ocultarCargando();
+    }
+  }
+  async function recargarTrasProgramacion(clues, mes, anio) {
+    const { data: capturas } = await estado.db.from('sis06p_capturas').select('*').eq('clues', clues);
+    _sis06pCapturasCache = capturas || [];
+    await cargarConciliacion(clues);
+    render();
+    try {
+      if (typeof cargarSIS06PTotalesParaComparar === 'function') await cargarSIS06PTotalesParaComparar(anio, mes);
+      if (typeof cargarMovimiento === 'function' && estado.movimiento) await cargarMovimiento();
+    } catch (e) { console.warn('[SIS-06-P] No se pudo refrescar Movimiento tras programar:', e); }
+  }
+
   function hayDifRevisor() { return !esUnidadSesion() && hayDiferenciasConciliacion(); }
 
   function actualizarDock() {
     renderAlertaDiferencias();
     renderListoParaEnviar();
+    renderProgramacion();
     actualizarPildoras();
     // En la pestaña Movimiento de un rol revisor, Guardar/Exportar de la barra
     // pertenecen al Movimiento (ver sincronizarDockMovimiento en biovac_ui.js).
@@ -3616,6 +3754,7 @@
     if (est === 'VALIDADO') detalle = esU ? (captura && captura.liberado_en ? 'Ya puedes exportar el Excel oficial e imprimir' : 'Validado por tu municipal: podrás exportar e imprimir cuando el municipio cierre el mes') : `Validado${captura && captura.validado_por ? ' por ' + captura.validado_por : ''}${captura && captura.validado_en ? ' el ' + fechaMesCorta(captura.validado_en) : ''} — la unidad ya fue avisada`;
     else if (est === 'ENVIADO') detalle = esU ? 'Esperando al municipal' : (hayDifRevisor() ? 'No se puede validar: paloteo y Movimiento no coinciden' : 'Cuadra con el Movimiento — pulsa Validar para aprobarlo');
     else if (!esU) detalle = 'La unidad aún no lo envía: no hay nada que validar';
+    else if (estaProgramada(captura)) detalle = `Cerrado: se enviará solo el ${fechaMesCorta(captura.envio_programado_para)}`;
     else if (_sinGuardar) detalle = 'Cambios sin guardar';
     else if (fueraDeVentanaDeCaptura(captura)) detalle = 'Este mes está fuera de su ventana de captura';
     else if (!captura) detalle = 'Aún sin guardar este mes';
@@ -3624,11 +3763,11 @@
     else if (v && esU && estaListoSinEnviar()) detalle = `Guardado, pero falta ENVIAR (hasta el ${fechaMesCorta(v.fin_envio)})`;
     else if (v) detalle = `Listo para enviar hasta el ${fechaMesCorta(v.fin_envio)}`;
     caja.style.display = 'flex';
-    const clicable = esU && est === 'BORRADOR';
+    const clicable = esU && est === 'BORRADOR' && !estaProgramada(captura);
     caja.classList.toggle('clicable', clicable);
     if (clicable) { caja.setAttribute('tabindex', '0'); caja.title = 'Toca para ver qué falta para enviar'; }
     else { caja.removeAttribute('tabindex'); caja.removeAttribute('title'); }
-    document.getElementById('dockEstadoTitulo').textContent = est === 'BORRADOR' ? 'Borrador' : est === 'ENVIADO' ? 'Enviado' : 'Validado';
+    document.getElementById('dockEstadoTitulo').textContent = est === 'BORRADOR' ? (estaProgramada(captura) ? 'Programado' : 'Borrador') : est === 'ENVIADO' ? 'Enviado' : 'Validado';
     document.getElementById('dockPunto').className = 'dock-punto ' + (est === 'ENVIADO' ? 'enviado' : est === 'VALIDADO' ? 'validado' : '');
     // Rojo solo cuando el envío ya abrió: antes, lo que falta por cuadrar es parte normal de la captura
     const btnEnv = document.getElementById('btnEnviarSIS06P');
@@ -4493,6 +4632,10 @@
     if (btnGuardar) btnGuardar.addEventListener('click', save);
     const btnEnviar = document.getElementById('btnEnviarSIS06P');
     if (btnEnviar) btnEnviar.addEventListener('click', enviarParaValidacion);
+    const btnProg = document.getElementById('btnProgramarSIS06P');
+    if (btnProg) btnProg.addEventListener('click', programarEnvio);
+    const btnCancProg = document.getElementById('btnCancelarProgSIS06P');
+    if (btnCancProg) btnCancProg.addEventListener('click', cancelarProgramacion);
     const btnValidar = document.getElementById('btnMarcarValidado');
     if (btnValidar) btnValidar.addEventListener('click', marcarValidado);
     const btnImprimir = document.getElementById('btnImprimirSIS06P');
