@@ -40,7 +40,7 @@ const reglasFn = modulo.slice(modulo.indexOf('// Regla de calendario (2ª dosis'
 const gridFn = modulo.slice(modulo.indexOf('function renderCaptureGrid() {'), modulo.indexOf('function updateFlaskCalculation() {'));
 const isoFn = modulo.slice(modulo.indexOf('function getISOWeek('), modulo.indexOf('let _campaignConfig'));
 const semanasFn = modulo.slice(modulo.indexOf('function generateCampaignWeeks()'), modulo.indexOf('function campaignSeasonLabel()'));
-const saveFn = modulo.slice(modulo.indexOf('function influenzaVentanaError('), modulo.indexOf('// --- LÓGICA DE ADMINISTRACIÓN Y MUNICIPIOS ---'));
+const saveFn = modulo.slice(modulo.indexOf('function influenzaVentanaError('), modulo.indexOf('// --- LÓGICA DE ADMINISTRACIÓN Y MUNICIPIOS ---'));
 const finPeriodoFn = modulo.slice(modulo.indexOf('function infFinPeriodo('), modulo.indexOf('/** Estado de la semana en el calendario'));
 
 async function montarCaptura(page, fecha, valoresGuardados) {
@@ -64,7 +64,7 @@ async function montarCaptura(page, fecha, valoresGuardados) {
       'window.__toasts = []; var showToast = (m) => window.__toasts.push(m);',
       'window.__guardados = [];',
       'var AppService = { call: async (a, p) => { window.__guardados.push([a, p]); return { ok: true }; }, runCapture: async (o) => o.action() };',
-      'var loadInfluenzaUnitData = async () => {}; var updateInfluenzaWeekBtnLabel = () => {}; var updateInfluenzaSinMovimientoUI = () => {};',
+      'var loadInfluenzaUnitData = async () => {}; var updateInfluenzaWeekBtnLabel = () => {}; var renderInfluenzaWeekPicker = () => {}; var updateInfluenzaSinMovimientoUI = () => {};',
       'var loadInfluenzaHistoryList = () => {};',
       'var capBloqueadaPorGuardado = () => false;   // el reporte guardado se abre bloqueado hasta «Editar»: aquí la captura siempre está editable',
       "var capSincronizarNombre = () => {}; var capEditando = () => false; var influenzaMesCongelado = () => null; var covidFolio = () => 'COV'; var renderAccionesReporte = () => {}; var capVacunaActual = () => 'INFLUENZA'; var _capEdicion = null; var _capturaVacuna = 'INFLUENZA';",

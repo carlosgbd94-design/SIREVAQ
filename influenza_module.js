@@ -257,6 +257,17 @@ function campaignSeasonLabel() {
   return m ? m[1] : deriveCampaignName(_campaignConfig.fecha_inicio, _campaignConfig.fecha_fin);
 }
 
+/** Unidad con las dos vacunas: si la semana tiene reporte de una sola, devuelve la que FALTA («COVID-19» o «Influenza»).
+ *  Así el selector de semanas no dice «Capturado» cuando solo se reportó una vacuna. Devuelve "" si no aplica. */
+function semanaVacunaFaltante(fecha) {
+  if (typeof _covidPanelListo === "undefined" || !_covidPanelListo) return "";
+  const inf = (_influenzaCapturasCache || []).some(r => r.fecha === fecha);
+  const cov = (_covidCapturasCache || []).some(r => r.fecha === fecha);
+  if (inf && !cov) return "COVID-19";
+  if (cov && !inf) return "Influenza";
+  return "";
+}
+
 // Helper para renderizar el Selector de Semanas Premium en el Dropdown
 function renderInfluenzaWeekPicker() {
   const dropdown = document.getElementById("influenza_semana_dropdown");
@@ -280,9 +291,11 @@ function renderInfluenzaWeekPicker() {
     const isSinMov = captureRecord && (captureRecord.sin_movimiento === true || captureRecord.sin_movimiento === 'SI');
     const isCurrent = w.fecha === currentWeekFecha;
     const isSelected = hiddenInput.value === w.fecha;
+    const falta = semanaVacunaFaltante(w.fecha);
 
     let estado;
-    if (isSinMov) estado = chip("azul", "pause_circle", "Sin movimiento");
+    if (falta) estado = chip("ambar", "error", `Falta ${falta}`);
+    else if (isSinMov) estado = chip("azul", "pause_circle", "Sin movimiento");
     else if (isCaptured) estado = chip("verde", "check_circle", "Capturado");
     else if (influenzaVentanaError(w.fecha)) estado = chip("gris", "schedule", `Abre ${influenzaDiaCorto(influenzaSemanaAbre(w.fecha))}`);
     else estado = chip("ambar", "error", "Pendiente");
@@ -340,7 +353,10 @@ function updateInfluenzaWeekBtnLabel(fecha) {
     
     const chip = (cls, icon, txt) => `<span class="${cls} border text-[10px] font-extrabold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shrink-0" style="white-space:nowrap;"><span class="material-symbols-rounded" style="font-size:12px;">${icon}</span>${txt}</span>`;
     let statusBadge = "";
-    if (isSinMov) {
+    const falta = semanaVacunaFaltante(fecha);
+    if (falta) {
+      statusBadge = chip("text-amber-700 bg-amber-50 border-amber-200", "error", `Falta ${falta}`);
+    } else if (isSinMov) {
       statusBadge = chip("text-blue-700 bg-blue-50 border-blue-200", "pause_circle", "Sin Movimiento");
     } else if (isCaptured) {
       statusBadge = chip("text-emerald-700 bg-emerald-50 border-emerald-200", "check_circle", "Capturado");
@@ -2120,7 +2136,16 @@ window.influenzaValidarCaptura = influenzaValidarCaptura;
 
 async function saveInfluenzaReport() {
   // Con «Sin movimiento» marcado y la unidad con las dos vacunas, un solo guardado deja Influenza y COVID-19 en ceros.
-  if (document.getElementById("chkSinMovimientoINF")?.checked && typeof _covidPanelListo !== "undefined" && _covidPanelListo) return guardarSinMovimientoAmbas();
+  // Ya NO se guarda COVID-19 en silencio: si la unidad tiene las dos vacunas y COVID-19 aún no tiene reporte esa semana, se pregunta.
+  if (document.getElementById("chkSinMovimientoINF")?.checked && typeof _covidPanelListo !== "undefined" && _covidPanelListo
+      && !(typeof _capturaVacuna !== "undefined" && _capturaVacuna === "COVID")) {
+    const fSel = document.getElementById("influenza_semana")?.value;
+    if (fSel && !capReporteGuardado(fSel, "COVID") && !capReporteGuardado(fSel, "INFLUENZA")) {
+      const eleccion = await preguntarSinMovimientoCovid();
+      if (eleccion === "AMBAS") return guardarSinMovimientoAmbas();
+      if (eleccion !== "SOLO") return;   // cancelar: no se guarda nada
+    }
+  }
   if (typeof _capturaVacuna !== "undefined" && _capturaVacuna === "COVID") return guardarCovidDesdePanel();
   const selectedFecha = document.getElementById("influenza_semana").value;
   const nombre = document.getElementById("nombreINFLUENZA").value.trim();
@@ -2196,6 +2221,7 @@ async function saveInfluenzaReport() {
       const folioGuardado = res?.folio || influenzaFolio(_influenzaCapturasCache.find(r => r.fecha === selectedFecha));
       if (folioGuardado) showToast(`Folio del reporte: ${folioGuardado}`, true, "info");
       updateInfluenzaWeekBtnLabel(selectedFecha);
+      renderInfluenzaWeekPicker();
       updateInfluenzaSinMovimientoUI();
       renderCaptureGrid();
       loadInfluenzaHistoryList();
@@ -9134,6 +9160,8 @@ function renderCovidCaptura() {
   });
   pintarAvisoSemanasCovid(cont, fecha);
   aplicarVacunaCaptura();
+  // «Falta COVID-19 / Falta Influenza» en el selector de semanas depende de que el panel de COVID-19 ya esté listo.
+  try { updateInfluenzaWeekBtnLabel(fecha); renderInfluenzaWeekPicker(); } catch (e) { /* selector aún no existe */ }
 }
 
 /** Igual que en Influenza: si hay semanas anteriores sin reporte de COVID-19, se avisa y se ofrece ir a esa semana (así no se captura en la semana equivocada). */
@@ -9189,13 +9217,39 @@ async function guardarCapturaCovid(fecha, p) {
       _covidCapturasCache = (r && r.data) || [];
       _capEdicion = null;
       renderCovidCaptura();
+      updateInfluenzaWeekBtnLabel(fecha);
+      renderInfluenzaWeekPicker();
       if (res && res.folio) showToast(`Folio del reporte de COVID-19: ${res.folio}`, true, "info");
       return res;
     }
   });
 }
 
-/** Un solo botón: guarda «Sin movimiento» de Influenza y de COVID-19 (las que aún no tengan reporte esa semana). */
+/** Aviso al guardar Influenza «Sin movimiento» cuando COVID-19 aún no se reporta esa semana.
+ *  Devuelve "AMBAS" (COVID-19 también en ceros), "SOLO" (solo Influenza; COVID-19 queda pendiente) o null (cancelar). */
+function preguntarSinMovimientoCovid() {
+  return new Promise((resolve) => {
+    const previo = document.activeElement;
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px";
+    ov.innerHTML = `<div role="alertdialog" aria-modal="true" aria-labelledby="sinMovCovTit" aria-describedby="sinMovCovTxt" style="background:#fff;border-radius:16px;max-width:440px;width:100%;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.3);font-family:inherit">
+      <h3 id="sinMovCovTit" style="margin:0 0 8px;font-size:18px;font-weight:800;color:#0f172a">¿Y COVID-19 esta semana?</h3>
+      <p id="sinMovCovTxt" style="margin:0 0 16px;font-size:14px;line-height:1.45;color:#475569">Vas a guardar Influenza en <b>Sin movimiento</b>. Aún no hay reporte de <b>COVID-19</b> de esta semana. Elige qué hacer con COVID-19:</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button type="button" data-r="AMBAS" style="padding:12px;border-radius:12px;border:0;background:#2563eb;color:#fff;font-weight:700;cursor:pointer">También COVID-19 sin movimiento</button>
+        <button type="button" data-r="SOLO" style="padding:12px;border-radius:12px;border:1px solid #cbd5e1;background:#fff;color:#0f172a;font-weight:700;cursor:pointer">Solo Influenza (capturaré COVID-19 después)</button>
+        <button type="button" data-r="" style="padding:10px;border-radius:12px;border:0;background:transparent;color:#64748b;font-weight:600;cursor:pointer">Cancelar</button>
+      </div></div>`;
+    const cerrar = (v) => { ov.remove(); document.removeEventListener("keydown", onKey, true); try { previo && previo.focus && previo.focus(); } catch (e) { /* */ } resolve(v || null); };
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); cerrar(null); } };
+    ov.addEventListener("click", (e) => { const b = e.target.closest("button[data-r]"); if (b) cerrar(b.dataset.r); else if (e.target === ov) cerrar(null); });
+    document.addEventListener("keydown", onKey, true);
+    document.body.appendChild(ov);
+    ov.querySelector('button[data-r="SOLO"]').focus();
+  });
+}
+
+/** Guarda «Sin movimiento» de Influenza y de COVID-19 (las que aún no tengan reporte esa semana). */
 async function guardarSinMovimientoAmbas() {
   const fecha = document.getElementById("influenza_semana")?.value;
   const nombre = (document.getElementById("nombreINFLUENZA")?.value || "").trim();
@@ -9233,6 +9287,7 @@ async function guardarSinMovimientoAmbas() {
       const r = await AppService.call("getcovid_capturas", { clues: USER.clues, anio_campana: campana }, { silent: true });
       _covidCapturasCache = (r && r.data) || [];
       updateInfluenzaWeekBtnLabel(fecha);
+      renderInfluenzaWeekPicker();
       capRepintar();
       loadInfluenzaHistoryList();
     }
