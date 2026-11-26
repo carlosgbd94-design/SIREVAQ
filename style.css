@@ -14959,6 +14959,9 @@ html.dark #influenzaBalanceUnidad .frs-balance-nota { background: var(--cp-soft)
 .ip-table tbody th, .ip-table tfoot th { padding: 12px 16px; text-align: left; font-weight: 700; color: var(--cp-text); min-width: 220px; }
 .ip-table td { padding: 12px 16px; color: var(--cp-text); font-variant-numeric: tabular-nums; }
 .ip-table tbody tr { border-bottom: 1px solid var(--cp-border); }
+/* Las celdas de grupo (th de fila) heredaban el th global sticky/top:0/z-index:10 y se quedaban pegadas arriba de la pantalla
+   encimando el resto de la tabla al hacer scroll; solo el th del encabezado debe ser fijo */
+.ip-table tbody th { position: static; top: auto; z-index: auto; background: transparent; }
 .ip-table tfoot tr { background: var(--cp-soft); font-weight: 800; }
 .ip-g-n { display: block; line-height: 1.35; }
 .ip-g-c { display: block; font-size: 12px; font-weight: 500; color: var(--cp-muted); margin-top: 1px; }
@@ -17040,8 +17043,14 @@ html body .modern-input-group input[type="date"]:not(.evd-date)::-webkit-datetim
 @media (min-width: 1100px) {
   #captureContentArea .cp-card.cp-flush { overflow: clip !important; }
   #captureContentArea .cp-tablewrap { overflow: clip !important; max-height: none !important; }
-  #captureContentArea .cp-tablewrap thead th { position: sticky !important; top: 104px !important; z-index: 6; }
+  #captureContentArea .cp-tablewrap thead th { position: sticky !important; top: 104px !important; z-index: 6; background-color: #f1f5f9; box-shadow: 0 1px 0 #cbd5e1; }
+  html.dark #captureContentArea .cp-tablewrap thead th { background-color: #18181b; box-shadow: 0 1px 0 #27272a; }
 }
+/* Aviso de permanencia («Excedido por…»): debajo de la fecha de recepción, centrado y dentro de su fila
+   (antes flotaba a -10px y montaba el borde de la fila de arriba, más ancho que su columna) */
+#captureContentArea .cp-tablewrap td[data-label="Recepción"] .sr-permanencia-hint { position: static; top: auto; right: auto; justify-content: center; width: fit-content; max-width: 100%; margin: 6px auto 0; white-space: nowrap; box-sizing: border-box; }
+/* Alerta de frasco abierto: centrada bajo el campo de cantidad (no bajo el ícono + campo) */
+#captureContentArea .cp-tablewrap td[data-label="Frascos"] > .sr-apertura-badge { width: calc(100% - 40px); margin-left: 40px; }
 
 /* Metas municipal (una columna por unidad): la caja con su propio desplazamiento se ajusta a la pantalla y se queda bajo las barras fijas,
    así el encabezado, la franja del bloque y los totales siempre están a la vista */
