@@ -802,7 +802,7 @@
       chip.style.display = "flex";
       const verde = "status-chip-v5 flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-wider";
       const rojo = "status-chip-v5 flex items-center gap-1.5 px-3 py-1 bg-rose-500/10 border border-rose-500/20 text-rose-600 rounded-full text-[10px] font-black uppercase tracking-wider";
-      chipTxt.textContent = S.guardando ? "Guardando..." : est.id === "cerrada" ? "Aún no abre" : rep ? (enEdicion(S.fecha) ? "Editando" : "Reporte Guardado") : "Listo";
+      chipTxt.textContent = S.guardando ? "Guardando..." : est.id === "cerrada" ? (est.congelado ? "SIS enviado" : "Aún no abre") : rep ? (enEdicion(S.fecha) ? "Editando" : "Reporte Guardado") : "Listo";
       chip.className = est.id === "cerrada" ? rojo : verde;
     }
 

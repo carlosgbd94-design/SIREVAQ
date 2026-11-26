@@ -337,6 +337,9 @@ test.describe('Influenza: captura de la unidad en móvil', () => {
     await expect(page.locator('#ic_r1')).toBeDisabled();
     await expect(page.locator('#hubEditBtn')).toBeHidden();
     await expect(page.locator('#hubDeleteBtn')).toBeHidden();
+    // Semana del mes cerrado SIN reporte: el botón flotante dice por qué no se captura («SIS enviado», no «Aún no abre»)
+    await page.locator('#icSemana').selectOption('2026-10-16');
+    await expect(page.locator('#hubStatusText')).toHaveText('SIS enviado');
   });
   test('reporte guardado: Editar y Eliminar viven solo en el hub flotante (sin botones repetidos en el panel)', async ({ page }) => {
     const st = estado();
