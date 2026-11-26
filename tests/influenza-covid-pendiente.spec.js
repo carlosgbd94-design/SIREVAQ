@@ -127,3 +127,32 @@ test('Selector de semanas: «Falta COVID-19» / «Falta Influenza» en vez de «
   const sinCov = await page.locator('.inf-sem-item').evaluateAll((els) => els.map((e) => e.querySelector('.inf-chip').lastChild.textContent.trim()));
   expect(sinCov[1]).toBe('Capturado');
 });
+
+test('Aviso de «semanas anteriores sin reporte» ignora las de un mes ya enviado/cerrado', async ({ page }) => {
+  await montar(page, `
+    ${fn('influenzaMesCongelado')}
+    ${fn('pintarAvisoSemanasCovid')}
+    var USER = { rol: 'UNIDAD' };
+    var _sisEstadosUnidad = { '2026-10': 'ENVIADO' };
+    var influenzaHoy = function () { return '2026-11-27'; };
+    var influenzaVentanaError = function () { return null; };
+    var influenzaRangoTexto = function (f) { return f; };
+    var generateCampaignWeeks = function () { return [
+      { semana: 1, fecha: '2026-10-16' }, { semana: 2, fecha: '2026-10-30' }, { semana: 3, fecha: '2026-11-13' }, { semana: 4, fecha: '2026-11-27' }]; };
+  `);
+  const link = (setup) => page.evaluate((s) => {
+    eval(s);
+    const cont = document.createElement('div'); document.body.appendChild(cont);
+    pintarAvisoSemanasCovid(cont, '2026-11-27');
+    const a = cont.querySelector('.inf-ctl-link');
+    return a ? { fecha: a.dataset.fecha, txt: cont.textContent } : null;
+  }, setup);
+  // Octubre enviado: solo avisa la semana de noviembre
+  const r = await link('0');
+  expect(r.fecha).toBe('2026-11-13');
+  expect(r.txt).toContain('1 semana anterior');
+  // Sin semanas pendientes de noviembre: no hay aviso
+  expect(await link("_covidCapturasCache = [{ fecha: '2026-11-13' }]")).toBeNull();
+  // Si octubre sigue en borrador, sí avisa (primero octubre)
+  expect((await link("_sisEstadosUnidad = { '2026-10': 'BORRADOR' }; _covidCapturasCache = []")).fecha).toBe('2026-10-16');
+});

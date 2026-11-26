@@ -869,7 +869,8 @@ function actualizarControlMetaInfluenza() {
   // Semanas anteriores sin reporte (el panel abre toda la semana, pero cada semana se reporta una sola vez)
   const hoy = influenzaHoy();
   const atrasadas = generateCampaignWeeks().filter(w => w.fecha < hoy && w.fecha !== _infGrid.fecha
-    && !_influenzaCapturasCache.some(r => r.fecha === w.fecha) && !influenzaVentanaError(w.fecha));
+    && !_influenzaCapturasCache.some(r => r.fecha === w.fecha) && !influenzaVentanaError(w.fecha)
+    && !influenzaMesCongelado(w.fecha)); // mes ya enviado/cerrado: ya no se puede capturar, no se avisa
   const pend = atrasadas.length
     ? `<div class="inf-ctl-msg is-warn"><span class="material-symbols-rounded" aria-hidden="true">history</span><div>Tienes <b>${atrasadas.length === 1 ? "1 semana anterior" : atrasadas.length + " semanas anteriores"} sin reporte</b>. <button type="button" class="inf-ctl-link" data-fecha="${atrasadas[0].fecha}">Ir a la semana del ${influenzaRangoTexto(atrasadas[0].fecha)}</button></div></div>`
     : "";
@@ -9170,7 +9171,8 @@ function pintarAvisoSemanasCovid(cont, fecha) {
   if (!_covidPanelListo) return;
   const hoy = influenzaHoy();
   const atrasadas = generateCampaignWeeks().filter(w => w.fecha < hoy && w.fecha !== fecha
-    && !_covidCapturasCache.some(r => String(r.fecha).slice(0, 10) === w.fecha) && !influenzaVentanaError(w.fecha));
+    && !_covidCapturasCache.some(r => String(r.fecha).slice(0, 10) === w.fecha) && !influenzaVentanaError(w.fecha)
+    && !influenzaMesCongelado(w.fecha)); // mes ya enviado/cerrado: ya no se puede capturar, no se avisa
   if (!atrasadas.length) return;
   const aviso = document.createElement("div");
   aviso.className = "inf-ctl-msg is-warn cov-pend-aviso";
